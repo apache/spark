@@ -69,20 +69,28 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
   def isChangelogCheckpointingEnabled: Boolean =
     SQLConf.get.getConfString(rocksdbChangelogCheckpointingConfKey) == "true"
 
-  def snapshotVersionsPresent(dir: File): Seq[Long] = {
+  def snapshotVersionsPresent(dir: File, checkpointFormatVersion: Int = 1): Seq[Long] = {
     dir.listFiles.filter(_.getName.endsWith(".zip"))
-      .map(_.getName.stripSuffix(".zip"))
-      .map(_.toLong)
+      .map(_.getName.stripSuffix(".zip").split("_"))
+      .map { case Array(version, _) => version.toLong }
       .sorted
       .toImmutableArraySeq
   }
 
-  def changelogVersionsPresent(dir: File): Seq[Long] = {
-    dir.listFiles.filter(_.getName.endsWith(".changelog"))
-      .map(_.getName.stripSuffix(".changelog"))
-      .map(_.toLong)
-      .sorted
-      .toImmutableArraySeq
+  def changelogVersionsPresent(dir: File, checkpointFormatVersion: Int = 1): Seq[Long] = {
+    checkpointFormatVersion match {
+      case 1 => dir.listFiles.filter(_.getName.endsWith(".changelog"))
+        .map(_.getName.stripSuffix(".changelog"))
+        .map(_.toLong)
+        .sorted
+        .toImmutableArraySeq
+      case _ =>
+        dir.listFiles.filter(_.getName.endsWith(".changelog"))
+          .map(_.getName.stripSuffix(".changelog").split("_"))
+          .map { case Array(version, _) => version.toLong }
+          .sorted
+          .toImmutableArraySeq
+    }
   }
 }
 
@@ -188,10 +196,12 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       val remoteDir = Utils.createTempDir().toString
       val conf = dbConf.copy(minDeltasForSnapshot = 1)
       new File(remoteDir).delete() // to make sure that the directory gets created
+      val versionToUniqueId = new mutable.HashMap[Long, String]()
       for (version <- 0 to 49) {
         withDB(remoteDir, version = version, conf = conf,
             useColumnFamilies = colFamiliesEnabled,
-            checkpointFormatVersion = checkpointFormatVersion) { db =>
+            checkpointFormatVersion = checkpointFormatVersion,
+            versionToUniqueId = versionToUniqueId) { db =>
           db.put(version.toString, version.toString)
           db.commit()
           if ((version + 1) % 5 == 0) db.doMaintenance()
@@ -199,11 +209,12 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       }
 
       if (isChangelogCheckpointingEnabled) {
-        assert(changelogVersionsPresent(remoteDir) === (1 to 50))
-        assert(snapshotVersionsPresent(remoteDir) === Range.inclusive(5, 50, 5))
+        assert(changelogVersionsPresent(remoteDir, checkpointFormatVersion) === (1 to 50))
+        assert(snapshotVersionsPresent(remoteDir, checkpointFormatVersion) ===
+          Range.inclusive(5, 50, 5))
       } else {
-        assert(changelogVersionsPresent(remoteDir) === Seq.empty)
-        assert(snapshotVersionsPresent(remoteDir) === (1 to 50))
+        assert(changelogVersionsPresent(remoteDir, checkpointFormatVersion) === Seq.empty)
+        assert(snapshotVersionsPresent(remoteDir, checkpointFormatVersion) === (1 to 50))
       }
   }
 
@@ -2184,18 +2195,21 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       localRootDir: File = Utils.createTempDir(),
       hadoopConf: Configuration = new Configuration,
       loggingId: String = "",
-      useColumnFamilies: Boolean = false)
+      useColumnFamilies: Boolean = false,
+      val versionToUniqueId : mutable.Map[Long, String] = mutable.Map[Long, String]())
     extends RocksDB(dfsRootDir, conf, localRootDir, hadoopConf, loggingId,
       useColumnFamilies, checkpointFormatVersion = 2) {
     import java.util.UUID
 
-    val versionToUniqueId = new mutable.HashMap[Long, String]()
+    // scalastyle:off
 
     override def load(
         version: Long,
         ckptId: Option[String] = None,
         readOnly: Boolean = false): RocksDB = {
       assert(ckptId.isEmpty, "Checkpoint ID should not be provided for test")
+
+      println(s"wei== before load version: $version, current versionToUniqueId: " + versionToUniqueId.mkString(", "))
 
       var checkpointUniqueId = versionToUniqueId.get(version)
       // if checkpointUniqueId is not found, create one and put in to the map
@@ -2204,15 +2218,21 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
         versionToUniqueId.put(version, uniqueId)
         checkpointUniqueId = Some(uniqueId)
       }
+      println(s"wei== after load version: $version, current versionToUniqueId: " + versionToUniqueId.mkString(", "))
       super.load(version, checkpointUniqueId, readOnly)
     }
 
     override def commit(): Long = {
+      println(s"wei== before commit version: $loadedVersion, current versionToUniqueId: " + versionToUniqueId.mkString(", "))
       // loadedVersion and loadedCheckpointId got updated after commit
       versionToUniqueId.put(loadedVersion + 1, sessionCheckpointId.get)
+
+      println(s"wei== after commit version: $loadedVersion, current versionToUniqueId: " + versionToUniqueId.mkString(", "))
       super.commit()
     }
   }
+
+  // scalastyle:on
 
   // withDB override with checkpoint format v2
   def withDB[T](
@@ -2222,6 +2242,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       hadoopConf: Configuration = new Configuration(),
       useColumnFamilies: Boolean = false,
       checkpointFormatVersion: Int = 1,
+      versionToUniqueId : mutable.Map[Long, String] = mutable.Map[Long, String](),
       localDir: File = Utils.createTempDir())(
       func: RocksDB => T): T = {
     var db: RocksDB = null
@@ -2242,7 +2263,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
             localRootDir = localDir,
             hadoopConf = hadoopConf,
             loggingId = s"[Thread-${Thread.currentThread.getId}]",
-            useColumnFamilies = useColumnFamilies)
+            useColumnFamilies = useColumnFamilies,
+            versionToUniqueId = versionToUniqueId)
       }
       db.load(version)
       func(db)

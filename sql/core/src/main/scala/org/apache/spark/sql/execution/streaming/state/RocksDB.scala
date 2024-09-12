@@ -322,7 +322,7 @@ class RocksDB(
           fileManager.getLatestSnapshotVersionAndUniqueId(version, checkpointUniqueId)
         }
 
-        if (checkpointFormatVersion >= 2 && enableChangelogCheckpointing && version != 0) {
+        if (version != 0 && enableChangelogCheckpointing && checkpointFormatVersion >= 2) {
           // TODO: changelog not always enabled?
           val changelogReader = fileManager.getChangelogReader(
             version, useColumnFamilies, checkpointUniqueId)

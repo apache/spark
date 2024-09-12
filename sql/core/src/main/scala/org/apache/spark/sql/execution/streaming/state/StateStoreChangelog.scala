@@ -295,16 +295,13 @@ abstract class StateStoreChangelogReader(
   def readLineage(): Array[(Long, String)] = {
     val lineageStr = input.readUTF()
     lineageStr.split(" ").map { lineage =>
+      println("wei==lineage: " + lineage)
       val Array(version, uniqueId) = lineage.split(":")
       (version.toLong, uniqueId)
     }
   }
 
-  val lineage = if (checkpointFormatVersion == 2) {
-    Some(readLineage())
-  } else {
-    None
-  }
+  val lineage: Option[Array[(Long, String)]]
 
   def version: Short
 
@@ -329,6 +326,11 @@ class StateStoreChangelogReaderV1(
 
   // Note that v1 does not record this value in the changelog file
   override def version: Short = 1
+
+  override val lineage: Option[Array[(Long, String)]] = checkpointFormatVersion match {
+    case 1 => None
+    case _ => Some(readLineage())
+  }
 
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte]) = {
     val keySize = input.readInt()
@@ -384,6 +386,11 @@ class StateStoreChangelogReaderV2(
   val changelogVersionStr = input.readUTF()
   assert(changelogVersionStr == "v2",
     s"Changelog version mismatch: $changelogVersionStr != v2")
+
+  override val lineage: Option[Array[(Long, String)]] = checkpointFormatVersion match {
+    case 1 => None
+    case _ => Some(readLineage())
+  }
 
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte]) = {
     val recordType = RecordType.getRecordTypeFromByte(input.readByte())
