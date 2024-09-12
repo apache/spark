@@ -33,8 +33,7 @@ public class ArrayExpressionUtils {
     } else if (o2 == null) {
       return 1;
     }
-    boolean c1 = o1, c2 = o2;
-    return c1 == c2 ? 0 : (c1 ? 1 : -1);
+    return o1.equals(o2) ? 0 : (o1 ? 1 : -1);
   };
 
   // Byte nullable comparator
@@ -46,8 +45,7 @@ public class ArrayExpressionUtils {
     } else if (o2 == null) {
       return 1;
     }
-    byte c1 = o1, c2 = o2;
-    return Byte.compare(c1, c2);
+    return Byte.compare(o1, o2);
   };
 
   // Short nullable comparator
@@ -59,8 +57,7 @@ public class ArrayExpressionUtils {
     } else if (o2 == null) {
       return 1;
     }
-    short c1 = o1, c2 = o2;
-    return Short.compare(c1, c2);
+    return Short.compare(o1, o2);
   };
 
   // Integer nullable comparator
@@ -72,8 +69,7 @@ public class ArrayExpressionUtils {
     } else if (o2 == null) {
       return 1;
     }
-    int c1 = o1, c2 = o2;
-    return Integer.compare(c1, c2);
+    return Integer.compare(o1, o2);
   };
 
   // Long nullable comparator
@@ -85,8 +81,7 @@ public class ArrayExpressionUtils {
     } else if (o2 == null) {
       return 1;
     }
-    long c1 = o1, c2 = o2;
-    return Long.compare(c1, c2);
+    return Long.compare(o1, o2);
   };
 
   // Float nullable comparator
@@ -98,8 +93,7 @@ public class ArrayExpressionUtils {
     } else if (o2 == null) {
       return 1;
     }
-    float c1 = o1, c2 = o2;
-    return SQLOrderingUtil.compareFloats(c1, c2);
+    return SQLOrderingUtil.compareFloats(o1, o2);
   };
 
   // Double nullable comparator
@@ -111,8 +105,7 @@ public class ArrayExpressionUtils {
     } else if (o2 == null) {
       return 1;
     }
-    double c1 = o1, c2 = o2;
-    return SQLOrderingUtil.compareDoubles(c1, c2);
+    return SQLOrderingUtil.compareDoubles(o1, o2);
   };
 
   // Boolean nullable comparator
