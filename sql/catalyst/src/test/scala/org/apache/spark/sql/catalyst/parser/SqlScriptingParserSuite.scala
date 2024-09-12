@@ -234,8 +234,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       exception = exception,
       condition = "END_LABEL_WITHOUT_BEGIN_LABEL",
       parameters = Map("endLabel" -> toSQLId("lbl")))
-    assert(exception.origin.line.isDefined)
-    assert(exception.origin.line.get == 8)
+    assert(exception.origin.line.contains(8))
   }
 
   test("compound: beginLabel + endLabel with different casing") {
@@ -298,8 +297,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         exception = exception,
         condition = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
         parameters = Map("varName" -> "`testVariable`"))
-    assert(exception.origin.line.isDefined)
-    assert(exception.origin.line.get == 4)
+    assert(exception.origin.line.contains(4))
   }
 
   test("declare in wrong scope") {
@@ -317,8 +315,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       exception = exception,
       condition = "INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE",
       parameters = Map("varName" -> "`testVariable`"))
-    assert(exception.origin.line.isDefined)
-    assert(exception.origin.line.get == 4)
+    assert(exception.origin.line.contains(4))
   }
 
   test("SET VAR statement test") {
