@@ -56,7 +56,7 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     assert(volumeSpec.mountPath === "/path")
     assert(volumeSpec.mountReadOnly)
     assert(volumeSpec.volumeConf.asInstanceOf[KubernetesPVCVolumeConf] ===
-      KubernetesPVCVolumeConf("claimName"))
+      KubernetesPVCVolumeConf("claimName", labels = Some(Map())))
   }
 
   test("SPARK-49598: Parses persistentVolumeClaim volumes correctly with labels") {
