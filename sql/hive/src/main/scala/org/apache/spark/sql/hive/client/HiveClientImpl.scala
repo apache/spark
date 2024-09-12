@@ -372,7 +372,11 @@ private[hive] class HiveClientImpl(
 
   private def toHiveDatabase(
       database: CatalogDatabase, userName: Option[String] = None): HiveDatabase = {
-    val props = database.properties
+    val props = if (database.collation.isDefined) {
+      database.properties + (PROP_COLLATION -> database.collation.get)
+    } else {
+      database.properties
+    }
     val hiveDb = new HiveDatabase(
       database.name,
       database.description,
@@ -392,8 +396,9 @@ private[hive] class HiveClientImpl(
       CatalogDatabase(
         name = d.getName,
         description = Option(d.getDescription).getOrElse(""),
+        collation = params.get(PROP_COLLATION),
         locationUri = CatalogUtils.stringToURI(d.getLocationUri),
-        properties = params)
+        properties = params -- Seq(PROP_COLLATION))
     }.getOrElse(throw new NoSuchDatabaseException(dbName))
   }
 

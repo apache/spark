@@ -1207,7 +1207,7 @@ colPosition
     ;
 
 collationSpec
-    : SET DEFAULT COLLATION collationName=identifier
+    : DEFAULT COLLATION collationName=identifier
     ;
 
 collateClause
