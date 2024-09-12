@@ -39,19 +39,31 @@ object KubernetesVolumeUtils {
    */
   @Since("3.0.0")
   def parseVolumesWithPrefix(sparkConf: SparkConf, prefix: String): Seq[KubernetesVolumeSpec] = {
-    val properties = sparkConf.getAllWithPrefix(prefix).toMap
+    // since volume prefix for volume coincides with volume labels prefix, filtering out
+    // required config
+    val properties = sparkConf.getAllWithPrefix(prefix).toMap.filter(x => !x._1.startsWith("label"))
+    val labelsProperties = sparkConf.getAllWithPrefix(prefix).
+      toMap.filter(x => x._1.startsWith("label"))
 
     getVolumeTypesAndNames(properties).map { case (volumeType, volumeName) =>
       val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_PATH_KEY"
       val readOnlyKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_READONLY_KEY"
       val subPathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_SUBPATH_KEY"
+      val labelsSubKey = s"label.$volumeType.$volumeName."
+
+      val selectedVolumeLabels = labelsProperties
+        .filter(_._1.startsWith(labelsSubKey))
+        .map {
+          case (k, v) => k.replaceAll(labelsSubKey, "") -> v
+        }
 
       KubernetesVolumeSpec(
         volumeName = volumeName,
         mountPath = properties(pathKey),
         mountSubPath = properties.getOrElse(subPathKey, ""),
         mountReadOnly = properties.get(readOnlyKey).exists(_.toBoolean),
-        volumeConf = parseVolumeSpecificConf(properties, volumeType, volumeName))
+        volumeConf = parseVolumeSpecificConf(properties,
+          volumeType, volumeName, selectedVolumeLabels))
     }.toSeq
   }
 
@@ -74,7 +86,8 @@ object KubernetesVolumeUtils {
   private def parseVolumeSpecificConf(
       options: Map[String, String],
       volumeType: String,
-      volumeName: String): KubernetesVolumeSpecificConf = {
+      volumeName: String,
+      labels: Map[String, String]): KubernetesVolumeSpecificConf = {
     volumeType match {
       case KUBERNETES_VOLUMES_HOSTPATH_TYPE =>
         val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_PATH_KEY"
@@ -86,14 +99,13 @@ object KubernetesVolumeUtils {
         val storageClassKey =
           s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_CLAIM_STORAGE_CLASS_KEY"
         val sizeLimitKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY"
-        val labelsKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_LABELS_KEY"
         verifyOptionKey(options, claimNameKey, KUBERNETES_VOLUMES_PVC_TYPE)
         verifySize(options.get(sizeLimitKey))
         KubernetesPVCVolumeConf(
           options(claimNameKey),
           options.get(storageClassKey),
           options.get(sizeLimitKey),
-          convertStringLabelsToMap(options.get(labelsKey)))
+          labels)
 
       case KUBERNETES_VOLUMES_EMPTYDIR_TYPE =>
         val mediumKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY"
@@ -127,22 +139,6 @@ object KubernetesVolumeUtils {
         throw new IllegalArgumentException(
           s"Volume size `$v` is smaller than 1KiB. Missing units?")
       }
-    }
-  }
-
-  /**
-   * Converts string of labels to consumable java Map
-   *
-   * @param labels labels in format : k1=v1,k2=v2
-   * @return Map[k1->v1, k2->v2]
-   */
-  private def convertStringLabelsToMap(labels: Option[String]): Map[String, String] = {
-    labels match {
-      case Some(value) =>
-        value.split(",").map(_.split("=")).collect {
-          case Array(k, v) => k -> v
-        }.toMap
-      case None => Map()
     }
   }
 }

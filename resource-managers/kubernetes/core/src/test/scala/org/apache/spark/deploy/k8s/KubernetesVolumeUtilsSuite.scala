@@ -50,7 +50,22 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     sparkConf.set("test.persistentVolumeClaim.volumeName.mount.path", "/path")
     sparkConf.set("test.persistentVolumeClaim.volumeName.mount.readOnly", "true")
     sparkConf.set("test.persistentVolumeClaim.volumeName.options.claimName", "claimName")
-    sparkConf.set("test.persistentVolumeClaim.volumeName.options.labels", "env=test,name=pvc-name")
+
+    val volumeSpec = KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head
+    assert(volumeSpec.volumeName === "volumeName")
+    assert(volumeSpec.mountPath === "/path")
+    assert(volumeSpec.mountReadOnly)
+    assert(volumeSpec.volumeConf.asInstanceOf[KubernetesPVCVolumeConf] ===
+      KubernetesPVCVolumeConf("claimName"))
+  }
+
+  test("Parses persistentVolumeClaim volumes correctly with labels") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("test.persistentVolumeClaim.volumeName.mount.path", "/path")
+    sparkConf.set("test.persistentVolumeClaim.volumeName.mount.readOnly", "true")
+    sparkConf.set("test.persistentVolumeClaim.volumeName.options.claimName", "claimName")
+    sparkConf.set("test.label.persistentVolumeClaim.volumeName.env", "test")
+    sparkConf.set("test.label.persistentVolumeClaim.volumeName.foo", "bar")
 
     val volumeSpec = KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head
     assert(volumeSpec.volumeName === "volumeName")
@@ -58,15 +73,14 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     assert(volumeSpec.mountReadOnly)
     assert(volumeSpec.volumeConf.asInstanceOf[KubernetesPVCVolumeConf] ===
       KubernetesPVCVolumeConf(claimName = "claimName",
-        labels = Map("env" -> "test", "name" -> "pvc-name")))
+        labels = Map("env" -> "test", "foo" -> "bar")))
   }
 
-  test("Parses persistentVolumeClaim volumes & puts labels as empty Map if not in correct format") {
+  test("Parses persistentVolumeClaim volumes & puts labels as empty Map if not provided") {
     val sparkConf = new SparkConf(false)
     sparkConf.set("test.persistentVolumeClaim.volumeName.mount.path", "/path")
     sparkConf.set("test.persistentVolumeClaim.volumeName.mount.readOnly", "true")
     sparkConf.set("test.persistentVolumeClaim.volumeName.options.claimName", "claimName")
-    sparkConf.set("test.persistentVolumeClaim.volumeName.options.labels", "env:test,name:pvc-name")
 
     val volumeSpec = KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head
     assert(volumeSpec.volumeName === "volumeName")

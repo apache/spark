@@ -24,9 +24,10 @@ import io.fabric8.kubernetes.api.model._
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_USE_LEGACY_PVC_ACCESS_MODE
 import org.apache.spark.deploy.k8s.Constants.{ENV_EXECUTOR_ID, SPARK_APP_ID_LABEL}
+import org.apache.spark.internal.Logging
 
 private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
-  extends KubernetesFeatureConfigStep {
+  extends KubernetesFeatureConfigStep with Logging {
   import MountVolumesFeatureStep._
 
   val additionalResources = ArrayBuffer.empty[HasMetadata]
@@ -86,6 +87,8 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
                 .replaceAll(PVC_ON_DEMAND, s"${conf.resourceNamePrefix}-driver$PVC_POSTFIX-$i")
           }
           if (storageClass.isDefined && size.isDefined) {
+            logDebug(s"Adding ${(labels ++
+              Map(SPARK_APP_ID_LABEL -> conf.appId)).asJava} to $claimName PVC ")
             additionalResources.append(new PersistentVolumeClaimBuilder()
               .withKind(PVC)
               .withApiVersion("v1")
