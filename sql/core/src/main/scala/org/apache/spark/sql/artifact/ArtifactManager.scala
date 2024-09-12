@@ -71,7 +71,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
     (ArtifactUtils.concatenatePaths(artifactPath, "classes"),
       s"$artifactURI${File.separator}classes${File.separator}")
 
-  protected[artifact] val state: JobArtifactState =
+  protected[sql] val state: JobArtifactState =
     JobArtifactState(session.sessionUUID, Option(classURI))
 
   def withResources[T](f: => T): T = {

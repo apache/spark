@@ -342,13 +342,11 @@ class ArtifactManagerSuite extends SharedSparkSession {
       .asInstanceOf[UDF2[Long, Long, Long]]
     spark.udf.register("intSum", instance, DataTypes.LongType)
 
-    artifactManager.withResources {
-      val r = spark.range(5)
-        .withColumn("id2", col("id") + 1)
-        .selectExpr("intSum(id, id2)")
-        .collect()
-      assert(r.map(_.getLong(0)).toSeq == Seq(1, 3, 5, 7, 9))
-    }
+    val r = spark.range(5)
+      .withColumn("id2", col("id") + 1)
+      .selectExpr("intSum(id, id2)")
+      .collect()
+    assert(r.map(_.getLong(0)).toSeq == Seq(1, 3, 5, 7, 9))
   }
 
   private def testAddArtifactToLocalSession(
