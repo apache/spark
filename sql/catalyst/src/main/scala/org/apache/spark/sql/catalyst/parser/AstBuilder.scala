@@ -5721,6 +5721,16 @@ class AstBuilder extends DataTypeAstBuilder
       operationNotAllowed("Operator pipe SQL syntax using |>", ctx)
     }
     Option(ctx.selectClause).map { c =>
+      def updateProject(p: Project): Project = {
+        val newProjectList: Seq[NamedExpression] = p.projectList.map {
+          case a: Alias =>
+            a.withNewChildren(Seq(PipeSelect(a.child)))
+              .asInstanceOf[NamedExpression]
+          case other =>
+            other
+        }
+        p.copy(projectList = newProjectList)
+      }
       withSelectQuerySpecification(
         ctx = ctx,
         selectClause = c,
@@ -5730,10 +5740,12 @@ class AstBuilder extends DataTypeAstBuilder
         havingClause = null,
         windowClause = null,
         left) match {
-        // The input should always be a projection since we only pass a context for the SELECT
+        // The input should generally be a projection since we only pass a context for the SELECT
         // clause here and pass "null" for all other clauses.
         case p: Project =>
-          p.copy(child = PipeOperatorSelect(p.child))
+          updateProject(p)
+        case d @ Distinct(p: Project) =>
+          d.copy(child = updateProject(p))
         case other =>
           throw SparkException.internalError(s"Unrecognized matched logical plan: $other")
       }

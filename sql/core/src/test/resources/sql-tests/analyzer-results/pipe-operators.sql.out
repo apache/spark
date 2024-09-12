@@ -66,7 +66,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 table t
 |> select 1 as x
 -- !query analysis
-Project [1 AS x#x]
+Project [pipeselect(1) AS x#x]
 +- SubqueryAlias spark_catalog.default.t
    +- Relation spark_catalog.default.t[x#x,y#x] csv
 
@@ -85,7 +85,7 @@ table t
 |> select x, y
 |> select x + length(y) as z
 -- !query analysis
-Project [(x#x + length(y#x)) AS z#x]
+Project [pipeselect((x#x + length(y#x))) AS z#x]
 +- Project [x#x, y#x]
    +- SubqueryAlias spark_catalog.default.t
       +- Relation spark_catalog.default.t[x#x,y#x] csv
@@ -95,7 +95,7 @@ Project [(x#x + length(y#x)) AS z#x]
 values (0), (1) tab(col)
 |> select col * 2 as result
 -- !query analysis
-Project [(col#x * 2) AS result#x]
+Project [pipeselect((col#x * 2)) AS result#x]
 +- SubqueryAlias tab
    +- LocalRelation [col#x]
 
@@ -104,7 +104,7 @@ Project [(col#x * 2) AS result#x]
 (select * from t union all select * from t)
 |> select x + length(y) as result
 -- !query analysis
-Project [(x#x + length(y#x)) AS result#x]
+Project [pipeselect((x#x + length(y#x))) AS result#x]
 +- Union false, false
    :- Project [x#x, y#x]
    :  +- SubqueryAlias spark_catalog.default.t
@@ -155,7 +155,7 @@ Project [col#x.i1 AS i1#x]
 table t
 |> select (select a from other where x = a limit 1) as result
 -- !query analysis
-Project [scalar-subquery#x [x#x] AS result#x]
+Project [pipeselect(scalar-subquery#x [x#x]) AS result#x]
 :  +- GlobalLimit 1
 :     +- LocalLimit 1
 :        +- Project [a#x]
@@ -170,7 +170,7 @@ Project [scalar-subquery#x [x#x] AS result#x]
 table t
 |> select (select any_value(a) from other where x = a limit 1) as result
 -- !query analysis
-Project [scalar-subquery#x [x#x] AS result#x]
+Project [pipeselect(scalar-subquery#x [x#x]) AS result#x]
 :  +- GlobalLimit 1
 :     +- LocalLimit 1
 :        +- Aggregate [any_value(a#x, false) AS any_value(a)#x]
@@ -185,8 +185,8 @@ Project [scalar-subquery#x [x#x] AS result#x]
 table t
 |> select x + length(x) as z, z + 1 as plus_one
 -- !query analysis
-Project [z#x, (z#x + 1) AS plus_one#x]
-+- Project [x#x, y#x, (x#x + length(cast(x#x as string))) AS z#x]
+Project [z#x, pipeselect((z#x + 1)) AS plus_one#x]
++- Project [x#x, y#x, pipeselect((x#x + length(cast(x#x as string)))) AS z#x]
    +- SubqueryAlias spark_catalog.default.t
       +- Relation spark_catalog.default.t[x#x,y#x] csv
 
@@ -196,11 +196,53 @@ table t
 |> select first_value(x) over (partition by y) as result
 -- !query analysis
 Project [result#x]
-+- Project [x#x, y#x, result#x, result#x]
-   +- Window [first_value(x#x, false) windowspecdefinition(y#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS result#x], [y#x]
++- Project [x#x, y#x, _we0#x, pipeselect(_we0#x) AS result#x]
+   +- Window [first_value(x#x, false) windowspecdefinition(y#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#x], [y#x]
       +- Project [x#x, y#x]
          +- SubqueryAlias spark_catalog.default.t
             +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+select 1 x, 2 y, 3 z
+|> select 1 + sum(x) over (),
+     avg(y) over (),
+     x,
+     avg(x+1) over (partition by y order by z) AS a2
+|> select a2
+-- !query analysis
+Project [a2#x]
++- Project [(1 + sum(x) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING))#xL, avg(y) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, x#x, a2#x]
+   +- Project [x#x, y#x, _w1#x, z#x, _we0#xL, avg(y) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, _we2#x, (cast(1 as bigint) + _we0#xL) AS (1 + sum(x) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING))#xL, avg(y) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, pipeselect(_we2#x) AS a2#x]
+      +- Window [avg(_w1#x) windowspecdefinition(y#x, z#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS _we2#x], [y#x], [z#x ASC NULLS FIRST]
+         +- Window [sum(x#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#xL, avg(y#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS avg(y) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
+            +- Project [x#x, y#x, (x#x + 1) AS _w1#x, z#x]
+               +- Project [1 AS x#x, 2 AS y#x, 3 AS z#x]
+                  +- OneRowRelation
+
+
+-- !query
+table t
+|> select x, count(*) over ()
+|> select x
+-- !query analysis
+Project [x#x]
++- Project [x#x, count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL]
+   +- Project [x#x, count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL, count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL]
+         +- Project [x#x]
+            +- SubqueryAlias spark_catalog.default.t
+               +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> select distinct x, y
+-- !query analysis
+Distinct
++- Project [x#x, y#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -212,14 +254,14 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "expr" : "sum(x#x) AS result#xL"
+    "expr" : "sum(x#x)"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 19,
-    "stopIndex" : 34,
-    "fragment" : "sum(x) as result"
+    "stopIndex" : 24,
+    "fragment" : "sum(x)"
   } ]
 }
 
@@ -233,14 +275,14 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "expr" : "y#x"
+    "expr" : "sum(x#x)"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 19,
-    "stopIndex" : 19,
-    "fragment" : "y"
+    "startIndex" : 34,
+    "stopIndex" : 39,
+    "fragment" : "sum(x)"
   } ]
 }
 

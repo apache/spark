@@ -67,6 +67,21 @@ table t
 table t
 |> select first_value(x) over (partition by y) as result;
 
+select 1 x, 2 y, 3 z
+|> select 1 + sum(x) over (),
+     avg(y) over (),
+     x,
+     avg(x+1) over (partition by y order by z) AS a2
+|> select a2;
+
+table t
+|> select x, count(*) over ()
+|> select x;
+
+-- DISTINCT is supported.
+table t
+|> select distinct x, y;
+
 -- Selection operators: negative tests.
 ---------------------------------------
 

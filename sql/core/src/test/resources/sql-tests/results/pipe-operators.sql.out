@@ -197,6 +197,40 @@ struct<result:int>
 
 
 -- !query
+select 1 x, 2 y, 3 z
+|> select 1 + sum(x) over (),
+     avg(y) over (),
+     x,
+     avg(x+1) over (partition by y order by z) AS a2
+|> select a2
+-- !query schema
+struct<a2:double>
+-- !query output
+2.0
+
+
+-- !query
+table t
+|> select x, count(*) over ()
+|> select x
+-- !query schema
+struct<x:int>
+-- !query output
+0
+1
+
+
+-- !query
+table t
+|> select distinct x, y
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
 table t
 |> select sum(x) as result
 -- !query schema
@@ -207,14 +241,14 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "expr" : "sum(x#x) AS result#xL"
+    "expr" : "sum(x#x)"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 19,
-    "stopIndex" : 34,
-    "fragment" : "sum(x) as result"
+    "stopIndex" : 24,
+    "fragment" : "sum(x)"
   } ]
 }
 
@@ -230,14 +264,14 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "expr" : "y#x"
+    "expr" : "sum(x#x)"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 19,
-    "stopIndex" : 19,
-    "fragment" : "y"
+    "startIndex" : 34,
+    "stopIndex" : 39,
+    "fragment" : "sum(x)"
   } ]
 }
 
