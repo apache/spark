@@ -35,7 +35,7 @@ import org.apache.spark.util.collection.OpenHashMap
 
 // scalastyle:off nonascii
 class CollationSQLExpressionsSuite
-  extends QueryTest
+    extends QueryTest
     with SharedSparkSession
     with ExpressionEvalHelper {
 
@@ -43,10 +43,10 @@ class CollationSQLExpressionsSuite
 
   test("Support Md5 hash expression with collation") {
     case class Md5TestCase(
-                            input: String,
-                            collationName: String,
-                            result: String
-                          )
+      input: String,
+      collationName: String,
+      result: String
+    )
 
     val testCases = Seq(
       Md5TestCase("Spark", "UTF8_BINARY", "8cde774d6f7333752ed72cacddb05126"),
@@ -73,11 +73,11 @@ class CollationSQLExpressionsSuite
 
   test("Support Sha2 hash expression with collation") {
     case class Sha2TestCase(
-                             input: String,
-                             collationName: String,
-                             bitLength: Int,
-                             result: String
-                           )
+      input: String,
+      collationName: String,
+      bitLength: Int,
+      result: String
+    )
 
     val testCases = Seq(
       Sha2TestCase("Spark", "UTF8_BINARY", 256,
@@ -108,10 +108,10 @@ class CollationSQLExpressionsSuite
 
   test("Support Sha1 hash expression with collation") {
     case class Sha1TestCase(
-                             input: String,
-                             collationName: String,
-                             result: String
-                           )
+      input: String,
+      collationName: String,
+      result: String
+    )
 
     val testCases = Seq(
       Sha1TestCase("Spark", "UTF8_BINARY", "85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c"),
@@ -138,10 +138,10 @@ class CollationSQLExpressionsSuite
 
   test("Support Crc32 hash expression with collation") {
     case class Crc321TestCase(
-                               input: String,
-                               collationName: String,
-                               result: Int
-                             )
+     input: String,
+     collationName: String,
+     result: Int
+    )
 
     val testCases = Seq(
       Crc321TestCase("Spark", "UTF8_BINARY", 1557323817),
@@ -166,10 +166,10 @@ class CollationSQLExpressionsSuite
 
   test("Support Murmur3Hash hash expression with collation") {
     case class Murmur3HashTestCase(
-                                    input: String,
-                                    collationName: String,
-                                    result: Int
-                                  )
+     input: String,
+     collationName: String,
+     result: Int
+    )
 
     val testCases = Seq(
       Murmur3HashTestCase("Spark", "UTF8_BINARY", 228093765),
@@ -194,10 +194,10 @@ class CollationSQLExpressionsSuite
 
   test("Support XxHash64 hash expression with collation") {
     case class XxHash64TestCase(
-                                 input: String,
-                                 collationName: String,
-                                 result: Long
-                               )
+      input: String,
+      collationName: String,
+      result: Long
+    )
 
     val testCases = Seq(
       XxHash64TestCase("Spark", "UTF8_BINARY", -4294468057691064905L),
@@ -222,10 +222,10 @@ class CollationSQLExpressionsSuite
 
   test("Support UrlEncode hash expression with collation") {
     case class UrlEncodeTestCase(
-                                  input: String,
-                                  collationName: String,
-                                  result: String
-                                )
+     input: String,
+     collationName: String,
+     result: String
+    )
 
     val testCases = Seq(
       UrlEncodeTestCase("https://spark.apache.org", "UTF8_BINARY",
@@ -256,10 +256,10 @@ class CollationSQLExpressionsSuite
 
   test("Support UrlDecode hash expression with collation") {
     case class UrlDecodeTestCase(
-                                  input: String,
-                                  collationName: String,
-                                  result: String
-                                )
+      input: String,
+      collationName: String,
+      result: String
+    )
 
     val testCases = Seq(
       UrlDecodeTestCase("https%3A%2F%2Fspark.apache.org", "UTF8_BINARY",
@@ -290,11 +290,11 @@ class CollationSQLExpressionsSuite
 
   test("Support ParseUrl hash expression with collation") {
     case class ParseUrlTestCase(
-                                 input: String,
-                                 collationName: String,
-                                 path: String,
-                                 result: String
-                               )
+      input: String,
+      collationName: String,
+      path: String,
+      result: String
+    )
 
     val testCases = Seq(
       ParseUrlTestCase("http://spark.apache.org/path?query=1", "UTF8_BINARY", "HOST",
@@ -325,13 +325,13 @@ class CollationSQLExpressionsSuite
 
   test("Support CsvToStructs csv expression with collation") {
     case class CsvToStructsTestCase(
-                                     input: String,
-                                     collationName: String,
-                                     schema: String,
-                                     options: String,
-                                     result: Row,
-                                     structFields: Seq[StructField]
-                                   )
+     input: String,
+     collationName: String,
+     schema: String,
+     options: String,
+     result: Row,
+     structFields: Seq[StructField]
+    )
 
     val testCases = Seq(
       CsvToStructsTestCase("1", "UTF8_BINARY", "'a INT'", "",
@@ -374,10 +374,10 @@ class CollationSQLExpressionsSuite
 
   test("Support SchemaOfCsv csv expression with collation") {
     case class SchemaOfCsvTestCase(
-                                    input: String,
-                                    collationName: String,
-                                    result: String
-                                  )
+      input: String,
+      collationName: String,
+      result: String
+    )
 
     val testCases = Seq(
       SchemaOfCsvTestCase("1", "UTF8_BINARY", "STRUCT<_c0: INT>"),
@@ -406,10 +406,10 @@ class CollationSQLExpressionsSuite
 
   test("Support StructsToCsv csv expression with collation") {
     case class StructsToCsvTestCase(
-                                     input: String,
-                                     collationName: String,
-                                     result: String
-                                   )
+     input: String,
+     collationName: String,
+     result: String
+    )
 
     val testCases = Seq(
       StructsToCsvTestCase("named_struct('a', 1, 'b', 2)", "UTF8_BINARY", "1,2"),
@@ -438,11 +438,11 @@ class CollationSQLExpressionsSuite
   test("Conv expression with collation") {
     // Supported collations
     case class ConvTestCase(
-                             num: String,
-                             from_base: String,
-                             to_base: String,
-                             collationName: String,
-                             result: String)
+        num: String,
+        from_base: String,
+        to_base: String,
+        collationName: String,
+        result: String)
 
     val testCases = Seq(
       ConvTestCase("100", "2", "10", "UTF8_BINARY", "4"),
@@ -464,9 +464,9 @@ class CollationSQLExpressionsSuite
   test("Bin expression with collation") {
     // Supported collations
     case class BinTestCase(
-                            num: String,
-                            collationName: String,
-                            result: String)
+        num: String,
+        collationName: String,
+        result: String)
 
     val testCases = Seq(
       BinTestCase("13", "UTF8_BINARY", "1101"),
@@ -489,9 +489,9 @@ class CollationSQLExpressionsSuite
 
   test("Hex with non-string input expression with collation") {
     case class HexTestCase(
-                            num: String,
-                            collationName: String,
-                            result: String)
+        num: String,
+        collationName: String,
+        result: String)
 
     val testCases = Seq(
       HexTestCase("13", "UTF8_BINARY", "D"),
@@ -514,9 +514,9 @@ class CollationSQLExpressionsSuite
 
   test("Hex with string input expression with collation") {
     case class HexTestCase(
-                            num: String,
-                            collationName: String,
-                            result: String)
+        num: String,
+        collationName: String,
+        result: String)
 
     val testCases = Seq(
       HexTestCase("Spark SQL", "UTF8_BINARY", "537061726B2053514C"),
@@ -537,9 +537,9 @@ class CollationSQLExpressionsSuite
 
   test("UnHex expression with collation") {
     case class UnHexTestCase(
-                              num: String,
-                              collationName: String,
-                              result: String)
+        num: String,
+        collationName: String,
+        result: String)
 
     val testCases = Seq(
       UnHexTestCase("537061726B2053514C", "UTF8_BINARY", "Spark SQL"),
@@ -560,13 +560,13 @@ class CollationSQLExpressionsSuite
 
   test("Support XPath expressions with collation") {
     case class XPathTestCase(
-                              xml: String,
-                              xpath: String,
-                              functionName: String,
-                              collationName: String,
-                              result: Any,
-                              resultType: DataType
-                            )
+      xml: String,
+      xpath: String,
+      functionName: String,
+      collationName: String,
+      result: Any,
+      resultType: DataType
+    )
 
     val testCases = Seq(
       XPathTestCase("<a><b>1</b></a>", "a/b",
@@ -604,10 +604,10 @@ class CollationSQLExpressionsSuite
 
   test("Support StringSpace expression with collation") {
     case class StringSpaceTestCase(
-                                    input: Int,
-                                    collationName: String,
-                                    result: String
-                                  )
+      input: Int,
+      collationName: String,
+      result: String
+    )
 
     val testCases = Seq(
       StringSpaceTestCase(1, "UTF8_BINARY", " "),
@@ -634,12 +634,12 @@ class CollationSQLExpressionsSuite
 
   test("Support ToNumber & TryToNumber expressions with collation") {
     case class ToNumberTestCase(
-                                 input: String,
-                                 collationName: String,
-                                 format: String,
-                                 result: Any,
-                                 resultType: DataType
-                               )
+      input: String,
+      collationName: String,
+      format: String,
+      result: Any,
+      resultType: DataType
+    )
 
     val testCases = Seq(
       ToNumberTestCase("123", "UTF8_BINARY", "999", 123, DecimalType(3, 0)),
@@ -705,11 +705,11 @@ class CollationSQLExpressionsSuite
 
   test("Support ToChar expression with collation") {
     case class ToCharTestCase(
-                               input: Int,
-                               collationName: String,
-                               format: String,
-                               result: String
-                             )
+      input: Int,
+      collationName: String,
+      format: String,
+      result: String
+    )
 
     val testCases = Seq(
       ToCharTestCase(12, "UTF8_BINARY", "999", " 12"),
@@ -736,11 +736,11 @@ class CollationSQLExpressionsSuite
 
   test("Support GetJsonObject json expression with collation") {
     case class GetJsonObjectTestCase(
-                                      input: String,
-                                      path: String,
-                                      collationName: String,
-                                      result: String
-                                    )
+      input: String,
+      path: String,
+      collationName: String,
+      result: String
+    )
 
     val testCases = Seq(
       GetJsonObjectTestCase("{\"a\":\"b\"}", "$.a", "UTF8_BINARY", "b"),
@@ -767,11 +767,11 @@ class CollationSQLExpressionsSuite
 
   test("Support JsonTuple json expression with collation") {
     case class JsonTupleTestCase(
-                                  input: String,
-                                  names: String,
-                                  collationName: String,
-                                  result: Row
-                                )
+      input: String,
+      names: String,
+      collationName: String,
+      result: Row
+    )
 
     val testCases = Seq(
       JsonTupleTestCase("{\"a\":1, \"b\":2}", "'a', 'b'", "UTF8_BINARY",
@@ -802,11 +802,11 @@ class CollationSQLExpressionsSuite
 
   test("Support JsonToStructs json expression with collation") {
     case class JsonToStructsTestCase(
-                                      input: String,
-                                      schema: String,
-                                      collationName: String,
-                                      result: Row
-                                    )
+      input: String,
+      schema: String,
+      collationName: String,
+      result: Row
+    )
 
     val testCases = Seq(
       JsonToStructsTestCase("{\"a\":1, \"b\":2.0}", "a INT, b DOUBLE",
@@ -837,10 +837,10 @@ class CollationSQLExpressionsSuite
 
   test("Support StructsToJson json expression with collation") {
     case class StructsToJsonTestCase(
-                                      struct: String,
-                                      collationName: String,
-                                      result: Row
-                                    )
+      struct: String,
+      collationName: String,
+      result: Row
+    )
 
     val testCases = Seq(
       StructsToJsonTestCase("named_struct('a', 1, 'b', 2)",
@@ -871,10 +871,10 @@ class CollationSQLExpressionsSuite
 
   test("Support LengthOfJsonArray json expression with collation") {
     case class LengthOfJsonArrayTestCase(
-                                          input: String,
-                                          collationName: String,
-                                          result: Row
-                                        )
+      input: String,
+      collationName: String,
+      result: Row
+    )
 
     val testCases = Seq(
       LengthOfJsonArrayTestCase("'[1,2,3,4]'", "UTF8_BINARY", Row(4)),
@@ -900,10 +900,10 @@ class CollationSQLExpressionsSuite
 
   test("Support JsonObjectKeys json expression with collation") {
     case class JsonObjectKeysJsonArrayTestCase(
-                                                input: String,
-                                                collationName: String,
-                                                result: Row
-                                              )
+      input: String,
+      collationName: String,
+      result: Row
+    )
 
     val testCases = Seq(
       JsonObjectKeysJsonArrayTestCase("{}", "UTF8_BINARY",
@@ -934,10 +934,10 @@ class CollationSQLExpressionsSuite
 
   test("Support SchemaOfJson json expression with collation") {
     case class SchemaOfJsonTestCase(
-                                     input: String,
-                                     collationName: String,
-                                     result: Row
-                                   )
+     input: String,
+     collationName: String,
+     result: Row
+    )
 
     val testCases = Seq(
       SchemaOfJsonTestCase("'[{\"col\":0}]'",
@@ -968,11 +968,11 @@ class CollationSQLExpressionsSuite
 
   test("Support `StringToMap` expression with collation") {
     case class StringToMapTestCase[R](
-                                       text: String,
-                                       pairDelim: String,
-                                       keyValueDelim: String,
-                                       collation: String,
-                                       result: R)
+        text: String,
+        pairDelim: String,
+        keyValueDelim: String,
+        collation: String,
+        result: R)
     val testCases = Seq(
       StringToMapTestCase("a:1,b:2,c:3", ",", ":", "UTF8_BINARY",
         Map("a" -> "1", "b" -> "2", "c" -> "3")),
@@ -1095,11 +1095,11 @@ class CollationSQLExpressionsSuite
   test("Support AesEncrypt misc expression with collation") {
     // Supported collations
     case class AesEncryptTestCase(
-                                   input: String,
-                                   collationName: String,
-                                   params: String,
-                                   result: String
-                                 )
+     input: String,
+     collationName: String,
+     params: String,
+     result: String
+    )
     val testCases = Seq(
       AesEncryptTestCase("Spark", "UTF8_BINARY", "'1234567890abcdef', 'ECB'",
         "8DE7DB79A23F3E8ED530994DDEA98913"),
@@ -1127,11 +1127,11 @@ class CollationSQLExpressionsSuite
   test("Support AesDecrypt misc expression with collation") {
     // Supported collations
     case class AesDecryptTestCase(
-                                   input: String,
-                                   collationName: String,
-                                   params: String,
-                                   result: String
-                                 )
+     input: String,
+     collationName: String,
+     params: String,
+     result: String
+    )
     val testCases = Seq(
       AesDecryptTestCase("8DE7DB79A23F3E8ED530994DDEA98913",
         "UTF8_BINARY", "'1234567890abcdef', 'ECB'", "Spark"),
@@ -1156,7 +1156,7 @@ class CollationSQLExpressionsSuite
   test("Support Mask expression with collation") {
     // Supported collations
     case class MaskTestCase[R](i: String, u: String, l: String, d: String, o: String, c: String,
-                               result: R)
+      result: R)
     val testCases = Seq(
       MaskTestCase("ab-CD-12-@$", null, null, null, null, "UTF8_BINARY", "ab-CD-12-@$"),
       MaskTestCase("ab-CD-12-@$", "X", null, null, null, "UTF8_LCASE", "ab-XX-12-@$"),
@@ -1165,7 +1165,6 @@ class CollationSQLExpressionsSuite
     )
     testCases.foreach(t => {
       def col(s: String): String = if (s == null) "null" else s"collate('$s', '${t.c}')"
-
       val query = s"SELECT mask(${col(t.i)}, ${col(t.u)}, ${col(t.l)}, ${col(t.d)}, ${col(t.o)})"
       // Result & data type
       var result = sql(query)
@@ -1178,9 +1177,7 @@ class CollationSQLExpressionsSuite
     )
     testCasting.foreach(t => {
       def col(s: String): String = if (s == null) "null" else s"collate('$s', '${t.c}')"
-
       def str(s: String): String = if (s == null) "null" else s"'$s'"
-
       val query1 = s"SELECT mask(${col(t.i)}, ${str(t.u)}, ${str(t.l)}, ${str(t.d)}, ${str(t.o)})"
       val query2 = s"SELECT mask(${str(t.i)}, ${col(t.u)}, ${str(t.l)}, ${str(t.d)}, ${str(t.o)})"
       val query3 = s"SELECT mask(${str(t.i)}, ${str(t.u)}, ${col(t.l)}, ${str(t.d)}, ${str(t.o)})"
@@ -1204,13 +1201,13 @@ class CollationSQLExpressionsSuite
 
   test("Support XmlToStructs xml expression with collation") {
     case class XmlToStructsTestCase(
-                                     input: String,
-                                     collationName: String,
-                                     schema: String,
-                                     options: String,
-                                     result: Row,
-                                     structFields: Seq[StructField]
-                                   )
+     input: String,
+     collationName: String,
+     schema: String,
+     options: String,
+     result: Row,
+     structFields: Seq[StructField]
+    )
 
     val testCases = Seq(
       XmlToStructsTestCase("<p><a>1</a></p>", "UTF8_BINARY", "'a INT'", "",
@@ -1252,10 +1249,10 @@ class CollationSQLExpressionsSuite
 
   test("Support SchemaOfXml xml expression with collation") {
     case class SchemaOfXmlTestCase(
-                                    input: String,
-                                    collationName: String,
-                                    result: String
-                                  )
+     input: String,
+     collationName: String,
+     result: String
+    )
 
     val testCases = Seq(
       SchemaOfXmlTestCase("<p><a>1</a></p>", "UTF8_BINARY", "STRUCT<a: BIGINT>"),
@@ -1284,10 +1281,10 @@ class CollationSQLExpressionsSuite
 
   test("Support StructsToXml xml expression with collation") {
     case class StructsToXmlTestCase(
-                                     input: String,
-                                     collationName: String,
-                                     result: String
-                                   )
+      input: String,
+      collationName: String,
+      result: String
+    )
 
     val testCases = Seq(
       StructsToXmlTestCase("named_struct('a', 1, 'b', 2)", "UTF8_BINARY",
@@ -1336,10 +1333,10 @@ class CollationSQLExpressionsSuite
 
   test("Support ParseJson & TryParseJson variant expressions with collation") {
     case class ParseJsonTestCase(
-                                  input: String,
-                                  collationName: String,
-                                  result: String
-                                )
+      input: String,
+      collationName: String,
+      result: String
+    )
 
     val testCases = Seq(
       ParseJsonTestCase("{\"a\":1,\"b\":2}", "UTF8_BINARY", "{\"a\":1,\"b\":2}"),
@@ -1408,10 +1405,10 @@ class CollationSQLExpressionsSuite
 
   test("Support IsVariantNull variant expressions with collation") {
     case class IsVariantNullTestCase(
-                                      input: String,
-                                      collationName: String,
-                                      result: Boolean
-                                    )
+      input: String,
+      collationName: String,
+      result: Boolean
+    )
 
     val testCases = Seq(
       IsVariantNullTestCase("'null'", "UTF8_BINARY", result = true),
@@ -1436,13 +1433,13 @@ class CollationSQLExpressionsSuite
 
   test("Support VariantGet & TryVariantGet variant expressions with collation") {
     case class VariantGetTestCase(
-                                   input: String,
-                                   path: String,
-                                   variantType: String,
-                                   collationName: String,
-                                   result: Any,
-                                   resultType: DataType
-                                 )
+      input: String,
+      path: String,
+      variantType: String,
+      collationName: String,
+      result: Any,
+      resultType: DataType
+    )
 
     val testCases = Seq(
       VariantGetTestCase("{\"a\": 1}", "$.a", "int", "UTF8_BINARY", 1, IntegerType),
@@ -1512,20 +1509,20 @@ class CollationSQLExpressionsSuite
 
   test("Support VariantExplode variant expressions with collation") {
     case class VariantExplodeTestCase(
-                                       input: String,
-                                       collationName: String,
-                                       result: String,
-                                       resultType: Seq[StructField]
-                                     )
+     input: String,
+     collationName: String,
+     result: String,
+     resultType: Seq[StructField]
+    )
 
     val testCases = Seq(
       VariantExplodeTestCase("[\"hello\", \"world\"]", "UTF8_BINARY",
-        Row(0, "null", "\"hello\"").toString() + Row(1, "null", "\"world\"").toString(),
-        Seq[StructField](
-          StructField("pos", IntegerType, nullable = false),
-          StructField("key", StringType("UTF8_BINARY")),
-          StructField("value", VariantType, nullable = false)
-        )
+          Row(0, "null", "\"hello\"").toString() + Row(1, "null", "\"world\"").toString(),
+          Seq[StructField](
+              StructField("pos", IntegerType, nullable = false),
+              StructField("key", StringType("UTF8_BINARY")),
+              StructField("value", VariantType, nullable = false)
+          )
       ),
       VariantExplodeTestCase("[\"Spark\", \"SQL\"]", "UTF8_LCASE",
         Row(0, "null", "\"Spark\"").toString() + Row(1, "null", "\"SQL\"").toString(),
@@ -1571,10 +1568,10 @@ class CollationSQLExpressionsSuite
 
   test("Support SchemaOfVariant variant expressions with collation") {
     case class SchemaOfVariantTestCase(
-                                        input: String,
-                                        collationName: String,
-                                        result: String
-                                      )
+     input: String,
+     collationName: String,
+     result: String
+    )
 
     val testCases = Seq(
       SchemaOfVariantTestCase("null", "UTF8_BINARY", "VOID"),
@@ -1602,10 +1599,10 @@ class CollationSQLExpressionsSuite
 
   test("Support SchemaOfVariantAgg variant expressions with collation") {
     case class SchemaOfVariantAggTestCase(
-                                           input: String,
-                                           collationName: String,
-                                           result: String
-                                         )
+      input: String,
+      collationName: String,
+      result: String
+    )
 
     val testCases = Seq(
       SchemaOfVariantAggTestCase("('1'), ('2'), ('3')", "UTF8_BINARY", "BIGINT"),
@@ -1753,7 +1750,7 @@ class CollationSQLExpressionsSuite
       UTF8String.fromString("d") -> 2L,
       UTF8String.fromString("e") -> 1L)
 
-    val bufferValuesComplex = bufferValuesUTF8String.map {
+    val bufferValuesComplex = bufferValuesUTF8String.map{
       case (k, v) => (InternalRow.fromSeq(Seq(k, k, k)), v)
     }
     val testCasesUTF8String = Seq(
@@ -1898,7 +1895,7 @@ class CollationSQLExpressionsSuite
         sql(s"INSERT INTO ${tableName} VALUES " + valuesToAdd)
         val query = s"SELECT lower(element_at(element_at(mode(i), 1).s1.a2, 1)) FROM ${tableName}"
 
-        checkAnswer(sql(query), Row(t.result))
+          checkAnswer(sql(query), Row(t.result))
       }
     })
   }
@@ -1937,7 +1934,6 @@ class CollationSQLExpressionsSuite
         }.mkString(",")
         valuesToAdd
       }
-
       val tableName = s"t_${t1.collationId}_mode_nested_map_struct1"
       withTable(tableName) {
         sql(s"CREATE TABLE ${tableName}(" +
@@ -2009,9 +2005,9 @@ class CollationSQLExpressionsSuite
     testSuppCollations.foreach(collationName => {
       val query =
         s"""
-           |select to_unix_timestamp(collate('2021-01-01 00:00:00', '${collationName}'),
-           |collate('yyyy-MM-dd HH:mm:ss', '${collationName}'))
-           |""".stripMargin
+          |select to_unix_timestamp(collate('2021-01-01 00:00:00', '${collationName}'),
+          |collate('yyyy-MM-dd HH:mm:ss', '${collationName}'))
+          |""".stripMargin
       // Result & data type check
       val testQuery = sql(query)
       val dataType = LongType
@@ -2026,8 +2022,8 @@ class CollationSQLExpressionsSuite
     testSuppCollations.foreach(collationName => {
       val query =
         s"""
-           |select from_unixtime(1609488000, collate('yyyy-MM-dd HH:mm:ss', '${collationName}'))
-           |""".stripMargin
+          |select from_unixtime(1609488000, collate('yyyy-MM-dd HH:mm:ss', '${collationName}'))
+          |""".stripMargin
       // Result & data type check
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
         val testQuery = sql(query)
@@ -2044,8 +2040,8 @@ class CollationSQLExpressionsSuite
     testSuppCollations.foreach(collationName => {
       val query =
         s"""
-           |select next_day('2015-01-14', collate('TU', '${collationName}'))
-           |""".stripMargin
+          |select next_day('2015-01-14', collate('TU', '${collationName}'))
+          |""".stripMargin
       // Result & data type check
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
         val testQuery = sql(query)
@@ -2062,9 +2058,9 @@ class CollationSQLExpressionsSuite
     testSuppCollations.foreach(collationName => {
       val query =
         s"""
-           |select from_utc_timestamp(collate('2016-08-31', '${collationName}'),
-           |collate('Asia/Seoul', '${collationName}'))
-           |""".stripMargin
+          |select from_utc_timestamp(collate('2016-08-31', '${collationName}'),
+          |collate('Asia/Seoul', '${collationName}'))
+          |""".stripMargin
       // Result & data type check
       val testQuery = sql(query)
       val dataType = TimestampType
@@ -2079,9 +2075,9 @@ class CollationSQLExpressionsSuite
     testSuppCollations.foreach(collationName => {
       val query =
         s"""
-           |select to_utc_timestamp(collate('2016-08-31 09:00:00', '${collationName}'),
-           |collate('Asia/Seoul', '${collationName}'))
-           |""".stripMargin
+          |select to_utc_timestamp(collate('2016-08-31 09:00:00', '${collationName}'),
+          |collate('Asia/Seoul', '${collationName}'))
+          |""".stripMargin
       // Result & data type check
       val testQuery = sql(query)
       val dataType = TimestampType
@@ -2096,9 +2092,9 @@ class CollationSQLExpressionsSuite
     testSuppCollations.foreach(collationName => {
       val query =
         s"""
-           |select to_date(collate('2016-12-31', '${collationName}'),
-           |collate('yyyy-MM-dd', '${collationName}'))
-           |""".stripMargin
+          |select to_date(collate('2016-12-31', '${collationName}'),
+          |collate('yyyy-MM-dd', '${collationName}'))
+          |""".stripMargin
       // Result & data type check
       val testQuery = sql(query)
       val dataType = DateType
@@ -2113,9 +2109,9 @@ class CollationSQLExpressionsSuite
     testSuppCollations.foreach(collationName => {
       val query =
         s"""
-           |select to_timestamp(collate('2016-12-31 23:59:59', '${collationName}'),
-           |collate('yyyy-MM-dd HH:mm:ss', '${collationName}'))
-           |""".stripMargin
+          |select to_timestamp(collate('2016-12-31 23:59:59', '${collationName}'),
+          |collate('yyyy-MM-dd HH:mm:ss', '${collationName}'))
+          |""".stripMargin
       // Result & data type check
       val testQuery = sql(query)
       val dataType = TimestampType
@@ -2130,8 +2126,8 @@ class CollationSQLExpressionsSuite
     testSuppCollations.foreach(collationName => {
       val query =
         s"""
-           |select trunc(collate('2016-12-31 23:59:59', '${collationName}'), 'MM')
-           |""".stripMargin
+          |select trunc(collate('2016-12-31 23:59:59', '${collationName}'), 'MM')
+          |""".stripMargin
       // Result & data type check
       val testQuery = sql(query)
       val dataType = DateType
@@ -2146,9 +2142,9 @@ class CollationSQLExpressionsSuite
     testSuppCollations.foreach(collationName => {
       val query =
         s"""
-           |select date_trunc(collate('HOUR', '${collationName}'),
-           |collate('2015-03-05T09:32:05.359', '${collationName}'))
-           |""".stripMargin
+          |select date_trunc(collate('HOUR', '${collationName}'),
+          |collate('2015-03-05T09:32:05.359', '${collationName}'))
+          |""".stripMargin
       // Result & data type check
       val testQuery = sql(query)
       val dataType = TimestampType
@@ -2163,8 +2159,8 @@ class CollationSQLExpressionsSuite
     testSuppCollations.foreach(collationName => {
       val query =
         s"""
-           |select make_timestamp(2014, 12, 28, 6, 30, 45.887, collate('CET', '${collationName}'))
-           |""".stripMargin
+          |select make_timestamp(2014, 12, 28, 6, 30, 45.887, collate('CET', '${collationName}'))
+          |""".stripMargin
       // Result & data type check
       val testQuery = sql(query)
       val dataType = TimestampType
@@ -2232,9 +2228,9 @@ class CollationSQLExpressionsSuite
     testSuppCollations.foreach(collationName => {
       val query =
         s"""
-           |select date_part(collate('Week', '${collationName}'),
-           |collate('2019-08-12 01:00:00.123456', '${collationName}'))
-           |""".stripMargin
+          |select date_part(collate('Week', '${collationName}'),
+          |collate('2019-08-12 01:00:00.123456', '${collationName}'))
+          |""".stripMargin
       // Result & data type check
       val testQuery = sql(query)
       val dataType = IntegerType
@@ -2327,10 +2323,10 @@ class CollationSQLExpressionsSuite
     testSuppCollations.foreach(collationName => {
       val query =
         s"""
-           |select date_format(convert_timezone(collate('America/Los_Angeles', '${collationName}'),
-           |collate('UTC', '${collationName}'), collate('2021-12-06 00:00:00', '${collationName}')),
-           |'yyyy-MM-dd HH:mm:ss.S')
-           |""".stripMargin
+          |select date_format(convert_timezone(collate('America/Los_Angeles', '${collationName}'),
+          |collate('UTC', '${collationName}'), collate('2021-12-06 00:00:00', '${collationName}')),
+          |'yyyy-MM-dd HH:mm:ss.S')
+          |""".stripMargin
       // Result & data type check
       val testQuery = sql(query)
       val dataType = StringType
@@ -2344,12 +2340,12 @@ class CollationSQLExpressionsSuite
     // be aware that output of java.util.UUID.fromString is always lowercase
 
     case class ReflectExpressions(
-                                   left: String,
-                                   leftCollation: String,
-                                   right: String,
-                                   rightCollation: String,
-                                   result: Boolean
-                                 )
+      left: String,
+      leftCollation: String,
+      right: String,
+      rightCollation: String,
+      result: Boolean
+    )
 
     val testCases = Seq(
       ReflectExpressions("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary",
@@ -3061,9 +3057,9 @@ class CollationSQLExpressionsSuite
       )
       // check result row data type
       val dataType = ArrayType(StructType(
-        StructField("key", StringType(collation), false) ::
+          StructField("key", StringType(collation), false) ::
           StructField("value", IntegerType, false) :: Nil
-      ), false)
+          ), false)
       assert(sql(query).schema.head.dataType == dataType)
     }
   }
@@ -3220,10 +3216,10 @@ class CollationSQLExpressionsSuite
 
   test("Support HyperLogLogPlusPlus expression with collation") {
     case class HyperLogLogPlusPlusTestCase(
-                                            collation: String,
-                                            input: Seq[String],
-                                            output: Seq[Row]
-                                          )
+      collation: String,
+      input: Seq[String],
+      output: Seq[Row]
+    )
 
     val testCases = Seq(
       HyperLogLogPlusPlusTestCase("utf8_binary", Seq("a", "a", "A", "z", "zz", "ZZ", "w", "AA",
@@ -3236,12 +3232,12 @@ class CollationSQLExpressionsSuite
         "aA", "Aa", "aa"), Seq(Row(5)))
     )
 
-    testCases.foreach(t => {
+    testCases.foreach( t => {
       // Using explicit collate clause
       val query =
         s"""
            |SELECT approx_count_distinct(col) FROM VALUES
-           |${t.input.map(s => s"('${s}' collate ${t.collation})").mkString(", ")} tab(col)
+           |${t.input.map(s => s"('${s}' collate ${t.collation})").mkString(", ") } tab(col)
            |""".stripMargin
       checkAnswer(sql(query), t.output)
 
@@ -3250,7 +3246,7 @@ class CollationSQLExpressionsSuite
         val query =
           s"""
              |SELECT approx_count_distinct(col) FROM VALUES
-             |${t.input.map(s => s"('${s}')").mkString(", ")} tab(col)
+             |${t.input.map(s => s"('${s}')").mkString(", ") } tab(col)
              |""".stripMargin
         checkAnswer(sql(query), t.output)
       }
