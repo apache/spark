@@ -631,9 +631,9 @@ case class SQLKeywords() extends LeafExpression with Generator with CodegenFallb
   group = "generator_funcs")
 case class AllCollations() extends LeafExpression with Generator with CodegenFallback {
   override def elementSchema: StructType = new StructType()
-    .add("COLLATION_CATALOG", StringType, nullable = false)
-    .add("COLLATION_SCHEMA", StringType, nullable = false)
-    .add("COLLATION_NAME", StringType, nullable = false)
+    .add("CATALOG", StringType, nullable = false)
+    .add("SCHEMA", StringType, nullable = false)
+    .add("NAME", StringType, nullable = false)
     .add("LANGUAGE", StringType)
     .add("COUNTRY", StringType)
     .add("ACCENT_SENSITIVITY", StringType, nullable = false)

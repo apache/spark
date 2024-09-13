@@ -1652,11 +1652,11 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         Row("SYSTEM", "BUILTIN", "af_CI_AI", "Afrikaans", "",
           "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0")))
 
-    checkAnswer(sql("SELECT * FROM all_collations() WHERE COLLATION_NAME LIKE '%UTF8_BINARY%'"),
+    checkAnswer(sql("SELECT * FROM all_collations() WHERE NAME LIKE '%UTF8_BINARY%'"),
       Row("SYSTEM", "BUILTIN", "UTF8_BINARY", null, null,
         "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", null))
 
-    checkAnswer(sql("SELECT * FROM all_collations() WHERE COLLATION_NAME LIKE '%zh_Hant_HKG%'"),
+    checkAnswer(sql("SELECT * FROM all_collations() WHERE NAME LIKE '%zh_Hant_HKG%'"),
       Seq(Row("SYSTEM", "BUILTIN", "zh_Hant_HKG", "Chinese", "Hong Kong SAR China",
         "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
         Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_AI", "Chinese", "Hong Kong SAR China",
@@ -1664,41 +1664,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI", "Chinese", "Hong Kong SAR China",
           "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
         Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI_AI", "Chinese", "Hong Kong SAR China",
-          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0")))
-
-    checkAnswer(sql("SELECT * FROM all_collations() WHERE LANGUAGE = 'Chinese' and " +
-      "(COUNTRY LIKE '%China%' or COUNTRY = 'Taiwan')"),
-      Seq(Row("SYSTEM", "BUILTIN", "zh_Hans_CHN", "Chinese", "China",
-        "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
-        Row("SYSTEM", "BUILTIN", "zh_Hans_CHN_AI", "Chinese", "China",
-          "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0"),
-        Row("SYSTEM", "BUILTIN", "zh_Hans_CHN_CI", "Chinese", "China",
-          "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
-        Row("SYSTEM", "BUILTIN", "zh_Hans_CHN_CI_AI", "Chinese", "China",
-          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0"),
-        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG", "Chinese", "Hong Kong SAR China",
-          "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
-        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_AI", "Chinese", "Hong Kong SAR China",
-          "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0"),
-        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI", "Chinese", "Hong Kong SAR China",
-          "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
-        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI_AI", "Chinese", "Hong Kong SAR China",
-          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0"),
-        Row("SYSTEM", "BUILTIN", "zh_Hant_MAC", "Chinese", "Macao SAR China",
-          "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
-        Row("SYSTEM", "BUILTIN", "zh_Hant_MAC_AI", "Chinese", "Macao SAR China",
-          "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0"),
-        Row("SYSTEM", "BUILTIN", "zh_Hant_MAC_CI", "Chinese", "Macao SAR China",
-          "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
-        Row("SYSTEM", "BUILTIN", "zh_Hant_MAC_CI_AI", "Chinese", "Macao SAR China",
-          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0"),
-        Row("SYSTEM", "BUILTIN", "zh_Hant_TWN", "Chinese", "Taiwan",
-          "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
-        Row("SYSTEM", "BUILTIN", "zh_Hant_TWN_AI", "Chinese", "Taiwan",
-          "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0"),
-        Row("SYSTEM", "BUILTIN", "zh_Hant_TWN_CI", "Chinese", "Taiwan",
-          "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
-        Row("SYSTEM", "BUILTIN", "zh_Hant_TWN_CI_AI", "Chinese", "Taiwan",
           "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0")))
 
     checkAnswer(sql("SELECT * FROM all_collations() WHERE COUNTRY = 'Singapore'"),
@@ -1711,14 +1676,25 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         Row("SYSTEM", "BUILTIN", "zh_Hans_SGP_CI_AI", "Chinese", "Singapore",
           "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0")))
 
-    checkAnswer(sql("SELECT COLLATION_NAME, LANGUAGE, ACCENT_SENSITIVITY, CASE_SENSITIVITY " +
+    checkAnswer(sql("SELECT * FROM all_collations() WHERE LANGUAGE = 'English' " +
+      "and COUNTRY = 'United States'"),
+      Seq(Row("SYSTEM", "BUILTIN", "en_USA", "English", "United States",
+        "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
+        Row("SYSTEM", "BUILTIN", "en_USA_AI", "English", "United States",
+          "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0"),
+        Row("SYSTEM", "BUILTIN", "en_USA_CI", "English", "United States",
+          "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", "75.1.0.0"),
+        Row("SYSTEM", "BUILTIN", "en_USA_CI_AI", "English", "United States",
+          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0")))
+
+    checkAnswer(sql("SELECT NAME, LANGUAGE, ACCENT_SENSITIVITY, CASE_SENSITIVITY " +
       "FROM all_collations() WHERE COUNTRY = 'United States'"),
       Seq(Row("en_USA", "English", "ACCENT_SENSITIVE", "CASE_SENSITIVE"),
         Row("en_USA_AI", "English", "ACCENT_SENSITIVE", "CASE_INSENSITIVE"),
         Row("en_USA_CI", "English", "ACCENT_INSENSITIVE", "CASE_SENSITIVE"),
         Row("en_USA_CI_AI", "English", "ACCENT_INSENSITIVE", "CASE_INSENSITIVE")))
 
-    checkAnswer(sql("SELECT COLLATION_NAME FROM all_collations() WHERE ICU_VERSION is null"),
+    checkAnswer(sql("SELECT NAME FROM all_collations() WHERE ICU_VERSION is null"),
       Seq(Row("UTF8_BINARY"), Row("UTF8_LCASE")))
   }
 }
