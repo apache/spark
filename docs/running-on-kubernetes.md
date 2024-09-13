@@ -433,14 +433,18 @@ the cluster.
 When there exists a log collection system, you can expose it at Spark Driver `Executors` tab UI. For example,
 
 ```
-spark.ui.custom.executor.log.url='https://log-server/log?appId={{APP_ID}}&execId={{EXECUTOR_ID}}'
+spark.ui.custom.driver.log.url='https://log-server/driverLog?appId={{APP_ID}}&namespace={{KUBERNETES_NAMESPACE}}&podName={{KUBERNETES_POD_NAME}}'
+spark.ui.custom.executor.log.url='https://log-server/executorLog?appId={{APP_ID}}&execId={{EXECUTOR_ID}}'
 ```
 
-You can add additional custom variables to this url template, populated with the values of existing executor environment variables like
+You can add additional custom variables to these url templates, populated with the values of existing driver and executor environment variables like
 
 ```
+spark.driverEnv.SPARK_DRIVER_ATTRIBUTE_YOUR_VAR='$(EXISTING_DRIVER_ENV_VAR)'
 spark.executorEnv.SPARK_EXECUTOR_ATTRIBUTE_YOUR_VAR='$(EXISTING_EXECUTOR_ENV_VAR)'
-spark.ui.custom.executor.log.url='https://log-server/log?appId={{APP_ID}}&execId={{EXECUTOR_ID}}&your_var={{YOUR_VAR}}'
+
+spark.ui.custom.driver.log.url='https://log-server/driverLog?appId={{APP_ID}}&podName={{KUBRNETES_POD_NAME}}&your_var={{YOUR_VAR}}'
+spark.ui.custom.executor.log.url='https://log-server/executorLog?appId={{APP_ID}}&execId={{EXECUTOR_ID}}&your_var={{YOUR_VAR}}'
 ```
 
 ### Accessing Driver UI
@@ -1710,28 +1714,6 @@ See the [configuration page](configuration.html) for information on Spark config
     If there is no outlier, it works like TOTAL_DURATION policy.
   </td>
   <td>3.3.0</td>
-</tr>
-<tr>
-  <td><code>spark.ui.custom.driver.log.url</code></td>
-  <td>(none)</td>
-  <td>
-    Specifies custom Spark driver log URL for supporting external log service instead of using cluster
-    managers' application log URLs in Spark UI. Spark will support some path variables via patterns
-    which can vary on cluster manager. Spark Kubernetes cluster manager supports the following path variables:
-    <ul>
-      <li><code>APP_ID</code>: The unique application id</li>
-      <li><code>KUBERNETES_NAMESPACE</code>: The namespace where the driver pods run</li>
-      <li><code>KUBERNETES_POD_NAME</code>: The name of the pod that contains the driver, which is <code>"[null]" in client mode</code></li>
-      <li><code>FILE_NAME</code>: The name of the log, which is always <code>"log"</code></li>
-    </ul>
-    Please note that this configuration also replaces original log urls in event log,
-    which will be also effective when accessing the application on history server. The new log urls must be
-    permanent, otherwise you might have dead link for driver log urls. <p/>
-    Example: Config value <code>"https://my.custom.url/logs?app={{APP_ID}}"</code>
-    adds for application <code>"app-example-123"</code> this link to the Spark UI:
-    <code>https://my.custom.url/logs?app=app-example-123</code>
-  </td>
-  <td>4.0.0</td>
 </tr>
 </table>
 
