@@ -16,6 +16,7 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import java.util.Locale
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -104,12 +105,14 @@ private[spark] class KubernetesClusterSchedulerBackend(
     conf.getOption("spark.app.id").getOrElse(appId)
   }
 
-  override def getDriverAttributes: Option[Map[String, String]] = Some(Map(
-    "LOG_FILES" -> "log",
-    "APP_ID" -> applicationId(),
-    "KUBERNETES_NAMESPACE" -> namespace,
-    "KUBERNETES_POD_NAME" -> Option(System.getenv(ENV_DRIVER_POD_NAME)).getOrElse("[null]")
-  ))
+  def extractAttributes: Map[String, String] = {
+    val prefix = "SPARK_DRIVER_ATTRIBUTE_"
+    sys.env.filter { case (k, _) => k.startsWith(prefix) }
+      .map(e => (e._1.substring(prefix.length).toUpperCase(Locale.ROOT), e._2))
+  }
+
+  override def getDriverAttributes: Option[Map[String, String]] =
+    Some(Map("LOG_FILES" -> "log") ++ extractAttributes)
 
   override def start(): Unit = {
     super.start()
