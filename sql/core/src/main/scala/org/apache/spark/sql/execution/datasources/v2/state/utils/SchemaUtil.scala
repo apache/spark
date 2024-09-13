@@ -58,7 +58,7 @@ object SchemaUtil {
     } else if (transformWithStateVariableInfoOpt.isDefined) {
       require(stateStoreColFamilySchemaOpt.isDefined)
       generateSchemaForStateVar(transformWithStateVariableInfoOpt.get,
-        stateStoreColFamilySchemaOpt.get)
+        stateStoreColFamilySchemaOpt.get, sourceOptions)
     } else {
       new StructType()
         .add("key", keySchema)
@@ -101,7 +101,8 @@ object SchemaUtil {
   def unifyMapStateRowPair(
       stateRows: Iterator[UnsafeRowPair],
       compositeKeySchema: StructType,
-      partitionId: Int): Iterator[InternalRow] = {
+      partitionId: Int,
+      stateSourceOptions: StateSourceOptions): Iterator[InternalRow] = {
     val groupingKeySchema = SchemaUtil.getSchemaAsDataType(
       compositeKeySchema, "key"
     ).asInstanceOf[StructType]
@@ -130,61 +131,84 @@ object SchemaUtil {
       row
     }
 
-    // All of the rows with the same grouping key were co-located and were
-    // grouped together consecutively.
-    new Iterator[InternalRow] {
-      var curGroupingKey: UnsafeRow = _
-      var curStateRowPair: UnsafeRowPair = _
-      val curMap = mutable.Map.empty[Any, Any]
+    def createFlattenedRow(
+        groupingKey: UnsafeRow,
+        userMapKey: UnsafeRow,
+        userMapValue: UnsafeRow,
+        partitionId: Int): GenericInternalRow = {
+      val row = new GenericInternalRow(4)
+      row.update(0, groupingKey)
+      row.update(1, userMapKey)
+      row.update(2, userMapValue)
+      row.update(3, partitionId)
+      row
+    }
 
-      override def hasNext: Boolean =
-        stateRows.hasNext || !curMap.isEmpty
+    if (stateSourceOptions.flattenCollectionTypes) {
+      stateRows
+        .map { pair =>
+          val groupingKey = pair.key.get(0, groupingKeySchema).asInstanceOf[UnsafeRow]
+          val userMapKey = pair.key.get(1, userKeySchema).asInstanceOf[UnsafeRow]
+          val userMapValue = pair.value
+          createFlattenedRow(groupingKey, userMapKey, userMapValue, partitionId)
+        }
+    } else {
+      // All of the rows with the same grouping key were co-located and were
+      // grouped together consecutively.
+      new Iterator[InternalRow] {
+        var curGroupingKey: UnsafeRow = _
+        var curStateRowPair: UnsafeRowPair = _
+        val curMap = mutable.Map.empty[Any, Any]
 
-      override def next(): InternalRow = {
-        var foundNewGroupingKey = false
-        while (stateRows.hasNext && !foundNewGroupingKey) {
-          curStateRowPair = stateRows.next()
-          if (curGroupingKey == null) {
-            // First time in the iterator
-            // Need to make a copy because we need to keep the
-            // value across function calls
-            curGroupingKey = curStateRowPair.key
-              .get(0, groupingKeySchema).asInstanceOf[UnsafeRow].copy()
-            appendKVPairToMap(curMap, curStateRowPair)
-          } else {
-            val curPairGroupingKey =
-              curStateRowPair.key.get(0, groupingKeySchema)
-            if (curPairGroupingKey == curGroupingKey) {
+        override def hasNext: Boolean =
+          stateRows.hasNext || !curMap.isEmpty
+
+        override def next(): InternalRow = {
+          var foundNewGroupingKey = false
+          while (stateRows.hasNext && !foundNewGroupingKey) {
+            curStateRowPair = stateRows.next()
+            if (curGroupingKey == null) {
+              // First time in the iterator
+              // Need to make a copy because we need to keep the
+              // value across function calls
+              curGroupingKey = curStateRowPair.key
+                .get(0, groupingKeySchema).asInstanceOf[UnsafeRow].copy()
               appendKVPairToMap(curMap, curStateRowPair)
             } else {
-              // find a different grouping key, exit loop and return a row
-              foundNewGroupingKey = true
+              val curPairGroupingKey =
+                curStateRowPair.key.get(0, groupingKeySchema)
+              if (curPairGroupingKey == curGroupingKey) {
+                appendKVPairToMap(curMap, curStateRowPair)
+              } else {
+                // find a different grouping key, exit loop and return a row
+                foundNewGroupingKey = true
+              }
             }
           }
-        }
-        if (foundNewGroupingKey) {
-          // found a different grouping key
-          val row = createDataRow(curGroupingKey, curMap)
-          // update vars
-          curGroupingKey =
-            curStateRowPair.key.get(0, groupingKeySchema)
-              .asInstanceOf[UnsafeRow].copy()
-          // empty the map, append current row
-          curMap.clear()
-          appendKVPairToMap(curMap, curStateRowPair)
-          // return map value of previous grouping key
-          row
-        } else {
-          if (curMap.isEmpty) {
-            throw new NoSuchElementException("Please check if the iterator hasNext(); Likely " +
-              "user is trying to get element from an exhausted iterator.")
-          }
-          else {
-            // reach the end of the state rows
+          if (foundNewGroupingKey) {
+            // found a different grouping key
             val row = createDataRow(curGroupingKey, curMap)
-            // clear the map to end the iterator
+            // update vars
+            curGroupingKey =
+              curStateRowPair.key.get(0, groupingKeySchema)
+                .asInstanceOf[UnsafeRow].copy()
+            // empty the map, append current row
             curMap.clear()
+            appendKVPairToMap(curMap, curStateRowPair)
+            // return map value of previous grouping key
             row
+          } else {
+            if (curMap.isEmpty) {
+              throw new NoSuchElementException("Please check if the iterator hasNext(); Likely " +
+                "user is trying to get element from an exhausted iterator.")
+            }
+            else {
+              // reach the end of the state rows
+              val row = createDataRow(curGroupingKey, curMap)
+              // clear the map to end the iterator
+              curMap.clear()
+              row
+            }
           }
         }
       }
@@ -203,6 +227,8 @@ object SchemaUtil {
       "single_value" -> classOf[StructType],
       "list_value" -> classOf[ArrayType],
       "map_value" -> classOf[MapType],
+      "user_map_key" -> classOf[StructType],
+      "user_map_value" -> classOf[StructType],
       "partition_id" -> classOf[IntegerType])
 
     val expectedFieldNames = if (sourceOptions.readChangeFeed) {
@@ -213,13 +239,21 @@ object SchemaUtil {
 
       stateVarType match {
         case ValueState =>
-          Seq("key", "single_value", "partition_id")
+          Seq("key", "value", "partition_id")
 
         case ListState =>
-          Seq("key", "list_value", "partition_id")
+          if (sourceOptions.flattenCollectionTypes) {
+            Seq("key", "value", "partition_id")
+          } else {
+            Seq("key", "list_value", "partition_id")
+          }
 
         case MapState =>
-          Seq("key", "map_value", "partition_id")
+          if (sourceOptions.flattenCollectionTypes) {
+            Seq("key", "user_map_key", "user_map_value", "partition_id")
+          } else {
+            Seq("key", "map_value", "partition_id")
+          }
 
         case _ =>
           throw StateDataSourceErrors
@@ -241,21 +275,29 @@ object SchemaUtil {
 
   private def generateSchemaForStateVar(
       stateVarInfo: TransformWithStateVariableInfo,
-      stateStoreColFamilySchema: StateStoreColFamilySchema): StructType = {
+      stateStoreColFamilySchema: StateStoreColFamilySchema,
+      stateSourceOptions: StateSourceOptions): StructType = {
     val stateVarType = stateVarInfo.stateVariableType
 
     stateVarType match {
       case ValueState =>
         new StructType()
           .add("key", stateStoreColFamilySchema.keySchema)
-          .add("single_value", stateStoreColFamilySchema.valueSchema)
+          .add("value", stateStoreColFamilySchema.valueSchema)
           .add("partition_id", IntegerType)
 
       case ListState =>
-        new StructType()
-          .add("key", stateStoreColFamilySchema.keySchema)
-          .add("list_value", ArrayType(stateStoreColFamilySchema.valueSchema))
-          .add("partition_id", IntegerType)
+        if (stateSourceOptions.flattenCollectionTypes) {
+          new StructType()
+            .add("key", stateStoreColFamilySchema.keySchema)
+            .add("value", stateStoreColFamilySchema.valueSchema)
+            .add("partition_id", IntegerType)
+        } else {
+          new StructType()
+            .add("key", stateStoreColFamilySchema.keySchema)
+            .add("list_value", ArrayType(stateStoreColFamilySchema.valueSchema))
+            .add("partition_id", IntegerType)
+        }
 
       case MapState =>
         val groupingKeySchema = SchemaUtil.getSchemaAsDataType(
@@ -266,30 +308,29 @@ object SchemaUtil {
           valueType = stateStoreColFamilySchema.valueSchema
         )
 
-        new StructType()
-          .add("key", groupingKeySchema)
-          .add("map_value", valueMapSchema)
-          .add("partition_id", IntegerType)
+        if (stateSourceOptions.flattenCollectionTypes) {
+          new StructType()
+            .add("key", groupingKeySchema)
+            .add("user_map_key", userKeySchema)
+            .add("user_map_value", stateStoreColFamilySchema.valueSchema)
+            .add("partition_id", IntegerType)
+        } else {
+          new StructType()
+            .add("key", groupingKeySchema)
+            .add("map_value", valueMapSchema)
+            .add("partition_id", IntegerType)
+        }
 
       case _ =>
         throw StateDataSourceErrors.internalError(s"Unsupported state variable type $stateVarType")
     }
   }
 
-  /**
-   * Helper functions for map state data source reader.
-   *
-   * Map state variables are stored in RocksDB state store has the schema of
-   * `TransformWithStateKeyValueRowSchemaUtils.getCompositeKeySchema()`;
-   * But for state store reader, we need to return in format of:
-   * "key": groupingKey, "map_value": Map(userKey -> value).
-   *
-   * The following functions help to translate between two schema.
-   */
-  def isMapStateVariable(
-      stateVariableInfoOpt: Option[TransformWithStateVariableInfo]): Boolean = {
+  def checkVariableType(
+      stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
+      varType: StateVariableType): Boolean = {
     stateVariableInfoOpt.isDefined &&
-      stateVariableInfoOpt.get.stateVariableType == MapState
+      stateVariableInfoOpt.get.stateVariableType == varType
   }
 
   /**
