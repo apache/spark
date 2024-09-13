@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionsException, ResolvedPartitionSpec}
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -37,15 +39,23 @@ case class DropPartitionExec(
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    val (existsPartIdents, notExistsPartIdents) =
-      partSpecs.map(_.ident).partition(table.partitionExists)
+    val existsPartIdents: mutable.Set[InternalRow] = mutable.Set()
+    val notExistsPartIdents: mutable.Set[InternalRow] = mutable.Set()
+    partSpecs.foreach(partSpec => {
+      val partIdents = table.listPartitionIdentifiers(partSpec.names.toArray, partSpec.ident)
+      if (partIdents.nonEmpty) {
+        existsPartIdents.addAll(partIdents)
+      } else {
+        notExistsPartIdents.add(partSpec.ident)
+      }
+    })
 
     if (notExistsPartIdents.nonEmpty && !ignoreIfNotExists) {
       throw new NoSuchPartitionsException(
-        table.name(), notExistsPartIdents, table.partitionSchema())
+        table.name(), notExistsPartIdents.toSeq, table.partitionSchema())
     }
 
-    val isTableAltered = existsPartIdents match {
+    val isTableAltered = existsPartIdents.toSeq match {
       case Seq() => false // Nothing will be done
       case Seq(partIdent) =>
         if (purge) table.purgePartition(partIdent) else table.dropPartition(partIdent)

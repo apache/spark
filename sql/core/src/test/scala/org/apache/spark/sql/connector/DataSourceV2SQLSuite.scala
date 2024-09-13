@@ -2940,6 +2940,37 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("Drop multi-level partition table with partial partition spec") {
+    val t = "testpart.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id string) USING foo PARTITIONED BY (p1 int, p2 int, p3 int)")
+      sql(s"INSERT INTO $t VALUES ('a', 1, 11, 111), ('b', 1, 22, 222), ('c', 2, 22, 333)")
+
+      checkAnswer(
+        sql(s"SHOW PARTITIONS $t"),
+        Seq(Row("p1=1/p2=11/p3=111"), Row("p1=1/p2=22/p3=222"), Row("p1=2/p2=22/p3=333")))
+
+      sql(s"ALTER TABLE $t DROP PARTITION (p1=1)")
+      checkAnswer(
+        sql(s"SHOW PARTITIONS $t"),
+        Seq(Row("p1=2/p2=22/p3=333")))
+
+      checkError(exception = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t DROP PARTITION (p1=4)")
+      },
+        condition = "PARTITIONS_NOT_FOUND",
+        sqlState = Some("428FT"),
+        parameters = Map(
+          "partitionList" -> "PARTITION (`p1` = 4)",
+          "tableName" -> t.split("\\.").map(part => s"`$part`").mkString(".")))
+
+      sql(s"ALTER TABLE $t DROP IF EXISTS PARTITION (p1=4)")
+      checkAnswer(
+        sql(s"SHOW PARTITIONS $t"),
+        Seq(Row("p1=2/p2=22/p3=333")))
+    }
+  }
+
   test("Check HasPartitionStatistics from InMemoryPartitionTable") {
     val t = "testpart.tbl"
     withTable(t) {
