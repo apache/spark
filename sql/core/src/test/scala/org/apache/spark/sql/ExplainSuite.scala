@@ -386,24 +386,6 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
         Nil: _*)
   }
 
-  test("Catch and log errors when failing to write to external data source") {
-    val password = "MyPassWord"
-    val token = "MyToken"
-    val value = "value"
-    val options = Map("password" -> password, "token" -> token, "key" -> value)
-    val query = spark.range(10).logicalPlan
-    val cmd = SaveIntoDataSourceCommand(query, null, options, SaveMode.Overwrite)
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        cmd.run(spark)
-      },
-      condition = "DATA_SOURCE_EXTERNAL_ERROR",
-      sqlState = "KD00F",
-      parameters = Map.empty
-    )
-  }
-
   test("SPARK-34970: Redact Map type options in explain output") {
     val password = "MyPassWord"
     val token = "MyToken"
