@@ -18,7 +18,6 @@
 --CONFIG_DIM2 spark.sql.codegen.wholeStage=true
 --CONFIG_DIM2 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
 --CONFIG_DIM2 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
---CONFIG_DIM2 spark.sql.codegen.wholeStage=true,spark.sql.codegen.join.sortMergeJoinBatchSize=2
 
 CREATE OR REPLACE TEMPORARY VIEW INT2_TBL(f1) AS VALUES
   (smallint(trim('0   '))),

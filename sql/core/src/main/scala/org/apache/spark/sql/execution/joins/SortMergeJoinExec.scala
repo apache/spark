@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.BooleanType
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -45,7 +46,7 @@ case class SortMergeJoinExec(
     right: SparkPlan,
     isSkewJoin: Boolean = false) extends ShuffledJoin {
 
-  private val batchSize = conf.getConf(SQLConf.SORT_MERGE_JOIN_BATCH_SIZE)
+  private val batchSize = if (Utils.isTesting) 2 else 65535
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
@@ -626,23 +627,14 @@ case class SortMergeJoinExec(
       matches: String): String = {
     val processCurrentJoinRows = ctx.freshName("processCurrentJoinRows")
     val processedCnt = ctx.freshName("processedCnt")
-    val checkBatchCode = if (batchSize > 0) {
-      s"""
-         |$processedCnt = $processedCnt + 1;
-         |if (($processedCnt & $batchSize) == 0) {
-         |  if (shouldStop()) return;
-         |}
-         |""".stripMargin
-    } else {
-      ""
-    }
     ctx.addNewFunction(processCurrentJoinRows,
       s"""
          |private void $processCurrentJoinRows() throws java.io.IOException {
          |  $beforeLoop
          |  int $processedCnt = 0;
          |  while ($matchIterator.hasNext()) {
-         |    $checkBatchCode
+         |    $processedCnt = $processedCnt + 1;
+         |    if ($processedCnt == $batchSize && shouldStop()) return;
          |    InternalRow $bufferedRow = (InternalRow) $matchIterator.next();
          |    $conditionCheck
          |    $outputRow
@@ -687,16 +679,6 @@ case class SortMergeJoinExec(
     val processCurrentJoinRows = ctx.freshName("processCurrentJoinRows")
     val hasOutputRow = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "hasOutputRow")
     val processedCnt = ctx.freshName("processedCnt")
-    val checkBatchCode = if (batchSize > 0) {
-      s"""
-         |$processedCnt = $processedCnt + 1;
-         |if (($processedCnt & $batchSize) == 0) {
-         |  if (shouldStop() && $matchIterator.hasNext()) return;
-         |}
-         |""".stripMargin
-    } else {
-      ""
-    }
     ctx.addNewFunction(processCurrentJoinRows,
       s"""
          |private void ${processCurrentJoinRows}() throws java.io.IOException {
@@ -705,7 +687,8 @@ case class SortMergeJoinExec(
          |
          |  // the last iteration of this loop is to emit an empty row if there is no matched rows.
          |  while ($matchIterator.hasNext() || !$hasOutputRow) {
-         |    $checkBatchCode
+         |    $processedCnt = $processedCnt + 1;
+         |    if ($processedCnt == $batchSize && shouldStop() && $matchIterator.hasNext()) return;
          |    InternalRow $bufferedRow = $matchIterator.hasNext() ?
          |      (InternalRow) $matchIterator.next() : null;
          |    $conditionCheck
