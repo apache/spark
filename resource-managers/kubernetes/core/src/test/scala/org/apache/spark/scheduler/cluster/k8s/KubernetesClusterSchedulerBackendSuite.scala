@@ -268,12 +268,14 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
 
   test("Driver attributes") {
     assert(schedulerBackendUnderTest.getDriverAttributes === Some(Map(
-      "LOG_FILES" -> "log",
-      "APP_ID" -> "spark-app-id",
-      "KUBERNETES_NAMESPACE" -> "default",
-      "KUBERNETES_POD_NAME" -> "[null]"
+      "LOG_FILES" -> "log"
     )))
-    withEnvs(ENV_DRIVER_POD_NAME -> "pod.name") {
+
+    withEnvs(
+      ENV_DRIVER_ATTRIBUTE_APP_ID -> "spark-app-id",
+      ENV_DRIVER_ATTRIBUTE_KUBERNETES_NAMESPACE -> "default",
+      ENV_DRIVER_ATTRIBUTE_KUBERNETES_POD_NAME -> "pod.name"
+    ) {
       assert(schedulerBackendUnderTest.getDriverAttributes === Some(Map(
         "LOG_FILES" -> "log",
         "APP_ID" -> "spark-app-id",
@@ -284,11 +286,12 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   }
 
   test("Driver log urls") {
-    assert(schedulerBackendUnderTest.getDriverLogUrls === Some(Map(
-      "log" -> ("https://my-custom.url/api/logs?applicationId=spark-app-id&namespace=default" +
-        "&pod_name=[null]")
-    )))
-    withEnvs(ENV_DRIVER_POD_NAME -> "pod.name") {
+    assert(schedulerBackendUnderTest.getDriverLogUrls === None)
+    withEnvs(
+      ENV_DRIVER_ATTRIBUTE_APP_ID -> "spark-app-id",
+      ENV_DRIVER_ATTRIBUTE_KUBERNETES_NAMESPACE -> "default",
+      ENV_DRIVER_ATTRIBUTE_KUBERNETES_POD_NAME -> "pod.name"
+    ) {
       assert(schedulerBackendUnderTest.getDriverLogUrls === Some(Map(
         "log" -> ("https://my-custom.url/api/logs?applicationId=spark-app-id&namespace=default" +
           "&pod_name=pod.name")
