@@ -37,31 +37,4 @@ class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
       spark.sql("DROP TEMPORARY VARIABLE IF EXISTS parm;")
     }
   }
-
-  // TODO(SPARK-49622) Re-enable `EXEC IMMEDIATE STACK OVERFLOW` test case
-  ignore("EXEC IMMEDIATE STACK OVERFLOW") {
-    try {
-      spark.sql("DECLARE parm = 1;")
-      val query = (1 to 20000).map(x => "SELECT 1 as a").mkString(" UNION ALL ")
-      Seq(
-        s"EXECUTE IMMEDIATE '$query'",
-        s"EXECUTE IMMEDIATE '$query' INTO parm").foreach { q =>
-        val e = intercept[ParseException] {
-          spark.sql(q)
-        }
-
-        checkError(
-          exception = e,
-          condition = "FAILED_TO_PARSE_TOO_COMPLEX",
-          parameters = Map(),
-          context = ExpectedContext(
-            query,
-            start = 0,
-            stop = query.length - 1)
-        )
-      }
-    } finally {
-      spark.sql("DROP TEMPORARY VARIABLE IF EXISTS parm;")
-    }
-  }
 }
