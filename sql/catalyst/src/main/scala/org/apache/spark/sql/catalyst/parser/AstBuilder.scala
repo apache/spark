@@ -425,7 +425,8 @@ class AstBuilder extends DataTypeAstBuilder
         ctx.aggregationClause,
         ctx.havingClause,
         ctx.windowClause,
-        plan
+        plan,
+        isPipeOperatorSelect = false
       )
     }
   }
@@ -1013,7 +1014,8 @@ class AstBuilder extends DataTypeAstBuilder
       ctx.aggregationClause,
       ctx.havingClause,
       ctx.windowClause,
-      from
+      from,
+      isPipeOperatorSelect = false
     )
   }
 
@@ -1100,7 +1102,8 @@ class AstBuilder extends DataTypeAstBuilder
       aggregationClause,
       havingClause,
       windowClause,
-      isDistinct = false)
+      isDistinct = false,
+      isPipeOperatorSelect = false)
 
     ScriptTransformation(
       string(visitStringLit(transformClause.script)),
@@ -1121,6 +1124,8 @@ class AstBuilder extends DataTypeAstBuilder
    * Add a regular (SELECT) query specification to a logical plan. The query specification
    * is the core of the logical plan, this is where sourcing (FROM clause), projection (SELECT),
    * aggregation (GROUP BY ... HAVING ...) and filtering (WHERE) takes place.
+   * If 'isPipeOperatorSelect' is true, wraps each projected expression with a [[PipeSelect]]
+   * expression for future validation of the expressions during analysis.
    *
    * Note that query hints are ignored (both by the parser and the builder).
    */
@@ -1132,7 +1137,8 @@ class AstBuilder extends DataTypeAstBuilder
       aggregationClause: AggregationClauseContext,
       havingClause: HavingClauseContext,
       windowClause: WindowClauseContext,
-      relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+      relation: LogicalPlan,
+      isPipeOperatorSelect: Boolean): LogicalPlan = withOrigin(ctx) {
     val isDistinct = selectClause.setQuantifier() != null &&
       selectClause.setQuantifier().DISTINCT() != null
 
@@ -1144,7 +1150,8 @@ class AstBuilder extends DataTypeAstBuilder
       aggregationClause,
       havingClause,
       windowClause,
-      isDistinct)
+      isDistinct,
+      isPipeOperatorSelect)
 
     // Hint
     selectClause.hints.asScala.foldRight(plan)(withHints)
@@ -1158,7 +1165,8 @@ class AstBuilder extends DataTypeAstBuilder
       aggregationClause: AggregationClauseContext,
       havingClause: HavingClauseContext,
       windowClause: WindowClauseContext,
-      isDistinct: Boolean): LogicalPlan = {
+      isDistinct: Boolean,
+      isPipeOperatorSelect: Boolean): LogicalPlan = {
     // Add lateral views.
     val withLateralView = lateralView.asScala.foldLeft(relation)(withGenerate)
 
@@ -1172,7 +1180,20 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     def createProject() = if (namedExpressions.nonEmpty) {
-      Project(namedExpressions, withFilter)
+      val newProjectList: Seq[NamedExpression] = if (isPipeOperatorSelect) {
+        // If this is a pipe operator |> SELECT clause, add a [[PipeSelect]] expression wrapping
+        // each alias in the project list, so the analyzer can check invariants later.
+        namedExpressions.map {
+          case a: Alias =>
+            a.withNewChildren(Seq(PipeSelect(a.child)))
+              .asInstanceOf[NamedExpression]
+          case other =>
+            other
+        }
+      } else {
+        namedExpressions
+      }
+      Project(newProjectList, withFilter)
     } else {
       withFilter
     }
@@ -5721,16 +5742,6 @@ class AstBuilder extends DataTypeAstBuilder
       operationNotAllowed("Operator pipe SQL syntax using |>", ctx)
     }
     Option(ctx.selectClause).map { c =>
-      def updateProject(p: Project): Project = {
-        val newProjectList: Seq[NamedExpression] = p.projectList.map {
-          case a: Alias =>
-            a.withNewChildren(Seq(PipeSelect(a.child)))
-              .asInstanceOf[NamedExpression]
-          case other =>
-            other
-        }
-        p.copy(projectList = newProjectList)
-      }
       withSelectQuerySpecification(
         ctx = ctx,
         selectClause = c,
@@ -5739,16 +5750,8 @@ class AstBuilder extends DataTypeAstBuilder
         aggregationClause = null,
         havingClause = null,
         windowClause = null,
-        left) match {
-        // The input should generally be a projection since we only pass a context for the SELECT
-        // clause here and pass "null" for all other clauses.
-        case p: Project =>
-          updateProject(p)
-        case d @ Distinct(p: Project) =>
-          d.copy(child = updateProject(p))
-        case other =>
-          throw SparkException.internalError(s"Unrecognized matched logical plan: $other")
-      }
+        relation = left,
+        isPipeOperatorSelect = true)
     }.get
   }
 

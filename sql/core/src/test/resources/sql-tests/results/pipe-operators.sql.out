@@ -167,6 +167,14 @@ NULL
 
 
 -- !query
+select (values (0) tab(col) |> select col) as result
+-- !query schema
+struct<result:int>
+-- !query output
+0
+
+
+-- !query
 table t
 |> select (select any_value(a) from other where x = a limit 1) as result
 -- !query schema
