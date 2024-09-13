@@ -152,6 +152,8 @@ statement
         UNSET (DBPROPERTIES | PROPERTIES) propertyList                 #unsetNamespaceProperties
     | ALTER namespace identifierReference
         SET locationSpec                                               #setNamespaceLocation
+    | ALTER  namespace identifierReference
+        SET collationSpec                                              #setNamespaceCollation
     | DROP namespace (IF EXISTS)? identifierReference
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW namespaces ((FROM | IN) multipartIdentifier)?
@@ -219,6 +221,8 @@ statement
     | ALTER TABLE identifierReference RECOVER PARTITIONS                 #recoverPartitions
     | ALTER TABLE identifierReference
         (clusterBySpec | CLUSTER BY NONE)                              #alterClusterBy
+    | ALTER TABLE identifierReference
+        SET collationSpec                                              #setTableCollation
     | DROP TABLE (IF EXISTS)? identifierReference PURGE?               #dropTable
     | DROP VIEW (IF EXISTS)? identifierReference                       #dropView
     | CREATE (OR REPLACE)? (GLOBAL? TEMPORARY)?

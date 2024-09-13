@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchDatabaseException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.test.TestHiveVersion
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -214,6 +215,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
 
     val readBack = client.getTable("default", "collation_table")
     assert(readBack.collation === Some("UNICODE"))
+    assert(!readBack.properties.contains(SupportsNamespaces.PROP_COLLATION))
   }
 
   test("loadTable") {
@@ -333,8 +335,10 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
       .copy(collation = Some("uNiCodE_CI"))
 
     client.alterTable("default", "src", newTable)
+    val readBack = client.getTable("default", "src")
 
-    assert(client.getTable("default", "src").collation === Some("uNiCodE_CI"))
+    assert(readBack.collation === Some("uNiCodE_CI"))
+    assert(!readBack.properties.contains(SupportsNamespaces.PROP_COLLATION))
   }
 
   test("listTables(database)") {

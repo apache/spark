@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, DelegatingCatalogExtension, LookupCatalog, SupportsNamespaces, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, DelegatingCatalogExtension, LookupCatalog, SupportsNamespaces, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command._
@@ -108,6 +108,13 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         clusterBySpecOpt.getOrElse(ClusterBySpec(Nil)), conf.resolver))
       AlterTableSetPropertiesCommand(table.catalogTable.identifier, prop, isView = false)
 
+    case SetTableCollation(ResolvedTable(catalog, _, table: V1Table, _), collation)
+      if supportsV1Command(catalog) =>
+      AlterTableSetPropertiesCommand(
+        table.catalogTable.identifier,
+        Map(TableCatalog.PROP_COLLATION -> collation),
+        isView = false)
+
     case RenameColumn(ResolvedV1TableIdentifier(ident), _, _) =>
       throw QueryCompilationErrors.unsupportedTableOperationError(ident, "RENAME COLUMN")
 
@@ -134,6 +141,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case SetNamespaceLocation(ResolvedV1Database(db), location) if conf.useV1Command =>
       AlterDatabaseSetLocationCommand(db, location)
+
+    case SetNamespaceCollation(ResolvedV1Database(db), collation) if conf.useV1Command =>
+      SetDatabaseCollationCommand(db, collation)
 
     case RenameTable(ResolvedV1TableOrViewIdentifier(oldIdent), newName, isView) =>
       AlterTableRenameCommand(oldIdent, newName.asTableIdentifier, isView)

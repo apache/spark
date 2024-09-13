@@ -3018,6 +3018,14 @@ class DDLParserSuite extends AnalysisTest {
           None, None, Some("UNICODE"), None, false), false))
   }
 
+  test("alter table set collation") {
+    comparePlans(parsePlan(
+      "ALTER TABLE t SET DEFAULT COLLATION uNiCoDe"),
+      SetTableCollation(UnresolvedTable(Seq("t"),
+        "ALTER TABLE ... SET DEFAULT COLLATION"), "UNICODE")
+    )
+  }
+
   test("create namespace with default collation") {
     comparePlans(parsePlan(
       "CREATE NAMESPACE t DEFAULT COLLATION uNiCoDe"),
@@ -3029,6 +3037,13 @@ class DDLParserSuite extends AnalysisTest {
       exception = internalException("CREATE NAMESPACE ns DEFAULT COLLATION XD"),
       condition = "COLLATION_INVALID_NAME",
       parameters = Map("proposals" -> "id, xh, af", "collationName" -> "XD")
+    )
+  }
+
+  test("alter namespace set collation") {
+    comparePlans(parsePlan(
+      "ALTER NAMESPACE ns SET DEFAULT COLLATION uNiCoDe"),
+      SetNamespaceCollation(UnresolvedNamespace(Seq("ns")), "UNICODE")
     )
   }
 }

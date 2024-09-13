@@ -279,18 +279,25 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
 
   Seq(true, false).foreach { hasCollations =>
     test(s"DESCRIBE TABLE EXTENDED with collation specified = $hasCollations") {
+
+      val getCollationDescription = () => sql(s"DESCRIBE TABLE EXTENDED t")
+        .where("col_name = 'Collation'")
+
       withTable("t") {
         val defaultCollation = if (hasCollations) "DEFAULT COLLATION uNiCoDe" else ""
 
         sql(s"CREATE TABLE t (id string) $defaultUsing $defaultCollation")
-        val descriptionDf = sql(s"DESCRIBE TABLE EXTENDED t")
-          .where("col_name = 'Collation'")
+        val descriptionDf = getCollationDescription()
 
         if (hasCollations) {
           checkAnswer(descriptionDf, Seq(Row("Collation", "UNICODE", "")))
         } else {
           assert(descriptionDf.isEmpty)
         }
+
+        sql(s"ALTER TABLE t SET DEFAULT COLLATION UniCode_cI")
+        val newDescription = getCollationDescription()
+        checkAnswer(newDescription, Seq(Row("Collation", "UNICODE_CI", "")))
       }
     }
   }

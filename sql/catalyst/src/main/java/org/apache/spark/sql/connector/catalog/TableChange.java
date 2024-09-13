@@ -261,6 +261,16 @@ public interface TableChange {
   }
 
   /**
+   * Create a TableChange for setting collation of a table.
+   *
+   * @param collation name of the new collation
+   * @return a TableChange for this assignment
+   */
+  static TableChange setCollation(String collation) {
+    return new SetCollation(collation);
+  }
+
+  /**
    * A TableChange to set a table property.
    * <p>
    * If the property already exists, it must be replaced with the new value.
@@ -785,6 +795,31 @@ public interface TableChange {
     @Override
     public int hashCode() {
       return Arrays.hashCode(clusteringColumns);
+    }
+  }
+
+
+  /** A TableChange to set collation of a table. */
+  final class SetCollation implements TableChange {
+    private final String collation;
+
+    private SetCollation(String collation) {
+      this.collation = collation;
+    }
+
+    public String collation() { return collation; }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      SetCollation that = (SetCollation) o;
+      return collation.equals(that.collation());
+    }
+
+    @Override
+    public int hashCode() {
+      return collation.hashCode();
     }
   }
 }

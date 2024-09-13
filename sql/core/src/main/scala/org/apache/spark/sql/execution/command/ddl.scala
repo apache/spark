@@ -145,6 +145,27 @@ case class AlterDatabasePropertiesCommand(
 }
 
 /**
+ * A command for users to set collation for a database
+ * If the database does not exist, an error message will be issued to indicate the database
+ * does not exist.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *    ALTER (DATABASE|SCHEMA) database_name DEFAULT COLLATION name
+ * }}}
+ */
+case class SetDatabaseCollationCommand(databaseName: String, collation: String)
+  extends LeafRunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val oldDb = catalog.getDatabaseMetadata(databaseName)
+    catalog.alterDatabase(oldDb.copy(collation = Some(collation)))
+
+    Seq.empty[Row]
+  }
+}
+
+/**
  * A command for users to set new location path for a database
  * If the database does not exist, an error message will be issued to indicate the database
  * does not exist.

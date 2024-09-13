@@ -4015,6 +4015,23 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Create an [[SetNamespaceCollation]] logical plan.
+   *
+   * For example:
+   * {{{
+   *   ALTER (DATABASE|SCHEMA|NAMESPACE) DEFAULT COLLATION name;
+   * }}}
+   */
+  override def visitSetNamespaceCollation(ctx: SetNamespaceCollationContext): LogicalPlan = {
+    withOrigin(ctx) {
+      SetNamespaceCollation(
+        withIdentClause(ctx.identifierReference, UnresolvedNamespace(_)),
+        visitCollationSpec(ctx.collationSpec)
+      )
+    }
+  }
+
+  /**
    * Create a [[ShowNamespaces]] command.
    */
   override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
@@ -4843,6 +4860,21 @@ class AstBuilder extends DataTypeAstBuilder
       AlterTableClusterBy(table, Some(visitClusterBySpec(ctx.clusterBySpec())))
     }
   }
+
+  /**
+   * Parse a [[SetTableCollation]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table1 DEFAULT COLLATION name
+   * }}}
+   */
+  override def visitSetTableCollation(ctx: SetTableCollationContext): LogicalPlan =
+    withOrigin(ctx) {
+      val table = createUnresolvedTable(
+        ctx.identifierReference, "ALTER TABLE ... SET DEFAULT COLLATION")
+      SetTableCollation(table, visitCollationSpec(ctx.collationSpec()))
+    }
 
   /**
    * Parse [[SetViewProperties]] or [[SetTableProperties]] commands.

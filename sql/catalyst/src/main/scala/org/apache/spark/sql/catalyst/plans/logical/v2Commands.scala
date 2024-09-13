@@ -646,6 +646,17 @@ case class SetNamespaceLocation(
 }
 
 /**
+ * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... DEFAULT COLLATION command.
+ */
+case class SetNamespaceCollation(
+    namespace: LogicalPlan,
+    collation: String) extends UnaryCommand {
+  override def child: LogicalPlan = namespace
+  override protected def withNewChildInternal(newChild: LogicalPlan): SetNamespaceCollation =
+    copy(namespace = newChild)
+}
+
+/**
  * The logical plan of the SHOW NAMESPACES command.
  */
 case class ShowNamespaces(
