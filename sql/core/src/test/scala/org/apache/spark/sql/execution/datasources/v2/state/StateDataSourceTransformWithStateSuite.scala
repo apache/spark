@@ -159,7 +159,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
 
         val resultDf = stateReaderDf.selectExpr(
           "key.value AS groupingKey",
-          "single_value.id AS valueId", "single_value.name AS valueName",
+          "value.id AS valueId", "value.name AS valueName",
           "partition_id")
 
         checkAnswer(resultDf,
@@ -222,7 +222,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           .load()
 
         val resultDf = stateReaderDf.selectExpr(
-          "key.value", "single_value.value", "single_value.ttlExpirationMs", "partition_id")
+          "key.value", "value.value", "value.ttlExpirationMs", "partition_id")
 
         var count = 0L
         resultDf.collect().foreach { row =>
@@ -235,7 +235,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
 
         val answerDf = stateReaderDf.selectExpr(
           "key.value AS groupingKey",
-          "single_value.value.value AS valueId", "partition_id")
+          "value.value.value AS valueId", "partition_id")
         checkAnswer(answerDf,
           Seq(Row("a", 1L, 0), Row("b", 1L, 1)))
 
@@ -294,6 +294,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           .format("statestore")
           .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
           .option(StateSourceOptions.STATE_VAR_NAME, "groupsList")
+          .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, false)
           .load()
 
         val listStateDf = stateReaderDf
@@ -342,6 +343,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           .format("statestore")
           .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
           .option(StateSourceOptions.STATE_VAR_NAME, "groupsListWithTTL")
+          .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, false)
           .load()
 
         val listStateDf = stateReaderDf
@@ -401,6 +403,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           .format("statestore")
           .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
           .option(StateSourceOptions.STATE_VAR_NAME, "sessionState")
+          .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, false)
           .load()
 
         val resultDf = stateReaderDf.selectExpr(
@@ -467,6 +470,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           .format("statestore")
           .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
           .option(StateSourceOptions.STATE_VAR_NAME, "mapState")
+          .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, false)
           .load()
 
         val resultDf = stateReaderDf.selectExpr(
