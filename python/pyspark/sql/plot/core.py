@@ -78,8 +78,6 @@ class PySparkPlotAccessor:
         "bar": PySparkTopNPlotBase().get_top_n,
         "barh": PySparkTopNPlotBase().get_top_n,
         "line": PySparkSampledPlotBase().get_sampled,
-        "scatter": PySparkTopNPlotBase().get_top_n,
-        "area": PySparkSampledPlotBase().get_sampled,
     }
     _backends = {}  # type: ignore[var-annotated]
 
