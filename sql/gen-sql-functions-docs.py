@@ -36,6 +36,7 @@ groups = {
     "bitwise_funcs", "conversion_funcs", "csv_funcs",
     "xml_funcs", "lambda_funcs", "collection_funcs",
     "url_funcs", "hash_funcs", "struct_funcs",
+    "table_funcs", "variant_funcs"
 }
 
 
