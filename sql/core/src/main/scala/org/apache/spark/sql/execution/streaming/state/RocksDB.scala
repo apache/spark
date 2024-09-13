@@ -251,10 +251,15 @@ class RocksDB(
     }
   }
 
+  // Mapping of local SST files to DFS files for file reuse.
+  // This mapping should only be updated using the Task thread - at version load and commit time.
+  // If same mapping instance is updated from different threads,
+  // it will result in undefined behavior (and most likely incorrect mapping state).
   @GuardedBy("acquireLock")
   private val rocksDBFileMapping: RocksDBFileMapping = new RocksDBFileMapping()
 
-  private val snapshots = new ConcurrentLinkedQueue[RocksDBSnapshot]()
+  // We send snapshots that needs to be uploaded by the maintenance thread to this queue
+  private val snapshotsToUploadQueue = new ConcurrentLinkedQueue[RocksDBSnapshot]()
 
   /**
    * Load the given version of data in a native RocksDB instance.
@@ -633,7 +638,7 @@ class RocksDB(
               assert(changelogWriter.isDefined)
               changelogWriter.foreach(_.commit())
               snapshot.foreach(s => {
-                snapshots.offer(s)
+                snapshotsToUploadQueue.offer(s)
               })
             } finally {
               changelogWriter = None
@@ -718,13 +723,13 @@ class RocksDB(
     if (enableChangelogCheckpointing) {
 
       var mostRecentSnapshot: Option[RocksDBSnapshot] = None
-      var snapshot = snapshots.poll()
+      var snapshot = snapshotsToUploadQueue.poll()
 
       while (snapshot != null) {
         logDebug(s"RocksDB Maintenance - polled snapshot ${snapshot.version}")
         mostRecentSnapshot.foreach(_.close())
         mostRecentSnapshot = Some(snapshot)
-        snapshot = snapshots.poll()
+        snapshot = snapshotsToUploadQueue.poll()
       }
 
       if (mostRecentSnapshot.isDefined) {
@@ -750,10 +755,10 @@ class RocksDB(
       dbOptions.close()
       dbLogger.close()
 
-      var snapshot = snapshots.poll()
+      var snapshot = snapshotsToUploadQueue.poll()
       while (snapshot != null) {
         snapshot.close()
-        snapshot = snapshots.poll()
+        snapshot = snapshotsToUploadQueue.poll()
       }
 
       silentDeleteRecursively(localRootDir, "closing RocksDB")
