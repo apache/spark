@@ -2816,7 +2816,8 @@ class SubquerySuite extends QueryTest
           |           select t_outer.t1 as b1,
           |                  null as b2
           |       ) as t_inner
-          |       where (t_inner.b1 < t_outer.t2  or t_inner.b1 is null) and  t_inner.b1 = t_outer.t1
+          |       where (t_inner.b1 < t_outer.t2  or t_inner.b1 is null)
+          |        and  t_inner.b1 = t_outer.t1
           |       order by t_inner.b1,t_inner.b2 desc limit 1
           |   ) as lateral_table
           |""".stripMargin
