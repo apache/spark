@@ -624,7 +624,7 @@ case class SQLKeywords() extends LeafExpression with Generator with CodegenFallb
   usage = """_FUNC_() - Get all of the Spark SQL string collations""",
   examples = """
     Examples:
-      > SELECT * FROM _FUNC_() WHERE COLLATION_NAME = 'UTF8_BINARY';
+      > SELECT * FROM _FUNC_() WHERE NAME = 'UTF8_BINARY';
        SYSTEM  BUILTIN  UTF8_BINARY NULL  NULL  ACCENT_SENSITIVE  CASE_SENSITIVE  NO_PAD  NULL
   """,
   since = "4.0.0",
