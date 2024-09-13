@@ -30,7 +30,6 @@ import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, Boo
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
 
-
 case class Mode(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
