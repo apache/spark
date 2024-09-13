@@ -2475,11 +2475,11 @@ Abcdcba	Abcdcba
 Bbabaaba	A
 Efd2	Efd2
 Hello, World! Nice Day.	Hello, World! Nice Day.
-İo	İo
-İo	İo
 Kitten	Sitting
 Something Else. Nothing Here.	Something Else. Nothing Here.
 Spark	Sql
+İo	İo
+İo	İo
 
 
 -- !query
@@ -2499,7 +2499,7 @@ Kitten	Sitting
 Something Else. Nothing Here.	Something Else. Nothing Here.
 Spark	Sql
 İo	İo
-İo	İo
+İo	İo
 
 
 -- !query
