@@ -21,12 +21,16 @@ import java.io.File
 import java.time.Duration
 import java.util.UUID
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path}
+import org.scalatest.matchers.must.Matchers.be
+import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
+import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Encoders, Row}
 import org.apache.spark.sql.catalyst.util.stringToFile
+import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state._
@@ -708,7 +712,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
     checkError(
       ex.asInstanceOf[SparkRuntimeException],
-      errorClass = "STATE_STORE_HANDLE_NOT_INITIALIZED",
+      condition = "STATE_STORE_HANDLE_NOT_INITIALIZED",
       parameters = Map.empty
     )
   }
@@ -725,8 +729,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     checkAnswer(df, Seq(("a", "1"), ("b", "1")).toDF())
   }
 
-  // TODO SPARK-48796 after restart state id will not be the same
-  ignore("transformWithState - test deleteIfExists operator") {
+  test("transformWithState - test deleteIfExists operator") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -1152,7 +1155,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           ExpectFailure[StateStoreInvalidConfigAfterRestart] { e =>
             checkError(
               e.asInstanceOf[SparkUnsupportedOperationException],
-              errorClass = "STATE_STORE_INVALID_CONFIG_AFTER_RESTART",
+              condition = "STATE_STORE_INVALID_CONFIG_AFTER_RESTART",
               parameters = Map(
                 "configName" -> "outputMode",
                 "oldConfig" -> "Update",
@@ -1194,7 +1197,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           ExpectFailure[StateStoreInvalidVariableTypeChange] { t =>
             checkError(
               t.asInstanceOf[SparkUnsupportedOperationException],
-              errorClass = "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE",
+              condition = "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE",
               parameters = Map(
                 "stateVarName" -> "countState",
                 "newType" -> "ListState",
@@ -1241,7 +1244,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           ExpectFailure[StateStoreInvalidConfigAfterRestart] { e =>
             checkError(
               e.asInstanceOf[SparkUnsupportedOperationException],
-              errorClass = "STATE_STORE_INVALID_CONFIG_AFTER_RESTART",
+              condition = "STATE_STORE_INVALID_CONFIG_AFTER_RESTART",
               parameters = Map(
                 "configName" -> "timeMode",
                 "oldConfig" -> "NoTime",
@@ -1293,7 +1296,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           ExpectFailure[StateStoreValueSchemaNotCompatible] { t =>
             checkError(
               t.asInstanceOf[SparkUnsupportedOperationException],
-              errorClass = "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE",
+              condition = "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE",
               parameters = Map(
                 "storedValueSchema" -> "StructType(StructField(value,LongType,false))",
                 "newValueSchema" ->
@@ -1424,6 +1427,495 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         } finally {
           q.stop()
         }
+      }
+    }
+  }
+
+  private def getFiles(path: Path): Array[FileStatus] = {
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    val fileManager = CheckpointFileManager.create(path, hadoopConf)
+    fileManager.list(path)
+  }
+
+  private def getStateSchemaPath(stateCheckpointPath: Path): Path = {
+    new Path(stateCheckpointPath, "_stateSchema/default/")
+  }
+
+  test("transformWithState - verify that metadata and schema logs are purged") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "1") {
+      withTempDir { chkptDir =>
+        val stateOpIdPath = new Path(new Path(chkptDir.getCanonicalPath, "state"), "0")
+        val stateSchemaPath = getStateSchemaPath(stateOpIdPath)
+
+        val metadataPath = OperatorStateMetadataV2.metadataDirPath(stateOpIdPath)
+        // in this test case, we are changing the state spec back and forth
+        // to trigger the writing of the schema and metadata files
+        val inputData = MemoryStream[(String, String)]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "1", "")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new MostRecentStatefulProcessorWithDeletion(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str2")),
+          CheckNewAnswer(("a", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        // assert that a metadata and schema file has been written for each run
+        // as state variables have been deleted
+        assert(getFiles(metadataPath).length == 2)
+        assert(getFiles(stateSchemaPath).length == 2)
+
+        val result3 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result3, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str3")),
+          CheckNewAnswer(("a", "1", "str2")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        // because we don't change the schema for this run, there won't
+        // be a new schema file written.
+        testStream(result3, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str4")),
+          CheckNewAnswer(("a", "2", "str3")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        // by the end of the test, there have been 4 batches,
+        // so the metadata and schema logs, and commitLog has been purged
+        // for batches 0 and 1 so metadata and schema files exist for batches 0, 1, 2, 3
+        // and we only need to keep metadata files for batches 2, 3, and the since schema
+        // hasn't changed between batches 2, 3, we only keep the schema file for batch 2
+        assert(getFiles(metadataPath).length == 2)
+        assert(getFiles(stateSchemaPath).length == 1)
+      }
+    }
+  }
+
+  test("transformWithState - verify that schema file is kept after metadata is purged") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "2") {
+      withTempDir { chkptDir =>
+        val stateOpIdPath = new Path(new Path(chkptDir.getCanonicalPath, "state"), "0")
+        val stateSchemaPath = getStateSchemaPath(stateOpIdPath)
+
+        val metadataPath = OperatorStateMetadataV2.metadataDirPath(stateOpIdPath)
+        // in this test case, we are changing the state spec back and forth
+        // to trigger the writing of the schema and metadata files
+        val inputData = MemoryStream[(String, String)]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "1", "")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "2", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new MostRecentStatefulProcessorWithDeletion(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str2")),
+          CheckNewAnswer(("a", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        assert(getFiles(metadataPath).length == 3)
+        assert(getFiles(stateSchemaPath).length == 2)
+
+        val result3 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result3, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str3")),
+          CheckNewAnswer(("a", "1", "str2")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        // metadata files should be kept for batches 1, 2, 3
+        // schema files should be kept for batches 0, 2, 3
+        assert(getFiles(metadataPath).length == 3)
+        assert(getFiles(stateSchemaPath).length == 3)
+        // we want to ensure that we can read batch 1 even though the
+        // metadata file for batch 0 was removed
+        val batch1Df = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, chkptDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+          .option(StateSourceOptions.BATCH_ID, 1)
+          .load()
+
+        val batch1AnsDf = batch1Df.selectExpr(
+          "key.value AS groupingKey",
+          "single_value.value AS valueId")
+
+        checkAnswer(batch1AnsDf, Seq(Row("a", 2L)))
+
+        val batch3Df = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, chkptDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+          .option(StateSourceOptions.BATCH_ID, 3)
+          .load()
+
+        val batch3AnsDf = batch3Df.selectExpr(
+          "key.value AS groupingKey",
+          "single_value.value AS valueId")
+        checkAnswer(batch3AnsDf, Seq(Row("a", 1L)))
+      }
+    }
+  }
+
+  test("state data source integration - value state supports time travel") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "5") {
+      withTempDir { chkptDir =>
+        // in this test case, we are changing the state spec back and forth
+        // to trigger the writing of the schema and metadata files
+        val inputData = MemoryStream[(String, String)]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "1", "")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "2", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "3", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "4", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "5", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "6", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "7", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new MostRecentStatefulProcessorWithDeletion(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str2")),
+          CheckNewAnswer(("a", "str1")),
+          AddData(inputData, ("a", "str3")),
+          CheckNewAnswer(("a", "str2")),
+          AddData(inputData, ("a", "str4")),
+          CheckNewAnswer(("a", "str3")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+
+        // Batches 0-7: countState, mostRecent
+        // Batches 8-9: countState
+
+        // By this time, offset and commit logs for batches 0-3 have been purged.
+        // However, if we want to read the data for batch 4, we need to read the corresponding
+        // metadata and schema file for batch 4, or the latest files that correspond to
+        // batch 4 (in this case, the files were written for batch 0).
+        // We want to test the behavior where the metadata files are preserved so that we can
+        // read from the state data source, even if the commit and offset logs are purged for
+        // a particular batch
+
+        val df = spark.read.format("state-metadata").load(chkptDir.toString)
+
+        // check the min and max batch ids that we have data for
+        checkAnswer(
+          df.select(
+            "operatorId", "operatorName", "stateStoreName", "numPartitions", "minBatchId",
+            "maxBatchId"),
+          Seq(Row(0, "transformWithStateExec", "default", 5, 4, 9))
+        )
+
+        val countStateDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, chkptDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+          .option(StateSourceOptions.BATCH_ID, 4)
+          .load()
+
+        val countStateAnsDf = countStateDf.selectExpr(
+          "key.value AS groupingKey",
+          "single_value.value AS valueId")
+        checkAnswer(countStateAnsDf, Seq(Row("a", 5L)))
+
+        val mostRecentDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, chkptDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "mostRecent")
+          .option(StateSourceOptions.BATCH_ID, 4)
+          .load()
+
+        val mostRecentAnsDf = mostRecentDf.selectExpr(
+          "key.value AS groupingKey",
+          "single_value.value")
+        checkAnswer(mostRecentAnsDf, Seq(Row("a", "str1")))
+      }
+    }
+  }
+
+  test("transformWithState - verify that all metadata and schema logs are not purged") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "3") {
+      withTempDir { chkptDir =>
+        val inputData = MemoryStream[(String, String)]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "1", "")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "2", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "3", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "4", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "5", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "6", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "7", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "8", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "9", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "10", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "11", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "12", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "13", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "14", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+
+        val stateOpIdPath = new Path(new Path(chkptDir.getCanonicalPath, "state"), "0")
+        val stateSchemaPath = getStateSchemaPath(stateOpIdPath)
+
+        val metadataPath = OperatorStateMetadataV2.metadataDirPath(stateOpIdPath)
+
+        // Metadata files exist for batches 0, 12, and the thresholdBatchId is 8
+        // as this is the earliest batchId for which the commit log is not present,
+        // so we need to keep metadata files for batch 0 so we can read the commit
+        // log correspondingly
+        assert(getFiles(metadataPath).length == 2)
+        assert(getFiles(stateSchemaPath).length == 1)
+      }
+    }
+  }
+
+  test("transformWithState - verify that no metadata and schema logs are purged after" +
+    " removing column family") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "3") {
+      withTempDir { chkptDir =>
+        val inputData = MemoryStream[(String, String)]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "1", "")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "2", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "1", "")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "2", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "3", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "4", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "5", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "6", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "7", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "8", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "9", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "10", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "11", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "12", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new MostRecentStatefulProcessorWithDeletion(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("b", "str2")),
+          CheckNewAnswer(("b", "str1")),
+          AddData(inputData, ("b", "str3")),
+          CheckNewAnswer(("b", "str2")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+
+        val stateOpIdPath = new Path(new Path(chkptDir.getCanonicalPath, "state"), "0")
+        val stateSchemaPath = getStateSchemaPath(stateOpIdPath)
+
+        val metadataPath = OperatorStateMetadataV2.metadataDirPath(stateOpIdPath)
+
+        // Metadata files are written for batches 0, 2, and 14.
+        // Schema files are written for 0, 14
+        // At the beginning of the last query run, the thresholdBatchId is 11.
+        // However, we would need both schema files to be preserved, if we want to
+        // be able to read from batch 11 onwards.
+        assert(getFiles(metadataPath).length == 2)
+        assert(getFiles(stateSchemaPath).length == 2)
       }
     }
   }

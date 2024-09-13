@@ -542,7 +542,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkError(
       exception = intercept[SparkIllegalArgumentException](
         dateAddInterval(input, new CalendarInterval(36, 47, 1))),
-      errorClass = "_LEGACY_ERROR_TEMP_2000",
+      condition = "_LEGACY_ERROR_TEMP_2000",
       parameters = Map(
         "message" -> "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date",
         "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
@@ -896,13 +896,13 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         getDayOfWeekFromString(UTF8String.fromString("xx"))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3209",
+      condition = "ILLEGAL_DAY_OF_WEEK",
       parameters = Map("string" -> "xx"))
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         getDayOfWeekFromString(UTF8String.fromString("\"quote"))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3209",
+      condition = "ILLEGAL_DAY_OF_WEEK",
       parameters = Map("string" -> "\"quote"))
   }
 
@@ -1043,7 +1043,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         timestampAdd("SECS", 1, date(1969, 1, 1, 0, 0, 0, 1, getZoneId("UTC")), getZoneId("UTC"))
       },
-      errorClass = "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+      condition = "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
       parameters = Map(
         "functionName" -> "`TIMESTAMPADD`",
         "parameter" -> "`unit`",
@@ -1102,7 +1102,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
           date(2022, 1, 1, 0, 0, 0, 1, getZoneId("UTC")),
           getZoneId("UTC"))
       },
-      errorClass = "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+      condition = "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
       parameters =
         Map("functionName" -> "`TIMESTAMPDIFF`",
           "parameter" -> "`unit`",

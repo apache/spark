@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.{ArrayType, MapType, StructType}
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
 /**
- * Adds [[MapSort]] to group expressions containing map columns, as the key/value paris need to be
+ * Adds [[MapSort]] to group expressions containing map columns, as the key/value pairs need to be
  * in the correct order before grouping:
  *
  * SELECT map_column, COUNT(*) FROM TABLE GROUP BY map_column  =>

@@ -111,7 +111,7 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
       exception = intercept[SparkOutOfMemoryError] {
         sorter.insertRecord(bytes, Platform.BYTE_ARRAY_OFFSET, 1, 0)
       },
-      errorClass = "UNABLE_TO_ACQUIRE_MEMORY",
+      condition = "UNABLE_TO_ACQUIRE_MEMORY",
       parameters = Map("requestedBytes" -> "800", "receivedBytes" -> "400"))
   }
 }

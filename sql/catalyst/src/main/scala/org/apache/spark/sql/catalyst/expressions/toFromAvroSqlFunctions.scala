@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -117,6 +118,9 @@ case class FromAvro(child: Expression, jsonFormatSchema: Expression, options: Ex
     val expr = constructor.newInstance(child, schemaValue, optionsValue)
     expr.asInstanceOf[Expression]
   }
+
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("from_avro")
 }
 
 /**
@@ -189,4 +193,7 @@ case class ToAvro(child: Expression, jsonFormatSchema: Expression)
     val expr = constructor.newInstance(child, schemaValue)
     expr.asInstanceOf[Expression]
   }
+
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("to_avro")
 }

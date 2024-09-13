@@ -24,7 +24,7 @@ import scala.collection.mutable.{ArrayBuffer, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
 
-import org.antlr.v4.runtime.{ParserRuleContext, Token}
+import org.antlr.v4.runtime.{ParserRuleContext, RuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
@@ -260,6 +260,74 @@ class AstBuilder extends DataTypeAstBuilder
 
     WhileStatement(condition, body, Some(labelText))
   }
+
+  override def visitRepeatStatement(ctx: RepeatStatementContext): RepeatStatement = {
+    val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
+    val boolExpr = ctx.booleanExpression()
+
+    val condition = withOrigin(boolExpr) {
+      SingleStatement(
+        Project(
+          Seq(Alias(expression(boolExpr), "condition")()),
+          OneRowRelation()))}
+    val body = visitCompoundBody(ctx.compoundBody())
+
+    RepeatStatement(condition, body, Some(labelText))
+  }
+
+  private def leaveOrIterateContextHasLabel(
+      ctx: RuleContext, label: String, isIterate: Boolean): Boolean = {
+    ctx match {
+      case c: BeginEndCompoundBlockContext
+        if Option(c.beginLabel()).isDefined &&
+          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label) =>
+        if (isIterate) {
+          throw SqlScriptingErrors.invalidIterateLabelUsageForCompound(CurrentOrigin.get, label)
+        }
+        true
+      case c: WhileStatementContext
+        if Option(c.beginLabel()).isDefined &&
+          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+        => true
+      case c: RepeatStatementContext
+        if Option(c.beginLabel()).isDefined &&
+          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+      => true
+      case _ => false
+    }
+  }
+
+  override def visitLeaveStatement(ctx: LeaveStatementContext): LeaveStatement =
+    withOrigin(ctx) {
+      val labelText = ctx.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
+      var parentCtx = ctx.parent
+
+      while (Option(parentCtx).isDefined) {
+        if (leaveOrIterateContextHasLabel(parentCtx, labelText, isIterate = false)) {
+          return LeaveStatement(labelText)
+        }
+        parentCtx = parentCtx.parent
+      }
+
+      throw SqlScriptingErrors.labelDoesNotExist(
+        CurrentOrigin.get, labelText, "LEAVE")
+    }
+
+  override def visitIterateStatement(ctx: IterateStatementContext): IterateStatement =
+    withOrigin(ctx) {
+      val labelText = ctx.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
+      var parentCtx = ctx.parent
+
+      while (Option(parentCtx).isDefined) {
+        if (leaveOrIterateContextHasLabel(parentCtx, labelText, isIterate = true)) {
+          return IterateStatement(labelText)
+        }
+        parentCtx = parentCtx.parent
+      }
+
+      throw SqlScriptingErrors.labelDoesNotExist(
+        CurrentOrigin.get, labelText, "ITERATE")
+    }
 
   override def visitSingleStatement(ctx: SingleStatementContext): LogicalPlan = withOrigin(ctx) {
     Option(ctx.statement().asInstanceOf[ParserRuleContext])
@@ -3398,6 +3466,14 @@ class AstBuilder extends DataTypeAstBuilder
             throw QueryParsingErrors.fromToIntervalUnsupportedError(from, to, ctx)
         }
       } catch {
+        // Keep error class of SparkIllegalArgumentExceptions and enrich it with query context
+        case se: SparkIllegalArgumentException =>
+          val pe = new ParseException(
+            errorClass = se.getErrorClass,
+            messageParameters = se.getMessageParameters.asScala.toMap,
+            ctx)
+          pe.setStackTrace(se.getStackTrace)
+          throw pe
         // Handle Exceptions thrown by CalendarInterval
         case e: IllegalArgumentException =>
           val pe = new ParseException(
@@ -5031,6 +5107,13 @@ class AstBuilder extends DataTypeAstBuilder
       val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
       val isLazy = ctx.LAZY != null
       if (query.isDefined) {
+        // Disallow parameter markers in the query of the cache.
+        // We need this limitation because we store the original query text, pre substitution.
+        // To lift this we would need to reconstitute the query with parameter markers replaced with
+        // the values given at CACHE TABLE time, or we would need to store the parameter values
+        // alongside the text.
+        // The same rule can be found in CREATE VIEW builder.
+        checkInvalidParameter(query.get, "the query of CACHE TABLE")
         CacheTableAsSelect(ident.head, query.get, source(ctx.query()), isLazy, options)
       } else {
         CacheTable(
@@ -5627,4 +5710,23 @@ class AstBuilder extends DataTypeAstBuilder
     withOrigin(ctx) {
       visitSetVariableImpl(ctx.query(), ctx.multipartIdentifierList(), ctx.assignmentList())
     }
+
+  /**
+   * Check plan for any parameters.
+   * If it finds any throws UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT.
+   * This method is used to ban parameters in some contexts.
+   */
+  protected def checkInvalidParameter(plan: LogicalPlan, statement: String): Unit = {
+    plan.foreach { p =>
+      p.expressions.foreach { expr =>
+        if (expr.containsPattern(PARAMETER)) {
+          throw QueryParsingErrors.parameterMarkerNotAllowed(statement, p.origin)
+        }
+      }
+    }
+    plan.children.foreach(p => checkInvalidParameter(p, statement))
+    plan.innerChildren.collect {
+      case child: LogicalPlan => checkInvalidParameter(child, statement)
+    }
+  }
 }

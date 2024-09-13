@@ -176,7 +176,7 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
 
     def test_listener_throw(self):
         """
-        Following Vanilla Spark's behavior, when the callback of user-defined listener throws,
+        Following classic Spark's behavior, when the callback of user-defined listener throws,
         other listeners should still proceed.
         """
 

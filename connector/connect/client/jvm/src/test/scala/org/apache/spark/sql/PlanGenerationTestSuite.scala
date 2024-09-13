@@ -552,6 +552,14 @@ class PlanGenerationTestSuite
       valueColumnName = "value")
   }
 
+  test("transpose index_column") {
+    simple.transpose(indexColumn = fn.col("id"))
+  }
+
+  test("transpose no_index_column") {
+    simple.transpose()
+  }
+
   test("offset") {
     simple.offset(1000)
   }
@@ -1801,7 +1809,11 @@ class PlanGenerationTestSuite
     fn.sentences(fn.col("g"))
   }
 
-  functionTest("sentences with locale") {
+  functionTest("sentences with language") {
+    fn.sentences(fn.col("g"), lit("en"))
+  }
+
+  functionTest("sentences with language and country") {
     fn.sentences(fn.col("g"), lit("en"), lit("US"))
   }
 
