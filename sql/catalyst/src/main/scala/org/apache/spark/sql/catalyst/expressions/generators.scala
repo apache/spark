@@ -621,7 +621,7 @@ case class SQLKeywords() extends LeafExpression with Generator with CodegenFallb
 }
 
 @ExpressionDescription(
-  usage = """_FUNC_() - Get Spark SQL all collations""",
+  usage = """_FUNC_() - Get all of the Spark SQL string collations""",
   examples = """
     Examples:
       > SELECT * FROM _FUNC_() LIMIT 2;
