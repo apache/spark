@@ -487,6 +487,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
 
     checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
+    checkDuplicateClauses(ctx.collationSpec(), "DEFAULT COLLATION", ctx)
     checkDuplicateClauses(ctx.schemaBinding(), "WITH SCHEMA", ctx)
     checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED ON", ctx)
     checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
@@ -542,6 +543,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
         userSpecifiedColumns,
         visitCommentSpecList(ctx.commentSpec()),
+        visitCollationSpecList(ctx.collationSpec()),
         properties,
         Some(originalText),
         qPlan,
@@ -567,6 +569,7 @@ class SparkSqlAstBuilder extends AstBuilder {
           tableIdentifier,
           userSpecifiedColumns,
           visitCommentSpecList(ctx.commentSpec()),
+          visitCollationSpecList(ctx.collationSpec()),
           properties,
           Option(source(ctx.query)),
           otherPlans.head,

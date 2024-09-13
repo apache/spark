@@ -415,11 +415,12 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       AlterViewSchemaBindingCommand(ident, viewSchemaMode)
 
     case CreateView(ResolvedIdentifierInSessionCatalog(ident), userSpecifiedColumns, comment,
-        properties, originalText, child, allowExisting, replace, viewSchemaMode) =>
+        collation, properties, originalText, child, allowExisting, replace, viewSchemaMode) =>
       CreateViewCommand(
         name = ident,
         userSpecifiedColumns = userSpecifiedColumns,
         comment = comment,
+        collation = collation,
         properties = properties,
         originalText = originalText,
         plan = child,
@@ -428,7 +429,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         viewType = PersistedView,
         viewSchemaMode = viewSchemaMode)
 
-    case CreateView(ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _, _) =>
+    case CreateView(ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _, _, _) =>
       throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "views")
 
     case ShowViews(ns: ResolvedNamespace, pattern, output) =>

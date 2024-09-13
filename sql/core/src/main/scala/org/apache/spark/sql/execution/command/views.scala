@@ -47,6 +47,7 @@ import org.apache.spark.util.ArrayImplicits._
  * @param userSpecifiedColumns the output column names and optional comments specified by users,
  *                             can be Nil if not specified.
  * @param comment the comment of this view.
+ * @param collation the collation of this view.
  * @param properties the properties of this view.
  * @param originalText the original SQL text of this view, can be None if this view is created via
  *                     Dataset API.
@@ -64,6 +65,7 @@ case class CreateViewCommand(
     name: TableIdentifier,
     userSpecifiedColumns: Seq[(String, Option[String])],
     comment: Option[String],
+    collation: Option[String],
     properties: Map[String, String],
     originalText: Option[String],
     plan: LogicalPlan,
@@ -220,7 +222,8 @@ case class CreateViewCommand(
       properties = newProperties,
       viewOriginalText = originalText,
       viewText = originalText,
-      comment = comment
+      comment = comment,
+      collation = collation
     )
   }
 

@@ -798,7 +798,6 @@ public interface TableChange {
     }
   }
 
-
   /** A TableChange to set collation of a table. */
   final class SetCollation implements TableChange {
     private final String collation;

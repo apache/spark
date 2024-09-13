@@ -1338,6 +1338,7 @@ case class CreateView(
     child: LogicalPlan,
     userSpecifiedColumns: Seq[(String, Option[String])],
     comment: Option[String],
+    collation: Option[String],
     properties: Map[String, String],
     originalText: Option[String],
     query: LogicalPlan,
