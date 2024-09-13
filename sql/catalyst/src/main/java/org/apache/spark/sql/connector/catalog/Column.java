@@ -21,7 +21,6 @@ import java.util.Map;
 import javax.annotation.Nullable;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.catalyst.util.IdentityColumnSpec;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.internal.connector.ColumnImpl;
 import org.apache.spark.sql.types.DataType;

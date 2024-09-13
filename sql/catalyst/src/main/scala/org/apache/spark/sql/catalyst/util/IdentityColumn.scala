@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, TableCatalogCapability}
+import org.apache.spark.sql.connector.catalog.{Identifier, IdentityColumnSpec, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{StructField, StructType}
-
-case class IdentityColumnSpec(start: Long, step: Long, allowExplicitInsert: Boolean)
 
 /**
  * This object contains utility methods and values for Identity Columns
@@ -62,7 +60,7 @@ object IdentityColumn {
    */
   def getIdentityInfo(field: StructField): Option[IdentityColumnSpec] = {
     if (isIdentityColumn(field)) {
-      Some(IdentityColumnSpec(
+      Some(new IdentityColumnSpec(
         field.metadata.getString(IDENTITY_INFO_START).toLong,
         field.metadata.getString(IDENTITY_INFO_STEP).toLong,
         field.metadata.getString(IDENTITY_INFO_ALLOW_EXPLICIT_INSERT).toBoolean))

@@ -22,10 +22,9 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, UnaryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn}
-import org.apache.spark.sql.catalyst.util.IdentityColumnSpec
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.validateDefaultValueExpr
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.{CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY}
-import org.apache.spark.sql.connector.catalog.{Column => V2Column, ColumnDefaultValue}
+import org.apache.spark.sql.connector.catalog.{Column => V2Column, ColumnDefaultValue, IdentityColumnSpec}
 import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.connector.ColumnImpl
@@ -56,13 +55,6 @@ case class ColumnDefinition(
   }
 
   def toV2Column(statement: String): V2Column = {
-    val finalMetadata = if (identityColumnSpec.isDefined) {
-      val metadataBuilder = new MetadataBuilder().withMetadata(metadata)
-      encodeIdentityColumnSpec(metadataBuilder)
-      metadataBuilder.build()
-    } else {
-      metadata
-    }
     ColumnImpl(
       name,
       dataType,
@@ -71,7 +63,7 @@ case class ColumnDefinition(
       defaultValue.map(_.toV2(statement, name)).orNull,
       generationExpression.orNull,
       identityColumnSpec.orNull,
-      if (finalMetadata == Metadata.empty) null else finalMetadata.json)
+      if (metadata == Metadata.empty) null else metadata.json)
   }
 
   def toV1Column: StructField = {
@@ -94,11 +86,11 @@ case class ColumnDefinition(
 
   private def encodeIdentityColumnSpec(metadataBuilder: MetadataBuilder): Unit = {
     identityColumnSpec.foreach { spec: IdentityColumnSpec =>
-      metadataBuilder.putLong(IdentityColumn.IDENTITY_INFO_START, spec.start)
-      metadataBuilder.putLong(IdentityColumn.IDENTITY_INFO_STEP, spec.step)
+      metadataBuilder.putLong(IdentityColumn.IDENTITY_INFO_START, spec.getStart)
+      metadataBuilder.putLong(IdentityColumn.IDENTITY_INFO_STEP, spec.getStep)
       metadataBuilder.putBoolean(
         IdentityColumn.IDENTITY_INFO_ALLOW_EXPLICIT_INSERT,
-        spec.allowExplicitInsert)
+        spec.isAllowExplicitInsert)
     }
   }
 }
@@ -125,7 +117,7 @@ object ColumnDefinition {
     }
     val generationExpr = GeneratedColumn.getGenerationExpression(col)
     val identityColumnSpec = if (col.metadata.contains(IdentityColumn.IDENTITY_INFO_START)) {
-      Some(IdentityColumnSpec(
+      Some(new IdentityColumnSpec(
         col.metadata.getLong(IdentityColumn.IDENTITY_INFO_START),
         col.metadata.getLong(IdentityColumn.IDENTITY_INFO_STEP),
         col.metadata.getBoolean(IdentityColumn.IDENTITY_INFO_ALLOW_EXPLICIT_INSERT)

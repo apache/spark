@@ -45,8 +45,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
-import org.apache.spark.sql.catalyst.util.IdentityColumnSpec
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, IdentityColumnSpec, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
@@ -3648,7 +3647,7 @@ class AstBuilder extends DataTypeAstBuilder
     val allowExplicitInsert = ctx.BY() != null && ctx.DEFAULT() != null
     val (start, step) = visitIdentityColSpec(ctx.identityColSpec())
 
-    IdentityColumnSpec(start, step, allowExplicitInsert)
+    new IdentityColumnSpec(start, step, allowExplicitInsert)
   }
 
   override def visitIdentityColSpec(ctx: IdentityColSpecContext): (Long, Long) = {
@@ -3673,7 +3672,7 @@ class AstBuilder extends DataTypeAstBuilder
           throw QueryParsingErrors.identityColumnIllegalStep(ctx)
         }
       } else {
-        throw throw SparkException
+        throw SparkException
             .internalError(s"Invalid identity column sequence generator option: ${option.getText}")
       }
     }

@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.internal.connector
 
-import org.apache.spark.sql.catalyst.util.IdentityColumnSpec
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue}
+import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, IdentityColumnSpec}
 import org.apache.spark.sql.types.DataType
 
 // The standard concrete implementation of data source V2 column.

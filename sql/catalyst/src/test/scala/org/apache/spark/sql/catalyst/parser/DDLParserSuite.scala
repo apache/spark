@@ -24,7 +24,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.IdentityColumnSpec
+import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, ClusterByTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
@@ -2878,10 +2878,10 @@ class DDLParserSuite extends AnalysisTest {
           dataType = expectedDataType,
           nullable = true,
           identityColumnSpec = Some(
-            IdentityColumnSpec(
-              start = expectedStart,
-              step = expectedStep,
-              allowExplicitInsert = expectedAllowExplicitInsert
+            new IdentityColumnSpec(
+              expectedStart,
+              expectedStep,
+              expectedAllowExplicitInsert
             )
           )
         ),
