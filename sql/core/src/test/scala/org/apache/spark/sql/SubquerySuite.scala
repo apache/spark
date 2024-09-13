@@ -2794,4 +2794,34 @@ class SubquerySuite extends QueryTest
       checkAnswer(df3, Row(7))
     }
   }
+
+  test("SPARK-49646: handle under/setOp under limit/aggregate with predicates cannot pulled up") {
+    sql("CREATE TABLE IF NOT EXISTS t(t1 INT,t2 int) USING json")
+    sql("CREATE TABLE IF NOT EXISTS a(a1 INT) USING json")
+    withTable("t", "a") {
+      val query =
+        """
+          |select 1
+          |from t as t_outer
+          |left join
+          |   lateral(
+          |       select b1,b2
+          |       from
+          |       (
+          |           select
+          |               a.a1 as b1,
+          |               1 as b2
+          |           from a
+          |           union
+          |           select t_outer.t1 as b1,
+          |                  null as b2
+          |       ) as t_inner
+          |       where (t_inner.b1 < t_outer.t2  or t_inner.b1 is null) and  t_inner.b1 = t_outer.t1
+          |       order by t_inner.b1,t_inner.b2 desc limit 1
+          |   ) as lateral_table
+          |""".stripMargin
+      val df = sql(query)
+      checkAnswer(df, Seq.empty)
+    }
+  }
 }
