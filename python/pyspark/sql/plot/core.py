@@ -197,6 +197,8 @@ class PySparkPlotAccessor:
         >>> columns = ["category", "int_val", "float_val"]
         >>> df = spark.createDataFrame(data, columns)
         >>> df.plot.barh(x="category", y="int_val")  # doctest: +SKIP
-        >>> df.plot.barh(x="category", y=["int_val", "float_val"])  # doctest: +SKIP
+        >>> df.plot.barh(
+        ...     x="category", y=["int_val", "float_val"]
+        ... )  # doctest: +SKIP
         """
         return self(kind="barh", x=x, y=y, **kwargs)
