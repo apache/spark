@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{QueryTest}
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
