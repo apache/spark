@@ -720,8 +720,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "expression" -> "'one'",
         "sourceType" -> "\"STRING\"",
-        "targetType" -> "\"BIGINT\"",
-        "ansiConfig" -> "\"spark.sql.ansi.enabled\""),
+        "targetType" -> "\"BIGINT\""),
       context = ExpectedContext(fragment = "\"one\"", start = 23, stop = 27)
     )
   }
