@@ -1261,8 +1261,12 @@ class DataSourceV2SQLSuiteV1Filter
       PROP_OWNER -> "it will be set to the current user",
       PROP_EXTERNAL -> "please use CREATE EXTERNAL TABLE"
     )
+    val excludedProperties = Set(SupportsNamespaces.PROP_COMMENT, SupportsNamespaces.PROP_COLLATION)
+    val legacyProperties = CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
+      .filterNot(excludedProperties.contains)
+
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
-      CatalogV2Util.TABLE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+      legacyProperties.foreach { key =>
         Seq("OPTIONS", "TBLPROPERTIES").foreach { clause =>
           Seq("CREATE", "REPLACE").foreach { action =>
             val sqlText = s"$action TABLE testcat.reservedTest (key int) " +
@@ -1315,7 +1319,7 @@ class DataSourceV2SQLSuiteV1Filter
       }
     }
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
-      CatalogV2Util.TABLE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+      legacyProperties.foreach { key =>
         Seq("OPTIONS", "TBLPROPERTIES").foreach { clause =>
           withTable("testcat.reservedTest") {
             Seq("CREATE", "REPLACE").foreach { action =>

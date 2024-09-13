@@ -26,6 +26,7 @@ import org.scalatest.Tag
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -171,6 +172,11 @@ trait DDLCommandTestUtils extends SQLTestUtils {
     val part1Loc = part0Loc.replace(from, to)
     FileUtils.copyDirectory(new File(part0Loc), new File(part1Loc))
     part1Loc
+  }
+
+  def namespaceLegacyProperties: Seq[String] = {
+    val excludedProperties = Set(SupportsNamespaces.PROP_COMMENT, SupportsNamespaces.PROP_COLLATION)
+    CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(excludedProperties.contains)
   }
 }
 
