@@ -153,23 +153,36 @@ object ColumnDefinition {
               s"Command $cmd should not have column default value expression.")
         }
         cmd.columns.foreach { col =>
-          if (col.defaultValue.isDefined && col.generationExpression.isDefined) {
-            throw new AnalysisException(
-              errorClass = "GENERATED_COLUMN_WITH_DEFAULT_VALUE",
-              messageParameters = Map(
-                "colName" -> col.name,
-                "defaultValue" -> col.defaultValue.get.originalSQL,
-                "genExpr" -> col.generationExpression.get
-              )
-            )
-          }
-
           col.defaultValue.foreach { default =>
+            checkDefaultColumnConflicts(col)
             validateDefaultValueExpr(default, statement, col.name, col.dataType)
           }
         }
 
       case _ =>
+    }
+  }
+
+  private def checkDefaultColumnConflicts(col: ColumnDefinition): Unit = {
+    if (col.generationExpression.isDefined) {
+      throw new AnalysisException(
+        errorClass = "GENERATED_COLUMN_WITH_DEFAULT_VALUE",
+        messageParameters = Map(
+          "colName" -> col.name,
+          "defaultValue" -> col.defaultValue.get.originalSQL,
+          "genExpr" -> col.generationExpression.get
+        )
+      )
+    }
+    if (col.identityColumnSpec.isDefined) {
+      throw new AnalysisException(
+        errorClass = "IDENTITY_COLUMN_WITH_DEFAULT_VALUE",
+        messageParameters = Map(
+          "colName" -> col.name,
+          "defaultValue" -> col.defaultValue.get.originalSQL,
+          "identityColumnSpec" -> col.identityColumnSpec.get.toString
+        )
+      )
     }
   }
 }

@@ -1753,6 +1753,32 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-48824: Column cannot have both an identity column spec and a default value") {
+    val tblName = "my_tab"
+    val tableDefinition =
+      s"$tblName(id BIGINT GENERATED ALWAYS AS IDENTITY DEFAULT 0, name STRING)"
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo") {
+      for (statement <- Seq("CREATE TABLE", "REPLACE TABLE")) {
+        withTable(s"testcat.$tblName") {
+          if (statement == "REPLACE TABLE") {
+            sql(s"CREATE TABLE testcat.$tblName(a INT) USING foo")
+          }
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"$statement testcat.$tableDefinition USING foo")
+            },
+            condition = "IDENTITY_COLUMN_WITH_DEFAULT_VALUE",
+            parameters = Map(
+              "colName" -> "id",
+              "defaultValue" -> "0",
+              "identityColumnSpec" ->
+                "IdentityColumnSpec{start=1, step=1, allowExplicitInsert=false}")
+          )
+        }
+      }
+    }
+  }
+
   test("SPARK-48824: Identity columns only allowed with TableCatalogs that " +
     "SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS") {
     val tblName = "my_tab"

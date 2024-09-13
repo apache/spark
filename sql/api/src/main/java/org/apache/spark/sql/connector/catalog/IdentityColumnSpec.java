@@ -16,11 +16,14 @@
  */
 
 package org.apache.spark.sql.connector.catalog;
+import org.apache.spark.annotation.Evolving;
+
 import java.util.Objects;
 
 /**
  * Identity column specification.
  */
+@Evolving
 public class IdentityColumnSpec {
     private final long start;
     private final long step;
