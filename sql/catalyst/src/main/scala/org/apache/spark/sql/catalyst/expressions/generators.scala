@@ -624,9 +624,8 @@ case class SQLKeywords() extends LeafExpression with Generator with CodegenFallb
   usage = """_FUNC_() - Get all of the Spark SQL string collations""",
   examples = """
     Examples:
-      > SELECT * FROM _FUNC_() LIMIT 2;
+      > SELECT * FROM _FUNC_() WHERE COLLATION_NAME = 'UTF8_BINARY';
        SYSTEM  BUILTIN  UTF8_BINARY NULL  NULL  ACCENT_SENSITIVE  CASE_SENSITIVE  NO_PAD  NULL
-       SYSTEM  BUILTIN  UTF8_LCASE  NULL  NULL  ACCENT_SENSITIVE  CASE_INSENSITIVE  NO_PAD  NULL
   """,
   since = "4.0.0",
   group = "generator_funcs")
@@ -648,14 +647,14 @@ case class AllCollations() extends LeafExpression with Generator with CodegenFal
         UTF8String.fromString(m.catalog),
         UTF8String.fromString(m.schema),
         UTF8String.fromString(m.collationName),
-        if (m.language != null) UTF8String.fromString(m.language) else null,
-        if (m.country != null) UTF8String.fromString(m.country) else null,
+        UTF8String.fromString(m.language),
+        UTF8String.fromString(m.country),
         UTF8String.fromString(
           if (m.accentSensitivity) "ACCENT_SENSITIVE" else "ACCENT_INSENSITIVE"),
         UTF8String.fromString(
           if (m.caseSensitivity) "CASE_SENSITIVE" else "CASE_INSENSITIVE"),
         UTF8String.fromString(m.padAttribute),
-        if (m.icuVersion != null) UTF8String.fromString(m.icuVersion) else null)
+        UTF8String.fromString(m.icuVersion))
     }
   }
 
