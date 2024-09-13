@@ -77,7 +77,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
     // Fold expressions that are foldable.
     case e if e.foldable =>
       try {
-        Literal.create(e.eval(EmptyRow), e.dataType)
+        Literal.create(e.freshCopyIfContainsStatefulExpression().eval(EmptyRow), e.dataType)
       } catch {
         case NonFatal(_) if isConditionalBranch =>
           // When doing constant folding inside conditional expressions, we should not fail
