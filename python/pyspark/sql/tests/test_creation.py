@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import platform
 from decimal import Decimal
 import os
 import time
