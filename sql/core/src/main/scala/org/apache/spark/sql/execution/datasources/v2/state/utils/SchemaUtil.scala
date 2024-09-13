@@ -337,13 +337,18 @@ object SchemaUtil {
    * Given key-value schema generated from `generateSchemaForStateVar()`,
    * returns the compositeKey schema that key is stored in the state store
    */
-  def getCompositeKeySchema(schema: StructType): StructType = {
+  def getCompositeKeySchema(
+      schema: StructType,
+      stateSourceOptions: StateSourceOptions): StructType = {
     val groupingKeySchema = SchemaUtil.getSchemaAsDataType(
       schema, "key").asInstanceOf[StructType]
     val userKeySchema = try {
-      Option(
-        SchemaUtil.getSchemaAsDataType(schema, "map_value").asInstanceOf[MapType]
+      if (stateSourceOptions.flattenCollectionTypes) {
+        Option(SchemaUtil.getSchemaAsDataType(schema, "user_map_key").asInstanceOf[StructType])
+      } else {
+        Option(SchemaUtil.getSchemaAsDataType(schema, "map_value").asInstanceOf[MapType]
           .keyType.asInstanceOf[StructType])
+      }
     } catch {
       case NonFatal(e) =>
         throw StateDataSourceErrors.internalError(s"No such field named as 'map_value' " +

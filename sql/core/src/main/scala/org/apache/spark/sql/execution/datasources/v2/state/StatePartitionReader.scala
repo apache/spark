@@ -76,7 +76,7 @@ abstract class StatePartitionReaderBase(
 
   protected val keySchema = {
     if (SchemaUtil.checkVariableType(stateVariableInfoOpt, StateVariableType.MapState)) {
-      SchemaUtil.getCompositeKeySchema(schema)
+      SchemaUtil.getCompositeKeySchema(schema, partition.sourceOptions)
     } else {
       SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
     }

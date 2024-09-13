@@ -308,6 +308,20 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         checkAnswer(listStateDf,
           Seq(Row("session1", "group1"), Row("session1", "group2"), Row("session1", "group4"),
             Row("session2", "group1"), Row("session3", "group7")))
+
+
+        val flattenedReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "groupsList")
+          .load()
+
+        val resultDf = flattenedReaderDf.selectExpr(
+          "key.value AS groupingKey",
+          "value.value AS valueList")
+        checkAnswer(resultDf,
+          Seq(Row("session1", "group1"), Row("session1", "group2"), Row("session1", "group4"),
+            Row("session2", "group1"), Row("session3", "group7")))
       }
     }
   }
@@ -370,6 +384,20 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         checkAnswer(valuesDf,
           Seq(Row("session1", "group1"), Row("session1", "group2"), Row("session1", "group4"),
           Row("session2", "group1"), Row("session3", "group7")))
+
+        val flattenedStateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "groupsListWithTTL")
+          .load()
+
+        val outputDf = flattenedStateReaderDf
+          .selectExpr("key.value AS groupingKey",
+            "value.value.value AS groupId")
+
+        checkAnswer(outputDf,
+          Seq(Row("session1", "group1"), Row("session1", "group2"), Row("session1", "group4"),
+          Row("session2", "group1"), Row("session3", "group7")))
       }
     }
   }
@@ -415,6 +443,24 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
               Map(Row("v1") -> Row("10"), Row("v2") -> Row("5"))),
             Row("k2",
               Map(Row("v2") -> Row("3"))))
+        )
+
+        val flattenedStateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "sessionState")
+          .load()
+
+        val outputDf = flattenedStateReaderDf
+          .selectExpr("key.value AS groupingKey",
+            "user_map_key.value AS mapKey",
+            "user_map_value.value AS mapValue")
+
+        checkAnswer(outputDf,
+          Seq(
+            Row("k1", "v1", "10"),
+            Row("k1", "v2", "5"),
+            Row("k2", "v2", "3"))
         )
       }
     }
