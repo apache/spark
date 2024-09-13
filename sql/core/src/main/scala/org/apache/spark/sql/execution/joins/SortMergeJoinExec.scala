@@ -45,6 +45,8 @@ case class SortMergeJoinExec(
     right: SparkPlan,
     isSkewJoin: Boolean = false) extends ShuffledJoin {
 
+  private val batchSize = conf.getConf(SQLConf.SORT_MERGE_JOIN_BATCH_SIZE)
+
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
@@ -463,7 +465,8 @@ case class SortMergeJoinExec(
       case _ => None
     }
 
-    val iterator = ctx.freshName("iterator")
+    val iterator = ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", "iterator",
+      forceInline = true)
     val numOutput = metricTerm(ctx, "numOutputRows")
     val resultVars = joinType match {
       case _: InnerLike | LeftOuter =>
@@ -539,12 +542,19 @@ case class SortMergeJoinExec(
       (evaluateVariables(streamedVars), "", "")
     }
 
-    val beforeLoop =
-      s"""
-         |${streamedVarDecl.mkString("\n")}
-         |${streamedBeforeLoop.trim}
-         |scala.collection.Iterator<UnsafeRow> $iterator = $matches.generateIterator();
-       """.stripMargin
+    val beforeLoop = joinType match {
+      case _: InnerLike | LeftOuter | RightOuter =>
+        s"""
+           |${streamedVarDecl.mkString("\n")}
+           |${streamedBeforeLoop.trim}
+         """.stripMargin
+      case _ =>
+        s"""
+           |${streamedVarDecl.mkString("\n")}
+           |${streamedBeforeLoop.trim}
+           |scala.collection.Iterator<UnsafeRow> $iterator = $matches.generateIterator();
+         """.stripMargin
+    }
     val outputRow =
       s"""
          |$numOutput.add(1);
@@ -558,11 +568,11 @@ case class SortMergeJoinExec(
       case _: InnerLike =>
         val cleanedFlag =
           ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "cleanedFlag", v => s"$v = false;")
-        codegenInner(findNextJoinRows, beforeLoop, iterator, bufferedRow, condCheck, outputRow,
-          eagerCleanup, cleanedFlag)
+        codegenInner(ctx, findNextJoinRows, beforeLoop, iterator, bufferedRow, condCheck, outputRow,
+          eagerCleanup, cleanedFlag, matches)
       case LeftOuter | RightOuter =>
-        codegenOuter(streamedInput, findNextJoinRows, beforeLoop, iterator, bufferedRow, condCheck,
-          ctx.freshName("hasOutputRow"), outputRow, eagerCleanup)
+        codegenOuter(ctx, streamedInput, findNextJoinRows, beforeLoop, iterator, bufferedRow,
+          condCheck, outputRow, eagerCleanup, matches)
       case LeftSemi =>
         val cleanedFlag =
           ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "cleanedFlag", v => s"$v = false;")
@@ -604,6 +614,7 @@ case class SortMergeJoinExec(
    * Generates the code for Inner join.
    */
   private def codegenInner(
+      ctx: CodegenContext,
       findNextJoinRows: String,
       beforeLoop: String,
       matchIterator: String,
@@ -611,19 +622,47 @@ case class SortMergeJoinExec(
       conditionCheck: String,
       outputRow: String,
       eagerCleanup: String,
-      cleanedFlag: String): String = {
+      cleanedFlag: String,
+      matches: String): String = {
+    val processCurrentJoinRows = ctx.freshName("processCurrentJoinRows")
+    val processedCnt = ctx.freshName("processedCnt")
+    val checkBatchCode = if (batchSize > 0) {
+      s"""
+         |$processedCnt = $processedCnt + 1;
+         |if (($processedCnt & $batchSize) == 0) {
+         |  if (shouldStop()) return;
+         |}
+         |""".stripMargin
+    } else {
+      ""
+    }
+    ctx.addNewFunction(processCurrentJoinRows,
+      s"""
+         |private void $processCurrentJoinRows() throws java.io.IOException {
+         |  $beforeLoop
+         |  int $processedCnt = 0;
+         |  while ($matchIterator.hasNext()) {
+         |    $checkBatchCode
+         |    InternalRow $bufferedRow = (InternalRow) $matchIterator.next();
+         |    $conditionCheck
+         |    $outputRow
+         |  }
+         |  $matchIterator = null;
+         |}
+      """.stripMargin)
     s"""
        |if($cleanedFlag) {
        |  return;
        |}
        |
+       |if ($matchIterator != null) {
+       |  $processCurrentJoinRows();
+       |  if (shouldStop()) return;
+       |}
+       |
        |while ($findNextJoinRows) {
-       |  $beforeLoop
-       |  while ($matchIterator.hasNext()) {
-       |    InternalRow $bufferedRow = (InternalRow) $matchIterator.next();
-       |    $conditionCheck
-       |    $outputRow
-       |  }
+       |  $matchIterator = $matches.generateIterator();
+       |  $processCurrentJoinRows();
        |  if (shouldStop()) return;
        |}
        |$cleanedFlag = true;
@@ -635,29 +674,59 @@ case class SortMergeJoinExec(
    * Generates the code for Left or Right Outer join.
    */
   private def codegenOuter(
+      ctx: CodegenContext,
       streamedInput: String,
       findNextJoinRows: String,
       beforeLoop: String,
       matchIterator: String,
       bufferedRow: String,
       conditionCheck: String,
-      hasOutputRow: String,
       outputRow: String,
-      eagerCleanup: String): String = {
+      eagerCleanup: String,
+      matches: String): String = {
+    val processCurrentJoinRows = ctx.freshName("processCurrentJoinRows")
+    val hasOutputRow = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "hasOutputRow")
+    val processedCnt = ctx.freshName("processedCnt")
+    val checkBatchCode = if (batchSize > 0) {
+      s"""
+         |$processedCnt = $processedCnt + 1;
+         |if (($processedCnt & $batchSize) == 0) {
+         |  if (shouldStop() && $matchIterator.hasNext()) return;
+         |}
+         |""".stripMargin
+    } else {
+      ""
+    }
+    ctx.addNewFunction(processCurrentJoinRows,
+      s"""
+         |private void ${processCurrentJoinRows}() throws java.io.IOException {
+         |  $beforeLoop
+         |  int $processedCnt = 0;
+         |
+         |  // the last iteration of this loop is to emit an empty row if there is no matched rows.
+         |  while ($matchIterator.hasNext() || !$hasOutputRow) {
+         |    $checkBatchCode
+         |    InternalRow $bufferedRow = $matchIterator.hasNext() ?
+         |      (InternalRow) $matchIterator.next() : null;
+         |    $conditionCheck
+         |    $hasOutputRow = true;
+         |    $outputRow
+         |  }
+         |
+         |  $matchIterator = null;
+         |}
+      """.stripMargin)
     s"""
+       |if ($matchIterator != null) {
+       |  $processCurrentJoinRows();
+       |  if (shouldStop()) return;
+       |}
+       |
        |while ($streamedInput.hasNext()) {
        |  $findNextJoinRows;
-       |  $beforeLoop
-       |  boolean $hasOutputRow = false;
-       |
-       |  // the last iteration of this loop is to emit an empty row if there is no matched rows.
-       |  while ($matchIterator.hasNext() || !$hasOutputRow) {
-       |    InternalRow $bufferedRow = $matchIterator.hasNext() ?
-       |      (InternalRow) $matchIterator.next() : null;
-       |    $conditionCheck
-       |    $hasOutputRow = true;
-       |    $outputRow
-       |  }
+       |  $matchIterator = $matches.generateIterator();
+       |  $hasOutputRow = false;
+       |  $processCurrentJoinRows();
        |  if (shouldStop()) return;
        |}
        |$eagerCleanup
