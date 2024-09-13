@@ -1666,11 +1666,4 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI_AI", "Chinese", "Hong Kong SAR China",
           "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", "75.1.0.0")))
   }
-
-  test("asdfs") {
-    withTable("t") {
-      spark.sql(s"CREATE TABLE t (id STRING) USING PARQUET DEFAULT COLLATION UNICODE")
-      checkAnswer(spark.sql("DESCRIBE TABLE EXTENDED t"), Seq(Row("asfd")))
-    }
-  }
 }
