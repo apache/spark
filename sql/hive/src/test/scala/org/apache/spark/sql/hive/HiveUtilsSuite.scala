@@ -92,7 +92,8 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
           SparkHadoopUtil.newConfiguration(conf),
           HiveUtils.newTemporaryConfiguration(useInMemoryDerby = true))
         client.createDatabase(
-          CatalogDatabase("foo", "", URI.create(s"file://${tmpDir.getAbsolutePath}/foo.db"), Map()),
+          CatalogDatabase("foo", "", None,
+            URI.create(s"file://${tmpDir.getAbsolutePath}/foo.db"), Map()),
           ignoreIfExists = true)
       } finally {
         Thread.currentThread().setContextClassLoader(contextClassLoader)

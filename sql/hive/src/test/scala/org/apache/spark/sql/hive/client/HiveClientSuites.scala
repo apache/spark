@@ -44,7 +44,7 @@ class HiveClientSuites extends SparkFunSuite with HiveClientVersions {
 
   test("success sanity check") {
     val badClient = buildClient(HiveUtils.builtinHiveVersion, new Configuration())
-    val db = CatalogDatabase("default", "desc", new URI("loc"), Map())
+    val db = CatalogDatabase("default", "desc", collation = None, new URI("loc"), Map())
     badClient.createDatabase(db, ignoreIfExists = true)
   }
 

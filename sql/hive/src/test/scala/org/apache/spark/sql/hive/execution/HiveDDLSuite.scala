@@ -1260,7 +1260,7 @@ class HiveDDLSuite
       val db1 = catalog.getDatabaseMetadata(dbName)
       val dbPath = new URI(tmpDir.toURI.toString.stripSuffix("/"))
       assert(db1.copy(properties = db1.properties -- Seq(PROP_OWNER)) ===
-        CatalogDatabase(dbName, "", dbPath, Map.empty))
+        CatalogDatabase(dbName, "", None, dbPath, Map.empty))
       sql("USE db1")
 
       sql(s"CREATE TABLE $tabName as SELECT 1")
@@ -1302,6 +1302,7 @@ class HiveDDLSuite
       CatalogDatabase(
       dbName,
       "",
+      None,
       expectedDBUri,
       Map.empty))
     // the database directory was created
