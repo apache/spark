@@ -1432,11 +1432,11 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
     s"""jdbc:hive2://$localhost:$serverPort/
        |$database;
        |transportMode=http;
-       |httpPath=cliservice;
+       |httpPath=cliservice;?
        |${hiveConfList}#${hiveVarList}
      """.stripMargin.split("\n").mkString.trim
   } else {
-    s"jdbc:hive2://$localhost:$serverPort/$database;${hiveConfList}#${hiveVarList}"
+    s"jdbc:hive2://$localhost:$serverPort/$database?${hiveConfList}#${hiveVarList}"
   }
 
   private def tryCaptureSysLog(f: => Unit): Unit = {
