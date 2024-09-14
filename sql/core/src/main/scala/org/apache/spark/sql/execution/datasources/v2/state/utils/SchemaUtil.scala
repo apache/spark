@@ -224,7 +224,6 @@ object SchemaUtil {
       "change_type" -> classOf[StringType],
       "key" -> classOf[StructType],
       "value" -> classOf[StructType],
-      "single_value" -> classOf[StructType],
       "list_value" -> classOf[ArrayType],
       "map_value" -> classOf[MapType],
       "user_map_key" -> classOf[StructType],
