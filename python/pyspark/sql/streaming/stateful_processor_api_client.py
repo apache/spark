@@ -17,14 +17,32 @@
 from enum import Enum
 import os
 import socket
-from typing import Any, Union, Optional, cast, Tuple
+from typing import Any, List, Union, Optional, cast, Tuple, TYPE_CHECKING
 
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
-from pyspark.sql.types import StructType, _parse_datatype_string, Row
+from pyspark.sql.types import (
+    StructType,
+    _parse_datatype_string,
+    Row,
+    IntegerType,
+    DataType,
+    ByteType,
+    ShortType,
+    LongType,
+    FloatType,
+    DoubleType,
+)
 from pyspark.sql.utils import has_numpy
 from pyspark.serializers import CPickleSerializer
 from pyspark.errors import PySparkRuntimeError
+
+if has_numpy:
+    import numpy as np
+
+if TYPE_CHECKING:
+    import numpy as np
+    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
 
 __all__ = ["StatefulProcessorApiClient", "StatefulProcessorHandleState"]
 
@@ -190,12 +208,42 @@ class StatefulProcessorApiClient:
     def _deserialize_from_bytes(self, value: bytes) -> Any:
         return self.pickleSer.loads(value)
 
-    def _send_arrow_state(self, state) -> None:
+    def _send_arrow_state(self, schema: StructType, state: List[Tuple]) -> None:
         import pyarrow as pa
+        import pandas as pd
 
-        batch = pa.RecordBatch.from_pandas(state)
+        column_names = [field.name for field in schema.fields]
+        pandas_df = self._convert(pd.DataFrame(state, columns=column_names), schema)
+        batch = pa.RecordBatch.from_pandas(pandas_df)
         self.serializer.dump_stream(iter([batch]), self.sockfile)
         self.sockfile.flush()
 
     def _read_arrow_state(self) -> Any:
         return self.serializer.load_stream(self.sockfile)
+
+    def _convert(self, df: "PandasDataFrameLike", schema: StructType) -> "PandasDataFrameLike":
+        for field in schema.fields:
+            if isinstance(
+                field.dataType, (ByteType, ShortType, LongType, FloatType, DoubleType, IntegerType)
+            ):
+                np_type = self._to_numpy_type(field.dataType)
+                df[field.name] = df[field.name].astype(np_type)
+        return df
+
+    def _to_numpy_type(self, type: DataType) -> Optional["np.dtype"]:
+        """Convert Spark data type to NumPy type."""
+        import numpy as np
+
+        if type == ByteType():
+            return np.dtype("int8")
+        elif type == ShortType():
+            return np.dtype("int16")
+        elif type == IntegerType():
+            return np.dtype("int32")
+        elif type == LongType():
+            return np.dtype("int64")
+        elif type == FloatType():
+            return np.dtype("float32")
+        elif type == DoubleType():
+            return np.dtype("float64")
+        return None

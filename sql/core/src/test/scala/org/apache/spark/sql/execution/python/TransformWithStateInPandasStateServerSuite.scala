@@ -183,17 +183,22 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
   }
 
   test("list state get - iterator not in map") {
+    val maxRecordsPerBatch = 2
     val message = ListStateCall.newBuilder().setStateName(stateName)
       .setGet(Get.newBuilder().build()).build()
     val iteratorMap: mutable.HashMap[String, Iterator[Row]] = mutable.HashMap()
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
-      statefulProcessorHandle, groupingKeySchema, "", false, false, 2,
-      outputStream, valueStateMap, transformWithStateInPandasDeserializer, arrowStreamWriter,
-      listStateMap, iteratorMap)
-    when(listState.get()).thenReturn(Iterator(new GenericRowWithSchema(Array(1), stateSchema)))
+      statefulProcessorHandle, groupingKeySchema, "", false, false,
+      maxRecordsPerBatch, outputStream, valueStateMap,
+      transformWithStateInPandasDeserializer, arrowStreamWriter, listStateMap, iteratorMap)
+    when(listState.get()).thenReturn(Iterator(new GenericRowWithSchema(Array(1), stateSchema),
+      new GenericRowWithSchema(Array(2), stateSchema),
+      new GenericRowWithSchema(Array(3), stateSchema)))
     stateServer.handleListStateRequest(message)
     verify(listState).get()
-    verify(arrowStreamWriter).writeRow(any)
+    // Verify that only maxRecordsPerBatch (2) rows are written to the output stream while still
+    // having 1 row left in the iterator.
+    verify(arrowStreamWriter, times(maxRecordsPerBatch)).writeRow(any)
     verify(arrowStreamWriter).finalizeCurrentArrowBatch()
   }
 

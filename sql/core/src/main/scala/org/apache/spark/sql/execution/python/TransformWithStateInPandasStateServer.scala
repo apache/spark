@@ -300,7 +300,9 @@ class TransformWithStateInPandasStateServer(
         }
         val listRowSerializer = listStateInfo.serializer
         // Only write a single batch in each GET request. Stops writing row if rowCount reaches
-        // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit.
+        // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to avoid a case
+        // when there are multiple state variables, user tries to access a different state variable
+        // while the current state variable is not exhausted yet.
         var rowCount = 0
         while (iteratorOption.get.hasNext &&
           rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {

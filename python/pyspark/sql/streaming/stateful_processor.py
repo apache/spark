@@ -16,7 +16,7 @@
 #
 
 from abc import ABC, abstractmethod
-from typing import Any, TYPE_CHECKING, Iterator, Optional, Union, cast
+from typing import Any, List, TYPE_CHECKING, Iterator, Optional, Union, cast
 
 from pyspark.sql import Row
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
@@ -99,17 +99,17 @@ class ListState:
         """
         return self._list_state_client.exists(self._state_name)
 
-    def get(self) -> Iterator["PandasDataFrameLike"]:
+    def get(self) -> Iterator[Row]:
         """
         Get list state with an iterator.
         """
         return ListStateIterator(self._list_state_client, self._state_name)
 
-    def put(self, new_state: "PandasDataFrameLike") -> None:
+    def put(self, new_state: List[Any]) -> None:
         """
         Update the values of the list state.
         """
-        self._list_state_client.put(self._state_name, new_state)
+        self._list_state_client.put(self._state_name, self.schema, new_state)
 
     def append_value(self, new_state: Any) -> None:
         """
@@ -117,11 +117,11 @@ class ListState:
         """
         self._list_state_client.append_value(self._state_name, self.schema, new_state)
 
-    def append_list(self, new_state: "PandasDataFrameLike") -> None:
+    def append_list(self, new_state: List[Any]) -> None:
         """
         Append a list of new values to the list state.
         """
-        self._list_state_client.append_list(self._state_name, new_state)
+        self._list_state_client.append_list(self._state_name, self.schema, new_state)
 
     def clear(self) -> None:
         """
