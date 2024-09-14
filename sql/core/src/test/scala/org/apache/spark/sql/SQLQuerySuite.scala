@@ -111,10 +111,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-34678: describe functions for table-valued functions") {
+    sql("describe function range").show(false)
     checkKeywordsExist(sql("describe function range"),
       "Function: range",
       "Class: org.apache.spark.sql.catalyst.plans.logical.Range",
-      "range(end: long)"
+      "range(start[, end[, step[, numSlices]]])",
+      "range(end)",
+      "Returns a table of values within a specified range."
     )
   }
 
