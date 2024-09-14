@@ -11241,12 +11241,26 @@ def sentences(
 ) -> Column:
     """
     Splits a string into arrays of sentences, where each sentence is an array of words.
-    The 'language' and 'country' arguments are optional, and if omitted, the default locale is used.
+    The `language` and `country` arguments are optional,
+    When they are omitted:
+    1.If they are both omitted, the `Locale.ROOT - locale(language='', country='')` is used.
+    The `Locale.ROOT` is regarded as the base locale of all locales, and is used as the
+    language/country neutral locale for the locale sensitive operations.
+    2.If the `country` is omitted, the `locale(language, country='')` is used.
+    When they are null:
+    1.If they are both `null`, the `Locale.US - locale(language='en', country='US')` is used.
+    2.If the `language` is null and the `country` is not null,
+    the `Locale.US - locale(language='en', country='US')` is used.
+    3.If the `language` is not null and the `country` is null, the `locale(language)` is used.
+    4.If neither is `null`, the `locale(language, country)` is used.
 
     .. versionadded:: 3.2.0
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    .. versionchanged:: 4.0.0
+        Supports `sentences(string, language)`.
 
     Parameters
     ----------
@@ -11268,6 +11282,12 @@ def sentences(
     >>> df.select(sentences(df.string, lit("en"), lit("US"))).show(truncate=False)
     +-----------------------------------+
     |sentences(string, en, US)          |
+    +-----------------------------------+
+    |[[This, is, an, example, sentence]]|
+    +-----------------------------------+
+    >>> df.select(sentences(df.string, lit("en"))).show(truncate=False)
+    +-----------------------------------+
+    |sentences(string, en, )            |
     +-----------------------------------+
     |[[This, is, an, example, sentence]]|
     +-----------------------------------+

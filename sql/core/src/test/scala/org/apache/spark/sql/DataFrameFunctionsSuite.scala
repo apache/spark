@@ -964,6 +964,36 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       queryContext = Array(ExpectedContext("", "", 0, 12, "sort_array(a)"))
     )
 
+    val df4 = Seq((Array[Int](2, 1, 3), true), (Array.empty[Int], false)).toDF("a", "b")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df4.selectExpr("sort_array(a, b)").collect()
+      },
+      condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      sqlState = "42K09",
+      parameters = Map(
+        "inputName" -> "`ascendingOrder`",
+        "inputType" -> "\"BOOLEAN\"",
+        "inputExpr" -> "\"b\"",
+        "sqlExpr" -> "\"sort_array(a, b)\""),
+      context = ExpectedContext(fragment = "sort_array(a, b)", start = 0, stop = 15)
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df4.selectExpr("sort_array(a, 'A')").collect()
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      sqlState = "42K09",
+      parameters = Map(
+        "sqlExpr" -> "\"sort_array(a, A)\"",
+        "paramIndex" -> "second",
+        "inputSql" -> "\"A\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"BOOLEAN\""),
+      context = ExpectedContext(fragment = "sort_array(a, 'A')", start = 0, stop = 17)
+    )
+
     checkAnswer(
       df.select(array_sort($"a"), array_sort($"b")),
       Seq(

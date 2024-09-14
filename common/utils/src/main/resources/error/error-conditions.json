@@ -1045,6 +1045,12 @@
     ],
     "sqlState" : "42710"
   },
+  "DATA_SOURCE_EXTERNAL_ERROR" : {
+    "message" : [
+      "Encountered error when saving to external data source."
+    ],
+    "sqlState" : "KD00F"
+  },
   "DATA_SOURCE_NOT_EXIST" : {
     "message" : [
       "Data source '<provider>' not found. Please make sure the data source is registered."
@@ -1582,6 +1588,12 @@
       "<identifier> is not a valid identifier as it has more than 2 name parts."
     ],
     "sqlState" : "42601"
+  },
+  "ILLEGAL_DAY_OF_WEEK" : {
+    "message" : [
+      "Illegal input for day of week: <string>."
+    ],
+    "sqlState" : "22009"
   },
   "ILLEGAL_STATE_STORE_VALUE" : {
     "message" : [
@@ -2401,6 +2413,11 @@
           "Uncaught arithmetic exception while parsing '<input>'."
         ]
       },
+      "DAY_TIME_PARSING" : {
+        "message" : [
+          "Error parsing interval day-time string: <msg>."
+        ]
+      },
       "INPUT_IS_EMPTY" : {
         "message" : [
           "Interval string cannot be empty."
@@ -2409,6 +2426,11 @@
       "INPUT_IS_NULL" : {
         "message" : [
           "Interval string cannot be null."
+        ]
+      },
+      "INTERVAL_PARSING" : {
+        "message" : [
+          "Error parsing interval <interval> string."
         ]
       },
       "INVALID_FRACTION" : {
@@ -2446,14 +2468,34 @@
           "Expect a unit name after <word> but hit EOL."
         ]
       },
+      "SECOND_NANO_FORMAT" : {
+        "message" : [
+          "Interval string does not match second-nano format of ss.nnnnnnnnn."
+        ]
+      },
       "UNKNOWN_PARSING_ERROR" : {
         "message" : [
           "Unknown error when parsing <word>."
         ]
       },
+      "UNMATCHED_FORMAT_STRING" : {
+        "message" : [
+          "Interval string does not match <intervalStr> format of <supportedFormat> when cast to <typeName>: <input>."
+        ]
+      },
+      "UNMATCHED_FORMAT_STRING_WITH_NOTICE" : {
+        "message" : [
+          "Interval string does not match <intervalStr> format of <supportedFormat> when cast to <typeName>: <input>. Set \"spark.sql.legacy.fromDayTimeString.enabled\" to \"true\" to restore the behavior before Spark 3.0."
+        ]
+      },
       "UNRECOGNIZED_NUMBER" : {
         "message" : [
           "Unrecognized number <number>."
+        ]
+      },
+      "UNSUPPORTED_FROM_TO_EXPRESSION" : {
+        "message" : [
+          "Cannot support (interval '<input>' <from> to <to>) expression."
         ]
       }
     },
@@ -3088,12 +3130,12 @@
     "subClass" : {
       "NOT_ALLOWED_IN_SCOPE" : {
         "message" : [
-          "Variable <varName> was declared on line <lineNumber>, which is not allowed in this scope."
+          "Declaration of the variable <varName> is not allowed in this scope."
         ]
       },
       "ONLY_AT_BEGINNING" : {
         "message" : [
-          "Variable <varName> can only be declared at the beginning of the compound, but it was declared on line <lineNumber>."
+          "Variable <varName> can only be declared at the beginning of the compound."
         ]
       }
     },
@@ -6626,11 +6668,6 @@
       "Type <dataType> does not support ordered operations."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2011" : {
-    "message" : [
-      "Unexpected data type <dataType>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2013" : {
     "message" : [
       "Negative values found in <frequencyExpression>"
@@ -8442,36 +8479,6 @@
   "_LEGACY_ERROR_TEMP_3208" : {
     "message" : [
       "The number of fields (<numFields>) in the partition identifier is not equal to the partition schema length (<schemaLen>). The identifier might not refer to one partition."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3209" : {
-    "message" : [
-      "Illegal input for day of week: <string>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3210" : {
-    "message" : [
-      "Interval string does not match second-nano format of ss.nnnnnnnnn"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3211" : {
-    "message" : [
-      "Error parsing interval day-time string: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3212" : {
-    "message" : [
-      "Cannot support (interval '<input>' <from> to <to>) expression"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3213" : {
-    "message" : [
-      "Error parsing interval <interval> string: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3214" : {
-    "message" : [
-      "Interval string does not match <intervalStr> format of <supportedFormat> when cast to <typeName>: <input><fallBackNotice>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3215" : {

@@ -173,14 +173,10 @@ class AstBuilder extends DataTypeAstBuilder
       case Some(c: CreateVariable) =>
         if (allowVarDeclare) {
           throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
-            c.origin,
-            toSQLId(c.name.asInstanceOf[UnresolvedIdentifier].nameParts),
-            c.origin.line.get.toString)
+            c.origin, c.name.asInstanceOf[UnresolvedIdentifier].nameParts)
         } else {
           throw SqlScriptingErrors.variableDeclarationNotAllowedInScope(
-            c.origin,
-            toSQLId(c.name.asInstanceOf[UnresolvedIdentifier].nameParts),
-            c.origin.line.get.toString)
+            c.origin, c.name.asInstanceOf[UnresolvedIdentifier].nameParts)
         }
       case _ =>
     }
@@ -200,7 +196,9 @@ class AstBuilder extends DataTypeAstBuilder
             el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
         withOrigin(bl) {
           throw SqlScriptingErrors.labelsMismatch(
-            CurrentOrigin.get, bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
+            CurrentOrigin.get,
+            bl.multipartIdentifier().getText,
+            el.multipartIdentifier().getText)
         }
       case (None, Some(el: EndLabelContext)) =>
         withOrigin(el) {
@@ -261,6 +259,52 @@ class AstBuilder extends DataTypeAstBuilder
     WhileStatement(condition, body, Some(labelText))
   }
 
+  override def visitSearchedCaseStatement(ctx: SearchedCaseStatementContext): CaseStatement = {
+    val conditions = ctx.conditions.asScala.toList.map(boolExpr => withOrigin(boolExpr) {
+      SingleStatement(
+        Project(
+          Seq(Alias(expression(boolExpr), "condition")()),
+          OneRowRelation()))
+    })
+    val conditionalBodies =
+      ctx.conditionalBodies.asScala.toList.map(body => visitCompoundBody(body))
+
+    if (conditions.length != conditionalBodies.length) {
+      throw SparkException.internalError(
+        s"Mismatched number of conditions ${conditions.length} and condition bodies" +
+          s" ${conditionalBodies.length} in case statement")
+    }
+
+    CaseStatement(
+      conditions = conditions,
+      conditionalBodies = conditionalBodies,
+      elseBody = Option(ctx.elseBody).map(body => visitCompoundBody(body)))
+  }
+
+  override def visitSimpleCaseStatement(ctx: SimpleCaseStatementContext): CaseStatement = {
+    // uses EqualTo to compare the case variable(the main case expression)
+    // to the WHEN clause expressions
+    val conditions = ctx.conditionExpressions.asScala.toList.map(expr => withOrigin(expr) {
+      SingleStatement(
+        Project(
+          Seq(Alias(EqualTo(expression(ctx.caseVariable), expression(expr)), "condition")()),
+          OneRowRelation()))
+    })
+    val conditionalBodies =
+      ctx.conditionalBodies.asScala.toList.map(body => visitCompoundBody(body))
+
+    if (conditions.length != conditionalBodies.length) {
+      throw SparkException.internalError(
+        s"Mismatched number of conditions ${conditions.length} and condition bodies" +
+          s" ${conditionalBodies.length} in case statement")
+    }
+
+    CaseStatement(
+      conditions = conditions,
+      conditionalBodies = conditionalBodies,
+      elseBody = Option(ctx.elseBody).map(body => visitCompoundBody(body)))
+  }
+
   override def visitRepeatStatement(ctx: RepeatStatementContext): RepeatStatement = {
     val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
     val boolExpr = ctx.booleanExpression()
@@ -292,7 +336,7 @@ class AstBuilder extends DataTypeAstBuilder
       case c: RepeatStatementContext
         if Option(c.beginLabel()).isDefined &&
           c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
-      => true
+        => true
       case _ => false
     }
   }
@@ -3466,6 +3510,14 @@ class AstBuilder extends DataTypeAstBuilder
             throw QueryParsingErrors.fromToIntervalUnsupportedError(from, to, ctx)
         }
       } catch {
+        // Keep error class of SparkIllegalArgumentExceptions and enrich it with query context
+        case se: SparkIllegalArgumentException =>
+          val pe = new ParseException(
+            errorClass = se.getErrorClass,
+            messageParameters = se.getMessageParameters.asScala.toMap,
+            ctx)
+          pe.setStackTrace(se.getStackTrace)
+          throw pe
         // Handle Exceptions thrown by CalendarInterval
         case e: IllegalArgumentException =>
           val pe = new ParseException(

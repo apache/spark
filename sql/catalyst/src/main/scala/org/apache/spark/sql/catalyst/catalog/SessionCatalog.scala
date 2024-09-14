@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
+import scala.jdk.CollectionConverters.CollectionHasAsScala
 import scala.util.{Failure, Success, Try}
 
 import com.google.common.cache.{Cache, CacheBuilder}
@@ -39,7 +40,8 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Expre
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, StringUtils}
+import org.apache.spark.sql.catalyst.util.CollationFactory.CollationMeta
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -1897,6 +1899,17 @@ class SessionCatalog(
   def listTemporaryFunctions(): Seq[FunctionIdentifier] = {
     (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
       .filter(isTemporaryFunction)
+  }
+
+  /**
+   * List all built-in collations with the given pattern.
+   */
+  def listCollations(pattern: Option[String]): Seq[CollationMeta] = {
+    val collationIdentifiers = CollationFactory.listCollations().asScala.toSeq
+    val filteredCollationNames = StringUtils.filterPattern(
+      collationIdentifiers.map(_.getName), pattern.getOrElse("*")).toSet
+    collationIdentifiers.filter(ident => filteredCollationNames.contains(ident.getName)).map(
+      CollationFactory.loadCollationMeta)
   }
 
   // -----------------

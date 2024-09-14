@@ -3959,6 +3959,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("provider" -> name))
   }
 
+  def externalDataSourceException(cause: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "DATA_SOURCE_EXTERNAL_ERROR",
+      messageParameters = Map(),
+      cause = Some(cause)
+    )
+  }
+
   def foundMultipleDataSources(provider: String): Throwable = {
     new AnalysisException(
       errorClass = "FOUND_MULTIPLE_DATA_SOURCES",

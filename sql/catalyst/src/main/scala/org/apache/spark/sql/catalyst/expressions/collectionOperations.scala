@@ -433,7 +433,7 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
         inputArrays.map(_.numElements()).max
       }
 
-      val result = new Array[InternalRow](biggestCardinality)
+      val result = new Array[AnyRef](biggestCardinality)
       val zippedArrs: Seq[(ArrayData, Int)] = inputArrays.zipWithIndex
 
       for (i <- 0 until biggestCardinality) {
@@ -1058,20 +1058,26 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = base.dataType match {
     case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
-      ascendingOrder match {
-        case Literal(_: Boolean, BooleanType) =>
-          TypeCheckResult.TypeCheckSuccess
-        case _ =>
-          DataTypeMismatch(
-            errorSubClass = "UNEXPECTED_INPUT_TYPE",
-            messageParameters = Map(
-              "paramIndex" -> ordinalNumber(1),
-              "requiredType" -> toSQLType(BooleanType),
-              "inputSql" -> toSQLExpr(ascendingOrder),
-              "inputType" -> toSQLType(ascendingOrder.dataType))
-          )
+      if (!ascendingOrder.foldable) {
+        DataTypeMismatch(
+          errorSubClass = "NON_FOLDABLE_INPUT",
+          messageParameters = Map(
+            "inputName" -> toSQLId("ascendingOrder"),
+            "inputType" -> toSQLType(ascendingOrder.dataType),
+            "inputExpr" -> toSQLExpr(ascendingOrder)))
+      } else if (ascendingOrder.dataType != BooleanType) {
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(1),
+            "requiredType" -> toSQLType(BooleanType),
+            "inputSql" -> toSQLExpr(ascendingOrder),
+            "inputType" -> toSQLType(ascendingOrder.dataType))
+        )
+      } else {
+        TypeCheckResult.TypeCheckSuccess
       }
-    case ArrayType(dt, _) =>
+    case ArrayType(_, _) =>
       DataTypeMismatch(
         errorSubClass = "INVALID_ORDERING_TYPE",
         messageParameters = Map(
