@@ -4104,4 +4104,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("functionName" -> functionName)
     )
   }
+
+  def pipeOperatorSelectContainsAggregateFunction(expr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION",
+      messageParameters = Map(
+        "expr" -> expr.toString),
+      origin = expr.origin)
+  }
 }
