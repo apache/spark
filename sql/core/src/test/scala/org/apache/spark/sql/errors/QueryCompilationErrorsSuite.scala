@@ -24,6 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.catalyst.expressions.{Coalesce, Literal, UnsafeRow}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
 import org.apache.spark.sql.execution.datasources.parquet.SparkToParquetSchemaConverter
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions._
@@ -926,6 +927,25 @@ class QueryCompilationErrorsSuite
       })
     }
   }
+
+  test("Catch and log errors when failing to write to external data source") {
+    val password = "MyPassWord"
+    val token = "MyToken"
+    val value = "value"
+    val options = Map("password" -> password, "token" -> token, "key" -> value)
+    val query = spark.range(10).logicalPlan
+    val cmd = SaveIntoDataSourceCommand(query, null, options, SaveMode.Overwrite)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        cmd.run(spark)
+      },
+      condition = "DATA_SOURCE_EXTERNAL_ERROR",
+      sqlState = "KD00F",
+      parameters = Map.empty
+    )
+  }
+
 }
 
 class MyCastToString extends SparkUserDefinedFunction(

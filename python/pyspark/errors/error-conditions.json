@@ -1088,6 +1088,11 @@
       "Function `<func_name>` should use only POSITIONAL or POSITIONAL OR KEYWORD arguments."
     ]
   },
+  "UNSUPPORTED_PLOT_BACKEND": {
+    "message": [
+      "`<backend>` is not supported, it should be one of the values from <supported_backends>"
+    ]
+  },
   "UNSUPPORTED_SIGNATURE": {
     "message": [
       "Unsupported signature: <signature>."
