@@ -374,7 +374,11 @@ case class RandStr(length: Expression, override val seedExpression: Expression)
   }
 
   override def evalInternal(input: InternalRow): Any = {
-    val numChars: Int = length.eval(input).asInstanceOf[Int]
+    val numChars: Int = length.eval(input) match {
+      case i: Int => i
+      case n: Long => n.toInt
+      case s: Short => s.toInt
+    }
     val bytes = new Array[Byte](numChars)
     (0 until numChars).foreach { i =>
       val num = (rng.nextInt() % 30).abs

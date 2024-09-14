@@ -56,7 +56,7 @@ class RandomSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     def testUniform(first: Any, second: Any, result: Any): Unit = {
       checkEvaluationWithoutCodegen(
-        Uniform(Literal(first), Literal(second), Literal(0)),
+        Uniform(Literal(first), Literal(second), Literal(0)).replacement,
         CatalystTypeConverters.convertToCatalyst(result))
     }
     testUniform(0, 1, 0)
