@@ -585,4 +585,29 @@ class CanonicalizeSuite extends SparkFunSuite {
     // but canonicalized form should be same even though respective ordering is different
     assert(u1.canonicalized == u2.canonicalized)
   }
+
+  test("SPARK-49618: equality check for repeated legs") {
+    val table1 = LocalRelation(
+      AttributeReference("i", IntegerType)(),
+      AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
+      AttributeReference("b", ByteType)(),
+      AttributeReference("d", DoubleType)()).select($"u", $"i").analyze
+
+    val table2 = LocalRelation(
+      AttributeReference("i", IntegerType)(),
+      AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
+      AttributeReference("b", ByteType)(),
+      AttributeReference("d", DoubleType)()).select($"u" as "a", $"i" as "b").analyze
+
+    val table3 = LocalRelation(
+      AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
+      AttributeReference("d", DoubleType)(),
+      AttributeReference("i", IntegerType)()).select($"u", $"i").analyze
+
+    // These unions are not equal because the head output attributes name are differing
+    val u1 = Union(Seq(table1, table2, table2, table3))
+    val u2 = Union(Seq(table1, table2, table3, table3))
+    assert(u1 != u2)
+    assert(u1.canonicalized != u2.canonicalized)
+  }
 }

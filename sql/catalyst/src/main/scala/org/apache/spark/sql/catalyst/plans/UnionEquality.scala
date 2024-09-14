@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExprId}
 
 trait UnionEquality [PlanType <: QueryPlan[PlanType]] {
@@ -28,9 +30,22 @@ trait UnionEquality [PlanType <: QueryPlan[PlanType]] {
   def positionAgnosticEquals(that: PlanType): Boolean = {
     val thisChildren = this.children
     val thatChildren = that.children
-    thisChildren.length == thatChildren.length &&
-      normalizeOutputAttributes(this.asInstanceOf[PlanType]) == normalizeOutputAttributes(that) &&
-      thisChildren.toSet == thatChildren.toSet
+    if (thisChildren.length == thatChildren.length &&
+      normalizeOutputAttributes(this.asInstanceOf[PlanType]) == normalizeOutputAttributes(that)) {
+      // check for elements equality disregarding order
+      val buff = mutable.ArrayBuffer[PlanType](thatChildren: _*)
+      thisChildren.forall(p => {
+        val i = buff.indexOf(p)
+        if (i == -1) {
+          false
+        } else {
+          buff.remove(i)
+          true
+        }
+      } )
+    } else {
+      false
+    }
   }
 
   def positionAgnosticHashCode: Int = this.positionAgnosticHash
