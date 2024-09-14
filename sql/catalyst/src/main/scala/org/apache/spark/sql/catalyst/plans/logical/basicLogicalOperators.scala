@@ -992,12 +992,18 @@ object Range {
     castAndEval[Int](expression, IntegerType, paramIndex, paramName)
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(start: long, end: long, step: long, numSlices: integer)
-    _FUNC_(start: long, end: long, step: long)
-    _FUNC_(start: long, end: long)
-    _FUNC_(end: long)""",
+    _FUNC_(start[, end[, step[, numSlices]]]) / _FUNC_(end) - Returns a table of values within a specified range.
+  """,
+  arguments = """
+    Arguments:
+      * start - An optional BIGINT literal defaulted to 0, marking the first value generated.
+      * end - A BIGINT literal marking endpoint (exclusive) of the number generation.
+      * step - An optional BIGINT literal defaulted to 1, specifying the increment used when generating values.
+      * numParts - An optional INTEGER literal specifying how the production of rows is spread across partitions.
+  """,
   examples = """
     Examples:
       > SELECT * FROM _FUNC_(1);
@@ -1023,6 +1029,7 @@ object Range {
   """,
   since = "2.0.0",
   group = "table_funcs")
+// scalastyle:on line.size.limit
 case class Range(
     start: Long,
     end: Long,
