@@ -353,7 +353,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     }
   }
 
-  private def checkFilterPushed(df: DataFrame, pushed: Boolean = true): Unit = {
+  protected def checkFilterPushed(df: DataFrame, pushed: Boolean = true): Unit = {
     val filter = df.queryExecution.optimizedPlan.collect {
       case f: Filter => f
     }
@@ -979,5 +979,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         parameters = Map("relationName" -> "`tbl1`")
       )
     }
+  }
+
+  def testDatetime(tbl: String): Unit = {}
+
+  test("scan with filter push-down with date time functions") {
+    testDatetime(s"$catalogAndNamespace.${caseConvert("datetime")}")
   }
 }

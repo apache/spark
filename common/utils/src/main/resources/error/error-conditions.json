@@ -1045,6 +1045,12 @@
     ],
     "sqlState" : "42710"
   },
+  "DATA_SOURCE_EXTERNAL_ERROR" : {
+    "message" : [
+      "Encountered error when saving to external data source."
+    ],
+    "sqlState" : "KD00F"
+  },
   "DATA_SOURCE_NOT_EXIST" : {
     "message" : [
       "Data source '<provider>' not found. Please make sure the data source is registered."
@@ -3118,12 +3124,12 @@
     "subClass" : {
       "NOT_ALLOWED_IN_SCOPE" : {
         "message" : [
-          "Variable <varName> was declared on line <lineNumber>, which is not allowed in this scope."
+          "Declaration of the variable <varName> is not allowed in this scope."
         ]
       },
       "ONLY_AT_BEGINNING" : {
         "message" : [
-          "Variable <varName> can only be declared at the beginning of the compound, but it was declared on line <lineNumber>."
+          "Variable <varName> can only be declared at the beginning of the compound."
         ]
       }
     },
@@ -3747,6 +3753,12 @@
       "Path does not exist: <path>."
     ],
     "sqlState" : "42K03"
+  },
+  "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION" : {
+    "message" : [
+      "Aggregate function <expr> is not allowed when using the pipe operator |> SELECT clause; please use the pipe operator |> AGGREGATE clause instead"
+    ],
+    "sqlState" : "0A000"
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [

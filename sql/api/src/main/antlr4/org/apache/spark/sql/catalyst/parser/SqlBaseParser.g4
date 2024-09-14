@@ -64,6 +64,7 @@ compoundStatement
     | setStatementWithOptionalVarKeyword
     | beginEndCompoundBlock
     | ifElseStatement
+    | caseStatement
     | whileStatement
     | repeatStatement
     | leaveStatement
@@ -96,6 +97,13 @@ leaveStatement
 
 iterateStatement
     : ITERATE multipartIdentifier
+    ;
+
+caseStatement
+    : CASE (WHEN conditions+=booleanExpression THEN conditionalBodies+=compoundBody)+
+        (ELSE elseBody=compoundBody)? END CASE                #searchedCaseStatement
+    | CASE caseVariable=expression (WHEN conditionExpressions+=expression THEN conditionalBodies+=compoundBody)+
+        (ELSE elseBody=compoundBody)? END CASE                #simpleCaseStatement
     ;
 
 singleStatement
@@ -605,6 +613,7 @@ queryTerm
         operator=INTERSECT setQuantifier? right=queryTerm                                #setOperation
     | left=queryTerm {!legacy_setops_precedence_enabled}?
         operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
+    | left=queryTerm OPERATOR_PIPE operatorPipeRightSide                                 #operatorPipeStatement
     ;
 
 queryPrimary
@@ -1461,6 +1470,10 @@ comment
 version
     : INTEGER_VALUE
     | stringLit
+    ;
+
+operatorPipeRightSide
+    : selectClause
     ;
 
 // When `SQL_standard_keyword_behavior=true`, there are 2 kinds of keywords in Spark SQL.
