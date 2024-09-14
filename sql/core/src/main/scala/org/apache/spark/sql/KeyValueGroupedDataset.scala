@@ -19,7 +19,8 @@ package org.apache.spark.sql
 
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.analysis.{EliminateEventTimeWatermark, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder}
+import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
@@ -302,15 +303,15 @@ class KeyValueGroupedDataset[K, V] private[sql](
 
   /** @inheritdoc */
   protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
-    val keyExprEncoder = encoderFor(kEncoder)
+    val keyAgEncoder = agnosticEncoderFor(kEncoder)
     val valueExprEncoder = encoderFor(vEncoder)
-    val encoders = columns.map(c => encoderFor(c.encoder))
-    val namedColumns = columns.map(c => withInputType(c.named, valueExprEncoder,
-      dataAttributes))
-    val keyColumn = aggKeyColumn(keyExprEncoder, groupingAttributes)
+    val encoders = columns.map(c => agnosticEncoderFor(c.encoder))
+    val namedColumns = columns.map { c =>
+      withInputType(c.named, valueExprEncoder, dataAttributes)
+    }
+    val keyColumn = aggKeyColumn(keyAgEncoder, groupingAttributes)
     val aggregate = Aggregate(groupingAttributes, keyColumn +: namedColumns, logicalPlan)
-    val execution = new QueryExecution(sparkSession, aggregate)
-    new Dataset(execution, ExpressionEncoder.tuple(keyExprEncoder +: encoders))
+    new Dataset(sparkSession, aggregate, ProductEncoder.tuple(keyAgEncoder +: encoders))
   }
 
   /** @inheritdoc */

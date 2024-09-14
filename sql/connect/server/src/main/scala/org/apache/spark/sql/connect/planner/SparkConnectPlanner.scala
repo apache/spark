@@ -2319,8 +2319,9 @@ class SparkConnectPlanner(
       throw InvalidPlanInput("reduce requires single child expression")
     }
     val udf = fun.getArgumentsList.asScala match {
-      case collection.Seq(e) if e.hasCommonInlineUserDefinedFunction &&
-           e.getCommonInlineUserDefinedFunction.hasScalarScalaUdf =>
+      case collection.Seq(e)
+          if e.hasCommonInlineUserDefinedFunction &&
+            e.getCommonInlineUserDefinedFunction.hasScalarScalaUdf =>
         unpackUdf(e.getCommonInlineUserDefinedFunction)
       case other =>
         throw InvalidPlanInput(s"reduce should carry a scalar scala udf, but got $other")

@@ -42,6 +42,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, Query
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder, StructEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
@@ -95,7 +96,7 @@ private[sql] object Dataset {
     sparkSession.withActive {
       val qe = sparkSession.sessionState.executePlan(logicalPlan)
       qe.assertAnalyzed()
-      new Dataset[Row](qe, ExpressionEncoder(qe.analyzed.schema))
+      new Dataset[Row](qe, RowEncoder.encoderFor(qe.analyzed.schema))
   }
 
   def ofRows(
@@ -106,7 +107,7 @@ private[sql] object Dataset {
       val qe = new QueryExecution(
         sparkSession, logicalPlan, shuffleCleanupMode = shuffleCleanupMode)
       qe.assertAnalyzed()
-      new Dataset[Row](qe, ExpressionEncoder(qe.analyzed.schema))
+      new Dataset[Row](qe, RowEncoder.encoderFor(qe.analyzed.schema))
     }
 
   /** A variant of ofRows that allows passing in a tracker so we can track query parsing time. */
@@ -119,7 +120,7 @@ private[sql] object Dataset {
     val qe = new QueryExecution(
       sparkSession, logicalPlan, tracker, shuffleCleanupMode = shuffleCleanupMode)
     qe.assertAnalyzed()
-    new Dataset[Row](qe, ExpressionEncoder(qe.analyzed.schema))
+    new Dataset[Row](qe, RowEncoder.encoderFor(qe.analyzed.schema))
   }
 }
 
@@ -252,15 +253,18 @@ class Dataset[T] private[sql](
     plan
   }
 
+  /**
+   * Expose the encoder as implicit so it can be used to construct new Dataset objects that have
+   * the same external type.
+   */
   private implicit def encoderImpl: Encoder[T] = encoder
 
   /**
-   * Currently [[ExpressionEncoder]] is the only implementation of [[Encoder]], here we turn the
-   * passed in encoder to [[ExpressionEncoder]] explicitly, and mark it implicit so that we can use
-   * it when constructing new Dataset objects that have the same object type (that will be
-   * possibly resolved to a different schema).
+   * The actual [[ExpressionEncoder]] used by the dataset. This and its resolved counterpart should
+   * only be used for actual (de)serialization, the binding of Aggregator inputs, and in the rare
+   * cases where a plan needs to be constructed with an ExpressionEncoder.
    */
-  private[sql] val exprEnc: ExpressionEncoder[T] = encoderFor(encoder)
+  private[sql] lazy val exprEnc: ExpressionEncoder[T] = encoderFor(encoder)
 
   // The resolved `ExpressionEncoder` which can be used to turn rows to objects of type T, after
   // collecting rows to the driver side.
@@ -479,7 +483,7 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `ds.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DataFrame = new Dataset[Row](queryExecution, ExpressionEncoder(schema))
+  def toDF(): DataFrame = new Dataset[Row](queryExecution, RowEncoder.encoderFor(schema))
 
   /** @inheritdoc */
   def as[U : Encoder]: Dataset[U] = Dataset[U](sparkSession, logicalPlan)
@@ -674,17 +678,17 @@ class Dataset[T] private[sql](
         Some(condition.expr),
         JoinHint.NONE)).analyzed.asInstanceOf[Join]
 
-    implicit val tuple2Encoder: Encoder[(T, U)] =
-      ExpressionEncoder
-        .tuple(Seq(this.exprEnc, other.exprEnc), useNullSafeDeserializer = true)
-        .asInstanceOf[Encoder[(T, U)]]
-
-    withTypedPlan(JoinWith.typedJoinWith(
+    val leftEncoder = agnosticEncoderFor(encoder)
+    val rightEncoder = agnosticEncoderFor(other.encoder)
+    val joinEncoder = ProductEncoder.tuple(Seq(leftEncoder, rightEncoder), elementsCanBeNull = true)
+      .asInstanceOf[Encoder[(T, U)]]
+    val joinWith = JoinWith.typedJoinWith(
       joined,
       sparkSession.sessionState.conf.dataFrameSelfJoinAutoResolveAmbiguity,
       sparkSession.sessionState.analyzer.resolver,
-      this.exprEnc.isSerializedAsStructForTopLevel,
-      other.exprEnc.isSerializedAsStructForTopLevel))
+      leftEncoder.isStruct,
+      rightEncoder.isStruct)
+    new Dataset(sparkSession, joinWith, joinEncoder)
   }
 
   // TODO(SPARK-22947): Fix the DataFrame API.
@@ -829,24 +833,29 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   def select[U1](c1: TypedColumn[T, U1]): Dataset[U1] = {
-    implicit val encoder: ExpressionEncoder[U1] = encoderFor(c1.encoder)
+    val encoder = agnosticEncoderFor(c1.encoder)
     val tc1 = withInputType(c1.named, exprEnc, logicalPlan.output)
     val project = Project(tc1 :: Nil, logicalPlan)
 
-    if (!encoder.isSerializedAsStructForTopLevel) {
-      new Dataset[U1](sparkSession, project, encoder)
-    } else {
-      // Flattens inner fields of U1
-      new Dataset[Tuple1[U1]](sparkSession, project, ExpressionEncoder.tuple(encoder)).map(_._1)
+    val plan = encoder match {
+      case se: StructEncoder[U1] =>
+        // Flatten the result.
+        val attribute = tc1.toAttribute
+        val projectList = se.fields.zipWithIndex.map {
+          case (field, index) =>
+            Alias(GetStructField(attribute, index, None), field.name)()
+        }
+        Project(projectList, project)
+      case _ => project
     }
+    new Dataset[U1](sparkSession, project, encoder)
   }
 
   /** @inheritdoc */
   protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
-    val encoders = columns.map(c => encoderFor(c.encoder))
+    val encoders = columns.map(c => agnosticEncoderFor(c.encoder))
     val namedColumns = columns.map(c => withInputType(c.named, exprEnc, logicalPlan.output))
-    val execution = new QueryExecution(sparkSession, Project(namedColumns, logicalPlan))
-    new Dataset(execution, ExpressionEncoder.tuple(encoders))
+    new Dataset(sparkSession, Project(namedColumns, logicalPlan), ProductEncoder.tuple(encoders))
   }
 
   /** @inheritdoc */
@@ -1554,7 +1563,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   lazy val rdd: RDD[T] = {
-    val objectType = exprEnc.deserializer.dataType
+    val objectType = ObjectType(encoder.clsTag.runtimeClass)
     rddQueryExecution.toRdd.mapPartitions { rows =>
       rows.map(_.get(0, objectType).asInstanceOf[T])
     }

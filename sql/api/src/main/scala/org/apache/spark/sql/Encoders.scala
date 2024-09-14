@@ -23,7 +23,7 @@ import scala.reflect.{classTag, ClassTag}
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
-import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec, JavaSerializationCodec, KryoSerializationCodec, RowEncoder => SchemaInference}
+import org.apache.spark.sql.catalyst.encoders.{Codec, JavaSerializationCodec, KryoSerializationCodec, RowEncoder => SchemaInference}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
@@ -247,9 +247,16 @@ object Encoders {
     TransformingEncoder(classTag[T], BinaryEncoder, provider)
   }
 
-  private def tupleEncoder[T](encoders: Encoder[_]*): Encoder[T] = {
-    ProductEncoder.tuple(encoders.asInstanceOf[Seq[AgnosticEncoder[_]]]).asInstanceOf[Encoder[T]]
+  private[sql] def tupleEncoder[T](encoders: Encoder[_]*): Encoder[T] = {
+    ProductEncoder.tuple(encoders.map(agnosticEncoderFor(_))).asInstanceOf[Encoder[T]]
   }
+
+  /**
+   * An encoder for 1-ary tuples.
+   *
+   * @since 4.0.0
+   */
+  def tuple[T1](e1: Encoder[T1]): Encoder[(T1)] = tupleEncoder(e1)
 
   /**
    * An encoder for 2-ary tuples.
