@@ -290,6 +290,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           StopStream
         )
 
+        // Verify that the state can be read in flattened/non-flattened modes
         val stateReaderDf = spark.read
           .format("statestore")
           .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
@@ -308,7 +309,6 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         checkAnswer(listStateDf,
           Seq(Row("session1", "group1"), Row("session1", "group2"), Row("session1", "group4"),
             Row("session2", "group1"), Row("session3", "group7")))
-
 
         val flattenedReaderDf = spark.read
           .format("statestore")
@@ -353,6 +353,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           StopStream
         )
 
+        // Verify that the state can be read in flattened/non-flattened modes
         val stateReaderDf = spark.read
           .format("statestore")
           .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
@@ -427,6 +428,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           StopStream
         )
 
+        // Verify that the state can be read in flattened/non-flattened modes
         val stateReaderDf = spark.read
           .format("statestore")
           .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
@@ -512,6 +514,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           StopStream
         )
 
+        // Verify that the state can be read in flattened/non-flattened modes
         val stateReaderDf = spark.read
           .format("statestore")
           .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
@@ -527,6 +530,24 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
             Row("k1",
               Map(Row("key2") -> Row(Row(2), 61000L),
                 Row("key1") -> Row(Row(1), 61000L))))
+        )
+
+        val flattenedStateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "mapState")
+          .load()
+
+        val outputDf = flattenedStateReaderDf
+          .selectExpr("key.value AS groupingKey",
+            "user_map_key.value AS mapKey",
+            "user_map_value.value.value AS mapValue",
+            "user_map_value.ttlExpirationMs AS ttlTimestamp")
+
+        checkAnswer(outputDf,
+          Seq(
+            Row("k1", "key1", 1, 61000L),
+            Row("k1", "key2", 2, 61000L))
         )
       }
     }
