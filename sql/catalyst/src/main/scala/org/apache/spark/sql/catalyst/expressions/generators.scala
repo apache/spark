@@ -629,7 +629,7 @@ case class SQLKeywords() extends LeafExpression with Generator with CodegenFallb
   """,
   since = "4.0.0",
   group = "generator_funcs")
-case class AllCollations() extends LeafExpression with Generator with CodegenFallback {
+case class Collations() extends LeafExpression with Generator with CodegenFallback {
   override def elementSchema: StructType = new StructType()
     .add("CATALOG", StringType, nullable = false)
     .add("SCHEMA", StringType, nullable = false)
@@ -658,5 +658,5 @@ case class AllCollations() extends LeafExpression with Generator with CodegenFal
     }
   }
 
-  override def prettyName: String = "all_collations"
+  override def prettyName: String = "collations"
 }

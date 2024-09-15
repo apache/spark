@@ -3169,29 +3169,6 @@ object SQLConf {
       .version("4.0.0")
       .fallbackConf(Python.PYTHON_WORKER_FAULTHANLDER_ENABLED)
 
-  val PYSPARK_PLOT_MAX_ROWS =
-    buildConf("spark.sql.pyspark.plotting.max_rows")
-      .doc(
-        "The visual limit on top-n-based plots. If set to 1000, the first 1000 data points " +
-        "will be used for plotting.")
-      .version("4.0.0")
-      .intConf
-      .createWithDefault(1000)
-
-  val PYSPARK_PLOT_SAMPLE_RATIO =
-    buildConf("spark.sql.pyspark.plotting.sample_ratio")
-      .doc(
-        "The proportion of data that will be plotted for sample-based plots. It is determined " +
-          "based on spark.sql.pyspark.plotting.max_rows if not explicitly set."
-      )
-      .version("4.0.0")
-      .doubleConf
-      .checkValue(
-        ratio => ratio >= 0.0 && ratio <= 1.0,
-        "The value should be between 0.0 and 1.0 inclusive."
-      )
-      .createOptional
-
   val ARROW_SPARKR_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.sparkr.enabled")
       .doc("When true, make use of Apache Arrow for columnar data transfers in SparkR. " +
@@ -5012,6 +4989,15 @@ object SQLConf {
       .stringConf
       .createWithDefault("versionAsOf")
 
+  val OPERATOR_PIPE_SYNTAX_ENABLED =
+    buildConf("spark.sql.operatorPipeSyntaxEnabled")
+      .doc("If true, enable operator pipe syntax for Apache Spark SQL. This uses the operator " +
+        "pipe marker |> to indicate separation between clauses of SQL in a manner that describes " +
+        "the sequence of steps that the query performs in a composable fashion.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
   val LEGACY_PERCENTILE_DISC_CALCULATION = buildConf("spark.sql.legacy.percentileDiscCalculation")
     .internal()
     .doc("If true, the old bogus percentile_disc calculation is used. The old calculation " +
@@ -5877,10 +5863,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonUDFProfiler: Option[String] = getConf(PYTHON_UDF_PROFILER)
 
   def pythonUDFWorkerFaulthandlerEnabled: Boolean = getConf(PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED)
-
-  def pysparkPlotMaxRows: Int = getConf(PYSPARK_PLOT_MAX_ROWS)
-
-  def pysparkPlotSampleRatio: Option[Double] = getConf(PYSPARK_PLOT_SAMPLE_RATIO)
 
   def arrowSparkREnabled: Boolean = getConf(ARROW_SPARKR_EXECUTION_ENABLED)
 

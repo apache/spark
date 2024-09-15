@@ -41,7 +41,6 @@ from pyspark.errors import (  # noqa: F401
     PythonException,
     UnknownException,
     SparkUpgradeException,
-    PySparkImportError,
     PySparkNotImplementedError,
     PySparkRuntimeError,
 )
@@ -114,22 +113,6 @@ def require_test_compiled() -> None:
             errorClass="TEST_CLASS_NOT_COMPILED",
             messageParameters={"test_class_path": test_class_path},
         )
-
-
-def require_minimum_plotly_version() -> None:
-    """Raise ImportError if plotly is not installed"""
-    minimum_plotly_version = "4.8"
-
-    try:
-        import plotly  # noqa: F401
-    except ImportError as error:
-        raise PySparkImportError(
-            errorClass="PACKAGE_NOT_INSTALLED",
-            messageParameters={
-                "package_name": "plotly",
-                "minimum_version": str(minimum_plotly_version),
-            },
-        ) from error
 
 
 class ForeachBatchFunction:
