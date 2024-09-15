@@ -48,13 +48,6 @@ try:
 except Exception as e:
     test_not_compiled_message = str(e)
 
-plotly_requirement_message = None
-try:
-    import plotly
-except ImportError as e:
-    plotly_requirement_message = str(e)
-have_plotly = plotly_requirement_message is None
-
 from pyspark.sql import SparkSession
 from pyspark.sql.types import ArrayType, DoubleType, UserDefinedType, Row
 from pyspark.testing.utils import ReusedPySparkTestCase, PySparkErrorTestUtils
