@@ -285,7 +285,7 @@ object RebaseDateTime {
   }
 
   // Loads rebasing info from an JSON file. JSON records in the files should conform to
-  // `JsonRebaseRecord`. HashMap is used here instead of AnyRefMap due to SPARK-49491.
+  // `JsonRebaseRecord`. Mutable HashMap is used here instead of AnyRefMap due to SPARK-49491.
   private[sql] def loadRebaseRecords(fileName: String): mutable.HashMap[String, RebaseInfo] = {
     val file = SparkClassUtils.getSparkClassLoader.getResource(fileName)
     val jsonRebaseRecords = mapper.readValue[Seq[JsonRebaseRecord]](file)
