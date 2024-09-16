@@ -334,7 +334,7 @@ SELECT randstr(1, 0) AS result
 -- !query schema
 struct<result:string>
 -- !query output
-8
+c
 
 
 -- !query
@@ -342,7 +342,7 @@ SELECT randstr(5, 0) AS result
 -- !query schema
 struct<result:string>
 -- !query output
-8i70B
+ceV0P
 
 
 -- !query
@@ -350,7 +350,7 @@ SELECT randstr(10, 0) AS result
 -- !query schema
 struct<result:string>
 -- !query output
-8i70BBEJ6A
+ceV0PXaR2I
 
 
 -- !query
@@ -358,7 +358,7 @@ SELECT randstr(10S, 0) AS result
 -- !query schema
 struct<result:string>
 -- !query output
-8i70BBEJ6A
+ceV0PXaR2I
 
 
 -- !query
@@ -366,9 +366,9 @@ SELECT randstr(10, 0) AS result FROM VALUES (0), (1), (2) tab(col)
 -- !query schema
 struct<result:string>
 -- !query output
-2iAhij5i3F
-3AD1fIHj7B
-8i70BBEJ6A
+ceV0PXaR2I
+fYxVfArnv7
+iSIv0VT2XL
 
 
 -- !query

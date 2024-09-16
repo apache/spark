@@ -374,21 +374,20 @@ case class RandStr(length: Expression, override val seedExpression: Expression)
   }
 
   override def evalInternal(input: InternalRow): Any = {
-    val numChars: Int = length.eval(input) match {
-      case i: Int => i
-      case n: Long => n.toInt
-      case s: Short => s.toInt
-    }
+    val numChars = length.eval(input).asInstanceOf[Number].intValue()
     val bytes = new Array[Byte](numChars)
     (0 until numChars).foreach { i =>
-      val num = (rng.nextInt() % 30).abs
+      // We generate a random number between 0 and 61, inclusive. Between the 62 different choices
+      // we choose 0-9, a-z, or A-Z, where each category comprises 10 choices, 26 choices, or 26
+      // choices, respectively (10 + 26 + 26 = 62).
+      val num = (rng.nextInt() % 62).abs
       num match {
         case _ if num < 10 =>
           bytes.update(i, ('0' + num).toByte)
-        case _ if num < 20 =>
+        case _ if num < 36 =>
           bytes.update(i, ('a' + num - 10).toByte)
         case _ =>
-          bytes.update(i, ('A' + num - 20).toByte)
+          bytes.update(i, ('A' + num - 36).toByte)
       }
     }
     val result: UTF8String = UTF8String.fromBytes(bytes.toArray)
@@ -407,13 +406,13 @@ case class RandStr(length: Expression, override val seedExpression: Expression)
         |int length = (int)(${eval.value});
         |char[] chars = new char[length];
         |for (int i = 0; i < length; i++) {
-        |  int v = Math.abs($rngTerm.nextInt() % 30);
+        |  int v = Math.abs($rngTerm.nextInt() % 62);
         |  if (v < 10) {
         |    chars[i] = (char)('0' + v);
-        |  } else if (v < 20) {
+        |  } else if (v < 36) {
         |    chars[i] = (char)('a' + (v - 10));
         |  } else {
-        |    chars[i] = (char)('A' + (v - 20));
+        |    chars[i] = (char)('A' + (v - 36));
         |  }
         |}
         |UTF8String ${ev.value} = UTF8String.fromString(new String(chars));

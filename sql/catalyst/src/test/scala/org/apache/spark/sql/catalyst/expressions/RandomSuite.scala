@@ -49,10 +49,10 @@ class RandomSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluationWithoutCodegen(
         RandStr(Literal(first), Literal(0)), CatalystTypeConverters.convertToCatalyst(result))
     }
-    testRandStr(1, "8")
-    testRandStr(5, "8i70B")
-    testRandStr(10, "8i70BBEJ6A")
-    testRandStr(10L, "8i70BBEJ6A")
+    testRandStr(1, "c")
+    testRandStr(5, "ceV0P")
+    testRandStr(10, "ceV0PXaR2I")
+    testRandStr(10L, "ceV0PXaR2I")
 
     def testUniform(first: Any, second: Any, result: Any): Unit = {
       checkEvaluationWithoutCodegen(
