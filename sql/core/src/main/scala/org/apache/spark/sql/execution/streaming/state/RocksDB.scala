@@ -279,7 +279,7 @@ class RocksDB(
     try {
       if (loadedVersion != version ||
         (checkpointFormatVersion >= 2 && checkpointUniqueId.isDefined &&
-        (!loadedCheckpointId.isDefined || checkpointUniqueId.get != loadedCheckpointId.get))) {
+        (loadedCheckpointId.isEmpty || checkpointUniqueId.get != loadedCheckpointId.get))) {
         closeDB(ignoreException = false)
         // deep copy is needed to avoid race condition
         // between maintenance and task threads
@@ -788,6 +788,10 @@ class RocksDB(
     acquire(RollbackStore)
     numKeysOnWritingVersion = numKeysOnLoadedVersion
     loadedVersion = -1L
+    LastCommitBasedCheckpointId = None
+    lastCommittedCheckpointId = None
+    loadedCheckpointId = None
+    sessionCheckpointId = None
     changelogWriter.foreach(_.abort())
     // Make sure changelogWriter gets recreated next time.
     changelogWriter = None

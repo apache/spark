@@ -412,7 +412,10 @@ private[sql] class RocksDBStateStoreProvider
       if (version < 0) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
       }
-      rocksDB.load(version, uniqueId, true)
+      rocksDB.load(
+        version,
+        if (storeConf.stateStoreCheckpointFormatVersion >= 2) uniqueId else None,
+        true)
       new RocksDBStateStore(version)
     }
     catch {

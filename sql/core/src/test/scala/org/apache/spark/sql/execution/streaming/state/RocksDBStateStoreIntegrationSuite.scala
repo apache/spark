@@ -385,7 +385,6 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
           .agg(count("*"))
           .as[(Int, Long)]
 
-      // Run the stream with changelog checkpointing disabled.
       testStream(aggregated, Update)(
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
         AddData(inputData, 3),

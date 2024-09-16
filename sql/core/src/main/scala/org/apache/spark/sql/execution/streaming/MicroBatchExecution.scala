@@ -926,7 +926,6 @@ class MicroBatchExecution(
   private def updateCheckpointId(
       execCtx: MicroBatchExecutionContext,
       latestExecPlan: SparkPlan): Unit = {
-    // This function cannot handle MBP now.
     latestExecPlan.collect {
       case e: StateStoreSaveExec =>
         assert(e.stateInfo.isDefined)

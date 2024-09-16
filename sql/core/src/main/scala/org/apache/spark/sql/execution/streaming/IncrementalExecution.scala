@@ -47,6 +47,9 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 /**
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
  * plan incrementally. Possibly preserving state in between each execution.
+ * @param currentCheckpointUniqueId checkpoint ID for the latest committed version. It is
+ *                                  operatorID -> array of checkpointIDs. Array index n
+ *                                  represents checkpoint ID for the nth shuffle partition.
  */
 class IncrementalExecution(
     sparkSession: SparkSession,
