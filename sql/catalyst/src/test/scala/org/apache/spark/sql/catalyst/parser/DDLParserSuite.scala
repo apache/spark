@@ -2903,6 +2903,7 @@ class DDLParserSuite extends AnalysisTest {
             None,
             None,
             None,
+            None,
             false
           ),
           false
@@ -2922,6 +2923,7 @@ class DDLParserSuite extends AnalysisTest {
             Map.empty[String, String],
             Some("parquet"),
             OptionList(Seq.empty),
+            None,
             None,
             None,
             None,
