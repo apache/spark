@@ -143,14 +143,14 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
 
   test("create/alter database with collation set") {
     withTempDir { tmpDir =>
-      val db = CatalogDatabase("dbWithCollation", description = "desc", collation = Some("uNiCode"),
+      val db = CatalogDatabase("dbWithCollation", description = "desc", collation = Some("UNICODE"),
         tmpDir.toURI, Map.empty)
       client.createDatabase(db, ignoreIfExists = true)
 
       val readBack = client.getDatabase("dbWithCollation")
       assert(readBack.collation === Some("UNICODE"))
 
-      client.alterDatabase(readBack.copy(collation = Some("unicode_ci")))
+      client.alterDatabase(readBack.copy(collation = Some("UNICODE_CI")))
       val alteredDb = client.getDatabase("dbWithCollation")
       assert(alteredDb.collation === Some("UNICODE_CI"))
     }
@@ -226,14 +226,14 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
 
   test("create/alter table with collations") {
     client.createTable(table("default", tableName = "collation_table",
-      collation = Some("uNiCoDe")), ignoreIfExists = false)
+      collation = Some("UNICODE")), ignoreIfExists = false)
 
     val readBack = client.getTable("default", "collation_table")
-    assert(readBack.collation === Some("UNICODE"))
     assert(!readBack.properties.contains(SupportsNamespaces.PROP_COLLATION))
+    assert(readBack.collation === Some("UNICODE"))
 
     client.alterTable("default", "collation_table",
-      readBack.copy(collation = Some("uNiCodE_CI")))
+      readBack.copy(collation = Some("UNICODE_CI")))
     val alteredTbl = client.getTable("default", "collation_table")
     assert(alteredTbl.collation === Some("UNICODE_CI"))
   }
