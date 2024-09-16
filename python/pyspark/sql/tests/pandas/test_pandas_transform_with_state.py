@@ -84,7 +84,6 @@ class TransformWithStateInPandasTestsMixin:
         )
         return df_final
 
-    """
     def _test_transform_with_state_in_pandas_basic(
         self, stateful_processor, check_results, single_batch=False, timeMode="None"
     ):
@@ -307,7 +306,6 @@ class TransformWithStateInPandasTestsMixin:
         finally:
             input_dir.cleanup()
 
-    """
     def _test_transform_with_state_in_pandas_chaining_ops(
             self, stateful_processor, check_results, timeMode="None"
     ):
@@ -374,16 +372,10 @@ class TransformWithStateInPandasTestsMixin:
         self.assertTrue(q.exception() is None)
 
     def test_transform_with_state_in_pandas_chaining_ops(self):
-        from datetime import datetime, timezone
         def check_results(batch_df, batch_id):
-            if batch_id == 0:
-                assert set(batch_df.sort("outputTimestamp").select("count").collect()) == {
-                    Row(count=1),
-                }
-                # outputTimestamp=datetime.fromtimestamp(20, tz=timezone.utc),
-            else:
-                raise Exception(f"I am inside batch id {batch_id}, batch: {batch_df.show()}")
-
+            assert set(batch_df.sort("outputTimestamp").select("count").collect()) == {
+                Row(count=1),
+            }
 
         self._test_transform_with_state_in_pandas_chaining_ops(StatefulProcessorChainingOps(), check_results)
 
