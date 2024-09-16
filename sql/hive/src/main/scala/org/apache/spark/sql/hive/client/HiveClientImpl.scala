@@ -1144,6 +1144,7 @@ private[hive] object HiveClientImpl extends Logging {
     table.storage.properties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
     table.properties.foreach { case (k, v) => hiveTable.setProperty(k, v) }
     table.comment.foreach { c => hiveTable.setProperty("comment", c) }
+    table.collation.foreach { c => hiveTable.setProperty(PROP_COLLATION, c) }
     // Hive will expand the view text, so it needs 2 fields: viewOriginalText and viewExpandedText.
     // Since we don't expand the view text, but only add table properties, we map the `viewText` to
     // the both fields in hive table.

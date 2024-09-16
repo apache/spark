@@ -141,6 +141,17 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
     }
   }
 
+  test("createDatabase with collation set") {
+    withTempDir { tmpDir =>
+      val db = CatalogDatabase("dbWithCollation", description = "desc", collation = Some("uNiCode"),
+        tmpDir.toURI, Map.empty)
+      client.createDatabase(db, ignoreIfExists = true)
+
+      val readBack = client.getDatabase("dbWithCollation")
+      assert(readBack.collation === Some("UNICODE"))
+    }
+  }
+
   test("setCurrentDatabase") {
     client.setCurrentDatabase("default")
   }
