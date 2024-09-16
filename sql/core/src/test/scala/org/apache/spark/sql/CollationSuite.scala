@@ -190,10 +190,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("check difference betweeen SR_AI and SR_Latn_AI collations") {
     // scalastyle:off nonascii
-    // SR_AI
-    checkAnswer(sql(s"SELECT 'cCćĆčČšŠžŽ' = 'čČcCćĆsSzZ' COLLATE SR_AI"), Row(true))
-
-    // SR_Latn_AI
     Seq(
       ("c", "ć"),
       ("c", "č"),
@@ -207,7 +203,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       ("Z", "Ž")
     ).foreach {
       case (c1, c2) =>
+        // SR_Latn_AI
         checkAnswer(sql(s"SELECT '$c1' = '$c2' COLLATE SR_Latn_AI"), Row(false))
+        // SR_AI
+        checkAnswer(sql(s"SELECT '$c1' = '$c2' COLLATE SR_AI"), Row(true))
     }
     // scalastyle:on nonascii
   }
