@@ -150,16 +150,11 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
         messageParameters = Map("handle" -> sessionId))
     }
 
-    operationIds.compute(
-      operationId,
-      (operationId, value) => {
-        if (value == true) {
-          // The existence of it should have been checked by SparkConnectExecutionManager.
-          throw new IllegalStateException(
-            s"ExecuteHolder with opId=${operationId} already exists!")
-        }
-        true
-      })
+    val alreadyExists = operationIds.putIfAbsent(operationId, true)
+    if (alreadyExists) {
+      // The existence of it should have been checked by SparkConnectExecutionManager.
+      throw new IllegalStateException(s"ExecuteHolder with opId=${operationId} already exists!")
+    }
   }
 
   /**
