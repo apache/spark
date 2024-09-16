@@ -419,5 +419,18 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertDoesNotContain("assertion failed", output)
+
+    // The UDF should not work in a nee REPL session.
+    val anotherOutput = runInterpreterInPasteMode("local",
+      s"""
+        |val r = spark.range(5)
+        |  .withColumn("id2", col("id") + 1)
+        |  .selectExpr("intSum(id, id2)")
+        |  .collect()
+        |
+      """.stripMargin)
+    assertContains(
+      "[UNRESOLVED_ROUTINE] Cannot resolve routine `intSum` on search path",
+      anotherOutput)
   }
 }
