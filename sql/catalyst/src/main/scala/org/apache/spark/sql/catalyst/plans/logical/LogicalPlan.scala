@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{LOGICAL_QUERY_STAGE, Tre
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
 
@@ -416,12 +417,22 @@ object LogicalPlanIntegrity {
   }
 
   def validateSchemaOutput(previousPlan: LogicalPlan, currentPlan: LogicalPlan): Option[String] = {
-    if (!DataTypeUtils.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
-      Some(s"The plan output schema has changed from ${previousPlan.schema.sql} to " +
-        currentPlan.schema.sql + s". The previous plan: ${previousPlan.treeString}\nThe new " +
-        "plan:\n" + currentPlan.treeString)
+    if (SqlApiConf.get.caseSensitiveAnalysis) {
+      if (!DataTypeUtils.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
+        Some(s"The plan output schema has changed from ${previousPlan.schema.sql} to " +
+          currentPlan.schema.sql + s". The previous plan: ${previousPlan.treeString}\nThe new " +
+          "plan:\n" + currentPlan.treeString)
+      } else {
+        None
+      }
     } else {
-      None
+      if (!DataTypeUtils.equalsIgnoreCaseAndNullability(previousPlan.schema, currentPlan.schema)) {
+        Some(s"The plan output schema has changed from ${previousPlan.schema.sql} to " +
+          currentPlan.schema.sql + s". The previous plan: ${previousPlan.treeString}\nThe new " +
+          "plan:\n" + currentPlan.treeString)
+      } else {
+        None
+      }
     }
   }
 
