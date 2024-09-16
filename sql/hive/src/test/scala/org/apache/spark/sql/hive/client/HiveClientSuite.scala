@@ -236,6 +236,8 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
       readBack.copy(collation = Some("UNICODE_CI")))
     val alteredTbl = client.getTable("default", "collation_table")
     assert(alteredTbl.collation === Some("UNICODE_CI"))
+
+    client.dropTable("default", "collation_table", ignoreIfNotExists = true, purge = true)
   }
 
   test("loadTable") {
