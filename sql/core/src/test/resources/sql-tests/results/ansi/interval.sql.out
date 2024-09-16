@@ -2890,7 +2890,7 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1.0D
 struct<>
 -- !query output
 java.lang.ArithmeticException
-not in range
+rounded value is out of range for input 2.147483648E9 and rounding mode HALF_UP
 
 
 -- !query
@@ -2970,7 +2970,7 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1.0D
 struct<>
 -- !query output
 java.lang.ArithmeticException
-not in range
+rounded value is out of range for input 9.223372036854776E18 and rounding mode HALF_UP
 
 
 -- !query

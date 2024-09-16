@@ -20,14 +20,16 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.SparkThrowable
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, ClusterByTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{Decimal, IntegerType, LongType, StringType, StructType, TimestampType}
+import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.storage.StorageLevelMapper
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -2856,8 +2858,215 @@ class DDLParserSuite extends AnalysisTest {
       exception = parseException(
         "CREATE TABLE my_tab(a INT, b INT GENERATED ALWAYS AS a + 1) USING PARQUET"),
       condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'a'", "hint" -> ": missing '('")
+      parameters = Map("error" -> "'a'", "hint" -> "")
     )
+  }
+
+  test("SPARK-48824: implement parser support for " +
+    "GENERATED ALWAYS/BY DEFAULT AS IDENTITY columns in tables ") {
+    def parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr: String,
+        identityColumnDefStr: String,
+        identityColumnSpecStr: String,
+        expectedDataType: DataType,
+        expectedStart: Long,
+        expectedStep: Long,
+        expectedAllowExplicitInsert: Boolean): Unit = {
+      val columnsWithIdentitySpec = Seq(
+        ColumnDefinition(
+          name = "id",
+          dataType = expectedDataType,
+          nullable = true,
+          identityColumnSpec = Some(
+            new IdentityColumnSpec(
+              expectedStart,
+              expectedStep,
+              expectedAllowExplicitInsert
+            )
+          )
+        ),
+        ColumnDefinition("val", IntegerType)
+      )
+      comparePlans(
+        parsePlan(
+          s"CREATE TABLE my_tab(id $identityColumnDataTypeStr GENERATED $identityColumnDefStr" +
+            s" AS IDENTITY $identityColumnSpecStr, val INT) USING parquet"
+        ),
+        CreateTable(
+          UnresolvedIdentifier(Seq("my_tab")),
+          columnsWithIdentitySpec,
+          Seq.empty[Transform],
+          UnresolvedTableSpec(
+            Map.empty[String, String],
+            Some("parquet"),
+            OptionList(Seq.empty),
+            None,
+            None,
+            None,
+            false
+          ),
+          false
+        )
+      )
+
+      comparePlans(
+        parsePlan(
+          s"REPLACE TABLE my_tab(id $identityColumnDataTypeStr GENERATED $identityColumnDefStr" +
+            s" AS IDENTITY $identityColumnSpecStr, val INT) USING parquet"
+        ),
+        ReplaceTable(
+          UnresolvedIdentifier(Seq("my_tab")),
+          columnsWithIdentitySpec,
+          Seq.empty[Transform],
+          UnresolvedTableSpec(
+            Map.empty[String, String],
+            Some("parquet"),
+            OptionList(Seq.empty),
+            None,
+            None,
+            None,
+            false
+          ),
+          false
+        )
+      )
+    }
+    for {
+      identityColumnDefStr <- Seq("BY DEFAULT", "ALWAYS")
+      identityColumnDataTypeStr <- Seq("BIGINT", "INT")
+    } {
+      val expectedAllowExplicitInsert = identityColumnDefStr == "BY DEFAULT"
+      val expectedDataType = identityColumnDataTypeStr match {
+        case "BIGINT" => LongType
+        case "INT" => IntegerType
+      }
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
+        identityColumnDefStr,
+        "(START WITH 2 INCREMENT BY 2)",
+        expectedDataType,
+        expectedStart = 2,
+        expectedStep = 2,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
+        identityColumnDefStr,
+        "(START WITH -2 INCREMENT BY -2)",
+        expectedDataType,
+        expectedStart = -2,
+        expectedStep = -2,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
+        identityColumnDefStr,
+        "(START WITH 2)",
+        expectedDataType,
+        expectedStart = 2,
+        expectedStep = 1,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
+        identityColumnDefStr,
+        "(START WITH -2)",
+        expectedDataType,
+        expectedStart = -2,
+        expectedStep = 1,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
+        identityColumnDefStr,
+        "(INCREMENT BY 2)",
+        expectedDataType,
+        expectedStart = 1,
+        expectedStep = 2,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
+        identityColumnDefStr,
+        "(INCREMENT BY -2)",
+        expectedDataType,
+        expectedStart = 1,
+        expectedStep = -2,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
+        identityColumnDefStr,
+        "()",
+        expectedDataType,
+        expectedStart = 1,
+        expectedStep = 1,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
+        identityColumnDefStr,
+        "",
+        expectedDataType,
+        expectedStart = 1,
+        expectedStep = 1,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
+    }
+  }
+
+  test("SPARK-48824: Column cannot have both a generation expression and an identity column spec") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        parsePlan(s"CREATE TABLE testcat.my_tab(id BIGINT GENERATED ALWAYS AS 1" +
+          s" GENERATED ALWAYS AS IDENTITY, val INT) USING foo")
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'1'", "hint" -> "")
+    )
+  }
+
+  test("SPARK-48824: Identity column step must not be zero") {
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(
+          s"CREATE TABLE testcat.my_tab" +
+            s"(id BIGINT GENERATED ALWAYS AS IDENTITY(INCREMENT BY 0), val INT) USING foo"
+        )
+      },
+      condition = "IDENTITY_COLUMNS_ILLEGAL_STEP",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "id BIGINT GENERATED ALWAYS AS IDENTITY(INCREMENT BY 0)",
+        start = 28,
+        stop = 81)
+    )
+  }
+
+  test("SPARK-48824: Identity column datatype must be long or integer") {
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(
+          s"CREATE TABLE testcat.my_tab(id FLOAT GENERATED ALWAYS AS IDENTITY(), val INT) USING foo"
+        )
+      },
+      condition = "IDENTITY_COLUMNS_UNSUPPORTED_DATA_TYPE",
+      parameters = Map("dataType" -> "FloatType"),
+      context =
+        ExpectedContext(fragment = "id FLOAT GENERATED ALWAYS AS IDENTITY()", start = 28, stop = 66)
+    )
+  }
+
+  test("SPARK-48824: Identity column sequence generator option cannot be duplicated") {
+    val identityColumnSpecStrs = Seq(
+      "(START WITH 0 START WITH 1)",
+      "(INCREMENT BY 1 INCREMENT BY 2)",
+      "(START WITH 0 INCREMENT BY 1 START WITH 1)",
+      "(INCREMENT BY 1 START WITH 0 INCREMENT BY 2)"
+    )
+    for {
+      identitySpecStr <- identityColumnSpecStrs
+    } {
+      val exception = intercept[ParseException] {
+        parsePlan(
+          s"CREATE TABLE testcat.my_tab" +
+            s"(id BIGINT GENERATED ALWAYS AS IDENTITY $identitySpecStr, val INT) USING foo"
+        )
+      }
+      assert(exception.getErrorClass === "IDENTITY_COLUMNS_DUPLICATED_SEQUENCE_GENERATOR_OPTION")
+    }
   }
 
   test("SPARK-42681: Relax ordering constraint for ALTER TABLE ADD COLUMN options") {

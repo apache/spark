@@ -45,13 +45,21 @@ object KubernetesVolumeUtils {
       val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_PATH_KEY"
       val readOnlyKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_READONLY_KEY"
       val subPathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_SUBPATH_KEY"
+      val labelKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_LABEL_KEY"
+
+      val volumeLabelsMap = properties
+        .filter(_._1.startsWith(labelKey))
+        .map {
+          case (k, v) => k.replaceAll(labelKey, "") -> v
+        }
 
       KubernetesVolumeSpec(
         volumeName = volumeName,
         mountPath = properties(pathKey),
         mountSubPath = properties.getOrElse(subPathKey, ""),
         mountReadOnly = properties.get(readOnlyKey).exists(_.toBoolean),
-        volumeConf = parseVolumeSpecificConf(properties, volumeType, volumeName))
+        volumeConf = parseVolumeSpecificConf(properties,
+          volumeType, volumeName, Option(volumeLabelsMap)))
     }.toSeq
   }
 
@@ -74,7 +82,8 @@ object KubernetesVolumeUtils {
   private def parseVolumeSpecificConf(
       options: Map[String, String],
       volumeType: String,
-      volumeName: String): KubernetesVolumeSpecificConf = {
+      volumeName: String,
+      labels: Option[Map[String, String]]): KubernetesVolumeSpecificConf = {
     volumeType match {
       case KUBERNETES_VOLUMES_HOSTPATH_TYPE =>
         val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_PATH_KEY"
@@ -91,7 +100,8 @@ object KubernetesVolumeUtils {
         KubernetesPVCVolumeConf(
           options(claimNameKey),
           options.get(storageClassKey),
-          options.get(sizeLimitKey))
+          options.get(sizeLimitKey),
+          labels)
 
       case KUBERNETES_VOLUMES_EMPTYDIR_TYPE =>
         val mediumKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY"
