@@ -187,8 +187,8 @@ class StateSchemaCompatibilityChecker(
           check(existingStateSchema, newSchema, ignoreValueSchema)
         }
       }
-      val colFamiliesAddedOrRemoved = newStateSchemaList.map(_.colFamilyName).toSet
-        != existingSchemaMap.keySet
+      val colFamiliesAddedOrRemoved =
+        (newStateSchemaList.map(_.colFamilyName).toSet != existingSchemaMap.keySet)
       if (stateSchemaVersion == SCHEMA_FORMAT_V3 && colFamiliesAddedOrRemoved) {
         createSchemaFile(newStateSchemaList, stateSchemaVersion)
       }
