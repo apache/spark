@@ -62,6 +62,9 @@ class TransformWithStateInPandasStateServer(
     batchTimestampMs: Option[Long] = None,
     eventTimeWatermarkForEviction: Option[Long] = None)
   extends Runnable with Logging {
+
+  import PythonResponseWriterUtils._
+
   private val keyRowDeserializer: ExpressionEncoder.Deserializer[Row] =
     ExpressionEncoder(groupingKeySchema).resolveAndBind().createDeserializer()
   private var inputStream: DataInputStream = _
@@ -136,14 +139,16 @@ class TransformWithStateInPandasStateServer(
         val timerRequest = message.getTimerValueRequest()
         timerRequest.getMethodCase match {
           case TimerValueRequest.MethodCase.GETPROCESSINGTIMER =>
-            val valueStr =
-              if (batchTimestampMs.isDefined) batchTimestampMs.get.toString else "-1"
-            sendResponse(0, null, ByteString.copyFromUtf8(valueStr))
+            val procTimestamp: Long =
+              if (batchTimestampMs.isDefined) batchTimestampMs.get else -1L
+            val byteString = PythonResponseWriterUtils.serializeLongToByteString(procTimestamp)
+            sendResponse(0, null, byteString)
           case TimerValueRequest.MethodCase.GETWATERMARK =>
-            val valueStr = if (eventTimeWatermarkForEviction.isDefined) {
-              eventTimeWatermarkForEviction.get.toString()
-            } else "-1"
-            sendResponse(0, null, ByteString.copyFromUtf8(valueStr))
+            val eventTimestamp: Long =
+              if (eventTimeWatermarkForEviction.isDefined) eventTimeWatermarkForEviction.get
+              else -1L
+            val byteString = PythonResponseWriterUtils.serializeLongToByteString(eventTimestamp)
+            sendResponse(0, null, byteString)
           case _ =>
             throw new IllegalArgumentException("Invalid timer value method call")
         }
@@ -157,25 +162,12 @@ class TransformWithStateInPandasStateServer(
           sendResponse(1)
         } else {
           sendResponse(0)
-          outputStream.flush()
-          val arrowStreamWriter = {
-            val outputSchema = new StructType()
-              .add("key", groupingKeySchema)
-              .add(StructField("timestamp", LongType))
-            val arrowSchema = ArrowUtils.toArrowSchema(outputSchema, timeZoneId,
-              errorOnDuplicatedFieldNames, largeVarTypes)
-            val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-              s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
-            val root = VectorSchemaRoot.create(arrowSchema, allocator)
-            new BaseStreamingArrowWriter(root, new ArrowStreamWriter(root, null, outputStream),
-              arrowTransformWithStateInPandasMaxRecordsPerBatch)
+          val outputSchema = new StructType()
+            .add("key", groupingKeySchema)
+            .add(StructField("timestamp", LongType))
+          sendIteratorAsArrowBatches(iter, outputSchema) { data =>
+            InternalRow(data._1, data._2)
           }
-          while (iter.hasNext) {
-            val (key, timestamp) = iter.next()
-            val internalRow = InternalRow(key, timestamp)
-            arrowStreamWriter.writeRow(internalRow)
-          }
-          arrowStreamWriter.finalizeCurrentArrowBatch()
         }
 
       case _ =>
@@ -250,24 +242,11 @@ class TransformWithStateInPandasStateServer(
               sendResponse(1)
             } else {
               sendResponse(0)
-              outputStream.flush()
-              val arrowStreamWriter = {
-                val outputSchema = new StructType()
-                  .add(StructField("timestamp", LongType))
-                val arrowSchema = ArrowUtils.toArrowSchema(outputSchema, timeZoneId,
-                  errorOnDuplicatedFieldNames, largeVarTypes)
-                val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-                  s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
-                val root = VectorSchemaRoot.create(arrowSchema, allocator)
-                new BaseStreamingArrowWriter(root, new ArrowStreamWriter(root, null, outputStream),
-                  arrowTransformWithStateInPandasMaxRecordsPerBatch)
+              val outputSchema = new StructType()
+                .add(StructField("timestamp", LongType))
+              sendIteratorAsArrowBatches(iter, outputSchema) { data =>
+                InternalRow(data)
               }
-              while (iter.hasNext) {
-                val timestamp = iter.next()
-                val internalRow = InternalRow(timestamp)
-                arrowStreamWriter.writeRow(internalRow)
-              }
-              arrowStreamWriter.finalizeCurrentArrowBatch()
             }
 
           case _ =>
@@ -330,24 +309,6 @@ class TransformWithStateInPandasStateServer(
     }
   }
 
-  private def sendResponse(
-      status: Int,
-      errorMessage: String = null,
-      byteString: ByteString = null): Unit = {
-    val responseMessageBuilder = StateResponse.newBuilder().setStatusCode(status)
-    if (status != 0 && errorMessage != null) {
-      responseMessageBuilder.setErrorMessage(errorMessage)
-    }
-    if (byteString != null) {
-      responseMessageBuilder.setValue(byteString)
-    }
-    val responseMessage = responseMessageBuilder.build()
-    val responseMessageBytes = responseMessage.toByteArray
-    val byteLength = responseMessageBytes.length
-    outputStream.writeInt(byteLength)
-    outputStream.write(responseMessageBytes)
-  }
-
   private def initializeValueState(
       stateName: String,
       schemaString: String,
@@ -365,6 +326,55 @@ class TransformWithStateInPandasStateServer(
       sendResponse(0)
     } else {
       sendResponse(1, s"state $stateName already exists")
+    }
+  }
+
+  /** Utils object for sending response to Python client. */
+  private object PythonResponseWriterUtils {
+    def sendResponse(
+        status: Int,
+        errorMessage: String = null,
+        byteString: ByteString = null): Unit = {
+      val responseMessageBuilder = StateResponse.newBuilder().setStatusCode(status)
+      if (status != 0 && errorMessage != null) {
+        responseMessageBuilder.setErrorMessage(errorMessage)
+      }
+      if (byteString != null) {
+        responseMessageBuilder.setValue(byteString)
+      }
+      val responseMessage = responseMessageBuilder.build()
+      val responseMessageBytes = responseMessage.toByteArray
+      val byteLength = responseMessageBytes.length
+      outputStream.writeInt(byteLength)
+      outputStream.write(responseMessageBytes)
+    }
+
+    def serializeLongToByteString(longValue: Long): ByteString = {
+      // ByteBuffer defaults to big-endian byte order.
+      // This is accordingly deserialized as big-endian on Python client.
+      val valueBytes =
+      java.nio.ByteBuffer.allocate(8).putLong(longValue).array()
+      ByteString.copyFrom(valueBytes)
+    }
+
+    def sendIteratorAsArrowBatches[T](
+        iter: Iterator[T], outputSchema: StructType)(func: T => InternalRow): Unit = {
+      outputStream.flush()
+      val arrowStreamWriter = {
+        val arrowSchema = ArrowUtils.toArrowSchema(outputSchema, timeZoneId,
+          errorOnDuplicatedFieldNames, largeVarTypes)
+        val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+          s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
+        val root = VectorSchemaRoot.create(arrowSchema, allocator)
+        new BaseStreamingArrowWriter(root, new ArrowStreamWriter(root, null, outputStream),
+          arrowTransformWithStateInPandasMaxRecordsPerBatch)
+      }
+      while (iter.hasNext) {
+        val data = iter.next()
+        val internalRow = func(data)
+        arrowStreamWriter.writeRow(internalRow)
+      }
+      arrowStreamWriter.finalizeCurrentArrowBatch()
     }
   }
 }

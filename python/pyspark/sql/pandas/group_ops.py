@@ -535,11 +535,6 @@ class PandasGroupedOpsMixin:
                         ExpiredTimerInfo(True, expiry_timestamp)))
 
             # TODO(SPARK-49603) set the handle state in the lazily initialized iterator
-            """
-            statefulProcessorApiClient.set_handle_state(
-                StatefulProcessorHandleState.TIMER_PROCESSED
-            )
-            """
 
             result_iter_list.insert(0, data_iter)
             result = itertools.chain(*result_iter_list)

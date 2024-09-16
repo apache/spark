@@ -129,25 +129,6 @@ class StatefulProcessorApiClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error initializing value state: " f"{response_message[1]}")
 
-    def get_batch_timestamp(self) -> int:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
-        get_batch_timestamp = stateMessage.GetBatchTimestampMs()
-        request = stateMessage.TimerMiscRequest(getBatchTimestampMs=get_batch_timestamp)
-        message = stateMessage.StateRequest(timerMiscRequest=request)
-
-        self._send_proto_message(message.SerializeToString())
-        response_message = self._receive_proto_message()
-        status = response_message[0]
-        if status != 0:
-            # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(f"Error initializing timer state: " f"{response_message[1]}")
-        else:
-            if len(response_message[2]) == 0:
-                return -1
-            # TODO: can we simply parse from utf8 string here?
-            timestamp = int(response_message[2])
-            return timestamp
-
     def register_timer(self, expiry_time_stamp_ms: int) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
@@ -249,8 +230,7 @@ class StatefulProcessorApiClient:
         else:
             if len(response_message[2]) == 0:
                 return -1
-            # TODO: can we simply parse from utf8 string here?
-            timestamp = int(response_message[2])
+            timestamp = self._deserialize_long_from_bytes(response_message[2])
             return timestamp
 
     def get_watermark_timestamp(self) -> int:
@@ -270,8 +250,7 @@ class StatefulProcessorApiClient:
         else:
             if len(response_message[2]) == 0:
                 return -1
-            # TODO: can we simply parse from utf8 string here?
-            timestamp = int(response_message[2])
+            timestamp = self._deserialize_long_from_bytes(response_message[2])
             return timestamp
 
     def _send_proto_message(self, message: bytes) -> None:
@@ -315,6 +294,9 @@ class StatefulProcessorApiClient:
 
         row_value = Row(*converted)
         return self.pickleSer.dumps(schema.toInternal(row_value))
+
+    def _deserialize_long_from_bytes(self, values: bytes) -> int:
+        return int.from_bytes(values, byteorder='big')
 
     def _deserialize_from_bytes(self, value: bytes) -> Any:
         return self.pickleSer.loads(value)
