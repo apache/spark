@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, Un
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, GreaterThan, Literal, NullsFirst, SortOrder, UnresolvedWindowExpression, UnspecifiedFrame, WindowSpecDefinition, WindowSpecReference}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, PROJECT, UNRESOLVED_RELATION}
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, RefreshResource}
@@ -883,6 +884,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("Operator pipe SQL syntax") {
     withSQLConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED.key -> "true") {
+<<<<<<< HEAD
       // Basic SELECT operators.
       parser.parsePlan("TABLE t |> SELECT 1 AS X")
       parser.parsePlan("TABLE t |> SELECT 1 AS X, 2 AS Y |> SELECT X + Y AS Z")
@@ -892,6 +894,19 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       parser.parsePlan("TABLE t |> SELECT X, LENGTH(Y) AS Z |> WHERE X + LENGTH(Y) < 4")
       parser.parsePlan("TABLE t |> WHERE X = 1 AND Y = 2 |> WHERE X + Y = 3")
       parser.parsePlan("VALUES (0), (1) tab(col) |> WHERE col < 1")
+=======
+      // Basic selection.
+      // Here we check that every parsed plan contains a projection and a source relation or
+      // inline table.
+      def checkPipeSelect(query: String): Unit = {
+        val plan: LogicalPlan = parser.parsePlan(query)
+        assert(plan.containsPattern(PROJECT))
+        assert(plan.containsAnyPattern(UNRESOLVED_RELATION, LOCAL_RELATION))
+      }
+      checkPipeSelect("TABLE t |> SELECT 1 AS X")
+      checkPipeSelect("TABLE t |> SELECT 1 AS X, 2 AS Y |> SELECT X + Y AS Z")
+      checkPipeSelect("VALUES (0), (1) tab(col) |> SELECT col * 2 AS result")
+>>>>>>> master
     }
   }
 }

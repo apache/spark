@@ -1158,6 +1158,7 @@ object TableFunctionRegistry {
     generator[PosExplode]("posexplode"),
     generator[PosExplode]("posexplode_outer", outer = true),
     generator[Stack]("stack"),
+    generator[Collations]("collations"),
     generator[SQLKeywords]("sql_keywords"),
     generator[VariantExplode]("variant_explode"),
     generator[VariantExplode]("variant_explode_outer", outer = true)

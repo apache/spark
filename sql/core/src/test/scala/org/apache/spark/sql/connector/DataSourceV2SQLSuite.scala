@@ -1753,6 +1753,64 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-48824: Column cannot have both an identity column spec and a default value") {
+    val tblName = "my_tab"
+    val tableDefinition =
+      s"$tblName(id BIGINT GENERATED ALWAYS AS IDENTITY DEFAULT 0, name STRING)"
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo") {
+      for (statement <- Seq("CREATE TABLE", "REPLACE TABLE")) {
+        withTable(s"testcat.$tblName") {
+          if (statement == "REPLACE TABLE") {
+            sql(s"CREATE TABLE testcat.$tblName(a INT) USING foo")
+          }
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"$statement testcat.$tableDefinition USING foo")
+            },
+            condition = "IDENTITY_COLUMN_WITH_DEFAULT_VALUE",
+            parameters = Map(
+              "colName" -> "id",
+              "defaultValue" -> "0",
+              "identityColumnSpec" ->
+                "IdentityColumnSpec{start=1, step=1, allowExplicitInsert=false}")
+          )
+        }
+      }
+    }
+  }
+
+  test("SPARK-48824: Identity columns only allowed with TableCatalogs that " +
+    "SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS") {
+    val tblName = "my_tab"
+    val tableDefinition =
+      s"$tblName(id BIGINT GENERATED ALWAYS AS IDENTITY(), val INT)"
+    for (statement <- Seq("CREATE TABLE", "REPLACE TABLE")) {
+      // InMemoryTableCatalog.capabilities() = {SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS}
+      withTable(s"testcat.$tblName") {
+        if (statement == "REPLACE TABLE") {
+          sql(s"CREATE TABLE testcat.$tblName(a INT) USING foo")
+        }
+        // Can create table with an identity column
+        sql(s"$statement testcat.$tableDefinition USING foo")
+        assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
+      }
+      // BasicInMemoryTableCatalog.capabilities() = {}
+      withSQLConf("spark.sql.catalog.dummy" -> classOf[BasicInMemoryTableCatalog].getName) {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("USE dummy")
+            sql(s"$statement dummy.$tableDefinition USING foo")
+          },
+          condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+          parameters = Map(
+            "tableName" -> "`dummy`.`my_tab`",
+            "operation" -> "identity column"
+          )
+        )
+      }
+    }
+  }
+
   test("SPARK-46972: asymmetrical replacement for char/varchar in V2SessionCatalog.createTable") {
     // unset this config to use the default v2 session catalog.
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)

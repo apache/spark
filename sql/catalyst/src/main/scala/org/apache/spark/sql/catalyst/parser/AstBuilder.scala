@@ -45,7 +45,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, IdentityColumnSpec, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
@@ -173,14 +173,10 @@ class AstBuilder extends DataTypeAstBuilder
       case Some(c: CreateVariable) =>
         if (allowVarDeclare) {
           throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
-            c.origin,
-            toSQLId(c.name.asInstanceOf[UnresolvedIdentifier].nameParts),
-            c.origin.line.get.toString)
+            c.origin, c.name.asInstanceOf[UnresolvedIdentifier].nameParts)
         } else {
           throw SqlScriptingErrors.variableDeclarationNotAllowedInScope(
-            c.origin,
-            toSQLId(c.name.asInstanceOf[UnresolvedIdentifier].nameParts),
-            c.origin.line.get.toString)
+            c.origin, c.name.asInstanceOf[UnresolvedIdentifier].nameParts)
         }
       case _ =>
     }
@@ -200,7 +196,9 @@ class AstBuilder extends DataTypeAstBuilder
             el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
         withOrigin(bl) {
           throw SqlScriptingErrors.labelsMismatch(
-            CurrentOrigin.get, bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
+            CurrentOrigin.get,
+            bl.multipartIdentifier().getText,
+            el.multipartIdentifier().getText)
         }
       case (None, Some(el: EndLabelContext)) =>
         withOrigin(el) {
@@ -261,6 +259,52 @@ class AstBuilder extends DataTypeAstBuilder
     WhileStatement(condition, body, Some(labelText))
   }
 
+  override def visitSearchedCaseStatement(ctx: SearchedCaseStatementContext): CaseStatement = {
+    val conditions = ctx.conditions.asScala.toList.map(boolExpr => withOrigin(boolExpr) {
+      SingleStatement(
+        Project(
+          Seq(Alias(expression(boolExpr), "condition")()),
+          OneRowRelation()))
+    })
+    val conditionalBodies =
+      ctx.conditionalBodies.asScala.toList.map(body => visitCompoundBody(body))
+
+    if (conditions.length != conditionalBodies.length) {
+      throw SparkException.internalError(
+        s"Mismatched number of conditions ${conditions.length} and condition bodies" +
+          s" ${conditionalBodies.length} in case statement")
+    }
+
+    CaseStatement(
+      conditions = conditions,
+      conditionalBodies = conditionalBodies,
+      elseBody = Option(ctx.elseBody).map(body => visitCompoundBody(body)))
+  }
+
+  override def visitSimpleCaseStatement(ctx: SimpleCaseStatementContext): CaseStatement = {
+    // uses EqualTo to compare the case variable(the main case expression)
+    // to the WHEN clause expressions
+    val conditions = ctx.conditionExpressions.asScala.toList.map(expr => withOrigin(expr) {
+      SingleStatement(
+        Project(
+          Seq(Alias(EqualTo(expression(ctx.caseVariable), expression(expr)), "condition")()),
+          OneRowRelation()))
+    })
+    val conditionalBodies =
+      ctx.conditionalBodies.asScala.toList.map(body => visitCompoundBody(body))
+
+    if (conditions.length != conditionalBodies.length) {
+      throw SparkException.internalError(
+        s"Mismatched number of conditions ${conditions.length} and condition bodies" +
+          s" ${conditionalBodies.length} in case statement")
+    }
+
+    CaseStatement(
+      conditions = conditions,
+      conditionalBodies = conditionalBodies,
+      elseBody = Option(ctx.elseBody).map(body => visitCompoundBody(body)))
+  }
+
   override def visitRepeatStatement(ctx: RepeatStatementContext): RepeatStatement = {
     val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
     val boolExpr = ctx.booleanExpression()
@@ -292,7 +336,7 @@ class AstBuilder extends DataTypeAstBuilder
       case c: RepeatStatementContext
         if Option(c.beginLabel()).isDefined &&
           c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
-      => true
+        => true
       case _ => false
     }
   }
@@ -3575,13 +3619,19 @@ class AstBuilder extends DataTypeAstBuilder
       }
     }
 
+    val dataType = typedVisit[DataType](ctx.dataType)
     ColumnDefinition(
       name = name,
-      dataType = typedVisit[DataType](ctx.dataType),
+      dataType = dataType,
       nullable = nullable,
       comment = commentSpec.map(visitCommentSpec),
       defaultValue = defaultExpression.map(visitDefaultExpression),
-      generationExpression = generationExpression.map(visitGenerationExpression)
+      generationExpression = generationExpression.collect {
+        case ctx: GeneratedColumnContext => visitGeneratedColumn(ctx)
+      },
+      identityColumnSpec = generationExpression.collect {
+        case ctx: IdentityColumnContext => visitIdentityColumn(ctx, dataType)
+      }
     )
   }
 
@@ -3637,10 +3687,62 @@ class AstBuilder extends DataTypeAstBuilder
   /**
    * Create a generation expression string.
    */
-  override def visitGenerationExpression(ctx: GenerationExpressionContext): String =
+  override def visitGeneratedColumn(ctx: GeneratedColumnContext): String =
     withOrigin(ctx) {
       getDefaultExpression(ctx.expression(), "GENERATED").originalSQL
     }
+
+  /**
+   * Parse and verify IDENTITY column definition.
+   *
+   * @param ctx      The parser context.
+   * @param dataType The data type of column defined as IDENTITY column. Used for verification.
+   * @return Tuple containing start, step and allowExplicitInsert.
+   */
+  protected def visitIdentityColumn(
+      ctx: IdentityColumnContext,
+      dataType: DataType): IdentityColumnSpec = {
+    if (dataType != LongType && dataType != IntegerType) {
+      throw QueryParsingErrors.identityColumnUnsupportedDataType(ctx, dataType.toString)
+    }
+    // We support two flavors of syntax:
+    // (1) GENERATED ALWAYS AS IDENTITY (...)
+    // (2) GENERATED BY DEFAULT AS IDENTITY (...)
+    // (1) forbids explicit inserts, while (2) allows.
+    val allowExplicitInsert = ctx.BY() != null && ctx.DEFAULT() != null
+    val (start, step) = visitIdentityColSpec(ctx.identityColSpec())
+
+    new IdentityColumnSpec(start, step, allowExplicitInsert)
+  }
+
+  override def visitIdentityColSpec(ctx: IdentityColSpecContext): (Long, Long) = {
+    val defaultStart = 1
+    val defaultStep = 1
+    if (ctx == null) {
+      return (defaultStart, defaultStep)
+    }
+    var (start, step): (Option[Long], Option[Long]) = (None, None)
+    ctx.sequenceGeneratorOption().asScala.foreach { option =>
+      if (option.start != null) {
+        if (start.isDefined) {
+          throw QueryParsingErrors.identityColumnDuplicatedSequenceGeneratorOption(ctx, "START")
+        }
+        start = Some(option.start.getText.toLong)
+      } else if (option.step != null) {
+        if (step.isDefined) {
+          throw QueryParsingErrors.identityColumnDuplicatedSequenceGeneratorOption(ctx, "STEP")
+        }
+        step = Some(option.step.getText.toLong)
+        if (step.get == 0L) {
+          throw QueryParsingErrors.identityColumnIllegalStep(ctx)
+        }
+      } else {
+        throw SparkException
+            .internalError(s"Invalid identity column sequence generator option: ${option.getText}")
+      }
+    }
+    (start.getOrElse(defaultStart), step.getOrElse(defaultStep))
+  }
 
   /**
    * Create an optional comment string.
