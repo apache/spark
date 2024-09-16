@@ -111,7 +111,7 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
     import SupportsNamespaces._
     val ns = s"$catalog.$namespace"
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
-      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+      namespaceLegacyProperties.foreach { key =>
         val exception = intercept[ParseException] {
           sql(s"CREATE NAMESPACE $ns WITH DBPROPERTIES('$key'='dummyVal')")
         }
@@ -119,7 +119,7 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
       }
     }
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
-      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+      namespaceLegacyProperties.foreach { key =>
         withNamespace(ns) {
           sql(s"CREATE NAMESPACE $ns WITH DBPROPERTIES('$key'='foo')")
           assert(sql(s"DESC NAMESPACE EXTENDED $ns")

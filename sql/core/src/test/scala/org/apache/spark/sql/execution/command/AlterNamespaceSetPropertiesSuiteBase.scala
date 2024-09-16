@@ -80,7 +80,7 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     val ns = s"$catalog.$namespace"
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
-      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+      namespaceLegacyProperties.foreach { key =>
         withNamespace(ns) {
           sql(s"CREATE NAMESPACE $ns")
           val sqlText = s"ALTER NAMESPACE $ns SET PROPERTIES ('$key'='dummyVal')"
@@ -100,7 +100,7 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
       }
     }
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
-      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+      namespaceLegacyProperties.foreach { key =>
         withNamespace(ns) {
           // Set the location explicitly because v2 catalog may not set the default location.
           // Without this, `meta.get(key)` below may return null.
