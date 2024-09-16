@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.state
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
@@ -147,7 +149,7 @@ abstract class StatePartitionReaderBase(
 
 /**
  * An implementation of [[StatePartitionReaderBase]] for the normal mode of State Data
- * Source. It reads the the state at a particular batchId.
+ * Source. It reads the state at a particular batchId.
  */
 class StatePartitionReader(
     storeConf: StateStoreConf,
@@ -193,9 +195,9 @@ class StatePartitionReader(
         .map { pair =>
           val key = pair.key
           val result = store.valuesIterator(key, stateVarName)
-          var unsafeRowArr: Seq[UnsafeRow] = Seq.empty
+          val unsafeRowArr = ArrayBuffer[UnsafeRow]()
           result.foreach { entry =>
-            unsafeRowArr = unsafeRowArr :+ entry.copy()
+            unsafeRowArr += entry.copy()
           }
           // convert the list of values to array type
           val arrData = new GenericArrayData(unsafeRowArr.toArray)

@@ -381,7 +381,7 @@ object StateSourceOptions extends DataSourceOptions {
       Option(options.get(FLATTEN_COLLECTION_TYPES))
         .map(_.toBoolean).getOrElse(true)
     } catch {
-      case _: Exception =>
+      case _: IllegalArgumentException =>
         throw StateDataSourceErrors.invalidOptionValue(FLATTEN_COLLECTION_TYPES,
           "Boolean value is expected")
     }
