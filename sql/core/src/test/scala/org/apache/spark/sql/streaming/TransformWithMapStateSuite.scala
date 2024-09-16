@@ -103,7 +103,7 @@ class TransformWithMapStateSuite extends StreamTest
         ExpectFailure[SparkIllegalArgumentException] { e => {
           checkError(
             exception = e.asInstanceOf[SparkIllegalArgumentException],
-            errorClass = "ILLEGAL_STATE_STORE_VALUE.NULL_VALUE",
+            condition = "ILLEGAL_STATE_STORE_VALUE.NULL_VALUE",
             sqlState = Some("42601"),
             parameters = Map("stateName" -> "sessionState")
           )
@@ -152,7 +152,7 @@ class TransformWithMapStateSuite extends StreamTest
         ExpectFailure[SparkIllegalArgumentException] { e => {
           checkError(
             exception = e.asInstanceOf[SparkIllegalArgumentException],
-            errorClass = "ILLEGAL_STATE_STORE_VALUE.NULL_VALUE",
+            condition = "ILLEGAL_STATE_STORE_VALUE.NULL_VALUE",
             sqlState = Some("42601"),
             parameters = Map("stateName" -> "sessionState"))
         }}

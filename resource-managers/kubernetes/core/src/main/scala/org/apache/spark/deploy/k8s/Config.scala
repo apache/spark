@@ -457,7 +457,7 @@ private[spark] object Config extends Logging {
       .doc("Time to wait between each round of executor allocation.")
       .version("2.3.0")
       .timeConf(TimeUnit.MILLISECONDS)
-      .checkValue(value => value > 0, "Allocation batch delay must be a positive time value.")
+      .checkValue(value => value > 100, "Allocation batch delay must be greater than 0.1s.")
       .createWithDefaultString("1s")
 
   val KUBERNETES_ALLOCATION_DRIVER_READINESS_TIMEOUT =
@@ -776,7 +776,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY = "options.medium"
   val KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY = "options.sizeLimit"
   val KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY = "options.server"
-
+  val KUBERNETES_VOLUMES_LABEL_KEY = "label."
   val KUBERNETES_DRIVER_ENV_PREFIX = "spark.kubernetes.driverEnv."
 
   val KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH = 253

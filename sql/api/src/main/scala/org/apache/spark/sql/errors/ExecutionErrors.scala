@@ -60,7 +60,8 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   }
 
   def failToRecognizePatternAfterUpgradeError(
-      pattern: String, e: Throwable): SparkUpgradeException = {
+      pattern: String,
+      e: Throwable): SparkUpgradeException = {
     new SparkUpgradeException(
       errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
       messageParameters = Map(
@@ -73,9 +74,8 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   def failToRecognizePatternError(pattern: String, e: Throwable): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2130",
-      messageParameters = Map(
-        "pattern" -> toSQLValue(pattern),
-        "docroot" -> SparkBuildInfo.spark_doc_root),
+      messageParameters =
+        Map("pattern" -> toSQLValue(pattern), "docroot" -> SparkBuildInfo.spark_doc_root),
       cause = e)
   }
 
@@ -93,9 +93,9 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   }
 
   def invalidInputInCastToDatetimeError(
-     value: Double,
-     to: DataType,
-     context: QueryContext): SparkDateTimeException = {
+      value: Double,
+      to: DataType,
+      context: QueryContext): SparkDateTimeException = {
     invalidInputInCastToDatetimeErrorInternal(toSQLValue(value), DoubleType, to, context)
   }
 
@@ -109,8 +109,7 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
       messageParameters = Map(
         "expression" -> sqlValue,
         "sourceType" -> toSQLType(from),
-        "targetType" -> toSQLType(to),
-        "ansiConfig" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)),
+        "targetType" -> toSQLType(to)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -132,8 +131,10 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
       summary = getSummary(context))
   }
 
-  def cannotParseStringAsDataTypeError(pattern: String, value: String, dataType: DataType)
-  : Throwable = {
+  def cannotParseStringAsDataTypeError(
+      pattern: String,
+      value: String,
+      dataType: DataType): Throwable = {
     SparkException.internalError(
       s"Cannot parse field value ${toSQLValue(value)} for pattern ${toSQLValue(pattern)} " +
         s"as the target spark data type ${toSQLType(dataType)}.")
@@ -161,8 +162,7 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   def userDefinedTypeNotAnnotatedAndRegisteredError(udt: UserDefinedType[_]): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2155",
-      messageParameters = Map(
-        "userClass" -> udt.userClass.getName),
+      messageParameters = Map("userClass" -> udt.userClass.getName),
       cause = null)
   }
 
@@ -184,8 +184,7 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   def cannotFindConstructorForTypeError(tpe: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2144",
-      messageParameters = Map(
-        "tpe" -> tpe))
+      messageParameters = Map("tpe" -> tpe))
   }
 
   def cannotHaveCircularReferencesInClassError(t: String): SparkUnsupportedOperationException = {
@@ -195,12 +194,12 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   }
 
   def cannotUseInvalidJavaIdentifierAsFieldNameError(
-      fieldName: String, walkedTypePath: WalkedTypePath): SparkUnsupportedOperationException = {
+      fieldName: String,
+      walkedTypePath: WalkedTypePath): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2140",
-      messageParameters = Map(
-        "fieldName" -> fieldName,
-        "walkedTypePath" -> walkedTypePath.toString))
+      messageParameters =
+        Map("fieldName" -> fieldName, "walkedTypePath" -> walkedTypePath.toString))
   }
 
   def primaryConstructorNotFoundError(cls: Class[_]): SparkRuntimeException = {
@@ -213,8 +212,15 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   def cannotGetOuterPointerForInnerClassError(innerCls: Class[_]): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2154",
-      messageParameters = Map(
-        "innerCls" -> innerCls.getName))
+      messageParameters = Map("innerCls" -> innerCls.getName))
+  }
+
+  def cannotUseKryoSerialization(): SparkRuntimeException = {
+    new SparkRuntimeException(errorClass = "CANNOT_USE_KRYO", messageParameters = Map.empty)
+  }
+
+  def elementsOfTupleExceedLimitError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2150")
   }
 }
 
