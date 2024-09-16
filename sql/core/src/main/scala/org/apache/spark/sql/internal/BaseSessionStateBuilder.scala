@@ -181,7 +181,7 @@ abstract class BaseSessionStateBuilder(
    * Note 1: The user-defined functions must be deterministic.
    * Note 2: This depends on the `functionRegistry` field.
    */
-  protected def udfRegistration: UDFRegistration = new UDFRegistration(functionRegistry)
+  protected def udfRegistration: UDFRegistration = new UDFRegistration(session, functionRegistry)
 
   protected def udtfRegistration: UDTFRegistration = new UDTFRegistration(tableFunctionRegistry)
 

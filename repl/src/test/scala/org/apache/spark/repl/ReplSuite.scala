@@ -396,4 +396,28 @@ class ReplSuite extends SparkFunSuite {
     Main.sparkContext.stop()
     System.clearProperty("spark.driver.port")
   }
+
+  test("register artifacts via SparkSession.addArtifact") {
+  val artifactPath = new File("src/test/resources").toPath
+    val intSumUdfPath = artifactPath.resolve("IntSumUdf.class")
+    val output = runInterpreterInPasteMode("local",
+      s"""
+        |import org.apache.spark.sql.api.java.UDF2
+        |import org.apache.spark.sql.types.DataTypes
+        |
+        |spark.addArtifact("${intSumUdfPath.toString}")
+        |
+        |spark.udf.registerJava("intSum", "IntSumUdf", DataTypes.LongType)
+        |
+        |val r = spark.range(5)
+        |  .withColumn("id2", col("id") + 1)
+        |  .selectExpr("intSum(id, id2)")
+        |  .collect()
+        |assert(r.map(_.getLong(0)).toSeq == Seq(1, 3, 5, 7, 9))
+        |
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+    assertDoesNotContain("assertion failed", output)
+  }
 }

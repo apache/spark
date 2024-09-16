@@ -44,7 +44,7 @@ import org.apache.spark.util.Utils
  * @since 1.3.0
  */
 @Stable
-class UDFRegistration private[sql] (functionRegistry: FunctionRegistry)
+class UDFRegistration private[sql] (session: SparkSession, functionRegistry: FunctionRegistry)
   extends api.UDFRegistration
   with Logging {
   protected[sql] def registerPython(name: String, udf: UserDefinedPythonFunction): Unit = {
@@ -121,7 +121,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry)
    */
   private[sql] def registerJavaUDAF(name: String, className: String): Unit = {
     try {
-      val clazz = Utils.classForName[AnyRef](className)
+      val clazz = session.artifactManager.withResources {
+        Utils.classForName[AnyRef](className, noSparkClassLoader = true)
+      }
       if (!classOf[UserDefinedAggregateFunction].isAssignableFrom(clazz)) {
         throw QueryCompilationErrors
           .classDoesNotImplementUserDefinedAggregateFunctionError(className)
@@ -145,9 +147,11 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry)
    * @param returnDataType return type of udf. If it is null, spark would try to infer
    *                       via reflection.
    */
-  private[sql] def registerJava(name: String, className: String, returnDataType: DataType): Unit = {
+  def registerJava(name: String, className: String, returnDataType: DataType): Unit = {
     try {
-      val clazz = Utils.classForName[AnyRef](className)
+      val clazz = session.artifactManager.withResources {
+        Utils.classForName[AnyRef](className)
+      }
       val udfInterfaces = clazz.getGenericInterfaces
         .filter(_.isInstanceOf[ParameterizedType])
         .map(_.asInstanceOf[ParameterizedType])
