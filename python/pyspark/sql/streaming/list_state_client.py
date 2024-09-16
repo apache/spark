@@ -14,11 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Iterator, List, Union, cast, Tuple
+from typing import Any, Dict, Iterator, List, Union, cast, Tuple
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
-from pyspark.sql.types import Row, StructType, _parse_datatype_string
+from pyspark.sql.types import Row, StructType, TYPE_CHECKING, _parse_datatype_string
 from pyspark.errors import PySparkRuntimeError
+
+if TYPE_CHECKING:
+    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
 
 __all__ = ["ListStateClient"]
 
@@ -28,7 +31,7 @@ class ListStateClient:
         self._stateful_processor_api_client = stateful_processor_api_client
         # A dictionary to store the mapping between list state name and a tuple of pandas DataFrame
         # and the index of the last row that was read.
-        self.pandas_df_dict = {}
+        self.pandas_df_dict: Dict[str, Tuple["PandasDataFrameLike", int]] = {}
 
     def exists(self, state_name: str) -> bool:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
