@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -76,7 +75,6 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
   }
 
   test("test reserved properties") {
-    import SupportsNamespaces._
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     val ns = s"$catalog.$namespace"
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {

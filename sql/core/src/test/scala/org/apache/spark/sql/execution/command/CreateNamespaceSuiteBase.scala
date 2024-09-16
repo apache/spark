@@ -26,7 +26,7 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util, SupportsNamespaces}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, SupportsNamespaces}
 import org.apache.spark.sql.execution.command.DDLCommandTestUtils.V1_COMMAND_VERSION
 import org.apache.spark.sql.internal.SQLConf
 
@@ -108,7 +108,6 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   test("CreateNameSpace: reserved properties") {
-    import SupportsNamespaces._
     val ns = s"$catalog.$namespace"
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
       namespaceLegacyProperties.foreach { key =>
