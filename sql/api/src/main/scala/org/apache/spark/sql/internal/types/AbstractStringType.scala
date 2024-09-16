@@ -51,3 +51,14 @@ case object StringTypeBinaryLcase extends AbstractStringType {
 case object StringTypeAnyCollation extends AbstractStringType {
   override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[StringType]
 }
+
+/**
+ * Use StringTypeNonCSAICollation for expressions supporting all possible collation types
+ * except CS_AI collation types.
+ */
+case object StringTypeNonCSAICollation extends AbstractStringType {
+  override private[sql] def acceptsType(other: DataType): Boolean =
+    other.isInstanceOf[StringType] &&
+      (!other.asInstanceOf[StringType].typeName.contains("_AI") ||
+      other.asInstanceOf[StringType].typeName.contains("_CI"))
+}

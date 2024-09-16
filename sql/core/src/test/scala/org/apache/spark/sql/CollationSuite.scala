@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import scala.jdk.CollectionConverters.MapHasAsJava
+import scala.util.Try
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -1622,6 +1623,79 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           checkCacheTable("'a'")
         }
       }
+    }
+  }
+
+  test("Expressions not supporting CS_AI collators") {
+    val unsupportedExpressions: Seq[Any] = Seq(
+      "ltrim",
+      "rtrim",
+      "trim",
+      "startswith",
+      "endswith",
+      "locate",
+      "instr",
+      "str_to_map",
+      "contains",
+      "replace",
+      ("translate", "efg"),
+      ("split_part", "2"),
+      ("substring_index", "2"))
+
+    val unsupportedCollator = "unicode_ai"
+    val supportedCollators: Seq[String] = Seq(
+      "unicode",
+      "unicode_ci",
+      "unicode_ci_ai"
+    )
+
+    unsupportedExpressions.foreach {
+      case expression: String =>
+        val analysisException = intercept[AnalysisException] {
+          sql(s"select $expression('bcd' collate $unsupportedCollator, 'abc')").collect()
+        }
+        assert(analysisException.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+
+        // Tests that expression works properly with non-cs_ai collation
+        supportedCollators.foreach {
+          collator =>
+            val result = Try {
+              sql(s"select $expression('bcd' collate $collator, 'abc')").collect()
+            }
+            assert(result.isSuccess)
+        }
+
+      case (expression: String, parameter: String) =>
+        val analysisException = intercept[AnalysisException] {
+          sql(s"select $expression('bcd' collate $unsupportedCollator, 'abc', '$parameter')")
+            .collect()
+        }
+        assert(analysisException.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+
+        // Tests that expression works properly with non-cs_ai collation
+        supportedCollators.foreach {
+          collator =>
+            val result = Try {
+              sql(s"select $expression('bcd' collate $collator, 'abc', '$parameter')").collect()
+            }
+            assert(result.isSuccess)
+        }
+
+      case (expression: String, parameter: Integer) =>
+        val analysisException = intercept[AnalysisException] {
+          sql(s"select $expression('bcd' collate $unsupportedCollator, 'abc', $parameter)")
+            .collect()
+        }
+        assert(analysisException.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+
+        // Tests that expression works properly with non-cs_ai collation
+        supportedCollators.foreach {
+          collator =>
+            val result = Try {
+              sql(s"select $expression('bcd' collate $collator, 'abc', $parameter)").collect()
+            }
+            assert(result.isSuccess)
+        }
     }
   }
 
