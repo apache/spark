@@ -27,6 +27,7 @@ import org.apache.spark.annotation.Stable
  */
 @Stable
 abstract class RuntimeConfig {
+
   /**
    * Sets the given Spark runtime configuration property.
    *
@@ -55,8 +56,8 @@ abstract class RuntimeConfig {
   /**
    * Returns the value of Spark runtime configuration property for the given key.
    *
-   * @throws java.util.NoSuchElementException if the key is not set and does not have a default
-   *                                          value
+   * @throws java.util.NoSuchElementException
+   *   if the key is not set and does not have a default value
    * @since 2.0.0
    */
   @throws[NoSuchElementException]("if the key is not set")
@@ -91,12 +92,13 @@ abstract class RuntimeConfig {
   def unset(key: String): Unit
 
   /**
-   * Indicates whether the configuration property with the given key
-   * is modifiable in the current session.
+   * Indicates whether the configuration property with the given key is modifiable in the current
+   * session.
    *
-   * @return `true` if the configuration property is modifiable. For static SQL, Spark Core,
-   *         invalid (not existing) and other non-modifiable configuration properties,
-   *         the returned value is `false`.
+   * @return
+   *   `true` if the configuration property is modifiable. For static SQL, Spark Core, invalid
+   *   (not existing) and other non-modifiable configuration properties, the returned value is
+   *   `false`.
    * @since 2.4.0
    */
   def isModifiable(key: String): Boolean

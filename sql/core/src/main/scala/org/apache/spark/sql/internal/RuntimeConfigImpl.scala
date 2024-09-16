@@ -62,8 +62,11 @@ class RuntimeConfigImpl private[sql](val sqlConf: SQLConf = new SQLConf) extends
   }
 
   /** @inheritdoc */
-  def getOption(key: String): Option[String] =
-    Option(sqlConf.getConfString(key, null))
+  def getOption(key: String): Option[String] = {
+    try Option(get(key)) catch {
+      case _: NoSuchElementException => None
+    }
+  }
 
   /** @inheritdoc */
   def unset(key: String): Unit = {

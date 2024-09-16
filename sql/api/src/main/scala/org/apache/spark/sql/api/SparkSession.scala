@@ -62,8 +62,8 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    * Runtime configuration interface for Spark.
    *
    * This is the interface through which the user can get and set all Spark and Hadoop
-   * configurations that are relevant to Spark SQL. When getting the value of a config,
-   * this defaults to the value set in the underlying `SparkContext`, if any.
+   * configurations that are relevant to Spark SQL. When getting the value of a config, this
+   * defaults to the value set in the underlying `SparkContext`, if any.
    *
    * @since 2.0.0
    */
