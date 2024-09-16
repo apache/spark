@@ -17,7 +17,7 @@
 from enum import Enum
 import os
 import socket
-from typing import Any, Union, cast, Tuple
+from typing import Any, Union, Optional, cast, Tuple
 
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.types import StructType, _parse_datatype_string, Row
@@ -101,7 +101,9 @@ class StatefulProcessorApiClient:
             # TODO(SPARK-49233): Classify errors thrown by internal methods.
             raise PySparkRuntimeError(f"Error removing implicit key: " f"{response_message[1]}")
 
-    def get_value_state(self, state_name: str, schema: Union[StructType, str]) -> None:
+    def get_value_state(
+        self, state_name: str, schema: Union[StructType, str], ttl_duration_ms: Optional[int]
+    ) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
         if isinstance(schema, str):
@@ -110,6 +112,8 @@ class StatefulProcessorApiClient:
         state_call_command = stateMessage.StateCallCommand()
         state_call_command.stateName = state_name
         state_call_command.schema = schema.json()
+        if ttl_duration_ms is not None:
+            state_call_command.ttl.durationMs = ttl_duration_ms
         call = stateMessage.StatefulProcessorCall(getValueState=state_call_command)
         message = stateMessage.StateRequest(statefulProcessorCall=call)
 

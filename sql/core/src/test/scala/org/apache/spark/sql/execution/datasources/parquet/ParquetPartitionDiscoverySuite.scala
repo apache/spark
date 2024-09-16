@@ -968,7 +968,7 @@ abstract class ParquetPartitionDiscoverySuite
             PartitionValues(Seq("b"), Seq(TypedPartValue("1", IntegerType))))
         )
       ),
-      errorClass = "CONFLICTING_PARTITION_COLUMN_NAMES",
+      condition = "CONFLICTING_PARTITION_COLUMN_NAMES",
       parameters = Map(
         "distinctPartColLists" ->
           "\n\tPartition column name list #0: a\n\tPartition column name list #1: b\n",
@@ -985,7 +985,7 @@ abstract class ParquetPartitionDiscoverySuite
             PartitionValues(Seq("a"), Seq(TypedPartValue("1", IntegerType))))
         )
       ),
-      errorClass = "CONFLICTING_PARTITION_COLUMN_NAMES",
+      condition = "CONFLICTING_PARTITION_COLUMN_NAMES",
       parameters = Map(
         "distinctPartColLists" ->
           "\n\tPartition column name list #0: a\n",
@@ -1003,7 +1003,7 @@ abstract class ParquetPartitionDiscoverySuite
               Seq(TypedPartValue("1", IntegerType), TypedPartValue("foo", StringType))))
         )
       ),
-      errorClass = "CONFLICTING_PARTITION_COLUMN_NAMES",
+      condition = "CONFLICTING_PARTITION_COLUMN_NAMES",
       parameters = Map(
         "distinctPartColLists" ->
           "\n\tPartition column name list #0: a\n\tPartition column name list #1: a, b\n",

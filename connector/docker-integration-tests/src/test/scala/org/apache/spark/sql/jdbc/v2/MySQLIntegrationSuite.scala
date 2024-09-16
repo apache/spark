@@ -77,8 +77,19 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       s"""CREATE TABLE pattern_testing_table (
          |pattern_testing_col LONGTEXT
          |)
-                   """.stripMargin
+         |""".stripMargin
     ).executeUpdate()
+    connection.prepareStatement(
+      "CREATE TABLE datetime (name VARCHAR(32), date1 DATE, time1 TIMESTAMP)")
+      .executeUpdate()
+  }
+
+  override def dataPreparation(connection: Connection): Unit = {
+    super.dataPreparation(connection)
+    connection.prepareStatement("INSERT INTO datetime VALUES " +
+      "('amy', '2022-05-19', '2022-05-19 00:00:00')").executeUpdate()
+    connection.prepareStatement("INSERT INTO datetime VALUES " +
+      "('alex', '2022-05-18', '2022-05-18 00:00:00')").executeUpdate()
   }
 
   override def testUpdateColumnType(tbl: String): Unit = {
@@ -98,7 +109,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       exception = intercept[AnalysisException] {
         sql(sql1)
       },
-      errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
+      condition = "NOT_SUPPORTED_CHANGE_COLUMN",
       parameters = Map(
         "originType" -> "\"STRING\"",
         "newType" -> "\"INT\"",
@@ -131,7 +142,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       exception = intercept[SparkSQLFeatureNotSupportedException] {
         sql(s"ALTER TABLE $tbl ALTER COLUMN ID DROP NOT NULL")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2271")
+      condition = "_LEGACY_ERROR_TEMP_2271")
   }
 
   override def testCreateTableWithProperty(tbl: String): Unit = {
@@ -156,6 +167,79 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       sql(s"INSERT INTO $tableName SELECT rpad('hi', 65536, 'spark')")
       assert(sql(s"SELECT char_length(c1) from $tableName").head().get(0) === 65536)
     }
+  }
+
+  override def testDatetime(tbl: String): Unit = {
+    val df1 = sql(s"SELECT name FROM $tbl WHERE " +
+      "dayofyear(date1) > 100 AND dayofmonth(date1) > 10 ")
+    checkFilterPushed(df1)
+    val rows1 = df1.collect()
+    assert(rows1.length === 2)
+    assert(rows1(0).getString(0) === "amy")
+    assert(rows1(1).getString(0) === "alex")
+
+    val df2 = sql(s"SELECT name FROM $tbl WHERE year(date1) = 2022 AND quarter(date1) = 2")
+    checkFilterPushed(df2)
+    val rows2 = df2.collect()
+    assert(rows2.length === 2)
+    assert(rows2(0).getString(0) === "amy")
+    assert(rows2(1).getString(0) === "alex")
+
+    val df3 = sql(s"SELECT name FROM $tbl WHERE second(time1) = 0 AND month(date1) = 5")
+    checkFilterPushed(df3)
+    val rows3 = df3.collect()
+    assert(rows3.length === 2)
+    assert(rows3(0).getString(0) === "amy")
+    assert(rows3(1).getString(0) === "alex")
+
+    val df4 = sql(s"SELECT name FROM $tbl WHERE hour(time1) = 0 AND minute(time1) = 0")
+    checkFilterPushed(df4)
+    val rows4 = df4.collect()
+    assert(rows4.length === 2)
+    assert(rows4(0).getString(0) === "amy")
+    assert(rows4(1).getString(0) === "alex")
+
+    val df5 = sql(s"SELECT name FROM $tbl WHERE " +
+      "extract(WEEk from date1) > 10 AND extract(YEAROFWEEK from date1) = 2022")
+    checkFilterPushed(df5)
+    val rows5 = df5.collect()
+    assert(rows5.length === 2)
+    assert(rows5(0).getString(0) === "amy")
+    assert(rows5(1).getString(0) === "alex")
+
+    val df6 = sql(s"SELECT name FROM $tbl WHERE date_add(date1, 1) = date'2022-05-20' " +
+      "AND datediff(date1, '2022-05-10') > 0")
+    checkFilterPushed(df6)
+    val rows6 = df6.collect()
+    assert(rows6.length === 1)
+    assert(rows6(0).getString(0) === "amy")
+
+    val df7 = sql(s"SELECT name FROM $tbl WHERE weekday(date1) = 2")
+    checkFilterPushed(df7)
+    val rows7 = df7.collect()
+    assert(rows7.length === 1)
+    assert(rows7(0).getString(0) === "alex")
+
+    val df8 = sql(s"SELECT name FROM $tbl WHERE dayofweek(date1) = 4")
+    checkFilterPushed(df8)
+    val rows8 = df8.collect()
+    assert(rows8.length === 1)
+    assert(rows8(0).getString(0) === "alex")
+
+    val df9 = sql(s"SELECT name FROM $tbl WHERE " +
+      "dayofyear(date1) > 100 order by dayofyear(date1) limit 1")
+    checkFilterPushed(df9)
+    val rows9 = df9.collect()
+    assert(rows9.length === 1)
+    assert(rows9(0).getString(0) === "alex")
+
+    // MySQL does not support
+    val df10 = sql(s"SELECT name FROM $tbl WHERE trunc(date1, 'week') = date'2022-05-16'")
+    checkFilterPushed(df10, false)
+    val rows10 = df10.collect()
+    assert(rows10.length === 2)
+    assert(rows10(0).getString(0) === "amy")
+    assert(rows10(1).getString(0) === "alex")
   }
 }
 

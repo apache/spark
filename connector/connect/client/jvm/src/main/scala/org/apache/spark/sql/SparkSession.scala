@@ -222,12 +222,7 @@ class SparkSession private[sql] (
 
   lazy val streams: StreamingQueryManager = new StreamingQueryManager(this)
 
-  /**
-   * Interface through which the user may create, drop, alter or query underlying databases,
-   * tables, functions etc.
-   *
-   * @since 3.5.0
-   */
+  /** @inheritdoc */
   lazy val catalog: Catalog = new CatalogImpl(this)
 
   /** @inheritdoc */

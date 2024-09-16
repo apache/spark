@@ -1843,6 +1843,13 @@ object SQLConf {
     .intConf
     .createWithDefault(10000)
 
+  val DATAFRAME_TRANSPOSE_MAX_VALUES = buildConf("spark.sql.transposeMaxValues")
+    .doc("When doing a transpose without specifying values for the index column this is" +
+      " the maximum number of values that will be transposed without error.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(500)
+
   val RUN_SQL_ON_FILES = buildConf("spark.sql.runSQLOnFiles")
     .internal()
     .doc("When true, we could use `datasource`.`path` as table in SQL query.")
@@ -4982,6 +4989,15 @@ object SQLConf {
       .stringConf
       .createWithDefault("versionAsOf")
 
+  val OPERATOR_PIPE_SYNTAX_ENABLED =
+    buildConf("spark.sql.operatorPipeSyntaxEnabled")
+      .doc("If true, enable operator pipe syntax for Apache Spark SQL. This uses the operator " +
+        "pipe marker |> to indicate separation between clauses of SQL in a manner that describes " +
+        "the sequence of steps that the query performs in a composable fashion.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
   val LEGACY_PERCENTILE_DISC_CALCULATION = buildConf("spark.sql.legacy.percentileDiscCalculation")
     .internal()
     .doc("If true, the old bogus percentile_disc calculation is used. The old calculation " +
@@ -5711,6 +5727,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
 
   def dataFramePivotMaxValues: Int = getConf(DATAFRAME_PIVOT_MAX_VALUES)
+
+  def dataFrameTransposeMaxValues: Int = getConf(DATAFRAME_TRANSPOSE_MAX_VALUES)
 
   def runSQLonFile: Boolean = getConf(RUN_SQL_ON_FILES)
 

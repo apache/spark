@@ -133,7 +133,7 @@ class FileBasedDataSourceSuite extends QueryTest
           exception = intercept[AnalysisException] {
             spark.emptyDataFrame.write.format(format).save(outputPath.toString)
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1142",
+          condition = "_LEGACY_ERROR_TEMP_1142",
           parameters = Map.empty
         )
       }
@@ -150,7 +150,7 @@ class FileBasedDataSourceSuite extends QueryTest
           exception = intercept[AnalysisException] {
             df.write.format(format).save(outputPath.toString)
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1142",
+          condition = "_LEGACY_ERROR_TEMP_1142",
           parameters = Map.empty
         )
       }
@@ -250,7 +250,7 @@ class FileBasedDataSourceSuite extends QueryTest
               exception = intercept[SparkException] {
                 testIgnoreMissingFiles(options)
               },
-              errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
+              condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
               parameters = Map("path" -> ".*")
             )
           }
@@ -282,7 +282,7 @@ class FileBasedDataSourceSuite extends QueryTest
         exception = intercept[AnalysisException] {
           Seq(1).toDF().write.text(textDir)
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`value`",
           "columnType" -> "\"INT\"",
@@ -293,7 +293,7 @@ class FileBasedDataSourceSuite extends QueryTest
         exception = intercept[AnalysisException] {
           Seq(1.2).toDF().write.text(textDir)
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`value`",
           "columnType" -> "\"DOUBLE\"",
@@ -304,7 +304,7 @@ class FileBasedDataSourceSuite extends QueryTest
         exception = intercept[AnalysisException] {
           Seq(true).toDF().write.text(textDir)
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`value`",
           "columnType" -> "\"BOOLEAN\"",
@@ -315,7 +315,7 @@ class FileBasedDataSourceSuite extends QueryTest
         exception = intercept[AnalysisException] {
           Seq(1).toDF("a").selectExpr("struct(a)").write.text(textDir)
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`struct(a)`",
           "columnType" -> "\"STRUCT<a: INT NOT NULL>\"",
@@ -326,7 +326,7 @@ class FileBasedDataSourceSuite extends QueryTest
         exception = intercept[AnalysisException] {
           Seq((Map("Tesla" -> 3))).toDF("cars").write.mode("overwrite").text(textDir)
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`cars`",
           "columnType" -> "\"MAP<STRING, INT>\"",
@@ -338,7 +338,7 @@ class FileBasedDataSourceSuite extends QueryTest
           Seq((Array("Tesla", "Chevy", "Ford"))).toDF("brands")
             .write.mode("overwrite").text(textDir)
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`brands`",
           "columnType" -> "\"ARRAY<STRING>\"",
@@ -352,7 +352,7 @@ class FileBasedDataSourceSuite extends QueryTest
           val schema = StructType(StructField("a", IntegerType, true) :: Nil)
           spark.read.schema(schema).text(textDir).collect()
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`a`",
           "columnType" -> "\"INT\"",
@@ -364,7 +364,7 @@ class FileBasedDataSourceSuite extends QueryTest
           val schema = StructType(StructField("a", DoubleType, true) :: Nil)
           spark.read.schema(schema).text(textDir).collect()
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`a`",
           "columnType" -> "\"DOUBLE\"",
@@ -376,7 +376,7 @@ class FileBasedDataSourceSuite extends QueryTest
           val schema = StructType(StructField("a", BooleanType, true) :: Nil)
           spark.read.schema(schema).text(textDir).collect()
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`a`",
           "columnType" -> "\"BOOLEAN\"",
@@ -397,7 +397,7 @@ class FileBasedDataSourceSuite extends QueryTest
         exception = intercept[AnalysisException] {
           Seq((1, "Tesla")).toDF("a", "b").selectExpr("struct(a, b)").write.csv(csvDir)
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`struct(a, b)`",
           "columnType" -> "\"STRUCT<a: INT NOT NULL, b: STRING>\"",
@@ -410,7 +410,7 @@ class FileBasedDataSourceSuite extends QueryTest
           spark.range(1).write.mode("overwrite").csv(csvDir)
           spark.read.schema(schema).csv(csvDir).collect()
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`a`",
           "columnType" -> "\"STRUCT<b: INT>\"",
@@ -421,7 +421,7 @@ class FileBasedDataSourceSuite extends QueryTest
         exception = intercept[AnalysisException] {
           Seq((1, Map("Tesla" -> 3))).toDF("id", "cars").write.mode("overwrite").csv(csvDir)
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`cars`",
           "columnType" -> "\"MAP<STRING, INT>\"",
@@ -434,7 +434,7 @@ class FileBasedDataSourceSuite extends QueryTest
           spark.range(1).write.mode("overwrite").csv(csvDir)
           spark.read.schema(schema).csv(csvDir).collect()
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`a`",
           "columnType" -> "\"MAP<INT, INT>\"",
@@ -446,7 +446,7 @@ class FileBasedDataSourceSuite extends QueryTest
           Seq((1, Array("Tesla", "Chevy", "Ford"))).toDF("id", "brands")
             .write.mode("overwrite").csv(csvDir)
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`brands`",
           "columnType" -> "\"ARRAY<STRING>\"",
@@ -459,7 +459,7 @@ class FileBasedDataSourceSuite extends QueryTest
           spark.range(1).write.mode("overwrite").csv(csvDir)
           spark.read.schema(schema).csv(csvDir).collect()
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`a`",
           "columnType" -> "\"ARRAY<INT>\"",
@@ -471,7 +471,7 @@ class FileBasedDataSourceSuite extends QueryTest
           Seq((1, new TestUDT.MyDenseVector(Array(0.25, 2.25, 4.25)))).toDF("id", "vectors")
             .write.mode("overwrite").csv(csvDir)
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`vectors`",
           "columnType" -> "UDT(\"ARRAY<DOUBLE>\")",
@@ -484,7 +484,7 @@ class FileBasedDataSourceSuite extends QueryTest
           spark.range(1).write.mode("overwrite").csv(csvDir)
           spark.read.schema(schema).csv(csvDir).collect()
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`a`",
           "columnType" -> "UDT(\"ARRAY<DOUBLE>\")",
@@ -512,7 +512,7 @@ class FileBasedDataSourceSuite extends QueryTest
               exception = intercept[AnalysisException] {
                 sql("select interval 1 days").write.format(format).mode("overwrite").save(tempDir)
               },
-              errorClass = "_LEGACY_ERROR_TEMP_1136",
+              condition = "_LEGACY_ERROR_TEMP_1136",
               parameters = Map.empty
             )
           }
@@ -529,7 +529,7 @@ class FileBasedDataSourceSuite extends QueryTest
                 spark.range(1).write.format(format).mode("overwrite").save(tempDir)
                 spark.read.schema(schema).format(format).load(tempDir).collect()
               },
-              errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+              condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
               parameters = Map(
                 "columnName" -> "`a`",
                 "columnType" -> "\"INTERVAL\"",
@@ -542,7 +542,7 @@ class FileBasedDataSourceSuite extends QueryTest
                 spark.range(1).write.format(format).mode("overwrite").save(tempDir)
                 spark.read.schema(schema).format(format).load(tempDir).collect()
               },
-              errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+              condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
               parameters = Map(
                 "columnName" -> "`a`",
                 "columnType" -> "UDT(\"INTERVAL\")",
@@ -579,7 +579,7 @@ class FileBasedDataSourceSuite extends QueryTest
               exception = intercept[AnalysisException] {
                 sql("select null").write.format(format).mode("overwrite").save(tempDir)
               },
-              errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+              condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
               parameters = Map(
                 "columnName" -> "`NULL`",
                 "columnType" -> "\"VOID\"",
@@ -592,7 +592,7 @@ class FileBasedDataSourceSuite extends QueryTest
                 spark.udf.register("testType", () => new NullData())
                 sql("select testType()").write.format(format).mode("overwrite").save(tempDir)
               },
-              errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+              condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
               parameters = Map(
                 "columnName" -> "`testType()`",
                 "columnType" -> "UDT(\"VOID\")",
@@ -607,7 +607,7 @@ class FileBasedDataSourceSuite extends QueryTest
                 spark.range(1).write.format(format).mode("overwrite").save(tempDir)
                 spark.read.schema(schema).format(format).load(tempDir).collect()
               },
-              errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+              condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
               parameters = Map(
                 "columnName" -> "`a`",
                 "columnType" -> "\"VOID\"",
@@ -621,7 +621,7 @@ class FileBasedDataSourceSuite extends QueryTest
                 spark.range(1).write.format(format).mode("overwrite").save(tempDir)
                 spark.read.schema(schema).format(format).load(tempDir).collect()
               },
-              errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+              condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
               parameters = Map(
                 "columnName" -> "`a`",
                 "columnType" -> "UDT(\"VOID\")",
@@ -657,14 +657,14 @@ class FileBasedDataSourceSuite extends QueryTest
               exception = intercept[SparkException] {
                 sql(s"select b from $tableName").collect()
               }.getCause.asInstanceOf[SparkRuntimeException],
-              errorClass = "_LEGACY_ERROR_TEMP_2093",
+              condition = "_LEGACY_ERROR_TEMP_2093",
               parameters = Map("requiredFieldName" -> "b", "matchedOrcFields" -> "[b, B]")
             )
             checkError(
               exception = intercept[SparkException] {
                 sql(s"select B from $tableName").collect()
               }.getCause.asInstanceOf[SparkRuntimeException],
-              errorClass = "_LEGACY_ERROR_TEMP_2093",
+              condition = "_LEGACY_ERROR_TEMP_2093",
               parameters = Map("requiredFieldName" -> "b", "matchedOrcFields" -> "[b, B]")
             )
           }

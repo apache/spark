@@ -32,8 +32,8 @@ import org.apache.spark.sql.types.StructType
 /**
  * The entry point to programming Spark with the Dataset and DataFrame API.
  *
- * In environments that this has been created upfront (e.g. REPL, notebooks), use the builder
- * to get an existing session:
+ * In environments that this has been created upfront (e.g. REPL, notebooks), use the builder to
+ * get an existing session:
  *
  * {{{
  *   SparkSession.builder().getOrCreate()
@@ -50,6 +50,7 @@ import org.apache.spark.sql.types.StructType
  * }}}
  */
 abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with Closeable {
+
   /**
    * The version of Spark on which this application is running.
    *
@@ -83,21 +84,23 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    *       DataTypes.StringType);
    * }}}
    *
-   * @note The user-defined functions must be deterministic. Due to optimization,
-   *       duplicate invocations may be eliminated or the function may even be invoked more times
-   *       than it is present in the query.
+   * @note
+   *   The user-defined functions must be deterministic. Due to optimization, duplicate
+   *   invocations may be eliminated or the function may even be invoked more times than it is
+   *   present in the query.
    * @since 2.0.0
    */
   def udf: UDFRegistration
 
   /**
-   * Start a new session with isolated SQL configurations, temporary tables, registered
-   * functions are isolated, but sharing the underlying `SparkContext` and cached data.
+   * Start a new session with isolated SQL configurations, temporary tables, registered functions
+   * are isolated, but sharing the underlying `SparkContext` and cached data.
    *
-   * @note Other than the `SparkContext`, all shared state is initialized lazily.
-   *       This method will force the initialization of the shared state to ensure that parent
-   *       and child sessions are set up with the same shared state. If the underlying catalog
-   *       implementation is Hive, this will initialize the metastore, which may take some time.
+   * @note
+   *   Other than the `SparkContext`, all shared state is initialized lazily. This method will
+   *   force the initialization of the shared state to ensure that parent and child sessions are
+   *   set up with the same shared state. If the underlying catalog implementation is Hive, this
+   *   will initialize the metastore, which may take some time.
    * @since 2.0.0
    */
   def newSession(): SparkSession[DS]
@@ -119,14 +122,13 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    *
    * @since 2.0.0
    */
-  def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DS[Row]
+  def createDataFrame[A <: Product: TypeTag](data: Seq[A]): DS[Row]
 
   /**
-   * :: DeveloperApi ::
-   * Creates a `DataFrame` from a `java.util.List` containing [[org.apache.spark.sql.Row]]s using
-   * the given schema.It is important to make sure that the structure of every
-   * [[org.apache.spark.sql.Row]] of the provided List matches the provided schema. Otherwise,
-   * there will be runtime exception.
+   * :: DeveloperApi :: Creates a `DataFrame` from a `java.util.List` containing
+   * [[org.apache.spark.sql.Row]]s using the given schema.It is important to make sure that the
+   * structure of every [[org.apache.spark.sql.Row]] of the provided List matches the provided
+   * schema. Otherwise, there will be runtime exception.
    *
    * @since 2.0.0
    */
@@ -136,8 +138,8 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
   /**
    * Applies a schema to a List of Java Beans.
    *
-   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
-   * SELECT * queries will return the columns in an undefined order.
+   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean, SELECT * queries
+   * will return the columns in an undefined order.
    *
    * @since 1.6.0
    */
@@ -156,11 +158,11 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
 
   /**
    * Creates a [[Dataset]] from a local Seq of data of a given type. This method requires an
-   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
-   * that is generally created automatically through implicits from a `SparkSession`, or can be
-   * created explicitly by calling static methods on `Encoders`.
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL
+   * representation) that is generally created automatically through implicits from a
+   * `SparkSession`, or can be created explicitly by calling static methods on `Encoders`.
    *
-   * == Example ==
+   * ==Example==
    *
    * {{{
    *
@@ -185,11 +187,11 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
 
   /**
    * Creates a [[Dataset]] from a `java.util.List` of a given type. This method requires an
-   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
-   * that is generally created automatically through implicits from a `SparkSession`, or can be
-   * created explicitly by calling static methods on `Encoders`.
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL
+   * representation) that is generally created automatically through implicits from a
+   * `SparkSession`, or can be created explicitly by calling static methods on `Encoders`.
    *
-   * == Java Example ==
+   * ==Java Example==
    *
    * {{{
    *     List<String> data = Arrays.asList("hello", "world");
@@ -201,33 +203,32 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
   def createDataset[T: Encoder](data: util.List[T]): DS[T]
 
   /**
-   * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
-   * in a range from 0 to `end` (exclusive) with step value 1.
+   * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements in a
+   * range from 0 to `end` (exclusive) with step value 1.
    *
    * @since 2.0.0
    */
   def range(end: Long): DS[lang.Long]
 
   /**
-   * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
-   * in a range from `start` to `end` (exclusive) with step value 1.
+   * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements in a
+   * range from `start` to `end` (exclusive) with step value 1.
    *
    * @since 2.0.0
    */
   def range(start: Long, end: Long): DS[lang.Long]
 
   /**
-   * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
-   * in a range from `start` to `end` (exclusive) with a step value.
+   * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements in a
+   * range from `start` to `end` (exclusive) with a step value.
    *
    * @since 2.0.0
    */
   def range(start: Long, end: Long, step: Long): DS[lang.Long]
 
   /**
-   * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
-   * in a range from `start` to `end` (exclusive) with a step value, with partition number
-   * specified.
+   * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements in a
+   * range from `start` to `end` (exclusive) with a step value, with partition number specified.
    *
    * @since 2.0.0
    */
@@ -238,16 +239,24 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    * ------------------------- */
 
   /**
-   * Returns the specified table/view as a `DataFrame`. If it's a table, it must support batch
-   * reading and the returned DataFrame is the batch scan query plan of this table. If it's a view,
-   * the returned DataFrame is simply the query plan of the view, which can either be a batch or
-   * streaming query plan.
+   * Interface through which the user may create, drop, alter or query underlying databases,
+   * tables, functions etc.
    *
-   * @param tableName is either a qualified or unqualified name that designates a table or view.
-   *                  If a database is specified, it identifies the table/view from the database.
-   *                  Otherwise, it first attempts to find a temporary view with the given name
-   *                  and then match the table/view from the current database.
-   *                  Note that, the global temporary view database is also valid here.
+   * @since 2.0.0
+   */
+  def catalog: Catalog[DS]
+
+  /**
+   * Returns the specified table/view as a `DataFrame`. If it's a table, it must support batch
+   * reading and the returned DataFrame is the batch scan query plan of this table. If it's a
+   * view, the returned DataFrame is simply the query plan of the view, which can either be a
+   * batch or streaming query plan.
+   *
+   * @param tableName
+   *   is either a qualified or unqualified name that designates a table or view. If a database is
+   *   specified, it identifies the table/view from the database. Otherwise, it first attempts to
+   *   find a temporary view with the given name and then match the table/view from the current
+   *   database. Note that, the global temporary view database is also valid here.
    * @since 2.0.0
    */
   def table(tableName: String): DS[Row]
@@ -257,58 +266,54 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    * ----------------- */
 
   /**
-   * Executes a SQL query substituting positional parameters by the given arguments,
-   * returning the result as a `DataFrame`.
-   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
+   * Executes a SQL query substituting positional parameters by the given arguments, returning the
+   * result as a `DataFrame`. This API eagerly runs DDL/DML commands, but not for SELECT queries.
    *
-   * @param sqlText A SQL statement with positional parameters to execute.
-   * @param args    An array of Java/Scala objects that can be converted to
-   *                SQL literal expressions. See
-   *                <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
-   *                Supported Data Types</a> for supported value types in Scala/Java.
-   *                For example, 1, "Steven", LocalDate.of(2023, 4, 2).
-   *                A value can be also a `Column` of a literal or collection constructor functions
-   *                such as `map()`, `array()`, `struct()`, in that case it is taken as is.
+   * @param sqlText
+   *   A SQL statement with positional parameters to execute.
+   * @param args
+   *   An array of Java/Scala objects that can be converted to SQL literal expressions. See <a
+   *   href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html"> Supported Data
+   *   Types</a> for supported value types in Scala/Java. For example, 1, "Steven",
+   *   LocalDate.of(2023, 4, 2). A value can be also a `Column` of a literal or collection
+   *   constructor functions such as `map()`, `array()`, `struct()`, in that case it is taken as
+   *   is.
    * @since 3.5.0
    */
   @Experimental
   def sql(sqlText: String, args: Array[_]): DS[Row]
 
   /**
-   * Executes a SQL query substituting named parameters by the given arguments,
-   * returning the result as a `DataFrame`.
-   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
+   * Executes a SQL query substituting named parameters by the given arguments, returning the
+   * result as a `DataFrame`. This API eagerly runs DDL/DML commands, but not for SELECT queries.
    *
-   * @param sqlText A SQL statement with named parameters to execute.
-   * @param args    A map of parameter names to Java/Scala objects that can be converted to
-   *                SQL literal expressions. See
-   *                <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
-   *                Supported Data Types</a> for supported value types in Scala/Java.
-   *                For example, map keys: "rank", "name", "birthdate";
-   *                map values: 1, "Steven", LocalDate.of(2023, 4, 2).
-   *                Map value can be also a `Column` of a literal or collection constructor
-   *                functions such as `map()`, `array()`, `struct()`, in that case it is taken
-   *                as is.
+   * @param sqlText
+   *   A SQL statement with named parameters to execute.
+   * @param args
+   *   A map of parameter names to Java/Scala objects that can be converted to SQL literal
+   *   expressions. See <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
+   *   Supported Data Types</a> for supported value types in Scala/Java. For example, map keys:
+   *   "rank", "name", "birthdate"; map values: 1, "Steven", LocalDate.of(2023, 4, 2). Map value
+   *   can be also a `Column` of a literal or collection constructor functions such as `map()`,
+   *   `array()`, `struct()`, in that case it is taken as is.
    * @since 3.4.0
    */
   @Experimental
   def sql(sqlText: String, args: Map[String, Any]): DS[Row]
 
   /**
-   * Executes a SQL query substituting named parameters by the given arguments,
-   * returning the result as a `DataFrame`.
-   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
+   * Executes a SQL query substituting named parameters by the given arguments, returning the
+   * result as a `DataFrame`. This API eagerly runs DDL/DML commands, but not for SELECT queries.
    *
-   * @param sqlText A SQL statement with named parameters to execute.
-   * @param args    A map of parameter names to Java/Scala objects that can be converted to
-   *                SQL literal expressions. See
-   *                <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
-   *                Supported Data Types</a> for supported value types in Scala/Java.
-   *                For example, map keys: "rank", "name", "birthdate";
-   *                map values: 1, "Steven", LocalDate.of(2023, 4, 2).
-   *                Map value can be also a `Column` of a literal or collection constructor
-   *                functions such as `map()`, `array()`, `struct()`, in that case it is taken
-   *                as is.
+   * @param sqlText
+   *   A SQL statement with named parameters to execute.
+   * @param args
+   *   A map of parameter names to Java/Scala objects that can be converted to SQL literal
+   *   expressions. See <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
+   *   Supported Data Types</a> for supported value types in Scala/Java. For example, map keys:
+   *   "rank", "name", "birthdate"; map values: 1, "Steven", LocalDate.of(2023, 4, 2). Map value
+   *   can be also a `Column` of a literal or collection constructor functions such as `map()`,
+   *   `array()`, `struct()`, in that case it is taken as is.
    * @since 3.4.0
    */
   @Experimental
@@ -317,8 +322,8 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
   }
 
   /**
-   * Executes a SQL query using Spark, returning the result as a `DataFrame`.
-   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
+   * Executes a SQL query using Spark, returning the result as a `DataFrame`. This API eagerly
+   * runs DDL/DML commands, but not for SELECT queries.
    *
    * @since 2.0.0
    */

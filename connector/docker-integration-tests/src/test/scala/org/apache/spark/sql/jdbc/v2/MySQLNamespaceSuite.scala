@@ -62,7 +62,7 @@ class MySQLNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespac
       exception = intercept[SparkSQLFeatureNotSupportedException] {
         catalog.createNamespace(Array("foo"), Map("comment" -> "test comment").asJava)
       },
-      errorClass = "UNSUPPORTED_FEATURE.COMMENT_NAMESPACE",
+      condition = "UNSUPPORTED_FEATURE.COMMENT_NAMESPACE",
       parameters = Map("namespace" -> "`foo`")
     )
     assert(catalog.namespaceExists(Array("foo")) === false)
@@ -74,7 +74,7 @@ class MySQLNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespac
           Array("foo"),
           NamespaceChange.setProperty("comment", "comment for foo"))
       },
-      errorClass = "UNSUPPORTED_FEATURE.COMMENT_NAMESPACE",
+      condition = "UNSUPPORTED_FEATURE.COMMENT_NAMESPACE",
       parameters = Map("namespace" -> "`foo`")
     )
 
@@ -82,7 +82,7 @@ class MySQLNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespac
       exception = intercept[SparkSQLFeatureNotSupportedException] {
         catalog.alterNamespace(Array("foo"), NamespaceChange.removeProperty("comment"))
       },
-      errorClass = "UNSUPPORTED_FEATURE.REMOVE_NAMESPACE_COMMENT",
+      condition = "UNSUPPORTED_FEATURE.REMOVE_NAMESPACE_COMMENT",
       parameters = Map("namespace" -> "`foo`")
     )
 
@@ -90,7 +90,7 @@ class MySQLNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespac
       exception = intercept[SparkSQLFeatureNotSupportedException] {
         catalog.dropNamespace(Array("foo"), cascade = false)
       },
-      errorClass = "UNSUPPORTED_FEATURE.DROP_NAMESPACE",
+      condition = "UNSUPPORTED_FEATURE.DROP_NAMESPACE",
       parameters = Map("namespace" -> "`foo`")
     )
     catalog.dropNamespace(Array("foo"), cascade = true)

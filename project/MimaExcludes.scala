@@ -148,6 +148,13 @@ object MimaExcludes {
     // SPARK-49425: Create a shared DataFrameWriter interface.
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrameWriter"),
 
+    // SPARK-49284: Shared Catalog interface.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.catalog.CatalogMetadata"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.catalog.Column"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.catalog.Database"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.catalog.Function"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.catalog.Table"),
+
     // SPARK-49426: Shared DataFrameWriterV2
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CreateTableWriter"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrameWriterV2"),
@@ -156,6 +163,22 @@ object MimaExcludes {
     // SPARK-49413: Create a shared RuntimeConfig interface.
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RuntimeConfig"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RuntimeConfig$"),
+
+    // SPARK-49287: Shared Streaming interfaces
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.scheduler.SparkListenerEvent"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ForeachWriter"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.SourceProgress"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.SourceProgress$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StateOperatorProgress"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StateOperatorProgress$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener$Event"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener$QueryIdleEvent"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener$QueryProgressEvent"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener$QueryStartedEvent"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener$QueryTerminatedEvent"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryStatus"),
   )
 
   // Default exclude rules

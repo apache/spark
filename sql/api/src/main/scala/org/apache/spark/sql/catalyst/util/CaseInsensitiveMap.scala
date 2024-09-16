@@ -23,12 +23,12 @@ import java.util.Locale
  * Builds a map in which keys are case insensitive. Input map can be accessed for cases where
  * case-sensitive information is required. The primary constructor is marked private to avoid
  * nested case-insensitive map creation, otherwise the keys in the original map will become
- * case-insensitive in this scenario.
- * Note: CaseInsensitiveMap is serializable. However, after transformation, e.g. `filterKeys()`,
- *       it may become not serializable.
+ * case-insensitive in this scenario. Note: CaseInsensitiveMap is serializable. However, after
+ * transformation, e.g. `filterKeys()`, it may become not serializable.
  */
-class CaseInsensitiveMap[T] private (val originalMap: Map[String, T]) extends Map[String, T]
-  with Serializable {
+class CaseInsensitiveMap[T] private (val originalMap: Map[String, T])
+    extends Map[String, T]
+    with Serializable {
 
   val keyLowerCasedMap = originalMap.map(kv => kv.copy(_1 = kv._1.toLowerCase(Locale.ROOT)))
 
@@ -62,4 +62,3 @@ object CaseInsensitiveMap {
     case _ => new CaseInsensitiveMap(params)
   }
 }
-

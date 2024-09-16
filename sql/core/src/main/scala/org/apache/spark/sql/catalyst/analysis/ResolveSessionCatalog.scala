@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, DelegatingCatalogExtension, LookupCatalog, SupportsNamespaces, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command._
@@ -284,10 +284,20 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case AnalyzeColumn(ResolvedV1TableOrViewIdentifier(ident), columnNames, allColumns) =>
       AnalyzeColumnCommand(ident, columnNames, allColumns)
 
-    case RepairTable(ResolvedV1TableIdentifier(ident), addPartitions, dropPartitions) =>
+    // V2 catalog doesn't support REPAIR TABLE yet, we must use v1 command here.
+    case RepairTable(
+        ResolvedV1TableIdentifierInSessionCatalog(ident),
+        addPartitions,
+        dropPartitions) =>
       RepairTableCommand(ident, addPartitions, dropPartitions)
 
-    case LoadData(ResolvedV1TableIdentifier(ident), path, isLocal, isOverwrite, partition) =>
+    // V2 catalog doesn't support LOAD DATA yet, we must use v1 command here.
+    case LoadData(
+        ResolvedV1TableIdentifierInSessionCatalog(ident),
+        path,
+        isLocal,
+        isOverwrite,
+        partition) =>
       LoadDataCommand(
         ident,
         path,
@@ -336,7 +346,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
       ShowColumnsCommand(db, v1TableName, output)
 
-    case RecoverPartitions(ResolvedV1TableIdentifier(ident)) =>
+    // V2 catalog doesn't support RECOVER PARTITIONS yet, we must use v1 command here.
+    case RecoverPartitions(ResolvedV1TableIdentifierInSessionCatalog(ident)) =>
       RepairTableCommand(
         ident,
         enableAddPartitions = true,
@@ -364,8 +375,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         purge,
         retainData = false)
 
+    // V2 catalog doesn't support setting serde properties yet, we must use v1 command here.
     case SetTableSerDeProperties(
-        ResolvedV1TableIdentifier(ident),
+        ResolvedV1TableIdentifierInSessionCatalog(ident),
         serdeClassName,
         serdeProperties,
         partitionSpec) =>
@@ -380,10 +392,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // V2 catalog doesn't support setting partition location yet, we must use v1 command here.
     case SetTableLocation(
-        ResolvedTable(catalog, _, t: V1Table, _),
+        ResolvedV1TableIdentifierInSessionCatalog(ident),
         Some(partitionSpec),
-        location) if isSessionCatalog(catalog) =>
-      AlterTableSetLocationCommand(t.v1Table.identifier, Some(partitionSpec), location)
+        location) =>
+      AlterTableSetLocationCommand(ident, Some(partitionSpec), location)
 
     case AlterViewAs(ResolvedViewIdentifier(ident), originalText, query) =>
       AlterViewAsCommand(ident, originalText, query)
@@ -600,6 +612,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     }
   }
 
+  object ResolvedV1TableIdentifierInSessionCatalog {
+    def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
+      case ResolvedTable(catalog, _, t: V1Table, _) if isSessionCatalog(catalog) =>
+        Some(t.catalogTable.identifier)
+      case _ => None
+    }
+  }
+
   object ResolvedV1TableOrViewIdentifier {
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
       case ResolvedV1TableIdentifier(ident) => Some(ident)
@@ -684,7 +704,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   }
 
   private def supportsV1Command(catalog: CatalogPlugin): Boolean = {
-    isSessionCatalog(catalog) &&
-      SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).isEmpty
+    isSessionCatalog(catalog) && (
+      SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).isEmpty ||
+        catalog.isInstanceOf[DelegatingCatalogExtension])
   }
 }

@@ -594,7 +594,7 @@ abstract class OrcQueryTest extends OrcTest {
         exception = intercept[AnalysisException] {
           testAllCorruptFiles()
         },
-        errorClass = "UNABLE_TO_INFER_SCHEMA",
+        condition = "UNABLE_TO_INFER_SCHEMA",
         parameters = Map("format" -> "ORC")
       )
       testAllCorruptFilesWithoutSchemaInfer()
@@ -619,7 +619,7 @@ abstract class OrcQueryTest extends OrcTest {
         exception = intercept[SparkException] {
           testAllCorruptFiles()
         },
-        errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+        condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
         parameters = Map("path" -> "file:.*")
       )
       val e4 = intercept[SparkException] {

@@ -90,7 +90,7 @@ class EncoderResolutionSuite extends PlanTest {
     val attrs = Seq($"arr".array(StringType))
     checkError(
       exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-      errorClass = "CANNOT_UP_CAST_DATATYPE",
+      condition = "CANNOT_UP_CAST_DATATYPE",
       parameters = Map("expression" -> "array element",
         "sourceType" -> "\"STRING\"", "targetType" -> "\"BIGINT\"",
         "details" -> (
@@ -125,7 +125,7 @@ class EncoderResolutionSuite extends PlanTest {
     val attrs = Seq($"arr".int)
     checkError(
       exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-      errorClass = "UNSUPPORTED_DESERIALIZER.DATA_TYPE_MISMATCH",
+      condition = "UNSUPPORTED_DESERIALIZER.DATA_TYPE_MISMATCH",
       parameters = Map("desiredType" -> "\"ARRAY\"", "dataType" -> "\"INT\""))
   }
 
@@ -134,7 +134,7 @@ class EncoderResolutionSuite extends PlanTest {
     val attrs = Seq($"arr".array(new StructType().add("c", "int")))
     checkError(
       exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-      errorClass = "FIELD_NOT_FOUND",
+      condition = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`a`", "fields" -> "`c`"))
   }
 
@@ -145,7 +145,7 @@ class EncoderResolutionSuite extends PlanTest {
       val attrs = Seq($"nestedArr".array(new StructType().add("arr", "int")))
       checkError(
         exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-        errorClass = "UNSUPPORTED_DESERIALIZER.DATA_TYPE_MISMATCH",
+        condition = "UNSUPPORTED_DESERIALIZER.DATA_TYPE_MISMATCH",
         parameters = Map("desiredType" -> "\"ARRAY\"", "dataType" -> "\"INT\""))
     }
 
@@ -154,7 +154,7 @@ class EncoderResolutionSuite extends PlanTest {
         .add("arr", ArrayType(new StructType().add("c", "int")))))
       checkError(
         exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-        errorClass = "FIELD_NOT_FOUND",
+        condition = "FIELD_NOT_FOUND",
         parameters = Map("fieldName" -> "`a`", "fields" -> "`c`"))
     }
   }
@@ -183,7 +183,7 @@ class EncoderResolutionSuite extends PlanTest {
       val attrs = Seq($"a".string, $"b".long, $"c".int)
       checkError(
         exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-        errorClass = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
+        condition = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
         parameters = Map("schema" -> "\"STRUCT<a: STRING, b: BIGINT, c: INT>\"",
           "ordinal" -> "2"))
     }
@@ -192,7 +192,7 @@ class EncoderResolutionSuite extends PlanTest {
       val attrs = Seq($"a".string)
       checkError(
         exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-        errorClass = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
+        condition = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
         parameters = Map("schema" -> "\"STRUCT<a: STRING>\"",
           "ordinal" -> "2"))
     }
@@ -205,7 +205,7 @@ class EncoderResolutionSuite extends PlanTest {
       val attrs = Seq($"a".string, $"b".struct($"x".long, $"y".string, $"z".int))
       checkError(
         exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-        errorClass = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
+        condition = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
         parameters = Map("schema" -> "\"STRUCT<x: BIGINT, y: STRING, z: INT>\"",
           "ordinal" -> "2"))
     }
@@ -214,7 +214,7 @@ class EncoderResolutionSuite extends PlanTest {
       val attrs = Seq($"a".string, $"b".struct($"x".long))
       checkError(
         exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-        errorClass = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
+        condition = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
         parameters = Map("schema" -> "\"STRUCT<x: BIGINT>\"",
           "ordinal" -> "2"))
     }
@@ -233,7 +233,7 @@ class EncoderResolutionSuite extends PlanTest {
       .foreach { attr =>
         val attrs = Seq(attr)
         checkError(exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-          errorClass = "CANNOT_UP_CAST_DATATYPE",
+          condition = "CANNOT_UP_CAST_DATATYPE",
           parameters = Map("expression" -> "a",
             "sourceType" -> ("\"" + attr.dataType.sql + "\""), "targetType" -> "\"STRING\"",
             "details" -> (
@@ -250,7 +250,7 @@ class EncoderResolutionSuite extends PlanTest {
       ExpressionEncoder[StringIntClass]().resolveAndBind(Seq($"a".string, $"b".long))
     }
     checkError(exception = e1,
-      errorClass = "CANNOT_UP_CAST_DATATYPE",
+      condition = "CANNOT_UP_CAST_DATATYPE",
       parameters = Map("expression" -> "b",
         "sourceType" -> ("\"BIGINT\""), "targetType" -> "\"INT\"",
         "details" -> (
@@ -267,7 +267,7 @@ class EncoderResolutionSuite extends PlanTest {
     }
 
     checkError(exception = e2,
-      errorClass = "CANNOT_UP_CAST_DATATYPE",
+      condition = "CANNOT_UP_CAST_DATATYPE",
       parameters = Map("expression" -> "b.`b`",
         "sourceType" -> ("\"DECIMAL(38,18)\""), "targetType" -> "\"BIGINT\"",
         "details" -> (

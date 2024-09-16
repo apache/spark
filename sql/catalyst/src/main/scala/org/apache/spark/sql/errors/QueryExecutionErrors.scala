@@ -79,8 +79,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "value" -> toSQLValue(t, from),
         "sourceType" -> toSQLType(from),
-        "targetType" -> toSQLType(to),
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "targetType" -> toSQLType(to)),
       context = Array.empty,
       summary = "")
   }
@@ -124,8 +123,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "expression" -> toSQLValue(s, StringType),
         "sourceType" -> toSQLType(StringType),
-        "targetType" -> toSQLType(BooleanType),
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "targetType" -> toSQLType(BooleanType)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -139,8 +137,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "expression" -> toSQLValue(s, StringType),
         "sourceType" -> toSQLType(StringType),
-        "targetType" -> toSQLType(to),
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "targetType" -> toSQLType(to)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -385,18 +382,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def mergeUnsupportedByWindowFunctionError(funcName: String): Throwable = {
     SparkException.internalError(
       s"The aggregate window function ${toSQLId(funcName)} does not support merging.")
-  }
-
-  def dataTypeUnexpectedError(dataType: DataType): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2011",
-      messageParameters = Map("dataType" -> dataType.catalogString))
-  }
-
-  def typeUnsupportedError(dataType: DataType): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2011",
-      messageParameters = Map("dataType" -> dataType.toString()))
   }
 
   def negativeValueUnexpectedError(
@@ -1308,10 +1293,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkRuntimeException(
       errorClass = "MALFORMED_CSV_RECORD",
       messageParameters = Map("badRecord" -> badRecord))
-  }
-
-  def elementsOfTupleExceedLimitError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2150")
   }
 
   def expressionDecodingError(e: Exception, expressions: Seq[Expression]): SparkRuntimeException = {

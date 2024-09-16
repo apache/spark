@@ -472,12 +472,7 @@ class SparkSession private(
    |  Catalog-related methods  |
    * ------------------------- */
 
-  /**
-   * Interface through which the user may create, drop, alter or query underlying
-   * databases, tables, functions etc.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @transient lazy val catalog: Catalog = new CatalogImpl(self)
 
   /** @inheritdoc */

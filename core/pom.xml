@@ -32,7 +32,6 @@
 
   <properties>
     <sbt.project.name>core</sbt.project.name>
-    <opentelemetry.exclude>**/OpenTelemetry*.scala</opentelemetry.exclude>
   </properties>
   
   <dependencies>
@@ -512,15 +511,6 @@
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     <plugins>
       <plugin>
-        <groupId>net.alchim31.maven</groupId>
-        <artifactId>scala-maven-plugin</artifactId>
-        <configuration>
-          <excludes>
-            <exclude>${opentelemetry.exclude}</exclude>
-          </excludes>
-        </configuration>
-      </plugin>
-      <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-dependency-plugin</artifactId>
         <executions>
@@ -568,6 +558,7 @@
               <include>org.eclipse.jetty:jetty-util</include>
               <include>org.eclipse.jetty:jetty-server</include>
               <include>com.google.guava:guava</include>
+              <include>com.google.guava:failureaccess</include>
               <include>com.google.protobuf:*</include>
               <!-- While shading new dependencies, please also update LICENSE/NOTICE files in the
                 core/src/main/resources/META-INF if necessary -->
@@ -626,36 +617,6 @@
       <properties>
         <jjwt.deps.scope>compile</jjwt.deps.scope>
       </properties>
-    </profile>
-    <profile>
-      <id>opentelemetry</id>
-      <properties>
-        <opentelemetry.exclude></opentelemetry.exclude>
-      </properties>
-      <dependencies>
-        <dependency>
-          <groupId>io.opentelemetry</groupId>
-          <artifactId>opentelemetry-exporter-otlp</artifactId>
-          <version>1.41.0</version>
-          <exclusions>
-            <exclusion>
-              <groupId>io.opentelemetry</groupId>
-              <artifactId>opentelemetry-sdk-extension-autoconfigure-spi</artifactId>
-            </exclusion>
-          </exclusions>
-        </dependency>
-        <dependency>
-          <groupId>io.opentelemetry</groupId>
-          <artifactId>opentelemetry-sdk</artifactId>
-          <version>1.41.0</version>
-        </dependency>
-        <dependency>
-          <groupId>com.squareup.okhttp3</groupId>
-          <artifactId>okhttp</artifactId>
-          <version>3.12.12</version>
-          <scope>test</scope>
-        </dependency>
-      </dependencies>
     </profile>
     <profile>
       <id>sparkr</id>
