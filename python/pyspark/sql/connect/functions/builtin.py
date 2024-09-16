@@ -1008,6 +1008,16 @@ def unhex(col: "ColumnOrName") -> Column:
 unhex.__doc__ = pysparkfuncs.unhex.__doc__
 
 
+def uniform(min: "ColumnOrName", max: "ColumnOrName", seed: Optional["ColumnOrName"]) -> Column:
+    if seed is None:
+        return _invoke_function_over_columns("uniform", min, max)
+    else:
+        return _invoke_function_over_columns("uniform", min, max, seed)
+
+
+uniform.__doc__ = pysparkfuncs.uniform.__doc__
+
+
 def approxCountDistinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
     warnings.warn("Deprecated in 3.4, use approx_count_distinct instead.", FutureWarning)
     return approx_count_distinct(col, rsd)
@@ -2569,6 +2579,16 @@ def regexp_like(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 
 
 regexp_like.__doc__ = pysparkfuncs.regexp_like.__doc__
+
+
+def randstr(length: "ColumnOrName", seed: Optional["ColumnOrName"]) -> Column:
+    if seed is None:
+        return _invoke_function_over_columns("randstr", length)
+    else:
+        return _invoke_function_over_columns("randstr", length, seed)
+
+
+randstr.__doc__ = pysparkfuncs.randstr.__doc__
 
 
 def regexp_count(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:

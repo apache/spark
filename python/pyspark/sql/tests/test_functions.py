@@ -29,7 +29,7 @@ from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeExce
 from pyspark.sql import Row, Window, functions as F, types
 from pyspark.sql.avro.functions import from_avro, to_avro
 from pyspark.sql.column import Column
-from pyspark.sql.functions.builtin import nullifzero, zeroifnull
+from pyspark.sql.functions.builtin import isnull, nullifzero, randstr, uniform, zeroifnull
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.testing.utils import have_numpy
 
@@ -1602,6 +1602,15 @@ class FunctionsTestsMixin:
         df = self.spark.createDataFrame([(None,), (1,)], ["a"])
         result = df.select(zeroifnull(df.a).alias("r")).collect()
         self.assertEqual([Row(r=0), Row(r=1)], result)
+
+    def test_randstr_uniform(self):
+        df = self.spark.createDataFrame([(0,), (1,)], ["a"])
+        result = df.select(randstr(5).alias("x")).select(isnull("x")).collect()
+        self.assertEqual([Row(x=False)], result)
+
+        df = self.spark.createDataFrame([(None,), (1,)], ["a"])
+        result = df.select(uniform(0, 10).alias("x")).select(isnull("x")).collect()
+        self.assertEqual([Row(x=False)], result)
 
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):
