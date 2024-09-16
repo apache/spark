@@ -25,8 +25,8 @@ import scala.jdk.CollectionConverters._
 
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
-import org.apache.spark.{LocalSparkContext, SparkContext, SparkException, SparkFunSuite}
 
+import org.apache.spark.{LocalSparkContext, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd, SparkListenerJobStart}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.tags.ExtendedSQLTest
