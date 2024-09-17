@@ -19,26 +19,23 @@ package org.apache.spark.sql
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
-
 import scala.collection.immutable.HashSet
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.collection.mutable
 import scala.util.Random
-
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
-
 import org.apache.spark.{SparkConf, SparkRuntimeException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
-import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
+import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, InternalRow, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoders, ExpressionEncoder, OuterScopes}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.BoxedIntEncoder
-import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRowWithSchema}
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericInternalRow, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.trees.DataFrameQueryContext
 import org.apache.spark.sql.catalyst.util.sideBySide
@@ -52,6 +49,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
 
@@ -2809,6 +2807,35 @@ class DatasetSuite extends QueryTest
     validateParamBeanDatasetWithInDirectSerializableBound(Seq(msg1, msg2), expectedData)
   }
 
+  test("CDPD-73233. test bean class with  generic parameter bound of UDTType") {
+    // just create encoder
+    UDTRegistration.register(classOf[TestUDT].getName, classOf[TestUDTType].getName)
+    val enc = Encoders.bean(classOf[UDTBean[TestUDT]])
+    enc.schema
+    val msg1 = new UDTBean[TestUDT]()
+    msg1.setMessage(new TestUDTImplSub(1, "a"))
+    val msg2 = new UDTBean[TestUDT]()
+    msg2.setMessage(new TestUDTImplSub(2, "b"))
+    val b1 = new UDTBean[TestUDT]
+    b1.setMessage(new TestUDTImpl(1, "a"))
+
+    val b2 = new UDTBean[TestUDT]
+    b2.setMessage(new TestUDTImpl(2, "b"))
+
+    val expectedData = mutable.Set[TestUDT](new TestUDTImpl(1, "a"), new TestUDTImpl(2, "b"))
+    val ds = spark.createDataset(Seq(msg1, msg2))(enc)
+    val df = ds.toDF()
+    val schema = df.schema
+    df.printSchema()
+    assertResult(1)(schema.size)
+    assertResult("message")(schema.head.name)
+    assertResult(new TestUDTType())(schema.head.dataType)
+    val numMessages = ds.collect()
+    assertResult(2)(numMessages.length)
+    numMessages.foreach(m => expectedData.remove(m.getMessage))
+    assert(expectedData.isEmpty)
+  }
+
   private def validateParamBeanDatasetWithDirectSerializableBound[T <: java.io.Serializable](
       data: Seq[MessageWrapper[T]],
       expectedData: mutable.Set[T]): Unit = {
@@ -3005,3 +3032,68 @@ class BigDecimalMessageWrapper[T <: BigDecimalExtender] extends java.io.Serializ
 class BigDecimalExtender(doub: Double) extends java.math.BigDecimal(doub * 2)
 
 class DerivedBigDecimalExtender (doub: Double) extends BigDecimalExtender(doub)
+
+trait TestUDT extends Serializable {
+  def intField: Int
+  def stringField: String
+}
+
+class TestUDTImpl(var intF: Int, var stringF: String) extends TestUDT {
+  def this() = this(0, "")
+  override def intField: Int = intF
+  override def stringField: String = stringF
+
+  override def hashCode(): Int = intF.hashCode() + stringF.hashCode
+
+  override def equals(obj: Any): Boolean = obj match {
+    case b: TestUDT => b.intField == this.intField && b.stringField == this.stringField
+
+    case _ => false
+  }
+}
+
+class TestUDTImplSub(var iF: Int, var sF: String) extends TestUDTImpl(iF, sF) {
+  def this() = this(0, "")
+}
+
+class UDTBean[T <: TestUDT] extends java.io.Serializable {
+  private var message: T = _
+
+  def getMessage: T = message
+
+  def setMessage(message: T): Unit = {
+    this.message = message
+  }
+
+  override def hashCode(): Int = message.hashCode()
+
+  override def equals(obj: Any): Boolean = obj match {
+    case b: UDTBean[_] => b.message == this.message
+
+    case _ => false
+  }
+}
+
+class TestUDTType extends UserDefinedType[TestUDT] {
+
+  override def sqlType: StructType = {
+    StructType(Seq(
+      StructField("intField", IntegerType, nullable = false),
+      StructField("stringField", StringType, nullable = false)))
+  }
+
+  override def serialize(obj: TestUDT): InternalRow = {
+    new GenericInternalRow(Array(obj.intField, UTF8String.fromString(obj.stringField)))
+  }
+
+  override def deserialize(datum: Any): TestUDT = {
+    datum match {
+      case row: InternalRow =>
+        val intF = row.getInt(0)
+        val strF = row.getString(1)
+        new TestUDTImpl(intF, strF)
+    }
+  }
+
+  override def userClass: Class[TestUDT] = classOf[TestUDT]
+}

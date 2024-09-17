@@ -84,7 +84,7 @@ object JavaTypeInference {
           UDTEncoder(udt, udt.getClass)
 
         case t =>
-          throw ExecutionErrors.cannotFindEncoderForTypeError(t.toString)
+          throw ExecutionErrors.cannotFindEncoderForTypeError(t.getTypeName)
       }
     } else {
       t match {
@@ -178,7 +178,7 @@ object JavaTypeInference {
 
                     case Failure(_) => None
                   }
-              }.getOrElse(throw ExecutionErrors.cannotFindEncoderForTypeError(t.toString))
+              }.getOrElse(throw ExecutionErrors.cannotFindEncoderForTypeError(t.getTypeName))
           }
 
         case pt: ParameterizedType =>
@@ -209,7 +209,7 @@ object JavaTypeInference {
                 BinaryEncoder,
                 JavaSerializationCodec)
             } else {
-              throw ExecutionErrors.cannotFindEncoderForTypeError(t.toString)
+              throw ExecutionErrors.cannotFindEncoderForTypeError(t.getTypeName)
             }
           } else {
             // add type variables from inheritance hierarchy of the class
@@ -238,7 +238,7 @@ object JavaTypeInference {
           }
 
         case t =>
-            throw ExecutionErrors.cannotFindEncoderForTypeError(t.toString)
+            throw ExecutionErrors.cannotFindEncoderForTypeError(t.getTypeName)
         }
     }
 
@@ -257,10 +257,10 @@ object JavaTypeInference {
       case s: SparkUnsupportedOperationException
         if s.getErrorClass == ExecutionErrors.ENCODER_NOT_FOUND_ERROR =>
          s.getMessageParameters.asScala.get(ExecutionErrors.TYPE_NAME) match {
-            case Some(clzzName) if clzzName.indexOf(classOf[java.io.Serializable].getTypeName) != -1
+            case Some(clzzName) if clzzName == classOf[java.io.Serializable].getTypeName
             => Option(JavaSerializationCodec -> classOf[java.io.Serializable])
 
-            case Some(clzzName) if clzzName.indexOf(classOf[KryoSerializable].getTypeName) != -1 =>
+            case Some(clzzName) if clzzName == classOf[KryoSerializable].getTypeName =>
               Option(KryoSerializationCodec -> classOf[KryoSerializable])
 
             case _ => None
