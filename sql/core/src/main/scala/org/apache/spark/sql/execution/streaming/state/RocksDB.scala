@@ -175,6 +175,7 @@ class RocksDB(
   @volatile private var lastCommittedCheckpointId: Option[String] = None
   @volatile protected var loadedCheckpointId: Option[String] = None
   @volatile protected var sessionCheckpointId: Option[String] = None
+  @volatile protected var versionToUniqueIdLineage: Array[(Long, Option[String])] = Array.empty
 
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
@@ -334,9 +335,11 @@ class RocksDB(
             version, useColumnFamilies, checkpointUniqueId)
           // currLineage contains the version -> uniqueId mapping from the previous snapshot file
           // to current version's changelog file
-          currLineage = Some(changelogReader.lineage.get.map(x => (x._1, Option(x._2))))
-          println("wei== currLineage in load(): ")
-          currLineage.foreach(x => println("wei== " + x.mkString(", ")))
+          versionToUniqueIdLineage = changelogReader.lineage.get.map {
+            case (version, uniqueId) => (version, Option(uniqueId))
+          }
+          println("wei== versionToUniqueIdLineage in load(): ")
+          versionToUniqueIdLineage.foreach(x => println("wei== " + x._1, x._2))
         }
 
         val (latestSnapshotVersion, latestSnapshotUniqueId) = {
@@ -346,6 +349,7 @@ class RocksDB(
           } else if (latestSnapshotVersionsAndUniqueIds.length == 1) {
             latestSnapshotVersionsAndUniqueIds.head
           } else {
+            // TODO: need test this scenario
             logInfo("Multiple snapshots found for the version. " +
               "Loading the latest snapshot from lineage.")
             println(s"wei== version: $version, latestSnapshotVersionsAndUniqueIds: " + latestSnapshotVersionsAndUniqueIds.mkString(", "))
@@ -364,6 +368,8 @@ class RocksDB(
         // Initialize maxVersion upon successful load from DFS
         fileManager.setMaxSeenVersion(version)
 
+        println("wei== in load() loaded version = latestSnapshotVersion = " + latestSnapshotVersion)
+
         setInitialCFInfo()
         metadata.columnFamilyMapping.foreach { mapping =>
           colFamilyNameToIdMap.putAll(mapping.asJava)
@@ -375,6 +381,7 @@ class RocksDB(
         // TODO: update loadedUniqueId?
         // reset last snapshot version
         if (lastSnapshotVersion > latestSnapshotVersion) {
+          println("wei == lastSnapshotVersion > latestSnapshotVersion, lastSnapshotVersion = " + lastSnapshotVersion + ", latestSnapshotVersion = " + latestSnapshotVersion)
           // discard any newer snapshots
           synchronized {
             if (latestSnapshot.isDefined) {
@@ -439,9 +446,8 @@ class RocksDB(
       // (version_uniqueId.zip) are source of truth.
       // They don't need to store lineage up to the previous version.
       if (checkpointFormatVersion >= 2) {
-        val lineage = (currLineage.getOrElse(Array()) ++ Array((version + 1, sessionCheckpointId)))
-          .map(x => (x._1, x._2.get))
-
+        val lineage: Array[(Long, String)] = versionToUniqueIdLineage.map(x => (x._1, x._2.get)) ++
+          Array((version + 1, sessionCheckpointId.get))
         changelogWriter.get.writeLineage(lineage)
       }
     }
@@ -529,7 +535,7 @@ class RocksDB(
       endVersion: Long,
       checkpointUniqueIdLineage: Option[Array[(Long, Option[String])]] = None): Unit = {
 
-    println("wei== replayChangelog(), endVersion: " + endVersion + ", checkpointUniqueIdLineage: " + checkpointUniqueIdLineage.mkString(", "))
+    println("wei== replayChangelog(), endVersion: " + endVersion)
     checkpointUniqueIdLineage.foreach(x => println("wei== checkpointUniqueIdLineage: " + x.mkString(", ")))
 
     val versionsAndUniqueIds = checkpointUniqueIdLineage match {
@@ -769,6 +775,7 @@ class RocksDB(
                 maxColumnFamilyId.get().toShort,
                 sessionCheckpointId))
             lastSnapshotVersion = newVersion
+            versionToUniqueIdLineage :+ (newVersion, sessionCheckpointId)
           }
         }
       }
@@ -866,6 +873,9 @@ class RocksDB(
           uniqueId)) =>
         try {
           println("wei== uploadSnapshot(), version: " + version + ", uniqueId: " + uniqueId)
+          println("wei== uploadSnapshot(), before filtering uniqueID Lineage: " + versionToUniqueIdLineage.mkString(", "))
+          versionToUniqueIdLineage = versionToUniqueIdLineage.filter(_._1 > version)
+          println("wei== uploadSnapshot(), after filtering uniqueID Lineage: " + versionToUniqueIdLineage.mkString(", "))
           val uploadTime = timeTakenMs {
             fileManager.saveCheckpointToDfs(
               localDir,
@@ -904,8 +914,11 @@ class RocksDB(
     changelogWriter.foreach(_.abort())
     // Make sure changelogWriter gets recreated next time.
     changelogWriter = None
+    LastCommitBasedCheckpointId = None
+    lastCommittedCheckpointId = None
+    loadedCheckpointId = None
+    sessionCheckpointId = None
     release(RollbackStore)
-    // TODO: roll back id?
     logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
   }
 
