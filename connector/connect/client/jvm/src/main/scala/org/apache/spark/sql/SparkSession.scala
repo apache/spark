@@ -41,7 +41,7 @@ import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, Spar
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.{CatalogImpl, RuntimeConfigImpl, SessionCleaner, SqlApiConf}
+import org.apache.spark.sql.internal.{CatalogImpl, ConnectRuntimeConfig, SessionCleaner, SqlApiConf}
 import org.apache.spark.sql.internal.ColumnNodeToProtoConverter.{toExpr, toTypedExpr}
 import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.streaming.StreamingQueryManager
@@ -89,7 +89,7 @@ class SparkSession private[sql] (
   }
 
   /** @inheritdoc */
-  val conf: RuntimeConfig = new RuntimeConfigImpl(client)
+  val conf: RuntimeConfig = new ConnectRuntimeConfig(client)
 
   /** @inheritdoc */
   @transient
