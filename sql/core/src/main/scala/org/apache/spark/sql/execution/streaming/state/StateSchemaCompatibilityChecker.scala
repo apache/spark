@@ -173,7 +173,7 @@ class StateSchemaCompatibilityChecker(
 
     if (existingStateSchemaList.isEmpty) {
       // write the schema file if it doesn't exist
-      createSchemaFile(newStateSchemaList, stateSchemaVersion)
+      createSchemaFile(newStateSchemaList.sortBy(_.colFamilyName), stateSchemaVersion)
       true
     } else {
       // validate if the new schema is compatible with the existing schema
