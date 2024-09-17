@@ -513,26 +513,27 @@ class PandasGroupedOpsMixin:
             )
 
             if timeMode == "processingtime":
-                expiry_list: list[(any, int)] = statefulProcessorApiClient.get_expiry_timers(batch_timestamp)
+                expiry_list_iter = statefulProcessorApiClient.get_expiry_timers_iterator(batch_timestamp)
             elif timeMode == "eventtime":
-                expiry_list: list[(any, int)] = statefulProcessorApiClient.get_expiry_timers(watermark_timestamp)
+                expiry_list_iter = statefulProcessorApiClient.get_expiry_timers_iterator(watermark_timestamp)
             else:
-                expiry_list = []
+                expiry_list_iter = []
 
             result_iter_list = []
             # process with valid expiry time info and with empty input rows,
             # only timer related rows will be emitted
-            for key_obj, expiry_timestamp in expiry_list:
-                if timeMode == "processingtime" and expiry_timestamp < batch_timestamp:
-                    result_iter_list.append(statefulProcessor.handleInputRows(
-                        (key_obj,), iter([]),
-                        TimerValues(batch_timestamp, watermark_timestamp),
-                        ExpiredTimerInfo(True, expiry_timestamp)))
-                elif timeMode == "eventtime" and expiry_timestamp < watermark_timestamp:
-                    result_iter_list.append(statefulProcessor.handleInputRows(
-                        (key_obj,), iter([]),
-                        TimerValues(batch_timestamp, watermark_timestamp),
-                        ExpiredTimerInfo(True, expiry_timestamp)))
+            for expiry_list in expiry_list_iter:
+                for key_obj, expiry_timestamp in expiry_list:
+                    if timeMode == "processingtime" and expiry_timestamp < batch_timestamp:
+                        result_iter_list.append(statefulProcessor.handleInputRows(
+                            (key_obj,), iter([]),
+                            TimerValues(batch_timestamp, watermark_timestamp),
+                            ExpiredTimerInfo(True, expiry_timestamp)))
+                    elif timeMode == "eventtime" and expiry_timestamp < watermark_timestamp:
+                        result_iter_list.append(statefulProcessor.handleInputRows(
+                            (key_obj,), iter([]),
+                            TimerValues(batch_timestamp, watermark_timestamp),
+                            ExpiredTimerInfo(True, expiry_timestamp)))
 
             # TODO(SPARK-49603) set the handle state in the lazily initialized iterator
 

@@ -77,6 +77,8 @@ class TransformWithStateInPandasStateServer(
       ExpressionEncoder.Deserializer[Row])]()
   }
 
+  private var expiryTimestampIter: Option[Iterator[(Any, Long)]] = None
+
   def run(): Unit = {
     val listeningSocket = stateServerSocket.accept()
     inputStream = new DataInputStream(
@@ -156,16 +158,19 @@ class TransformWithStateInPandasStateServer(
       case TimerRequest.MethodCase.EXPIRYTIMERREQUEST =>
         val expiryRequest = message.getExpiryTimerRequest()
         val expiryTimestamp = expiryRequest.getExpiryTimestampMs
-        val iter = statefulProcessorHandle.getExpiredTimersWithKeyRow(expiryTimestamp)
-        if (iter == null || !iter.hasNext) {
-          // avoid sending over empty batch
+        if (!expiryTimestampIter.isDefined) {
+          expiryTimestampIter =
+            Option(statefulProcessorHandle.getExpiredTimersWithKeyRow(expiryTimestamp))
+        }
+        if (expiryTimestampIter.get == null || !expiryTimestampIter.get.hasNext) {
+          // iterator is exhausted, signal the end of iterator on python client
           sendResponse(1)
         } else {
           sendResponse(0)
           val outputSchema = new StructType()
             .add("key", groupingKeySchema)
             .add(StructField("timestamp", LongType))
-          sendIteratorAsArrowBatches(iter, outputSchema) { data =>
+          sendIteratorAsArrowBatches(expiryTimestampIter.get, outputSchema) { data =>
             InternalRow(data._1, data._2)
           }
         }
