@@ -1566,6 +1566,11 @@ class ClientE2ETestSuite
     val result = df.select(trim(col("col"), " ").as("trimmed_col")).collect()
     assert(result sameElements Array(Row("a"), Row("b"), Row("c")))
   }
+
+  test("SPARK-49673: new batch size, multiple batches") {
+    val maxBatchSize = spark.conf.get("spark.connect.grpc.arrow.maxBatchSize").dropRight(1).toInt
+    assert(spark.range(maxBatchSize).collect().length == maxBatchSize)
+  }
 }
 
 private[sql] case class ClassData(a: String, b: Int)
