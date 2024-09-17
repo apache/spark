@@ -19,12 +19,16 @@ package org.apache.spark.sql.catalyst.plans
 
 import scala.collection.mutable
 
+import com.google.common.base.Objects
+
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExprId}
 
 trait UnionEquality [PlanType <: QueryPlan[PlanType]] {
   self: PlanType =>
 
-  private lazy val positionAgnosticHash = this.children.toSet.hashCode()
+  // because union legs can have repeats, avoiding  this.children.toSet.hashCode
+  private lazy val positionAgnosticHash =
+    Objects.hashCode(this.children.map(_.hashCode()).sorted: _*)
 
   // for now should be used only for unionAll. Union distinct may not have size check
   def positionAgnosticEquals(that: PlanType): Boolean = {
