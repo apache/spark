@@ -186,6 +186,29 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("check difference betweeen SR_AI and SR_Latn_AI collations") {
+    // scalastyle:off nonascii
+    Seq(
+      ("c", "ć"),
+      ("c", "č"),
+      ("ć", "č"),
+      ("C", "Ć"),
+      ("C", "Č"),
+      ("Ć", "Č"),
+      ("s", "š"),
+      ("S", "Š"),
+      ("z", "ž"),
+      ("Z", "Ž")
+    ).foreach {
+      case (c1, c2) =>
+        // SR_Latn_AI
+        checkAnswer(sql(s"SELECT '$c1' = '$c2' COLLATE SR_Latn_AI"), Row(false))
+        // SR_AI
+        checkAnswer(sql(s"SELECT '$c1' = '$c2' COLLATE SR_AI"), Row(true))
+    }
+    // scalastyle:on nonascii
+  }
+
   test("equality check respects collation") {
     Seq(
       ("utf8_binary", "aaa", "AAA", false),
