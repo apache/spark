@@ -37,14 +37,13 @@ import org.apache.spark.util.SparkClassUtils
  * both [[java.sql.Date]] and [[java.time.LocalDate]] are allowed. Deserialization is never
  * lenient; it will always produce instance of the external type.
  */
-trait AgnosticEncoder[T] extends Encoder[T] with ToAgnosticEncoder[T] {
+trait AgnosticEncoder[T] extends Encoder[T] {
   def isPrimitive: Boolean
   def nullable: Boolean = !isPrimitive
   def dataType: DataType
   override def schema: StructType = StructType(StructField("value", dataType, nullable) :: Nil)
   def lenientSerialization: Boolean = false
   def isStruct: Boolean = false
-  override def encoder: AgnosticEncoder[T] = this
 }
 
 /**
@@ -56,6 +55,7 @@ trait ToAgnosticEncoder[T] {
 
 object AgnosticEncoders {
   def agnosticEncoderFor[T: Encoder]: AgnosticEncoder[T] = implicitly[Encoder[T]] match {
+    case a: AgnosticEncoder[T] => a
     case e: ToAgnosticEncoder[T @unchecked] => e.encoder
     case other => throw ExecutionErrors.invalidAgnosticEncoderError(other)
   }
