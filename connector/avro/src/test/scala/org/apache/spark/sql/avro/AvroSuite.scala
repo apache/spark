@@ -2320,6 +2320,46 @@ abstract class AvroSuite
     }
   }
 
+  test("Translate recursive schema - union - 2 non-null fields") {
+    val avroSchema = """
+     |{
+     |  "type": "record",
+     |  "name": "TreeNode",
+     |  "fields": [
+     |    {
+     |      "name": "name",
+     |      "type": "string"
+     |    },
+     |    {
+     |      "name": "value",
+     |      "type": [
+     |        "long"
+     |      ]
+     |    },
+     |    {
+     |      "name": "children",
+     |      "type": [
+     |        "null",
+     |        {
+     |          "type": "array",
+     |          "items": "TreeNode"
+     |        }
+     |      ],
+     |      "default": null
+     |    }
+     |  ]
+     |}
+    """.stripMargin
+    val nonRecursiveFields = new StructType().add("name", StringType, nullable = false)
+      .add("value", LongType, nullable = false)
+    var expectedSchema = nonRecursiveFields
+    for (i <- 1 to 5) {
+      checkSparkSchemaEquals(avroSchema, expectedSchema, i)
+      expectedSchema = nonRecursiveFields.add("children",
+        new ArrayType(expectedSchema, false), nullable = true)
+    }
+  }
+
   test("Translate recursive schema - record") {
     val avroSchema = """
       |{
