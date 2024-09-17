@@ -409,6 +409,30 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(nvl2(col("b"), col("a"), col("c"))), Seq(Row(null)))
   }
 
+  test("randstr function") {
+    withTable("t") {
+      sql("create table t(col int not null) using csv")
+      sql("insert into t values (0)")
+      val df = sql("select col from t")
+      checkAnswer(
+        df.select(randstr(lit(5), lit(0)).alias("x")).select(isnull(col("x"))),
+        Seq(Row(false)))
+    }
+    // TODO: add some error cases
+  }
+
+  test("uniform function") {
+    withTable("t") {
+      sql("create table t(col int not null) using csv")
+      sql("insert into t values (0)")
+      val df = sql("select col from t")
+      checkAnswer(
+        df.select(uniform(lit(0), lit(10), lit(0)).alias("x")).select(isnull(col("x"))),
+        Seq(Row(false)))
+    }
+    // TODO: add some error cases
+  }
+
   test("zeroifnull function") {
     withTable("t") {
       // Here we exercise a non-nullable, non-foldable column.
