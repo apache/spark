@@ -358,6 +358,8 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("TaskMetrics backward compatibility") {
     // "Executor Deserialize CPU Time" and "Executor CPU Time" were introduced in Spark 2.1.0
     // "Peak Execution Memory" was introduced in Spark 3.0.0
+    // "Peak On Heap Execution Memory" and "Peak Off Heap Execution Memory" were introduced in
+    // Spark 3.5.0
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0, hasHadoopInput = false, hasOutput = true)
     metrics.setExecutorDeserializeCpuTime(100L)
     metrics.setExecutorCpuTime(100L)
@@ -367,6 +369,8 @@ class JsonProtocolSuite extends SparkFunSuite {
       .removeField("Executor Deserialize CPU Time")
       .removeField("Executor CPU Time")
       .removeField("Peak Execution Memory")
+      .removeField("Peak On Heap Execution Memory")
+      .removeField("Peak Off Heap Execution Memory")
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
     assert(newMetrics.executorDeserializeCpuTime == 0)
     assert(newMetrics.executorCpuTime == 0)
