@@ -417,22 +417,18 @@ object LogicalPlanIntegrity {
   }
 
   def validateSchemaOutput(previousPlan: LogicalPlan, currentPlan: LogicalPlan): Option[String] = {
-    if (SqlApiConf.get.caseSensitiveAnalysis) {
-      if (!DataTypeUtils.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
-        Some(s"The plan output schema has changed from ${previousPlan.schema.sql} to " +
-          currentPlan.schema.sql + s". The previous plan: ${previousPlan.treeString}\nThe new " +
-          "plan:\n" + currentPlan.treeString)
-      } else {
-        None
-      }
+    val isValid = if (SqlApiConf.get.caseSensitiveAnalysis) {
+      DataTypeUtils.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)
     } else {
-      if (!DataTypeUtils.equalsIgnoreCaseAndNullability(previousPlan.schema, currentPlan.schema)) {
-        Some(s"The plan output schema has changed from ${previousPlan.schema.sql} to " +
+      DataTypeUtils.equalsIgnoreCaseAndNullability(previousPlan.schema, currentPlan.schema)
+    }
+
+    if (isValid) {
+      None
+    } else {
+      Some(s"The plan output schema has changed from ${previousPlan.schema.sql} to " +
           currentPlan.schema.sql + s". The previous plan: ${previousPlan.treeString}\nThe new " +
           "plan:\n" + currentPlan.treeString)
-      } else {
-        None
-      }
     }
   }
 
