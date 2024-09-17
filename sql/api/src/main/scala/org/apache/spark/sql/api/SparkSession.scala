@@ -390,7 +390,6 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
   @scala.annotation.varargs
   def addArtifacts(uri: URI*): Unit
 
-
   /**
    * Add a tag to be assigned to all the operations started by this thread in this session.
    *
@@ -446,10 +445,12 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
   /**
    * Request to interrupt all currently running operations of this session.
    *
-   * @note This method will wait up to 60 seconds for the interruption request to be issued.
-
-   * @return Sequence of operation IDs requested to be interrupted.
-
+   * @note
+   *   This method will wait up to 60 seconds for the interruption request to be issued.
+   *
+   * @return
+   *   Sequence of operation IDs requested to be interrupted.
+   *
    * @since 4.0.0
    */
   def interruptAll(): Seq[String]
@@ -457,10 +458,12 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
   /**
    * Request to interrupt all currently running operations of this session with the given job tag.
    *
-   * @note This method will wait up to 60 seconds for the interruption request to be issued.
+   * @note
+   *   This method will wait up to 60 seconds for the interruption request to be issued.
    *
-   * @return Sequence of operation IDs requested to be interrupted.
-
+   * @return
+   *   Sequence of operation IDs requested to be interrupted.
+   *
    * @since 4.0.0
    */
   def interruptTag(tag: String): Seq[String]
@@ -468,10 +471,12 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
   /**
    * Request to interrupt an operation of this session, given its operation ID.
    *
-   * @note This method will wait up to 60 seconds for the interruption request to be issued.
+   * @note
+   *   This method will wait up to 60 seconds for the interruption request to be issued.
    *
-   * @return The operation ID requested to be interrupted, as a single-element sequence, or an empty
-   *    sequence if the operation is not started by this session.
+   * @return
+   *   The operation ID requested to be interrupted, as a single-element sequence, or an empty
+   *   sequence if the operation is not started by this session.
    *
    * @since 4.0.0
    */
