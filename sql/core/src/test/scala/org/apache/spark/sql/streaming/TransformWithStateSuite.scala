@@ -1743,8 +1743,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
         val mostRecentAnsDf = mostRecentDf.selectExpr(
           "key.value AS groupingKey",
-          "v" +
-           "alue.value")
+          "value.value")
         checkAnswer(mostRecentAnsDf, Seq(Row("a", "str1")))
       }
     }
