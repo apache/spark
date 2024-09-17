@@ -33,11 +33,11 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.OrderUtils
 import org.apache.spark.sql.connect.client.SparkResult
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter, UdfUtils}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{struct, to_json}
-import org.apache.spark.sql.internal.{ColumnNodeToProtoConverter, DataFrameWriterImpl, UnresolvedAttribute, UnresolvedRegex}
+import org.apache.spark.sql.internal.{ColumnNodeToProtoConverter, DataFrameWriterImpl, DataFrameWriterV2Impl, MergeIntoWriterImpl, ToScalaUDF, UDFAdaptors, UnresolvedAttribute, UnresolvedRegex}
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -481,13 +481,21 @@ class Dataset[T] private[sql] (
     val unpivot = builder.getUnpivotBuilder
       .setInput(plan.getRoot)
       .addAllIds(ids.toImmutableArraySeq.map(_.expr).asJava)
-      .setValueColumnName(variableColumnName)
+      .setVariableColumnName(variableColumnName)
       .setValueColumnName(valueColumnName)
     valuesOption.foreach { values =>
       unpivot.getValuesBuilder
         .addAllValues(values.toImmutableArraySeq.map(_.expr).asJava)
     }
   }
+
+  private def buildTranspose(indices: Seq[Column]): DataFrame =
+    sparkSession.newDataFrame { builder =>
+      val transpose = builder.getTransposeBuilder.setInput(plan.getRoot)
+      indices.foreach { indexColumn =>
+        transpose.addIndexColumns(indexColumn.expr)
+      }
+    }
 
   /** @inheritdoc */
   @scala.annotation.varargs
@@ -534,7 +542,7 @@ class Dataset[T] private[sql] (
    * @since 3.5.0
    */
   def groupByKey[K](func: MapFunction[T, K], encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
-    groupByKey(UdfUtils.mapFunctionToScalaFunc(func))(encoder)
+    groupByKey(ToScalaUDF(func))(encoder)
 
   /** @inheritdoc */
   @scala.annotation.varargs
@@ -581,6 +589,14 @@ class Dataset[T] private[sql] (
       valueColumnName: String): DataFrame = {
     buildUnpivot(ids, None, variableColumnName, valueColumnName)
   }
+
+  /** @inheritdoc */
+  def transpose(indexColumn: Column): DataFrame =
+    buildTranspose(Seq(indexColumn))
+
+  /** @inheritdoc */
+  def transpose(): DataFrame =
+    buildTranspose(Seq.empty)
 
   /** @inheritdoc */
   def limit(n: Int): Dataset[T] = sparkSession.newDataset(agnosticEncoder) { builder =>
@@ -865,17 +881,17 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def filter(f: FilterFunction[T]): Dataset[T] = {
-    filter(UdfUtils.filterFuncToScalaFunc(f))
+    filter(ToScalaUDF(f))
   }
 
   /** @inheritdoc */
   def map[U: Encoder](f: T => U): Dataset[U] = {
-    mapPartitions(UdfUtils.mapFuncToMapPartitionsAdaptor(f))
+    mapPartitions(UDFAdaptors.mapToMapPartitions(f))
   }
 
   /** @inheritdoc */
   def map[U](f: MapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
-    map(UdfUtils.mapFunctionToScalaFunc(f))(encoder)
+    mapPartitions(UDFAdaptors.mapToMapPartitions(f))(encoder)
   }
 
   /** @inheritdoc */
@@ -893,24 +909,10 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
-  def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
-    mapPartitions(UdfUtils.mapPartitionsFuncToScalaFunc(f))(encoder)
-  }
-
-  /** @inheritdoc */
-  override def flatMap[U: Encoder](func: T => IterableOnce[U]): Dataset[U] =
-    mapPartitions(UdfUtils.flatMapFuncToMapPartitionsAdaptor(func))
-
-  /** @inheritdoc */
-  override def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
-    flatMap(UdfUtils.flatMapFuncToScalaFunc(f))(encoder)
-  }
-
-  /** @inheritdoc */
   @deprecated("use flatMap() or select() with functions.explode() instead", "3.5.0")
   def explode[A <: Product: TypeTag](input: Column*)(f: Row => IterableOnce[A]): DataFrame = {
     val generator = SparkUserDefinedFunction(
-      UdfUtils.iterableOnceToSeq(f),
+      UDFAdaptors.iterableOnceToSeq(f),
       UnboundRowEncoder :: Nil,
       ScalaReflection.encoderFor[Seq[A]])
     select(col("*"), functions.inline(generator(struct(input: _*))))
@@ -921,31 +923,16 @@ class Dataset[T] private[sql] (
   def explode[A, B: TypeTag](inputColumn: String, outputColumn: String)(
       f: A => IterableOnce[B]): DataFrame = {
     val generator = SparkUserDefinedFunction(
-      UdfUtils.iterableOnceToSeq(f),
+      UDFAdaptors.iterableOnceToSeq(f),
       Nil,
       ScalaReflection.encoderFor[Seq[B]])
     select(col("*"), functions.explode(generator(col(inputColumn))).as((outputColumn)))
   }
 
   /** @inheritdoc */
-  def foreach(f: T => Unit): Unit = {
-    foreachPartition(UdfUtils.foreachFuncToForeachPartitionsAdaptor(f))
-  }
-
-  /** @inheritdoc */
-  override def foreach(func: ForeachFunction[T]): Unit =
-    foreach(UdfUtils.foreachFuncToScalaFunc(func))
-
-  /** @inheritdoc */
   def foreachPartition(f: Iterator[T] => Unit): Unit = {
     // Delegate to mapPartition with empty result.
-    mapPartitions(UdfUtils.foreachPartitionFuncToMapPartitionsAdaptor(f))(RowEncoder(Seq.empty))
-      .collect()
-  }
-
-  /** @inheritdoc */
-  override def foreachPartition(func: ForeachPartitionFunction[T]): Unit = {
-    foreachPartition(UdfUtils.foreachPartitionFuncToScalaFunc(func))
+    mapPartitions(UDFAdaptors.foreachPartitionToMapPartitions(f))(NullEncoder).collect()
   }
 
   /** @inheritdoc */
@@ -1047,51 +1034,12 @@ class Dataset[T] private[sql] (
     new DataFrameWriterImpl[T](this)
   }
 
-  /**
-   * Create a write configuration builder for v2 sources.
-   *
-   * This builder is used to configure and execute write operations. For example, to append to an
-   * existing table, run:
-   *
-   * {{{
-   *   df.writeTo("catalog.db.table").append()
-   * }}}
-   *
-   * This can also be used to create or replace existing tables:
-   *
-   * {{{
-   *   df.writeTo("catalog.db.table").partitionedBy($"col").createOrReplace()
-   * }}}
-   *
-   * @group basic
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   def writeTo(table: String): DataFrameWriterV2[T] = {
-    new DataFrameWriterV2[T](table, this)
+    new DataFrameWriterV2Impl[T](table, this)
   }
 
-  /**
-   * Merges a set of updates, insertions, and deletions based on a source table into a target
-   * table.
-   *
-   * Scala Examples:
-   * {{{
-   *   spark.table("source")
-   *     .mergeInto("target", $"source.id" === $"target.id")
-   *     .whenMatched($"salary" === 100)
-   *     .delete()
-   *     .whenNotMatched()
-   *     .insertAll()
-   *     .whenNotMatchedBySource($"salary" === 100)
-   *     .update(Map(
-   *       "salary" -> lit(200)
-   *     ))
-   *     .merge()
-   * }}}
-   *
-   * @group basic
-   * @since 4.0.0
-   */
+  /** @inheritdoc */
   def mergeInto(table: String, condition: Column): MergeIntoWriter[T] = {
     if (isStreaming) {
       throw new AnalysisException(
@@ -1099,7 +1047,7 @@ class Dataset[T] private[sql] (
         messageParameters = Map("methodName" -> toSQLId("mergeInto")))
     }
 
-    new MergeIntoWriter[T](table, this, condition)
+    new MergeIntoWriterImpl[T](table, this, condition)
   }
 
   /**
@@ -1463,6 +1411,22 @@ class Dataset[T] private[sql] (
   @scala.annotation.varargs
   override def dropDuplicatesWithinWatermark(col1: String, cols: String*): Dataset[T] =
     super.dropDuplicatesWithinWatermark(col1, cols: _*)
+
+  /** @inheritdoc */
+  override def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): Dataset[U] =
+    super.mapPartitions(f, encoder)
+
+  /** @inheritdoc */
+  override def flatMap[U: Encoder](func: T => IterableOnce[U]): Dataset[U] =
+    super.flatMap(func)
+
+  /** @inheritdoc */
+  override def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): Dataset[U] =
+    super.flatMap(f, encoder)
+
+  /** @inheritdoc */
+  override def foreachPartition(func: ForeachPartitionFunction[T]): Unit =
+    super.foreachPartition(func)
 
   /** @inheritdoc */
   @scala.annotation.varargs

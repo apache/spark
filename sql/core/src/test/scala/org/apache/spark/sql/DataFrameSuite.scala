@@ -29,6 +29,7 @@ import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.sql.api.python.PythonSQLUtils.distributed_sequence_id
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -224,7 +225,7 @@ class DataFrameSuite extends QueryTest
       exception = intercept[AnalysisException] {
         df.select(explode($"*"))
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"explode(csv)\"",
         "paramIndex" -> "first",
@@ -568,7 +569,7 @@ class DataFrameSuite extends QueryTest
         testData.toDF().withColumns(Seq("newCol1", "newCOL1"),
           Seq(col("key") + 1, col("key") + 2))
       },
-      errorClass = "COLUMN_ALREADY_EXISTS",
+      condition = "COLUMN_ALREADY_EXISTS",
       parameters = Map("columnName" -> "`newcol1`"))
   }
 
@@ -588,7 +589,7 @@ class DataFrameSuite extends QueryTest
           testData.toDF().withColumns(Seq("newCol1", "newCol1"),
             Seq(col("key") + 1, col("key") + 2))
         },
-        errorClass = "COLUMN_ALREADY_EXISTS",
+        condition = "COLUMN_ALREADY_EXISTS",
         parameters = Map("columnName" -> "`newCol1`"))
     }
   }
@@ -631,7 +632,7 @@ class DataFrameSuite extends QueryTest
       exception = intercept[AnalysisException] {
         df1.withMetadata("x1", metadata)
       },
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map("objectName" -> "`x1`", "proposal" -> "`x`")
     )
   }
@@ -1116,7 +1117,7 @@ class DataFrameSuite extends QueryTest
           exception = intercept[org.apache.spark.sql.AnalysisException] {
             df(name)
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1049",
+          condition = "_LEGACY_ERROR_TEMP_1049",
           parameters = Map("name" -> name))
       }
 
@@ -1202,7 +1203,7 @@ class DataFrameSuite extends QueryTest
     }
     checkError(
       exception = e,
-      errorClass = "COLUMN_ALREADY_EXISTS",
+      condition = "COLUMN_ALREADY_EXISTS",
       parameters = Map("columnName" -> "`column1`"))
 
     // multiple duplicate columns present
@@ -1213,7 +1214,7 @@ class DataFrameSuite extends QueryTest
     }
     checkError(
       exception = f,
-      errorClass = "COLUMN_ALREADY_EXISTS",
+      condition = "COLUMN_ALREADY_EXISTS",
       parameters = Map("columnName" -> "`column1`"))
   }
 
@@ -1245,7 +1246,7 @@ class DataFrameSuite extends QueryTest
           exception = intercept[AnalysisException] {
             insertion.write.insertInto("rdd_base")
           },
-          errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
+          condition = "UNSUPPORTED_INSERT.RDD_BASED",
           parameters = Map.empty
         )
 
@@ -1256,7 +1257,7 @@ class DataFrameSuite extends QueryTest
           exception = intercept[AnalysisException] {
             insertion.write.insertInto("indirect_ds")
           },
-          errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
+          condition = "UNSUPPORTED_INSERT.RDD_BASED",
           parameters = Map.empty
         )
 
@@ -1266,7 +1267,7 @@ class DataFrameSuite extends QueryTest
           exception = intercept[AnalysisException] {
             insertion.write.insertInto("one_row")
           },
-          errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
+          condition = "UNSUPPORTED_INSERT.RDD_BASED",
           parameters = Map.empty
         )
       }
@@ -2036,7 +2037,7 @@ class DataFrameSuite extends QueryTest
       exception = intercept[AnalysisException] {
         df.groupBy($"d", $"b").as[GroupByKey, Row]
       },
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map("objectName" -> "`d`", "proposal" -> "`a`, `b`, `c`"),
       context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
   }
@@ -2316,7 +2317,8 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-36338: DataFrame.withSequenceColumn should append unique sequence IDs") {
-    val ids = spark.range(10).repartition(5).withSequenceColumn("default_index")
+    val ids = spark.range(10).repartition(5).select(
+      distributed_sequence_id().alias("default_index"), col("id"))
     assert(ids.collect().map(_.getLong(0)).toSet === Range(0, 10).toSet)
     assert(ids.take(5).map(_.getLong(0)).toSet === Range(0, 5).toSet)
   }
@@ -2548,7 +2550,7 @@ class DataFrameSuite extends QueryTest
         exception = intercept[ParseException] {
           spark.range(1).toDF("CASE").filter("CASE").collect()
         },
-        errorClass = "PARSE_SYNTAX_ERROR",
+        condition = "PARSE_SYNTAX_ERROR",
         parameters = Map("error" -> "'CASE'", "hint" -> ""))
     }
   }
@@ -2560,7 +2562,7 @@ class DataFrameSuite extends QueryTest
         exception = intercept[AnalysisException] {
           spark.range(1).createTempView("AUTHORIZATION")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1321",
+        condition = "_LEGACY_ERROR_TEMP_1321",
         parameters = Map("viewName" -> "AUTHORIZATION"))
     }
   }

@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 import _root_.java.util
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.{functions, Column, Row}
+import org.apache.spark.sql.{functions, Column, Encoder, Row}
 
 /**
  * A set of methods for aggregations on a `DataFrame`, created by [[Dataset#groupBy groupBy]],
@@ -30,7 +30,8 @@ import org.apache.spark.sql.{functions, Column, Row}
  * The main method is the `agg` function, which has multiple variants. This class also contains
  * some first-order statistics such as `mean`, `sum` for convenience.
  *
- * @note This class was named `GroupedData` in Spark 1.x.
+ * @note
+ *   This class was named `GroupedData` in Spark 1.x.
  * @since 2.0.0
  */
 @Stable
@@ -66,8 +67,16 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
   }
 
   /**
-   * (Scala-specific) Compute aggregates by specifying the column names and
-   * aggregate methods. The resulting `DataFrame` will also contain the grouping columns.
+   * Returns a `KeyValueGroupedDataset` where the data is grouped by the grouping expressions of
+   * current `RelationalGroupedDataset`.
+   *
+   * @since 3.0.0
+   */
+  def as[K: Encoder, T: Encoder]: KeyValueGroupedDataset[K, T, DS]
+
+  /**
+   * (Scala-specific) Compute aggregates by specifying the column names and aggregate methods. The
+   * resulting `DataFrame` will also contain the grouping columns.
    *
    * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
    * {{{
@@ -84,8 +93,8 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
     toDF((aggExpr +: aggExprs).map(toAggCol))
 
   /**
-   * (Scala-specific) Compute aggregates by specifying a map from column name to
-   * aggregate methods. The resulting `DataFrame` will also contain the grouping columns.
+   * (Scala-specific) Compute aggregates by specifying a map from column name to aggregate
+   * methods. The resulting `DataFrame` will also contain the grouping columns.
    *
    * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
    * {{{
@@ -101,8 +110,8 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
   def agg(exprs: Map[String, String]): DS[Row] = toDF(exprs.map(toAggCol).toSeq)
 
   /**
-   * (Java-specific) Compute aggregates by specifying a map from column name to
-   * aggregate methods. The resulting `DataFrame` will also contain the grouping columns.
+   * (Java-specific) Compute aggregates by specifying a map from column name to aggregate methods.
+   * The resulting `DataFrame` will also contain the grouping columns.
    *
    * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
    * {{{
@@ -152,28 +161,27 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
   def agg(expr: Column, exprs: Column*): DS[Row] = toDF(expr +: exprs)
 
   /**
-   * Count the number of rows for each group.
-   * The resulting `DataFrame` will also contain the grouping columns.
+   * Count the number of rows for each group. The resulting `DataFrame` will also contain the
+   * grouping columns.
    *
    * @since 1.3.0
    */
   def count(): DS[Row] = toDF(functions.count(functions.lit(1)).as("count") :: Nil)
 
   /**
-   * Compute the average value for each numeric columns for each group. This is an alias for `avg`.
-   * The resulting `DataFrame` will also contain the grouping columns.
-   * When specified columns are given, only compute the average values for them.
+   * Compute the average value for each numeric columns for each group. This is an alias for
+   * `avg`. The resulting `DataFrame` will also contain the grouping columns. When specified
+   * columns are given, only compute the average values for them.
    *
    * @since 1.3.0
    */
   @scala.annotation.varargs
   def mean(colNames: String*): DS[Row] = aggregateNumericColumns(colNames, functions.avg)
 
-
   /**
-   * Compute the max value for each numeric columns for each group.
-   * The resulting `DataFrame` will also contain the grouping columns.
-   * When specified columns are given, only compute the max values for them.
+   * Compute the max value for each numeric columns for each group. The resulting `DataFrame` will
+   * also contain the grouping columns. When specified columns are given, only compute the max
+   * values for them.
    *
    * @since 1.3.0
    */
@@ -181,9 +189,9 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
   def max(colNames: String*): DS[Row] = aggregateNumericColumns(colNames, functions.max)
 
   /**
-   * Compute the mean value for each numeric columns for each group.
-   * The resulting `DataFrame` will also contain the grouping columns.
-   * When specified columns are given, only compute the mean values for them.
+   * Compute the mean value for each numeric columns for each group. The resulting `DataFrame`
+   * will also contain the grouping columns. When specified columns are given, only compute the
+   * mean values for them.
    *
    * @since 1.3.0
    */
@@ -191,9 +199,9 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
   def avg(colNames: String*): DS[Row] = aggregateNumericColumns(colNames, functions.avg)
 
   /**
-   * Compute the min value for each numeric column for each group.
-   * The resulting `DataFrame` will also contain the grouping columns.
-   * When specified columns are given, only compute the min values for them.
+   * Compute the min value for each numeric column for each group. The resulting `DataFrame` will
+   * also contain the grouping columns. When specified columns are given, only compute the min
+   * values for them.
    *
    * @since 1.3.0
    */
@@ -201,9 +209,9 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
   def min(colNames: String*): DS[Row] = aggregateNumericColumns(colNames, functions.min)
 
   /**
-   * Compute the sum for each numeric columns for each group.
-   * The resulting `DataFrame` will also contain the grouping columns.
-   * When specified columns are given, only compute the sum for them.
+   * Compute the sum for each numeric columns for each group. The resulting `DataFrame` will also
+   * contain the grouping columns. When specified columns are given, only compute the sum for
+   * them.
    *
    * @since 1.3.0
    */
@@ -213,27 +221,29 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
   /**
    * Pivots a column of the current `DataFrame` and performs the specified aggregation.
    *
-   * Spark will eagerly compute the distinct values in `pivotColumn` so it can determine
-   * the resulting schema of the transformation. To avoid any eager computations, provide an
-   * explicit list of values via `pivot(pivotColumn: String, values: Seq[Any])`.
+   * Spark will eagerly compute the distinct values in `pivotColumn` so it can determine the
+   * resulting schema of the transformation. To avoid any eager computations, provide an explicit
+   * list of values via `pivot(pivotColumn: String, values: Seq[Any])`.
    *
    * {{{
    *   // Compute the sum of earnings for each year by course with each course as a separate column
    *   df.groupBy("year").pivot("course").sum("earnings")
    * }}}
    *
-   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
-   *      except for the aggregation.
-   * @param pivotColumn Name of the column to pivot.
+   * @see
+   *   `org.apache.spark.sql.Dataset.unpivot` for the reverse operation, except for the
+   *   aggregation.
+   * @param pivotColumn
+   *   Name of the column to pivot.
    * @since 1.6.0
    */
   def pivot(pivotColumn: String): RGD = pivot(df.col(pivotColumn))
 
   /**
-   * Pivots a column of the current `DataFrame` and performs the specified aggregation.
-   * There are two versions of pivot function: one that requires the caller to specify the list
-   * of distinct values to pivot on, and one that does not. The latter is more concise but less
-   * efficient, because Spark needs to first compute the list of distinct values internally.
+   * Pivots a column of the current `DataFrame` and performs the specified aggregation. There are
+   * two versions of pivot function: one that requires the caller to specify the list of distinct
+   * values to pivot on, and one that does not. The latter is more concise but less efficient,
+   * because Spark needs to first compute the list of distinct values internally.
    *
    * {{{
    *   // Compute the sum of earnings for each year by course with each course as a separate column
@@ -252,10 +262,13 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
    *     .agg(sum($"earnings"))
    * }}}
    *
-   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
-   *      except for the aggregation.
-   * @param pivotColumn Name of the column to pivot.
-   * @param values      List of values that will be translated to columns in the output DataFrame.
+   * @see
+   *   `org.apache.spark.sql.Dataset.unpivot` for the reverse operation, except for the
+   *   aggregation.
+   * @param pivotColumn
+   *   Name of the column to pivot.
+   * @param values
+   *   List of values that will be translated to columns in the output DataFrame.
    * @since 1.6.0
    */
   def pivot(pivotColumn: String, values: Seq[Any]): RGD =
@@ -265,8 +278,8 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
    * (Java-specific) Pivots a column of the current `DataFrame` and performs the specified
    * aggregation.
    *
-   * There are two versions of pivot function: one that requires the caller to specify the list
-   * of distinct values to pivot on, and one that does not. The latter is more concise but less
+   * There are two versions of pivot function: one that requires the caller to specify the list of
+   * distinct values to pivot on, and one that does not. The latter is more concise but less
    * efficient, because Spark needs to first compute the list of distinct values internally.
    *
    * {{{
@@ -277,10 +290,13 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
    *   df.groupBy("year").pivot("course").sum("earnings");
    * }}}
    *
-   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
-   *      except for the aggregation.
-   * @param pivotColumn Name of the column to pivot.
-   * @param values      List of values that will be translated to columns in the output DataFrame.
+   * @see
+   *   `org.apache.spark.sql.Dataset.unpivot` for the reverse operation, except for the
+   *   aggregation.
+   * @param pivotColumn
+   *   Name of the column to pivot.
+   * @param values
+   *   List of values that will be translated to columns in the output DataFrame.
    * @since 1.6.0
    */
   def pivot(pivotColumn: String, values: util.List[Any]): RGD =
@@ -288,13 +304,16 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
 
   /**
    * (Java-specific) Pivots a column of the current `DataFrame` and performs the specified
-   * aggregation. This is an overloaded version of the `pivot` method with `pivotColumn` of
-   * the `String` type.
+   * aggregation. This is an overloaded version of the `pivot` method with `pivotColumn` of the
+   * `String` type.
    *
-   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
-   *      except for the aggregation.
-   * @param pivotColumn the column to pivot.
-   * @param values      List of values that will be translated to columns in the output DataFrame.
+   * @see
+   *   `org.apache.spark.sql.Dataset.unpivot` for the reverse operation, except for the
+   *   aggregation.
+   * @param pivotColumn
+   *   the column to pivot.
+   * @param values
+   *   List of values that will be translated to columns in the output DataFrame.
    * @since 2.4.0
    */
   def pivot(pivotColumn: Column, values: util.List[Any]): RGD =
@@ -303,35 +322,40 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
   /**
    * Pivots a column of the current `DataFrame` and performs the specified aggregation.
    *
-   * Spark will eagerly compute the distinct values in `pivotColumn` so it can determine
-   * the resulting schema of the transformation. To avoid any eager computations, provide an
-   * explicit list of values via `pivot(pivotColumn: Column, values: Seq[Any])`.
+   * Spark will eagerly compute the distinct values in `pivotColumn` so it can determine the
+   * resulting schema of the transformation. To avoid any eager computations, provide an explicit
+   * list of values via `pivot(pivotColumn: Column, values: Seq[Any])`.
    *
    * {{{
    *   // Compute the sum of earnings for each year by course with each course as a separate column
    *   df.groupBy($"year").pivot($"course").sum($"earnings");
    * }}}
    *
-   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
-   *      except for the aggregation.
-   * @param pivotColumn he column to pivot.
+   * @see
+   *   `org.apache.spark.sql.Dataset.unpivot` for the reverse operation, except for the
+   *   aggregation.
+   * @param pivotColumn
+   *   he column to pivot.
    * @since 2.4.0
    */
   def pivot(pivotColumn: Column): RGD
 
   /**
-   * Pivots a column of the current `DataFrame` and performs the specified aggregation.
-   * This is an overloaded version of the `pivot` method with `pivotColumn` of the `String` type.
+   * Pivots a column of the current `DataFrame` and performs the specified aggregation. This is an
+   * overloaded version of the `pivot` method with `pivotColumn` of the `String` type.
    *
    * {{{
    *   // Compute the sum of earnings for each year by course with each course as a separate column
    *   df.groupBy($"year").pivot($"course", Seq("dotNET", "Java")).sum($"earnings")
    * }}}
    *
-   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
-   *      except for the aggregation.
-   * @param pivotColumn the column to pivot.
-   * @param values      List of values that will be translated to columns in the output DataFrame.
+   * @see
+   *   `org.apache.spark.sql.Dataset.unpivot` for the reverse operation, except for the
+   *   aggregation.
+   * @param pivotColumn
+   *   the column to pivot.
+   * @param values
+   *   List of values that will be translated to columns in the output DataFrame.
    * @since 2.4.0
    */
   def pivot(pivotColumn: Column, values: Seq[Any]): RGD

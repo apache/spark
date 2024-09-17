@@ -1422,7 +1422,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       }
       checkError(
         ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
-        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
+        condition = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
         parameters = Map(
           "schema" -> ".+\"c1\":\"spark.UTF8_LCASE\".+"
         ),
@@ -1457,7 +1457,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
               .option("checkpointLocation", checkpointDir.getCanonicalPath)
               .start(outputDir.getCanonicalPath)
           },
-          errorClass = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
+          condition = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
           sqlState = "42KDE",
           parameters = Map(
             "outputMode" -> "append",

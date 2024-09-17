@@ -1,2 +1,2 @@
-Expand [[id#0L, a, cast(a#0 as double)], [id#0L, b, b#0]], [id#0L, #0, value#0]
+Expand [[id#0L, a, cast(a#0 as double)], [id#0L, b, b#0]], [id#0L, name#0, value#0]
 +- LocalRelation <empty>, [id#0L, a#0, b#0]

@@ -62,7 +62,7 @@ class LookupFunctionsSuite extends PlanTest {
           }
           checkError(
             exception = cause,
-            errorClass = "UNRESOLVED_ROUTINE",
+            condition = "UNRESOLVED_ROUTINE",
             parameters = Map(
               "routineName" -> "`undefined_fn`",
               "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`db1`]"))

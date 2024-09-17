@@ -188,7 +188,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
     spark.dataSource.registerPython(dataSourceName, dataSource)
     checkError(
       exception = intercept[AnalysisException](spark.read.format(dataSourceName).load()),
-      errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      condition = "INVALID_SCHEMA.NON_STRUCT_TYPE",
       parameters = Map("inputSchema" -> "INT", "dataType" -> "\"INT\""))
   }
 
@@ -309,7 +309,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
           exception = intercept[AnalysisException] {
             spark.dataSource.registerPython(provider, dataSource)
           },
-          errorClass = "DATA_SOURCE_ALREADY_EXISTS",
+          condition = "DATA_SOURCE_ALREADY_EXISTS",
           parameters = Map("provider" -> provider))
       }
     }
@@ -657,7 +657,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
         exception = intercept[AnalysisException] {
           spark.range(1).write.format(dataSourceName).save()
         },
-        errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
+        condition = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
         parameters = Map("source" -> "SimpleDataSource", "createMode" -> "\"ErrorIfExists\""))
     }
 
@@ -666,7 +666,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
         exception = intercept[AnalysisException] {
           spark.range(1).write.format(dataSourceName).mode("ignore").save()
         },
-        errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
+        condition = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
         parameters = Map("source" -> "SimpleDataSource", "createMode" -> "\"Ignore\""))
     }
 
@@ -675,7 +675,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
         exception = intercept[AnalysisException] {
           spark.range(1).write.format(dataSourceName).mode("foo").save()
         },
-        errorClass = "INVALID_SAVE_MODE",
+        condition = "INVALID_SAVE_MODE",
         parameters = Map("mode" -> "\"foo\""))
     }
   }

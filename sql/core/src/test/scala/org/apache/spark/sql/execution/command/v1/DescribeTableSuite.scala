@@ -47,7 +47,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)")
       }
       checkError(e,
-        errorClass = "PARTITIONS_NOT_FOUND",
+        condition = "PARTITIONS_NOT_FOUND",
         parameters = Map("partitionList" -> "PARTITION (`id` = 1)",
           "tableName" -> "`ns`.`table`"))
     }
@@ -63,7 +63,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         exception = intercept[AnalysisException] {
           sql(s"DESC $tbl key1").collect()
         },
-        errorClass = "COLUMN_NOT_FOUND",
+        condition = "COLUMN_NOT_FOUND",
         parameters = Map(
           "colName" -> "`key1`",
           "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""
@@ -89,7 +89,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
           exception = intercept[AnalysisException] {
             sql(s"DESC $tbl KEY").collect()
           },
-          errorClass = "COLUMN_NOT_FOUND",
+          condition = "COLUMN_NOT_FOUND",
           parameters = Map(
             "colName" -> "`KEY`",
             "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""

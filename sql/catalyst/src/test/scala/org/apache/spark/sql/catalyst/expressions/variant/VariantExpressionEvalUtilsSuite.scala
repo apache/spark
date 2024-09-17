@@ -116,7 +116,7 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
   }
 
   test("parseJson negative") {
-    def checkException(json: String, errorClass: String, parameters: Map[String, String]): Unit = {
+    def checkException(json: String, condition: String, parameters: Map[String, String]): Unit = {
       val try_parse_json_output = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json),
         allowDuplicateKeys = false, failOnError = false)
       checkError(
@@ -124,7 +124,7 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
           VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json),
             allowDuplicateKeys = false)
         },
-        errorClass = errorClass,
+        condition = condition,
         parameters = parameters
       )
       assert(try_parse_json_output === null)
