@@ -4112,4 +4112,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "expr" -> expr.toString),
       origin = expr.origin)
   }
+
+  def inlineTableContainsScalarSubquery(inlineTable: LogicalPlan): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.SCALAR_SUBQUERY_IN_VALUES",
+      messageParameters = Map.empty,
+      origin = inlineTable.origin
+    )
+  }
 }

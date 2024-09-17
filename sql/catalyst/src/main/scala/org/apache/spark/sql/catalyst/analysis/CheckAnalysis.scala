@@ -250,6 +250,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           context = u.origin.getQueryContext,
           summary = u.origin.context.summary)
 
+      case u: UnresolvedInlineTable if unresolvedInlineTableContainsScalarSubquery(u) =>
+        throw QueryCompilationErrors.inlineTableContainsScalarSubquery(u)
+
       case command: V2PartitionCommand =>
         command.table match {
           case r @ ResolvedTable(_, _, table, _) => table match {
@@ -1557,6 +1560,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           }
         }
       case _ =>
+    }
+  }
+
+  private def unresolvedInlineTableContainsScalarSubquery(
+      unresolvedInlineTable: UnresolvedInlineTable) = {
+    unresolvedInlineTable.rows.exists { row =>
+      row.exists { expression =>
+        expression.exists(_.isInstanceOf[ScalarSubquery])
+      }
     }
   }
 }

@@ -5330,6 +5330,11 @@
           "<treeNode>"
         ]
       },
+      "SCALAR_SUBQUERY_IN_VALUES" : {
+        "message" : [
+          "Scalar subqueries in the VALUES clause."
+        ]
+      },
       "UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION" : {
         "message" : [
           "Correlated subqueries in the join predicate cannot reference both join inputs:",
