@@ -22,7 +22,7 @@ import java.time.temporal.ChronoField
 import java.util.{Calendar, TimeZone}
 import java.util.Calendar.{DAY_OF_MONTH, DST_OFFSET, ERA, HOUR_OF_DAY, MINUTE, MONTH, SECOND, YEAR, ZONE_OFFSET}
 
-import scala.collection.mutable
+import scala.collection.mutable.HashMap
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
@@ -286,10 +286,10 @@ object RebaseDateTime {
 
   // Loads rebasing info from an JSON file. JSON records in the files should conform to
   // `JsonRebaseRecord`. Mutable HashMap is used here instead of AnyRefMap due to SPARK-49491.
-  private[sql] def loadRebaseRecords(fileName: String): mutable.HashMap[String, RebaseInfo] = {
+  private[sql] def loadRebaseRecords(fileName: String): HashMap[String, RebaseInfo] = {
     val file = SparkClassUtils.getSparkClassLoader.getResource(fileName)
     val jsonRebaseRecords = mapper.readValue[Seq[JsonRebaseRecord]](file)
-    val hashMap = new mutable.HashMap[String, RebaseInfo]
+    val hashMap = new HashMap[String, RebaseInfo]
     hashMap.sizeHint((3 * jsonRebaseRecords.size) / 2)
     jsonRebaseRecords.foreach { jsonRecord =>
       val rebaseInfo = RebaseInfo(jsonRecord.switches, jsonRecord.diffs)
@@ -313,7 +313,7 @@ object RebaseDateTime {
    */
   private val gregJulianRebaseMap = loadRebaseRecords("gregorian-julian-rebase-micros.json")
 
-  private def getLastSwitchTs(rebaseMap: mutable.HashMap[String, RebaseInfo]): Long = {
+  private def getLastSwitchTs(rebaseMap: HashMap[String, RebaseInfo]): Long = {
     val latestTs = rebaseMap.values.map(_.switches.last).max
     require(
       rebaseMap.values.forall(_.diffs.last == 0),
