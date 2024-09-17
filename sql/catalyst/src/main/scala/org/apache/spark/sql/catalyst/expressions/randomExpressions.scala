@@ -310,7 +310,7 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression)
     """
     Examples:
       > SELECT _FUNC_(3, 0) AS result;
-       8i7
+       ceV
   """,
   since = "4.0.0",
   group = "string_funcs")
