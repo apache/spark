@@ -1968,12 +1968,6 @@
     ],
     "sqlState" : "22012"
   },
-  "INVALID_AGNOSTIC_ENCODER" : {
-    "message" : [
-      "Found an invalid agnostic encoder. Expects an instance of AgnosticEncoder but got <encoderType>. For more information consult '<docroot>/api/java/index.html?org/apache/spark/sql/Encoder.html'."
-    ],
-    "sqlState" : "42001"
-  },
   "INVALID_AGGREGATE_FILTER" : {
     "message" : [
       "The FILTER expression <filterExpr> in an aggregate function is invalid."
@@ -2001,6 +1995,12 @@
       }
     },
     "sqlState" : "42903"
+  },
+  "INVALID_AGNOSTIC_ENCODER" : {
+    "message" : [
+      "Found an invalid agnostic encoder. Expects an instance of AgnosticEncoder but got <encoderType>. For more information consult '<docroot>/api/java/index.html?org/apache/spark/sql/Encoder.html'."
+    ],
+    "sqlState" : "42001"
   },
   "INVALID_ARRAY_INDEX" : {
     "message" : [

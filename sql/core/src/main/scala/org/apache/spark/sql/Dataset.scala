@@ -840,7 +840,7 @@ class Dataset[T] private[sql](
     val plan = encoder match {
       case se: StructEncoder[U1] =>
         // Flatten the result.
-        val attribute = tc1.toAttribute
+        val attribute = GetColumnByOrdinal(0, se.dataType)
         val projectList = se.fields.zipWithIndex.map {
           case (field, index) =>
             Alias(GetStructField(attribute, index, None), field.name)()
@@ -848,7 +848,7 @@ class Dataset[T] private[sql](
         Project(projectList, project)
       case _ => project
     }
-    new Dataset[U1](sparkSession, project, encoder)
+    new Dataset[U1](sparkSession, plan, encoder)
   }
 
   /** @inheritdoc */
@@ -1563,7 +1563,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   lazy val rdd: RDD[T] = {
-    val objectType = ObjectType(encoder.clsTag.runtimeClass)
+    val objectType = exprEnc.deserializer.dataType
     rddQueryExecution.toRdd.mapPartitions { rows =>
       rows.map(_.get(0, objectType).asInstanceOf[T])
     }

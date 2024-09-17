@@ -36,8 +36,8 @@ import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode
  * @since 2.0.0
  */
 class KeyValueGroupedDataset[K, V] private[sql](
-    val kEncoder: Encoder[K],
-    val vEncoder: Encoder[V],
+    kEncoder: Encoder[K],
+    vEncoder: Encoder[V],
     @transient val queryExecution: QueryExecution,
     private val dataAttributes: Seq[Attribute],
     private val groupingAttributes: Seq[Attribute])
@@ -320,7 +320,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
       thisSortExprs: Column*)(
       otherSortExprs: Column*)(
       f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): Dataset[R] = {
-    implicit val uEncoder = other.vEncoder
+    implicit val uEncoder = other.vEncoderImpl
     Dataset[R](
       sparkSession,
       CoGroup(
