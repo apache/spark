@@ -39,16 +39,16 @@ case class DropPartitionExec(
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    val existsPartIdents: mutable.Set[InternalRow] = mutable.Set()
-    val notExistsPartIdents: mutable.Set[InternalRow] = mutable.Set()
-    partSpecs.foreach(partSpec => {
+    val existsPartIdents = mutable.Set[InternalRow]()
+    val notExistsPartIdents = mutable.Set[InternalRow]()
+    partSpecs.foreach { partSpec =>
       val partIdents = table.listPartitionIdentifiers(partSpec.names.toArray, partSpec.ident)
       if (partIdents.nonEmpty) {
         existsPartIdents.addAll(partIdents)
       } else {
         notExistsPartIdents.add(partSpec.ident)
       }
-    })
+    }
 
     if (notExistsPartIdents.nonEmpty && !ignoreIfNotExists) {
       throw new NoSuchPartitionsException(
