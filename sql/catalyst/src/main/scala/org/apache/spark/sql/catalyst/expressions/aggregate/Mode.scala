@@ -65,8 +65,7 @@ case class Mode(
       TypeCheckResult.DataTypeMismatch("UNSUPPORTED_MODE_DATA_TYPE",
         messageParameters =
           Map("child" -> toSQLType(child.dataType),
-            "mode" -> toSQLId(prettyName),
-            "reason" -> "MapType with collated fields"))
+            "mode" -> toSQLId(prettyName)))
     }
   }
 

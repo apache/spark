@@ -1919,8 +1919,7 @@ class CollationSQLExpressionsSuite
           parameters = Map(
             ("sqlExpr", "\"mode(i)\""),
             ("child", c1),
-            ("mode", "`mode`"),
-            ("reason", "MapType with collated fields")),
+            ("mode", "`mode`")),
           queryContext = Seq(ExpectedContext("mode(i)", 18, 24)).toArray
         )
       }
