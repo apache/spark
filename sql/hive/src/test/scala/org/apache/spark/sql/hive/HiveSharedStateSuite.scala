@@ -86,7 +86,7 @@ class HiveSharedStateSuite extends SparkFunSuite {
     assert(ss2.sparkContext.hadoopConfiguration.get("hive.metastore.warehouse.dir") !==
       invalidPath, "warehouse conf in session options can't affect application wide hadoop conf")
     assert(ss.conf.get("spark.foo") === "bar2222", "session level conf should be passed to catalog")
-    assert(!ss.conf.get(WAREHOUSE_PATH).contains(invalidPath),
+    assert(!ss.conf.get(WAREHOUSE_PATH.key).contains(invalidPath),
       "session level conf should be passed to catalog")
   }
 

@@ -26,7 +26,7 @@ import _root_.java.net.URI
 import _root_.java.util
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
-import org.apache.spark.sql.{Encoder, Row}
+import org.apache.spark.sql.{Encoder, Row, RuntimeConfig}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -57,6 +57,17 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    * @since 2.0.0
    */
   def version: String
+
+  /**
+   * Runtime configuration interface for Spark.
+   *
+   * This is the interface through which the user can get and set all Spark and Hadoop
+   * configurations that are relevant to Spark SQL. When getting the value of a config, this
+   * defaults to the value set in the underlying `SparkContext`, if any.
+   *
+   * @since 2.0.0
+   */
+  def conf: RuntimeConfig
 
   /**
    * A collection of methods for registering user-defined functions (UDF).

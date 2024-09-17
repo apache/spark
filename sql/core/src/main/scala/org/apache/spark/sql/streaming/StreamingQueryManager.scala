@@ -364,7 +364,7 @@ class StreamingQueryManager private[sql] (
         .orElse(activeQueries.get(query.id)) // shouldn't be needed but paranoia ...
 
       val shouldStopActiveRun =
-        sparkSession.conf.get(SQLConf.STREAMING_STOP_ACTIVE_RUN_ON_RESTART)
+        sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_STOP_ACTIVE_RUN_ON_RESTART)
       if (activeOption.isDefined) {
         if (shouldStopActiveRun) {
           val oldQuery = activeOption.get
