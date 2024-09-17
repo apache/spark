@@ -74,7 +74,7 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
           new VolumeBuilder()
             .withHostPath(new HostPathVolumeSource(hostPath, ""))
 
-        case KubernetesPVCVolumeConf(claimNameTemplate, storageClass, size) =>
+        case KubernetesPVCVolumeConf(claimNameTemplate, storageClass, size, labels) =>
           val claimName = conf match {
             case c: KubernetesExecutorConf =>
               claimNameTemplate
@@ -86,12 +86,17 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
                 .replaceAll(PVC_ON_DEMAND, s"${conf.resourceNamePrefix}-driver$PVC_POSTFIX-$i")
           }
           if (storageClass.isDefined && size.isDefined) {
+            val defaultVolumeLabels = Map(SPARK_APP_ID_LABEL -> conf.appId)
+            val volumeLabels = labels match {
+              case Some(customLabelsMap) => (customLabelsMap ++ defaultVolumeLabels).asJava
+              case None => defaultVolumeLabels.asJava
+            }
             additionalResources.append(new PersistentVolumeClaimBuilder()
               .withKind(PVC)
               .withApiVersion("v1")
               .withNewMetadata()
                 .withName(claimName)
-                .addToLabels(SPARK_APP_ID_LABEL, conf.appId)
+                .addToLabels(volumeLabels)
                 .endMetadata()
               .withNewSpec()
                 .withStorageClassName(storageClass.get)

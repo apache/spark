@@ -45,21 +45,21 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   test("lookup a single missing field should output existing fields") {
     checkError(
       exception = intercept[SparkIllegalArgumentException](s("c")),
-      errorClass = "FIELD_NOT_FOUND",
+      condition = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`c`", "fields" -> "`a`, `b`"))
   }
 
   test("lookup a set of missing fields should output existing fields") {
     checkError(
       exception = intercept[SparkIllegalArgumentException](s(Set("a", "c"))),
-      errorClass = "NONEXISTENT_FIELD_NAME_IN_LIST",
+      condition = "NONEXISTENT_FIELD_NAME_IN_LIST",
       parameters = Map("nonExistFields" -> "`c`", "fieldNames" -> "`a`, `b`"))
   }
 
   test("lookup fieldIndex for missing field should output existing fields") {
     checkError(
       exception = intercept[SparkIllegalArgumentException](s.fieldIndex("c")),
-      errorClass = "FIELD_NOT_FOUND",
+      condition = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`c`", "fields" -> "`a`, `b`"))
   }
 
@@ -341,7 +341,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`S1`.`S12`.`S123`",
         "path" -> "`s1`.`s12`"))
@@ -352,7 +352,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
+      condition = "AMBIGUOUS_COLUMN_OR_FIELD",
       parameters = Map("name" -> "`S2`.`x`", "n" -> "2"))
     caseSensitiveCheck(Seq("s2", "x"), Some(Seq("s2") -> StructField("x", IntegerType)))
 
@@ -362,7 +362,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`m1`.`key`",
         "path" -> "`m1`"))
@@ -373,7 +373,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`M1`.`key`.`name`",
         "path" -> "`m1`.`key`"))
@@ -382,7 +382,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`M1`.`value`.`name`",
         "path" -> "`m1`.`value`"))
@@ -399,7 +399,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`m2`.`key`.`A`.`name`",
         "path" -> "`m2`.`key`.`a`"))
@@ -408,7 +408,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`M2`.`value`.`b`.`name`",
         "path" -> "`m2`.`value`.`b`"))
@@ -418,7 +418,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`A1`.`element`",
         "path" -> "`a1`"))
@@ -428,7 +428,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`A1`.`element`.`name`",
         "path" -> "`a1`.`element`"))
@@ -442,7 +442,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`a2`.`element`.`C`.`name`",
         "path" -> "`a2`.`element`.`c`"))
@@ -456,7 +456,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`M3`.`value`.`value`.`MA`.`name`",
         "path" -> "`m3`.`value`.`value`.`ma`"))
@@ -470,7 +470,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`A3`.`element`.`element`.`D`.`name`",
         "path" -> "`a3`.`element`.`element`.`d`")
@@ -522,7 +522,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkException] {
         StructType.fromDDL("c1 DECIMAL(10, 5)").merge(StructType.fromDDL("c1 DECIMAL(12, 2)"))
       },
-      errorClass = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
+      condition = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
       parameters = Map("left" -> "\"DECIMAL(10,5)\"", "right" -> "\"DECIMAL(12,2)\"")
     )
 
@@ -530,7 +530,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkException] {
         StructType.fromDDL("c1 DECIMAL(12, 5)").merge(StructType.fromDDL("c1 DECIMAL(12, 2)"))
       },
-      errorClass = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
+      condition = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
       parameters = Map("left" -> "\"DECIMAL(12,5)\"", "right" -> "\"DECIMAL(12,2)\"")
     )
   }

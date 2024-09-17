@@ -358,7 +358,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
                |""".stripMargin)
           checkError(
             exception = intercept[AnalysisException](spark.table("non_partition_table")),
-            errorClass = "_LEGACY_ERROR_TEMP_3096",
+            condition = "_LEGACY_ERROR_TEMP_3096",
             parameters = Map(
               "resLen" -> "2",
               "relLen" -> "1",

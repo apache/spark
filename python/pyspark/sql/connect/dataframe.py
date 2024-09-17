@@ -426,40 +426,29 @@ class DataFrame(ParentDataFrame):
                     "arg_type": type(numPartitions).__name__,
                 },
             )
-
         res._cached_schema = self._cached_schema
         return res
 
-    def dropDuplicates(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
-        # Acceptable args should be str, ... or a single List[str]
-        # So if subset length is 1, it can be either single str, or a list of str
-        # if subset length is greater than 1, it must be a sequence of str
-        if not subset:
+    def dropDuplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
+        if subset is not None and not isinstance(subset, (list, tuple)):
+            raise PySparkTypeError(
+                errorClass="NOT_LIST_OR_TUPLE",
+                messageParameters={"arg_name": "subset", "arg_type": type(subset).__name__},
+            )
+
+        if subset is None:
             res = DataFrame(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
             )
-        elif len(subset) == 1 and isinstance(subset[0], list):
-            item = subset[0]
-            for c in item:
-                if not isinstance(c, str):
-                    raise PySparkTypeError(
-                        errorClass="NOT_STR",
-                        messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
-                    )
-            res = DataFrame(
-                plan.Deduplicate(child=self._plan, column_names=item),
-                session=self._session,
-            )
         else:
-            for c in subset:  # type: ignore[assignment]
+            for c in subset:
                 if not isinstance(c, str):
                     raise PySparkTypeError(
                         errorClass="NOT_STR",
                         messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
                     )
             res = DataFrame(
-                plan.Deduplicate(child=self._plan, column_names=cast(List[str], subset)),
-                session=self._session,
+                plan.Deduplicate(child=self._plan, column_names=subset), session=self._session
             )
 
         res._cached_schema = self._cached_schema
@@ -467,30 +456,27 @@ class DataFrame(ParentDataFrame):
 
     drop_duplicates = dropDuplicates
 
-    def dropDuplicatesWithinWatermark(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
-        # Acceptable args should be str, ... or a single List[str]
-        # So if subset length is 1, it can be either single str, or a list of str
-        # if subset length is greater than 1, it must be a sequence of str
-        if len(subset) > 1:
-            assert all(isinstance(c, str) for c in subset)
+    def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
+        if subset is not None and not isinstance(subset, (list, tuple)):
+            raise PySparkTypeError(
+                errorClass="NOT_LIST_OR_TUPLE",
+                messageParameters={"arg_name": "subset", "arg_type": type(subset).__name__},
+            )
 
-        if not subset:
+        if subset is None:
             return DataFrame(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True, within_watermark=True),
                 session=self._session,
             )
-        elif len(subset) == 1 and isinstance(subset[0], list):
-            return DataFrame(
-                plan.Deduplicate(child=self._plan, column_names=subset[0], within_watermark=True),
-                session=self._session,
-            )
         else:
+            for c in subset:
+                if not isinstance(c, str):
+                    raise PySparkTypeError(
+                        errorClass="NOT_STR",
+                        messageParameters={"arg_name": "subset", "arg_type": type(c).__name__},
+                    )
             return DataFrame(
-                plan.Deduplicate(
-                    child=self._plan,
-                    column_names=cast(List[str], subset),
-                    within_watermark=True,
-                ),
+                plan.Deduplicate(child=self._plan, column_names=subset, within_watermark=True),
                 session=self._session,
             )
 
@@ -1797,7 +1783,7 @@ class DataFrame(ParentDataFrame):
                     )
                 )
             else:
-                # TODO: revisit vanilla Spark's Dataset.col
+                # TODO: revisit classic Spark's Dataset.col
                 # if (sparkSession.sessionState.conf.supportQuotedRegexColumnName) {
                 #   colRegex(colName)
                 # } else {
@@ -1871,6 +1857,12 @@ class DataFrame(ParentDataFrame):
         pdf, ei = self._session.client.to_pandas(query, self._plan.observations)
         self._execution_info = ei
         return pdf
+
+    def transpose(self, indexColumn: Optional["ColumnOrName"] = None) -> ParentDataFrame:
+        return DataFrame(
+            plan.Transpose(self._plan, [F._to_col(indexColumn)] if indexColumn is not None else []),
+            self._session,
+        )
 
     @property
     def schema(self) -> StructType:

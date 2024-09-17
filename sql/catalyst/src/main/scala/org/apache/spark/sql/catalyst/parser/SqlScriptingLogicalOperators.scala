@@ -89,3 +89,52 @@ case class WhileStatement(
     condition: SingleStatement,
     body: CompoundBody,
     label: Option[String]) extends CompoundPlanStatement
+
+/**
+ * Logical operator for REPEAT statement.
+ * @param condition Any expression evaluating to a Boolean.
+ *                 Body is executed as long as the condition evaluates to false
+ * @param body Compound body is a collection of statements that are executed once no matter what,
+ *             and then as long as condition is false.
+ * @param label An optional label for the loop which is unique amongst all labels for statements
+ *              within which the LOOP statement is contained.
+ *              If an end label is specified it must match the beginning label.
+ *              The label can be used to LEAVE or ITERATE the loop.
+ */
+case class RepeatStatement(
+    condition: SingleStatement,
+    body: CompoundBody,
+    label: Option[String]) extends CompoundPlanStatement
+
+
+/**
+ * Logical operator for LEAVE statement.
+ * The statement can be used both for compounds or any kind of loops.
+ * When used, the corresponding body/loop execution is skipped and the execution continues
+ *   with the next statement after the body/loop.
+ * @param label Label of the compound or loop to leave.
+ */
+case class LeaveStatement(label: String) extends CompoundPlanStatement
+
+/**
+ * Logical operator for ITERATE statement.
+ * The statement can be used only for loops.
+ * When used, the rest of the loop is skipped and the loop execution continues
+ *   with the next iteration.
+ * @param label Label of the loop to iterate.
+ */
+case class IterateStatement(label: String) extends CompoundPlanStatement
+
+/**
+ * Logical operator for CASE statement.
+ * @param conditions Collection of conditions which correspond to WHEN clauses.
+ * @param conditionalBodies Collection of bodies that have a corresponding condition,
+ *                          in WHEN branches.
+ * @param elseBody Body that is executed if none of the conditions are met, i.e. ELSE branch.
+ */
+case class CaseStatement(
+    conditions: Seq[SingleStatement],
+    conditionalBodies: Seq[CompoundBody],
+    elseBody: Option[CompoundBody]) extends CompoundPlanStatement {
+  assert(conditions.length == conditionalBodies.length)
+}

@@ -48,7 +48,7 @@ class HiveResolutionSuite extends HiveComparisonTest {
       exception = intercept[AnalysisException] {
         sql("SELECT a[0].b from nested").queryExecution.analyzed
       },
-      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+      condition = "AMBIGUOUS_REFERENCE_TO_FIELDS",
       sqlState = "42000",
       parameters = Map("field" -> "`b`", "count" -> "2")
     )

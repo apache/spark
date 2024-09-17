@@ -62,8 +62,8 @@ trait SparkParserUtils {
       val secondChar = s.charAt(start + 1)
       val thirdChar = s.charAt(start + 2)
       (firstChar == '0' || firstChar == '1') &&
-        (secondChar >= '0' && secondChar <= '7') &&
-        (thirdChar >= '0' && thirdChar <= '7')
+      (secondChar >= '0' && secondChar <= '7') &&
+      (thirdChar >= '0' && thirdChar <= '7')
     }
 
     val isRawString = {
@@ -97,15 +97,18 @@ trait SparkParserUtils {
             // \u0000 style 16-bit unicode character literals.
             sb.append(Integer.parseInt(b, i + 1, i + 1 + 4, 16).toChar)
             i += 1 + 4
-          } else if (cAfterBackslash == 'U' && i + 1 + 8 <= length && allCharsAreHex(b, i + 1, 8)) {
+          } else if (cAfterBackslash == 'U' && i + 1 + 8 <= length && allCharsAreHex(
+              b,
+              i + 1,
+              8)) {
             // \U00000000 style 32-bit unicode character literals.
             // Use Long to treat codePoint as unsigned in the range of 32-bit.
             val codePoint = JLong.parseLong(b, i + 1, i + 1 + 8, 16)
             if (codePoint < 0x10000) {
-              sb.append((codePoint & 0xFFFF).toChar)
+              sb.append((codePoint & 0xffff).toChar)
             } else {
-              val highSurrogate = (codePoint - 0x10000) / 0x400 + 0xD800
-              val lowSurrogate = (codePoint - 0x10000) % 0x400 + 0xDC00
+              val highSurrogate = (codePoint - 0x10000) / 0x400 + 0xd800
+              val lowSurrogate = (codePoint - 0x10000) % 0x400 + 0xdc00
               sb.append(highSurrogate.toChar)
               sb.append(lowSurrogate.toChar)
             }
@@ -147,8 +150,13 @@ trait SparkParserUtils {
     if (text.isEmpty) {
       CurrentOrigin.set(position(ctx.getStart))
     } else {
-      CurrentOrigin.set(positionAndText(ctx.getStart, ctx.getStop, text.get,
-        current.objectType, current.objectName))
+      CurrentOrigin.set(
+        positionAndText(
+          ctx.getStart,
+          ctx.getStop,
+          text.get,
+          current.objectType,
+          current.objectName))
     }
     try {
       f

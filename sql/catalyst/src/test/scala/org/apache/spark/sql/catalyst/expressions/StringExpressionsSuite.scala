@@ -155,7 +155,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[AnalysisException] {
         Elt(Seq.empty).checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`elt`",
         "expectedNum" -> "> 1",
@@ -166,7 +166,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[AnalysisException] {
         Elt(Seq(Literal(1))).checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`elt`",
         "expectedNum" -> "> 1",
@@ -466,6 +466,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val a = $"a".string.at(0)
     val b = $"b".binary.at(0)
     val bytes = Array[Byte](1, 2, 3, 4)
+
+    assert(!Base64(Literal(bytes)).nullable)
+    assert(Base64(Literal.create(null, BinaryType)).nullable)
+    assert(Base64(Literal(bytes).castNullable()).nullable)
+    assert(!UnBase64(Literal("AQIDBA==")).nullable)
+    assert(UnBase64(Literal.create(null, StringType)).nullable)
+    assert(UnBase64(Literal("AQIDBA==").castNullable()).nullable)
 
     checkEvaluation(Base64(Literal(bytes)), "AQIDBA==", create_row("abdef"))
     checkEvaluation(Base64(UnBase64(Literal("AQIDBA=="))), "AQIDBA==", create_row("abdef"))
@@ -1498,7 +1505,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
       checkErrorInExpression[SparkIllegalArgumentException](
         toNumberExpr,
-        errorClass = "INVALID_FORMAT.MISMATCH_INPUT",
+        condition = "INVALID_FORMAT.MISMATCH_INPUT",
         parameters = Map(
           "inputType" -> "\"STRING\"",
           "input" -> str,
@@ -1903,7 +1910,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[AnalysisException] {
         ParseUrl(Seq(Literal("1"))).checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`parse_url`",
         "expectedNum" -> "[2, 3]",
@@ -1915,7 +1922,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         ParseUrl(Seq(Literal("1"), Literal("2"), Literal("3"),
           Literal("4"))).checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`parse_url`",
         "expectedNum" -> "[2, 3]",
@@ -1980,7 +1987,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(
-      Sentences(Literal("\"quote"), Literal("\"quote"), Literal("\"quote")) :: Nil)
+      Sentences(Literal("\"quote"), Literal("\"quote"), Literal("\"quote")).replacement :: Nil)
   }
 
   test("SPARK-33386: elt ArrayIndexOutOfBoundsException") {
@@ -2030,7 +2037,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[AnalysisException] {
         expr1.checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`elt`",
         "expectedNum" -> "> 1",

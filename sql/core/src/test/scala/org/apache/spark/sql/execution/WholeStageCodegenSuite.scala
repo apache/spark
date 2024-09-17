@@ -878,7 +878,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
             exception = intercept[SparkException] {
               sql(query).collect()
             },
-            errorClass = "INTERNAL_ERROR",
+            condition = "INTERNAL_ERROR",
             parameters = Map("message" -> expectedErrMsg),
             matchPVals = true)
         }
@@ -903,7 +903,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
             exception = intercept[SparkException] {
               sql(query).collect()
             },
-            errorClass = "INTERNAL_ERROR",
+            condition = "INTERNAL_ERROR",
             parameters = Map("message" -> expectedErrMsg),
             matchPVals = true)
         }

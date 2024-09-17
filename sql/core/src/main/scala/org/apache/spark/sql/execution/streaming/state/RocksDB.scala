@@ -214,14 +214,14 @@ class RocksDB(
 
   /**
    * Remove RocksDB column family, if exists
+   * @return columnFamilyId if it exists, else None
    */
-  def removeColFamilyIfExists(colFamilyName: String): Boolean = {
+  def removeColFamilyIfExists(colFamilyName: String): Option[Short] = {
     if (checkColFamilyExists(colFamilyName)) {
-      colFamilyNameToIdMap.remove(colFamilyName)
       shouldForceSnapshot.set(true)
-      true
+      Some(colFamilyNameToIdMap.remove(colFamilyName))
     } else {
-      false
+      None
     }
   }
 
@@ -273,7 +273,7 @@ class RocksDB(
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)}")
     try {
       if (loadedVersion != version) {
-        closeDB()
+        closeDB(ignoreException = false)
         val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
         rocksDBFileMapping.currentVersion = latestSnapshotVersion
         val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion,
@@ -402,10 +402,12 @@ class RocksDB(
    * Replay change log from the loaded version to the target version.
    */
   private def replayChangelog(endVersion: Long): Unit = {
+    logInfo(log"Replaying changelog from version " +
+      log"${MDC(LogKeys.LOADED_VERSION, loadedVersion)} -> " +
+      log"${MDC(LogKeys.END_VERSION, endVersion)}")
     for (v <- loadedVersion + 1 to endVersion) {
-      logInfo(log"replaying changelog from version " +
-        log"${MDC(LogKeys.LOADED_VERSION, loadedVersion)} -> " +
-        log"${MDC(LogKeys.END_VERSION, endVersion)}")
+      logInfo(log"Replaying changelog on version " +
+        log"${MDC(LogKeys.VERSION_NUM, v)}")
       var changelogReader: StateStoreChangelogReader = null
       try {
         changelogReader = fileManager.getChangelogReader(v, useColumnFamilies)
@@ -912,11 +914,13 @@ class RocksDB(
    *
    * @param opType - operation type releasing the lock
    */
-  private def release(opType: RocksDBOpType): Unit = acquireLock.synchronized  {
-    logInfo(log"RocksDB instance was released by ${MDC(LogKeys.THREAD, acquiredThreadInfo)} " +
-      log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
-    acquiredThreadInfo = null
-    acquireLock.notifyAll()
+  private def release(opType: RocksDBOpType): Unit = acquireLock.synchronized {
+    if (acquiredThreadInfo != null) {
+      logInfo(log"RocksDB instance was released by ${MDC(LogKeys.THREAD,
+        acquiredThreadInfo)} " + log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
+      acquiredThreadInfo = null
+      acquireLock.notifyAll()
+    }
   }
 
   private def getDBProperty(property: String): Long = db.getProperty(property).toLong
@@ -927,13 +931,17 @@ class RocksDB(
     logInfo(log"Opened DB with conf ${MDC(LogKeys.CONFIG, conf)}")
   }
 
-  private def closeDB(): Unit = {
+  private def closeDB(ignoreException: Boolean = true): Unit = {
     if (db != null) {
-
       // Cancel and wait until all background work finishes
       db.cancelAllBackgroundWork(true)
-      // Close the DB instance
-      db.close()
+      if (ignoreException) {
+        // Close the DB instance
+        db.close()
+      } else {
+        // Close the DB instance and throw the exception if any
+        db.closeE()
+      }
       db = null
     }
   }
