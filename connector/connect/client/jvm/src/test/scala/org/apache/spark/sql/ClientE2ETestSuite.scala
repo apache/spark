@@ -23,7 +23,7 @@ import java.util.Properties
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration.DurationInt
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.jdk.CollectionConverters._
 
 import org.apache.commons.io.FileUtils
@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, 
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
+import org.apache.spark.sql.connect.client.{RetryPolicy, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.test.{ConnectFunSuite, IntegrationTestUtils, RemoteSparkSession, SQLHelper}
@@ -1569,7 +1569,21 @@ class ClientE2ETestSuite
 
   test("SPARK-49673: new batch size, multiple batches") {
     val maxBatchSize = spark.conf.get("spark.connect.grpc.arrow.maxBatchSize").dropRight(1).toInt
-    assert(spark.range(maxBatchSize).collect().length == maxBatchSize)
+    // Adjust client grpcMaxMessageSize to maxBatchSize (10MiB; set in RemoteSparkSession config)
+    val sparkWithLowerMaxMessageSize = SparkSession
+      .builder()
+      .client(
+        SparkConnectClient
+          .builder()
+          .userId("test")
+          .port(port)
+          .grpcMaxMessageSize(maxBatchSize)
+          .retryPolicy(RetryPolicy
+            .defaultPolicy()
+            .copy(maxRetries = Some(10), maxBackoff = Some(FiniteDuration(30, "s"))))
+          .build())
+      .create()
+    assert(sparkWithLowerMaxMessageSize.range(maxBatchSize).collect().length == maxBatchSize)
   }
 }
 
