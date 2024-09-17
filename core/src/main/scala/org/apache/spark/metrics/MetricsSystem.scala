@@ -77,7 +77,7 @@ private[spark] class MetricsSystem private (
   private[this] val metricsConfig = new MetricsConfig(conf)
 
   private val sinks = new mutable.ArrayBuffer[Sink]
-  private val sourcesWithListeners = new mutable.HashMap[Source, MetricRegistryListener]
+  private val sources = new mutable.ArrayBuffer[(Source, MetricRegistryListener)]
 
   private var running: Boolean = false
 
@@ -111,8 +111,8 @@ private[spark] class MetricsSystem private (
     if (running) {
       sinks.foreach(_.stop())
       registry.removeMatching((_: String, _: Metric) => true)
-      sourcesWithListeners.synchronized {
-        sourcesWithListeners.keySet.foreach(removeSource)
+      sources.synchronized {
+        sources.foreach(s => removeSource(s._1))
       }
     } else {
       logWarning("Stopping a MetricsSystem that is not running")
@@ -159,21 +159,24 @@ private[spark] class MetricsSystem private (
     } else { defaultName }
   }
 
-  def getSourcesByName(sourceName: String): Seq[Source] = sourcesWithListeners.synchronized {
-    sourcesWithListeners.keySet.filter(_.sourceName == sourceName).toSeq
+  def getSourcesByName(sourceName: String): Seq[Source] = sources.synchronized {
+    sources.filter(s => s._1.sourceName == sourceName).map(_._1).toSeq
   }
 
   def registerSource(source: Source): Unit = {
     val listener = new MetricsSystemListener(buildRegistryName(source))
-    sourcesWithListeners.synchronized {
-      sourcesWithListeners += source -> listener
+    sources.synchronized {
+      sources += (source, listener)
     }
     source.metricRegistry.addListener(listener)
   }
 
   def removeSource(source: Source): Unit = {
-    sourcesWithListeners.synchronized {
-      sourcesWithListeners.remove(source).foreach(source.metricRegistry.removeListener)
+    sources.synchronized {
+      val sourceIdx = sources.indexWhere(s => s._1 == source)
+      if (sourceIdx != -1) {
+        source.metricRegistry.removeListener(sources.remove(sourceIdx)._2)
+      }
     }
     val regName = buildRegistryName(source)
     registry.removeMatching((name: String, _: Metric) => name.startsWith(regName))

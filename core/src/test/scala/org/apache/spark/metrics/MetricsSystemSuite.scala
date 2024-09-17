@@ -20,7 +20,6 @@ package org.apache.spark.metrics
 import java.util.Properties
 
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
 
 import com.codahale.metrics.{Gauge, MetricRegistry, MetricRegistryListener}
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
@@ -46,10 +45,10 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     val metricsSystem = MetricsSystem.createMetricsSystem("default", conf)
     metricsSystem.start()
     val sources =
-      PrivateMethod[HashMap[Source, MetricRegistryListener]](Symbol("sourcesWithListeners"))
+      PrivateMethod[ArrayBuffer[(Source, MetricRegistryListener)]](Symbol("sources"))
     val sinks = PrivateMethod[ArrayBuffer[Sink]](Symbol("sinks"))
 
-    assert(metricsSystem.invokePrivate(sources()).size === StaticSources.allSources.length)
+    assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length)
     assert(metricsSystem.invokePrivate(sinks()).length === 0)
     assert(metricsSystem.getServletHandlers.nonEmpty)
   }
@@ -58,16 +57,16 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     val metricsSystem = MetricsSystem.createMetricsSystem("test", conf)
     metricsSystem.start()
     val sources =
-      PrivateMethod[HashMap[Source, MetricRegistryListener]](Symbol("sourcesWithListeners"))
+      PrivateMethod[ArrayBuffer[(Source, MetricRegistryListener)]](Symbol("sources"))
     val sinks = PrivateMethod[ArrayBuffer[Sink]](Symbol("sinks"))
 
-    assert(metricsSystem.invokePrivate(sources()).size === StaticSources.allSources.length)
+    assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length)
     assert(metricsSystem.invokePrivate(sinks()).length === 1)
     assert(metricsSystem.getServletHandlers.nonEmpty)
 
     val source = new MasterSource(null)
     metricsSystem.registerSource(source)
-    assert(metricsSystem.invokePrivate(sources()).size === StaticSources.allSources.length + 1)
+    assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length + 1)
   }
 
   test("MetricsSystem with Driver instance") {
