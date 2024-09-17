@@ -79,6 +79,8 @@ class TransformWithStateInPandasStateServer(
 
   private var expiryTimestampIter: Option[Iterator[(Any, Long)]] = None
 
+  private var groupingKeyToListTimerIter: Option[Iterator[Long]] = None
+
   def run(): Unit = {
     val listeningSocket = stateServerSocket.accept()
     inputStream = new DataInputStream(
@@ -240,16 +242,18 @@ class TransformWithStateInPandasStateServer(
             statefulProcessorHandle.deleteTimer(expiryTimestamp)
             sendResponse(0)
           case TimerStateCallCommand.MethodCase.LIST =>
-            val iter = statefulProcessorHandle.listTimers()
+            if (!groupingKeyToListTimerIter.isDefined) {
+              groupingKeyToListTimerIter = Option(statefulProcessorHandle.listTimers())
+            }
 
-            if (iter == null || !iter.hasNext) {
+            if (groupingKeyToListTimerIter.get == null || !groupingKeyToListTimerIter.get.hasNext) {
               // avoid sending over empty batch
               sendResponse(1)
             } else {
               sendResponse(0)
               val outputSchema = new StructType()
                 .add(StructField("timestamp", LongType))
-              sendIteratorAsArrowBatches(iter, outputSchema) { data =>
+              sendIteratorAsArrowBatches(groupingKeyToListTimerIter.get, outputSchema) { data =>
                 InternalRow(data)
               }
             }

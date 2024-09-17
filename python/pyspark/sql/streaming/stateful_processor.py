@@ -172,7 +172,7 @@ class StatefulProcessorHandle:
     def deleteTimer(self, expiry_time_stamp_ms: int) -> None:
         self.stateful_processor_api_client.delete_timer(expiry_time_stamp_ms)
 
-    def listTimers(self) -> list[int]:
+    def listTimers(self) -> Iterator[list[int]]:
         return self.stateful_processor_api_client.list_timers()
 
 

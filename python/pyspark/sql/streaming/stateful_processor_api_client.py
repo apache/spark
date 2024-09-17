@@ -159,31 +159,31 @@ class StatefulProcessorApiClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error delete timers: " f"{response_message[1]}")
 
-    def list_timers(self) -> list[int]:
+    def list_timers(self) -> Iterator[list[int]]:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        while True:
+            list_call = stateMessage.ListTimers()
+            state_call_command = stateMessage.TimerStateCallCommand(list=list_call)
+            call = stateMessage.StatefulProcessorCall(timerStateCall=state_call_command)
+            message = stateMessage.StateRequest(statefulProcessorCall=call)
 
-        list_call = stateMessage.ListTimers()
-        state_call_command = stateMessage.TimerStateCallCommand(list=list_call)
-        call = stateMessage.StatefulProcessorCall(timerStateCall=state_call_command)
-        message = stateMessage.StateRequest(statefulProcessorCall=call)
-
-        self._send_proto_message(message.SerializeToString())
-        response_message = self._receive_proto_message()
-        status = response_message[0]
-        if status == 1:
-            return []
-        elif status == 0:
-            iterator = self._read_arrow_state()
-            batch = next(iterator)
-            result_list = []
-            batch_df = batch.to_pandas()
-            for i in range(batch.num_rows):
-                timestamp = batch_df.at[i, 'timestamp'].item()
-                result_list.append(timestamp)
-            return result_list
-        else:
-            # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(f"Error getting expiry timers: " f"{response_message[1]}")
+            self._send_proto_message(message.SerializeToString())
+            response_message = self._receive_proto_message()
+            status = response_message[0]
+            if status == 1:
+                break
+            elif status == 0:
+                iterator = self._read_arrow_state()
+                batch = next(iterator)
+                result_list = []
+                batch_df = batch.to_pandas()
+                for i in range(batch.num_rows):
+                    timestamp = batch_df.at[i, 'timestamp'].item()
+                    result_list.append(timestamp)
+                return result_list
+            else:
+                # TODO(SPARK-49233): Classify user facing errors.
+                raise PySparkRuntimeError(f"Error getting expiry timers: " f"{response_message[1]}")
 
     def get_expiry_timers_iterator(self, expiry_timestamp: int) -> Iterator[list[Any, int]]:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
