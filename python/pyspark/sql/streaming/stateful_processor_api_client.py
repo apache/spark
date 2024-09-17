@@ -180,7 +180,7 @@ class StatefulProcessorApiClient:
                 for i in range(batch.num_rows):
                     timestamp = batch_df.at[i, 'timestamp'].item()
                     result_list.append(timestamp)
-                return result_list
+                yield result_list
             else:
                 # TODO(SPARK-49233): Classify user facing errors.
                 raise PySparkRuntimeError(f"Error getting expiry timers: " f"{response_message[1]}")

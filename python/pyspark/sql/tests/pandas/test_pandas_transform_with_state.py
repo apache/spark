@@ -88,7 +88,6 @@ class TransformWithStateInPandasTestsMixin:
         )
         return df_final
 
-    """
     def _test_transform_with_state_in_pandas_basic(
         self, stateful_processor, check_results, single_batch=False, timeMode="None"
     ):
@@ -309,7 +308,6 @@ class TransformWithStateInPandasTestsMixin:
             self.assertTrue(q.exception() is None)
         finally:
             input_dir.cleanup()
-    """
 
     def _test_transform_with_state_in_pandas_proc_timer(
             self, stateful_processor, check_results):
@@ -532,6 +530,13 @@ class ProcTimeStatefulProcessor(StatefulProcessor):
     def handleInputRows(self, key, rows, timer_values, expired_timer_info) -> Iterator[pd.DataFrame]:
         if expired_timer_info.is_valid():
             # reset count state each time the timer is expired
+            timer_list = []
+            for e in self.handle.listTimers():
+                timer_list.extend(e)
+            if len(timer_list) > 0:
+                # before deleting the expiring timers, there are 2 timers -
+                # one timer we just registered, and one that is going to be deleted
+                assert(len(timer_list) == 2)
             self.count_state.clear()
             self.handle.deleteTimer(expired_timer_info.get_expiry_time_in_ms())
             yield pd.DataFrame({"id": key, "countAsString": str("-1"),

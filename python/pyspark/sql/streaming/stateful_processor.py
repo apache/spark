@@ -167,12 +167,21 @@ class StatefulProcessorHandle:
         return ValueState(ValueStateClient(self.stateful_processor_api_client), state_name, schema)
 
     def registerTimer(self, expiry_time_stamp_ms: int) -> None:
+        """
+        Register a timer for a given expiry timestamp in milliseconds for the grouping key.
+        """
         self.stateful_processor_api_client.register_timer(expiry_time_stamp_ms)
 
     def deleteTimer(self, expiry_time_stamp_ms: int) -> None:
+        """
+        Delete a timer for a given expiry timestamp in milliseconds for the grouping key.
+        """
         self.stateful_processor_api_client.delete_timer(expiry_time_stamp_ms)
 
     def listTimers(self) -> Iterator[list[int]]:
+        """
+        List all timers of their expiry timestamps in milliseconds for the grouping key.
+        """
         return self.stateful_processor_api_client.list_timers()
 
 
