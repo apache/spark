@@ -79,7 +79,7 @@ class TransformWithStateInPandasStateServer(
 
   private var expiryTimestampIter: Option[Iterator[(Any, Long)]] = None
 
-  private var groupingKeyToListTimerIter: Option[Iterator[Long]] = None
+  private var listTimerIter: Option[Iterator[Long]] = None
 
   def run(): Unit = {
     val listeningSocket = stateServerSocket.accept()
@@ -164,7 +164,8 @@ class TransformWithStateInPandasStateServer(
           expiryTimestampIter =
             Option(statefulProcessorHandle.getExpiredTimersWithKeyRow(expiryTimestamp))
         }
-        if (expiryTimestampIter.get == null || !expiryTimestampIter.get.hasNext) {
+        // expiryTimestampIter could be None in the TWSPandasServerSuite
+        if (!expiryTimestampIter.isDefined || !expiryTimestampIter.get.hasNext) {
           // iterator is exhausted, signal the end of iterator on python client
           sendResponse(1)
         } else {
@@ -242,18 +243,18 @@ class TransformWithStateInPandasStateServer(
             statefulProcessorHandle.deleteTimer(expiryTimestamp)
             sendResponse(0)
           case TimerStateCallCommand.MethodCase.LIST =>
-            if (!groupingKeyToListTimerIter.isDefined) {
-              groupingKeyToListTimerIter = Option(statefulProcessorHandle.listTimers())
+            if (!listTimerIter.isDefined) {
+              listTimerIter = Option(statefulProcessorHandle.listTimers())
             }
-
-            if (groupingKeyToListTimerIter.get == null || !groupingKeyToListTimerIter.get.hasNext) {
+            // listTimerIter could be None in the TWSPandasServerSuite
+            if (!listTimerIter.isDefined || !listTimerIter.get.hasNext) {
               // avoid sending over empty batch
               sendResponse(1)
             } else {
               sendResponse(0)
               val outputSchema = new StructType()
                 .add(StructField("timestamp", LongType))
-              sendIteratorAsArrowBatches(groupingKeyToListTimerIter.get, outputSchema) { data =>
+              sendIteratorAsArrowBatches(listTimerIter.get, outputSchema) { data =>
                 InternalRow(data)
               }
             }

@@ -153,8 +153,6 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     verify(outputStream).writeInt(0)
   }
 
-
-  // TODO change this after returning correct format
   test("timer value get processing time") {
     val message = TimerRequest.newBuilder().setTimerValueRequest(
       TimerValueRequest.newBuilder().setGetProcessingTimer(
@@ -184,8 +182,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
       ).build()
     ).build()
     stateServer.handleTimerRequest(message)
-    verify(statefulProcessorHandle).getExpiredTimers(any[Long])
-    verify(outputStream).writeInt(0)
+    verify(statefulProcessorHandle).getExpiredTimersWithKeyRow(any[Long])
+    verify(outputStream).writeInt(1)
   }
 
   test("stateful processor register timer") {
@@ -218,6 +216,6 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     ).build()
     stateServer.handleStatefulProcessorCall(message)
     verify(statefulProcessorHandle).listTimers()
-    verify(outputStream).writeInt(0)
+    verify(outputStream).writeInt(1)
   }
 }
