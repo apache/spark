@@ -456,6 +456,21 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     (newPlan, newCond)
   }
 
+   private def guaranteedToReturnOneRow(query: LogicalPlan): Boolean = {
+     if (query.maxRows.exists(_ <= 1)) {
+       return true
+     }
+     val aggNode = query match {
+       case havingPart@Filter(_, aggPart: Aggregate) => Some(aggPart)
+       case aggPart: Aggregate => Some(aggPart)
+       // LIMIT 1 is handled above, this is for all other types of LIMITs
+       case Limit(_, aggPart: Aggregate) => Some(aggPart)
+       case Project(_, aggPart: Aggregate) => Some(aggPart)
+       case _: LogicalPlan => None
+     }
+     (aggNode.isDefined && aggNode.get.groupingExpressions.isEmpty)
+   }
+
   private def rewriteSubQueries(plan: LogicalPlan): LogicalPlan = {
     /**
      * This function is used as a aid to enforce idempotency of pullUpCorrelatedPredicate rule.
@@ -481,7 +496,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     }
 
     plan.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
-      case ScalarSubquery(sub, children, exprId, conditions, hint, mayHaveCountBugOld)
+      case ScalarSubquery(sub, children, exprId, conditions, hint,
+      mayHaveCountBugOld, needSingleJoinOld)
         if children.nonEmpty =>
 
         def mayHaveCountBugAgg(a: Aggregate): Boolean = {
@@ -527,8 +543,13 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           val (topPart, havingNode, aggNode) = splitSubquery(sub)
           (aggNode.isDefined && aggNode.get.groupingExpressions.isEmpty)
         }
+        val needSingleJoin = if (needSingleJoinOld.isDefined) {
+          needSingleJoinOld.get
+        } else {
+          conf.getConf(SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN) && !guaranteedToReturnOneRow(sub)
+        }
         ScalarSubquery(newPlan, children, exprId, getJoinCondition(newCond, conditions),
-          hint, Some(mayHaveCountBug))
+          hint, Some(mayHaveCountBug), Some(needSingleJoin))
       case Exists(sub, children, exprId, conditions, hint) if children.nonEmpty =>
         val (newPlan, newCond) = if (SQLConf.get.decorrelateInnerQueryEnabledForExistsIn) {
           decorrelate(sub, plan, handleCountBug = true)
@@ -786,7 +807,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
       subqueries: ArrayBuffer[ScalarSubquery]): (LogicalPlan, AttributeMap[Attribute]) = {
     val subqueryAttrMapping = ArrayBuffer[(Attribute, Attribute)]()
     val newChild = subqueries.foldLeft(child) {
-      case (currentChild, ScalarSubquery(sub, _, _, conditions, subHint, mayHaveCountBug)) =>
+      case (currentChild, ScalarSubquery(sub, _, _, conditions, subHint, mayHaveCountBug,
+      needSingleJoin)) =>
         val query = DecorrelateInnerQuery.rewriteDomainJoins(currentChild, sub, conditions)
         val origOutput = query.output.head
         // The subquery appears on the right side of the join, hence add its hint to the right
@@ -794,9 +816,13 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         val joinHint = JoinHint(None, subHint)
 
         val resultWithZeroTups = evalSubqueryOnZeroTups(query)
+        val joinType = needSingleJoin match {
+          case Some(true) => LeftSingle
+          case _ => LeftOuter
+        }
         lazy val planWithoutCountBug = Project(
           currentChild.output :+ origOutput,
-          Join(currentChild, query, LeftOuter, conditions.reduceOption(And), joinHint))
+          Join(currentChild, query, joinType, conditions.reduceOption(And), joinHint))
 
         if (Utils.isTesting) {
           assert(mayHaveCountBug.isDefined)
@@ -845,7 +871,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
                 currentChild.output :+ subqueryResultExpr,
                 Join(currentChild,
                   Project(query.output :+ alwaysTrueExpr, query),
-                  LeftOuter, conditions.reduceOption(And), joinHint))
+                  joinType, conditions.reduceOption(And), joinHint))
 
             } else {
               // CASE 3: Subquery with HAVING clause. Pull the HAVING clause above the join.
@@ -877,7 +903,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
                 currentChild.output :+ caseExpr,
                 Join(currentChild,
                   Project(subqueryRoot.output :+ alwaysTrueExpr, subqueryRoot),
-                  LeftOuter, conditions.reduceOption(And), joinHint))
+                  joinType, conditions.reduceOption(And), joinHint))
             }
           }
         }
@@ -1028,7 +1054,7 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
 
     case p: LogicalPlan => p.transformExpressionsUpWithPruning(
       _.containsPattern(SCALAR_SUBQUERY)) {
-      case s @ ScalarSubquery(OneRowSubquery(p @ Project(_, _: OneRowRelation)), _, _, _, _, _)
+      case s @ ScalarSubquery(OneRowSubquery(p @ Project(_, _: OneRowRelation)), _, _, _, _, _, _)
           if !hasCorrelatedSubquery(s.plan) && s.joinCond.isEmpty =>
         assert(p.projectList.size == 1)
         stripOuterReferences(p.projectList).head

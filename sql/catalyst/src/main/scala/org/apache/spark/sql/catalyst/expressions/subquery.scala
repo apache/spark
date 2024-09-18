@@ -378,7 +378,8 @@ case class ScalarSubquery(
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty,
     hint: Option[HintInfo] = None,
-    mayHaveCountBug: Option[Boolean] = None)
+    mayHaveCountBug: Option[Boolean] = None,
+    needSingleJoin: Option[Boolean] = None)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
   override def dataType: DataType = {
     if (!plan.schema.fields.nonEmpty) {

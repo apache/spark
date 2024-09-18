@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{CodegenSupport, ExplainUtils, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.ArrayImplicits._
@@ -63,13 +64,15 @@ case class BroadcastNestedLoopJoinExec(
 
   override def outputPartitioning: Partitioning = (joinType, buildSide) match {
     case (_: InnerLike, _) | (LeftOuter, BuildRight) | (RightOuter, BuildLeft) |
-         (LeftSemi, BuildRight) | (LeftAnti, BuildRight) => streamed.outputPartitioning
+         (LeftSingle, BuildRight) | (LeftSemi, BuildRight) | (LeftAnti, BuildRight) =>
+      streamed.outputPartitioning
     case _ => super.outputPartitioning
   }
 
   override def outputOrdering: Seq[SortOrder] = (joinType, buildSide) match {
     case (_: InnerLike, _) | (LeftOuter, BuildRight) | (RightOuter, BuildLeft) |
-         (LeftSemi, BuildRight) | (LeftAnti, BuildRight) => streamed.outputOrdering
+         (LeftSingle, BuildRight) | (LeftSemi, BuildRight) | (LeftAnti, BuildRight) =>
+      streamed.outputOrdering
     case _ => Nil
   }
 
@@ -87,7 +90,7 @@ case class BroadcastNestedLoopJoinExec(
     joinType match {
       case _: InnerLike =>
         left.output ++ right.output
-      case LeftOuter =>
+      case LeftOuter | LeftSingle =>
         left.output ++ right.output.map(_.withNullability(true))
       case RightOuter =>
         left.output.map(_.withNullability(true)) ++ right.output
@@ -136,7 +139,9 @@ case class BroadcastNestedLoopJoinExec(
    *   LeftOuter with BuildRight
    *   RightOuter with BuildLeft
    */
-  private def outerJoin(relation: Broadcast[Array[InternalRow]]): RDD[InternalRow] = {
+  private def outerJoin(
+      relation: Broadcast[Array[InternalRow]],
+      check: Int => Int): RDD[InternalRow] = {
     streamed.execute().mapPartitionsInternal { streamedIter =>
       val buildRows = relation.value
       val joinedRow = new JoinedRow
@@ -152,6 +157,8 @@ case class BroadcastNestedLoopJoinExec(
         private var resultRow: InternalRow = null
         // the next index of buildRows to try
         private var nextIndex: Int = 0
+        // number of build rows matching the current probe row
+        private var matches: Int = 0
 
         @scala.annotation.tailrec
         private def findNextMatch(): Boolean = {
@@ -162,12 +169,14 @@ case class BroadcastNestedLoopJoinExec(
             streamRow = streamedIter.next()
             nextIndex = 0
             foundMatch = false
+            matches = 0
           }
           while (nextIndex < buildRows.length) {
             resultRow = joinedRow(streamRow, buildRows(nextIndex))
             nextIndex += 1
             if (boundCondition(resultRow)) {
               foundMatch = true
+              matches = check(matches)
               return true
             }
           }
@@ -381,13 +390,25 @@ case class BroadcastNestedLoopJoinExec(
       case (_: InnerLike, _) =>
         innerJoin(broadcastedRelation)
       case (LeftOuter, BuildRight) | (RightOuter, BuildLeft) =>
-        outerJoin(broadcastedRelation)
+        outerJoin(broadcastedRelation, _ => 0)
+      case (LeftSingle, BuildRight) =>
+        val check: Int => Int = matches => {
+          if (matches > 0) {
+            throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows();
+          }
+          matches + 1
+        }
+        outerJoin(broadcastedRelation, check)
       case (LeftSemi, _) =>
         leftExistenceJoin(broadcastedRelation, exists = true)
       case (LeftAnti, _) =>
         leftExistenceJoin(broadcastedRelation, exists = false)
       case (_: ExistenceJoin, _) =>
         existenceJoin(broadcastedRelation)
+      case (LeftSingle, BuildLeft) =>
+        throw new IllegalArgumentException(
+          s"BroadcastNestedLoopJoin should not use the left side as build when " +
+            s"executing a LeftSingle join")
       case _ =>
         /**
          * LeftOuter with BuildLeft
@@ -410,7 +431,7 @@ case class BroadcastNestedLoopJoinExec(
 
   override def supportCodegen: Boolean = (joinType, buildSide) match {
     case (_: InnerLike, _) | (LeftOuter, BuildRight) | (RightOuter, BuildLeft) |
-         (LeftSemi | LeftAnti, BuildRight) => true
+         (LeftSemi | LeftAnti, BuildRight) | (LeftSingle, BuildRight) => true
     case _ => false
   }
 
@@ -428,6 +449,7 @@ case class BroadcastNestedLoopJoinExec(
     (joinType, buildSide) match {
       case (_: InnerLike, _) => codegenInner(ctx, input)
       case (LeftOuter, BuildRight) | (RightOuter, BuildLeft) => codegenOuter(ctx, input)
+      case (LeftSingle, BuildRight) => codegenOuter(ctx, input, single = true)
       case (LeftSemi, BuildRight) => codegenLeftExistence(ctx, input, exists = true)
       case (LeftAnti, BuildRight) => codegenLeftExistence(ctx, input, exists = false)
       case _ =>
@@ -473,7 +495,10 @@ case class BroadcastNestedLoopJoinExec(
      """.stripMargin
   }
 
-  private def codegenOuter(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+  private def codegenOuter(
+      ctx: CodegenContext,
+      input: Seq[ExprCode],
+      single: Boolean = false): String = {
     val (buildRowArray, buildRowArrayTerm) = prepareBroadcast(ctx)
     val (buildRow, checkCondition, _) = getJoinCondition(ctx, input, streamed, broadcast)
     val buildVars = genOneSideJoinVars(ctx, buildRow, broadcast, setDefaultValue = true)
@@ -486,6 +511,7 @@ case class BroadcastNestedLoopJoinExec(
     val shouldOutputRow = ctx.freshName("shouldOutputRow")
     val foundMatch = ctx.freshName("foundMatch")
     val numOutput = metricTerm(ctx, "numOutputRows")
+    val matchesFound = ctx.freshName("matchesFound")
 
     if (buildRowArray.isEmpty) {
       s"""
@@ -494,14 +520,32 @@ case class BroadcastNestedLoopJoinExec(
          |${consume(ctx, resultVars)}
        """.stripMargin
     } else {
+      val initSingleCounter = if (single) {
+        s"""
+           |int $matchesFound = 0;""".stripMargin
+      } else {
+        ""
+      }
+      val evaluateSingleCheck = if (single) {
+        s"""
+           |$matchesFound += 1;
+           |if ($matchesFound > 1) {
+           |  throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows();
+           |}
+           |""".stripMargin
+      } else {
+        ""
+      }
       s"""
          |boolean $foundMatch = false;
+         |${initSingleCounter}
          |for (int $arrayIndex = 0; $arrayIndex < $buildRowArrayTerm.length; $arrayIndex++) {
          |  UnsafeRow $buildRow = (UnsafeRow) $buildRowArrayTerm[$arrayIndex];
          |  boolean $shouldOutputRow = false;
          |  $checkCondition {
          |    $shouldOutputRow = true;
          |    $foundMatch = true;
+         |    $evaluateSingleCheck
          |  }
          |  if ($arrayIndex == $buildRowArrayTerm.length - 1 && !$foundMatch) {
          |    $buildRow = null;

@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{CodegenSupport, ExplainUtils, RowIterator}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{BooleanType, IntegralType, LongType}
@@ -52,7 +53,7 @@ trait HashJoin extends JoinCodegenSupport {
     joinType match {
       case _: InnerLike =>
         left.output ++ right.output
-      case LeftOuter =>
+      case LeftOuter | LeftSingle =>
         left.output ++ right.output.map(_.withNullability(true))
       case RightOuter =>
         left.output.map(_.withNullability(true)) ++ right.output
@@ -71,11 +72,11 @@ trait HashJoin extends JoinCodegenSupport {
         case _: InnerLike | RightOuter => right.outputPartitioning
         case x =>
           throw new IllegalArgumentException(
-            s"HashJoin should not take $x as the JoinType with building left side")
+            s"OutputPart HashJoin should not take $x as the JoinType with building left side")
       }
     case BuildRight =>
       joinType match {
-        case _: InnerLike | LeftOuter | LeftSemi | LeftAnti | _: ExistenceJoin =>
+        case _: InnerLike | LeftOuter | LeftSingle | LeftSemi | LeftAnti | _: ExistenceJoin =>
           left.outputPartitioning
         case x =>
           throw new IllegalArgumentException(
@@ -89,11 +90,11 @@ trait HashJoin extends JoinCodegenSupport {
         case _: InnerLike | RightOuter => right.outputOrdering
         case x =>
           throw new IllegalArgumentException(
-            s"HashJoin should not take $x as the JoinType with building left side")
+            s"OutputOrder HashJoin should not take $x as the JoinType with building left side")
       }
     case BuildRight =>
       joinType match {
-        case _: InnerLike | LeftOuter | LeftSemi | LeftAnti | _: ExistenceJoin =>
+        case _: InnerLike | LeftOuter | LeftSingle | LeftSemi | LeftAnti | _: ExistenceJoin =>
           left.outputOrdering
         case x =>
           throw new IllegalArgumentException(
@@ -191,7 +192,8 @@ trait HashJoin extends JoinCodegenSupport {
 
   private def outerJoin(
       streamedIter: Iterator[InternalRow],
-      hashedRelation: HashedRelation): Iterator[InternalRow] = {
+      hashedRelation: HashedRelation,
+      check: Int => Int): Iterator[InternalRow] = {
     val joinedRow = new JoinedRow()
     val keyGenerator = streamSideKeyGenerator()
     val nullRow = new GenericInternalRow(buildPlan.output.length)
@@ -214,17 +216,20 @@ trait HashJoin extends JoinCodegenSupport {
         val buildIter = hashedRelation.get(rowKey)
         new RowIterator {
           private var found = false
+          private var matches = 0
           override def advanceNext(): Boolean = {
             while (buildIter != null && buildIter.hasNext) {
               val nextBuildRow = buildIter.next()
               if (boundCondition(joinedRow.withRight(nextBuildRow))) {
                 found = true
+                matches = check(matches)
                 return true
               }
             }
             if (!found) {
               joinedRow.withRight(nullRow)
               found = true
+              matches = 0
               return true
             }
             false
@@ -328,7 +333,15 @@ trait HashJoin extends JoinCodegenSupport {
       case _: InnerLike =>
         innerJoin(streamedIter, hashed)
       case LeftOuter | RightOuter =>
-        outerJoin(streamedIter, hashed)
+        outerJoin(streamedIter, hashed, _ => 0)
+      case LeftSingle =>
+        val check: Int => Int = matches => {
+          if (matches > 0) {
+            throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows();
+          }
+          matches + 1
+        }
+        outerJoin(streamedIter, hashed, check)
       case LeftSemi =>
         semiJoin(streamedIter, hashed)
       case LeftAnti =>
@@ -354,7 +367,7 @@ trait HashJoin extends JoinCodegenSupport {
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     joinType match {
       case _: InnerLike => codegenInner(ctx, input)
-      case LeftOuter | RightOuter => codegenOuter(ctx, input)
+      case LeftOuter | RightOuter | LeftSingle => codegenOuter(ctx, input)
       case LeftSemi => codegenSemi(ctx, input)
       case LeftAnti => codegenAnti(ctx, input)
       case _: ExistenceJoin => codegenExistence(ctx, input)
@@ -492,6 +505,23 @@ trait HashJoin extends JoinCodegenSupport {
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
       val found = ctx.freshName("found")
+      val matchesFound = ctx.freshName("matchesFound")
+      val initSingleCounter = if (joinType == LeftSingle) {
+        s"""
+           |int $matchesFound = 0;""".stripMargin
+      } else {
+        ""
+      }
+      val evaluateSingleCheck = if (joinType == LeftSingle) {
+        s"""
+           |$matchesFound = $matchesFound +  1;
+           |if ($matchesFound > 1) {
+           |  throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows();
+           |}
+           |""".stripMargin
+      } else {
+        ""
+      }
 
       s"""
          |// generate join key for stream side
@@ -499,6 +529,7 @@ trait HashJoin extends JoinCodegenSupport {
          |// find matches from HashRelation
          |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
          |boolean $found = false;
+         |${initSingleCounter}
          |// the last iteration of this loop is to emit an empty row if there is no matched rows.
          |while ($matches != null && $matches.hasNext() || !$found) {
          |  UnsafeRow $matched = $matches != null && $matches.hasNext() ?
@@ -506,6 +537,7 @@ trait HashJoin extends JoinCodegenSupport {
          |  ${checkCondition.trim}
          |  if ($conditionPassed) {
          |    $found = true;
+         |    $evaluateSingleCheck
          |    $numOutput.add(1);
          |    ${consume(ctx, resultVars)}
          |  }

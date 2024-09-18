@@ -258,6 +258,7 @@ message Join {
     JOIN_TYPE_LEFT_ANTI = 5;
     JOIN_TYPE_LEFT_SEMI = 6;
     JOIN_TYPE_CROSS = 7;
+    JOIN_TYPE_LEFT_SINGLE = 8;
   }
 
   // (Optional) Only used by joinWith. Set the left and right join data types.
