@@ -11309,7 +11309,9 @@ def sentences(
 
 @_try_remote_functions
 def substring(
-    str: "ColumnOrName", pos: Union["ColumnOrName", int], len: Union["ColumnOrName", int]
+    str: "ColumnOrName",
+    pos: Union["ColumnOrName", int],
+    len: Union["ColumnOrName", int],
 ) -> Column:
     """
     Substring starts at `pos` and is of length `len` when str is String type or
@@ -11348,16 +11350,59 @@ def substring(
 
     Examples
     --------
+    Example 1: Using literal integers as arguments
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('abcd',)], ['s',])
-    >>> df.select(substring(df.s, 1, 2).alias('s')).collect()
-    [Row(s='ab')]
+    >>> df.select('*', sf.substring(df.s, 1, 2)).show()
+    +----+------------------+
+    |   s|substring(s, 1, 2)|
+    +----+------------------+
+    |abcd|                ab|
+    +----+------------------+
+
+    Example 2: Using columns as arguments
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('Spark', 2, 3)], ['s', 'p', 'l'])
-    >>> df.select(substring(df.s, 2, df.l).alias('s')).collect()
-    [Row(s='par')]
-    >>> df.select(substring(df.s, df.p, 3).alias('s')).collect()
-    [Row(s='par')]
-    >>> df.select(substring(df.s, df.p, df.l).alias('s')).collect()
-    [Row(s='par')]
+    >>> df.select('*', sf.substring(df.s, 2, df.l)).show()
+    +-----+---+---+------------------+
+    |    s|  p|  l|substring(s, 2, l)|
+    +-----+---+---+------------------+
+    |Spark|  2|  3|               par|
+    +-----+---+---+------------------+
+
+    >>> df.select('*', sf.substring(df.s, df.p, 3)).show()
+    +-----+---+---+------------------+
+    |    s|  p|  l|substring(s, p, 3)|
+    +-----+---+---+------------------+
+    |Spark|  2|  3|               par|
+    +-----+---+---+------------------+
+
+    >>> df.select('*', sf.substring(df.s, df.p, df.l)).show()
+    +-----+---+---+------------------+
+    |    s|  p|  l|substring(s, p, l)|
+    +-----+---+---+------------------+
+    |Spark|  2|  3|               par|
+    +-----+---+---+------------------+
+
+    Example 3: Using column names as arguments
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('Spark', 2, 3)], ['s', 'p', 'l'])
+    >>> df.select('*', sf.substring(df.s, 2, 'l')).show()
+    +-----+---+---+------------------+
+    |    s|  p|  l|substring(s, 2, l)|
+    +-----+---+---+------------------+
+    |Spark|  2|  3|               par|
+    +-----+---+---+------------------+
+
+    >>> df.select('*', sf.substring('s', 'p', 'l')).show()
+    +-----+---+---+------------------+
+    |    s|  p|  l|substring(s, p, l)|
+    +-----+---+---+------------------+
+    |Spark|  2|  3|               par|
+    +-----+---+---+------------------+
     """
     pos = _enum_to_value(pos)
     pos = lit(pos) if isinstance(pos, int) else pos
