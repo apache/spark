@@ -922,19 +922,14 @@ public final class CollationFactory {
   }
 
   /**
-   * Returns whether the ICU collation is Case Insensitive for the given collation id.
+   * Returns whether the ICU collation is not Case Sensitive Accent Insensitive
+   * for the given collation id.
    */
-  public static Boolean isCI(int collationId) {
-    return Collation.CollationSpecICU.fromCollationId(collationId).caseSensitivity
-            == Collation.CollationSpecICU.CaseSensitivity.CI;
-  }
-
-  /**
-   * Returns whether the ICU collation is Accent Insensitive for the given collation id.
-   */
-  public static Boolean isAI(int collationId) {
-    return Collation.CollationSpecICU.fromCollationId(collationId).accentSensitivity
-            == Collation.CollationSpecICU.AccentSensitivity.AI;
+  public static Boolean isNonCSAI(int collationId) {
+    return Collation.CollationSpecICU.fromCollationId(collationId).caseSensitivity ==
+            Collation.CollationSpecICU.CaseSensitivity.CI ||
+            Collation.CollationSpecICU.fromCollationId(collationId).accentSensitivity !=
+            Collation.CollationSpecICU.AccentSensitivity.AI;
   }
 
   public static void assertValidProvider(String provider) throws SparkException {

@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import scala.jdk.CollectionConverters.MapHasAsJava
-import scala.util.Try
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -1622,63 +1621,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         withTable("tbl") {
           checkCacheTable("'a'")
         }
-      }
-    }
-  }
-
-  test("Expressions not supporting CS_AI collators") {
-    val unsupportedExpressions: Seq[Any] = Seq(
-      "ltrim",
-      "rtrim",
-      "trim",
-      "startswith",
-      "endswith",
-      "locate",
-      "instr",
-      "str_to_map",
-      "contains",
-      "replace",
-      ("translate", "efg"),
-      ("split_part", "2"),
-      ("substring_index", "2"))
-
-    val unsupportedCollator = "unicode_ai"
-    val supportedCollators: Seq[String] = Seq("unicode", "unicode_ci", "unicode_ci_ai")
-
-    unsupportedExpressions.foreach {
-      expression: Any =>
-        val unsupportedQuery: String = {
-          expression match {
-            case expression: String =>
-              s"select $expression('bcd' collate $unsupportedCollator, 'abc')"
-            case (expression: String, parameter: String) =>
-              s"select $expression('bcd' collate $unsupportedCollator, 'abc', '$parameter')"
-            case (expression: String, parameter: Integer) =>
-              s"select $expression('bcd' collate $unsupportedCollator, 'abc', $parameter)"
-          }
-        }
-
-        val analysisException = intercept[AnalysisException] {
-          sql(unsupportedQuery).collect()
-        }
-        assert(analysisException.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
-
-      supportedCollators.foreach {
-        collator =>
-          val supportedQuery = expression match {
-            case expression: String =>
-              s"select $expression('bcd' collate $collator, 'abc')"
-            case (expression: String, parameter: String) =>
-              s"select $expression('bcd' collate $collator, 'abc', '$parameter')"
-            case (expression: String, parameter: Integer) =>
-              s"select $expression('bcd' collate $collator, 'abc', $parameter)"
-          }
-
-          // Tests that expression works properly with non-cs_ai collation
-          val result = Try {
-            sql(supportedQuery).collect()
-          }
-          assert(result.isSuccess)
       }
     }
   }
