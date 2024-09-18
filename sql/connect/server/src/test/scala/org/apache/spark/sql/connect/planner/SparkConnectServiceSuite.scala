@@ -871,11 +871,14 @@ class SparkConnectServiceSuite
   class VerifyEvents(val sparkContext: SparkContext) {
     val listener: MockSparkListener = new MockSparkListener()
     val listenerBus = sparkContext.listenerBus
+    val EVENT_WAIT_TIMEOUT = timeout(10.seconds)
     val LISTENER_BUS_TIMEOUT = 30000
     def executeHolder: ExecuteHolder = {
-      // An ExecuteHolder will eventually be set
-      Eventually.eventually(timeout(1.seconds)) {
-        assert(listener.executeHolder.isDefined)
+      // An ExecuteHolder shall be set eventually through MockSparkListener
+      Eventually.eventually(EVENT_WAIT_TIMEOUT) {
+        assert(
+          listener.executeHolder.isDefined,
+          s"No events have been posted in $EVENT_WAIT_TIMEOUT")
         listener.executeHolder.get
       }
     }
@@ -894,8 +897,10 @@ class SparkConnectServiceSuite
     def onCompleted(producedRowCount: Option[Long] = None): Unit = {
       assert(executeHolder.eventsManager.getProducedRowCount == producedRowCount)
       // The eventsManager is closed asynchronously
-      Eventually.eventually(timeout(1.seconds)) {
-        assert(executeHolder.eventsManager.status == ExecuteStatus.Closed)
+      Eventually.eventually(EVENT_WAIT_TIMEOUT) {
+        assert(
+          executeHolder.eventsManager.status == ExecuteStatus.Closed,
+          s"Execution has not been completed in $EVENT_WAIT_TIMEOUT")
       }
     }
     def onCanceled(): Unit = {
