@@ -1008,7 +1008,9 @@ def unhex(col: "ColumnOrName") -> Column:
 unhex.__doc__ = pysparkfuncs.unhex.__doc__
 
 
-def uniform(min: "ColumnOrName", max: "ColumnOrName", seed: Optional["ColumnOrName"]) -> Column:
+def uniform(
+    min: "ColumnOrName", max: "ColumnOrName", seed: Optional["ColumnOrName"] = None
+) -> Column:
     if seed is None:
         return _invoke_function_over_columns("uniform", min, max)
     else:
@@ -2588,7 +2590,7 @@ def regexp_like(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 regexp_like.__doc__ = pysparkfuncs.regexp_like.__doc__
 
 
-def randstr(length: "ColumnOrName", seed: Optional["ColumnOrName"]) -> Column:
+def randstr(length: "ColumnOrName", seed: Optional["ColumnOrName"] = None) -> Column:
     if seed is None:
         return _invoke_function_over_columns("randstr", length)
     else:

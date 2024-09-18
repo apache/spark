@@ -11862,7 +11862,7 @@ def regexp_like(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def randstr(length: "ColumnOrName", seed: Optional["ColumnOrName"]) -> Column:
+def randstr(length: "ColumnOrName", seed: Optional["ColumnOrName"] = None) -> Column:
     """Returns a string of the specified length whose characters are chosen uniformly at random from
     the following pool of characters: 0-9, a-z, A-Z. The random seed is optional. The string length
     must be a constant two-byte or four-byte integer (SMALLINT or INT, respectively).
@@ -12259,7 +12259,9 @@ def unhex(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def uniform(min: "ColumnOrName", max: "ColumnOrName", seed: Optional["ColumnOrName"]) -> Column:
+def uniform(
+    min: "ColumnOrName", max: "ColumnOrName", seed: Optional["ColumnOrName"] = None
+) -> Column:
     """Returns a random value with independent and identically distributed (i.i.d.) values with the
     specified range of numbers. The random seed is optional. The provided numbers specifying the
     minimum and maximum values of the range must be constant. If both of these numbers are integers,
