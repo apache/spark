@@ -79,7 +79,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
     // Fold expressions that are foldable.
     case e if e.foldable =>
       try {
-        Literal.create(e.eval(EmptyRow), e.dataType)
+        Literal.create(e.freshCopyIfContainsStatefulExpression().eval(EmptyRow), e.dataType)
       } catch {
         case NonFatal(_) if isConditionalBranch =>
           // When doing constant folding inside conditional expressions, we should not fail
@@ -88,6 +88,12 @@ object ConstantFolding extends Rule[LogicalPlan] {
           e.setTagValue(FAILED_TO_EVALUATE, ())
           e
       }
+
+    // Don't replace ScalarSubquery if its plan is an aggregate that may suffer from a COUNT bug.
+    case s @ ScalarSubquery(_, _, _, _, _, mayHaveCountBug)
+      if conf.getConf(SQLConf.DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG) &&
+        mayHaveCountBug.nonEmpty && mayHaveCountBug.get =>
+      s
 
     // Replace ScalarSubquery with null if its maxRows is 0
     case s: ScalarSubquery if s.plan.maxRows.contains(0) =>
@@ -1086,17 +1092,6 @@ object SimplifyCasts extends Rule[LogicalPlan] {
   // any precision or range.
   private def isWiderCast(from: DataType, to: NumericType): Boolean =
     from.isInstanceOf[NumericType] && Cast.canUpCast(from, to)
-}
-
-
-/**
- * Removes nodes that are not necessary.
- */
-object RemoveDispensableExpressions extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
-    _.containsPattern(UNARY_POSITIVE), ruleId) {
-    case UnaryPositive(child) => child
-  }
 }
 
 

@@ -1116,6 +1116,59 @@ struct<>
 
 
 -- !query
+DECLARE agg = 'max'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE col = 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE tab = 'T'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+WITH S(c1, c2) AS (VALUES(1, 2), (2, 3)),
+     T(c1, c2) AS (VALUES ('a', 'b'), ('c', 'd'))
+SELECT IDENTIFIER(agg)(IDENTIFIER(col)) FROM IDENTIFIER(tab)
+-- !query schema
+struct<max(c1):string>
+-- !query output
+c
+
+
+-- !query
+WITH S(c1, c2) AS (VALUES(1, 2), (2, 3)),
+     T(c1, c2) AS (VALUES ('a', 'b'), ('c', 'd'))
+SELECT IDENTIFIER('max')(IDENTIFIER('c1')) FROM IDENTIFIER('T')
+-- !query schema
+struct<max(c1):string>
+-- !query output
+c
+
+
+-- !query
+WITH ABC(c1, c2) AS (VALUES(1, 2), (2, 3))
+SELECT IDENTIFIER('max')(IDENTIFIER('c1')) FROM IDENTIFIER('A' || 'BC')
+-- !query schema
+struct<max(c1):int>
+-- !query output
+2
+
+
+-- !query
 SELECT row_number() OVER IDENTIFIER('x.win') FROM VALUES(1) AS T(c1) WINDOW win AS (ORDER BY c1)
 -- !query schema
 struct<>

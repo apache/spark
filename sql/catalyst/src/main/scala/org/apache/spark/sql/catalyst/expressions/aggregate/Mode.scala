@@ -18,13 +18,14 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, UnresolvedWithinGroup}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult, UnresolvedWithinGroup}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, ExpressionDescription, ImplicitCastInputTypes, SortOrder}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData, UnsafeRowUtils}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
 
 case class Mode(
@@ -47,6 +48,21 @@ case class Mode(
   override def dataType: DataType = child.dataType
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (UnsafeRowUtils.isBinaryStable(child.dataType) || child.dataType.isInstanceOf[StringType]) {
+      /*
+        * The Mode class uses collation awareness logic to handle string data.
+        * Complex types with collated fields are not yet supported.
+       */
+      // TODO: SPARK-48700: Mode expression for complex types (all collations)
+      super.checkInputDataTypes()
+    } else {
+      TypeCheckResult.TypeCheckFailure("The input to the function 'mode' was" +
+        " a type of binary-unstable type that is " +
+        s"not currently supported by ${prettyName}.")
+    }
+  }
 
   override def prettyName: String = "mode"
 
@@ -74,7 +90,29 @@ case class Mode(
     if (buffer.isEmpty) {
       return null
     }
-
+    /*
+      * The Mode class uses special collation awareness logic
+      *  to handle string data types with various collations.
+      *
+      * For string types that don't support binary equality,
+      * we create a new map where the keys are the collation keys of the original strings.
+      *
+      * Keys from the original map are aggregated based on the corresponding collation keys.
+      *  The groupMapReduce method groups the entries by collation key and maps each group
+      *  to a single value (the sum of the counts), and finally reduces the groups to a single map.
+      *
+      * The new map is then used in the rest of the Mode evaluation logic.
+      */
+    val collationAwareBuffer = child.dataType match {
+      case c: StringType if
+        !CollationFactory.fetchCollation(c.collationId).supportsBinaryEquality =>
+        val collationId = c.collationId
+        val modeMap = buffer.toSeq.groupMapReduce {
+         case (k, _) => CollationFactory.getCollationKey(k.asInstanceOf[UTF8String], collationId)
+        }(x => x)((x, y) => (x._1, x._2 + y._2)).values
+        modeMap
+      case _ => buffer
+    }
     reverseOpt.map { reverse =>
       val defaultKeyOrdering = if (reverse) {
         PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]].reverse
@@ -82,8 +120,8 @@ case class Mode(
         PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]]
       }
       val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
-      buffer.maxBy { case (key, count) => (count, key) }(ordering)
-    }.getOrElse(buffer.maxBy(_._2))._1
+      collationAwareBuffer.maxBy { case (key, count) => (count, key) }(ordering)
+    }.getOrElse(collationAwareBuffer.maxBy(_._2))._1
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Mode =
@@ -128,6 +166,7 @@ case class Mode(
     copy(child = newChild)
 }
 
+// TODO: SPARK-48701: PandasMode (all collations)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
@@ -205,6 +244,9 @@ case class PandasMode(
   with ImplicitCastInputTypes with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, true, 0, 0)
+
+  def this(child: Expression, ignoreNA: Expression) =
+    this(child, PandasAggregate.expressionToIgnoreNA(ignoreNA, "pandas_mode"))
 
   // Returns empty array for empty inputs
   override def nullable: Boolean = false

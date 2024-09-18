@@ -134,6 +134,11 @@
       "Metadata can only be provided for a single column."
     ]
   },
+  "CANNOT_REGISTER_UDTF": {
+    "message": [
+      "Cannot register the UDTF '<name>': expected a 'UserDefinedTableFunction'. Please make sure the UDTF is correctly defined as a class, and then either wrap it in the `udtf()` function or annotate it with `@udtf(...)`."
+    ]
+  },
   "CANNOT_SET_TOGETHER": {
     "message": [
       "<arg_list> should not be set together."
@@ -147,6 +152,11 @@
   "CANNOT_WITHOUT": {
     "message": [
       "Cannot <condition1> without <condition2>."
+    ]
+  },
+  "CLASSIC_OPERATION_NOT_SUPPORTED_ON_DF": {
+    "message": [
+      "Calling property or member '<member>' is not supported in PySpark Classic, please use Spark Connect instead."
     ]
   },
   "COLLATION_INVALID_PROVIDER" : {

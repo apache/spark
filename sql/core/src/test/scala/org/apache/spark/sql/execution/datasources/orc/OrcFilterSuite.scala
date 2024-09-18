@@ -28,13 +28,14 @@ import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument, SearchA
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.internal.ExpressionUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -46,6 +47,7 @@ import org.apache.spark.util.ArrayImplicits._
  */
 @ExtendedSQLTest
 class OrcFilterSuite extends OrcTest with SharedSparkSession {
+  import testImplicits.toRichColumn
 
   override protected def sparkConf: SparkConf =
     super
@@ -58,8 +60,8 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       checker: (SearchArgument) => Unit): Unit = {
     val output = predicate.collect { case a: Attribute => a }.distinct
     val query = df
-      .select(output.map(e => Column(e)): _*)
-      .where(Column(predicate))
+      .select(output.map(e => ExpressionUtils.column(e)): _*)
+      .where(ExpressionUtils.column(predicate))
 
     query.queryExecution.optimizedPlan match {
       case PhysicalOperation(_, filters, DataSourceV2ScanRelation(_, o: OrcScan, _, _, _)) =>
@@ -681,7 +683,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
             exception = intercept[AnalysisException] {
               sql(s"select a from $tableName where a < 0").collect()
             },
-            errorClass = "AMBIGUOUS_REFERENCE",
+            condition = "AMBIGUOUS_REFERENCE",
             parameters = Map(
               "name" -> "`a`",
               "referenceNames" -> ("[`spark_catalog`.`default`.`spark_32622`.`a`, " +

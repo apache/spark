@@ -17,6 +17,11 @@
 ARG java_image_tag=21
 
 FROM azul/zulu-openjdk:${java_image_tag}
+LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.ref.name="Apache Spark Scala/Java Image"
+# Overwrite this label to avoid exposing the underlying Ubuntu OS version label
+LABEL org.opencontainers.image.version=""
 
 ARG spark_uid=185
 
@@ -55,7 +60,7 @@ RUN ln -s $(basename $(ls /opt/spark/examples/jars/spark-examples_*.jar)) /opt/s
 COPY kubernetes/tests /opt/spark/tests
 COPY data /opt/spark/data
 
-ENV SPARK_HOME /opt/spark
+ENV SPARK_HOME=/opt/spark
 
 WORKDIR /opt/spark/work-dir
 RUN chmod g+w /opt/spark/work-dir

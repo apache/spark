@@ -1008,11 +1008,10 @@ case class Bin(child: Expression)
   override def dataType: DataType = SQLConf.get.defaultStringType
 
   protected override def nullSafeEval(input: Any): Any =
-    UTF8String.fromString(jl.Long.toBinaryString(input.asInstanceOf[Long]))
+    UTF8String.toBinaryString(input.asInstanceOf[Long])
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c) =>
-      s"UTF8String.fromString(java.lang.Long.toBinaryString($c))")
+    defineCodeGen(ctx, ev, c => s"UTF8String.toBinaryString($c)")
   }
 
   override protected def withNewChildInternal(newChild: Expression): Bin = copy(child = newChild)
@@ -1021,7 +1020,6 @@ case class Bin(child: Expression)
 object Hex {
   private final val hexDigits =
     Array[Byte]('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F')
-  private final val ZERO_UTF8 = UTF8String.fromBytes(Array[Byte]('0'))
 
   // lookup table to translate '0' -> 0 ... 'F'/'f' -> 15
   val unhexDigits = {
@@ -1053,7 +1051,7 @@ object Hex {
 
   def hex(num: Long): UTF8String = {
     val zeros = jl.Long.numberOfLeadingZeros(num)
-    if (zeros == jl.Long.SIZE) return ZERO_UTF8
+    if (zeros == jl.Long.SIZE) return UTF8String.ZERO_UTF8
     val len = (jl.Long.SIZE - zeros + 3) / 4
     var numBuf = num
     val value = new Array[Byte](len)

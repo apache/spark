@@ -124,3 +124,35 @@ select url_decode(null)
 struct<url_decode(NULL):string>
 -- !query output
 NULL
+
+
+-- !query
+select try_url_decode('https%3A%2F%2Fspark.apache.org')
+-- !query schema
+struct<try_url_decode(https%3A%2F%2Fspark.apache.org):string>
+-- !query output
+https://spark.apache.org
+
+
+-- !query
+select try_url_decode('http%3A%2F%2spark.apache.org')
+-- !query schema
+struct<try_url_decode(http%3A%2F%2spark.apache.org):string>
+-- !query output
+NULL
+
+
+-- !query
+select try_url_decode('inva lid://user:pass@host/file\\;param?query\\;p2')
+-- !query schema
+struct<try_url_decode(inva lid://user:pass@host/file\;param?query\;p2):string>
+-- !query output
+inva lid://user:pass@host/file\;param?query\;p2
+
+
+-- !query
+select try_url_decode(null)
+-- !query schema
+struct<try_url_decode(NULL):string>
+-- !query output
+NULL

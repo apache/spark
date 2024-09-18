@@ -816,8 +816,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
   "sqlState" : "4274K",
   "messageParameters" : {
-    "functionName" : "`UDTFForwardStateFromAnalyzeWithKwargs`",
-    "parameterName" : "`argument`"
+    "parameterName" : "`argument`",
+    "routineName" : "`UDTFForwardStateFromAnalyzeWithKwargs`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1033,8 +1033,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
   "sqlState" : "4274K",
   "messageParameters" : {
-    "functionName" : "`UDTFWithSinglePartition`",
-    "parameterName" : "`initial_count`"
+    "parameterName" : "`initial_count`",
+    "routineName" : "`UDTFWithSinglePartition`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1093,6 +1093,29 @@ NULL	1.0
 NULL	1.0
 NULL	1.0
 NULL	1.0
+
+
+-- !query
+SELECT * FROM
+    InvalidEvalReturnsNoneToNonNullableColumnScalarType(TABLE(SELECT 1 AS X), unresolved_column)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`unresolved_column`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 93,
+    "stopIndex" : 109,
+    "fragment" : "unresolved_column"
+  } ]
+}
 
 
 -- !query

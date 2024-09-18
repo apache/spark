@@ -19,17 +19,19 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.util.UUID
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
-import java.util.concurrent.atomic.AtomicReference
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.json4s.{JInt, JString}
+import org.json4s.JsonAST.JValue
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
 
-import org.apache.spark.{SparkContext, SparkEnv, SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkContext, SparkEnv, SparkException}
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
@@ -37,7 +39,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{NextIterator, ThreadUtils, Utils}
 
 /**
  * Base trait for a versioned key-value store which provides read operations. Each instance of a
@@ -124,6 +126,8 @@ trait StateStore extends ReadStateStore {
 
   /**
    * Create column family with given name, if absent.
+   *
+   * @return column family ID
    */
   def createColFamilyIfAbsent(
       colFamilyName: String,
@@ -279,15 +283,44 @@ case class StateStoreCustomTimingMetric(name: String, desc: String) extends Stat
     SQLMetrics.createTimingMetric(sparkContext, desc)
 }
 
-sealed trait KeyStateEncoderSpec
+sealed trait KeyStateEncoderSpec {
+  def jsonValue: JValue
+  def json: String = compact(render(jsonValue))
+}
 
-case class NoPrefixKeyStateEncoderSpec(keySchema: StructType) extends KeyStateEncoderSpec
+object KeyStateEncoderSpec {
+  def fromJson(keySchema: StructType, m: Map[String, Any]): KeyStateEncoderSpec = {
+    // match on type
+    m("keyStateEncoderType").asInstanceOf[String] match {
+      case "NoPrefixKeyStateEncoderSpec" =>
+        NoPrefixKeyStateEncoderSpec(keySchema)
+      case "RangeKeyScanStateEncoderSpec" =>
+        val orderingOrdinals = m("orderingOrdinals").
+          asInstanceOf[List[_]].map(_.asInstanceOf[BigInt].toInt)
+        RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals)
+      case "PrefixKeyScanStateEncoderSpec" =>
+        val numColsPrefixKey = m("numColsPrefixKey").asInstanceOf[BigInt].toInt
+        PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey)
+    }
+  }
+}
+
+case class NoPrefixKeyStateEncoderSpec(keySchema: StructType) extends KeyStateEncoderSpec {
+  override def jsonValue: JValue = {
+    ("keyStateEncoderType" -> JString("NoPrefixKeyStateEncoderSpec"))
+  }
+}
 
 case class PrefixKeyScanStateEncoderSpec(
     keySchema: StructType,
     numColsPrefixKey: Int) extends KeyStateEncoderSpec {
   if (numColsPrefixKey == 0 || numColsPrefixKey >= keySchema.length) {
     throw StateStoreErrors.incorrectNumOrderingColsForPrefixScan(numColsPrefixKey.toString)
+  }
+
+  override def jsonValue: JValue = {
+    ("keyStateEncoderType" -> JString("PrefixKeyScanStateEncoderSpec")) ~
+      ("numColsPrefixKey" -> JInt(numColsPrefixKey))
   }
 }
 
@@ -297,6 +330,11 @@ case class RangeKeyScanStateEncoderSpec(
     orderingOrdinals: Seq[Int]) extends KeyStateEncoderSpec {
   if (orderingOrdinals.isEmpty || orderingOrdinals.length > keySchema.length) {
     throw StateStoreErrors.incorrectNumOrderingColsForRangeScan(orderingOrdinals.length.toString)
+  }
+
+  override def jsonValue: JValue = {
+    ("keyStateEncoderType" -> JString("RangeKeyScanStateEncoderSpec")) ~
+      ("orderingOrdinals" -> orderingOrdinals.map(JInt(_)))
   }
 }
 
@@ -440,6 +478,55 @@ object StateStoreProvider {
 }
 
 /**
+ * This is an optional trait to be implemented by [[StateStoreProvider]]s that can read the change
+ * of state store over batches. This is used by State Data Source with additional options like
+ * snapshotStartBatchId or readChangeFeed.
+ */
+trait SupportsFineGrainedReplay {
+
+  /**
+   * Return an instance of [[StateStore]] representing state data of the given version.
+   * The State Store will be constructed from the snapshot at snapshotVersion, and applying delta
+   * files up to the endVersion. If there is no snapshot file at snapshotVersion, an exception will
+   * be thrown.
+   *
+   * @param snapshotVersion checkpoint version of the snapshot to start with
+   * @param endVersion   checkpoint version to end with
+   */
+  def replayStateFromSnapshot(snapshotVersion: Long, endVersion: Long): StateStore
+
+  /**
+   * Return an instance of [[ReadStateStore]] representing state data of the given version.
+   * The State Store will be constructed from the snapshot at snapshotVersion, and applying delta
+   * files up to the endVersion. If there is no snapshot file at snapshotVersion, an exception will
+   * be thrown.
+   * Only implement this if there is read-only optimization for the state store.
+   *
+   * @param snapshotVersion checkpoint version of the snapshot to start with
+   * @param endVersion   checkpoint version to end with
+   */
+  def replayReadStateFromSnapshot(snapshotVersion: Long, endVersion: Long): ReadStateStore = {
+    new WrappedReadStateStore(replayStateFromSnapshot(snapshotVersion, endVersion))
+  }
+
+  /**
+   * Return an iterator that reads all the entries of changelogs from startVersion to
+   * endVersion.
+   * Each record is represented by a tuple of (recordType: [[RecordType.Value]], key: [[UnsafeRow]],
+   * value: [[UnsafeRow]], batchId: [[Long]])
+   * A put record is returned as a tuple(recordType, key, value, batchId)
+   * A delete record is return as a tuple(recordType, key, null, batchId)
+   *
+   * @param startVersion starting changelog version
+   * @param endVersion ending changelog version
+   * @return iterator that gives tuple(recordType: [[RecordType.Value]], nested key: [[UnsafeRow]],
+   *         nested value: [[UnsafeRow]], batchId: [[Long]])
+   */
+  def getStateStoreChangeDataReader(startVersion: Long, endVersion: Long):
+    NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)]
+}
+
+/**
  * Unique identifier for a provider, used to identify when providers can be reused.
  * Note that `queryRunId` is used uniquely identify a provider, so that the same provider
  * instance is not reused across query restarts.
@@ -524,14 +611,7 @@ object StateStore extends Logging {
   @GuardedBy("loadedProviders")
   private val loadedProviders = new mutable.HashMap[StateStoreProviderId, StateStoreProvider]()
 
-  @GuardedBy("loadedProviders")
-  private val schemaValidated = new mutable.HashMap[StateStoreProviderId, Option[Throwable]]()
-
   private val maintenanceThreadPoolLock = new Object
-
-  // Shared exception between threads in thread pool that the scheduling thread
-  // checks to see if an exception has been thrown in the maintenance task
-  private val threadPoolException = new AtomicReference[Throwable](null)
 
   // This set is to keep track of the partitions that are queued
   // for maintenance or currently have maintenance running on them
@@ -540,10 +620,13 @@ object StateStore extends Logging {
   private val maintenancePartitions = new mutable.HashSet[StateStoreProviderId]
 
   /**
-   * Runs the `task` periodically and automatically cancels it if there is an exception. `onError`
-   * will be called when an exception happens.
+   * Runs the `task` periodically and bubbles any exceptions that it encounters.
+   *
+   * Note: exceptions in the maintenance thread pool are caught and logged; the associated
+   * StateStoreProvider is also unloaded. Any exception that happens in the MaintenanceTask
+   * is indeed exceptional and thus we let it propagate.
    */
-  class MaintenanceTask(periodMs: Long, task: => Unit, onError: => Unit) {
+  class MaintenanceTask(periodMs: Long, task: => Unit) {
     private val executor =
       ThreadUtils.newDaemonSingleThreadScheduledExecutor("state-store-maintenance-task")
 
@@ -554,7 +637,6 @@ object StateStore extends Logging {
         } catch {
           case NonFatal(e) =>
             logWarning("Error running maintenance thread", e)
-            onError
             throw e
         }
       }
@@ -649,15 +731,6 @@ object StateStore extends Logging {
     storeProvider.getStore(version)
   }
 
-  private def disallowBinaryInequalityColumn(schema: StructType): Unit = {
-    if (!UnsafeRowUtils.isBinaryStable(schema)) {
-      throw new SparkUnsupportedOperationException(
-        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
-        messageParameters = Map("schema" -> schema.json)
-      )
-    }
-  }
-
   private def getStateStoreProvider(
       storeProviderId: StateStoreProviderId,
       keySchema: StructType,
@@ -669,40 +742,6 @@ object StateStore extends Logging {
       useMultipleValuesPerKey: Boolean): StateStoreProvider = {
     loadedProviders.synchronized {
       startMaintenanceIfNeeded(storeConf)
-
-      if (storeProviderId.storeId.partitionId == PARTITION_ID_TO_CHECK_SCHEMA) {
-        val result = schemaValidated.getOrElseUpdate(storeProviderId, {
-          // SPARK-47776: collation introduces the concept of binary (in)equality, which means
-          // in some collation we no longer be able to just compare the binary format of two
-          // UnsafeRows to determine equality. For example, 'aaa' and 'AAA' can be "semantically"
-          // same in case insensitive collation.
-          // State store is basically key-value storage, and the most provider implementations
-          // rely on the fact that all the columns in the key schema support binary equality.
-          // We need to disallow using binary inequality column in the key schema, before we
-          // could support this in majority of state store providers (or high-level of state
-          // store.)
-          disallowBinaryInequalityColumn(keySchema)
-
-          val checker = new StateSchemaCompatibilityChecker(storeProviderId, hadoopConf)
-          // regardless of configuration, we check compatibility to at least write schema file
-          // if necessary
-          // if the format validation for value schema is disabled, we also disable the schema
-          // compatibility checker for value schema as well.
-          val ret = Try(
-            checker.check(keySchema, valueSchema,
-              ignoreValueSchema = !storeConf.formatValidationCheckValue)
-          ).toEither.fold(Some(_), _ => None)
-          if (storeConf.stateSchemaCheckEnabled) {
-            ret
-          } else {
-            None
-          }
-        })
-
-        if (result.isDefined) {
-          throw result.get
-        }
-      }
 
       // SPARK-42567 - Track load time for state store provider and log warning if takes longer
       // than 2s.
@@ -753,7 +792,6 @@ object StateStore extends Logging {
   /** Stop maintenance thread and reset the maintenance task */
   def stopMaintenanceTask(): Unit = loadedProviders.synchronized {
     if (maintenanceThreadPool != null) {
-      threadPoolException.set(null)
       maintenanceThreadPoolLock.synchronized {
         maintenancePartitions.clear()
       }
@@ -782,16 +820,7 @@ object StateStore extends Logging {
       if (SparkEnv.get != null && !isMaintenanceRunning) {
         maintenanceTask = new MaintenanceTask(
           storeConf.maintenanceInterval,
-          task = { doMaintenance() },
-          onError = { loadedProviders.synchronized {
-              logInfo("Stopping maintenance task since an error was encountered.")
-              stopMaintenanceTask()
-              // SPARK-44504 - Unload explicitly to force closing underlying DB instance
-              // and releasing allocated resources, especially for RocksDBStateStoreProvider.
-              loadedProviders.keySet.foreach { key => unload(key) }
-              loadedProviders.clear()
-            }
-          }
+          task = { doMaintenance() }
         )
         maintenanceThreadPool = new MaintenanceThreadPool(numMaintenanceThreads)
         logInfo("State Store maintenance task started")
@@ -822,12 +851,6 @@ object StateStore extends Logging {
     loadedProviders.synchronized {
       loadedProviders.toSeq
     }.foreach { case (id, provider) =>
-      // check exception
-      if (threadPoolException.get() != null) {
-        val exception = threadPoolException.get()
-        logWarning("Error in maintenanceThreadPool", exception)
-        throw exception
-      }
       if (processThisPartition(id)) {
         maintenanceThreadPool.execute(() => {
           val startTime = System.currentTimeMillis()
@@ -840,8 +863,20 @@ object StateStore extends Logging {
           } catch {
             case NonFatal(e) =>
               logWarning(log"Error managing ${MDC(LogKeys.STATE_STORE_PROVIDER, provider)}, " +
-                log"stopping management thread", e)
-              threadPoolException.set(e)
+                log"unloading state store provider", e)
+              // When we get a non-fatal exception, we just unload the provider.
+              //
+              // By not bubbling the exception to the maintenance task thread or the query execution
+              // thread, it's possible for a maintenance thread pool task to continue failing on
+              // the same partition. Additionally, if there is some global issue that will cause
+              // all maintenance thread pool tasks to fail, then bubbling the exception and
+              // stopping the pool is faster than waiting for all tasks to see the same exception.
+              //
+              // However, we assume that repeated failures on the same partition and global issues
+              // are rare. The benefit to unloading just the partition with an exception is that
+              // transient issues on a given provider do not affect any other providers; so, in
+              // most cases, this should be a more performant solution.
+              unload(id)
           } finally {
             val duration = System.currentTimeMillis() - startTime
             val logMsg =

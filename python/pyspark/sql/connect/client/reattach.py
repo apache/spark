@@ -74,7 +74,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
             return cls._release_thread_pool_instance
 
     @classmethod
-    def shutdown_threadpool(cls: Type["ExecutePlanResponseReattachableIterator"]) -> None:
+    def shutdown(cls: Type["ExecutePlanResponseReattachableIterator"]) -> None:
         """
         When the channel is closed, this method will be called before, to make sure all
         outstanding calls are closed.
@@ -85,15 +85,6 @@ class ExecutePlanResponseReattachableIterator(Generator):
                 cls._release_thread_pool.join()  # type: ignore[attr-defined]
                 cls._release_thread_pool_instance = None
 
-    def shutdown(self: "ExecutePlanResponseReattachableIterator") -> None:
-        """
-        When the channel is closed, this method will be called before, to make sure all
-        outstanding calls are closed, and mark this iterator is shutdown.
-        """
-        with self._lock:
-            self.shutdown_threadpool()
-            self._is_shutdown = True
-
     def __init__(
         self,
         request: pb2.ExecutePlanRequest,
@@ -101,7 +92,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         retrying: Callable[[], Retrying],
         metadata: Iterable[Tuple[str, str]],
     ):
-        self._is_shutdown = False
+        self._release_thread_pool  # Trigger initialization
         self._request = request
         self._retrying = retrying
         if request.operation_id:
@@ -219,8 +210,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
             except Exception as e:
                 warnings.warn(f"ReleaseExecute failed with exception: {e}.")
 
-        if not self._is_shutdown:
-            self._release_thread_pool.apply_async(target)
+        with self._lock:
+            if self._release_thread_pool_instance is not None:
+                self._release_thread_pool.apply_async(target)
 
     def _release_all(self) -> None:
         """
@@ -243,8 +235,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
             except Exception as e:
                 warnings.warn(f"ReleaseExecute failed with exception: {e}.")
 
-        if not self._is_shutdown:
-            self._release_thread_pool.apply_async(target)
+        with self._lock:
+            if self._release_thread_pool_instance is not None:
+                self._release_thread_pool.apply_async(target)
         self._result_complete = True
 
     def _call_iter(self, iter_fun: Callable) -> Any:
@@ -273,8 +266,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
             ):
                 if self._last_returned_response_id is not None:
                     raise PySparkRuntimeError(
-                        error_class="RESPONSE_ALREADY_RECEIVED",
-                        message_parameters={},
+                        errorClass="RESPONSE_ALREADY_RECEIVED",
+                        messageParameters={},
                     )
                 # Try a new ExecutePlan, and throw upstream for retry.
                 self._iterator = iter(
@@ -291,8 +284,14 @@ class ExecutePlanResponseReattachableIterator(Generator):
             raise e
 
     def _create_reattach_execute_request(self) -> pb2.ReattachExecuteRequest:
+        server_side_session_id = (
+            None
+            if not self._initial_request.client_observed_server_side_session_id
+            else self._initial_request.client_observed_server_side_session_id
+        )
         reattach = pb2.ReattachExecuteRequest(
             session_id=self._initial_request.session_id,
+            client_observed_server_side_session_id=server_side_session_id,
             user_context=self._initial_request.user_context,
             operation_id=self._initial_request.operation_id,
         )

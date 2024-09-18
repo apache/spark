@@ -76,7 +76,7 @@ class UrlFunctionsSuite extends QueryTest with SharedSparkSession {
         exception = intercept[SparkIllegalArgumentException] {
           sql(s"SELECT parse_url('$url', 'HOST')").collect()
         },
-        errorClass = "INVALID_URL",
+        condition = "INVALID_URL",
         parameters = Map(
           "url" -> url,
           "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)

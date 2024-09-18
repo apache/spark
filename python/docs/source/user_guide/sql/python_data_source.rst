@@ -26,6 +26,65 @@ Overview
 The Python Data Source API is a new feature introduced in Spark 4.0, enabling developers to read from custom data sources and write to custom data sinks in Python.
 This guide provides a comprehensive overview of the API and instructions on how to create, use, and manage Python data sources.
 
+Simple Example
+--------------
+Here's a simple Python data source that generates exactly two rows of synthetic data.
+This example demonstrates how to set up a custom data source without using external libraries, focusing on the essentials needed to get it up and running quickly.
+
+**Step 1: Define the data source**
+
+.. code-block:: python
+
+    from pyspark.sql.datasource import DataSource, DataSourceReader
+    from pyspark.sql.types import IntegerType, StringType, StructField, StructType
+
+    class SimpleDataSource(DataSource):
+        """
+        A simple data source for PySpark that generates exactly two rows of synthetic data.
+        """
+
+        @classmethod
+        def name(cls):
+            return "simple"
+
+        def schema(self):
+            return StructType([
+                StructField("name", StringType()),
+                StructField("age", IntegerType())
+            ])
+
+        def reader(self, schema: StructType):
+            return SimpleDataSourceReader()
+
+    class SimpleDataSourceReader(DataSourceReader):
+
+        def read(self, partition):
+            yield ("Alice", 20)
+            yield ("Bob", 30)
+
+**Step 2: Register the data source**
+
+.. code-block:: python
+
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.getOrCreate()
+
+    spark.dataSource.register(SimpleDataSource)
+
+**Step 3: Read from the data source**
+
+.. code-block:: python
+
+    spark.read.format("simple").load().show()
+
+    # +-----+---+
+    # | name|age|
+    # +-----+---+
+    # |Alice| 20|
+    # |  Bob| 30|
+    # +-----+---+
+
 
 Creating a Python Data Source
 -----------------------------
@@ -393,3 +452,67 @@ We can also use the same data source in streaming reader and writer
 .. code-block:: python
 
     query = spark.readStream.format("fake").load().writeStream.format("fake").start("/output_path")
+
+Python Data Source Reader with direct Arrow Batch support for improved performance
+----------------------------------------------------------------------------------
+The Python Datasource Reader supports direct yielding of Arrow Batches, which can significantly improve data processing performance. By using the efficient Arrow format,
+this feature avoids the overhead of traditional row-by-row data processing, resulting in performance improvements of up to one order of magnitude, especially with large datasets.
+
+**Enabling Arrow Batch Support**:
+To enable this feature, configure your custom DataSource to yield Arrow batches by returning `pyarrow.RecordBatch` objects within the `read` method of your `DataSourceReader`
+(or `DataSourceStreamReader`) implementation. This method simplifies data handling and reduces the number of I/O operations, particularly beneficial for large-scale data processing tasks.
+
+**Arrow Batch Example**:
+The following example demonstrates how to implement a basic Data Source using Arrow Batch support.
+
+.. code-block:: python
+
+    from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
+    from pyspark.sql import SparkSession
+    import pyarrow as pa
+
+    # Define the ArrowBatchDataSource
+    class ArrowBatchDataSource(DataSource):
+        """
+        A Data Source for testing Arrow Batch Serialization
+        """
+
+        @classmethod
+        def name(cls):
+            return "arrowbatch"
+
+        def schema(self):
+            return "key int, value string"
+
+        def reader(self, schema: str):
+            return ArrowBatchDataSourceReader(schema, self.options)
+
+    # Define the ArrowBatchDataSourceReader
+    class ArrowBatchDataSourceReader(DataSourceReader):
+        def __init__(self, schema, options):
+            self.schema: str = schema
+            self.options = options
+
+        def read(self, partition):
+            # Create Arrow Record Batch
+            keys = pa.array([1, 2, 3, 4, 5], type=pa.int32())
+            values = pa.array(["one", "two", "three", "four", "five"], type=pa.string())
+            schema = pa.schema([("key", pa.int32()), ("value", pa.string())])
+            record_batch = pa.RecordBatch.from_arrays([keys, values], schema=schema)
+            yield record_batch
+
+        def partitions(self):
+            # Define the number of partitions
+            num_part = 1
+            return [InputPartition(i) for i in range(num_part)]
+
+    # Initialize the Spark Session
+    spark = SparkSession.builder.appName("ArrowBatchExample").getOrCreate()
+
+    # Register the ArrowBatchDataSource
+    spark.dataSource.register(ArrowBatchDataSource)
+
+    # Load data using the custom data source
+    df = spark.read.format("arrowbatch").load()
+
+    df.show()

@@ -42,6 +42,18 @@ package object config {
   private[spark] val SPARK_TASK_PREFIX = "spark.task"
   private[spark] val LISTENER_BUS_EVENT_QUEUE_PREFIX = "spark.scheduler.listenerbus.eventqueue"
 
+  private[spark] val DEFAULT_PARALLELISM =
+    ConfigBuilder("spark.default.parallelism")
+      .doc("Default number of partitions in RDDs returned by transformations like " +
+        "join, reduceByKey, and parallelize when not set by user. " +
+        "For distributed shuffle operations like reduceByKey and join, the largest number of " +
+        "partitions in a parent RDD. For operations like parallelize with no parent RDDs, " +
+        "it depends on the cluster manager. For example in Local mode, it defaults to the " +
+        "number of cores on the local machine")
+      .version("0.5.0")
+      .intConf
+      .createOptional
+
   private[spark] val RESOURCES_DISCOVERY_PLUGIN =
     ConfigBuilder("spark.resources.discoveryPlugin")
       .doc("Comma-separated list of class names implementing" +
@@ -258,6 +270,18 @@ package object config {
       .stringConf
       .toSequence
       .createWithDefault(GarbageCollectionMetrics.OLD_GENERATION_BUILTIN_GARBAGE_COLLECTORS)
+
+  private[spark] val EVENT_LOG_INCLUDE_TASK_METRICS_ACCUMULATORS =
+    ConfigBuilder("spark.eventLog.includeTaskMetricsAccumulators")
+      .doc("Whether to include TaskMetrics' underlying accumulator values in the event log (as " +
+        "part of the Task/Stage/Job metrics' 'Accumulables' fields. This configuration defaults " +
+        "to false because the TaskMetrics values are already logged in the 'Task Metrics' " +
+        "fields (so the accumulator updates are redundant). This flag exists only as a " +
+        "backwards-compatibility escape hatch for applications that might rely on the old " +
+        "behavior. See SPARK-42204 for details.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite")
@@ -906,6 +930,18 @@ package object config {
       .booleanConf
       .createOptional
 
+  private[spark] val EXCLUDE_ON_FAILURE_ENABLED_APPLICATION =
+    ConfigBuilder("spark.excludeOnFailure.application.enabled")
+      .version("4.0.0")
+      .booleanConf
+      .createOptional
+
+  private[spark] val EXCLUDE_ON_FAILURE_ENABLED_TASK_AND_STAGE =
+    ConfigBuilder("spark.excludeOnFailure.taskAndStage.enabled")
+      .version("4.0.0")
+      .booleanConf
+      .createOptional
+
   private[spark] val MAX_TASK_ATTEMPTS_PER_EXECUTOR =
     ConfigBuilder("spark.excludeOnFailure.task.maxTaskAttemptsPerExecutor")
       .version("3.1.0")
@@ -1098,13 +1134,6 @@ package object config {
     .stringConf
     .createOptional
 
-  // To limit how many applications are shown in the History Server summary ui
-  private[spark] val HISTORY_UI_MAX_APPS =
-    ConfigBuilder("spark.history.ui.maxApplications")
-      .version("2.0.1")
-      .intConf
-      .createWithDefault(Integer.MAX_VALUE)
-
   private[spark] val IO_ENCRYPTION_ENABLED = ConfigBuilder("spark.io.encryption.enabled")
     .version("2.1.0")
     .booleanConf
@@ -1237,7 +1266,7 @@ package object config {
         "like YARN and event logs.")
       .version("2.1.2")
       .regexConf
-      .createWithDefault("(?i)secret|password|token|access[.]key".r)
+      .createWithDefault("(?i)secret|password|token|access[.]?key".r)
 
   private[spark] val STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.string.regex")
@@ -1461,6 +1490,14 @@ package object config {
           s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024}.")
       .createWithDefaultString("32k")
 
+  private[spark] val SHUFFLE_FILE_MERGE_BUFFER_SIZE =
+    ConfigBuilder("spark.shuffle.file.merge.buffer")
+      .doc("Size of the in-memory buffer for each shuffle file input stream, in KiB unless " +
+        "otherwise specified. These buffers use off-heap buffers and are related to the number " +
+        "of files in the shuffle file. Too large buffers should be avoided.")
+      .version("4.0.0")
+      .fallbackConf(SHUFFLE_FILE_BUFFER_SIZE)
+
   private[spark] val SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.unsafe.file.output.buffer")
       .doc("(Deprecated since Spark 4.0, please use 'spark.shuffle.localDisk.file.output.buffer'.)")
@@ -1605,8 +1642,7 @@ package object config {
       .version("3.2.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
-      .checkValue(Set("ADLER32", "CRC32").contains, "Shuffle checksum algorithm " +
-        "should be either ADLER32 or CRC32.")
+      .checkValues(Set("ADLER32", "CRC32", "CRC32C"))
       .createWithDefault("ADLER32")
 
   private[spark] val SHUFFLE_COMPRESS =
@@ -1951,6 +1987,13 @@ package object config {
     .version("1.3.0")
     .intConf
     .createWithDefault(6066)
+
+  private[spark] val MASTER_REST_SERVER_FILTERS = ConfigBuilder("spark.master.rest.filters")
+    .doc("Comma separated list of filter class names to apply to the Spark Master REST API.")
+    .version("4.0.0")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
 
   private[spark] val MASTER_UI_PORT = ConfigBuilder("spark.master.ui.port")
     .version("1.1.0")

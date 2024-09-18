@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.{AliasIdentifier, SQLConfHelper}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
@@ -1440,7 +1440,7 @@ case class Offset(offsetExpr: Expression, child: LogicalPlan) extends OrderPrese
 }
 
 /**
- * A constructor for creating a pivot, which will later be converted to a [[Project]]
+ * A logical plan node for creating a pivot, which will later be converted to a [[Project]]
  * or an [[Aggregate]] during the query analysis.
  *
  * @param groupByExprsOpt A sequence of group by expressions. This field should be None if coming
@@ -1474,9 +1474,27 @@ case class Pivot(
   override protected def withNewChildInternal(newChild: LogicalPlan): Pivot = copy(child = newChild)
 }
 
+/**
+ * A logical plan node for transpose, which will later be converted to a [[LocalRelation]]
+ * at ReplaceTranspose during the query optimization.
+ *
+ * The result of the transpose operation is held in the `data` field, and the corresponding
+ * schema is stored in the `output` field. The `Transpose` node does not depend on any child
+ * logical plans after the data has been collected and transposed.
+ *
+ * @param output A sequence of output attributes representing the schema of the transposed data.
+ * @param data A sequence of [[InternalRow]] containing the transposed data.
+ */
+case class Transpose(
+    output: Seq[Attribute],
+    data: Seq[InternalRow] = Nil
+) extends LeafNode {
+  final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPOSE)
+}
+
 
 /**
- * A constructor for creating an Unpivot, which will later be converted to an [[Expand]]
+ * A logical plan node for creating an Unpivot, which will later be converted to an [[Expand]]
  * during the query analysis.
  *
  * Either ids or values array must be set. The ids array can be empty,
@@ -1582,7 +1600,7 @@ case class Unpivot(
 }
 
 /**
- * A constructor for creating a logical limit, which is split into two separate logical nodes:
+ * A logical plan node for creating a logical limit, which is split into two separate logical nodes:
  * a [[LocalLimit]], which is a partition local limit, followed by a [[GlobalLimit]].
  *
  * This muds the water for clean logical/physical separation, and is done for better limit pushdown.
@@ -1997,6 +2015,16 @@ case class DeduplicateWithinWatermark(keys: Seq[Attribute], child: LogicalPlan) 
  * This is used to allow such commands in the subquery-related checks.
  */
 trait SupportsSubquery extends LogicalPlan
+
+/**
+ * Trait that logical plans can extend to check whether it can allow non-deterministic
+ * expressions and pass the CheckAnalysis rule.
+ */
+trait SupportsNonDeterministicExpression extends LogicalPlan {
+
+  /** Returns whether it allows non-deterministic expressions. */
+  def allowNonDeterministicExpression: Boolean
+}
 
 /**
  * Collect arbitrary (named) metrics from a dataset. As soon as the query reaches a completion

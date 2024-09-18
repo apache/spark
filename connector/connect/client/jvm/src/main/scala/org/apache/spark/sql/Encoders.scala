@@ -16,10 +16,11 @@
  */
 package org.apache.spark.sql
 
+import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
-import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder => RowEncoderFactory}
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, JavaSerializationCodec, KryoSerializationCodec, RowEncoder => RowEncoderFactory}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.types.StructType
 
@@ -175,6 +176,54 @@ object Encoders {
    * @since 3.5.0
    */
   def row(schema: StructType): Encoder[Row] = RowEncoderFactory.encoderFor(schema)
+
+  /**
+   * (Scala-specific) Creates an encoder that serializes objects of type T using generic Java
+   * serialization. This encoder maps T into a single byte array (binary) field.
+   *
+   * T must be publicly accessible.
+   *
+   * @note
+   *   This is extremely inefficient and should only be used as the last resort.
+   * @since 4.0.0
+   */
+  def javaSerialization[T: ClassTag]: Encoder[T] = {
+    TransformingEncoder(implicitly[ClassTag[T]], BinaryEncoder, JavaSerializationCodec)
+  }
+
+  /**
+   * Creates an encoder that serializes objects of type T using generic Java serialization. This
+   * encoder maps T into a single byte array (binary) field.
+   *
+   * T must be publicly accessible.
+   *
+   * @note
+   *   This is extremely inefficient and should only be used as the last resort.
+   * @since 4.0.0
+   */
+  def javaSerialization[T](clazz: Class[T]): Encoder[T] = javaSerialization(ClassTag[T](clazz))
+
+  /**
+   * (Scala-specific) Creates an encoder that serializes objects of type T using Kryo. This
+   * encoder maps T into a single byte array (binary) field.
+   *
+   * T must be publicly accessible.
+   *
+   * @since 4.0.0
+   */
+  def kryo[T: ClassTag]: Encoder[T] = {
+    TransformingEncoder(implicitly[ClassTag[T]], BinaryEncoder, KryoSerializationCodec)
+  }
+
+  /**
+   * Creates an encoder that serializes objects of type T using Kryo. This encoder maps T into a
+   * single byte array (binary) field.
+   *
+   * T must be publicly accessible.
+   *
+   * @since 4.0.0
+   */
+  def kryo[T](clazz: Class[T]): Encoder[T] = kryo(ClassTag[T](clazz))
 
   private def tupleEncoder[T](encoders: Encoder[_]*): Encoder[T] = {
     ProductEncoder.tuple(encoders.asInstanceOf[Seq[AgnosticEncoder[_]]]).asInstanceOf[Encoder[T]]

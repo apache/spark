@@ -45,6 +45,7 @@ import org.apache.spark.util.ArrayImplicits._
  */
 @Stable
 object Row {
+
   /**
    * This method can be used to extract fields from a [[Row]] object in a pattern match. Example:
    * {{{
@@ -83,9 +84,8 @@ object Row {
   val empty = apply()
 }
 
-
 /**
- * Represents one row of output from a relational operator.  Allows both generic access by ordinal,
+ * Represents one row of output from a relational operator. Allows both generic access by ordinal,
  * which will incur boxing overhead for primitives, as well as native primitive access.
  *
  * It is invalid to use the native primitive interface to retrieve a value that is null, instead a
@@ -103,9 +103,9 @@ object Row {
  * Row.fromSeq(Seq(value1, value2, ...))
  * }}}
  *
- * A value of a row can be accessed through both generic access by ordinal,
- * which will incur boxing overhead for primitives, as well as native primitive access.
- * An example of generic access by ordinal:
+ * A value of a row can be accessed through both generic access by ordinal, which will incur
+ * boxing overhead for primitives, as well as native primitive access. An example of generic
+ * access by ordinal:
  * {{{
  * import org.apache.spark.sql._
  *
@@ -117,10 +117,9 @@ object Row {
  * // fourthValue: Any = null
  * }}}
  *
- * For native primitive access, it is invalid to use the native primitive interface to retrieve
- * a value that is null, instead a user must check `isNullAt` before attempting to retrieve a
- * value that might be null.
- * An example of native primitive access:
+ * For native primitive access, it is invalid to use the native primitive interface to retrieve a
+ * value that is null, instead a user must check `isNullAt` before attempting to retrieve a value
+ * that might be null. An example of native primitive access:
  * {{{
  * // using the row from the previous example.
  * val firstValue = row.getInt(0)
@@ -143,6 +142,7 @@ object Row {
  */
 @Stable
 trait Row extends Serializable {
+
   /** Number of elements in the Row. */
   def size: Int = length
 
@@ -155,8 +155,8 @@ trait Row extends Serializable {
   def schema: StructType = null
 
   /**
-   * Returns the value at position i. If the value is null, null is returned. The following
-   * is a mapping between Spark SQL types and return types:
+   * Returns the value at position i. If the value is null, null is returned. The following is a
+   * mapping between Spark SQL types and return types:
    *
    * {{{
    *   BooleanType -> java.lang.Boolean
@@ -184,8 +184,8 @@ trait Row extends Serializable {
   def apply(i: Int): Any = get(i)
 
   /**
-   * Returns the value at position i. If the value is null, null is returned. The following
-   * is a mapping between Spark SQL types and return types:
+   * Returns the value at position i. If the value is null, null is returned. The following is a
+   * mapping between Spark SQL types and return types:
    *
    * {{{
    *   BooleanType -> java.lang.Boolean
@@ -218,116 +218,145 @@ trait Row extends Serializable {
   /**
    * Returns the value at position i as a primitive boolean.
    *
-   * @throws ClassCastException when data type does not match.
-   * @throws NullPointerException when value is null.
+   * @throws ClassCastException
+   *   when data type does not match.
+   * @throws org.apache.spark.SparkRuntimeException
+   *   when value is null.
    */
   def getBoolean(i: Int): Boolean = getAnyValAs[Boolean](i)
 
   /**
    * Returns the value at position i as a primitive byte.
    *
-   * @throws ClassCastException when data type does not match.
-   * @throws NullPointerException when value is null.
+   * @throws ClassCastException
+   *   when data type does not match.
+   * @throws org.apache.spark.SparkRuntimeException
+   *   when value is null.
    */
   def getByte(i: Int): Byte = getAnyValAs[Byte](i)
 
   /**
    * Returns the value at position i as a primitive short.
    *
-   * @throws ClassCastException when data type does not match.
-   * @throws NullPointerException when value is null.
+   * @throws ClassCastException
+   *   when data type does not match.
+   * @throws org.apache.spark.SparkRuntimeException
+   *   when value is null.
    */
   def getShort(i: Int): Short = getAnyValAs[Short](i)
 
   /**
    * Returns the value at position i as a primitive int.
    *
-   * @throws ClassCastException when data type does not match.
-   * @throws NullPointerException when value is null.
+   * @throws ClassCastException
+   *   when data type does not match.
+   * @throws org.apache.spark.SparkRuntimeException
+   *   when value is null.
    */
   def getInt(i: Int): Int = getAnyValAs[Int](i)
 
   /**
    * Returns the value at position i as a primitive long.
    *
-   * @throws ClassCastException when data type does not match.
-   * @throws NullPointerException when value is null.
+   * @throws ClassCastException
+   *   when data type does not match.
+   * @throws org.apache.spark.SparkRuntimeException
+   *   when value is null.
    */
   def getLong(i: Int): Long = getAnyValAs[Long](i)
 
   /**
-   * Returns the value at position i as a primitive float.
-   * Throws an exception if the type mismatches or if the value is null.
+   * Returns the value at position i as a primitive float. Throws an exception if the type
+   * mismatches or if the value is null.
    *
-   * @throws ClassCastException when data type does not match.
-   * @throws NullPointerException when value is null.
+   * @throws ClassCastException
+   *   when data type does not match.
+   * @throws org.apache.spark.SparkRuntimeException
+   *   when value is null.
    */
   def getFloat(i: Int): Float = getAnyValAs[Float](i)
 
   /**
    * Returns the value at position i as a primitive double.
    *
-   * @throws ClassCastException when data type does not match.
-   * @throws NullPointerException when value is null.
+   * @throws ClassCastException
+   *   when data type does not match.
+   * @throws org.apache.spark.SparkRuntimeException
+   *   when value is null.
    */
   def getDouble(i: Int): Double = getAnyValAs[Double](i)
 
   /**
    * Returns the value at position i as a String object.
    *
-   * @throws ClassCastException when data type does not match.
+   * @throws ClassCastException
+   *   when data type does not match.
    */
   def getString(i: Int): String = getAs[String](i)
 
   /**
    * Returns the value at position i of decimal type as java.math.BigDecimal.
    *
-   * @throws ClassCastException when data type does not match.
+   * @throws ClassCastException
+   *   when data type does not match.
    */
   def getDecimal(i: Int): java.math.BigDecimal = getAs[java.math.BigDecimal](i)
 
   /**
    * Returns the value at position i of date type as java.sql.Date.
    *
-   * @throws ClassCastException when data type does not match.
+   * @throws ClassCastException
+   *   when data type does not match.
    */
   def getDate(i: Int): java.sql.Date = getAs[java.sql.Date](i)
 
   /**
    * Returns the value at position i of date type as java.time.LocalDate.
    *
-   * @throws ClassCastException when data type does not match.
+   * @throws ClassCastException
+   *   when data type does not match.
    */
   def getLocalDate(i: Int): java.time.LocalDate = getAs[java.time.LocalDate](i)
 
   /**
    * Returns the value at position i of date type as java.sql.Timestamp.
    *
-   * @throws ClassCastException when data type does not match.
+   * @throws ClassCastException
+   *   when data type does not match.
    */
   def getTimestamp(i: Int): java.sql.Timestamp = getAs[java.sql.Timestamp](i)
 
   /**
    * Returns the value at position i of date type as java.time.Instant.
    *
-   * @throws ClassCastException when data type does not match.
+   * @throws ClassCastException
+   *   when data type does not match.
    */
   def getInstant(i: Int): java.time.Instant = getAs[java.time.Instant](i)
 
   /**
    * Returns the value at position i of array type as a Scala Seq.
    *
-   * @throws ClassCastException when data type does not match.
+   * @throws ClassCastException
+   *   when data type does not match.
    */
   def getSeq[T](i: Int): Seq[T] = {
-    val res = getAs[scala.collection.Seq[T]](i)
-    if (res != null) res.toSeq else null
+    getAs[scala.collection.Seq[T]](i) match {
+      // SPARK-49178: When the type of `Seq[T]` is `mutable.ArraySeq[T]`,
+      // rewrap `mutable.ArraySeq[T].array` as `immutable.ArraySeq[T]`
+      // to avoid a collection copy.
+      case seq: mutable.ArraySeq[T] =>
+        seq.array.toImmutableArraySeq.asInstanceOf[Seq[T]]
+      case other if other != null => other.toSeq
+      case _ => null
+    }
   }
 
   /**
    * Returns the value at position i of array type as `java.util.List`.
    *
-   * @throws ClassCastException when data type does not match.
+   * @throws ClassCastException
+   *   when data type does not match.
    */
   def getList[T](i: Int): java.util.List[T] =
     getSeq[T](i).asJava
@@ -335,14 +364,16 @@ trait Row extends Serializable {
   /**
    * Returns the value at position i of map type as a Scala Map.
    *
-   * @throws ClassCastException when data type does not match.
+   * @throws ClassCastException
+   *   when data type does not match.
    */
   def getMap[K, V](i: Int): scala.collection.Map[K, V] = getAs[Map[K, V]](i)
 
   /**
    * Returns the value at position i of array type as a `java.util.Map`.
    *
-   * @throws ClassCastException when data type does not match.
+   * @throws ClassCastException
+   *   when data type does not match.
    */
   def getJavaMap[K, V](i: Int): java.util.Map[K, V] =
     getMap[K, V](i).asJava
@@ -350,48 +381,56 @@ trait Row extends Serializable {
   /**
    * Returns the value at position i of struct type as a [[Row]] object.
    *
-   * @throws ClassCastException when data type does not match.
+   * @throws ClassCastException
+   *   when data type does not match.
    */
   def getStruct(i: Int): Row = getAs[Row](i)
 
   /**
-   * Returns the value at position i.
-   * For primitive types if value is null it returns 'zero value' specific for primitive
-   * i.e. 0 for Int - use isNullAt to ensure that value is not null
+   * Returns the value at position i. For primitive types if value is null it returns 'zero value'
+   * specific for primitive i.e. 0 for Int - use isNullAt to ensure that value is not null
    *
-   * @throws ClassCastException when data type does not match.
+   * @throws ClassCastException
+   *   when data type does not match.
    */
   def getAs[T](i: Int): T = get(i).asInstanceOf[T]
 
   /**
-   * Returns the value of a given fieldName.
-   * For primitive types if value is null it returns 'zero value' specific for primitive
-   * i.e. 0 for Int - use isNullAt to ensure that value is not null
+   * Returns the value of a given fieldName. For primitive types if value is null it returns 'zero
+   * value' specific for primitive i.e. 0 for Int - use isNullAt to ensure that value is not null
    *
-   * @throws UnsupportedOperationException when schema is not defined.
-   * @throws IllegalArgumentException when fieldName do not exist.
-   * @throws ClassCastException when data type does not match.
+   * @throws UnsupportedOperationException
+   *   when schema is not defined.
+   * @throws IllegalArgumentException
+   *   when fieldName do not exist.
+   * @throws ClassCastException
+   *   when data type does not match.
    */
   def getAs[T](fieldName: String): T = getAs[T](fieldIndex(fieldName))
 
   /**
    * Returns the index of a given field name.
    *
-   * @throws UnsupportedOperationException when schema is not defined.
-   * @throws IllegalArgumentException when a field `name` does not exist.
+   * @throws UnsupportedOperationException
+   *   when schema is not defined.
+   * @throws IllegalArgumentException
+   *   when a field `name` does not exist.
    */
   def fieldIndex(name: String): Int = {
     throw DataTypeErrors.fieldIndexOnRowWithoutSchemaError(fieldName = name)
   }
 
   /**
-   * Returns a Map consisting of names and values for the requested fieldNames
-   * For primitive types if value is null it returns 'zero value' specific for primitive
-   * i.e. 0 for Int - use isNullAt to ensure that value is not null
+   * Returns a Map consisting of names and values for the requested fieldNames For primitive types
+   * if value is null it returns 'zero value' specific for primitive i.e. 0 for Int - use isNullAt
+   * to ensure that value is not null
    *
-   * @throws UnsupportedOperationException when schema is not defined.
-   * @throws IllegalArgumentException when fieldName do not exist.
-   * @throws ClassCastException when data type does not match.
+   * @throws UnsupportedOperationException
+   *   when schema is not defined.
+   * @throws IllegalArgumentException
+   *   when fieldName do not exist.
+   * @throws ClassCastException
+   *   when data type does not match.
    */
   def getValuesMap[T](fieldNames: Seq[String]): Map[String, T] = {
     fieldNames.map { name =>
@@ -438,24 +477,25 @@ trait Row extends Serializable {
         o1 match {
           case b1: Array[Byte] =>
             if (!o2.isInstanceOf[Array[Byte]] ||
-                !java.util.Arrays.equals(b1, o2.asInstanceOf[Array[Byte]])) {
+              !java.util.Arrays.equals(b1, o2.asInstanceOf[Array[Byte]])) {
               return false
             }
           case f1: Float if java.lang.Float.isNaN(f1) =>
-            if (!o2.isInstanceOf[Float] || ! java.lang.Float.isNaN(o2.asInstanceOf[Float])) {
+            if (!o2.isInstanceOf[Float] || !java.lang.Float.isNaN(o2.asInstanceOf[Float])) {
               return false
             }
           case d1: Double if java.lang.Double.isNaN(d1) =>
-            if (!o2.isInstanceOf[Double] || ! java.lang.Double.isNaN(o2.asInstanceOf[Double])) {
+            if (!o2.isInstanceOf[Double] || !java.lang.Double.isNaN(o2.asInstanceOf[Double])) {
               return false
             }
           case d1: java.math.BigDecimal if o2.isInstanceOf[java.math.BigDecimal] =>
             if (d1.compareTo(o2.asInstanceOf[java.math.BigDecimal]) != 0) {
               return false
             }
-          case _ => if (o1 != o2) {
-            return false
-          }
+          case _ =>
+            if (o1 != o2) {
+              return false
+            }
         }
       }
       i += 1
@@ -498,8 +538,8 @@ trait Row extends Serializable {
   def mkString(sep: String): String = mkString("", sep, "")
 
   /**
-   * Displays all elements of this traversable or iterator in a string using
-   * start, end, and separator strings.
+   * Displays all elements of this traversable or iterator in a string using start, end, and
+   * separator strings.
    */
   def mkString(start: String, sep: String, end: String): String = {
     val n = length
@@ -521,9 +561,12 @@ trait Row extends Serializable {
   /**
    * Returns the value at position i.
    *
-   * @throws UnsupportedOperationException when schema is not defined.
-   * @throws ClassCastException when data type does not match.
-   * @throws NullPointerException when value is null.
+   * @throws UnsupportedOperationException
+   *   when schema is not defined.
+   * @throws ClassCastException
+   *   when data type does not match.
+   * @throws org.apache.spark.SparkRuntimeException
+   *   when value is null.
    */
   private def getAnyValAs[T <: AnyVal](i: Int): T =
     if (isNullAt(i)) throw DataTypeErrors.valueIsNullError(i)
@@ -549,7 +592,8 @@ trait Row extends Serializable {
    * Note that this only supports the data types that are also supported by
    * [[org.apache.spark.sql.catalyst.encoders.RowEncoder]].
    *
-   * @return the JSON representation of the row.
+   * @return
+   *   the JSON representation of the row.
    */
   private[sql] def jsonValue: JValue = {
     require(schema != null, "JSON serialization requires a non-null schema.")
@@ -591,13 +635,12 @@ trait Row extends Serializable {
       case (s: Seq[_], ArrayType(elementType, _)) =>
         iteratorToJsonArray(s.iterator, elementType)
       case (m: Map[String @unchecked, _], MapType(StringType, valueType, _)) =>
-        new JObject(m.toList.sortBy(_._1).map {
-          case (k, v) => k -> toJson(v, valueType)
+        new JObject(m.toList.sortBy(_._1).map { case (k, v) =>
+          k -> toJson(v, valueType)
         })
       case (m: Map[_, _], MapType(keyType, valueType, _)) =>
-        new JArray(m.iterator.map {
-          case (k, v) =>
-            new JObject("key" -> toJson(k, keyType) :: "value" -> toJson(v, valueType) :: Nil)
+        new JArray(m.iterator.map { case (k, v) =>
+          new JObject("key" -> toJson(k, keyType) :: "value" -> toJson(v, valueType) :: Nil)
         }.toList)
       case (row: Row, schema: StructType) =>
         var n = 0
@@ -611,13 +654,13 @@ trait Row extends Serializable {
         new JObject(elements.toList)
       case (v: Any, udt: UserDefinedType[Any @unchecked]) =>
         toJson(UDTUtils.toRow(v, udt), udt.sqlType)
-      case _ => throw new SparkIllegalArgumentException(
-        errorClass = "FAILED_ROW_TO_JSON",
-        messageParameters = Map(
-          "value" -> toSQLValue(value.toString),
-          "class" -> value.getClass.toString,
-          "sqlType" -> toSQLType(dataType.toString))
-      )
+      case _ =>
+        throw new SparkIllegalArgumentException(
+          errorClass = "FAILED_ROW_TO_JSON",
+          messageParameters = Map(
+            "value" -> toSQLValue(value.toString),
+            "class" -> value.getClass.toString,
+            "sqlType" -> toSQLType(dataType.toString)))
     }
     toJson(this, schema)
   }

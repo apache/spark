@@ -20,14 +20,16 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.SparkThrowable
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, ClusterByTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{Decimal, IntegerType, LongType, StringType, StructType, TimestampType}
+import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.storage.StorageLevelMapper
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -39,7 +41,16 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   private def parseCompare(sql: String, expected: LogicalPlan): Unit = {
-    comparePlans(parsePlan(sql), expected, checkAnalysis = false)
+    // We don't care the write privileges in this suite.
+    val parsed = parsePlan(sql).transform {
+      case u: UnresolvedRelation => u.clearWritePrivileges
+      case i: InsertIntoStatement =>
+        i.table match {
+          case u: UnresolvedRelation => i.copy(table = u.clearWritePrivileges)
+          case _ => i
+        }
+    }
+    comparePlans(parsed, expected, checkAnalysis = false)
   }
 
   private def internalException(sqlText: String): SparkThrowable = {
@@ -70,7 +81,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql = "CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING) USING parquet"
     checkError(
       exception = parseException(sql),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "':'", "hint" -> ""))
   }
 
@@ -371,7 +382,7 @@ class DDLParserSuite extends AnalysisTest {
         |Columns: p2 string""".stripMargin
     checkError(
       exception = parseException(createSql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> value1),
       context = ExpectedContext(
         fragment = createSql,
@@ -381,7 +392,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
     checkError(
       exception = parseException(replaceSql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> value1),
       context = ExpectedContext(
         fragment = replaceSql,
@@ -396,7 +407,7 @@ class DDLParserSuite extends AnalysisTest {
         |Columns: p2 string""".stripMargin
     checkError(
       exception = parseException(createSqlWithExpr),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> value2),
       context = ExpectedContext(
         fragment = createSqlWithExpr,
@@ -406,7 +417,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSqlWithExpr = createSqlWithExpr.replaceFirst("CREATE", "REPLACE")
     checkError(
       exception = parseException(replaceSqlWithExpr),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> value2),
       context = ExpectedContext(
         fragment = replaceSqlWithExpr,
@@ -473,7 +484,7 @@ class DDLParserSuite extends AnalysisTest {
       "which also specifies a serde"
     checkError(
       exception = parseException(createSql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> value),
       context = ExpectedContext(
         fragment = createSql,
@@ -483,7 +494,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
     checkError(
       exception = parseException(replaceSql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> value),
       context = ExpectedContext(
         fragment = replaceSql,
@@ -529,7 +540,7 @@ class DDLParserSuite extends AnalysisTest {
     val value = "ROW FORMAT DELIMITED is only compatible with 'textfile', not 'otherformat'"
     checkError(
       exception = parseException(createFailSql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> value),
       context = ExpectedContext(
         fragment = createFailSql,
@@ -539,7 +550,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceFailSql = createFailSql.replaceFirst("CREATE", "REPLACE")
     checkError(
       exception = parseException(replaceFailSql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> value),
       context = ExpectedContext(
         fragment = replaceFailSql,
@@ -601,7 +612,7 @@ class DDLParserSuite extends AnalysisTest {
         |STORED AS parquet""".stripMargin
     checkError(
       exception = parseException(createSql),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "CREATE TABLE ... USING ... STORED AS PARQUET "),
       context = ExpectedContext(
         fragment = createSql,
@@ -611,7 +622,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
     checkError(
       exception = parseException(replaceSql),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "REPLACE TABLE ... USING ... STORED AS PARQUET "),
       context = ExpectedContext(
         fragment = replaceSql,
@@ -626,7 +637,7 @@ class DDLParserSuite extends AnalysisTest {
         |ROW FORMAT SERDE 'customSerde'""".stripMargin
     checkError(
       exception = parseException(createSql),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "CREATE TABLE ... USING ... ROW FORMAT SERDE CUSTOMSERDE"),
       context = ExpectedContext(
         fragment = createSql,
@@ -636,7 +647,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
     checkError(
       exception = parseException(replaceSql),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "REPLACE TABLE ... USING ... ROW FORMAT SERDE CUSTOMSERDE"),
       context = ExpectedContext(
         fragment = replaceSql,
@@ -651,7 +662,7 @@ class DDLParserSuite extends AnalysisTest {
         |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','""".stripMargin
     checkError(
       exception = parseException(createSql),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "CREATE TABLE ... USING ... ROW FORMAT DELIMITED"),
       context = ExpectedContext(
         fragment = createSql,
@@ -661,7 +672,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
     checkError(
       exception = parseException(replaceSql),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "REPLACE TABLE ... USING ... ROW FORMAT DELIMITED"),
       context = ExpectedContext(
         fragment = replaceSql,
@@ -676,7 +687,7 @@ class DDLParserSuite extends AnalysisTest {
     val fragment = "STORED BY 'handler'"
     checkError(
       exception = parseException(createSql),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "STORED BY"),
       context = ExpectedContext(
         fragment = fragment,
@@ -686,7 +697,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
     checkError(
       exception = parseException(replaceSql),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "STORED BY"),
       context = ExpectedContext(
         fragment = fragment,
@@ -698,7 +709,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql1 = "CREATE TABLE my_tab (id bigint) SKEWED BY (id) ON (1,2,3)"
     checkError(
       exception = parseException(sql1),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "CREATE TABLE ... SKEWED BY"),
       context = ExpectedContext(
         fragment = sql1,
@@ -708,7 +719,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql2 = "REPLACE TABLE my_tab (id bigint) SKEWED BY (id) ON (1,2,3)"
     checkError(
       exception = parseException(sql2),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "CREATE TABLE ... SKEWED BY"),
       context = ExpectedContext(
         fragment = sql2,
@@ -728,7 +739,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql1 = createTableHeader("TBLPROPERTIES('test' = 'test2')")
     checkError(
       exception = parseException(sql1),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "TBLPROPERTIES"),
       context = ExpectedContext(
         fragment = sql1,
@@ -738,7 +749,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql2 = createTableHeader("LOCATION '/tmp/file'")
     checkError(
       exception = parseException(sql2),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "LOCATION"),
       context = ExpectedContext(
         fragment = sql2,
@@ -748,7 +759,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql3 = createTableHeader("COMMENT 'a table'")
     checkError(
       exception = parseException(sql3),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "COMMENT"),
       context = ExpectedContext(
         fragment = sql3,
@@ -758,7 +769,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql4 = createTableHeader("CLUSTERED BY(b) INTO 256 BUCKETS")
     checkError(
       exception = parseException(sql4),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "CLUSTERED BY"),
       context = ExpectedContext(
         fragment = sql4,
@@ -768,7 +779,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql5 = createTableHeader("PARTITIONED BY (b)")
     checkError(
       exception = parseException(sql5),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "PARTITIONED BY"),
       context = ExpectedContext(
         fragment = sql5,
@@ -778,7 +789,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql6 = createTableHeader("PARTITIONED BY (c int)")
     checkError(
       exception = parseException(sql6),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "PARTITIONED BY"),
       context = ExpectedContext(
         fragment = sql6,
@@ -788,7 +799,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql7 = createTableHeader("STORED AS parquet")
     checkError(
       exception = parseException(sql7),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "STORED AS/BY"),
       context = ExpectedContext(
         fragment = sql7,
@@ -798,7 +809,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql8 = createTableHeader("STORED AS INPUTFORMAT 'in' OUTPUTFORMAT 'out'")
     checkError(
       exception = parseException(sql8),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "STORED AS/BY"),
       context = ExpectedContext(
         fragment = sql8,
@@ -808,7 +819,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql9 = createTableHeader("ROW FORMAT SERDE 'serde'")
     checkError(
       exception = parseException(sql9),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "ROW FORMAT"),
       context = ExpectedContext(
         fragment = sql9,
@@ -818,7 +829,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql10 = replaceTableHeader("TBLPROPERTIES('test' = 'test2')")
     checkError(
       exception = parseException(sql10),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "TBLPROPERTIES"),
       context = ExpectedContext(
         fragment = sql10,
@@ -828,7 +839,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql11 = replaceTableHeader("LOCATION '/tmp/file'")
     checkError(
       exception = parseException(sql11),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "LOCATION"),
       context = ExpectedContext(
         fragment = sql11,
@@ -838,7 +849,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql12 = replaceTableHeader("COMMENT 'a table'")
     checkError(
       exception = parseException(sql12),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "COMMENT"),
       context = ExpectedContext(
         fragment = sql12,
@@ -848,7 +859,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql13 = replaceTableHeader("CLUSTERED BY(b) INTO 256 BUCKETS")
     checkError(
       exception = parseException(sql13),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "CLUSTERED BY"),
       context = ExpectedContext(
         fragment = sql13,
@@ -858,7 +869,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql14 = replaceTableHeader("PARTITIONED BY (b)")
     checkError(
       exception = parseException(sql14),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "PARTITIONED BY"),
       context = ExpectedContext(
         fragment = sql14,
@@ -868,7 +879,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql15 = replaceTableHeader("PARTITIONED BY (c int)")
     checkError(
       exception = parseException(sql15),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "PARTITIONED BY"),
       context = ExpectedContext(
         fragment = sql15,
@@ -878,7 +889,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql16 = replaceTableHeader("STORED AS parquet")
     checkError(
       exception = parseException(sql16),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "STORED AS/BY"),
       context = ExpectedContext(
         fragment = sql16,
@@ -888,7 +899,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql17 = replaceTableHeader("STORED AS INPUTFORMAT 'in' OUTPUTFORMAT 'out'")
     checkError(
       exception = parseException(sql17),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "STORED AS/BY"),
       context = ExpectedContext(
         fragment = sql17,
@@ -898,7 +909,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql18 = replaceTableHeader("ROW FORMAT SERDE 'serde'")
     checkError(
       exception = parseException(sql18),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "ROW FORMAT"),
       context = ExpectedContext(
         fragment = sql18,
@@ -908,7 +919,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql19 = createTableHeader("CLUSTER BY (a)")
     checkError(
       exception = parseException(sql19),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "CLUSTER BY"),
       context = ExpectedContext(
         fragment = sql19,
@@ -918,7 +929,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql20 = replaceTableHeader("CLUSTER BY (a)")
     checkError(
       exception = parseException(sql20),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "CLUSTER BY"),
       context = ExpectedContext(
         fragment = sql20,
@@ -1075,33 +1086,6 @@ class DDLParserSuite extends AnalysisTest {
         ifExists = true))
   }
 
-  // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);
-  // ALTER TABLE table_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
-  test("alter table: alter table properties") {
-    val sql1_table = "ALTER TABLE table_name SET TBLPROPERTIES ('test' = 'test', " +
-        "'comment' = 'new_comment')"
-    val sql2_table = "ALTER TABLE table_name UNSET TBLPROPERTIES ('comment', 'test')"
-    val sql3_table = "ALTER TABLE table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
-
-    comparePlans(
-      parsePlan(sql1_table),
-      SetTableProperties(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET TBLPROPERTIES", true),
-        Map("test" -> "test", "comment" -> "new_comment")))
-    comparePlans(
-      parsePlan(sql2_table),
-      UnsetTableProperties(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... UNSET TBLPROPERTIES", true),
-        Seq("comment", "test"),
-        ifExists = false))
-    comparePlans(
-      parsePlan(sql3_table),
-      UnsetTableProperties(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... UNSET TBLPROPERTIES", true),
-        Seq("comment", "test"),
-        ifExists = true))
-  }
-
   test("alter table: add column") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x int"),
@@ -1231,15 +1215,6 @@ class DDLParserSuite extends AnalysisTest {
       )))
   }
 
-  test("alter table: rename column") {
-    comparePlans(
-      parsePlan("ALTER TABLE table_name RENAME COLUMN a.b.c TO d"),
-      RenameColumn(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... RENAME COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        "d"))
-  }
-
   test("alter table: update column type using ALTER") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c TYPE bigint"),
@@ -1258,7 +1233,7 @@ class DDLParserSuite extends AnalysisTest {
     val fragment = "bad_type"
     checkError(
       exception = parseException(sql),
-      errorClass = "UNSUPPORTED_DATATYPE",
+      condition = "UNSUPPORTED_DATATYPE",
       parameters = Map("typeName" -> "\"BAD_TYPE\""),
       context = ExpectedContext(
         fragment = fragment,
@@ -1309,19 +1284,19 @@ class DDLParserSuite extends AnalysisTest {
     val sql1 = "ALTER TABLE table_name ALTER COLUMN a.b.c TYPE bigint COMMENT 'new comment'"
     checkError(
       exception = parseException(sql1),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'COMMENT'", "hint" -> ""))
 
     val sql2 = "ALTER TABLE table_name ALTER COLUMN a.b.c TYPE bigint COMMENT AFTER d"
     checkError(
       exception = parseException(sql2),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'COMMENT'", "hint" -> ""))
 
     val sql3 = "ALTER TABLE table_name ALTER COLUMN a.b.c TYPE bigint COMMENT 'new comment' AFTER d"
     checkError(
       exception = parseException(sql3),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'COMMENT'", "hint" -> ""))
   }
 
@@ -1347,48 +1322,6 @@ class DDLParserSuite extends AnalysisTest {
         None,
         None,
         None))
-  }
-
-  test("alter table: drop column") {
-    comparePlans(
-      parsePlan("ALTER TABLE table_name DROP COLUMN a.b.c"),
-      DropColumns(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS"),
-        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
-        ifExists = false))
-
-    comparePlans(
-      parsePlan("ALTER TABLE table_name DROP COLUMN IF EXISTS a.b.c"),
-      DropColumns(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS"),
-        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
-        ifExists = true))
-  }
-
-  test("alter table: drop multiple columns") {
-    val sql = "ALTER TABLE table_name DROP COLUMN x, y, a.b.c"
-    Seq(sql, sql.replace("COLUMN", "COLUMNS")).foreach { drop =>
-      comparePlans(
-        parsePlan(drop),
-        DropColumns(
-          UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS"),
-          Seq(UnresolvedFieldName(Seq("x")),
-            UnresolvedFieldName(Seq("y")),
-            UnresolvedFieldName(Seq("a", "b", "c"))),
-          ifExists = false))
-    }
-
-    val sqlIfExists = "ALTER TABLE table_name DROP COLUMN IF EXISTS x, y, a.b.c"
-    Seq(sqlIfExists, sqlIfExists.replace("COLUMN", "COLUMNS")).foreach { drop =>
-      comparePlans(
-        parsePlan(drop),
-        DropColumns(
-          UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS"),
-          Seq(UnresolvedFieldName(Seq("x")),
-            UnresolvedFieldName(Seq("y")),
-            UnresolvedFieldName(Seq("a", "b", "c"))),
-          ifExists = true))
-    }
   }
 
   test("alter table: hive style change column") {
@@ -1433,7 +1366,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql4 = "ALTER TABLE table_name CHANGE COLUMN a.b.c new_name INT"
     checkError(
       exception = parseException(sql4),
-      errorClass = "_LEGACY_ERROR_TEMP_0034",
+      condition = "_LEGACY_ERROR_TEMP_0034",
       parameters = Map(
         "operation" -> "Renaming column",
         "command" -> "ALTER COLUMN",
@@ -1447,7 +1380,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql5 = "ALTER TABLE table_name PARTITION (a='1') CHANGE COLUMN a.b.c c INT"
     checkError(
       exception = parseException(sql5),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE ... PARTITION ... CHANGE COLUMN"),
       context = ExpectedContext(
         fragment = sql5,
@@ -1494,7 +1427,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql5 = "ALTER TABLE table_name PARTITION (a='1') REPLACE COLUMNS (x string)"
     checkError(
       exception = parseException(sql5),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE ... PARTITION ... REPLACE COLUMNS"),
       context = ExpectedContext(
         fragment = sql5,
@@ -1504,7 +1437,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql6 = "ALTER TABLE table_name REPLACE COLUMNS (x string NOT NULL)"
     checkError(
       exception = parseException(sql6),
-      errorClass = "_LEGACY_ERROR_TEMP_0034",
+      condition = "_LEGACY_ERROR_TEMP_0034",
       parameters = Map("operation" -> "NOT NULL", "command" -> "REPLACE COLUMNS", "msg" -> ""),
       context = ExpectedContext(
         fragment = sql6,
@@ -1514,7 +1447,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql7 = "ALTER TABLE table_name REPLACE COLUMNS (x string FIRST)"
     checkError(
       exception = parseException(sql7),
-      errorClass = "_LEGACY_ERROR_TEMP_0034",
+      condition = "_LEGACY_ERROR_TEMP_0034",
       parameters = Map(
         "operation" -> "Column position",
         "command" -> "REPLACE COLUMNS",
@@ -1527,7 +1460,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql8 = "ALTER TABLE table_name REPLACE COLUMNS (a.b.c string)"
     checkError(
       exception = parseException(sql8),
-      errorClass = "_LEGACY_ERROR_TEMP_0034",
+      condition = "_LEGACY_ERROR_TEMP_0034",
       parameters = Map(
         "operation" -> "Replacing with a nested column",
         "command" -> "REPLACE COLUMNS",
@@ -1540,7 +1473,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql9 = "ALTER TABLE table_name REPLACE COLUMNS (a STRING COMMENT 'x' COMMENT 'y')"
     checkError(
       exception = parseException(sql9),
-      errorClass = "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
+      condition = "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
       parameters = Map(
         "type" -> "REPLACE",
         "columnName" -> "a",
@@ -1715,7 +1648,7 @@ class DDLParserSuite extends AnalysisTest {
         |PARTITION (p1 = 3, p2) IF NOT EXISTS""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "IF NOT EXISTS with dynamic partitions: p2"),
       context = ExpectedContext(
         fragment = fragment,
@@ -1733,7 +1666,7 @@ class DDLParserSuite extends AnalysisTest {
         |PARTITION (p1 = 3) IF NOT EXISTS""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "INSERT INTO ... IF NOT EXISTS"),
       context = ExpectedContext(
         fragment = fragment,
@@ -1773,7 +1706,7 @@ class DDLParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(
         "INSERT INTO TABLE t1 BY NAME (c1,c2) SELECT * FROM tmp_view"),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map(
         "error" -> "'c1'",
         "hint" -> "")
@@ -1798,7 +1731,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql = "DELETE FROM testcat.ns1.ns2.tbl AS t(a,b,c,d) WHERE d = 2"
     checkError(
       exception = parseException(sql),
-      errorClass = "COLUMN_ALIASES_NOT_ALLOWED",
+      condition = "COLUMN_ALIASES_NOT_ALLOWED",
       parameters = Map("op" -> "DELETE"),
       context = ExpectedContext(
         fragment = sql,
@@ -1840,7 +1773,7 @@ class DDLParserSuite extends AnalysisTest {
         |WHERE d=2""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "COLUMN_ALIASES_NOT_ALLOWED",
+      condition = "COLUMN_ALIASES_NOT_ALLOWED",
       parameters = Map("op" -> "UPDATE"),
       context = ExpectedContext(
         fragment = sql,
@@ -2000,7 +1933,7 @@ class DDLParserSuite extends AnalysisTest {
       """.stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'*'", "hint" -> ""))
   }
 
@@ -2046,7 +1979,7 @@ class DDLParserSuite extends AnalysisTest {
           .stripMargin
         checkError(
           exception = parseException(sql),
-          errorClass = "COLUMN_ALIASES_NOT_ALLOWED",
+          condition = "COLUMN_ALIASES_NOT_ALLOWED",
           parameters = Map("op" -> "MERGE"),
           context = ExpectedContext(
             fragment = sql,
@@ -2125,7 +2058,7 @@ class DDLParserSuite extends AnalysisTest {
         |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION",
+      condition = "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql,
@@ -2148,7 +2081,7 @@ class DDLParserSuite extends AnalysisTest {
         |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "NON_LAST_NOT_MATCHED_BY_TARGET_CLAUSE_OMIT_CONDITION",
+      condition = "NON_LAST_NOT_MATCHED_BY_TARGET_CLAUSE_OMIT_CONDITION",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql,
@@ -2172,7 +2105,7 @@ class DDLParserSuite extends AnalysisTest {
         |WHEN NOT MATCHED BY SOURCE THEN DELETE""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "NON_LAST_NOT_MATCHED_BY_SOURCE_CLAUSE_OMIT_CONDITION",
+      condition = "NON_LAST_NOT_MATCHED_BY_SOURCE_CLAUSE_OMIT_CONDITION",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql,
@@ -2187,7 +2120,7 @@ class DDLParserSuite extends AnalysisTest {
         |ON target.col1 = source.col1""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0008",
+      condition = "_LEGACY_ERROR_TEMP_0008",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql,
@@ -2278,7 +2211,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql1 = "analyze table a.b.c compute statistics xxxx"
     checkError(
       exception = parseException(sql1),
-      errorClass = "INVALID_SQL_SYNTAX.ANALYZE_TABLE_UNEXPECTED_NOSCAN",
+      condition = "INVALID_SQL_SYNTAX.ANALYZE_TABLE_UNEXPECTED_NOSCAN",
       parameters = Map("ctx" -> "XXXX"),
       context = ExpectedContext(
         fragment = sql1,
@@ -2288,7 +2221,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql2 = "analyze table a.b.c partition (a) compute statistics xxxx"
     checkError(
       exception = parseException(sql2),
-      errorClass = "INVALID_SQL_SYNTAX.ANALYZE_TABLE_UNEXPECTED_NOSCAN",
+      condition = "INVALID_SQL_SYNTAX.ANALYZE_TABLE_UNEXPECTED_NOSCAN",
       parameters = Map("ctx" -> "XXXX"),
       context = ExpectedContext(
         fragment = sql2,
@@ -2307,7 +2240,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql = "ANALYZE TABLES IN a.b.c COMPUTE STATISTICS xxxx"
     checkError(
       exception = parseException(sql),
-      errorClass = "INVALID_SQL_SYNTAX.ANALYZE_TABLE_UNEXPECTED_NOSCAN",
+      condition = "INVALID_SQL_SYNTAX.ANALYZE_TABLE_UNEXPECTED_NOSCAN",
       parameters = Map("ctx" -> "XXXX"),
       context = ExpectedContext(
         fragment = sql,
@@ -2319,7 +2252,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql1 = "ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR COLUMNS"
     checkError(
       exception = parseException(sql1),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "end of input", "hint" -> ""))
 
     comparePlans(
@@ -2356,13 +2289,13 @@ class DDLParserSuite extends AnalysisTest {
     val sql2 = "ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL COLUMNS key, value"
     checkError(
       exception = parseException(sql2),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'key'", "hint" -> "")) // expecting {<EOF>, ';'}
 
     val sql3 = "ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL"
     checkError(
       exception = parseException(sql3),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "end of input", "hint" -> ": missing 'COLUMNS'"))
   }
 
@@ -2439,7 +2372,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql = "CACHE TABLE a.b.c AS SELECT * FROM testData"
     checkError(
       exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0037",
+      condition = "_LEGACY_ERROR_TEMP_0037",
       parameters = Map("quoted" -> "a.b"),
       context = ExpectedContext(
         fragment = sql,
@@ -2451,7 +2384,7 @@ class DDLParserSuite extends AnalysisTest {
     val createTableSql = "create table test_table using my_data_source options (password)"
     checkError(
       exception = parseException(createTableSql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "A value must be specified for the key: password."),
       context = ExpectedContext(
         fragment = createTableSql,
@@ -2475,29 +2408,6 @@ class DDLParserSuite extends AnalysisTest {
       RefreshTable(UnresolvedTableOrView(Seq("a", "b", "c"), "REFRESH TABLE", true)))
   }
 
-  test("show columns") {
-    val sql1 = "SHOW COLUMNS FROM t1"
-    val sql2 = "SHOW COLUMNS IN db1.t1"
-    val sql3 = "SHOW COLUMNS FROM t1 IN db1"
-    val sql4 = "SHOW COLUMNS FROM db1.t1 IN db1"
-
-    val parsed1 = parsePlan(sql1)
-    val expected1 = ShowColumns(UnresolvedTableOrView(Seq("t1"), "SHOW COLUMNS", true), None)
-    val parsed2 = parsePlan(sql2)
-    val expected2 = ShowColumns(UnresolvedTableOrView(Seq("db1", "t1"), "SHOW COLUMNS", true), None)
-    val parsed3 = parsePlan(sql3)
-    val expected3 =
-      ShowColumns(UnresolvedTableOrView(Seq("db1", "t1"), "SHOW COLUMNS", true), Some(Seq("db1")))
-    val parsed4 = parsePlan(sql4)
-    val expected4 =
-      ShowColumns(UnresolvedTableOrView(Seq("db1", "t1"), "SHOW COLUMNS", true), Some(Seq("db1")))
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-    comparePlans(parsed4, expected4)
-  }
-
   test("alter view: add partition (not supported)") {
     val sql =
       """ALTER VIEW a.b.c ADD IF NOT EXISTS PARTITION
@@ -2505,7 +2415,7 @@ class DDLParserSuite extends AnalysisTest {
         |(dt='2009-09-09', country='uk')""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER VIEW ... ADD PARTITION"),
       context = ExpectedContext(
         fragment = sql,
@@ -2685,12 +2595,16 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("SPARK-33474: Support typed literals as partition spec values") {
-    def insertPartitionPlan(part: String): InsertIntoStatement = {
+    def insertPartitionPlan(part: String, optimizeInsertIntoCmds: Boolean): InsertIntoStatement = {
       InsertIntoStatement(
         UnresolvedRelation(Seq("t")),
         Map("part" -> Some(part)),
         Seq.empty[String],
-        UnresolvedInlineTable(Seq("col1"), Seq(Seq(Literal("a")))),
+        if (optimizeInsertIntoCmds) {
+          ResolveInlineTables(UnresolvedInlineTable(Seq("col1"), Seq(Seq(Literal("a")))))
+        } else {
+          UnresolvedInlineTable(Seq("col1"), Seq(Seq(Literal("a"))))
+        },
         overwrite = false, ifPartitionNotExists = false)
     }
     val binaryStr = "Spark SQL"
@@ -2705,15 +2619,27 @@ class DDLParserSuite extends AnalysisTest {
     val timestampTypeSql = s"INSERT INTO t PARTITION(part = timestamp'$timestamp') VALUES('a')"
     val binaryTypeSql = s"INSERT INTO t PARTITION(part = X'$binaryHexStr') VALUES('a')"
 
-    comparePlans(parsePlan(dateTypeSql), insertPartitionPlan("2019-01-02"))
-    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
-      comparePlans(parsePlan(intervalTypeSql), insertPartitionPlan(interval))
+    for (optimizeInsertIntoValues <- Seq(true, false)) {
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key ->
+          optimizeInsertIntoValues.toString) {
+        parseCompare(dateTypeSql, insertPartitionPlan(
+          "2019-01-02", optimizeInsertIntoValues))
+        withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+          parseCompare(intervalTypeSql, insertPartitionPlan(
+            interval, optimizeInsertIntoValues))
+        }
+        parseCompare(ymIntervalTypeSql, insertPartitionPlan(
+          "INTERVAL '1-2' YEAR TO MONTH", optimizeInsertIntoValues))
+        parseCompare(dtIntervalTypeSql,
+          insertPartitionPlan(
+            "INTERVAL '1 02:03:04.128462' DAY TO SECOND", optimizeInsertIntoValues))
+        parseCompare(timestampTypeSql, insertPartitionPlan(
+          timestamp, optimizeInsertIntoValues))
+        parseCompare(binaryTypeSql, insertPartitionPlan(
+          binaryStr, optimizeInsertIntoValues))
+      }
     }
-    comparePlans(parsePlan(ymIntervalTypeSql), insertPartitionPlan("INTERVAL '1-2' YEAR TO MONTH"))
-    comparePlans(parsePlan(dtIntervalTypeSql),
-      insertPartitionPlan("INTERVAL '1 02:03:04.128462' DAY TO SECOND"))
-    comparePlans(parsePlan(timestampTypeSql), insertPartitionPlan(timestamp))
-    comparePlans(parsePlan(binaryTypeSql), insertPartitionPlan(binaryStr))
   }
 
   test("SPARK-38335: Implement parser support for DEFAULT values for columns in tables") {
@@ -2774,14 +2700,14 @@ class DDLParserSuite extends AnalysisTest {
     val sql1 = "ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT "
     checkError(
       exception = parseException(sql1),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "end of input", "hint" -> ""))
     // It is not possible to both SET DEFAULT and DROP DEFAULT at the same time.
     // This results in a parsing error.
     val sql2 = "ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT SET DEFAULT 42"
     checkError(
       exception = parseException(sql2),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'SET'", "hint" -> ""))
 
     comparePlans(
@@ -2800,7 +2726,7 @@ class DDLParserSuite extends AnalysisTest {
       val fragment = "b STRING NOT NULL DEFAULT \"abc\""
       checkError(
         exception = parseException(sql),
-        errorClass = "UNSUPPORTED_DEFAULT_VALUE.WITH_SUGGESTION",
+        condition = "UNSUPPORTED_DEFAULT_VALUE.WITH_SUGGESTION",
         parameters = Map.empty,
         context = ExpectedContext(
           fragment = fragment,
@@ -2810,12 +2736,12 @@ class DDLParserSuite extends AnalysisTest {
 
     // In each of the following cases, the DEFAULT reference parses as an unresolved attribute
     // reference. We can handle these cases after the parsing stage, at later phases of analysis.
-    comparePlans(parsePlan("VALUES (1, 2, DEFAULT) AS val"),
+    parseCompare("VALUES (1, 2, DEFAULT) AS val",
       SubqueryAlias("val",
         UnresolvedInlineTable(Seq("col1", "col2", "col3"), Seq(Seq(Literal(1), Literal(2),
           UnresolvedAttribute("DEFAULT"))))))
-    comparePlans(parsePlan(
-      "INSERT INTO t PARTITION(part = date'2019-01-02') VALUES ('a', DEFAULT)"),
+    parseCompare(
+      "INSERT INTO t PARTITION(part = date'2019-01-02') VALUES ('a', DEFAULT)",
       InsertIntoStatement(
         UnresolvedRelation(Seq("t")),
         Map("part" -> Some("2019-01-02")),
@@ -2860,7 +2786,7 @@ class DDLParserSuite extends AnalysisTest {
       exception = intercept[ParseException](
         parsePlan(
           "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\" NOT NULL)")),
-      errorClass = "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
+      condition = "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
       parameters = Map(
         "columnName" -> "b",
         "optionName" -> "NOT NULL"),
@@ -2870,7 +2796,7 @@ class DDLParserSuite extends AnalysisTest {
       exception = intercept[ParseException](
         parsePlan(
           "CREATE TABLE my_tab(a INT, b STRING DEFAULT \"123\" NOT NULL DEFAULT \"abc\")")),
-      errorClass = "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
+      condition = "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
       parameters = Map(
         "columnName" -> "b",
         "optionName" -> "DEFAULT"),
@@ -2880,7 +2806,7 @@ class DDLParserSuite extends AnalysisTest {
       exception = intercept[ParseException](
         parsePlan(
           "CREATE TABLE my_tab(a INT, b STRING COMMENT \"abc\" NOT NULL COMMENT \"abc\")")),
-      errorClass = "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
+      condition = "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
       parameters = Map(
         "columnName" -> "b",
         "optionName" -> "COMMENT"),
@@ -2912,7 +2838,7 @@ class DDLParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("CREATE TABLE my_tab(a INT, " +
           "b INT GENERATED ALWAYS AS (a + 1) GENERATED ALWAYS AS (a + 2)) USING PARQUET"),
-      errorClass = "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
+      condition = "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
       parameters = Map("columnName" -> "b", "optionName" -> "GENERATED ALWAYS AS"),
       context = ExpectedContext(
         fragment = "b INT GENERATED ALWAYS AS (a + 1) GENERATED ALWAYS AS (a + 2)",
@@ -2924,16 +2850,223 @@ class DDLParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(
         "CREATE TABLE my_tab(a INT, b INT GENERATED ALWAYS AS ()) USING PARQUET"),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "')'", "hint" -> "")
     )
     // No parenthesis
     checkError(
       exception = parseException(
         "CREATE TABLE my_tab(a INT, b INT GENERATED ALWAYS AS a + 1) USING PARQUET"),
-      errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'a'", "hint" -> ": missing '('")
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'a'", "hint" -> "")
     )
+  }
+
+  test("SPARK-48824: implement parser support for " +
+    "GENERATED ALWAYS/BY DEFAULT AS IDENTITY columns in tables ") {
+    def parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr: String,
+        identityColumnDefStr: String,
+        identityColumnSpecStr: String,
+        expectedDataType: DataType,
+        expectedStart: Long,
+        expectedStep: Long,
+        expectedAllowExplicitInsert: Boolean): Unit = {
+      val columnsWithIdentitySpec = Seq(
+        ColumnDefinition(
+          name = "id",
+          dataType = expectedDataType,
+          nullable = true,
+          identityColumnSpec = Some(
+            new IdentityColumnSpec(
+              expectedStart,
+              expectedStep,
+              expectedAllowExplicitInsert
+            )
+          )
+        ),
+        ColumnDefinition("val", IntegerType)
+      )
+      comparePlans(
+        parsePlan(
+          s"CREATE TABLE my_tab(id $identityColumnDataTypeStr GENERATED $identityColumnDefStr" +
+            s" AS IDENTITY $identityColumnSpecStr, val INT) USING parquet"
+        ),
+        CreateTable(
+          UnresolvedIdentifier(Seq("my_tab")),
+          columnsWithIdentitySpec,
+          Seq.empty[Transform],
+          UnresolvedTableSpec(
+            Map.empty[String, String],
+            Some("parquet"),
+            OptionList(Seq.empty),
+            None,
+            None,
+            None,
+            false
+          ),
+          false
+        )
+      )
+
+      comparePlans(
+        parsePlan(
+          s"REPLACE TABLE my_tab(id $identityColumnDataTypeStr GENERATED $identityColumnDefStr" +
+            s" AS IDENTITY $identityColumnSpecStr, val INT) USING parquet"
+        ),
+        ReplaceTable(
+          UnresolvedIdentifier(Seq("my_tab")),
+          columnsWithIdentitySpec,
+          Seq.empty[Transform],
+          UnresolvedTableSpec(
+            Map.empty[String, String],
+            Some("parquet"),
+            OptionList(Seq.empty),
+            None,
+            None,
+            None,
+            false
+          ),
+          false
+        )
+      )
+    }
+    for {
+      identityColumnDefStr <- Seq("BY DEFAULT", "ALWAYS")
+      identityColumnDataTypeStr <- Seq("BIGINT", "INT")
+    } {
+      val expectedAllowExplicitInsert = identityColumnDefStr == "BY DEFAULT"
+      val expectedDataType = identityColumnDataTypeStr match {
+        case "BIGINT" => LongType
+        case "INT" => IntegerType
+      }
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
+        identityColumnDefStr,
+        "(START WITH 2 INCREMENT BY 2)",
+        expectedDataType,
+        expectedStart = 2,
+        expectedStep = 2,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
+        identityColumnDefStr,
+        "(START WITH -2 INCREMENT BY -2)",
+        expectedDataType,
+        expectedStart = -2,
+        expectedStep = -2,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
+        identityColumnDefStr,
+        "(START WITH 2)",
+        expectedDataType,
+        expectedStart = 2,
+        expectedStep = 1,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
+        identityColumnDefStr,
+        "(START WITH -2)",
+        expectedDataType,
+        expectedStart = -2,
+        expectedStep = 1,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
+        identityColumnDefStr,
+        "(INCREMENT BY 2)",
+        expectedDataType,
+        expectedStart = 1,
+        expectedStep = 2,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
+        identityColumnDefStr,
+        "(INCREMENT BY -2)",
+        expectedDataType,
+        expectedStart = 1,
+        expectedStep = -2,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
+        identityColumnDefStr,
+        "()",
+        expectedDataType,
+        expectedStart = 1,
+        expectedStep = 1,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
+      parseAndCompareIdentityColumnPlan(
+        identityColumnDataTypeStr,
+        identityColumnDefStr,
+        "",
+        expectedDataType,
+        expectedStart = 1,
+        expectedStep = 1,
+        expectedAllowExplicitInsert = expectedAllowExplicitInsert)
+    }
+  }
+
+  test("SPARK-48824: Column cannot have both a generation expression and an identity column spec") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        parsePlan(s"CREATE TABLE testcat.my_tab(id BIGINT GENERATED ALWAYS AS 1" +
+          s" GENERATED ALWAYS AS IDENTITY, val INT) USING foo")
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'1'", "hint" -> "")
+    )
+  }
+
+  test("SPARK-48824: Identity column step must not be zero") {
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(
+          s"CREATE TABLE testcat.my_tab" +
+            s"(id BIGINT GENERATED ALWAYS AS IDENTITY(INCREMENT BY 0), val INT) USING foo"
+        )
+      },
+      condition = "IDENTITY_COLUMNS_ILLEGAL_STEP",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "id BIGINT GENERATED ALWAYS AS IDENTITY(INCREMENT BY 0)",
+        start = 28,
+        stop = 81)
+    )
+  }
+
+  test("SPARK-48824: Identity column datatype must be long or integer") {
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(
+          s"CREATE TABLE testcat.my_tab(id FLOAT GENERATED ALWAYS AS IDENTITY(), val INT) USING foo"
+        )
+      },
+      condition = "IDENTITY_COLUMNS_UNSUPPORTED_DATA_TYPE",
+      parameters = Map("dataType" -> "FloatType"),
+      context =
+        ExpectedContext(fragment = "id FLOAT GENERATED ALWAYS AS IDENTITY()", start = 28, stop = 66)
+    )
+  }
+
+  test("SPARK-48824: Identity column sequence generator option cannot be duplicated") {
+    val identityColumnSpecStrs = Seq(
+      "(START WITH 0 START WITH 1)",
+      "(INCREMENT BY 1 INCREMENT BY 2)",
+      "(START WITH 0 INCREMENT BY 1 START WITH 1)",
+      "(INCREMENT BY 1 START WITH 0 INCREMENT BY 2)"
+    )
+    for {
+      identitySpecStr <- identityColumnSpecStrs
+    } {
+      val exception = intercept[ParseException] {
+        parsePlan(
+          s"CREATE TABLE testcat.my_tab" +
+            s"(id BIGINT GENERATED ALWAYS AS IDENTITY $identitySpecStr, val INT) USING foo"
+        )
+      }
+      assert(exception.getErrorClass === "IDENTITY_COLUMNS_DUPLICATED_SEQUENCE_GENERATOR_OPTION")
+    }
   }
 
   test("SPARK-42681: Relax ordering constraint for ALTER TABLE ADD COLUMN options") {
@@ -2963,7 +3096,7 @@ class DDLParserSuite extends AnalysisTest {
       exception = intercept[ParseException](
         parsePlan("ALTER TABLE my_tab ADD COLUMN b STRING NOT NULL DEFAULT \"abc\" NOT NULL")
       ),
-      errorClass = "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
+      condition = "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
       parameters = Map("type" -> "ADD", "columnName" -> "b", "optionName" -> "NOT NULL"),
       context = ExpectedContext(
         fragment = "b STRING NOT NULL DEFAULT \"abc\" NOT NULL",
@@ -2975,7 +3108,7 @@ class DDLParserSuite extends AnalysisTest {
       exception = intercept[ParseException](
         parsePlan("ALTER TABLE my_tab ADD COLUMN b STRING DEFAULT \"123\" NOT NULL DEFAULT \"abc\"")
       ),
-      errorClass = "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
+      condition = "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
       parameters = Map("type" -> "ADD", "columnName" -> "b", "optionName" -> "DEFAULT"),
       context = ExpectedContext(
         fragment = "b STRING DEFAULT \"123\" NOT NULL DEFAULT \"abc\"",
@@ -2987,7 +3120,7 @@ class DDLParserSuite extends AnalysisTest {
       exception = intercept[ParseException](
         parsePlan("ALTER TABLE my_tab ADD COLUMN b STRING COMMENT \"abc\" NOT NULL COMMENT \"abc\"")
       ),
-      errorClass = "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
+      condition = "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
       parameters = Map("type" -> "ADD", "columnName" -> "b", "optionName" -> "COMMENT"),
       context = ExpectedContext(
         fragment = "b STRING COMMENT \"abc\" NOT NULL COMMENT \"abc\"",
@@ -2999,7 +3132,7 @@ class DDLParserSuite extends AnalysisTest {
       exception = intercept[ParseException](
         parsePlan("ALTER TABLE my_tab ADD COLUMN b STRING FIRST COMMENT \"abc\" AFTER y")
       ),
-      errorClass = "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
+      condition = "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
       parameters = Map("type" -> "ADD", "columnName" -> "b", "optionName" -> "FIRST|AFTER"),
       context =
         ExpectedContext(fragment = "b STRING FIRST COMMENT \"abc\" AFTER y", start = 30, stop = 65)
@@ -3011,7 +3144,7 @@ class DDLParserSuite extends AnalysisTest {
       "USING parquet CLUSTERED BY (a) INTO 2 BUCKETS CLUSTER BY (a)"
     checkError(
       exception = parseException(sql1),
-      errorClass = "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED",
+      condition = "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED",
       parameters = Map.empty,
       context = ExpectedContext(fragment = sql1, start = 0, stop = 96)
     )
@@ -3022,7 +3155,7 @@ class DDLParserSuite extends AnalysisTest {
       "USING parquet CLUSTERED BY (a) INTO 2 BUCKETS CLUSTER BY (a)"
     checkError(
       exception = parseException(sql1),
-      errorClass = "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED",
+      condition = "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED",
       parameters = Map.empty,
       context = ExpectedContext(fragment = sql1, start = 0, stop = 97)
     )
@@ -3033,7 +3166,7 @@ class DDLParserSuite extends AnalysisTest {
       "USING parquet CLUSTER BY (a) PARTITIONED BY (a)"
     checkError(
       exception = parseException(sql1),
-      errorClass = "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED",
+      condition = "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED",
       parameters = Map.empty,
       context = ExpectedContext(fragment = sql1, start = 0, stop = 83)
     )
@@ -3044,7 +3177,7 @@ class DDLParserSuite extends AnalysisTest {
       "USING parquet CLUSTER BY (a) PARTITIONED BY (a)"
     checkError(
       exception = parseException(sql1),
-      errorClass = "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED",
+      condition = "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED",
       parameters = Map.empty,
       context = ExpectedContext(fragment = sql1, start = 0, stop = 84)
     )
@@ -3062,7 +3195,7 @@ class DDLParserSuite extends AnalysisTest {
 
     checkError(
       exception = internalException(insertDirSql),
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "INSERT OVERWRITE DIRECTORY is not supported."))
   }
 }

@@ -20,13 +20,13 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.types.DataType
 
 /**
- * This represents an argument expression to a function call accompanied with an
+ * This represents an argument expression to a routine call accompanied with an
  * explicit reference to the corresponding argument name as a string. In this way,
  * the analyzer can make sure that the provided values match up to the arguments
  * as intended, and the arguments may appear in any order.
  * This unary expression is unevaluable because we intend to replace it with
  * the provided value itself during query analysis (after possibly rearranging
- * the parsed argument list to match up the names to the expected function
+ * the parsed argument list to match up the names to the expected routine
  * signature).
  *
  * SQL Syntax: key => value
@@ -37,8 +37,8 @@ import org.apache.spark.sql.types.DataType
  *   The second argument generates NamedArgumentExpression("charset", Literal("utf-8"))
  * SELECT encode(charset => "utf-8", value => "abc");
  *
- * @param key The name of the function argument
- * @param value The value of the function argument
+ * @param key The name of the routine argument
+ * @param value The value of the routine argument
  */
 case class NamedArgumentExpression(key: String, value: Expression)
   extends UnaryExpression with Unevaluable {

@@ -29,17 +29,18 @@ class StreamingTestsForeachBatchMixin:
         q = None
 
         def collectBatch(batch_df, batch_id):
-            batch_df.createOrReplaceGlobalTempView("test_view")
+            batch_df.write.format("parquet").saveAsTable("test_table")
 
         try:
             df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
             q = df.writeStream.foreachBatch(collectBatch).start()
             q.processAllAvailable()
-            collected = self.spark.sql("select * from global_temp.test_view").collect()
+            collected = self.spark.sql("select * from test_table").collect()
             self.assertTrue(len(collected), 2)
         finally:
             if q:
                 q.stop()
+            self.spark.sql("DROP TABLE IF EXISTS test_table")
 
     def test_streaming_foreach_batch_tempview(self):
         q = None
@@ -50,18 +51,19 @@ class StreamingTestsForeachBatchMixin:
             # clone the session which is no longer same with the session used to start the
             # streaming query
             assert len(batch_df.sparkSession.sql("SELECT * FROM updates").collect()) == 2
-            # Write to a global view verify on the repl/client side.
-            batch_df.createOrReplaceGlobalTempView("temp_view")
+            # Write a table to verify on the repl/client side.
+            batch_df.write.format("parquet").saveAsTable("test_table")
 
         try:
             df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
             q = df.writeStream.foreachBatch(collectBatch).start()
             q.processAllAvailable()
-            collected = self.spark.sql("SELECT * FROM global_temp.temp_view").collect()
+            collected = self.spark.sql("SELECT * FROM test_table").collect()
             self.assertTrue(len(collected[0]), 2)
         finally:
             if q:
                 q.stop()
+            self.spark.sql("DROP TABLE IF EXISTS test_table")
 
     def test_streaming_foreach_batch_propagates_python_errors(self):
         from pyspark.errors import StreamingQueryException

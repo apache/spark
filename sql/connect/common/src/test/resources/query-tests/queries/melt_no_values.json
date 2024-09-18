@@ -1,0 +1,26 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "unpivot": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "ids": [{
+      "unresolvedAttribute": {
+        "unparsedIdentifier": "id"
+      }
+    }, {
+      "unresolvedAttribute": {
+        "unparsedIdentifier": "a"
+      }
+    }],
+    "variableColumnName": "name",
+    "valueColumnName": "value"
+  }
+}

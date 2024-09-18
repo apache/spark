@@ -145,13 +145,11 @@ class StreamingQueryListenerBus(sparkSession: SparkSession) extends Logging {
           case t: QueryTerminatedEvent =>
             listener.onQueryTerminated(t)
           case _ =>
-            logWarning(
-              log"Unknown StreamingQueryListener event: " +
-                log"${MDC(LogKeys.EVENT, event)}")
+            logWarning(log"Unknown StreamingQueryListener event: ${MDC(LogKeys.EVENT, event)}")
         }
       } catch {
         case e: Exception =>
-          logWarning(s"Listener $listener threw an exception", e)
+          logWarning(log"Listener ${MDC(LogKeys.LISTENER, listener)} threw an exception", e)
       })
   }
 }

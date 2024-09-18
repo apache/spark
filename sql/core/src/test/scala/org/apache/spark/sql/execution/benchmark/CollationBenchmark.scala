@@ -24,7 +24,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 abstract class CollationBenchmarkBase extends BenchmarkBase {
   protected val collationTypes: Seq[String] =
-    Seq("UTF8_LCASE", "UNICODE", "UTF8_BINARY", "UNICODE_CI")
+    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI")
 
   def generateSeqInput(n: Long): Seq[UTF8String]
 
@@ -49,7 +49,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       }
     }
     }
-    benchmark.run()
+    benchmark.run(relativeTime = true)
   }
 
   def benchmarkUTFStringCompare(collationTypes: Seq[String], utf8Strings: Seq[UTF8String]): Unit = {
@@ -73,7 +73,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       }
     }
     }
-    benchmark.run()
+    benchmark.run(relativeTime = true)
   }
 
   def benchmarkUTFStringHashFunction(
@@ -99,7 +99,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       }
     }
     }
-    benchmark.run()
+    benchmark.run(relativeTime = true)
   }
 
   def benchmarkContains(
@@ -127,7 +127,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       }
     }
     }
-    benchmark.run()
+    benchmark.run(relativeTime = true)
   }
 
   def benchmarkStartsWith(
@@ -155,7 +155,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       }
     }
     }
-    benchmark.run()
+    benchmark.run(relativeTime = true)
   }
 
   def benchmarkEndsWith(
@@ -183,7 +183,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       }
     }
     }
-    benchmark.run()
+    benchmark.run(relativeTime = true)
   }
 }
 

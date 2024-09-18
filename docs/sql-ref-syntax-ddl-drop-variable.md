@@ -27,7 +27,7 @@ be thrown if the variable does not exist.
 ### Syntax
 
 ```sql
-DROP TEMPORARY VARIABLE [ IF EXISTS ] variable_name
+DROP TEMPORARY { VAR | VARIABLE } [ IF EXISTS ] variable_name
 ```
 
 ### Parameters
@@ -54,10 +54,11 @@ DROP TEMPORARY VARIABLE var1;
 
 -- Try to drop temporary variable which is not present
 DROP TEMPORARY VARIABLE var1;
-Error: VARIABLE_NOT_FOUND
-The variable `system`.`session`.`var1` cannot be found.
+[VARIABLE_NOT_FOUND] The variable `system`.`session`.`var1` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.
+To tolerate the error on drop use DROP VARIABLE IF EXISTS. SQLSTATE: 42883
   
--- Drop temporart variable if it exists
+-- Drop temporary variable if it exists
 DROP TEMPORARY VARIABLE IF EXISTS var1;
 ```
 

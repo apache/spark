@@ -60,14 +60,7 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Receive the data source writer instance.
         writer = pickleSer._read_with_length(infile)
-        if not isinstance(writer, DataSourceWriter):
-            raise PySparkAssertionError(
-                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
-                message_parameters={
-                    "expected": "an instance of DataSourceWriter",
-                    "actual": f"'{type(writer).__name__}'",
-                },
-            )
+        assert isinstance(writer, DataSourceWriter)
 
         # Receive the commit messages.
         num_messages = read_int(infile)
@@ -76,8 +69,8 @@ def main(infile: IO, outfile: IO) -> None:
             message = pickleSer._read_with_length(infile)
             if message is not None and not isinstance(message, WriterCommitMessage):
                 raise PySparkAssertionError(
-                    error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
-                    message_parameters={
+                    errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                    messageParameters={
                         "expected": "an instance of WriterCommitMessage",
                         "actual": f"'{type(message).__name__}'",
                     },

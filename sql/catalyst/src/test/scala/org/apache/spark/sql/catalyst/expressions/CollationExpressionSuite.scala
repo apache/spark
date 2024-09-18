@@ -28,14 +28,14 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(collationId == 0)
     val collateExpr = Collate(Literal("abc"), "UTF8_BINARY")
     assert(collateExpr.dataType === StringType(collationId))
-    collateExpr.dataType.asInstanceOf[StringType].collationId == 0
+    assert(collateExpr.dataType.asInstanceOf[StringType].collationId == 0)
     checkEvaluation(collateExpr, "abc")
   }
 
   test("collate against literal") {
     val collateExpr = Collate(Literal("abc"), "UTF8_LCASE")
     val collationId = CollationFactory.collationNameToId("UTF8_LCASE")
-    assert(collateExpr.dataType == StringType(collationId))
+    assert(collateExpr.dataType === StringType(collationId))
     checkEvaluation(collateExpr, "abc")
   }
 
@@ -61,22 +61,22 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("collate on non existing collation") {
     checkError(
       exception = intercept[SparkException] { Collate(Literal("abc"), "UTF8_BS") },
-      errorClass = "COLLATION_INVALID_NAME",
+      condition = "COLLATION_INVALID_NAME",
       sqlState = "42704",
-      parameters = Map("collationName" -> "UTF8_BS"))
+      parameters = Map("collationName" -> "UTF8_BS", "proposals" -> "UTF8_LCASE"))
   }
 
   test("collation on non-explicit default collation") {
-    checkEvaluation(Collation(Literal("abc")).replacement, "UTF8_BINARY")
+    checkEvaluation(Collation(Literal("abc")), "UTF8_BINARY")
   }
 
   test("collation on explicitly collated string") {
     checkEvaluation(
       Collation(Literal.create("abc",
-        StringType(CollationFactory.UTF8_LCASE_COLLATION_ID))).replacement,
+        StringType(CollationFactory.UTF8_LCASE_COLLATION_ID))),
       "UTF8_LCASE")
     checkEvaluation(
-      Collation(Collate(Literal("abc"), "UTF8_LCASE")).replacement,
+      Collation(Collate(Literal("abc"), "UTF8_LCASE")),
       "UTF8_LCASE")
   }
 
@@ -212,7 +212,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("sR_cYRl_sRb", "sr_Cyrl_SRB")
     ).foreach {
       case (collation, normalized) =>
-        checkEvaluation(Collation(Literal.create("abc", StringType(collation))).replacement,
+        checkEvaluation(Collation(Literal.create("abc", StringType(collation))),
           normalized)
     }
   }

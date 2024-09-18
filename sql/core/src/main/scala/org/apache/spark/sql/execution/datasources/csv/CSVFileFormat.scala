@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -109,6 +110,12 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     // Check a field requirement for corrupt records here to throw an exception in a driver side
     ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)
+
+    if (requiredSchema.length == 1 &&
+      requiredSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
+      throw QueryCompilationErrors.queryFromRawFilesIncludeCorruptRecordColumnError()
+    }
+
     // Don't push any filter which refers to the "virtual" column which cannot present in the input.
     // Such filters will be applied later on the upper layer.
     val actualFilters =
@@ -150,8 +157,6 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
   override def supportDataType(dataType: DataType): Boolean = dataType match {
     case _: VariantType => false
 
-    case _: BinaryType => false
-
     case _: AtomicType => true
 
     case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
@@ -159,4 +164,5 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
     case _ => false
   }
 
+  override def allowDuplicatedColumnNames: Boolean = true
 }

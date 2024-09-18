@@ -16,7 +16,7 @@
  */
 package org.apache.spark.scheduler.cluster
 
-import java.net.URL
+import java.net.URI
 import java.util.concurrent.atomic.AtomicReference
 
 import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
@@ -97,7 +97,7 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
     val sched = mock[TaskSchedulerImpl]
     when(sched.sc).thenReturn(sc)
 
-    val url = new URL(sc.uiWebUrl.get)
+    val url = new URI(sc.uiWebUrl.get).toURL()
     // Before adding the "YARN" filter, should get the code from the filter in SparkConf.
     assert(TestUtils.httpResponseCode(url) === HttpServletResponse.SC_BAD_GATEWAY)
 
@@ -124,10 +124,10 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
 
     sc.ui.get.attachHandler("/new-handler", servlet, "/")
 
-    val newUrl = new URL(sc.uiWebUrl.get + "/new-handler/")
+    val newUrl = new URI(sc.uiWebUrl.get + "/new-handler/").toURL()
     assert(TestUtils.httpResponseCode(newUrl) === HttpServletResponse.SC_NOT_ACCEPTABLE)
 
-    val bypassUrl = new URL(sc.uiWebUrl.get + "/new-handler/?bypass")
+    val bypassUrl = new URI(sc.uiWebUrl.get + "/new-handler/?bypass").toURL()
     assert(TestUtils.httpResponseCode(bypassUrl) === HttpServletResponse.SC_CONFLICT)
   }
 

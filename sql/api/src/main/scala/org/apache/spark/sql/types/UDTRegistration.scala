@@ -45,21 +45,26 @@ object UDTRegistration extends Serializable with Logging {
 
   /**
    * Queries if a given user class is already registered or not.
-   * @param userClassName the name of user class
-   * @return boolean value indicates if the given user class is registered or not
+   * @param userClassName
+   *   the name of user class
+   * @return
+   *   boolean value indicates if the given user class is registered or not
    */
   def exists(userClassName: String): Boolean = udtMap.contains(userClassName)
 
   /**
-   * Registers an UserDefinedType to an user class. If the user class is already registered
-   * with another UserDefinedType, warning log message will be shown.
-   * @param userClass the name of user class
-   * @param udtClass the name of UserDefinedType class for the given userClass
+   * Registers an UserDefinedType to an user class. If the user class is already registered with
+   * another UserDefinedType, warning log message will be shown.
+   * @param userClass
+   *   the name of user class
+   * @param udtClass
+   *   the name of UserDefinedType class for the given userClass
    */
   def register(userClass: String, udtClass: String): Unit = {
     if (udtMap.contains(userClass)) {
-      logWarning(log"Cannot register UDT for ${MDC(LogKeys.CLASS_NAME, userClass)}, " +
-        log"which is already registered.")
+      logWarning(
+        log"Cannot register UDT for ${MDC(LogKeys.CLASS_NAME, userClass)}, " +
+          log"which is already registered.")
     } else {
       // When register UDT with class name, we can't check if the UDT class is an UserDefinedType,
       // or not. The check is deferred.
@@ -69,8 +74,10 @@ object UDTRegistration extends Serializable with Logging {
 
   /**
    * Returns the Class of UserDefinedType for the name of a given user class.
-   * @param userClass class name of user class
-   * @return Option value of the Class object of UserDefinedType
+   * @param userClass
+   *   class name of user class
+   * @return
+   *   Option value of the Class object of UserDefinedType
    */
   def getUDTFor(userClass: String): Option[Class[_]] = {
     udtMap.get(userClass).map { udtClassName =>

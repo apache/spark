@@ -41,9 +41,9 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     assert(utf8Binary.supportsBinaryEquality)
 
     assert(UTF8_LCASE_COLLATION_ID == 1)
-    val utf8BinaryLcase = fetchCollation(UTF8_LCASE_COLLATION_ID)
-    assert(utf8BinaryLcase.collationName == "UTF8_LCASE")
-    assert(!utf8BinaryLcase.supportsBinaryEquality)
+    val utf8Lcase = fetchCollation(UTF8_LCASE_COLLATION_ID)
+    assert(utf8Lcase.collationName == "UTF8_LCASE")
+    assert(!utf8Lcase.supportsBinaryEquality)
 
     assert(UNICODE_COLLATION_ID == (1 << 29))
     val unicode = fetchCollation(UNICODE_COLLATION_ID)
@@ -91,37 +91,32 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
 
   test("fetch invalid UTF8_BINARY and ICU root locale collation names") {
     Seq(
-      "UTF8_BINARY_CS",
-      "UTF8_BINARY_AS",
-      "UTF8_BINARY_CS_AS",
-      "UTF8_BINARY_AS_CS",
-      "UTF8_BINARY_CI",
-      "UTF8_BINARY_AI",
-      "UTF8_BINARY_CI_AI",
-      "UTF8_BINARY_AI_CI",
-      "UTF8_BS",
-      "BINARY_UTF8",
-      "UTF8_BINARY_A",
-      "UNICODE_X",
-      "UNICODE_CI_X",
-      "UNICODE_LCASE_X",
-      "UTF8_UNICODE",
-      "UTF8_BINARY_UNICODE",
-      "CI_UNICODE",
-      "LCASE_UNICODE",
-      "UNICODE_UNSPECIFIED",
-      "UNICODE_CI_UNSPECIFIED",
-      "UNICODE_UNSPECIFIED_CI_UNSPECIFIED",
-      "UNICODE_INDETERMINATE",
-      "UNICODE_CI_INDETERMINATE"
-    ).foreach(collationName => {
-      val error = intercept[SparkException] {
-        fetchCollation(collationName)
-      }
-
-      assert(error.getErrorClass === "COLLATION_INVALID_NAME")
-      assert(error.getMessageParameters.asScala === Map("collationName" -> collationName))
-    })
+      ("UTF8_BINARY_CS", "UTF8_BINARY"),
+      ("UTF8_BINARY_AS", "UTF8_BINARY"), // this should be UNICODE_AS
+      ("UTF8_BINARY_CS_AS","UTF8_BINARY"), // this should be UNICODE_CS_AS
+      ("UTF8_BINARY_AS_CS","UTF8_BINARY"),
+      ("UTF8_BINARY_CI","UTF8_BINARY"),
+      ("UTF8_BINARY_AI","UTF8_BINARY"),
+      ("UTF8_BINARY_CI_AI","UTF8_BINARY"),
+      ("UTF8_BINARY_AI_CI","UTF8_BINARY"),
+      ("UTF8_BS","UTF8_LCASE"),
+      ("BINARY_UTF8","ar_SAU"),
+      ("UTF8_BINARY_A","UTF8_BINARY"),
+      ("UNICODE_X","UNICODE"),
+      ("UNICODE_CI_X","UNICODE"),
+      ("UNICODE_LCASE_X","UNICODE"),
+      ("UTF8_UNICODE","UTF8_LCASE"),
+      ("UTF8_BINARY_UNICODE","UTF8_BINARY"),
+      ("CI_UNICODE", "UNICODE"),
+      ("LCASE_UNICODE", "UNICODE"),
+      ("UNICODE_UNSPECIFIED", "UNICODE"),
+      ("UNICODE_CI_UNSPECIFIED", "UNICODE"),
+      ("UNICODE_UNSPECIFIED_CI_UNSPECIFIED", "UNICODE"),
+      ("UNICODE_INDETERMINATE", "UNICODE"),
+      ("UNICODE_CI_INDETERMINATE", "UNICODE")
+    ).foreach{case (collationName, proposals) =>
+      checkCollationNameError(collationName, proposals)
+    }
   }
 
   case class CollationTestCase[R](collationName: String, s1: String, s2: String, expectedResult: R)
@@ -156,8 +151,8 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
         testCase.expectedResult)
 
       val hash1 = collation.hashFunction.applyAsLong(toUTF8(testCase.s1))
-      val hash2 = collation.hashFunction.applyAsLong(toUTF8(testCase.s1))
-      assert(hash1 == hash2)
+      val hash2 = collation.hashFunction.applyAsLong(toUTF8(testCase.s2))
+      assert((hash1 == hash2) == testCase.expectedResult)
     })
   }
 
@@ -276,52 +271,51 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
 
   test("invalid names of collations with ICU non-root localization") {
     Seq(
-      "en_US", // Must use 3-letter country code
-      "enn",
-      "en_AAA",
-      "en_Something",
-      "en_Something_USA",
-      "en_LCASE",
-      "en_UCASE",
-      "en_CI_LCASE",
-      "en_CI_UCASE",
-      "en_CI_UNSPECIFIED",
-      "en_USA_UNSPECIFIED",
-      "en_USA_UNSPECIFIED_CI",
-      "en_INDETERMINATE",
-      "en_USA_INDETERMINATE",
-      "en_Latn_USA", // Use en_USA instead.
-      "en_Cyrl_USA",
-      "en_USA_AAA",
-      "sr_Cyrl_SRB_AAA",
+      ("en_US", "en_USA"), // Must use 3-letter country code
+      ("eN_US", "en_USA"), // verify that proper casing is captured in error.
+      ("enn", "en, nn, bn"),
+      ("en_AAA", "en_USA"),
+      ("en_Something", "UNICODE"),
+      ("en_Something_USA", "en_USA"),
+      ("en_LCASE", "en_USA"),
+      ("en_UCASE", "en_USA"),
+      ("en_CI_LCASE", "UNICODE"),
+      ("en_CI_UCASE", "en_USA"),
+      ("en_CI_UNSPECIFIED", "en_USA"),
+      ("en_USA_UNSPECIFIED", "en_USA"),
+      ("en_USA_UNSPECIFIED_CI", "en_USA_CI"),
+      ("en_INDETERMINATE", "en_USA"),
+      ("en_USA_INDETERMINATE", "en_USA"),
+      ("en_Latn_USA", "en_USA"),
+      ("en_Cyrl_USA", "en_USA"),
+      ("en_USA_AAA", "en_USA"),
+      ("sr_Cyrl_SRB_AAA", "sr_Cyrl_SRB"),
       // Invalid ordering of language, script and country code.
-      "USA_en",
-      "sr_SRB_Cyrl",
-      "SRB_sr",
-      "SRB_sr_Cyrl",
-      "SRB_Cyrl_sr",
-      "Cyrl_sr",
-      "Cyrl_sr_SRB",
-      "Cyrl_SRB_sr",
+      ("USA_en", "en"),
+      ("sr_SRB_Cyrl", "sr_Cyrl"),
+      ("SRB_sr", "ar_SAU"),
+      ("SRB_sr_Cyrl", "bs_Cyrl"),
+      ("SRB_Cyrl_sr", "sr_Cyrl_SRB"),
+      ("Cyrl_sr", "sr_Cyrl_SRB"),
+      ("Cyrl_sr_SRB", "sr_Cyrl_SRB"),
+      ("Cyrl_SRB_sr", "sr_Cyrl_SRB"),
       // Collation specifiers in the middle of locale.
-      "CI_en",
-      "USA_CI_en",
-      "en_CI_USA",
-      "CI_sr_Cyrl_SRB",
-      "sr_CI_Cyrl_SRB",
-      "sr_Cyrl_CI_SRB",
-      "CI_Cyrl_sr",
-      "Cyrl_CI_sr",
-      "Cyrl_CI_sr_SRB",
-      "Cyrl_sr_CI_SRB"
-    ).foreach(collationName => {
-      val error = intercept[SparkException] {
-        fetchCollation(collationName)
-      }
-
-      assert(error.getErrorClass === "COLLATION_INVALID_NAME")
-      assert(error.getMessageParameters.asScala === Map("collationName" -> collationName))
-    })
+      ("CI_en", "ceb"),
+      ("USA_CI_en", "UNICODE"),
+      ("en_CI_USA", "en_USA"),
+      ("CI_sr_Cyrl_SRB", "sr_Cyrl_SRB"),
+      ("sr_CI_Cyrl_SRB", "sr_Cyrl_SRB"),
+      ("sr_Cyrl_CI_SRB", "sr_Cyrl_SRB"),
+      ("CI_Cyrl_sr", "sr_Cyrl_SRB"),
+      ("Cyrl_CI_sr", "he_ISR"),
+      ("Cyrl_CI_sr_SRB", "sr_Cyrl_SRB"),
+      ("Cyrl_sr_CI_SRB", "sr_Cyrl_SRB"),
+      // no locale specified
+      ("_CI_AI", "af_CI_AI, am_CI_AI, ar_CI_AI"),
+      ("", "af, am, ar")
+    ).foreach { case (collationName, proposals) =>
+      checkCollationNameError(collationName, proposals)
+    }
   }
 
   test("collations name normalization for ICU non-root localization") {
@@ -407,28 +401,27 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     })
   }
 
-  test("repeated and/or incompatible specifiers in collation name") {
+  test("repeated and/or incompatible and/or misplaced specifiers in collation name") {
     Seq(
-      "UTF8_LCASE_LCASE",
-      "UNICODE_CS_CS",
-      "UNICODE_CI_CI",
-      "UNICODE_CI_CS",
-      "UNICODE_CS_CI",
-      "UNICODE_AS_AS",
-      "UNICODE_AI_AI",
-      "UNICODE_AS_AI",
-      "UNICODE_AI_AS",
-      "UNICODE_AS_CS_AI",
-      "UNICODE_CS_AI_CI",
-      "UNICODE_CS_AS_CI_AI"
-    ).foreach(collationName => {
-      val error = intercept[SparkException] {
-        fetchCollation(collationName)
-      }
-
-      assert(error.getErrorClass === "COLLATION_INVALID_NAME")
-      assert(error.getMessageParameters.asScala === Map("collationName" -> collationName))
-    })
+      ("UTF8_LCASE_LCASE", "UTF8_LCASE"),
+      ("UNICODE_CS_CS", "UNICODE_CS"),
+      ("UNICODE_CI_CI", "UNICODE_CI"),
+      ("UNICODE_CI_CS", "UNICODE_CS"),
+      ("UNICODE_CS_CI", "UNICODE_CS"),
+      ("UNICODE_AS_AS", "UNICODE_AS"),
+      ("UNICODE_AI_AI", "UNICODE_AI"),
+      ("UNICODE_AS_AI", "UNICODE_AS"),
+      ("UNICODE_AI_AS", "UNICODE_AS"),
+      ("UNICODE_AS_CS_AI", "UNICODE_AS_CS"),
+      ("UNICODE_CS_AI_CI", "UNICODE_CS_AI"),
+      ("UNICODE_CS_AS_CI_AI", "UNICODE_CS_AS"),
+      ("UNICODE__CS__AS", "UNICODE_AS"),
+      ("UNICODE-CS-AS", "UNICODE"),
+      ("UNICODECSAS", "UNICODE"),
+      ("_CS_AS_UNICODE", "UNICODE")
+    ).foreach { case (collationName, proposals) =>
+      checkCollationNameError(collationName, proposals)
+    }
   }
 
   test("basic ICU collator checks") {
@@ -458,5 +451,14 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       val result = collation.comparator.compare(toUTF8(testCase.s1), toUTF8(testCase.s2))
       assert(Integer.signum(result) == testCase.expectedResult)
     })
+  }
+
+  private def checkCollationNameError(collationName: String, proposals: String): Unit = {
+    val e = intercept[SparkException] {
+      fetchCollation(collationName)
+    }
+    assert(e.getErrorClass === "COLLATION_INVALID_NAME")
+    assert(e.getMessageParameters.asScala === Map(
+      "collationName" -> collationName, "proposals" -> proposals))
   }
 }

@@ -50,7 +50,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    spark.conf.set(SQLConf.ORC_IMPLEMENTATION, "native")
+    spark.conf.set(SQLConf.ORC_IMPLEMENTATION.key, "native")
   }
 
   override def afterAll(): Unit = {
@@ -276,14 +276,14 @@ abstract class FileStreamSinkSuite extends StreamTest {
     withTempDir { dir =>
 
       def testOutputMode(mode: String): Unit = {
-        val e = intercept[AnalysisException] {
-          df.writeStream.format("parquet").outputMode(mode).start(dir.getCanonicalPath)
-        }
-        Seq(mode, "not support").foreach { w =>
-          assert(e.getMessage.toLowerCase(Locale.ROOT).contains(w))
-        }
+        checkError(
+          exception = intercept[AnalysisException] {
+            df.writeStream.format("parquet").outputMode(mode).start(dir.getCanonicalPath)
+          },
+          condition = "STREAMING_OUTPUT_MODE.UNSUPPORTED_DATASOURCE",
+          sqlState = "42KDE",
+          parameters = Map("className" -> "parquet", "outputMode" -> mode))
       }
-
       testOutputMode("update")
       testOutputMode("complete")
     }
@@ -378,7 +378,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
           exception = intercept[AnalysisException] {
             spark.read.schema(s"$c0 INT, $c1 INT").json(outputDir).as[(Int, Int)]
           },
-          errorClass = "COLUMN_ALREADY_EXISTS",
+          condition = "COLUMN_ALREADY_EXISTS",
           parameters = Map("columnName" -> s"`${c1.toLowerCase(Locale.ROOT)}`"))
       }
     }
@@ -649,6 +649,19 @@ abstract class FileStreamSinkSuite extends StreamTest {
           }
         }
       }
+    }
+  }
+
+  test("SPARK-48991: Move path initialization into try-catch block") {
+    val logAppender = new LogAppender("Assume no metadata directory.")
+    Seq(null, "", "file:tmp").foreach { path =>
+      withLogAppender(logAppender) {
+        assert(!FileStreamSink.hasMetadata(Seq(path), spark.sessionState.newHadoopConf(), conf))
+      }
+
+      assert(logAppender.loggingEvents.map(_.getMessage.getFormattedMessage).contains(
+        "Assume no metadata directory. Error while looking for metadata directory in the path:" +
+        s" $path."))
     }
   }
 }

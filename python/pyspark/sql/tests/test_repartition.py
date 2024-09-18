@@ -37,8 +37,8 @@ class DataFrameRepartitionTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "numPartitions", "arg_type": "list"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "numPartitions", "arg_type": "list"},
         )
 
     def test_repartition_by_range(self):
@@ -80,8 +80,8 @@ class DataFrameRepartitionTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INT_OR_STR",
-            message_parameters={"arg_name": "numPartitions", "arg_type": "list"},
+            errorClass="NOT_COLUMN_OR_INT_OR_STR",
+            messageParameters={"arg_name": "numPartitions", "arg_type": "list"},
         )
 
 

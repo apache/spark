@@ -41,16 +41,16 @@ def require_minimum_pandas_version() -> None:
         raised_error = error
     if not have_pandas:
         raise PySparkImportError(
-            error_class="PACKAGE_NOT_INSTALLED",
-            message_parameters={
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={
                 "package_name": "Pandas",
                 "minimum_version": str(minimum_pandas_version),
             },
         ) from raised_error
     if LooseVersion(pandas.__version__) < LooseVersion(minimum_pandas_version):
         raise PySparkImportError(
-            error_class="UNSUPPORTED_PACKAGE_VERSION",
-            message_parameters={
+            errorClass="UNSUPPORTED_PACKAGE_VERSION",
+            messageParameters={
                 "package_name": "Pandas",
                 "minimum_version": str(minimum_pandas_version),
                 "current_version": str(pandas.__version__),
@@ -74,16 +74,16 @@ def require_minimum_pyarrow_version() -> None:
         raised_error = error
     if not have_arrow:
         raise PySparkImportError(
-            error_class="PACKAGE_NOT_INSTALLED",
-            message_parameters={
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={
                 "package_name": "PyArrow",
                 "minimum_version": str(minimum_pyarrow_version),
             },
         ) from raised_error
     if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
         raise PySparkImportError(
-            error_class="UNSUPPORTED_PACKAGE_VERSION",
-            message_parameters={
+            errorClass="UNSUPPORTED_PACKAGE_VERSION",
+            messageParameters={
                 "package_name": "PyArrow",
                 "minimum_version": str(minimum_pyarrow_version),
                 "current_version": str(pyarrow.__version__),
@@ -91,6 +91,6 @@ def require_minimum_pyarrow_version() -> None:
         )
     if os.environ.get("ARROW_PRE_0_15_IPC_FORMAT", "0") == "1":
         raise PySparkRuntimeError(
-            error_class="ARROW_LEGACY_IPC_FORMAT",
-            message_parameters={},
+            errorClass="ARROW_LEGACY_IPC_FORMAT",
+            messageParameters={},
         )

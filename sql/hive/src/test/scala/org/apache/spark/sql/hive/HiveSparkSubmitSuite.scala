@@ -733,7 +733,7 @@ object SPARK_9757 extends QueryTest {
 
     val hiveContext = new TestHiveContext(sparkContext)
     spark = hiveContext.sparkSession
-    import hiveContext.implicits._
+    import hiveContext.sparkSession.implicits._
 
     val dir = Utils.createTempDir()
     dir.delete()
@@ -828,7 +828,7 @@ object SPARK_18360 {
       .enableHiveSupport().getOrCreate()
 
     val defaultDbLocation = spark.catalog.getDatabase("default").locationUri
-    assert(new Path(defaultDbLocation) == new Path(spark.conf.get(WAREHOUSE_PATH)))
+    assert(new Path(defaultDbLocation) == new Path(spark.conf.get(WAREHOUSE_PATH.key)))
 
     val hiveClient =
       spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client

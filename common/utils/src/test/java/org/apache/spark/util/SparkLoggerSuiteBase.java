@@ -81,6 +81,8 @@ public abstract class SparkLoggerSuiteBase {
     MDC.of(LogKeys.REASON$.MODULE$, "the shuffle data is too large")};
   private final String msgWithMDCs = "Lost executor {}, reason: {}";
 
+  private final MDC[] emptyMDCs = new MDC[0];
+
   private final MDC executorIDMDCValueIsNull = MDC.of(LogKeys.EXECUTOR_ID$.MODULE$, null);
 
   private final MDC scalaCustomLogMDC =
@@ -106,6 +108,11 @@ public abstract class SparkLoggerSuiteBase {
 
   // test for message (with mdcs and exception)
   abstract String expectedPatternForMsgWithMDCsAndException(Level level);
+
+  // test for message (with empty mdcs and exception)
+  String expectedPatternForMsgWithEmptyMDCsAndException(Level level) {
+    return expectedPatternForBasicMsgWithException(level);
+  }
 
   // test for message (with mdc - the value is null)
   abstract String expectedPatternForMsgWithMDCValueIsNull(Level level);
@@ -189,6 +196,20 @@ public abstract class SparkLoggerSuiteBase {
         Pair.of(Level.WARN, warnFn),
         Pair.of(Level.INFO, infoFn)).forEach(pair ->
       checkLogOutput(pair.getLeft(), pair.getRight(), this::expectedPatternForMsgWithMDCs));
+  }
+
+  @Test
+  public void testLoggerWithEmptyMDCsAndException() {
+    Throwable exception = new RuntimeException("OOM");
+    Runnable errorFn = () -> logger().error(basicMsg, exception, emptyMDCs);
+    Runnable warnFn = () -> logger().warn(basicMsg, exception, emptyMDCs);
+    Runnable infoFn = () -> logger().info(basicMsg, exception, emptyMDCs);
+    List.of(
+        Pair.of(Level.ERROR, errorFn),
+        Pair.of(Level.WARN, warnFn),
+        Pair.of(Level.INFO, infoFn)).forEach(pair ->
+        checkLogOutput(pair.getLeft(), pair.getRight(),
+            this::expectedPatternForMsgWithEmptyMDCsAndException));
   }
 
   @Test

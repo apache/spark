@@ -430,7 +430,7 @@ private[tree] object TreeEnsembleModel extends Logging {
       val metadata = compact(render(
         ("class" -> className) ~ ("version" -> thisFormatVersion) ~
           ("metadata" -> Extraction.decompose(ensembleMetadata))))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
 
       // Create Parquet data.
       val dataRDD = sc.parallelize(model.trees.zipWithIndex.toImmutableArraySeq)

@@ -42,7 +42,7 @@ case object StringTypeBinary extends AbstractStringType {
 case object StringTypeBinaryLcase extends AbstractStringType {
   override private[sql] def acceptsType(other: DataType): Boolean =
     other.isInstanceOf[StringType] && (other.asInstanceOf[StringType].supportsBinaryEquality ||
-      other.asInstanceOf[StringType].isUTF8BinaryLcaseCollation)
+      other.asInstanceOf[StringType].isUTF8LcaseCollation)
 }
 
 /**

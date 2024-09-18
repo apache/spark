@@ -43,16 +43,13 @@ class SparkThrowableSuite extends SparkFunSuite {
   /* Used to regenerate the error class file. Run:
    {{{
       SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \
-        "core/testOnly *SparkThrowableSuite -- -t \"Error classes are correctly formatted\""
+        "core/testOnly *SparkThrowableSuite -- -t \"Error conditions are correctly formatted\""
    }}}
    */
   private val regenerateCommand = "SPARK_GENERATE_GOLDEN_FILES=1 build/sbt " +
     "\"core/testOnly *SparkThrowableSuite -- -t \\\"Error classes match with document\\\"\""
 
   private val errorJsonFilePath = getWorkspaceFilePath(
-    // Note that though we call them "error classes" here, the proper name is "error conditions",
-    // hence why the name of the JSON file is different. We will address this inconsistency as part
-    // of this ticket: https://issues.apache.org/jira/browse/SPARK-47429
     "common", "utils", "src", "main", "resources", "error", "error-conditions.json")
 
   private val errorReader = new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL))
@@ -81,8 +78,8 @@ class SparkThrowableSuite extends SparkFunSuite {
     mapper.readValue(errorJsonFilePath.toUri.toURL, new TypeReference[Map[String, ErrorInfo]]() {})
   }
 
-  test("Error classes are correctly formatted") {
-    val errorClassFileContents =
+  test("Error conditions are correctly formatted") {
+    val errorConditionFileContents =
       IOUtils.toString(errorJsonFilePath.toUri.toURL.openStream(), StandardCharsets.UTF_8)
     val mapper = JsonMapper.builder()
       .addModule(DefaultScalaModule)
@@ -96,33 +93,30 @@ class SparkThrowableSuite extends SparkFunSuite {
       .writeValueAsString(errorReader.errorInfoMap)
 
     if (regenerateGoldenFiles) {
-      if (rewrittenString.trim != errorClassFileContents.trim) {
-        val errorClassesFile = errorJsonFilePath.toFile
-        logInfo(s"Regenerating error class file $errorClassesFile")
-        Files.delete(errorClassesFile.toPath)
+      if (rewrittenString.trim != errorConditionFileContents.trim) {
+        val errorConditionsFile = errorJsonFilePath.toFile
+        logInfo(s"Regenerating error conditions file $errorConditionsFile")
+        Files.delete(errorConditionsFile.toPath)
         FileUtils.writeStringToFile(
-          errorClassesFile,
+          errorConditionsFile,
           rewrittenString + lineSeparator,
           StandardCharsets.UTF_8)
       }
     } else {
-      assert(rewrittenString.trim == errorClassFileContents.trim)
+      assert(rewrittenString.trim == errorConditionFileContents.trim)
     }
   }
 
   test("SQLSTATE is mandatory") {
-    val errorClassesNoSqlState = errorReader.errorInfoMap.filter {
+    val errorConditionsNoSqlState = errorReader.errorInfoMap.filter {
       case (error: String, info: ErrorInfo) =>
         !error.startsWith("_LEGACY_ERROR_TEMP") && info.sqlState.isEmpty
     }.keys.toSeq
-    assert(errorClassesNoSqlState.isEmpty,
-      s"Error classes without SQLSTATE: ${errorClassesNoSqlState.mkString(", ")}")
+    assert(errorConditionsNoSqlState.isEmpty,
+      s"Error classes without SQLSTATE: ${errorConditionsNoSqlState.mkString(", ")}")
   }
 
   test("Error class and error state / SQLSTATE invariants") {
-    // Unlike in the rest of the codebase, the term "error class" is used here as it is in our
-    // documentation as well as in the SQL standard. We can remove this comment as part of this
-    // ticket: https://issues.apache.org/jira/browse/SPARK-47429
     val errorClassesJson = Utils.getSparkClassLoader.getResource("error/error-classes.json")
     val errorStatesJson = Utils.getSparkClassLoader.getResource("error/error-states.json")
     val mapper = JsonMapper.builder()
@@ -171,9 +165,9 @@ class SparkThrowableSuite extends SparkFunSuite {
       .enable(SerializationFeature.INDENT_OUTPUT)
       .build()
     mapper.writeValue(tmpFile, errorReader.errorInfoMap)
-    val rereadErrorClassToInfoMap = mapper.readValue(
+    val rereadErrorConditionToInfoMap = mapper.readValue(
       tmpFile, new TypeReference[Map[String, ErrorInfo]]() {})
-    assert(rereadErrorClassToInfoMap == errorReader.errorInfoMap)
+    assert(rereadErrorConditionToInfoMap == errorReader.errorInfoMap)
   }
 
   test("Error class names should contain only capital letters, numbers and underscores") {
@@ -207,13 +201,6 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
     assert(e.getErrorClass === "INTERNAL_ERROR")
     assert(e.getMessageParameters().get("message").contains("Undefined error message parameter"))
-
-    // Does not fail with too many args (expects 0 args)
-    assert(getMessage("DIVIDE_BY_ZERO", Map("config" -> "foo", "a" -> "bar")) ==
-      "[DIVIDE_BY_ZERO] Division by zero. " +
-      "Use `try_divide` to tolerate divisor being 0 and return NULL instead. " +
-        "If necessary set foo to \"false\" " +
-        "to bypass this error. SQLSTATE: 22012")
   }
 
   test("Error message is formatted") {
@@ -259,6 +246,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     } catch {
       case e: SparkThrowable =>
         assert(e.getErrorClass == null)
+        assert(!e.isInternalError)
         assert(e.getSqlState == null)
       case _: Throwable =>
         // Should not end up here
@@ -275,6 +263,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     } catch {
       case e: SparkThrowable =>
         assert(e.getErrorClass == "CANNOT_PARSE_DECIMAL")
+        assert(!e.isInternalError)
         assert(e.getSqlState == "22018")
       case _: Throwable =>
         // Should not end up here
@@ -492,5 +481,51 @@ class SparkThrowableSuite extends SparkFunSuite {
       assert(e.getErrorClass === "INTERNAL_ERROR")
       assert(e.getMessage.contains("BY.ZERO"))
     }
+  }
+
+  test("handle null values in message parameters") {
+    withTempDir { dir =>
+      val json = new File(dir, "errors.json")
+      FileUtils.writeStringToFile(json,
+        """
+          |{
+          |  "MISSING_PARAMETER" : {
+          |    "message" : [
+          |      "Parameter <param> is missing."
+          |    ]
+          |  }
+          |}
+          |""".stripMargin, StandardCharsets.UTF_8)
+
+      val reader = new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
+      // Attempt to get the error message with a null parameter
+      val errorMessage = reader.getErrorMessage("MISSING_PARAMETER", Map("param" -> null))
+
+      assert(errorMessage.contains("Parameter null is missing."))
+    }
+  }
+
+  test("detect unused message parameters") {
+    checkError(
+      exception = intercept[SparkException] {
+        SparkThrowableHelper.getMessage(
+          errorClass = "CANNOT_UP_CAST_DATATYPE",
+          messageParameters = Map(
+            "expression" -> "CAST('aaa' AS LONG)",
+            "sourceType" -> "STRING",
+            "targetType" -> "LONG",
+            "op" -> "CAST", // unused parameter
+            "details" -> "implicit cast"
+          ))
+      },
+      condition = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" ->
+          ("Found unused message parameters of the error class 'CANNOT_UP_CAST_DATATYPE'. " +
+          "Its error message format has 4 placeholders, but the passed message parameters map " +
+          "has 5 items. Consider to add placeholders to the error format or " +
+          "remove unused message parameters.")
+      )
+    )
   }
 }

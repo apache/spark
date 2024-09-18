@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.adaptive.LogicalQueryStage
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
@@ -80,13 +79,5 @@ case class EmptyRelationExec(@transient logical: LogicalPlan) extends LeafExecNo
 
   override def doCanonicalize(): SparkPlan = {
     this.copy(logical = LocalRelation(logical.output).canonicalized)
-  }
-
-  override protected[sql] def cleanupResources(): Unit = {
-    logical.foreach {
-      case LogicalQueryStage(_, physical) =>
-        physical.cleanupResources()
-    }
-    super.cleanupResources()
   }
 }

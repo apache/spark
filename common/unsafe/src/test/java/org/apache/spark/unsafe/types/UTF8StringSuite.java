@@ -26,8 +26,11 @@ import java.util.*;
 
 import com.google.common.collect.ImmutableMap;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.UTF8StringBuilder;
+
 import org.junit.jupiter.api.Test;
 
+import static org.apache.spark.unsafe.types.UTF8String.fromString;
 import static org.junit.jupiter.api.Assertions.*;
 
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
@@ -42,7 +45,9 @@ public class UTF8StringSuite {
     assertEquals(len, s2.numChars());
 
     assertEquals(str, s1.toString());
+    assertEquals(str, s1.toValidString());
     assertEquals(str, s2.toString());
+    assertEquals(str, s2.toValidString());
     assertEquals(s1, s2);
 
     assertEquals(s1.hashCode(), s2.hashCode());
@@ -885,7 +890,10 @@ public class UTF8StringSuite {
     for (String hex : expected.split(" ")) exp.write(Integer.parseInt(hex.substring(2), 16));
     ByteArrayOutputStream inp = new ByteArrayOutputStream();
     for (String hex : input.split(" ")) inp.write(Integer.parseInt(hex.substring(2), 16));
-    assertEquals(fromBytes(exp.toByteArray()), fromBytes(inp.toByteArray()).makeValid());
+    UTF8String expUTF8String = fromBytes(exp.toByteArray());
+    UTF8String inpUTF8String = fromBytes(inp.toByteArray());
+    assertEquals(expUTF8String, inpUTF8String.makeValid());
+    assertEquals(inpUTF8String.toValidString(), inpUTF8String.toString());
   }
   @Test
   public void makeValid() {
@@ -1110,4 +1118,273 @@ public class UTF8StringSuite {
     testIsValid("0x9C 0x76 0x17", "0xEF 0xBF 0xBD 0x76 0x17");
   }
 
+  @Test
+  public void testGetByte() {
+    // Valid UTF-8 string
+    String validString = "abcde";
+    UTF8String validUTF8String = fromString(validString);
+    // Valid byte index handling
+    for (int i = 0; i < validString.length(); ++i) {
+      assertEquals(validString.charAt(i), validUTF8String.getByte(i));
+    }
+    // Invalid byte index handling
+    assertEquals(0, validUTF8String.getByte(-1));
+    assertEquals(0, validUTF8String.getByte(validString.length()));
+    assertEquals(0, validUTF8String.getByte(validString.length() + 1));
+
+    // Invalid UTF-8 string
+    byte[] invalidString = new byte[] {(byte) 0x41, (byte) 0x42, (byte) 0x80};
+    UTF8String invalidUTF8String = fromBytes(invalidString);
+    // Valid byte index handling
+    for (int i = 0; i < invalidString.length; ++i) {
+      assertEquals(invalidString[i], invalidUTF8String.getByte(i));
+    }
+    // Invalid byte index handling
+    assertEquals(0, invalidUTF8String.getByte(-1));
+    assertEquals(0, invalidUTF8String.getByte(invalidString.length));
+    assertEquals(0, invalidUTF8String.getByte(invalidString.length + 1));
+  }
+
+  @Test
+  public void testGetChar() {
+    // Valid UTF-8 string
+    String str = "abcde";
+    UTF8String s = fromString(str);
+    // Valid character index handling
+    for (int i = 0; i < str.length(); ++i) {
+      assertEquals(str.charAt(i), s.getChar(i));
+    }
+    // Invalid character index handling
+    assertThrows(IndexOutOfBoundsException.class, () -> s.getChar(-1));
+    assertThrows(IndexOutOfBoundsException.class, () -> s.getChar(str.length()));
+    assertThrows(IndexOutOfBoundsException.class, () -> s.getChar(str.length() + 1));
+
+    // Invalid UTF-8 string
+    byte[] invalidString = new byte[] {(byte) 0x41, (byte) 0x42, (byte) 0x80};
+    UTF8String invalidUTF8String = fromBytes(invalidString);
+    // Valid byte index handling
+    for (int i = 0; i < invalidString.length; ++i) {
+      if (Character.isValidCodePoint(invalidString[i])) {
+        assertEquals(invalidString[i], invalidUTF8String.getChar(i));
+      } else {
+        assertEquals(0, invalidUTF8String.getChar(i));
+      }
+    }
+    // Invalid byte index handling
+    assertThrows(IndexOutOfBoundsException.class, () -> s.getChar(-1));
+    assertThrows(IndexOutOfBoundsException.class, () -> s.getChar(str.length()));
+    assertThrows(IndexOutOfBoundsException.class, () -> s.getChar(str.length() + 1));
+  }
+
+  @Test
+  public void testCodePointFrom() {
+    // Valid UTF-8 string
+    String str = "abcde";
+    UTF8String s = fromString(str);
+    // Valid character index handling
+    for (int i = 0; i < str.length(); ++i) {
+      assertEquals(str.charAt(i), s.codePointFrom(i));
+    }
+    // Invalid character index handling
+    assertThrows(IndexOutOfBoundsException.class, () -> s.codePointFrom(-1));
+    assertThrows(IndexOutOfBoundsException.class, () -> s.codePointFrom(str.length()));
+    assertThrows(IndexOutOfBoundsException.class, () -> s.codePointFrom(str.length() + 1));
+
+    // Invalid UTF-8 string
+    byte[] invalidString = new byte[] {(byte) 0x41, (byte) 0x42, (byte) 0x80};
+    UTF8String invalidUTF8String = fromBytes(invalidString);
+    // Valid byte index handling
+    for (int i = 0; i < invalidString.length; ++i) {
+      if (Character.isValidCodePoint(invalidString[i])) {
+        assertEquals(invalidString[i], invalidUTF8String.codePointFrom(i));
+      } else {
+        assertEquals(0, invalidUTF8String.codePointFrom(i));
+      }
+    }
+    // Invalid byte index handling
+    assertThrows(IndexOutOfBoundsException.class, () -> s.codePointFrom(-1));
+    assertThrows(IndexOutOfBoundsException.class, () -> s.codePointFrom(str.length()));
+    assertThrows(IndexOutOfBoundsException.class, () -> s.codePointFrom(str.length() + 1));
+  }
+
+  @Test
+  public void utf8StringCodePoints() {
+    String s = "aéह 日å!";
+    UTF8String s0 = fromString(s);
+    for (int i = 0; i < s.length(); ++i) {
+      assertEquals(s.codePointAt(i), s0.getChar(i));
+    }
+
+    UTF8String s1 = fromBytes(new byte[] {0x41, (byte) 0xC3, (byte) 0xB1, (byte) 0xE2,
+      (byte) 0x82, (byte) 0xAC, (byte) 0xF0, (byte) 0x90, (byte) 0x8D, (byte) 0x88});
+    // numBytesForFirstByte
+    assertEquals(1, UTF8String.numBytesForFirstByte(s1.getByte(0)));
+    assertEquals(2, UTF8String.numBytesForFirstByte(s1.getByte(1)));
+    assertEquals(3, UTF8String.numBytesForFirstByte(s1.getByte(3)));
+    assertEquals(4, UTF8String.numBytesForFirstByte(s1.getByte(6)));
+    // getByte
+    assertEquals((byte) 0x41, s1.getByte(0));
+    assertEquals((byte) 0xC3, s1.getByte(1));
+    assertEquals((byte) 0xE2, s1.getByte(3));
+    assertEquals((byte) 0xF0, s1.getByte(6));
+    // codePointFrom
+    assertEquals(0x41, s1.codePointFrom(0));
+    assertEquals(0xF1, s1.codePointFrom(1));
+    assertEquals(0x20AC, s1.codePointFrom(3));
+    assertEquals(0x10348, s1.codePointFrom(6));
+    assertThrows(IndexOutOfBoundsException.class, () -> s1.codePointFrom(-1));
+    assertThrows(IndexOutOfBoundsException.class, () -> s1.codePointFrom(99));
+    // getChar
+    assertEquals(0x41, s1.getChar(0));
+    assertEquals(0xF1, s1.getChar(1));
+    assertEquals(0x20AC, s1.getChar(2));
+    assertEquals(0x10348, s1.getChar(3));
+    assertThrows(IndexOutOfBoundsException.class, () -> s1.getChar(-1));
+    assertThrows(IndexOutOfBoundsException.class, () -> s1.getChar(99));
+
+    UTF8String s2 = fromString("Añ€𐍈");
+    // numBytesForFirstByte
+    assertEquals(1, UTF8String.numBytesForFirstByte(s2.getByte(0)));
+    assertEquals(2, UTF8String.numBytesForFirstByte(s2.getByte(1)));
+    assertEquals(3, UTF8String.numBytesForFirstByte(s2.getByte(3)));
+    assertEquals(4, UTF8String.numBytesForFirstByte(s2.getByte(6)));
+    // getByte
+    assertEquals((byte) 0x41, s2.getByte(0));
+    assertEquals((byte) 0xC3, s2.getByte(1));
+    assertEquals((byte) 0xE2, s2.getByte(3));
+    assertEquals((byte) 0xF0, s2.getByte(6));
+    // codePointFrom
+    assertEquals(0x41, s2.codePointFrom(0));
+    assertEquals(0xF1, s2.codePointFrom(1));
+    assertEquals(0x20AC, s2.codePointFrom(3));
+    assertEquals(0x10348, s2.codePointFrom(6));
+    assertThrows(IndexOutOfBoundsException.class, () -> s2.codePointFrom(-1));
+    assertThrows(IndexOutOfBoundsException.class, () -> s2.codePointFrom(99));
+    // getChar
+    assertEquals(0x41, s2.getChar(0));
+    assertEquals(0xF1, s2.getChar(1));
+    assertEquals(0x20AC, s2.getChar(2));
+    assertEquals(0x10348, s2.getChar(3));
+    assertThrows(IndexOutOfBoundsException.class, () -> s2.getChar(-1));
+    assertThrows(IndexOutOfBoundsException.class, () -> s2.getChar(99));
+
+    UTF8String s3 = EMPTY_UTF8;
+    // codePointFrom
+    assertThrows(IndexOutOfBoundsException.class, () -> s3.codePointFrom(0));
+    assertThrows(IndexOutOfBoundsException.class, () -> s3.codePointFrom(-1));
+    assertThrows(IndexOutOfBoundsException.class, () -> s3.codePointFrom(99));
+    // getChar
+    assertThrows(IndexOutOfBoundsException.class, () -> s3.getChar(0));
+    assertThrows(IndexOutOfBoundsException.class, () -> s3.getChar(-1));
+    assertThrows(IndexOutOfBoundsException.class, () -> s3.getChar(99));
+  }
+
+  private void testCodePointIterator(UTF8String utf8String) {
+    CodePointIteratorType iteratorMode = utf8String.isValid() ?
+      CodePointIteratorType.CODE_POINT_ITERATOR_ASSUME_VALID :
+      CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID;
+    Iterator<Integer> iterator = utf8String.codePointIterator(iteratorMode);
+    for (int i = 0; i < utf8String.numChars(); ++i) {
+      assertTrue(iterator.hasNext());
+      int codePoint = (utf8String.isValid() ? utf8String : utf8String.makeValid()).getChar(i);
+      assertEquals(codePoint, (int) iterator.next());
+    }
+    assertFalse(iterator.hasNext());
+  }
+  @Test
+  public void codePointIterator() {
+    // Valid UTF8 strings.
+    testCodePointIterator(fromString(""));
+    testCodePointIterator(fromString("abc"));
+    testCodePointIterator(fromString("a!2&^R"));
+    testCodePointIterator(fromString("aéह 日å!"));
+    testCodePointIterator(fromBytes(new byte[] {(byte) 0x41}));
+    testCodePointIterator(fromBytes(new byte[] {(byte) 0xC2, (byte) 0xA3}));
+    testCodePointIterator(fromBytes(new byte[] {(byte) 0xE2, (byte) 0x82, (byte) 0xAC}));
+    // Invalid UTF8 strings.
+    testCodePointIterator(fromBytes(new byte[] {(byte) 0xFF}));
+    testCodePointIterator(fromBytes(new byte[] {(byte) 0x80}));
+    testCodePointIterator(fromBytes(new byte[] {(byte) 0xC2, (byte) 0x80}));
+    testCodePointIterator(fromBytes(new byte[] {(byte) 0xE2, (byte) 0x82, (byte) 0x80}));
+    testCodePointIterator(fromBytes(new byte[] {(byte) 0x41, (byte) 0x80, (byte) 0x42}));
+    testCodePointIterator(fromBytes(new byte[] {
+      (byte) 0x41, (byte) 0xC2, (byte) 0x80, (byte) 0x42}));
+    testCodePointIterator(fromBytes(new byte[] {
+      (byte) 0x41, (byte) 0xE2, (byte) 0x82, (byte) 0x80, (byte) 0x42}));
+  }
+
+  private void testReverseCodePointIterator(UTF8String utf8String) {
+    CodePointIteratorType iteratorMode = utf8String.isValid() ?
+      CodePointIteratorType.CODE_POINT_ITERATOR_ASSUME_VALID :
+      CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID;
+    Iterator<Integer> iterator = utf8String.codePointIterator(iteratorMode);
+    for (int i = 0; i < utf8String.numChars(); ++i) {
+      assertTrue(iterator.hasNext());
+      int codePoint = (utf8String.isValid() ? utf8String : utf8String.makeValid()).getChar(i);
+      assertEquals(codePoint, (int) iterator.next());
+    }
+    assertFalse(iterator.hasNext());
+  }
+  @Test
+  public void reverseCodePointIterator() {
+    // Valid UTF8 strings
+    testReverseCodePointIterator(fromString(""));
+    testReverseCodePointIterator(fromString("abc"));
+    testReverseCodePointIterator(fromString("a!2&^R"));
+    testReverseCodePointIterator(fromString("aéह 日å!"));
+    testReverseCodePointIterator(fromBytes(new byte[] {(byte) 0x41}));
+    testReverseCodePointIterator(fromBytes(new byte[] {(byte) 0xC2, (byte) 0xA3}));
+    testReverseCodePointIterator(fromBytes(new byte[] {(byte) 0xE2, (byte) 0x82, (byte) 0xAC}));
+    // Invalid UTF8 strings
+    testReverseCodePointIterator(fromBytes(new byte[] {(byte) 0xFF}));
+    testReverseCodePointIterator(fromBytes(new byte[] {(byte) 0x80}));
+    testReverseCodePointIterator(fromBytes(new byte[] {(byte) 0xC2, (byte) 0x80}));
+    testReverseCodePointIterator(fromBytes(new byte[] {(byte) 0xE2, (byte) 0x82, (byte) 0x80}));
+    testReverseCodePointIterator(fromBytes(new byte[] {(byte) 0x41, (byte) 0x80, (byte) 0x42}));
+    testReverseCodePointIterator(fromBytes(new byte[] {
+      (byte) 0x41, (byte) 0xC2, (byte) 0x80, (byte) 0x42}));
+    testReverseCodePointIterator(fromBytes(new byte[] {
+      (byte) 0x41, (byte) 0xE2, (byte) 0x82, (byte) 0x80, (byte) 0x42}));
+  }
+
+  @Test
+  public void toBinaryString() {
+    assertEquals(ZERO_UTF8, UTF8String.toBinaryString(0));
+    assertEquals(UTF8String.fromString("1"), UTF8String.toBinaryString(1));
+    assertEquals(UTF8String.fromString("10"), UTF8String.toBinaryString(2));
+    assertEquals(UTF8String.fromString("100"), UTF8String.toBinaryString(4));
+    assertEquals(UTF8String.fromString("111"), UTF8String.toBinaryString(7));
+    assertEquals(
+      UTF8String.fromString("1111111111111111111111111111111111111111111111111111111111110011"),
+      UTF8String.toBinaryString(-13));
+    assertEquals(
+      UTF8String.fromString("1000000000000000000000000000000000000000000000000000000000000000"),
+      UTF8String.toBinaryString(Long.MIN_VALUE));
+    assertEquals(
+      UTF8String.fromString("111111111111111111111111111111111111111111111111111111111111111"),
+      UTF8String.toBinaryString(Long.MAX_VALUE));
+  }
+
+  /**
+   * This tests whether appending a codepoint to a 'UTF8StringBuilder' correctly appends every
+   * single codepoint. We test it against an already existing 'StringBuilder.appendCodePoint' and
+   * 'UTF8String.fromString'. We skip testing the surrogate codepoints because at some point while
+   * converting the surrogate codepoint to 'UTF8String' (via 'StringBuilder' and 'UTF8String') we
+   * get an ill-formated byte sequence (probably because 'String' is in UTF-16 format, and a single
+   * surrogate codepoint is handled differently in UTF-16 than in UTF-8, so somewhere during those
+   * conversions some different behaviour happens).
+   */
+  @Test
+  public void testAppendCodepointToUTF8StringBuilder() {
+    int surrogateRangeLowerBound = 0xD800;
+    int surrogateRangeUpperBound = 0xDFFF;
+    for (int i = Character.MIN_CODE_POINT; i <= Character.MAX_CODE_POINT; ++i) {
+      if(surrogateRangeLowerBound <= i && i <= surrogateRangeUpperBound) continue;
+      UTF8StringBuilder usb = new UTF8StringBuilder();
+      usb.appendCodePoint(i);
+      StringBuilder sb = new StringBuilder();
+      sb.appendCodePoint(i);
+      assert(usb.build().equals(UTF8String.fromString(sb.toString())));
+    }
+  }
 }

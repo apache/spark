@@ -29,6 +29,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -386,9 +387,9 @@ object PartitioningUtils extends SQLConfHelper {
       } else {
         pathsWithPartitionValues.map(_._2.columnNames.map(_.toLowerCase()))
       }
-      assert(
-        partColNames.distinct.size == 1,
-        listConflictingPartitionColumns(pathsWithPartitionValues))
+      if (partColNames.distinct.size != 1) {
+        throw conflictingPartitionColumnsError(pathsWithPartitionValues)
+      }
 
       // Resolves possible type conflicts for each column
       val values = pathsWithPartitionValues.map(_._2)
@@ -404,8 +405,8 @@ object PartitioningUtils extends SQLConfHelper {
     }
   }
 
-  private[datasources] def listConflictingPartitionColumns(
-      pathWithPartitionValues: Seq[(Path, PartitionValues)]): String = {
+  private[datasources] def conflictingPartitionColumnsError(
+      pathWithPartitionValues: Seq[(Path, PartitionValues)]): SparkRuntimeException = {
     val distinctPartColNames = pathWithPartitionValues.map(_._2.columnNames).distinct
 
     def groupByKey[K, V](seq: Seq[(K, V)]): Map[K, Iterable[V]] =
@@ -423,13 +424,8 @@ object PartitioningUtils extends SQLConfHelper {
     // Lists out those non-leaf partition directories that also contain files
     val suspiciousPaths = distinctPartColNames.sortBy(_.length).flatMap(partColNamesToPaths)
 
-    s"Conflicting partition column names detected:\n" +
-      distinctPartColLists.mkString("\n\t", "\n\t", "\n\n") +
-      "For partitioned table directories, data files should only live in leaf directories.\n" +
-      "And directories at the same level should have the same partition column name.\n" +
-      "Please check the following directories for unexpected files or " +
-      "inconsistent partition column names:\n" +
-      suspiciousPaths.map("\t" + _).mkString("\n", "\n", "")
+    QueryExecutionErrors.conflictingPartitionColumnNamesError(
+      distinctPartColLists, suspiciousPaths)
   }
 
   // scalastyle:off line.size.limit
@@ -554,7 +550,7 @@ object PartitioningUtils extends SQLConfHelper {
       Cast(Literal(unescapePathName(value)), it).eval()
     case BinaryType => value.getBytes()
     case BooleanType => value.toBoolean
-    case dt => throw QueryExecutionErrors.typeUnsupportedError(dt)
+    case dt => throw SparkException.internalError(s"Unsupported partition type: $dt")
   }
 
   def validatePartitionColumn(

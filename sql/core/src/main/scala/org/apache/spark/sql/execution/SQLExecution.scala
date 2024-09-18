@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import org.apache.spark.{ErrorMessageFormat, JobArtifactSet, SparkEnv, SparkException, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{ErrorMessageFormat, JobArtifactSet, SparkContext, SparkEnv, SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.SparkContext.{SPARK_JOB_DESCRIPTION, SPARK_JOB_INTERRUPT_ON_CANCEL}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
@@ -87,7 +87,7 @@ object SQLExecution extends Logging {
     executionIdToQueryExecution.put(executionId, queryExecution)
     val originalInterruptOnCancel = sc.getLocalProperty(SPARK_JOB_INTERRUPT_ON_CANCEL)
     if (originalInterruptOnCancel == null) {
-      val interruptOnCancel = sparkSession.conf.get(SQLConf.INTERRUPT_ON_CANCEL)
+      val interruptOnCancel = sparkSession.sessionState.conf.getConf(SQLConf.INTERRUPT_ON_CANCEL)
       sc.setInterruptOnCancel(interruptOnCancel)
     }
     try {
@@ -128,7 +128,8 @@ object SQLExecution extends Logging {
           sparkPlanInfo = SparkPlanInfo.EMPTY,
           time = System.currentTimeMillis(),
           modifiedConfigs = redactedConfigs,
-          jobTags = sc.getJobTags()
+          jobTags = sc.getJobTags(),
+          jobGroupId = Option(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID))
         )
         try {
           body match {
@@ -176,7 +177,10 @@ object SQLExecution extends Logging {
             shuffleIds.foreach { shuffleId =>
               queryExecution.shuffleCleanupMode match {
                 case RemoveShuffleFiles =>
-                  SparkEnv.get.shuffleManager.unregisterShuffle(shuffleId)
+                  // Same as what we do in ContextCleaner.doCleanupShuffle, but do not unregister
+                  // the shuffle on MapOutputTracker, so that stage retries would be triggered.
+                  // Set blocking to Utils.isTesting to deflake unit tests.
+                  sc.shuffleDriverComponents.removeShuffle(shuffleId, Utils.isTesting)
                 case SkipMigration =>
                   SparkEnv.get.blockManager.migratableResolver.addShuffleToSkip(shuffleId)
                 case _ => // this should not happen

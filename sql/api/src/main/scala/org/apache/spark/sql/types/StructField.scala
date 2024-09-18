@@ -31,11 +31,15 @@ import org.apache.spark.util.SparkSchemaUtils
 
 /**
  * A field inside a StructType.
- * @param name The name of this field.
- * @param dataType The data type of this field.
- * @param nullable Indicates if values of this field can be `null` values.
- * @param metadata The metadata of this field. The metadata should be preserved during
- *                 transformation if the content of the column is not modified, e.g, in selection.
+ * @param name
+ *   The name of this field.
+ * @param dataType
+ *   The data type of this field.
+ * @param nullable
+ *   Indicates if values of this field can be `null` values.
+ * @param metadata
+ *   The metadata of this field. The metadata should be preserved during transformation if the
+ *   content of the column is not modified, e.g, in selection.
  *
  * @since 1.3.0
  */
@@ -54,8 +58,9 @@ case class StructField(
       stringConcat: StringConcat,
       maxDepth: Int): Unit = {
     if (maxDepth > 0) {
-      stringConcat.append(s"$prefix-- ${SparkSchemaUtils.escapeMetaCharacters(name)}: " +
-        s"${dataType.typeName} (nullable = $nullable)\n")
+      stringConcat.append(
+        s"$prefix-- ${SparkSchemaUtils.escapeMetaCharacters(name)}: " +
+          s"${dataType.typeName} (nullable = $nullable)\n")
       DataType.buildFormattedString(dataType, s"$prefix    |", stringConcat, maxDepth)
     }
   }

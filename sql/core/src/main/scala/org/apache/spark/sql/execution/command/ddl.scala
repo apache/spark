@@ -335,14 +335,6 @@ case class AlterTableUnsetPropertiesCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
-    if (!ifExists) {
-      val nonexistentKeys = propKeys.filter(key => !table.properties.contains(key)
-        && key != TableCatalog.PROP_COMMENT)
-      if (nonexistentKeys.nonEmpty) {
-        throw QueryCompilationErrors.unsetNonExistentPropertiesError(
-          nonexistentKeys, table.identifier)
-      }
-    }
     // If comment is in the table property, we reset it to None
     val tableComment = if (propKeys.contains(TableCatalog.PROP_COMMENT)) None else table.comment
     val newProperties = table.properties.filter { case (k, _) => !propKeys.contains(k) }
@@ -869,7 +861,7 @@ case class RepairTableCommand(
     // Hive metastore may not have enough memory to handle millions of partitions in single RPC,
     // we should split them into smaller batches. Since Hive client is not thread safe, we cannot
     // do this in parallel.
-    val batchSize = spark.conf.get(SQLConf.ADD_PARTITION_BATCH_SIZE)
+    val batchSize = spark.sessionState.conf.getConf(SQLConf.ADD_PARTITION_BATCH_SIZE)
     partitionSpecsAndLocs.iterator.grouped(batchSize).foreach { batch =>
       val now = MILLISECONDS.toSeconds(System.currentTimeMillis())
       val parts = batch.map { case (spec, location) =>

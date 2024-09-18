@@ -203,8 +203,8 @@ class Retrying:
     def _last_exception(self) -> BaseException:
         if self._exception is None:
             raise PySparkRuntimeError(
-                error_class="NO_ACTIVE_EXCEPTION",
-                message_parameters={},
+                errorClass="NO_ACTIVE_EXCEPTION",
+                messageParameters={},
             )
         return self._exception
 
@@ -233,7 +233,7 @@ class Retrying:
 
         # Exceeded retries
         logger.debug(f"Given up on retrying. error: {repr(exception)}")
-        raise RetriesExceeded(error_class="RETRIES_EXCEEDED", message_parameters={}) from exception
+        raise RetriesExceeded(errorClass="RETRIES_EXCEEDED", messageParameters={}) from exception
 
     def __iter__(self) -> Generator[AttemptManager, None, None]:
         """

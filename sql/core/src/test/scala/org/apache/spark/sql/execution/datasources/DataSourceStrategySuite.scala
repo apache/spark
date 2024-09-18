@@ -357,36 +357,4 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
       Some(sources.GreaterThanOrEqual("col", "value")))
     testTranslateFilter(IsNotNull(colAttr), Some(sources.IsNotNull("col")))
   }
-
-  for (collation <- Seq("UTF8_LCASE", "UNICODE")) {
-    test(s"SPARK-48431: Filter pushdown on columns with $collation collation") {
-      val colAttr = $"col".string(collation)
-
-      // No pushdown for all comparison based filters.
-      testTranslateFilter(EqualTo(colAttr, Literal("value")), Some(sources.AlwaysTrue))
-      testTranslateFilter(LessThan(colAttr, Literal("value")), Some(sources.AlwaysTrue))
-      testTranslateFilter(LessThan(colAttr, Literal("value")), Some(sources.AlwaysTrue))
-      testTranslateFilter(LessThanOrEqual(colAttr, Literal("value")), Some(sources.AlwaysTrue))
-      testTranslateFilter(GreaterThan(colAttr, Literal("value")), Some(sources.AlwaysTrue))
-      testTranslateFilter(GreaterThanOrEqual(colAttr, Literal("value")), Some(sources.AlwaysTrue))
-
-      // Allow pushdown of Is(Not)Null filter.
-      testTranslateFilter(IsNotNull(colAttr), Some(sources.IsNotNull("col")))
-      testTranslateFilter(IsNull(colAttr), Some(sources.IsNull("col")))
-
-      // Top level filter splitting at And and Or.
-      testTranslateFilter(And(EqualTo(colAttr, Literal("value")), IsNotNull(colAttr)),
-        Some(sources.And(sources.AlwaysTrue, sources.IsNotNull("col"))))
-      testTranslateFilter(Or(EqualTo(colAttr, Literal("value")), IsNotNull(colAttr)),
-        Some(sources.Or(sources.AlwaysTrue, sources.IsNotNull("col"))))
-
-      // Different cases involving Not.
-      testTranslateFilter(Not(EqualTo(colAttr, Literal("value"))), Some(sources.AlwaysTrue))
-      testTranslateFilter(And(Not(EqualTo(colAttr, Literal("value"))), IsNotNull(colAttr)),
-        Some(sources.And(sources.AlwaysTrue, sources.IsNotNull("col"))))
-      // This filter would work, but we want to keep the translation logic simple.
-      testTranslateFilter(And(EqualTo(colAttr, Literal("value")), Not(IsNotNull(colAttr))),
-        Some(sources.And(sources.AlwaysTrue, sources.AlwaysTrue)))
-    }
-  }
 }

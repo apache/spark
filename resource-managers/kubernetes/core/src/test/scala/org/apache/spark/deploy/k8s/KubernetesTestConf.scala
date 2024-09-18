@@ -117,12 +117,17 @@ object KubernetesTestConf {
           (KUBERNETES_VOLUMES_HOSTPATH_TYPE,
             Map(KUBERNETES_VOLUMES_OPTIONS_PATH_KEY -> path))
 
-        case KubernetesPVCVolumeConf(claimName, storageClass, sizeLimit) =>
+        case KubernetesPVCVolumeConf(claimName, storageClass, sizeLimit, labels) =>
           val sconf = storageClass
             .map { s => (KUBERNETES_VOLUMES_OPTIONS_CLAIM_STORAGE_CLASS_KEY, s) }.toMap
           val lconf = sizeLimit.map { l => (KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY, l) }.toMap
+          val llabels = labels match {
+            case Some(value) => value.map { case(k, v) => s"label.$k" -> v }
+            case None => Map()
+          }
           (KUBERNETES_VOLUMES_PVC_TYPE,
-            Map(KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY -> claimName) ++ sconf ++ lconf)
+            Map(KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY -> claimName) ++
+              sconf ++ lconf ++ llabels)
 
         case KubernetesEmptyDirVolumeConf(medium, sizeLimit) =>
           val mconf = medium.map { m => (KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY, m) }.toMap

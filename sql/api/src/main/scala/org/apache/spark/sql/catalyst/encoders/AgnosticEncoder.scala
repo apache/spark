@@ -19,24 +19,23 @@ package org.apache.spark.sql.catalyst.encoders
 import java.{sql => jsql}
 import java.math.{BigDecimal => JBigDecimal, BigInteger => JBigInt}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
-import java.util.concurrent.ConcurrentHashMap
 
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.sql.{Encoder, Row}
+import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, VariantVal}
 import org.apache.spark.util.SparkClassUtils
 
 /**
- * A non implementation specific encoder. This encoder containers all the information needed
- * to generate an implementation specific encoder (e.g. InternalRow <=> Custom Object).
+ * A non implementation specific encoder. This encoder containers all the information needed to
+ * generate an implementation specific encoder (e.g. InternalRow <=> Custom Object).
  *
  * The input of the serialization does not need to match the external type of the encoder. This is
- * called lenient serialization. An example of this is lenient date serialization, in this case both
- * [[java.sql.Date]] and [[java.time.LocalDate]] are allowed. Deserialization is never lenient; it
- * will always produce instance of the external type.
- *
+ * called lenient serialization. An example of this is lenient date serialization, in this case
+ * both [[java.sql.Date]] and [[java.time.LocalDate]] are allowed. Deserialization is never
+ * lenient; it will always produce instance of the external type.
  */
 trait AgnosticEncoder[T] extends Encoder[T] {
   def isPrimitive: Boolean
@@ -49,14 +48,14 @@ trait AgnosticEncoder[T] extends Encoder[T] {
 
 object AgnosticEncoders {
   case class OptionEncoder[E](elementEncoder: AgnosticEncoder[E])
-    extends AgnosticEncoder[Option[E]] {
+      extends AgnosticEncoder[Option[E]] {
     override def isPrimitive: Boolean = false
     override def dataType: DataType = elementEncoder.dataType
     override val clsTag: ClassTag[Option[E]] = ClassTag(classOf[Option[E]])
   }
 
   case class ArrayEncoder[E](element: AgnosticEncoder[E], containsNull: Boolean)
-    extends AgnosticEncoder[Array[E]] {
+      extends AgnosticEncoder[Array[E]] {
     override def isPrimitive: Boolean = false
     override def dataType: DataType = ArrayType(element.dataType, containsNull)
     override val clsTag: ClassTag[Array[E]] = element.clsTag.wrap
@@ -73,7 +72,7 @@ object AgnosticEncoders {
       element: AgnosticEncoder[E],
       containsNull: Boolean,
       override val lenientSerialization: Boolean)
-    extends AgnosticEncoder[C] {
+      extends AgnosticEncoder[C] {
     override def isPrimitive: Boolean = false
     override val dataType: DataType = ArrayType(element.dataType, containsNull)
   }
@@ -83,12 +82,10 @@ object AgnosticEncoders {
       keyEncoder: AgnosticEncoder[K],
       valueEncoder: AgnosticEncoder[V],
       valueContainsNull: Boolean)
-    extends AgnosticEncoder[C] {
+      extends AgnosticEncoder[C] {
     override def isPrimitive: Boolean = false
-    override val dataType: DataType = MapType(
-      keyEncoder.dataType,
-      valueEncoder.dataType,
-      valueContainsNull)
+    override val dataType: DataType =
+      MapType(keyEncoder.dataType, valueEncoder.dataType, valueContainsNull)
   }
 
   case class EncoderField(
@@ -114,17 +111,28 @@ object AgnosticEncoders {
   case class ProductEncoder[K](
       override val clsTag: ClassTag[K],
       override val fields: Seq[EncoderField],
-      outerPointerGetter: Option[() => AnyRef]) extends StructEncoder[K]
+      outerPointerGetter: Option[() => AnyRef])
+      extends StructEncoder[K]
 
   object ProductEncoder {
-    val cachedCls = new ConcurrentHashMap[Int, Class[_]]
-    private[sql] def tuple(encoders: Seq[AgnosticEncoder[_]]): AgnosticEncoder[_] = {
-      val fields = encoders.zipWithIndex.map {
-        case (e, id) => EncoderField(s"_${id + 1}", e, e.nullable, Metadata.empty)
+    private val MAX_TUPLE_ELEMENTS = 22
+
+    private val tupleClassTags = Array.tabulate[ClassTag[Any]](MAX_TUPLE_ELEMENTS + 1) {
+      case 0 => null
+      case i => ClassTag(SparkClassUtils.classForName(s"scala.Tuple$i"))
+    }
+
+    private[sql] def tuple(
+        encoders: Seq[AgnosticEncoder[_]],
+        elementsCanBeNull: Boolean = false): AgnosticEncoder[_] = {
+      val numElements = encoders.size
+      if (numElements < 1 || numElements > MAX_TUPLE_ELEMENTS) {
+        throw ExecutionErrors.elementsOfTupleExceedLimitError()
       }
-      val cls = cachedCls.computeIfAbsent(encoders.size,
-        _ => SparkClassUtils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}"))
-      ProductEncoder[Any](ClassTag(cls), fields, None)
+      val fields = encoders.zipWithIndex.map { case (e, id) =>
+        EncoderField(s"_${id + 1}", e, e.nullable || elementsCanBeNull, Metadata.empty)
+      }
+      ProductEncoder[Any](tupleClassTags(numElements), fields, None)
     }
 
     private[sql] def isTuple(tag: ClassTag[_]): Boolean = {
@@ -141,19 +149,19 @@ object AgnosticEncoders {
   object UnboundRowEncoder extends BaseRowEncoder {
     override val schema: StructType = new StructType()
     override val fields: Seq[EncoderField] = Seq.empty
-}
+  }
 
   case class JavaBeanEncoder[K](
       override val clsTag: ClassTag[K],
       override val fields: Seq[EncoderField])
-    extends StructEncoder[K]
+      extends StructEncoder[K]
 
   // This will only work for encoding from/to Sparks' InternalRow format.
   // It is here for compatibility.
   case class UDTEncoder[E >: Null](
       udt: UserDefinedType[E],
       udtClass: Class[_ <: UserDefinedType[_]])
-    extends AgnosticEncoder[E] {
+      extends AgnosticEncoder[E] {
     override def isPrimitive: Boolean = false
     override def dataType: DataType = udt
     override def clsTag: ClassTag[E] = ClassTag(udt.userClass)
@@ -164,21 +172,19 @@ object AgnosticEncoders {
     override def isPrimitive: Boolean = false
     override def dataType: DataType = StringType
   }
-  case class ScalaEnumEncoder[T, E](
-     parent: Class[T],
-     override val clsTag: ClassTag[E])
-    extends EnumEncoder[E]
+  case class ScalaEnumEncoder[T, E](parent: Class[T], override val clsTag: ClassTag[E])
+      extends EnumEncoder[E]
   case class JavaEnumEncoder[E](override val clsTag: ClassTag[E]) extends EnumEncoder[E]
 
-  protected abstract class LeafEncoder[E : ClassTag](override val dataType: DataType)
-    extends AgnosticEncoder[E] {
+  protected abstract class LeafEncoder[E: ClassTag](override val dataType: DataType)
+      extends AgnosticEncoder[E] {
     override val clsTag: ClassTag[E] = classTag[E]
     override val isPrimitive: Boolean = clsTag.runtimeClass.isPrimitive
   }
 
   // Primitive encoders
-  abstract class PrimitiveLeafEncoder[E : ClassTag](dataType: DataType)
-    extends LeafEncoder[E](dataType)
+  abstract class PrimitiveLeafEncoder[E: ClassTag](dataType: DataType)
+      extends LeafEncoder[E](dataType)
   case object PrimitiveBooleanEncoder extends PrimitiveLeafEncoder[Boolean](BooleanType)
   case object PrimitiveByteEncoder extends PrimitiveLeafEncoder[Byte](ByteType)
   case object PrimitiveShortEncoder extends PrimitiveLeafEncoder[Short](ShortType)
@@ -188,24 +194,24 @@ object AgnosticEncoders {
   case object PrimitiveDoubleEncoder extends PrimitiveLeafEncoder[Double](DoubleType)
 
   // Primitive wrapper encoders.
-  abstract class BoxedLeafEncoder[E : ClassTag, P](
+  abstract class BoxedLeafEncoder[E: ClassTag, P](
       dataType: DataType,
       val primitive: PrimitiveLeafEncoder[P])
-    extends LeafEncoder[E](dataType)
+      extends LeafEncoder[E](dataType)
   case object BoxedBooleanEncoder
-    extends BoxedLeafEncoder[java.lang.Boolean, Boolean](BooleanType, PrimitiveBooleanEncoder)
+      extends BoxedLeafEncoder[java.lang.Boolean, Boolean](BooleanType, PrimitiveBooleanEncoder)
   case object BoxedByteEncoder
-    extends BoxedLeafEncoder[java.lang.Byte, Byte](ByteType, PrimitiveByteEncoder)
+      extends BoxedLeafEncoder[java.lang.Byte, Byte](ByteType, PrimitiveByteEncoder)
   case object BoxedShortEncoder
-    extends BoxedLeafEncoder[java.lang.Short, Short](ShortType, PrimitiveShortEncoder)
+      extends BoxedLeafEncoder[java.lang.Short, Short](ShortType, PrimitiveShortEncoder)
   case object BoxedIntEncoder
-    extends BoxedLeafEncoder[java.lang.Integer, Int](IntegerType, PrimitiveIntEncoder)
+      extends BoxedLeafEncoder[java.lang.Integer, Int](IntegerType, PrimitiveIntEncoder)
   case object BoxedLongEncoder
-    extends BoxedLeafEncoder[java.lang.Long, Long](LongType, PrimitiveLongEncoder)
+      extends BoxedLeafEncoder[java.lang.Long, Long](LongType, PrimitiveLongEncoder)
   case object BoxedFloatEncoder
-    extends BoxedLeafEncoder[java.lang.Float, Float](FloatType, PrimitiveFloatEncoder)
+      extends BoxedLeafEncoder[java.lang.Float, Float](FloatType, PrimitiveFloatEncoder)
   case object BoxedDoubleEncoder
-    extends BoxedLeafEncoder[java.lang.Double, Double](DoubleType, PrimitiveDoubleEncoder)
+      extends BoxedLeafEncoder[java.lang.Double, Double](DoubleType, PrimitiveDoubleEncoder)
 
   // Nullable leaf encoders
   case object NullEncoder extends LeafEncoder[java.lang.Void](NullType)
@@ -218,19 +224,19 @@ object AgnosticEncoders {
   case object YearMonthIntervalEncoder extends LeafEncoder[Period](YearMonthIntervalType())
   case object VariantEncoder extends LeafEncoder[VariantVal](VariantType)
   case class DateEncoder(override val lenientSerialization: Boolean)
-    extends LeafEncoder[jsql.Date](DateType)
+      extends LeafEncoder[jsql.Date](DateType)
   case class LocalDateEncoder(override val lenientSerialization: Boolean)
-    extends LeafEncoder[LocalDate](DateType)
+      extends LeafEncoder[LocalDate](DateType)
   case class TimestampEncoder(override val lenientSerialization: Boolean)
-    extends LeafEncoder[jsql.Timestamp](TimestampType)
+      extends LeafEncoder[jsql.Timestamp](TimestampType)
   case class InstantEncoder(override val lenientSerialization: Boolean)
-    extends LeafEncoder[Instant](TimestampType)
+      extends LeafEncoder[Instant](TimestampType)
   case object LocalDateTimeEncoder extends LeafEncoder[LocalDateTime](TimestampNTZType)
 
   case class SparkDecimalEncoder(dt: DecimalType) extends LeafEncoder[Decimal](dt)
   case class ScalaDecimalEncoder(dt: DecimalType) extends LeafEncoder[BigDecimal](dt)
   case class JavaDecimalEncoder(dt: DecimalType, override val lenientSerialization: Boolean)
-    extends LeafEncoder[JBigDecimal](dt)
+      extends LeafEncoder[JBigDecimal](dt)
 
   val STRICT_DATE_ENCODER: DateEncoder = DateEncoder(lenientSerialization = false)
   val STRICT_LOCAL_DATE_ENCODER: LocalDateEncoder = LocalDateEncoder(lenientSerialization = false)
@@ -247,5 +253,21 @@ object AgnosticEncoders {
     ScalaDecimalEncoder(DecimalType.SYSTEM_DEFAULT)
   val DEFAULT_JAVA_DECIMAL_ENCODER: JavaDecimalEncoder =
     JavaDecimalEncoder(DecimalType.SYSTEM_DEFAULT, lenientSerialization = false)
-}
 
+  /**
+   * Encoder that transforms external data into a representation that can be further processed by
+   * another encoder. This is fallback for scenarios where objects can't be represented using
+   * standard encoders, an example of this is where we use a different (opaque) serialization
+   * format (i.e. java serialization, kryo serialization, or protobuf).
+   */
+  case class TransformingEncoder[I, O](
+      clsTag: ClassTag[I],
+      transformed: AgnosticEncoder[O],
+      codecProvider: () => Codec[_ >: I, O])
+      extends AgnosticEncoder[I] {
+    override def isPrimitive: Boolean = transformed.isPrimitive
+    override def dataType: DataType = transformed.dataType
+    override def schema: StructType = transformed.schema
+    override def isStruct: Boolean = transformed.isStruct
+  }
+}

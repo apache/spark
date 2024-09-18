@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
-import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.BoundedPriorityQueue
 
@@ -170,7 +170,7 @@ case class CollectSet(
   override def eval(buffer: mutable.HashSet[Any]): Any = {
     val array = child.dataType match {
       case BinaryType =>
-        buffer.iterator.map(_.asInstanceOf[ArrayData].toByteArray()).toArray
+        buffer.iterator.map(_.asInstanceOf[ArrayData].toByteArray()).toArray[Any]
       case _ => buffer.toArray
     }
     new GenericArrayData(array)
@@ -219,6 +219,9 @@ case class CollectTopK(
   def this(child: Expression, num: Int) = this(child, num, false, 0, 0)
   def this(child: Expression, num: Int, reverse: Boolean) = this(child, num, reverse, 0, 0)
 
+  def this(child: Expression, num: Expression, reverse: Expression) =
+    this(child, CollectTopK.expressionToNum(num), CollectTopK.expressionToReverse(reverse))
+
   override protected lazy val bufferElementType: DataType = child.dataType
   override protected def convertToBufferElement(value: Any): Any = InternalRow.copyValue(value)
 
@@ -244,4 +247,16 @@ case class CollectTopK(
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): CollectTopK =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
+}
+
+private[aggregate] object CollectTopK {
+  def expressionToReverse(e: Expression): Boolean = e match {
+    case BooleanLiteral(reverse) => reverse
+    case _ => throw QueryCompilationErrors.invalidReverseParameter(e)
+  }
+
+  def expressionToNum(e: Expression): Int = e match {
+    case IntegerLiteral(num) => num
+    case _ => throw QueryCompilationErrors.invalidNumParameter(e)
+  }
 }

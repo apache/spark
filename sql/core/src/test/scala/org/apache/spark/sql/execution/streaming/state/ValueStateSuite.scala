@@ -61,7 +61,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       assert(ex.isInstanceOf[SparkException])
       checkError(
         ex.asInstanceOf[SparkException],
-        errorClass = "INTERNAL_ERROR_TWS",
+        condition = "INTERNAL_ERROR_TWS",
         parameters = Map(
           "message" -> s"Implicit key not found in state store for stateName=$stateName"
         ),
@@ -80,7 +80,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       }
       checkError(
         ex1.asInstanceOf[SparkException],
-        errorClass = "INTERNAL_ERROR_TWS",
+        condition = "INTERNAL_ERROR_TWS",
         parameters = Map(
           "message" -> s"Implicit key not found in state store for stateName=$stateName"
         ),
@@ -166,17 +166,17 @@ class ValueStateSuite extends StateVariableSuiteBase {
       val handle = new StatefulProcessorHandleImpl(store,
         UUID.randomUUID(), Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
 
-      val cfName = "_testState"
+      val cfName = "$testState"
       val ex = intercept[SparkUnsupportedOperationException] {
         handle.getValueState[Long](cfName, Encoders.scalaLong)
       }
       checkError(
         ex,
-        errorClass = "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS",
+        condition = "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS",
         parameters = Map(
           "colFamilyName" -> cfName
         ),
-        matchPVals = true
+        matchPVals = false
       )
     }
   }
@@ -192,7 +192,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     }
     checkError(
       ex,
-      errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
+      condition = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
       parameters = Map(
         "stateStoreProvider" -> "HDFSBackedStateStoreProvider"
       ),
@@ -377,7 +377,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
 
         checkError(
           ex,
-          errorClass = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
+          condition = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
           parameters = Map(
             "operationType" -> "update",
             "stateName" -> "testState"
@@ -385,6 +385,33 @@ class ValueStateSuite extends StateVariableSuiteBase {
           matchPVals = true
         )
       }
+    }
+  }
+
+  test("Value state TTL with non-primitive type") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      val timestampMs = 10
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.product[TestClass].asInstanceOf[ExpressionEncoder[Any]], TimeMode.ProcessingTime(),
+        batchTimestampMs = Some(timestampMs))
+
+      val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+      val testState: ValueStateImplWithTTL[POJOTestClass] =
+        handle.getValueState[POJOTestClass]("testState",
+        Encoders.bean(classOf[POJOTestClass]), ttlConfig)
+          .asInstanceOf[ValueStateImplWithTTL[POJOTestClass]]
+      ImplicitGroupingKeyTracker.setImplicitKey(TestClass(1L, "k1"))
+      testState.update(new POJOTestClass("n1", 1))
+      assert(testState.get() === new POJOTestClass("n1", 1))
+      assert(testState.getWithoutEnforcingTTL().get === new POJOTestClass("n1", 1))
+
+      val ttlExpirationMs = timestampMs + 60000
+      val ttlValue = testState.getTTLValue()
+      assert(ttlValue.isDefined)
+      assert(ttlValue.get._2 === ttlExpirationMs)
+      val ttlStateValueIterator = testState.getValuesInTTLState()
+      assert(ttlStateValueIterator.hasNext)
     }
   }
 }
@@ -410,6 +437,7 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
 
   import StateStoreTestsHelper._
 
+  // dummy schema for initializing rocksdb provider
   protected def schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
   protected def schemaForValueRow: StructType = new StructType().add("value", BinaryType)
 

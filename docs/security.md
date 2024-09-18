@@ -49,9 +49,14 @@ specified below, the secret must be defined by setting the `spark.authenticate.s
 option. The same secret is shared by all Spark applications and daemons in that case, which limits
 the security of these deployments, especially on multi-tenant clusters.
 
-The REST Submission Server does not support authentication. You should
-ensure that all network access to the REST API (port 6066 by default) 
-is restricted to hosts that are trusted to submit jobs.
+The REST Submission Server supports HTTP `Authorization` header with
+a cryptographically signed JSON Web Token via `JWSFilter`.
+To enable authorization, Spark Master should have
+`spark.master.rest.filters=org.apache.spark.ui.JWSFilter` and
+`spark.org.apache.spark.ui.JWSFilter.param.secretKey=BASE64URL-ENCODED-KEY` configurations, and
+client should provide HTTP `Authorization` header which contains JSON Web Token signed by
+the shared secret key. Please note that this feature requires a Spark distribution built with
+`jjwt` profile.
 
 ### YARN
 
@@ -208,6 +213,15 @@ The following table describes the different options available for configuring th
   <td>2.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.network.crypto.cipher</code></td>
+  <td>AES/CTR/NoPadding</td>
+  <td>
+    Cipher mode to use. Defaults "AES/CTR/NoPadding" for backward compatibility, which is not authenticated. 
+    Recommended to use "AES/GCM/NoPadding", which is an authenticated encryption mode.
+  </td>
+  <td>4.0.0, 3.5.2, 3.4.4</td>
+</tr>
+<tr>
   <td><code>spark.network.crypto.authEngineVersion</code></td>
   <td>1</td>
   <td>Version of AES-based RPC encryption to use. Valid versions are 1 or 2. Version 2 is recommended.</td>
@@ -308,7 +322,7 @@ The following settings cover enabling encryption for data written to disk:
 
 ## Authentication and Authorization
 
-Enabling authentication for the Web UIs is done using [javax servlet filters](https://docs.oracle.com/javaee/6/api/javax/servlet/Filter.html).
+Enabling authentication for the Web UIs is done using [jakarta servlet filters](https://jakarta.ee/specifications/servlet/5.0/apidocs/jakarta/servlet/filter).
 You will need a filter that implements the authentication method you want to deploy. Spark does not
 provide any built-in authentication filters.
 
@@ -342,6 +356,8 @@ The following options control the authentication of Web UIs:
   <td><code>spark.ui.filters</code></td>
   <td>None</td>
   <td>
+    Spark supports HTTP <code>Authorization</code> header with a cryptographically signed
+    JSON Web Token via <code>org.apache.spark.ui.JWSFilter</code>. <br />
     See the <a href="configuration.html#spark-ui">Spark UI</a> configuration for how to configure
     filters.
   </td>
@@ -797,6 +813,12 @@ Generally speaking, a Spark cluster and its services are not deployed on the pub
 They are generally private services, and should only be accessible within the network of the
 organization that deploys Spark. Access to the hosts and ports used by Spark services should
 be limited to origin hosts that need to access the services.
+
+However, like the REST Submission port, Spark also supports HTTP `Authorization` header
+with a cryptographically signed JSON Web Token (JWT) for all UI ports.
+To use it, a user needs the Spark distribution built with `jjwt` profile and to configure
+`spark.ui.filters=org.apache.spark.ui.JWSFilter` and
+`spark.org.apache.spark.ui.JWSFilter.param.secretKey=BASE64URL-ENCODED-KEY`.
 
 Below are the primary ports that Spark uses for its communication and how to
 configure those ports.
