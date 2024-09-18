@@ -114,7 +114,7 @@ private[sql] class RocksDBStateStoreProvider
       val valueEncoder = kvEncoder._2
       val keyEncoder = kvEncoder._1
 
-      verify(valueEncoder.supportsMultipleValuesPerKey, "valuesIterator requires a encoder " +
+      verify(valueEncoder.supportsMultipleValuesPerKey, "valuesIterator requires an encoder " +
       "that supports multiple values for a single key.")
 
       val encodedValues = rocksDB.get(keyEncoder.encodeKey(key))
