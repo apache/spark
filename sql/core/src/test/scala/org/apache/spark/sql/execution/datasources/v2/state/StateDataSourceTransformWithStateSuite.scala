@@ -283,6 +283,61 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
+  testWithChangelogCheckpointingEnabled("state data source cdf integration - " +
+    "value state with single variable and TTL") {
+    withTempDir { tempDir =>
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key ->
+          TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new StatefulProcessorWithTTL(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+          AddData(inputData, "a"),
+          AddData(inputData, "b"),
+          Execute { _ =>
+            // wait for the batch to run since we are using processing time
+            Thread.sleep(5000)
+          },
+          StopStream
+        )
+
+        val stateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+          .option(StateSourceOptions.READ_CHANGE_FEED, true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+          .load()
+
+        val resultDf = stateReaderDf.selectExpr(
+          "key.value", "value.value", "value.ttlExpirationMs", "partition_id")
+
+        var count = 0L
+        resultDf.collect().foreach { row =>
+          count = count + 1
+          assert(row.getLong(2) > 0)
+        }
+
+        // verify that 2 state rows are present
+        assert(count === 2)
+
+        val answerDf = stateReaderDf.selectExpr(
+          "change_type",
+          "key.value AS groupingKey",
+          "value.value.value AS valueId", "partition_id")
+        checkAnswer(answerDf,
+          Seq(Row("update", "a", 1L, 0), Row("update", "b", 1L, 1)))
+      }
+    }
+  }
+
   test("state data source integration - list state") {
     withTempDir { tempDir =>
       withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
