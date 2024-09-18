@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
+
 import scala.collection.mutable
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
@@ -30,7 +32,6 @@ import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.UserDefinedType
 
 trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
@@ -190,14 +191,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
             u.copy(child = newChild)
           }
 
-        case _ =>
-          val newExpr = e.mapChildren(innerResolve(_, isTopLevel = false))
-          newExpr match {
-            case UpCast(child, adt: UserDefinedType[_], walkedTypePath)
-              if !classOf[UserDefinedType[_]].isAssignableFrom(child.dataType.getClass) =>
-              UpCast(child, adt.sqlType, walkedTypePath)
-            case _ => newExpr
-          }
+        case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
       }
       resolved.copyTagsFrom(e)
       resolved

@@ -300,6 +300,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       // ResolveLateralColumnAliasReference for more details.
       ResolveLateralColumnAliasReference ::
       ResolveExpressionsWithNamePlaceholders ::
+      RectifyDeserializerUpcast ::
       ResolveDeserializer ::
       ResolveNewInstance ::
       ResolveUpCast ::
@@ -3683,6 +3684,20 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       hiddenList.map(_.markAsQualifiedAccessOnly()) ++
         project.child.metadataOutput.filter(_.qualifiedAccessOnly))
     project
+  }
+
+  object RectifyDeserializerUpcast extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+      _.containsPattern(DESERIALIZE_TO_OBJECT), UnknownRuleId) {
+      case d@DeserializeToObject(deserializer, _, child) if !deserializer.resolved &&
+        child.resolved && child.output.forall(
+        x => !classOf[UserDefinedType[_]].isAssignableFrom(x.dataType.getClass)) =>
+        val newDeserializer = deserializer.transformUpWithPruning(_.containsPattern(UP_CAST)) {
+          case UpCast(child, target: UserDefinedType[_], walkedPath)
+          => UpCast(child, target.sqlType, walkedPath)
+        }
+        d.copy(deserializer = newDeserializer)
+    }
   }
 
   /**
