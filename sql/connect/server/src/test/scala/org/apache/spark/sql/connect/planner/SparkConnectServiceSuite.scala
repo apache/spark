@@ -873,8 +873,11 @@ class SparkConnectServiceSuite
     val listenerBus = sparkContext.listenerBus
     val LISTENER_BUS_TIMEOUT = 30000
     def executeHolder: ExecuteHolder = {
-      assert(listener.executeHolder.isDefined)
-      listener.executeHolder.get
+      // An ExecuteHolder will eventually be set
+      Eventually.eventually(timeout(1.seconds)) {
+        assert(listener.executeHolder.isDefined)
+        listener.executeHolder.get
+      }
     }
     def onNext(v: proto.ExecutePlanResponse): Unit = {
       if (v.hasSchema) {
