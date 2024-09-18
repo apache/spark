@@ -4090,6 +4090,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def avroOptionsException(optionName: String, message: String): Throwable = {
+    new AnalysisException(
+      errorClass = "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE",
+      messageParameters = Map("optionName" -> optionName, "message" -> message)
+    )
+  }
+
   def protobufNotLoadedSqlFunctionsUnusable(functionName: String): Throwable = {
     new AnalysisException(
       errorClass = "PROTOBUF_NOT_LOADED_SQL_FUNCTIONS_UNUSABLE",
