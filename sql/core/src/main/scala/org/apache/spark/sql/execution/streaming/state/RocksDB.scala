@@ -696,6 +696,9 @@ class RocksDB(
           snapshot.version, snapshot.numKeys, snapshot.fileMapping,
           Some(snapshot.columnFamilyMapping), Some(snapshot.maxColumnFamilyId))
         val snapshotInfo = RocksDBVersionSnapshotInfo(snapshot.version, snapshot.dfsFileSuffix)
+        // We are only removing the uploaded snapshot info from the pending set,
+        // to let the file mapping (i.e. query threads) know that the snapshot (i.e. and its files)
+        // have been uploaded to DFS. We don't touch the file mapping here to avoid corrupting it.
         rocksDBFileMapping.snapshotsPendingUpload.remove(snapshotInfo)
         fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
       }
