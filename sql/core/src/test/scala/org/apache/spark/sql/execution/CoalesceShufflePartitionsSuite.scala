@@ -317,7 +317,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper {
       import spark.implicits._
       spark.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "1KB")
       spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key, "10KB")
-      spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR, 2.0)
+      spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR.key, "2.0")
       val df00 = spark.range(0, 1000, 2)
         .selectExpr("id as key", "id as value")
         .union(Seq.fill(100000)((600, 600)).toDF("key", "value"))
@@ -345,7 +345,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper {
       import spark.implicits._
       spark.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
       spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key, "100B")
-      spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR, 2.0)
+      spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR.key, "2.0")
       val df00 = spark.range(0, 10, 2)
         .selectExpr("id as key", "id as value")
         .union(Seq.fill(1000)((600, 600)).toDF("key", "value"))

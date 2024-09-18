@@ -30,8 +30,8 @@ import org.apache.spark.util.NextIterator
  * Singleton utils class used primarily while interacting with TimerState
  */
 object TimerStateUtils {
-  val PROC_TIMERS_STATE_NAME = "_procTimers"
-  val EVENT_TIMERS_STATE_NAME = "_eventTimers"
+  val PROC_TIMERS_STATE_NAME = "$procTimers"
+  val EVENT_TIMERS_STATE_NAME = "$eventTimers"
   val KEY_TO_TIMESTAMP_CF = "_keyToTimestamp"
   val TIMESTAMP_TO_KEY_CF = "_timestampToKey"
 }

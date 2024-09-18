@@ -18,6 +18,7 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLStmt
 import org.apache.spark.sql.exceptions.SqlScriptingException
 
@@ -32,7 +33,7 @@ private[sql] object SqlScriptingErrors {
       origin = origin,
       errorClass = "LABELS_MISMATCH",
       cause = null,
-      messageParameters = Map("beginLabel" -> beginLabel, "endLabel" -> endLabel))
+      messageParameters = Map("beginLabel" -> toSQLId(beginLabel), "endLabel" -> toSQLId(endLabel)))
   }
 
   def endLabelWithoutBeginLabel(origin: Origin, endLabel: String): Throwable = {
@@ -40,29 +41,27 @@ private[sql] object SqlScriptingErrors {
       origin = origin,
       errorClass = "END_LABEL_WITHOUT_BEGIN_LABEL",
       cause = null,
-      messageParameters = Map("endLabel" -> endLabel))
+      messageParameters = Map("endLabel" -> toSQLId(endLabel)))
   }
 
   def variableDeclarationNotAllowedInScope(
       origin: Origin,
-      varName: String,
-      lineNumber: String): Throwable = {
+      varName: Seq[String]): Throwable = {
     new SqlScriptingException(
       origin = origin,
       errorClass = "INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE",
       cause = null,
-      messageParameters = Map("varName" -> varName, "lineNumber" -> lineNumber))
+      messageParameters = Map("varName" -> toSQLId(varName)))
   }
 
   def variableDeclarationOnlyAtBeginning(
       origin: Origin,
-      varName: String,
-      lineNumber: String): Throwable = {
+      varName: Seq[String]): Throwable = {
     new SqlScriptingException(
       origin = origin,
       errorClass = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
       cause = null,
-      messageParameters = Map("varName" -> varName, "lineNumber" -> lineNumber))
+      messageParameters = Map("varName" -> toSQLId(varName)))
   }
 
   def invalidBooleanStatement(

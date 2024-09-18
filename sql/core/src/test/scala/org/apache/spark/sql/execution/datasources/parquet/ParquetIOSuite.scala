@@ -846,7 +846,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     def checkCompressionCodec(codec: ParquetCompressionCodec): Unit = {
       withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> codec.name()) {
         withParquetFile(data) { path =>
-          assertResult(spark.conf.get(SQLConf.PARQUET_COMPRESSION).toUpperCase(Locale.ROOT)) {
+          assertResult(spark.conf.get(SQLConf.PARQUET_COMPRESSION.key).toUpperCase(Locale.ROOT)) {
             compressionCodecFor(path, codec.name())
           }
         }
@@ -855,7 +855,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
     // Checks default compression codec
     checkCompressionCodec(
-      ParquetCompressionCodec.fromString(spark.conf.get(SQLConf.PARQUET_COMPRESSION)))
+      ParquetCompressionCodec.fromString(spark.conf.get(SQLConf.PARQUET_COMPRESSION.key)))
 
     ParquetCompressionCodec.availableCodecs.asScala.foreach(checkCompressionCodec(_))
   }
@@ -1068,7 +1068,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         exception = intercept[SparkException] {
           spark.read.schema(readSchema).parquet(path).collect()
         },
-        errorClass = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
+        condition = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
         parameters = Map(
           "path" -> ".*",
           "column" -> "\\[_1\\]",

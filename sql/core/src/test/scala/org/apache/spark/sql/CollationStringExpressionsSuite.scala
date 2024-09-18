@@ -141,7 +141,7 @@ class CollationStringExpressionsSuite
           Cast(Literal.create("a"), StringType("UTF8_LCASE")))
         CollationTypeCasts.transform(expr)
       },
-      errorClass = "COLLATION_MISMATCH.IMPLICIT",
+      condition = "COLLATION_MISMATCH.IMPLICIT",
       sqlState = "42P21",
       parameters = Map.empty
     )
@@ -152,7 +152,7 @@ class CollationStringExpressionsSuite
           Collate(Literal.create("a"), "UTF8_LCASE"))
         CollationTypeCasts.transform(expr)
       },
-      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      condition = "COLLATION_MISMATCH.EXPLICIT",
       sqlState = "42P21",
       parameters = Map("explicitTypes" -> "`string`, `string collate UTF8_LCASE`")
     )

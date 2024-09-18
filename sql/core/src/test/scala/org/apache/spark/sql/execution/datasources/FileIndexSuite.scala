@@ -137,7 +137,7 @@ class FileIndexSuite extends SharedSparkSession {
           exception = intercept[SparkRuntimeException] {
             fileIndex.partitionSpec()
           },
-          errorClass = "_LEGACY_ERROR_TEMP_2058",
+          condition = "_LEGACY_ERROR_TEMP_2058",
           parameters = Map("value" -> "foo", "dataType" -> "IntegerType", "columnName" -> "a")
         )
       }

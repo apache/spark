@@ -153,7 +153,7 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
     }
     checkError(
       exception = ex,
-      errorClass = "KAFKA_START_OFFSET_DOES_NOT_MATCH_ASSIGNED",
+      condition = "KAFKA_START_OFFSET_DOES_NOT_MATCH_ASSIGNED",
       parameters = Map(
         "specifiedPartitions" -> "Set\\(.*,.*\\)",
         "assignedPartitions" -> "Set\\(.*,.*,.*\\)"),

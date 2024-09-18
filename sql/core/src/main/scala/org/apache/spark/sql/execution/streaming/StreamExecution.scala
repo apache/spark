@@ -41,8 +41,10 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit, SparkDataStream}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate, Write}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchUserFuncException, ForeachUserFuncException}
+import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataV2FileManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.streaming._
@@ -369,13 +371,7 @@ abstract class StreamExecution(
           messageParameters = Map(
             "id" -> id.toString,
             "runId" -> runId.toString,
-            "message" -> message,
-            "queryDebugString" -> toDebugString(includeLogicalPlan = isInitialized),
-            "startOffset" -> getLatestExecutionContext().startOffsets.toOffsetSeq(
-              sources.toSeq, getLatestExecutionContext().offsetSeqMetadata).toString,
-            "endOffset" -> getLatestExecutionContext().endOffsets.toOffsetSeq(
-              sources.toSeq, getLatestExecutionContext().offsetSeqMetadata).toString
-          ))
+            "message" -> message))
 
         errorClassOpt = e match {
           case t: SparkThrowable => Option(t.getErrorClass)
@@ -487,7 +483,7 @@ abstract class StreamExecution(
   @throws[TimeoutException]
   protected def interruptAndAwaitExecutionThreadTermination(): Unit = {
     val timeout = math.max(
-      sparkSession.conf.get(SQLConf.STREAMING_STOP_TIMEOUT), 0)
+      sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_STOP_TIMEOUT), 0)
     queryExecutionThread.interrupt()
     queryExecutionThread.join(timeout)
     if (queryExecutionThread.isAlive) {
@@ -691,6 +687,31 @@ abstract class StreamExecution(
     logDebug(s"Purging metadata at threshold=$threshold")
     offsetLog.purge(threshold)
     commitLog.purge(threshold)
+  }
+
+  protected def purgeStatefulMetadata(plan: SparkPlan): Unit = {
+    plan.collect { case statefulOperator: StatefulOperator =>
+      statefulOperator match {
+        case ssw: StateStoreWriter =>
+          ssw.operatorStateMetadataVersion match {
+            case 2 =>
+              // checkpointLocation of the operator is runId/state, and commitLog path is
+              // runId/commits, so we want the parent of the checkpointLocation to get the
+              // commit log path.
+              val parentCheckpointLocation =
+                new Path(statefulOperator.getStateInfo.checkpointLocation).getParent
+
+              val fileManager = new OperatorStateMetadataV2FileManager(
+                parentCheckpointLocation,
+                sparkSession,
+                ssw
+              )
+              fileManager.purgeMetadataFiles()
+            case _ =>
+          }
+        case _ =>
+      }
+    }
   }
 }
 

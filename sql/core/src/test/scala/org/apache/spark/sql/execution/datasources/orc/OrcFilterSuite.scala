@@ -683,7 +683,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
             exception = intercept[AnalysisException] {
               sql(s"select a from $tableName where a < 0").collect()
             },
-            errorClass = "AMBIGUOUS_REFERENCE",
+            condition = "AMBIGUOUS_REFERENCE",
             parameters = Map(
               "name" -> "`a`",
               "referenceNames" -> ("[`spark_catalog`.`default`.`spark_32622`.`a`, " +

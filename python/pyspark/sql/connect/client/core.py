@@ -1786,7 +1786,7 @@ class SparkConnectClient(object):
             req.user_context.user_id = self._user_id
 
         try:
-            return self._stub.FetchErrorDetails(req)
+            return self._stub.FetchErrorDetails(req, metadata=self._builder.metadata())
         except grpc.RpcError:
             return None
 
