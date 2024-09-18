@@ -24,6 +24,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.Utils
 
+
 /**
  * The class contains tests for the `DESCRIBE TABLE` command to check V2 table catalogs.
  */
@@ -173,6 +174,27 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
           Row("distinct_count", "4"),
           Row("avg_col_len", "NULL"),
           Row("max_col_len", "NULL")))
+    }
+  }
+
+  test("SPARK-46535: describe extended (formatted) a column without col stats") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(
+        s"""
+           |CREATE TABLE $tbl
+           |(key INT COMMENT 'column_comment', col STRING)
+           |$defaultUsing""".stripMargin)
+
+      val descriptionDf = sql(s"DESCRIBE TABLE EXTENDED $tbl key")
+      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+        ("info_name", StringType),
+        ("info_value", StringType)))
+      QueryTest.checkAnswer(
+        descriptionDf,
+        Seq(
+          Row("col_name", "key"),
+          Row("data_type", "int"),
+          Row("comment", "column_comment")))
     }
   }
 }
