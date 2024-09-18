@@ -21,7 +21,7 @@ import java.util.Properties
 
 import scala.collection.mutable.ArrayBuffer
 
-import com.codahale.metrics.{Gauge, MetricRegistry, MetricRegistryListener}
+import com.codahale.metrics.{Gauge, MetricRegistry}
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
@@ -44,8 +44,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
   test("MetricsSystem with default config") {
     val metricsSystem = MetricsSystem.createMetricsSystem("default", conf)
     metricsSystem.start()
-    val sources =
-      PrivateMethod[ArrayBuffer[(Source, MetricRegistryListener)]](Symbol("sources"))
+    val sources = PrivateMethod[ArrayBuffer[Source]](Symbol("sources"))
     val sinks = PrivateMethod[ArrayBuffer[Sink]](Symbol("sinks"))
 
     assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length)
@@ -56,8 +55,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
   test("MetricsSystem with sources add") {
     val metricsSystem = MetricsSystem.createMetricsSystem("test", conf)
     metricsSystem.start()
-    val sources =
-      PrivateMethod[ArrayBuffer[(Source, MetricRegistryListener)]](Symbol("sources"))
+    val sources = PrivateMethod[ArrayBuffer[Source]](Symbol("sources"))
     val sinks = PrivateMethod[ArrayBuffer[Sink]](Symbol("sinks"))
 
     assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length)

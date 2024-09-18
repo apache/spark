@@ -22,14 +22,17 @@ import java.nio.charset.StandardCharsets
 import java.util.Locale
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
-import scala.collection.mutable.{ArrayBuffer, Queue}
-import com.codahale.metrics.MetricRegistryListener
+
+import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.Queue
+
 import org.apache.commons.io.FileUtils
 import org.scalatest.{Assertions, PrivateMethodTester}
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
+
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI.UI_ENABLED
@@ -374,14 +377,14 @@ class StreamingContextSuite
 
     val sources = StreamingContextSuite.getSources(ssc.env.metricsSystem)
     val streamingSource = StreamingContextSuite.getStreamingSource(ssc)
-    assert(sources.exists(s => s._1 == streamingSource))
+    assert(sources.contains(streamingSource))
     assert(ssc.getState() === StreamingContextState.ACTIVE)
 
     ssc.stop()
     val sourcesAfterStop = StreamingContextSuite.getSources(ssc.env.metricsSystem)
     val streamingSourceAfterStop = StreamingContextSuite.getStreamingSource(ssc)
     assert(ssc.getState() === StreamingContextState.STOPPED)
-    assert(!sourcesAfterStop.exists(s => s._1 == streamingSourceAfterStop))
+    assert(!sourcesAfterStop.contains(streamingSourceAfterStop))
   }
 
   test("SPARK-28709 registering and de-registering of progressListener") {
@@ -1024,10 +1027,8 @@ object testPackage extends Assertions {
  * This includes methods to access private methods and fields in StreamingContext and MetricsSystem
  */
 private object StreamingContextSuite extends PrivateMethodTester {
-  private val _sources =
-    PrivateMethod[ArrayBuffer[(Source, MetricRegistryListener)]](Symbol("sources"))
-  private def getSources(
-      metricsSystem: MetricsSystem): ArrayBuffer[(Source, MetricRegistryListener)] = {
+  private val _sources = PrivateMethod[ArrayBuffer[Source]](Symbol("sources"))
+  private def getSources(metricsSystem: MetricsSystem): ArrayBuffer[Source] = {
     metricsSystem.invokePrivate(_sources())
   }
   private val _streamingSource = PrivateMethod[StreamingSource](Symbol("streamingSource"))

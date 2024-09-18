@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
-import com.codahale.metrics.{Counter, Gauge, Histogram, Meter, Metric, MetricRegistry, MetricRegistryListener, Timer}
+import com.codahale.metrics.{Metric, MetricRegistry}
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf}
@@ -77,7 +77,7 @@ private[spark] class MetricsSystem private (
   private[this] val metricsConfig = new MetricsConfig(conf)
 
   private val sinks = new mutable.ArrayBuffer[Sink]
-  private val sources = new mutable.ArrayBuffer[(Source, MetricRegistryListener)]
+  private val sources = new mutable.ArrayBuffer[Source]
 
   private var running: Boolean = false
 
@@ -111,9 +111,6 @@ private[spark] class MetricsSystem private (
     if (running) {
       sinks.foreach(_.stop())
       registry.removeMatching((_: String, _: Metric) => true)
-      sources.synchronized {
-        sources.foreach(s => removeSource(s._1))
-      }
     } else {
       logWarning("Stopping a MetricsSystem that is not running")
     }
@@ -160,23 +157,24 @@ private[spark] class MetricsSystem private (
   }
 
   def getSourcesByName(sourceName: String): Seq[Source] = sources.synchronized {
-    sources.filter(s => s._1.sourceName == sourceName).map(_._1).toSeq
+    sources.filter(_.sourceName == sourceName).toSeq
   }
 
   def registerSource(source: Source): Unit = {
-    val listener = new MetricsSystemListener(buildRegistryName(source))
     sources.synchronized {
-      sources += (source, listener)
+      sources += source
     }
-    source.metricRegistry.addListener(listener)
+    try {
+      val regName = buildRegistryName(source)
+      registry.register(regName, source.metricRegistry)
+    } catch {
+      case e: IllegalArgumentException => logInfo("Metrics already registered", e)
+    }
   }
 
   def removeSource(source: Source): Unit = {
     sources.synchronized {
-      val sourceIdx = sources.indexWhere(s => s._1 == source)
-      if (sourceIdx != -1) {
-        source.metricRegistry.removeListener(sources.remove(sourceIdx)._2)
-      }
+      sources -= source
     }
     val regName = buildRegistryName(source)
     registry.removeMatching((name: String, _: Metric) => name.startsWith(regName))
@@ -244,48 +242,6 @@ private[spark] class MetricsSystem private (
   }
 
   def metricsProperties(): Properties = metricsConfig.properties
-
-  private[spark] class MetricsSystemListener(prefix: String) extends MetricRegistryListener {
-    def metricName(name: String): String = MetricRegistry.name(prefix, name)
-
-    def registerMetric[T <: Metric](name: String, metric: T): Unit = {
-      try {
-        registry.register(metricName(name), metric)
-      } catch {
-        case e: IllegalArgumentException => logInfo("Metrics already registered", e)
-      }
-    }
-
-    override def onHistogramAdded(name: String, histogram: Histogram): Unit =
-      registerMetric(name, histogram)
-
-    override def onCounterAdded(name: String, counter: Counter): Unit =
-      registerMetric(name, counter)
-
-    override def onMeterAdded(name: String, meter: Meter): Unit =
-      registerMetric(name, meter)
-
-    override def onGaugeAdded(name: String, gauge: Gauge[_]): Unit =
-      registerMetric(name, gauge)
-
-    override def onTimerAdded(name: String, timer: Timer): Unit =
-      registerMetric(name, timer)
-
-    override def onHistogramRemoved(name: String): Unit =
-      registry.remove(metricName(name))
-
-    override def onGaugeRemoved(name: String): Unit =
-      registry.remove(metricName(name))
-
-    override def onMeterRemoved(name: String): Unit =
-      registry.remove(metricName(name))
-
-    override def onCounterRemoved(name: String): Unit =
-      registry.remove(metricName(name))
-
-    override def onTimerRemoved(name: String): Unit =
-      registry.remove(metricName(name))
-  }
 }
 
 private[spark] object MetricsSystem {
