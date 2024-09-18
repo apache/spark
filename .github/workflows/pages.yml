@@ -64,8 +64,8 @@ jobs:
           bundler-cache: true
       - name: Install Pandoc
         run: |
-          apt-get update -y
-          apt-get install pandoc
+          sudo apt-get update -y
+          sudo apt-get install pandoc
       - name: Install dependencies for documentation generation
         run: |
           cd docs
