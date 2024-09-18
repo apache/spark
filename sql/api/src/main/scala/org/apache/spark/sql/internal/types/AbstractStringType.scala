@@ -58,7 +58,5 @@ case object StringTypeAnyCollation extends AbstractStringType {
  */
 case object StringTypeNonCSAICollation extends AbstractStringType {
   override private[sql] def acceptsType(other: DataType): Boolean =
-    other.isInstanceOf[StringType] &&
-      (!other.asInstanceOf[StringType].typeName.contains("_AI") ||
-      other.asInstanceOf[StringType].typeName.contains("_CI"))
+    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].isNonCSAICollation
 }

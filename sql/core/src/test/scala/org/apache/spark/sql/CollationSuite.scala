@@ -1643,11 +1643,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       ("substring_index", "2"))
 
     val unsupportedCollator = "unicode_ai"
-    val supportedCollators: Seq[String] = Seq(
-      "unicode",
-      "unicode_ci",
-      "unicode_ci_ai"
-    )
+    val supportedCollators: Seq[String] = Seq("unicode", "unicode_ci", "unicode_ci_ai")
 
     unsupportedExpressions.foreach {
       expression: Any =>
