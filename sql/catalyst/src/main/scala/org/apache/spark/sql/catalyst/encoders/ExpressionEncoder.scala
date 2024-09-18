@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.optimizer.{ReassignLambdaVariableID, Simpli
 import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LeafNode, LocalRelation}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{ObjectType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, ObjectType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -258,7 +258,7 @@ case class ExpressionEncoder[T](
   // The schema after converting `T` to a Spark SQL row. This schema is dependent on the given
   // serializer.
   val schema: StructType = StructType(serializer.map { s =>
-    StructField(s.name, s.dataType, s.nullable)
+    StructField(s.name, DataType.udtToSqlType(s.dataType), s.nullable)
   })
 
   /**
