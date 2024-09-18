@@ -87,16 +87,16 @@ abstract class StatePartitionReaderBase(
       schema, "value").asInstanceOf[StructType]
   }
 
+  protected val useColFamilies = if (stateVariableInfoOpt.isDefined) {
+    true
+  } else {
+    false
+  }
+
   protected lazy val provider: StateStoreProvider = {
     val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
       partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
-
-    val useColFamilies = if (stateVariableInfoOpt.isDefined) {
-      true
-    } else {
-      false
-    }
 
     val useMultipleValuesPerKey = if (stateVariableInfoOpt.isDefined &&
       stateVariableInfoOpt.get.stateVariableType == StateVariableType.ListState) {
@@ -247,10 +247,18 @@ class StateStoreChangeDataPartitionReader(
       throw StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
         provider.getClass.toString)
     }
+
+    val colFamilyNameOpt = if (stateVariableInfoOpt.isDefined) {
+      Some(stateVariableInfoOpt.get.stateName)
+    } else {
+      None
+    }
+
     provider.asInstanceOf[SupportsFineGrainedReplay]
       .getStateStoreChangeDataReader(
         partition.sourceOptions.readChangeFeedOptions.get.changeStartBatchId + 1,
-        partition.sourceOptions.readChangeFeedOptions.get.changeEndBatchId + 1)
+        partition.sourceOptions.readChangeFeedOptions.get.changeEndBatchId + 1,
+        colFamilyNameOpt)
   }
 
   override lazy val iter: Iterator[InternalRow] = {

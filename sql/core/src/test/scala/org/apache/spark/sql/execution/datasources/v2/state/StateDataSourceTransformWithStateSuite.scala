@@ -175,18 +175,48 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         }
         assert(ex.isInstanceOf[StateDataSourceInvalidOptionValue])
         assert(ex.getMessage.contains("State variable non-exist is not defined"))
+      }
+    }
+  }
 
-        // TODO: this should be removed when readChangeFeed is supported for value state
-        val ex1 = intercept[Exception] {
-          spark.read
+  testWithChangelogCheckpointingEnabled("state data source cdf integration - " +
+    "value state with single variable") {
+    withTempDir { tempDir =>
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key ->
+          TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new StatefulProcessorWithSingleValueVar(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          AddData(inputData, "b"),
+          CheckNewAnswer(("b", "1")),
+          StopStream
+        )
+
+        val changeFeedDf = spark.read
             .format("statestore")
             .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
             .option(StateSourceOptions.STATE_VAR_NAME, "valueState")
-            .option(StateSourceOptions.READ_CHANGE_FEED, "true")
+            .option(StateSourceOptions.READ_CHANGE_FEED, true)
             .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
             .load()
-        }
-        assert(ex1.isInstanceOf[StateDataSourceConflictOptions])
+        val opDf = changeFeedDf.selectExpr(
+          "change_type",
+          "key.value AS groupingKey",
+          "value.id AS valueId", "value.name AS valueName",
+          "partition_id")
+
+        checkAnswer(opDf,
+          Seq(Row("update", "a", 1L, "dummyKey", 0), Row("update", "b", 1L, "dummyKey", 1)))
       }
     }
   }
@@ -249,19 +279,6 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         }
         assert(ex.isInstanceOf[StateDataSourceInvalidOptionValue])
         assert(ex.getMessage.contains("State variable non-exist is not defined"))
-
-        // TODO: this should be removed when readChangeFeed is supported for TTL based state
-        // variables
-        val ex1 = intercept[Exception] {
-          spark.read
-            .format("statestore")
-            .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
-            .option(StateSourceOptions.STATE_VAR_NAME, "countState")
-            .option(StateSourceOptions.READ_CHANGE_FEED, "true")
-            .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
-            .load()
-        }
-        assert(ex1.isInstanceOf[StateDataSourceConflictOptions])
       }
     }
   }

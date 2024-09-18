@@ -162,12 +162,6 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
         throw StateDataSourceErrors.invalidOptionValue(STATE_VAR_NAME,
           s"State variable $stateVarName is not defined for the transformWithState operator.")
       }
-
-      // TODO: Support change feed and transformWithState together
-      if (sourceOptions.readChangeFeed) {
-        throw StateDataSourceErrors.conflictOptions(Seq(StateSourceOptions.READ_CHANGE_FEED,
-          StateSourceOptions.STATE_VAR_NAME))
-      }
     } else {
       // if the operator is transformWithState, then a state variable argument is mandatory
       if (stateStoreMetadata.size == 1 &&
