@@ -92,14 +92,14 @@ abstract class StatePartitionReaderBase(
       partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
 
-    val useMultipleValuesPerKey = if (stateVariableInfoOpt.isDefined &&
-      stateVariableInfoOpt.get.stateVariableType == StateVariableType.ListState) {
+    val useColFamilies = if (stateVariableInfoOpt.isDefined) {
       true
     } else {
       false
     }
 
-    val useColFamilies = if (stateVariableInfoOpt.isDefined) {
+    val useMultipleValuesPerKey = if (stateVariableInfoOpt.isDefined &&
+      stateVariableInfoOpt.get.stateVariableType == StateVariableType.ListState) {
       true
     } else {
       false
