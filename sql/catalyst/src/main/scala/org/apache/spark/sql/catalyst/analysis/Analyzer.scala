@@ -2620,10 +2620,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   object ResolveProcedures extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(UNRESOLVED_PROCEDURE), ruleId) {
-      case Call(UnresolvedProcedure(CatalogAndIdentifier(catalog, ident)), args) =>
+      case Call(UnresolvedProcedure(CatalogAndIdentifier(catalog, ident)), args, execute) =>
         val procedureCatalog = catalog.asProcedureCatalog
         val procedure = load(procedureCatalog, ident)
-        Call(ResolvedProcedure(procedureCatalog, ident, procedure), args)
+        Call(ResolvedProcedure(procedureCatalog, ident, procedure), args, execute)
     }
 
     private def load(catalog: ProcedureCatalog, ident: Identifier): UnboundProcedure = {
@@ -2642,13 +2642,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    */
   object BindProcedures extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case Call(ResolvedProcedure(catalog, ident, unbound: UnboundProcedure), args)
+      case Call(ResolvedProcedure(catalog, ident, unbound: UnboundProcedure), args, execute)
           if args.forall(_.resolved) =>
         val inputType = extractInputType(args)
         val bound = unbound.bind(inputType)
         validateParameterModes(bound)
         val rearrangedArgs = NamedParametersSupport.defaultRearrange(bound, args)
-        Call(ResolvedProcedure(catalog, ident, bound), rearrangedArgs)
+        Call(ResolvedProcedure(catalog, ident, bound), rearrangedArgs, execute)
     }
 
     private def extractInputType(args: Seq[Expression]): StructType = {

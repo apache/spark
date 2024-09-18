@@ -1580,7 +1580,11 @@ case class SetVariable(
 /**
  * The logical plan of the CALL statement.
  */
-case class Call(procedure: LogicalPlan, args: Seq[Expression]) extends UnaryNode {
+case class Call(
+    procedure: LogicalPlan,
+    args: Seq[Expression],
+    execute: Boolean = true)
+  extends UnaryNode with ExecutableDuringAnalysis {
 
   override def output: Seq[Attribute] = Nil
 
@@ -1621,6 +1625,10 @@ case class Call(procedure: LogicalPlan, args: Seq[Expression]) extends UnaryNode
     }
     val argsString = truncatedString(args, ", ", maxFields)
     s"Call $name($argsString)"
+  }
+
+  override def stageForExplain(): Call = {
+    copy(execute = false)
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Call =

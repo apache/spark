@@ -32,9 +32,9 @@ import org.apache.spark.sql.connector.read.{LocalScan, Scan}
 class InvokeProcedures(session: SparkSession) extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case c: Call if c.resolved && c.bound && c.checkArgTypes().isSuccess =>
+    case c: Call if c.resolved && c.bound && c.execute && c.checkArgTypes().isSuccess =>
       session.sessionState.optimizer.execute(c) match {
-        case Call(ResolvedProcedure(_, _, procedure: BoundProcedure), args) =>
+        case Call(ResolvedProcedure(_, _, procedure: BoundProcedure), args, _) =>
           invoke(procedure, args)
         case _ =>
           throw SparkException.internalError("Unexpected plan for optimized CALL statement")
