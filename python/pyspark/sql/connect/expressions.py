@@ -477,8 +477,19 @@ class LiteralExpression(Expression):
     def __repr__(self) -> str:
         if self._value is None:
             return "NULL"
-        else:
-            return f"{self._value}"
+        elif isinstance(self._dataType, DateType):
+            dt = DateType().fromInternal(self._value)
+            if dt is not None and isinstance(dt, datetime.date):
+                return dt.strftime("%Y-%m-%d")
+        elif isinstance(self._dataType, TimestampType):
+            ts = TimestampType().fromInternal(self._value)
+            if ts is not None and isinstance(ts, datetime.datetime):
+                return ts.strftime("%Y-%m-%d %H:%M:%S.%f")
+        elif isinstance(self._dataType, TimestampNTZType):
+            ts = TimestampNTZType().fromInternal(self._value)
+            if ts is not None and isinstance(ts, datetime.datetime):
+                return ts.strftime("%Y-%m-%d %H:%M:%S.%f")
+        return f"{self._value}"
 
 
 class ColumnReference(Expression):
