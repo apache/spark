@@ -28,6 +28,11 @@ class DataFramePlotPlotlyTestsMixin:
         columns = ["category", "int_val", "float_val"]
         return self.spark.createDataFrame(data, columns)
 
+    def sdf2(self):
+        data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
+        columns = ["length", "width", "species"]
+        return self.spark.createDataFrame(data, columns)
+
     def _check_fig_data(self, kind, fig_data, expected_x, expected_y, expected_name=""):
         if kind == "line":
             self.assertEqual(fig_data["mode"], "lines")
@@ -37,6 +42,9 @@ class DataFramePlotPlotlyTestsMixin:
         elif kind == "barh":
             self.assertEqual(fig_data["type"], "bar")
             self.assertEqual(fig_data["orientation"], "h")
+        elif kind == "scatter":
+            self.assertEqual(fig_data["type"], "scatter")
+            self.assertEqual(fig_data["orientation"], "v")
 
         self.assertEqual(fig_data["xaxis"], "x")
         self.assertEqual(list(fig_data["x"]), expected_x)
@@ -64,20 +72,17 @@ class DataFramePlotPlotlyTestsMixin:
         self._check_fig_data("bar", fig["data"][0], ["A", "B", "C"], [10, 30, 20], "int_val")
         self._check_fig_data("bar", fig["data"][1], ["A", "B", "C"], [1.5, 2.5, 3.5], "float_val")
 
-    def test_barh_plot(self):
-        # single column as vertical axis
-        fig = self.sdf.plot(kind="barh", x="category", y="int_val")
-        self._check_fig_data("barh", fig["data"][0], ["A", "B", "C"], [10, 30, 20])
-
-        # multiple columns as vertical axis
-        fig = self.sdf.plot.barh(x="category", y=["int_val", "float_val"])
-        self._check_fig_data("barh", fig["data"][0], ["A", "B", "C"], [10, 30, 20], "int_val")
-        self._check_fig_data("barh", fig["data"][1], ["A", "B", "C"], [1.5, 2.5, 3.5], "float_val")
-
-        # multiple columns as horizontal axis
-        fig = self.sdf.plot.barh(x=["int_val", "float_val"], y="category")
-        self._check_fig_data("barh", fig["data"][0], [10, 30, 20], ["A", "B", "C"], "int_val")
-        self._check_fig_data("barh", fig["data"][1], [1.5, 2.5, 3.5], ["A", "B", "C"], "float_val")
+    def test_scatter_plot(self):
+        fig = self.sdf2.plot(kind="scatter", x="length", y="width")
+        self._check_fig_data(
+            "scatter", fig["data"][0], [5.1, 4.9, 7.0, 6.4, 5.9], [3.5, 3.0, 3.2, 3.2, 3.0]
+        )
+        # additional keyword arguments
+        fig = self.sdf2.plot.scatter(x="length", y="width", c="DarkBlue")
+        self._check_fig_data(
+            "scatter", fig["data"][0], [5.1, 4.9, 7.0, 6.4, 5.9], [3.5, 3.0, 3.2, 3.2, 3.0]
+        )
+        self.assertEqual(fig["data"][0]["marker"]["color"], "#636efa")
 
 
 class DataFramePlotPlotlyTests(DataFramePlotPlotlyTestsMixin, ReusedSQLTestCase):
