@@ -155,17 +155,25 @@ class ValueStateCall(_message.Message):
     ) -> None: ...
 
 class ListStateCall(_message.Message):
-    __slots__ = ("stateName", "exists", "get", "listStatePut", "appendValue", "appendList", "clear")
+    __slots__ = (
+        "stateName",
+        "exists",
+        "listStateGet",
+        "listStatePut",
+        "appendValue",
+        "appendList",
+        "clear",
+    )
     STATENAME_FIELD_NUMBER: _ClassVar[int]
     EXISTS_FIELD_NUMBER: _ClassVar[int]
-    GET_FIELD_NUMBER: _ClassVar[int]
+    LISTSTATEGET_FIELD_NUMBER: _ClassVar[int]
     LISTSTATEPUT_FIELD_NUMBER: _ClassVar[int]
     APPENDVALUE_FIELD_NUMBER: _ClassVar[int]
     APPENDLIST_FIELD_NUMBER: _ClassVar[int]
     CLEAR_FIELD_NUMBER: _ClassVar[int]
     stateName: str
     exists: Exists
-    get: Get
+    listStateGet: ListStateGet
     listStatePut: ListStatePut
     appendValue: AppendValue
     appendList: AppendList
@@ -174,7 +182,7 @@ class ListStateCall(_message.Message):
         self,
         stateName: _Optional[str] = ...,
         exists: _Optional[_Union[Exists, _Mapping]] = ...,
-        get: _Optional[_Union[Get, _Mapping]] = ...,
+        listStateGet: _Optional[_Union[ListStateGet, _Mapping]] = ...,
         listStatePut: _Optional[_Union[ListStatePut, _Mapping]] = ...,
         appendValue: _Optional[_Union[AppendValue, _Mapping]] = ...,
         appendList: _Optional[_Union[AppendList, _Mapping]] = ...,
@@ -208,6 +216,12 @@ class ValueStateUpdate(_message.Message):
 class Clear(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
+
+class ListStateGet(_message.Message):
+    __slots__ = ("iteratorId",)
+    ITERATORID_FIELD_NUMBER: _ClassVar[int]
+    iteratorId: str
+    def __init__(self, iteratorId: _Optional[str] = ...) -> None: ...
 
 class ListStatePut(_message.Message):
     __slots__ = ()

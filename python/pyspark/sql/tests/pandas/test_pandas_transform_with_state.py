@@ -430,30 +430,27 @@ class ListStateProcessor(StatefulProcessor):
         iter1 = self.list_state1.get()
         iter2 = self.list_state2.get()
         # Mixing the iterator to test it we can resume from the correct point
-        result1 = next(iter1)
-        assert result1[0] == self.dict[0]
-        result2 = next(iter2)
-        assert result2[0] == self.dict[0]
-        result1 = next(iter1)
-        assert result1[0] == self.dict[1]
-        result2 = next(iter2)
-        assert result2[0] == self.dict[1]
-
+        assert next(iter1)[0] == self.dict[0]
+        assert next(iter2)[0] == self.dict[0]
+        assert next(iter1)[0] == self.dict[1]
+        assert next(iter2)[0] == self.dict[1]
+        # Get another iterator for list_state1 to test if the 2 iterators (iter1 and iter3) don't
+        # interfere with each other.
+        iter3 = self.list_state1.get()
+        assert next(iter3)[0] == self.dict[0]
+        assert next(iter3)[0] == self.dict[1]
         # the second arrow batch should contain the appended value 111 for list_state1 and
         # 222 for list_state2
-        result1 = next(iter1)
-        assert result1[0] == 111
-        result2 = next(iter2)
-        assert result2[0] == 222
-        result1 = next(iter1)
+        assert next(iter1)[0] == 111
+        assert next(iter2)[0] == 222
+        assert next(iter3)[0] == 111
         # since we put another 2 rows after 111/222, check them here
-        assert result1[0] == self.dict[0]
-        result2 = next(iter2)
-        assert result2[0] == self.dict[0]
-        result1 = next(iter1)
-        assert result1[0] == self.dict[1]
-        result2 = next(iter2)
-        assert result2[0] == self.dict[1]
+        assert next(iter1)[0] == self.dict[0]
+        assert next(iter2)[0] == self.dict[0]
+        assert next(iter3)[0] == self.dict[0]
+        assert next(iter1)[0] == self.dict[1]
+        assert next(iter2)[0] == self.dict[1]
+        assert next(iter3)[0] == self.dict[1]
         yield pd.DataFrame({"id": key, "countAsString": str(count)})
 
     def close(self) -> None:

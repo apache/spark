@@ -79,7 +79,7 @@ class TransformWithStateInPandasStateServer(
   } else {
     new mutable.HashMap[String, ListStateInfo]()
   }
-  // A map to store the list state name -> iterator mapping. This is to keep track of the
+  // A map to store the iterator id -> iterator mapping. This is to keep track of the
   // current iterator position for each list state in a grouping key in case user tries to fetch
   // another list state before the current iterator is exhausted.
   private var listStateIterators = if (listStateIteratorMapForTest != null) {
@@ -274,11 +274,12 @@ class TransformWithStateInPandasStateServer(
         val rows = deserializer.readArrowBatches(inputStream)
         listStateInfo.listState.put(rows.toArray)
         sendResponse(0)
-      case ListStateCall.MethodCase.GET =>
-        var iteratorOption = listStateIterators.get(stateName)
+      case ListStateCall.MethodCase.LISTSTATEGET =>
+        val iteratorId = message.getListStateGet.getIteratorId
+        var iteratorOption = listStateIterators.get(iteratorId)
         if (iteratorOption.isEmpty) {
           iteratorOption = Some(listStateInfo.listState.get())
-          listStateIterators.put(stateName, iteratorOption.get)
+          listStateIterators.put(iteratorId, iteratorOption.get)
         }
         if (!iteratorOption.get.hasNext) {
           sendResponse(2, s"List state $stateName doesn't contain any value.")

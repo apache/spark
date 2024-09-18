@@ -77,7 +77,7 @@ message ListStateCall {
   string stateName = 1;
   oneof method {
     Exists exists = 2;
-    Get get = 3;
+    ListStateGet listStateGet = 3;
     ListStatePut listStatePut = 4;
     AppendValue appendValue = 5;
     AppendList appendList = 6;
@@ -103,6 +103,10 @@ message ValueStateUpdate {
 }
 
 message Clear {
+}
+
+message ListStateGet {
+  string iteratorId = 1;
 }
 
 message ListStatePut {
