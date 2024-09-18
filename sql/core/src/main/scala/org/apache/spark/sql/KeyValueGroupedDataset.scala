@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderF
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
 import org.apache.spark.sql.internal.TypedAggUtils.{aggKeyColumn, withInputType}
@@ -41,7 +42,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
     @transient val queryExecution: QueryExecution,
     private val dataAttributes: Seq[Attribute],
     private val groupingAttributes: Seq[Attribute])
-  extends api.KeyValueGroupedDataset[K, V, Dataset] {
+  extends api.KeyValueGroupedDataset[K, V] {
   type KVDS[KY, VL] = KeyValueGroupedDataset[KY, VL]
 
   private implicit def kEncoderImpl: Encoder[K] = kEncoder
