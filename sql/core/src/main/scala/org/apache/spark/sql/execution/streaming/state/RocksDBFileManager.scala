@@ -635,7 +635,7 @@ class RocksDBFileManager(
     localImmutableFiles.foreach { existingFile =>
       val existingFileSize = existingFile.length()
       val requiredFile = requiredFileNameToFileDetails.get(existingFile.getName)
-      val prevDfsFile = rocksDBFileMapping.dfsFile(this, existingFile.getName)
+      val prevDfsFile = rocksDBFileMapping.getDfsFile(this, existingFile.getName)
       val isSameFile = if (requiredFile.isDefined && prevDfsFile.isDefined) {
         requiredFile.get.dfsFileName == prevDfsFile.get.dfsFileName &&
           existingFile.length() == requiredFile.get.sizeBytes
