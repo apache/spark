@@ -160,6 +160,10 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrameWriterV2"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WriteConfigMethods"),
 
+    // SPARK-49424: Shared Encoders
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders$"),
+
     // SPARK-49413: Create a shared RuntimeConfig interface.
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RuntimeConfig"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RuntimeConfig$"),

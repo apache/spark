@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.SparkRuntimeException
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Encoders}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -71,9 +71,9 @@ class EncoderResolutionSuite extends PlanTest {
   }
 
   test("real type doesn't match encoder schema but they are compatible: tupled encoder") {
-    val encoder = ExpressionEncoder.tuple(
-      ExpressionEncoder[StringLongClass](),
-      ExpressionEncoder[Long]())
+    val encoder = encoderFor(Encoders.tuple(
+      Encoders.product[StringLongClass],
+      Encoders.scalaLong))
     val attrs = Seq($"a".struct($"a".string, $"b".byte), $"b".int)
     testFromRow(encoder, attrs, InternalRow(InternalRow(str, 1.toByte), 2))
   }
