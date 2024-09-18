@@ -22,7 +22,6 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
-import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -119,15 +118,12 @@ class RelationalGroupedDataset protected[sql](
 
   /** @inheritdoc */
   def as[K: Encoder, T: Encoder]: KeyValueGroupedDataset[K, T] = {
-    val keyEncoder = encoderFor[K]
-    val valueEncoder = encoderFor[T]
-
     val (qe, groupingAttributes) =
       handleGroupingExpression(df.logicalPlan, df.sparkSession, groupingExprs)
 
     new KeyValueGroupedDataset(
-      keyEncoder,
-      valueEncoder,
+      implicitly[Encoder[K]],
+      implicitly[Encoder[T]],
       qe,
       df.logicalPlan.output,
       groupingAttributes)
