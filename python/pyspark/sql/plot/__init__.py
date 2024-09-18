@@ -18,4 +18,17 @@
 """
 This package includes the plotting APIs for PySpark DataFrame.
 """
+import os
+import sys
+import warnings
 from pyspark.sql.plot.core import *  # noqa: F403, F401
+from pyspark.sql.utils import require_minimum_plotly_version
+
+try:
+    require_minimum_plotly_version()
+except ImportError as e:
+    if os.environ.get("SPARK_TESTING"):
+        warnings.warn(str(e))
+        sys.exit()
+    else:
+        raise

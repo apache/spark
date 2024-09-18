@@ -39,10 +39,10 @@ from pyspark.resource import ResourceProfile
 from pyspark.sql.column import Column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.merge import MergeIntoWriter
-from pyspark.sql.plot import PySparkPlotAccessor
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import StructType, Row
 from pyspark.sql.utils import dispatch_df_method
+
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -66,6 +66,7 @@ if TYPE_CHECKING:
         ArrowMapIterFunction,
         DataFrameLike as PandasDataFrameLike,
     )
+    from pyspark.sql.plot import PySparkPlotAccessor
     from pyspark.sql.metrics import ExecutionInfo
 
 
@@ -6396,7 +6397,7 @@ class DataFrame:
         ...
 
     @property
-    def plot(self) -> PySparkPlotAccessor:
+    def plot(self) -> "PySparkPlotAccessor":
         """
         Returns a :class:`PySparkPlotAccessor` for plotting functions.
 

@@ -15,12 +15,14 @@
 # limitations under the License.
 #
 
+import unittest
 from pyspark.errors import PySparkValueError
 from pyspark.sql import Row
 from pyspark.sql.plot import PySparkSampledPlotBase, PySparkTopNPlotBase
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.sqlutils import ReusedSQLTestCase, have_plotly, plotly_requirement_message
 
 
+@unittest.skipIf(not have_plotly, plotly_requirement_message)
 class DataFramePlotTestsMixin:
     def test_backend(self):
         accessor = self.spark.range(2).plot
@@ -67,7 +69,6 @@ class DataFramePlotTests(DataFramePlotTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.sql.tests.plot.test_frame_plot import *  # noqa: F401
 
     try:

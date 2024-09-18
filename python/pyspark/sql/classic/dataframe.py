@@ -58,7 +58,6 @@ from pyspark.sql.column import Column
 from pyspark.sql.classic.column import _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.merge import MergeIntoWriter
-from pyspark.sql.plot import PySparkPlotAccessor
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import (
     StructType,
@@ -73,6 +72,11 @@ from pyspark.sql.dataframe import (
 from pyspark.sql.utils import get_active_spark_context, to_java_array, to_scala_map
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
+
+try:
+    from pyspark.sql.plot import PySparkPlotAccessor
+except ImportError:
+    PySparkPlotAccessor = None
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject

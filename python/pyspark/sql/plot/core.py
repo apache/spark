@@ -117,7 +117,7 @@ class PySparkPlotAccessor:
             Name of column to use for the horizontal axis.
         y : str or list of str
             Name(s) of the column(s) to use for the vertical axis. Multiple columns can be plotted.
-        **kwds : optional
+        **kwargs : optional
             Additional keyword arguments.
 
         Returns
