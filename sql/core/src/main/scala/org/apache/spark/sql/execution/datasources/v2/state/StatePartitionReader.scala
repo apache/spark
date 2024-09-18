@@ -87,12 +87,6 @@ abstract class StatePartitionReaderBase(
       schema, "value").asInstanceOf[StructType]
   }
 
-  protected val useColFamilies = if (stateVariableInfoOpt.isDefined) {
-    true
-  } else {
-    false
-  }
-
   protected lazy val provider: StateStoreProvider = {
     val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
       partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
@@ -100,6 +94,12 @@ abstract class StatePartitionReaderBase(
 
     val useMultipleValuesPerKey = if (stateVariableInfoOpt.isDefined &&
       stateVariableInfoOpt.get.stateVariableType == StateVariableType.ListState) {
+      true
+    } else {
+      false
+    }
+
+    val useColFamilies = if (stateVariableInfoOpt.isDefined) {
       true
     } else {
       false
