@@ -32,12 +32,13 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.execution.streaming.{StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state.StateMessage
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, Exists, Get, HandleState, ListStateCall, ListStatePut, SetHandleState, StateCallCommand, StatefulProcessorCall, ValueStateCall, ValueStateUpdate}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, Exists, Get, HandleState, ListStateCall, ListStateGet, ListStatePut, SetHandleState, StateCallCommand, StatefulProcessorCall, ValueStateCall, ValueStateUpdate}
 import org.apache.spark.sql.streaming.{ListState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with BeforeAndAfterEach {
   val stateName = "test"
+  val iteratorId = "testId"
   val serverSocket: ServerSocket = mock(classOf[ServerSocket])
   val groupingKeySchema: StructType = StructType(Seq())
   val stateSchema: StructType = StructType(Array(StructField("value", IntegerType)))
@@ -71,7 +72,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
       ValueStateInfo(valueState, stateSchema, stateDeserializer))
     listStateMap = mutable.HashMap[String, ListStateInfo](stateName ->
       ListStateInfo(listState, stateSchema, stateDeserializer, stateSerializer))
-    val listStateIteratorMap = mutable.HashMap[String, Iterator[Row]](stateName ->
+    val listStateIteratorMap = mutable.HashMap[String, Iterator[Row]](iteratorId ->
       Iterator(new GenericRowWithSchema(Array(1), stateSchema)))
     transformWithStateInPandasDeserializer = mock(classOf[TransformWithStateInPandasDeserializer])
     arrowStreamWriter = mock(classOf[BaseStreamingArrowWriter])
@@ -173,9 +174,9 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     verify(listState).exists()
   }
 
-  test("list state get") {
+  test("list state get - iterator in map") {
     val message = ListStateCall.newBuilder().setStateName(stateName)
-      .setGet(Get.newBuilder().build()).build()
+      .setListStateGet(ListStateGet.newBuilder().setIteratorId(iteratorId).build()).build()
     stateServer.handleListStateRequest(message)
     verify(listState, times(0)).get()
     verify(arrowStreamWriter).writeRow(any)
@@ -185,7 +186,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
   test("list state get - iterator not in map") {
     val maxRecordsPerBatch = 2
     val message = ListStateCall.newBuilder().setStateName(stateName)
-      .setGet(Get.newBuilder().build()).build()
+      .setListStateGet(ListStateGet.newBuilder().setIteratorId(iteratorId).build()).build()
     val iteratorMap: mutable.HashMap[String, Iterator[Row]] = mutable.HashMap()
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
       statefulProcessorHandle, groupingKeySchema, "", false, false,

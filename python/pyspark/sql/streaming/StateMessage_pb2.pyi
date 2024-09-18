@@ -1,3 +1,18 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
@@ -95,22 +110,22 @@ class ValueStateCall(_message.Message):
     def __init__(self, stateName: _Optional[str] = ..., exists: _Optional[_Union[Exists, _Mapping]] = ..., get: _Optional[_Union[Get, _Mapping]] = ..., valueStateUpdate: _Optional[_Union[ValueStateUpdate, _Mapping]] = ..., clear: _Optional[_Union[Clear, _Mapping]] = ...) -> None: ...
 
 class ListStateCall(_message.Message):
-    __slots__ = ("stateName", "exists", "get", "listStatePut", "appendValue", "appendList", "clear")
+    __slots__ = ("stateName", "exists", "listStateGet", "listStatePut", "appendValue", "appendList", "clear")
     STATENAME_FIELD_NUMBER: _ClassVar[int]
     EXISTS_FIELD_NUMBER: _ClassVar[int]
-    GET_FIELD_NUMBER: _ClassVar[int]
+    LISTSTATEGET_FIELD_NUMBER: _ClassVar[int]
     LISTSTATEPUT_FIELD_NUMBER: _ClassVar[int]
     APPENDVALUE_FIELD_NUMBER: _ClassVar[int]
     APPENDLIST_FIELD_NUMBER: _ClassVar[int]
     CLEAR_FIELD_NUMBER: _ClassVar[int]
     stateName: str
     exists: Exists
-    get: Get
+    listStateGet: ListStateGet
     listStatePut: ListStatePut
     appendValue: AppendValue
     appendList: AppendList
     clear: Clear
-    def __init__(self, stateName: _Optional[str] = ..., exists: _Optional[_Union[Exists, _Mapping]] = ..., get: _Optional[_Union[Get, _Mapping]] = ..., listStatePut: _Optional[_Union[ListStatePut, _Mapping]] = ..., appendValue: _Optional[_Union[AppendValue, _Mapping]] = ..., appendList: _Optional[_Union[AppendList, _Mapping]] = ..., clear: _Optional[_Union[Clear, _Mapping]] = ...) -> None: ...
+    def __init__(self, stateName: _Optional[str] = ..., exists: _Optional[_Union[Exists, _Mapping]] = ..., listStateGet: _Optional[_Union[ListStateGet, _Mapping]] = ..., listStatePut: _Optional[_Union[ListStatePut, _Mapping]] = ..., appendValue: _Optional[_Union[AppendValue, _Mapping]] = ..., appendList: _Optional[_Union[AppendList, _Mapping]] = ..., clear: _Optional[_Union[Clear, _Mapping]] = ...) -> None: ...
 
 class MapStateCall(_message.Message):
     __slots__ = ("stateName", "exists", "getValue", "containsKey", "updateValue", "iterator", "keys", "values", "removeKey", "clear")
@@ -163,6 +178,12 @@ class ValueStateUpdate(_message.Message):
 class Clear(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
+
+class ListStateGet(_message.Message):
+    __slots__ = ("iteratorId",)
+    ITERATORID_FIELD_NUMBER: _ClassVar[int]
+    iteratorId: str
+    def __init__(self, iteratorId: _Optional[str] = ...) -> None: ...
 
 class ListStatePut(_message.Message):
     __slots__ = ()

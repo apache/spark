@@ -19,6 +19,7 @@ from typing import Any, Dict, Iterator, List, Union, cast, Tuple
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.types import Row, StructType, TYPE_CHECKING, _parse_datatype_string
 from pyspark.errors import PySparkRuntimeError
+import uuid
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
@@ -55,16 +56,18 @@ class ListStateClient:
                 f"Error checking value state exists: " f"{response_message[1]}"
             )
 
-    def get(self, state_name: str) -> Any:
+    def get(self, state_name: str, iterator_id: str) -> Any:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
-        if state_name in self.pandas_df_dict:
+        if iterator_id in self.pandas_df_dict:
             # If the state is already in the dictionary, return the next row.
-            pandas_df, index = self.pandas_df_dict[state_name]
+            pandas_df, index = self.pandas_df_dict[iterator_id]
         else:
             # If the state is not in the dictionary, fetch the state from the server.
-            get_call = stateMessage.Get()
-            list_state_call = stateMessage.ListStateCall(stateName=state_name, get=get_call)
+            get_call = stateMessage.ListStateGet(iteratorId=iterator_id)
+            list_state_call = stateMessage.ListStateCall(
+                stateName=state_name, listStateGet=get_call
+            )
             state_variable_request = stateMessage.StateVariableRequest(
                 listStateCall=list_state_call
             )
@@ -84,10 +87,10 @@ class ListStateClient:
         new_index = index + 1
         if new_index < len(pandas_df):
             # Update the index in the dictionary.
-            self.pandas_df_dict[state_name] = (pandas_df, new_index)
+            self.pandas_df_dict[iterator_id] = (pandas_df, new_index)
         else:
             # If the index is at the end of the DataFrame, remove the state from the dictionary.
-            self.pandas_df_dict.pop(state_name, None)
+            self.pandas_df_dict.pop(iterator_id, None)
         pandas_row = pandas_df.iloc[index]
         return Row(**pandas_row.to_dict())
 
@@ -173,9 +176,12 @@ class ListStateIterator:
     def __init__(self, list_state_client: ListStateClient, state_name: str):
         self.list_state_client = list_state_client
         self.state_name = state_name
+        # Generate a unique identifier for the iterator to make sure iterators from the same
+        # list state do not interfere with each other.
+        self.iterator_id = str(uuid.uuid4())
 
     def __iter__(self) -> Iterator[Row]:
         return self
 
     def __next__(self) -> Row:
-        return self.list_state_client.get(self.state_name)
+        return self.list_state_client.get(self.state_name, self.iterator_id)
