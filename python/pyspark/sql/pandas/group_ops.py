@@ -366,6 +366,7 @@ class PandasGroupedOpsMixin:
         outputStructType: Union[StructType, str],
         outputMode: str,
         timeMode: str,
+        eventTimeColumnName: str = "",
     ) -> DataFrame:
         """
         Invokes methods defined in the stateful processor used in arbitrary state API v2. It
@@ -521,6 +522,7 @@ class PandasGroupedOpsMixin:
             self.session._jsparkSession.parseDataType(outputStructType.json()),
             outputMode,
             timeMode,
+            eventTimeColumnName
         )
         return DataFrame(jdf, self.session)
 

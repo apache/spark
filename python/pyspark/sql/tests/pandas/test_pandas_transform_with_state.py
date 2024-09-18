@@ -32,6 +32,7 @@ from pyspark.sql.types import (
     StructField,
     Row,
     IntegerType,
+    TimestampType
 )
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
@@ -211,6 +212,7 @@ class TransformWithStateInPandasTestsMixin:
             Row(id="1", countAsString="2"),
         }
 
+
     # test value state with ttl has the same behavior as value state when
     # state doesn't expire.
     def test_value_state_ttl_basic(self):
@@ -227,7 +229,7 @@ class TransformWithStateInPandasTestsMixin:
                 }
 
         self._test_transform_with_state_in_pandas_basic(
-            SimpleTTLStatefulProcessor(), check_results, False, "processingTime"
+            SimpleTTLStatefulProcessor(), check_results, False, "eventTime"
         )
 
     def test_value_state_ttl_expiration(self):
@@ -303,6 +305,93 @@ class TransformWithStateInPandasTestsMixin:
             self.assertTrue(q.exception() is None)
         finally:
             input_dir.cleanup()
+
+    def _test_transform_with_state_in_pandas_chaining_ops(
+            self, stateful_processor, check_results, timeMode="None"
+    ):
+        import pyspark.sql.functions as f
+
+        input_path = tempfile.mkdtemp()
+        self._prepare_test_resource1(input_path)
+
+        def prepare_batch1(input_path):
+            with open(input_path + "/text-test3.txt", "w") as fw:
+                fw.write("a, 20\n")
+
+        def prepare_batch2(input_path):
+            with open(input_path + "/text-test1.txt", "w") as fw:
+                fw.write("a, 4\n")
+
+        def prepare_batch3(input_path):
+            with open(input_path + "/text-test2.txt", "w") as fw:
+                fw.write("a, 11\n")
+                fw.write("a, 13\n")
+                fw.write("a, 15\n")
+
+        prepare_batch1(input_path)
+        prepare_batch2(input_path)
+        prepare_batch3(input_path)
+
+        df = self._build_test_df(input_path)
+        df = df.select("id",
+                       f.from_unixtime(f.col("temperature")).alias("eventTime").cast("timestamp")) \
+            .withWatermark("eventTime", "10 seconds")
+
+        for q in self.spark.streams.active:
+            q.stop()
+        self.assertTrue(df.isStreaming)
+
+        output_schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("outputTimestamp", TimestampType(), True)
+            ]
+        )
+
+        q = (
+            df.groupBy("id")
+            .transformWithStateInPandas(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode=timeMode,
+                eventTimeColumnName="outputTimestamp"
+            )
+            .groupBy("outputTimestamp")
+            .count()
+            .writeStream.queryName("chaining_ops_query")
+            .foreachBatch(check_results)
+            .outputMode("update")
+            .start()
+        )
+
+        self.assertEqual(q.name, "chaining_ops_query")
+        self.assertTrue(q.isActive)
+        q.processAllAvailable()
+        q.awaitTermination(10)
+        self.assertTrue(q.exception() is None)
+
+    def test_transform_with_state_in_pandas_chaining_ops(self):
+        def check_results(batch_df, batch_id):
+            assert set(batch_df.sort("outputTimestamp").select("count").collect()) == {
+                Row(count=1),
+            }
+
+        self._test_transform_with_state_in_pandas_chaining_ops(StatefulProcessorChainingOps(), check_results)
+
+
+class StatefulProcessorChainingOps(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        pass
+
+    def handleInputRows(self, key, rows) -> Iterator[pd.DataFrame]:
+        for pdf in rows:
+            l = pdf['eventTime'].tolist()
+
+        yield pd.DataFrame({"id": key, "outputTimestamp": l[0]})
+
+    def close(self) -> None:
+        pass
 
 
 class SimpleStatefulProcessor(StatefulProcessor):
