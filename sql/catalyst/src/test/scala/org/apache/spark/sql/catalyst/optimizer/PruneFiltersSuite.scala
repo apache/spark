@@ -208,4 +208,51 @@ class PruneFiltersSuite extends PlanTest {
       comparePlans(optimized, correctAnswer)
     }
   }
+
+  test("Collect metrics is lost under false filter") {
+    Seq("true", "false").foreach(x => withSQLConf(
+        SQLConf.PRUNE_FILTERS_CAN_PRUNE_SIDEEFFECT_SUBPLAN.key -> x) {
+      val streamingRelation = CollectMetrics("metrics", Literal(1).as("lit") :: Nil,
+        LocalRelation(Seq($"a".int, $"b".int, $"c".int), Nil, isStreaming = true), 0)
+      val originalQuery = streamingRelation.where(10 > 5).select($"a").analyze
+      val optimized = Optimize.execute(originalQuery)
+      val correctAnswer = streamingRelation.select($"a").analyze
+      comparePlans(optimized, correctAnswer)
+    })
+  }
+
+  test("Collect metrics is lost under null filter") {
+    Seq("true", "false").foreach(x => withSQLConf(
+        SQLConf.PRUNE_FILTERS_CAN_PRUNE_SIDEEFFECT_SUBPLAN.key -> x) {
+      val streamingRelation = CollectMetrics("metrics", Literal(1).as("lit") :: Nil,
+        LocalRelation(Seq($"a".int, $"b".int, $"c".int), Nil, isStreaming = true), 0)
+      val originalQuery = streamingRelation.where(null).select($"a").analyze
+      val optimized = Optimize.execute(originalQuery)
+      val correctAnswer = streamingRelation.select($"a").analyze
+      comparePlans(optimized, correctAnswer)
+    })
+  }
+
+  test("Collect metrics is not lost under true filter") {
+    withSQLConf(
+        SQLConf.PRUNE_FILTERS_CAN_PRUNE_SIDEEFFECT_SUBPLAN.key -> "true") {
+      val streamingRelation =
+        LocalRelation(Seq($"a".int, $"b".int, $"c".int), Nil, isStreaming = true)
+      val wrapped = CollectMetrics("metrics", Literal(1).as("lit") :: Nil, streamingRelation, 0)
+      val originalQuery = wrapped.where(10 < 5).select($"a").analyze
+      val optimized = Optimize.execute(originalQuery)
+      val correctAnswer = streamingRelation.select($"a").analyze
+      comparePlans(optimized, correctAnswer)
+    }
+
+    withSQLConf(
+        DatabricksSQLConf.Optimizer.PRUNE_FILTERS_APPLY_ON_SIDE_EFFECT_CHILDREN.key -> "false") {
+      val streamingRelation = CollectMetrics("metrics", Literal(1).as("lit") :: Nil,
+        LocalRelation(Seq($"a".int, $"b".int, $"c".int), Nil, isStreaming = true), 0)
+      val originalQuery = streamingRelation.where(10 < 5).select($"a").analyze
+      val optimized = Optimize.execute(originalQuery)
+      val correctAnswer = streamingRelation.where(10 < 5).select($"a").analyze
+      comparePlans(optimized, correctAnswer)
+    }
+  }
 }

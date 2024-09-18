@@ -3835,6 +3835,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PRUNE_FILTERS_CAN_PRUNE_SIDEEFFECT_SUBPLAN =
+    buildConf("spark.databricks.sql.optimizer.pruneFiltersCanPruneSideeffectSubplan")
+      .internal()
+      .doc("Allow PruneFilters to remove subplans with CollectMetrics when we encounter a false " +
+        "filter. This flag is to restore prior buggy behavior for broken pipelines.")
+      .booleanConf
+      .createWithDefault(false)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }

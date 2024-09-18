@@ -1724,7 +1724,16 @@ object EliminateSorts extends Rule[LogicalPlan] {
  */
 object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
   private def shouldApply(child: LogicalPlan): Boolean =
-    SQLConf.get.getConf(SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN) || !child.isStreaming
+    (SQLConf.get.getConf(SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN) ||
+      !child.isStreaming) &&
+    (SQLConf.get.getConf(SQLConf.PRUNE_FILTERS_CAN_PRUNE_SIDEEFFECT_SUBPLAN) ||
+      isSideEffectFree(child))
+
+  private def isSideEffectFree(plan: LogicalPlan): Boolean = plan match {
+    case p: LogicalQueryStage => isSideEffectFree(p.logicalPlan)
+    case c: CollectMetrics => false
+    case _ => plan.children.forall(isSideEffectFree)
+  }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(FILTER), ruleId) {
