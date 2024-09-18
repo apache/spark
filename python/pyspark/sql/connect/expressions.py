@@ -489,6 +489,7 @@ class LiteralExpression(Expression):
             ts = TimestampNTZType().fromInternal(self._value)
             if ts is not None and isinstance(ts, datetime.datetime):
                 return ts.strftime("%Y-%m-%d %H:%M:%S.%f")
+        # TODO(SPARK-49693): Refine the string representation of timedelta
         return f"{self._value}"
 
 
