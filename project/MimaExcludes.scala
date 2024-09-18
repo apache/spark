@@ -164,6 +164,10 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders$"),
 
+    // SPARK-49413: Create a shared RuntimeConfig interface.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RuntimeConfig"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RuntimeConfig$"),
+
     // SPARK-49287: Shared Streaming interfaces
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.scheduler.SparkListenerEvent"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ForeachWriter"),
