@@ -4351,6 +4351,15 @@ object functions {
 
   /**
    * Splits a string into arrays of sentences, where each sentence is an array of words. The
+   * default `country`('') is used.
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def sentences(string: Column, language: Column): Column =
+    Column.fn("sentences", string, language)
+
+  /**
+   * Splits a string into arrays of sentences, where each sentence is an array of words. The
    * default locale is used.
    * @group string_funcs
    * @since 3.2.0
@@ -6850,6 +6859,18 @@ object functions {
    * @since 4.0.0
    */
   def parse_json(json: Column): Column = Column.fn("parse_json", json)
+
+  /**
+   * Converts a column containing nested inputs (array/map/struct) into a variants where maps and
+   * structs are converted to variant objects which are unordered unlike SQL structs. Input maps
+   * can only have string keys.
+   *
+   * @param col
+   *   a column with a nested schema or column name.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def to_variant_object(col: Column): Column = Column.fn("to_variant_object", col)
 
   /**
    * Check if a variant value is a variant null. Returns true if and only if the input is a

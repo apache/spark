@@ -141,6 +141,7 @@ HAVING	false
 HOUR	false
 HOURS	false
 IDENTIFIER	false
+IDENTITY	false
 IF	false
 IGNORE	false
 ILIKE	false
@@ -148,6 +149,7 @@ IMMEDIATE	false
 IMPORT	false
 IN	false
 INCLUDE	false
+INCREMENT	false
 INDEX	false
 INDEXES	false
 INNER	false
@@ -251,6 +253,7 @@ REFERENCES	false
 REFRESH	false
 RENAME	false
 REPAIR	false
+REPEAT	false
 REPEATABLE	false
 REPLACE	false
 RESET	false
@@ -336,6 +339,7 @@ UNKNOWN	false
 UNLOCK	false
 UNPIVOT	false
 UNSET	false
+UNTIL	false
 UPDATE	false
 USE	false
 USER	false

@@ -41,7 +41,7 @@ import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, Spar
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.{CatalogImpl, SessionCleaner, SqlApiConf}
+import org.apache.spark.sql.internal.{CatalogImpl, ConnectRuntimeConfig, SessionCleaner, SqlApiConf}
 import org.apache.spark.sql.internal.ColumnNodeToProtoConverter.{toExpr, toTypedExpr}
 import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.streaming.StreamingQueryManager
@@ -88,16 +88,8 @@ class SparkSession private[sql] (
     client.hijackServerSideSessionIdForTesting(suffix)
   }
 
-  /**
-   * Runtime configuration interface for Spark.
-   *
-   * This is the interface through which the user can get and set all Spark configurations that
-   * are relevant to Spark SQL. When getting the value of a config, his defaults to the value set
-   * in server, if any.
-   *
-   * @since 3.4.0
-   */
-  val conf: RuntimeConfig = new RuntimeConfig(client)
+  /** @inheritdoc */
+  val conf: RuntimeConfig = new ConnectRuntimeConfig(client)
 
   /** @inheritdoc */
   @transient
@@ -428,7 +420,7 @@ class SparkSession private[sql] (
    *
    * @since 3.5.0
    */
-  def interruptAll(): Seq[String] = {
+  override def interruptAll(): Seq[String] = {
     client.interruptAll().getInterruptedIdsList.asScala.toSeq
   }
 
@@ -441,7 +433,7 @@ class SparkSession private[sql] (
    *
    * @since 3.5.0
    */
-  def interruptTag(tag: String): Seq[String] = {
+  override def interruptTag(tag: String): Seq[String] = {
     client.interruptTag(tag).getInterruptedIdsList.asScala.toSeq
   }
 
@@ -454,7 +446,7 @@ class SparkSession private[sql] (
    *
    * @since 3.5.0
    */
-  def interruptOperation(operationId: String): Seq[String] = {
+  override def interruptOperation(operationId: String): Seq[String] = {
     client.interruptOperation(operationId).getInterruptedIdsList.asScala.toSeq
   }
 
@@ -485,65 +477,17 @@ class SparkSession private[sql] (
     SparkSession.onSessionClose(this)
   }
 
-  /**
-   * Add a tag to be assigned to all the operations started by this thread in this session.
-   *
-   * Often, a unit of execution in an application consists of multiple Spark executions.
-   * Application programmers can use this method to group all those jobs together and give a group
-   * tag. The application can use `org.apache.spark.sql.SparkSession.interruptTag` to cancel all
-   * running running executions with this tag. For example:
-   * {{{
-   * // In the main thread:
-   * spark.addTag("myjobs")
-   * spark.range(10).map(i => { Thread.sleep(10); i }).collect()
-   *
-   * // In a separate thread:
-   * spark.interruptTag("myjobs")
-   * }}}
-   *
-   * There may be multiple tags present at the same time, so different parts of application may
-   * use different tags to perform cancellation at different levels of granularity.
-   *
-   * @param tag
-   *   The tag to be added. Cannot contain ',' (comma) character or be an empty string.
-   *
-   * @since 3.5.0
-   */
-  def addTag(tag: String): Unit = {
-    client.addTag(tag)
-  }
+  /** @inheritdoc */
+  override def addTag(tag: String): Unit = client.addTag(tag)
 
-  /**
-   * Remove a tag previously added to be assigned to all the operations started by this thread in
-   * this session. Noop if such a tag was not added earlier.
-   *
-   * @param tag
-   *   The tag to be removed. Cannot contain ',' (comma) character or be an empty string.
-   *
-   * @since 3.5.0
-   */
-  def removeTag(tag: String): Unit = {
-    client.removeTag(tag)
-  }
+  /** @inheritdoc */
+  override def removeTag(tag: String): Unit = client.removeTag(tag)
 
-  /**
-   * Get the tags that are currently set to be assigned to all the operations started by this
-   * thread.
-   *
-   * @since 3.5.0
-   */
-  def getTags(): Set[String] = {
-    client.getTags()
-  }
+  /** @inheritdoc */
+  override def getTags(): Set[String] = client.getTags()
 
-  /**
-   * Clear the current thread's operation tags.
-   *
-   * @since 3.5.0
-   */
-  def clearTags(): Unit = {
-    client.clearTags()
-  }
+  /** @inheritdoc */
+  override def clearTags(): Unit = client.clearTags()
 
   /**
    * We cannot deserialize a connect [[SparkSession]] because of a class clash on the server side.

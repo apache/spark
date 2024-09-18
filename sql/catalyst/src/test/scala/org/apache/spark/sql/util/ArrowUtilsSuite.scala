@@ -54,13 +54,13 @@ class ArrowUtilsSuite extends SparkFunSuite {
       exception = intercept[SparkException] {
         roundtrip(TimestampType)
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "Missing timezoneId where it is mandatory."))
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
         ArrowUtils.fromArrowType(new ArrowType.Int(8, false))
       },
-      errorClass = "UNSUPPORTED_ARROWTYPE",
+      condition = "UNSUPPORTED_ARROWTYPE",
       parameters = Map("typeName" -> "Int(8, false)")
     )
   }

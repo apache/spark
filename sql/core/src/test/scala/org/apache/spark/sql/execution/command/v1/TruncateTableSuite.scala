@@ -201,7 +201,7 @@ class TruncateTableSuite extends TruncateTableSuiteBase with CommandSuiteBase {
           exception = intercept[AnalysisException] {
             sql(s"TRUNCATE TABLE $t")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1266",
+          condition = "_LEGACY_ERROR_TEMP_1266",
           parameters = Map("tableIdentWithDB" -> "`spark_catalog`.`ns`.`tbl`")
         )
       }

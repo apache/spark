@@ -101,7 +101,7 @@ class GroupedData:
 
     def __repr__(self) -> str:
         # the expressions are not resolved here,
-        # so the string representation can be different from vanilla PySpark.
+        # so the string representation can be different from classic PySpark.
         grouping_str = ", ".join(str(e._expr) for e in self._grouping_cols)
         grouping_str = f"grouping expressions: [{grouping_str}]"
 

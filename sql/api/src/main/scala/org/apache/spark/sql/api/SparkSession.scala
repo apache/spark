@@ -26,7 +26,7 @@ import _root_.java.net.URI
 import _root_.java.util
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
-import org.apache.spark.sql.{Encoder, Row}
+import org.apache.spark.sql.{Encoder, Row, RuntimeConfig}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -57,6 +57,17 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    * @since 2.0.0
    */
   def version: String
+
+  /**
+   * Runtime configuration interface for Spark.
+   *
+   * This is the interface through which the user can get and set all Spark and Hadoop
+   * configurations that are relevant to Spark SQL. When getting the value of a config, this
+   * defaults to the value set in the underlying `SparkContext`, if any.
+   *
+   * @since 2.0.0
+   */
+  def conf: RuntimeConfig
 
   /**
    * A collection of methods for registering user-defined functions (UDF).
@@ -389,6 +400,98 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
   @Experimental
   @scala.annotation.varargs
   def addArtifacts(uri: URI*): Unit
+
+  /**
+   * Add a tag to be assigned to all the operations started by this thread in this session.
+   *
+   * Often, a unit of execution in an application consists of multiple Spark executions.
+   * Application programmers can use this method to group all those jobs together and give a group
+   * tag. The application can use `org.apache.spark.sql.SparkSession.interruptTag` to cancel all
+   * running executions with this tag. For example:
+   * {{{
+   * // In the main thread:
+   * spark.addTag("myjobs")
+   * spark.range(10).map(i => { Thread.sleep(10); i }).collect()
+   *
+   * // In a separate thread:
+   * spark.interruptTag("myjobs")
+   * }}}
+   *
+   * There may be multiple tags present at the same time, so different parts of application may
+   * use different tags to perform cancellation at different levels of granularity.
+   *
+   * @param tag
+   *   The tag to be added. Cannot contain ',' (comma) character or be an empty string.
+   *
+   * @since 4.0.0
+   */
+  def addTag(tag: String): Unit
+
+  /**
+   * Remove a tag previously added to be assigned to all the operations started by this thread in
+   * this session. Noop if such a tag was not added earlier.
+   *
+   * @param tag
+   *   The tag to be removed. Cannot contain ',' (comma) character or be an empty string.
+   *
+   * @since 4.0.0
+   */
+  def removeTag(tag: String): Unit
+
+  /**
+   * Get the operation tags that are currently set to be assigned to all the operations started by
+   * this thread in this session.
+   *
+   * @since 4.0.0
+   */
+  def getTags(): Set[String]
+
+  /**
+   * Clear the current thread's operation tags.
+   *
+   * @since 4.0.0
+   */
+  def clearTags(): Unit
+
+  /**
+   * Request to interrupt all currently running operations of this session.
+   *
+   * @note
+   *   This method will wait up to 60 seconds for the interruption request to be issued.
+   *
+   * @return
+   *   Sequence of operation IDs requested to be interrupted.
+   *
+   * @since 4.0.0
+   */
+  def interruptAll(): Seq[String]
+
+  /**
+   * Request to interrupt all currently running operations of this session with the given job tag.
+   *
+   * @note
+   *   This method will wait up to 60 seconds for the interruption request to be issued.
+   *
+   * @return
+   *   Sequence of operation IDs requested to be interrupted.
+   *
+   * @since 4.0.0
+   */
+  def interruptTag(tag: String): Seq[String]
+
+  /**
+   * Request to interrupt an operation of this session, given its operation ID.
+   *
+   * @note
+   *   This method will wait up to 60 seconds for the interruption request to be issued.
+   *
+   * @return
+   *   The operation ID requested to be interrupted, as a single-element sequence, or an empty
+   *   sequence if the operation is not started by this session.
+   *
+   * @since 4.0.0
+   */
+  def interruptOperation(operationId: String): Seq[String]
 
   /**
    * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a

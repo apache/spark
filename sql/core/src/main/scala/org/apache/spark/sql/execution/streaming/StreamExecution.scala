@@ -371,13 +371,7 @@ abstract class StreamExecution(
           messageParameters = Map(
             "id" -> id.toString,
             "runId" -> runId.toString,
-            "message" -> message,
-            "queryDebugString" -> toDebugString(includeLogicalPlan = isInitialized),
-            "startOffset" -> getLatestExecutionContext().startOffsets.toOffsetSeq(
-              sources.toSeq, getLatestExecutionContext().offsetSeqMetadata).toString,
-            "endOffset" -> getLatestExecutionContext().endOffsets.toOffsetSeq(
-              sources.toSeq, getLatestExecutionContext().offsetSeqMetadata).toString
-          ))
+            "message" -> message))
 
         errorClassOpt = e match {
           case t: SparkThrowable => Option(t.getErrorClass)
@@ -489,7 +483,7 @@ abstract class StreamExecution(
   @throws[TimeoutException]
   protected def interruptAndAwaitExecutionThreadTermination(): Unit = {
     val timeout = math.max(
-      sparkSession.conf.get(SQLConf.STREAMING_STOP_TIMEOUT), 0)
+      sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_STOP_TIMEOUT), 0)
     queryExecutionThread.interrupt()
     queryExecutionThread.join(timeout)
     if (queryExecutionThread.isAlive) {

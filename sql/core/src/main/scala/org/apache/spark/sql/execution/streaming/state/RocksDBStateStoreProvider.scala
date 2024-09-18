@@ -567,7 +567,7 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     // if the column family is not internal and uses reserved characters, throw an exception
-    if (!isInternal && colFamilyName.charAt(0) == '_') {
+    if (!isInternal && colFamilyName.charAt(0) == '$') {
       throw StateStoreErrors.cannotCreateColumnFamilyWithReservedChars(colFamilyName)
     }
   }

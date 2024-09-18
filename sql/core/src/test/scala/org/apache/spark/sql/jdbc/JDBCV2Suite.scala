@@ -399,7 +399,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       exception = intercept[AnalysisException] {
         df.collect()
       },
-      errorClass = "NULL_DATA_SOURCE_OPTION",
+      condition = "NULL_DATA_SOURCE_OPTION",
       parameters = Map(
         "option" -> "pushDownOffset")
     )
@@ -2943,7 +2943,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         exception = intercept[AnalysisException] {
           checkAnswer(sql("SELECT h2.test.my_avg2(id) FROM h2.test.people"), Seq.empty)
         },
-        errorClass = "UNRESOLVED_ROUTINE",
+        condition = "UNRESOLVED_ROUTINE",
         parameters = Map(
           "routineName" -> "`h2`.`test`.`my_avg2`",
           "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`.`default`]"),
@@ -2955,7 +2955,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         exception = intercept[AnalysisException] {
           checkAnswer(sql("SELECT h2.my_avg2(id) FROM h2.test.people"), Seq.empty)
         },
-        errorClass = "UNRESOLVED_ROUTINE",
+        condition = "UNRESOLVED_ROUTINE",
         parameters = Map(
           "routineName" -> "`h2`.`my_avg2`",
           "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`.`default`]"),
@@ -3038,7 +3038,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       exception = intercept[IndexAlreadyExistsException] {
         sql(s"CREATE INDEX people_index ON TABLE h2.test.people (id)")
       },
-      errorClass = "INDEX_ALREADY_EXISTS",
+      condition = "INDEX_ALREADY_EXISTS",
       parameters = Map(
         "indexName" -> "`people_index`",
         "tableName" -> "`test`.`people`"
@@ -3056,7 +3056,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       exception = intercept[NoSuchIndexException] {
         sql(s"DROP INDEX people_index ON TABLE h2.test.people")
       },
-      errorClass = "INDEX_NOT_FOUND",
+      condition = "INDEX_NOT_FOUND",
       parameters = Map("indexName" -> "`people_index`", "tableName" -> "`test`.`people`")
     )
     assert(jdbcTable.indexExists("people_index") == false)
@@ -3073,7 +3073,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         exception = intercept[AnalysisException] {
           sql("SELECT * FROM h2.test.people where h2.db_name.schema_name.function_name()")
         },
-        errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+        condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
         sqlState = "42601",
         parameters = Map("identifier" -> "`db_name`.`schema_name`.`function_name`")
       )

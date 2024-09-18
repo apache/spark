@@ -40,7 +40,7 @@ trait AlterTableDropColumnSuiteBase extends command.AlterTableDropColumnSuiteBas
         exception = intercept[AnalysisException](
           sql(s"ALTER TABLE $t DROP COLUMN id")
         ),
-        errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
         parameters = Map(
           "tableName" -> toSQLId(t),
           "operation" -> "DROP COLUMN"
