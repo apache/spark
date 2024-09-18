@@ -158,7 +158,8 @@ class CatalogManager(
 }
 
 private[sql] object CatalogManager {
-  val SESSION_CATALOG_NAME: String = "spark_catalog"
+  val SESSION_CATALOG_NAME: String =
+    System.getProperty("spark.session.catalog.name", "spark_catalog")
   val SYSTEM_CATALOG_NAME = "system"
   val SESSION_NAMESPACE = "session"
 }
