@@ -183,6 +183,17 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener$QueryStartedEvent"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener$QueryTerminatedEvent"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryStatus"),
+
+    // SPARK-49415: Shared SQLImplicits.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DatasetHolder"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DatasetHolder$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.LowPrioritySQLImplicits"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.SQLContext$implicits$"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.SQLImplicits"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.SQLImplicits.StringToColumn"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.SQLImplicits.this"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLImplicits$StringToColumn"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.SparkSession$implicits$"),
   )
 
   // Default exclude rules

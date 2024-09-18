@@ -239,8 +239,7 @@ private[sql] trait SQLTestUtilsBase
    * This is because we create the `SparkSession` immediately before the first test is run,
    * but the implicits import is needed in the constructor.
    */
-  protected object testImplicits extends SQLImplicits {
-    protected override def session: SparkSession = self.spark
+  protected object testImplicits extends SQLImplicits(self.spark) {
     implicit def toRichColumn(c: Column): SparkSession#RichColumn = session.RichColumn(c)
   }
 
