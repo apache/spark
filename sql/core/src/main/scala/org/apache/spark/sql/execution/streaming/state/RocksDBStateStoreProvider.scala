@@ -705,6 +705,11 @@ class RocksDBStateStoreChangeDataReader(
 
   override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
     if (colFamilyIdBytesOpt.isDefined) {
+      // If we are reading records for a particular column family, the corresponding vcf id
+      // will be encoded in the key byte array. We need to extract that and compare for the
+      // expected column family id. If it matches, we return the record. If not, we move to
+      // the next record. Note that this has be handled across multiple changelog files and we
+      // rely on the currentChangelogReader to move to the next changelog file when needed.
       var currRecord: (RecordType.Value, Array[Byte], Array[Byte]) = null
       var currEncoder: (RocksDBKeyStateEncoder, RocksDBValueStateEncoder) = null
 
