@@ -208,26 +208,4 @@ class PruneFiltersSuite extends PlanTest {
       comparePlans(optimized, correctAnswer)
     }
   }
-
-  test("Streaming relation is not lost under null filter") {
-    withSQLConf(
-        SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key -> "true") {
-      val streamingRelation =
-        LocalRelation(Seq($"a".int, $"b".int, $"c".int), Nil, isStreaming = true)
-      val originalQuery = streamingRelation.where(10 < null).select($"a").analyze
-      val optimized = Optimize.execute(originalQuery)
-      val correctAnswer = streamingRelation.select($"a").analyze
-      comparePlans(optimized, correctAnswer)
-    }
-
-    withSQLConf(
-        SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key -> "false") {
-      val streamingRelation =
-        LocalRelation(Seq($"a".int, $"b".int, $"c".int), Nil, isStreaming = true)
-      val originalQuery = streamingRelation.where(10 < null).select($"a").analyze
-      val optimized = Optimize.execute(originalQuery)
-      val correctAnswer = streamingRelation.where(10 < null).select($"a").analyze
-      comparePlans(optimized, correctAnswer)
-    }
-  }
 }
