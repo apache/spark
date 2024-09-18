@@ -120,7 +120,6 @@ import org.apache.spark.util.SparkClassUtils
  */
 @Stable
 abstract class Dataset[T] extends Serializable {
-  // TODO check signatures for the implementations!
   type DS[U] <: Dataset[U]
 
   def sparkSession: SparkSession

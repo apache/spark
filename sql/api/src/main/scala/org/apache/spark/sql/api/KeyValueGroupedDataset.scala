@@ -31,7 +31,6 @@ import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode
  * @since 2.0.0
  */
 abstract class KeyValueGroupedDataset[K, V] extends Serializable {
-  // TODO check signatures in the implementation
   type KVDS[KL, VL] <: KeyValueGroupedDataset[KL, VL]
 
   /**
