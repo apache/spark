@@ -449,7 +449,7 @@ case class BroadcastNestedLoopJoinExec(
     (joinType, buildSide) match {
       case (_: InnerLike, _) => codegenInner(ctx, input)
       case (LeftOuter, BuildRight) | (RightOuter, BuildLeft) => codegenOuter(ctx, input)
-      case (LeftSingle, BuildRight) => codegenOuter(ctx, input, single = true)
+      case (LeftSingle, BuildRight) => codegenOuter(ctx, input)
       case (LeftSemi, BuildRight) => codegenLeftExistence(ctx, input, exists = true)
       case (LeftAnti, BuildRight) => codegenLeftExistence(ctx, input, exists = false)
       case _ =>
@@ -497,8 +497,7 @@ case class BroadcastNestedLoopJoinExec(
 
   private def codegenOuter(
       ctx: CodegenContext,
-      input: Seq[ExprCode],
-      single: Boolean = false): String = {
+      input: Seq[ExprCode]): String = {
     val (buildRowArray, buildRowArrayTerm) = prepareBroadcast(ctx)
     val (buildRow, checkCondition, _) = getJoinCondition(ctx, input, streamed, broadcast)
     val buildVars = genOneSideJoinVars(ctx, buildRow, broadcast, setDefaultValue = true)
@@ -520,13 +519,13 @@ case class BroadcastNestedLoopJoinExec(
          |${consume(ctx, resultVars)}
        """.stripMargin
     } else {
-      val initSingleCounter = if (single) {
+      val initSingleCounter = if (joinType == LeftSingle) {
         s"""
            |int $matchesFound = 0;""".stripMargin
       } else {
         ""
       }
-      val evaluateSingleCheck = if (single) {
+      val evaluateSingleCheck = if (joinType == LeftSingle) {
         s"""
            |$matchesFound += 1;
            |if ($matchesFound > 1) {

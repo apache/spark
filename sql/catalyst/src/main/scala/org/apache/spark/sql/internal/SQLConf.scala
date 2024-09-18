@@ -5061,8 +5061,8 @@ object SQLConf {
   val SCALAR_SUBQUERY_USE_SINGLE_JOIN =
     buildConf("spark.sql.optimizer.scalarSubqueryUseSingleJoin")
       .internal()
-      .doc("When set to true, allow scalar subqueries with group-by on a column that also " +
-        " has an equality filter with a constant (SPARK-48557).")
+      .doc("When set to true, use LEFT_SINGLE join for correlated scalar subqueries where " +
+        "optimizer can't prove that only 1 row will be returned")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
