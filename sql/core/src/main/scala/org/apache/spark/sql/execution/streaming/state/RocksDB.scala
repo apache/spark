@@ -646,8 +646,11 @@ class RocksDB(
           // is enabled.
           if (shouldForceSnapshot.get()) {
             uploadSnapshot()
-            changelogWriter.foreach(_.abort())
-            changelogWriter = None
+            try {
+              changelogWriter.foreach(_.abort())
+            } finally {
+              changelogWriter = None
+            }
           } else {
             try {
               assert(changelogWriter.isDefined)
