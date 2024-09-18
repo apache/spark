@@ -20,10 +20,11 @@ package org.apache.spark.sql
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.analysis.{EliminateEventTimeWatermark, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, ScopedExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
+import org.apache.spark.sql.internal.ExpressionColumnNode
 import org.apache.spark.sql.internal.TypedAggUtils.{aggKeyColumn, withInputType}
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeMode}
 
@@ -305,7 +306,12 @@ class KeyValueGroupedDataset[K, V] private[sql](
   /** @inheritdoc */
   protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(c => encoderFor(c.encoder))
-    val namedColumns = columns.map(c => withInputType(c.named, vExprEnc, dataAttributes))
+    val namedColumns =
+      columns
+        // SPARK-42199: resolve these aggregate expressions only against dataAttributes
+        // this is to hide key column from expression resolution
+        .map(scopeTypedColumn(dataAttributes))
+        .map(c => withInputType(c.named, vExprEnc, dataAttributes))
     val keyColumn = aggKeyColumn(kExprEnc, groupingAttributes)
     val aggregate = Aggregate(groupingAttributes, keyColumn +: namedColumns, logicalPlan)
     val execution = new QueryExecution(sparkSession, aggregate)
@@ -333,6 +339,11 @@ class KeyValueGroupedDataset[K, V] private[sql](
         this.logicalPlan,
         other.logicalPlan))
   }
+
+  private def scopeTypedColumn(
+      scope: Seq[Attribute])(
+      typedCol: TypedColumn[_, _]): TypedColumn[_, _] =
+    new TypedColumn(ExpressionColumnNode(ScopedExpression(typedCol.expr, scope)), typedCol.encoder)
 
   override def toString: String = {
     val builder = new StringBuilder
