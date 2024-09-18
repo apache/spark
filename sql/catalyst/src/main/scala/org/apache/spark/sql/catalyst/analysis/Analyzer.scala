@@ -2655,20 +2655,17 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       val fields = args.zipWithIndex.map { case (arg, index) =>
         arg match {
           case NamedArgumentExpression(name, value) =>
-            val metadata = argMetadata(byName = true)
-            StructField(name, value.dataType, value.nullable, metadata)
+            StructField(name, value.dataType, value.nullable, byNameMetadata)
           case _ =>
-            val name = s"param$index"
-            val metadata = argMetadata(byName = false)
-            StructField(name, arg.dataType, arg.nullable, metadata)
+            StructField(s"param$index", arg.dataType, arg.nullable)
         }
       }
       StructType(fields)
     }
 
-    private def argMetadata(byName: Boolean): Metadata = {
+    private def byNameMetadata: Metadata = {
       new MetadataBuilder()
-        .putBoolean(ProcedureParameter.BY_NAME_METADATA_KEY, byName)
+        .putBoolean(ProcedureParameter.BY_NAME_METADATA_KEY, value = true)
         .build()
     }
 

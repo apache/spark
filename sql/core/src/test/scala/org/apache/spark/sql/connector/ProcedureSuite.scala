@@ -334,6 +334,15 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
       context = ExpectedContext(fragment = call, start = 0, stop = call.length - 1))
   }
 
+  test("save execution summary") {
+    withTable("summary") {
+      catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+      val result = sql("CALL cat.ns.sum(1, 2)")
+      result.write.saveAsTable("summary")
+      checkAnswer(spark.table("summary"), Row(3) :: Nil)
+    }
+  }
+
   object UnboundVoidProcedure extends UnboundProcedure {
     override def name: String = "void"
     override def description: String = "void procedure"

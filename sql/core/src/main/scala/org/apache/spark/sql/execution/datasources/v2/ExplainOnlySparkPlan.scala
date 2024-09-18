@@ -19,29 +19,17 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.LeafLike
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, truncatedString}
-import org.apache.spark.sql.connector.catalog.{Identifier, ProcedureCatalog}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
-import org.apache.spark.sql.connector.catalog.procedures.Procedure
 import org.apache.spark.sql.execution.SparkPlan
 
-/**
- * The physical plan of the CALL statement used in EXPLAIN.
- */
-case class CallExec(
-    catalog: ProcedureCatalog,
-    ident: Identifier,
-    procedure: Procedure,
-    args: Seq[Expression]) extends SparkPlan with LeafLike[SparkPlan] {
+case class ExplainOnlySparkPlan(toExplain: LogicalPlan) extends SparkPlan with LeafLike[SparkPlan] {
 
   override def output: Seq[Attribute] = Nil
 
   override def simpleString(maxFields: Int): String = {
-    val name = s"${quoteIfNeeded(catalog.name)}.${ident.quoted}"
-    val argsString = truncatedString(args, ", ", maxFields)
-    s"Call $name($argsString)"
+    toExplain.simpleString(maxFields)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {

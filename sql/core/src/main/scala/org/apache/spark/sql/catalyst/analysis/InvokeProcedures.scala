@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.connector.read.{LocalScan, Scan}
+import org.apache.spark.util.ArrayImplicits._
 
 class InvokeProcedures(session: SparkSession) extends Rule[LogicalPlan] {
 
@@ -41,17 +42,21 @@ class InvokeProcedures(session: SparkSession) extends Rule[LogicalPlan] {
       }
   }
 
-  private def invoke(procedure: BoundProcedure, args: Seq[Expression]): MultiResult = {
+  private def invoke(procedure: BoundProcedure, args: Seq[Expression]): LogicalPlan = {
     val input = toInternalRow(args)
     val scanIterator = procedure.call(input)
-    val relations = scanIterator.asScala.toSeq.map(toRelation)
-    MultiResult(relations)
+    val relations = scanIterator.asScala.map(toRelation).toSeq
+    relations match {
+      case Nil => LocalRelation(Nil)
+      case Seq(relation) => relation
+      case _ => MultiResult(relations)
+    }
   }
 
   private def toRelation(scan: Scan): LogicalPlan = scan match {
     case s: LocalScan =>
       val attrs = DataTypeUtils.toAttributes(s.readSchema)
-      val data = s.rows.toSeq
+      val data = s.rows.toImmutableArraySeq
       LocalRelation(attrs, data)
     case _ =>
       throw SparkException.internalError(
@@ -59,6 +64,7 @@ class InvokeProcedures(session: SparkSession) extends Rule[LogicalPlan] {
   }
 
   private def toInternalRow(args: Seq[Expression]): InternalRow = {
+    require(args.forall(_.foldable), "args must be foldable")
     val values = args.map(_.eval()).toArray
     new GenericInternalRow(values)
   }

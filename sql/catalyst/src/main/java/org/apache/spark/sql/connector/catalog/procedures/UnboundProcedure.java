@@ -40,7 +40,7 @@ public interface UnboundProcedure extends Procedure {
    * by name, its metadata will indicate this with {@link ProcedureParameter#BY_NAME_METADATA_KEY}
    * set to {@code true}. In such cases, the field name will match the name of the target procedure
    * parameter. If the argument is not named, {@link ProcedureParameter#BY_NAME_METADATA_KEY} will
-   * be set to {@code false} and the name will be assigned randomly.
+   * not be set and the name will be assigned randomly.
    *
    * @param inputType the input types to bind to
    * @return the bound procedure that is most suitable for the given input types
