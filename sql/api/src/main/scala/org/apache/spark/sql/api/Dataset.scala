@@ -1419,8 +1419,8 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
   def reduce(func: ReduceFunction[T]): T = reduce(ToScalaUDF(func))
 
   /**
-   * (Scala-specific)
-   * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key `func`.
+   * (Scala-specific) Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given
+   * key `func`.
    *
    * @group typedrel
    * @since 2.0.0
@@ -1428,8 +1428,8 @@ abstract class Dataset[T, DS[U] <: Dataset[U, DS]] extends Serializable {
   def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T, DS]
 
   /**
-   * (Java-specific)
-   * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key `func`.
+   * (Java-specific) Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given
+   * key `func`.
    *
    * @group typedrel
    * @since 2.0.0
