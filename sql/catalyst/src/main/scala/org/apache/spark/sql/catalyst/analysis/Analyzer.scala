@@ -2652,13 +2652,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     }
 
     private def extractInputType(args: Seq[Expression]): StructType = {
-      val fields = args.zipWithIndex.map { case (arg, index) =>
-        arg match {
-          case NamedArgumentExpression(name, value) =>
-            StructField(name, value.dataType, value.nullable, byNameMetadata)
-          case _ =>
-            StructField(s"param$index", arg.dataType, arg.nullable)
-        }
+      val fields = args.zipWithIndex.map {
+        case (NamedArgumentExpression(name, value), _) =>
+          StructField(name, value.dataType, value.nullable, byNameMetadata)
+        case (arg, index) =>
+          StructField(s"param$index", arg.dataType, arg.nullable)
       }
       StructType(fields)
     }
