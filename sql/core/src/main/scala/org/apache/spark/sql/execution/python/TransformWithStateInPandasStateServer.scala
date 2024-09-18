@@ -32,8 +32,8 @@ import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateVariableRequest, ValueStateCall}
-import org.apache.spark.sql.streaming.{ListState, TTLConfig, ValueState}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateVariableRequest, ValueStateCall}
+import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 
@@ -60,7 +60,8 @@ class TransformWithStateInPandasStateServer(
     deserializerForTest: TransformWithStateInPandasDeserializer = null,
     arrowStreamWriterForTest: BaseStreamingArrowWriter = null,
     listStatesMapForTest : mutable.HashMap[String, ListStateInfo] = null,
-    listStateIteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null)
+    listStateIteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null,
+    mapStatesMapForTest : mutable.HashMap[String, MapStateInfo] = null)
   extends Runnable with Logging {
   private val keyRowDeserializer: ExpressionEncoder.Deserializer[Row] =
     ExpressionEncoder(groupingKeySchema).resolveAndBind().createDeserializer()
@@ -86,6 +87,13 @@ class TransformWithStateInPandasStateServer(
     listStateIteratorMapForTest
   } else {
     new mutable.HashMap[String, Iterator[Row]]()
+  }
+  // A map to store the map state name -> (map state, schema, map state row deserializer,
+  // map state row serializer) mapping.
+  private val mapStates = if (mapStatesMapForTest != null) {
+    mapStatesMapForTest
+  } else {
+    new mutable.HashMap[String, MapStateInfo]()
   }
 
   def run(): Unit = {
@@ -190,6 +198,11 @@ class TransformWithStateInPandasStateServer(
         val stateName = message.getGetListState.getStateName
         val schema = message.getGetListState.getSchema
         initializeStateVariable(stateName, schema, "listState", None)
+      case StatefulProcessorCall.MethodCase.GETMAPSTATE =>
+        val stateName = message.getGetMapState.getStateName
+        val keySchema = message.getGetMapState.getSchema
+        val valueSchema = message.getGetMapState.getMapStateValueSchema
+        initializeStateVariable(stateName, keySchema, "listState", None)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
     }
@@ -330,6 +343,63 @@ class TransformWithStateInPandasStateServer(
     }
   }
 
+  private[sql] def handleMapStateRequest(message: MapStateCall): Unit = {
+    val stateName = message.getStateName
+    if (!listStates.contains(stateName)) {
+      logWarning(log"Map state ${MDC(LogKeys.STATE_NAME, stateName)} is not initialized.")
+      sendResponse(1, s"Map state $stateName is not initialized.")
+      return
+    }
+    val mapStateInfo = mapStates(stateName)
+    message.getMethodCase match {
+      case MapStateCall.MethodCase.EXISTS =>
+        if (mapStateInfo.mapState.exists()) {
+          sendResponse(0)
+        } else {
+          // Send status code 2 to indicate that the list state doesn't have a value yet.
+          sendResponse(2, s"state $stateName doesn't exist")
+        }
+      case MapStateCall.MethodCase.GETVALUE =>
+        val keyBytes = message.getContainsKey.getKey.toByteArray
+        val keyRow = PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema,
+          mapStateInfo.keyDeserializer)
+        val value = mapStateInfo.mapState.getValue(keyRow)
+        if (value != null) {
+          val valueBytes = PythonSQLUtils.toPyRow(value)
+          val byteString = ByteString.copyFrom(valueBytes)
+          sendResponse(0, null, byteString)
+        } else {
+          logWarning(log"Map state ${MDC(LogKeys.STATE_NAME, stateName)} doesn't contain" +
+            log" key ${MDC(LogKeys.KEY, keyRow.toString)}.")
+          sendResponse(0)
+        }
+      case MapStateCall.MethodCase.CONTAINSKEY =>
+        val keyBytes = message.getContainsKey.getKey.toByteArray
+        val keyRow = PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema,
+          mapStateInfo.keyDeserializer)
+        if (mapStateInfo.mapState.containsKey(keyRow)) {
+          sendResponse(0)
+        } else {
+          sendResponse(2, s"Map state $stateName doesn't contain key ${keyRow.toString()}")
+        }
+      case MapStateCall.MethodCase.UPDATEVALUE =>
+        val keyBytes = message.getUpdateValue.getKey.toByteArray
+        val keyRow = PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema,
+          mapStateInfo.keyDeserializer)
+        val valueBytes = message.getUpdateValue.getValue.toByteArray
+        val valueRow = PythonSQLUtils.toJVMRow(valueBytes, mapStateInfo.valueSchema,
+          mapStateInfo.valueDeserializer)
+        mapStateInfo.mapState.updateValue(keyRow, valueRow)
+        sendResponse(0)
+      case MapStateCall.MethodCase.ITERATOR =>
+        // TODO: add implementation
+        val iterator = mapStateInfo.mapState.iterator()
+        sendResponse(0)
+      case _ =>
+        throw new IllegalArgumentException("Invalid method call")
+    }
+  }
+
   private def sendResponse(
       status: Int,
       errorMessage: String = null,
@@ -352,7 +422,8 @@ class TransformWithStateInPandasStateServer(
     stateName: String,
     schemaString: String,
     stateVariable: String,
-    ttlDurationMs: Option[Int]): Unit = {
+    ttlDurationMs: Option[Int],
+    mapStateValueSchemaString: String = null): Unit = {
     val schema = StructType.fromString(schemaString)
     val expressionEncoder = ExpressionEncoder(schema).resolveAndBind()
     stateVariable match {
@@ -378,6 +449,19 @@ class TransformWithStateInPandasStateServer(
         } else {
           sendResponse(1, s"List state $stateName already exists")
         }
+        case "mapState" => if (!mapStates.contains(stateName)) {
+          val valueSchema = StructType.fromString(mapStateValueSchemaString)
+          val valueExpressionEncoder = ExpressionEncoder(valueSchema).resolveAndBind()
+          mapStates.put(stateName,
+            MapStateInfo(statefulProcessorHandle.getMapState[Row, Row](stateName,
+              Encoders.row(schema), Encoders.row(valueSchema)), schema, valueSchema,
+              expressionEncoder.createDeserializer(), expressionEncoder.createSerializer(),
+              valueExpressionEncoder.createDeserializer(),
+              valueExpressionEncoder.createSerializer()))
+          sendResponse(0)
+        } else {
+          sendResponse(1, s"Map state $stateName already exists")
+        }
     }
   }
 }
@@ -398,3 +482,15 @@ case class ListStateInfo(
     schema: StructType,
     deserializer: ExpressionEncoder.Deserializer[Row],
     serializer: ExpressionEncoder.Serializer[Row])
+
+/**
+ * Case class to store the information of a map state.
+ */
+case class MapStateInfo(
+    mapState: MapState[Row, Row],
+    keySchema: StructType,
+    valueSchema: StructType,
+    keyDeserializer: ExpressionEncoder.Deserializer[Row],
+    keySerializer: ExpressionEncoder.Serializer[Row],
+    valueDeserializer: ExpressionEncoder.Deserializer[Row],
+    valueSerializer: ExpressionEncoder.Serializer[Row])
