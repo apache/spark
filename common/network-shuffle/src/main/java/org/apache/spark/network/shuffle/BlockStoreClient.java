@@ -24,13 +24,14 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 import com.codahale.metrics.MetricSet;
 import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.Uninterruptibles;
 
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
@@ -53,9 +54,8 @@ import org.apache.spark.network.util.TransportConf;
 public abstract class BlockStoreClient implements Closeable {
   protected final SparkLogger logger = SparkLoggerFactory.getLogger(this.getClass());
 
-  private static final ScheduledExecutorService scheduledExecutor =
-          Executors.newSingleThreadScheduledExecutor(
-                  NettyUtils.createThreadFactory("Block Store Client Retry"));
+  private static final ExecutorService executorService = Executors.newCachedThreadPool(
+          NettyUtils.createThreadFactory("Block Store Client Retry"));
 
   protected volatile TransportClientFactory clientFactory;
   protected String appId;
@@ -254,9 +254,11 @@ public abstract class BlockStoreClient implements Closeable {
                         MDC.of(LogKeys.NUM_RETRY$.MODULE$, finalRetryCount),
                         MDC.of(LogKeys.MAX_ATTEMPTS$.MODULE$, maxRetries),
                         MDC.of(LogKeys.RETRY_WAIT_TIME$.MODULE$, delayMs));
-                scheduledExecutor.schedule(() ->
+                executorService.execute(() ->{
+                        Uninterruptibles.sleepUninterruptibly(delayMs, TimeUnit.MILLISECONDS);
                         retry(finalRetryCount, finalSaslRetryCount, maxRetries, enableSaslRetries,
-                        delayMs, action, future), delayMs, TimeUnit.MILLISECONDS);
+                        delayMs, action, future);
+                });
               }
               return null;
             });
