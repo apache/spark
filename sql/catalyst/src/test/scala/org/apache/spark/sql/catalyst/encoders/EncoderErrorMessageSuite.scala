@@ -56,7 +56,6 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
     checkError(
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable1]()),
-
       condition = ExecutionErrors.ENCODER_NOT_FOUND_ERROR,
       parameters = Map(
         ExecutionErrors.TYPE_NAME -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
@@ -75,7 +74,6 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
     checkError(
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable3]()),
-
       condition = ExecutionErrors.ENCODER_NOT_FOUND_ERROR,
       parameters = Map(
         ExecutionErrors.TYPE_NAME -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",

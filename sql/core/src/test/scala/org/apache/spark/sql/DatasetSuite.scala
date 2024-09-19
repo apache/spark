@@ -55,7 +55,6 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
-
 case class TestDataPoint(x: Int, y: Double, s: String, t: TestDataPoint2)
 case class TestDataPoint2(x: Int, s: String)
 
@@ -2795,7 +2794,7 @@ class DatasetSuite extends QueryTest
       msg
     })
     validateParamBeanDataset(Encoders.bean(classOf[MessageWrapper[String]]),
-      data, mutable.Buffer(data : _*),
+      data, mutable.Buffer(data: _*),
       StructType(Seq(StructField("message", BinaryType, true)))
     )
   }
@@ -2804,13 +2803,11 @@ class DatasetSuite extends QueryTest
     " Serializable class") {
     // just create encoder
     Encoders.bean(classOf[BigDecimalMessageWrapper[_]])
-
     val data = Seq(2d, 8d).map(doub => {
       val bean = new BigDecimalMessageWrapper[DerivedBigDecimalExtender]()
       bean.setMessage(new DerivedBigDecimalExtender(doub))
       bean
     })
-
     validateParamBeanDataset(
       Encoders.bean(classOf[BigDecimalMessageWrapper[DerivedBigDecimalExtender]]),
       data, mutable.Buffer(data: _*),
@@ -2832,7 +2829,6 @@ class DatasetSuite extends QueryTest
       bean.setMessage(new TestUDTImpl(tup._1, tup._2))
       bean
     })
-
     validateParamBeanDataset(
       Encoders.bean(classOf[UDTBean[TestUDT]]),
       data, mutable.Buffer(expectedData: _*),
@@ -2840,10 +2836,10 @@ class DatasetSuite extends QueryTest
   }
 
   private def validateParamBeanDataset[T](
-      encoder: Encoder[T],
-      data: Seq[T],
-      expectedData: mutable.Buffer[T],
-      expectedSchema: StructType): Unit = {
+                                           encoder: Encoder[T],
+                                           data: Seq[T],
+                                           expectedData: mutable.Buffer[T],
+                                           expectedSchema: StructType): Unit = {
     val ds = spark.createDataset(data)(encoder)
     val resultData = ds.collect()
     assertResult(expectedData.size)(resultData.length)
@@ -3016,6 +3012,7 @@ class MessageWrapper[T <: java.io.Serializable] extends java.io.Serializable {
   override def equals(obj: Any): Boolean = {
     obj match {
       case m: MessageWrapper[_] => m.message == this.message
+
       case _ => false
     }
   }
@@ -3053,7 +3050,7 @@ class BigDecimalExtender(doub: Double) extends java.math.BigDecimal(doub) {
   override def hashCode(): Int = super.hashCode()
 }
 
-class DerivedBigDecimalExtender (doub: Double) extends BigDecimalExtender(doub) {
+class DerivedBigDecimalExtender(doub: Double) extends BigDecimalExtender(doub) {
   override def equals(obj: Any): Boolean = {
     obj match {
       case m: DerivedBigDecimalExtender => super.equals(m.asInstanceOf[BigDecimalExtender])
@@ -3066,12 +3063,15 @@ class DerivedBigDecimalExtender (doub: Double) extends BigDecimalExtender(doub) 
 
 trait TestUDT extends Serializable {
   def intField: Int
+
   def stringField: String
 }
 
 class TestUDTImpl(var intF: Int, var stringF: String) extends TestUDT {
   def this() = this(0, "")
+
   override def intField: Int = intF
+
   override def stringField: String = stringF
 
   override def hashCode(): Int = intF.hashCode() + stringF.hashCode

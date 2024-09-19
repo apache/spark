@@ -158,17 +158,17 @@ object JavaTypeInference {
               case cls: Class[_] => cls
             }
             tv.getBounds.flatMap(getAllSuperClasses).foldLeft[(Option[AgnosticEncoder[_]],
-                Option[AgnosticEncoder[_]])](None -> None) {
-              case (r @ (Some(_), _), _) => r
+              Option[AgnosticEncoder[_]])](None -> None) {
+              case (r@(Some(_), _), _) => r
 
-              case (r @ (None, serEncoder), bound) =>
+              case (r@(None, serEncoder), bound) =>
                 Try(encoderFor(bound, seenTypeSet, typeVariables, forGenericBound = true)) match {
                   case Success(value) => (Option(value), serEncoder)
 
                   case Failure(UseSerializationEncoder(codecProvider, clazz)) =>
-                   None ->
-                     Option(TransformingEncoder(ClassTag(concreteBound.getOrElse(clazz)),
-                       BinaryEncoder, codecProvider))
+                    None ->
+                      Option(TransformingEncoder(ClassTag(concreteBound.getOrElse(clazz)),
+                        BinaryEncoder, codecProvider))
 
                   case Failure(_) => r
                 }
@@ -179,12 +179,10 @@ object JavaTypeInference {
 
               case _ => throw ExecutionErrors.cannotFindEncoderForTypeError(t.getTypeName)
             }
-
         }
 
       case pt: ParameterizedType if !forGenericBound =>
         encoderFor(pt.getRawType, seenTypeSet, JavaTypeUtils.getTypeArguments(pt).asScala.toMap)
-
 
       case c: Class[_] if !forGenericBound =>
         if (seenTypeSet.contains(c)) {
@@ -242,19 +240,17 @@ object JavaTypeInference {
         throw ExecutionErrors.cannotFindEncoderForTypeError(t.getTypeName)
     }
 
-  private def getAllSuperClasses(typee: Type): Array[Class[_]] = {
-    if (typee eq null) {
-      Array.empty
-    } else {
-      typee match {
-        case clazz: Class[_] =>
-          val currentInterfaces = clazz.getInterfaces
-          currentInterfaces ++ (clazz.getSuperclass +: currentInterfaces).flatMap(
-            clz => getAllSuperClasses(clz)) :+ clazz
+  private def getAllSuperClasses(typee: Type): Array[Class[_]] = if (typee eq null) {
+    Array.empty
+  } else {
+    typee match {
+      case clazz: Class[_] =>
+        val currentInterfaces = clazz.getInterfaces
+        currentInterfaces ++ (clazz.getSuperclass +: currentInterfaces).flatMap(
+          clz => getAllSuperClasses(clz)) :+ clazz
 
-        case tv: TypeVariable[_] => tv.getBounds.foldLeft(Array.empty[Class[_]]) {
-          case (res, bnd) => res ++ getAllSuperClasses(bnd)
-        }
+      case tv: TypeVariable[_] => tv.getBounds.foldLeft(Array.empty[Class[_]]) {
+        case (res, bnd) => res ++ getAllSuperClasses(bnd)
       }
     }
   }

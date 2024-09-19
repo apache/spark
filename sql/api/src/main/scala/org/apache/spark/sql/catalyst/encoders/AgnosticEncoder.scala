@@ -54,7 +54,6 @@ trait ToAgnosticEncoder[T] {
 }
 
 object AgnosticEncoders {
-
   def agnosticEncoderFor[T: Encoder]: AgnosticEncoder[T] = implicitly[Encoder[T]] match {
     case a: AgnosticEncoder[T] => a
     case e: ToAgnosticEncoder[T @unchecked] => e.encoder
@@ -186,10 +185,8 @@ object AgnosticEncoders {
     override def isPrimitive: Boolean = false
     override def dataType: DataType = StringType
   }
-
   case class ScalaEnumEncoder[T, E](parent: Class[T], override val clsTag: ClassTag[E])
       extends EnumEncoder[E]
-
   case class JavaEnumEncoder[E](override val clsTag: ClassTag[E]) extends EnumEncoder[E]
 
   protected abstract class LeafEncoder[E: ClassTag](override val dataType: DataType)
