@@ -92,7 +92,8 @@ object JavaTypeInference {
     case c: Class[_] if !forGenericBound && c == classOf[Array[Byte]] => BinaryEncoder
     case c: Class[_] if !forGenericBound && c == classOf[java.math.BigDecimal] =>
       DEFAULT_JAVA_DECIMAL_ENCODER
-    case c: Class[_] if !forGenericBound && c == classOf[java.math.BigInteger] => JavaBigIntEncoder
+    case c: Class[_] if !forGenericBound && c == classOf[java.math.BigInteger] =>
+      JavaBigIntEncoder
     case c: Class[_] if !forGenericBound && c == classOf[java.time.LocalDate] =>
       STRICT_LOCAL_DATE_ENCODER
     case c: Class[_] if !forGenericBound && c == classOf[java.sql.Date] => STRICT_DATE_ENCODER
@@ -152,90 +153,86 @@ object JavaTypeInference {
         case None =>
           // Concrete type unknown, check if the bounds can be used to identify a
           // UDTEncoder and if exception is thrown check if the type extends Serializable
-          val concreteBound = tv.getBounds.collectFirst {
-            case cls: Class[_] => cls
-          }
-          tv.getBounds.flatMap(getAllSuperClasses).
-            foldLeft[(Option[AgnosticEncoder[_]], Option[AgnosticEncoder[_]])](None -> None) {
-              case (r@(Some(_), _), _) => r
+          val concreteBound = tv.getBounds.collectFirst { case cls: Class[_] => cls }
+          tv.getBounds
+            .flatMap(getAllSuperClasses)
+            .foldLeft[(Option[AgnosticEncoder[_]], Option[AgnosticEncoder[_]])](None -> None) {
+              case (r @ (Some(_), _), _) => r
 
-              case (r@(None, serEncoder), bound) =>
+              case (r @ (None, serEncoder), bound) =>
                 Try(encoderFor(bound, seenTypeSet, typeVariables, forGenericBound = true)) match {
                   case Success(value) => (Option(value), serEncoder)
 
                   case Failure(UseSerializationEncoder(codecProvider, clazz)) =>
-                    None -> Option(TransformingEncoder(ClassTag(concreteBound.getOrElse(clazz)),
-                      BinaryEncoder, codecProvider))
+                    None -> Option(
+                      TransformingEncoder(
+                        ClassTag(concreteBound.getOrElse(clazz)),
+                        BinaryEncoder,
+                        codecProvider))
 
                   case Failure(_) => r
                 }
             } match {
-              case (Some(encd), _) => encd
+            case (Some(encd), _) => encd
 
-              case (None, Some(encd)) => encd
+            case (None, Some(encd)) => encd
 
-              case _ => throw ExecutionErrors.cannotFindEncoderForTypeError(t.getTypeName)
-            }
+            case _ => throw ExecutionErrors.cannotFindEncoderForTypeError(t.getTypeName)
+          }
       }
 
-      case pt: ParameterizedType if !forGenericBound =>
-        encoderFor(pt.getRawType, seenTypeSet, JavaTypeUtils.getTypeArguments(pt).asScala.toMap)
+    case pt: ParameterizedType if !forGenericBound =>
+      encoderFor(pt.getRawType, seenTypeSet, JavaTypeUtils.getTypeArguments(pt).asScala.toMap)
 
-      case c: Class[_] if !forGenericBound =>
-        if (seenTypeSet.contains(c)) {
-          throw ExecutionErrors.cannotHaveCircularReferencesInBeanClassError(c)
-        }
+    case c: Class[_] if !forGenericBound =>
+      if (seenTypeSet.contains(c)) {
+        throw ExecutionErrors.cannotHaveCircularReferencesInBeanClassError(c)
+      }
 
-        // TODO: we should only collect properties that have getter and setter. However, some
-        //  tests pass in scala case class as java bean class which doesn't have getter and
-        //  setter.
-        val properties = getJavaBeanReadableProperties(c)
-        // if the properties is empty and this is not a top level enclosing class, then we
-        // should not consider class as bean, as otherwise it will be treated as empty schema
-        // and loose the data on deser.
-        if (properties.isEmpty && seenTypeSet.nonEmpty) {
-          if (classOf[KryoSerializable].isAssignableFrom(c)) {
-            TransformingEncoder(
-              ClassTag(c),
-              BinaryEncoder,
-              KryoSerializationCodec)
-          } else if (classOf[java.io.Serializable].isAssignableFrom(c)) {
-            TransformingEncoder(
-              ClassTag(c),
-              BinaryEncoder,
-              JavaSerializationCodec)
-          } else {
-            throw ExecutionErrors.cannotFindEncoderForTypeError(t.getTypeName)
-          }
+      // TODO: we should only collect properties that have getter and setter. However, some
+      //  tests pass in scala case class as java bean class which doesn't have getter and
+      //  setter.
+      val properties = getJavaBeanReadableProperties(c)
+      // if the properties is empty and this is not a top level enclosing class, then we
+      // should not consider class as bean, as otherwise it will be treated as empty schema
+      // and loose the data on deser.
+      if (properties.isEmpty && seenTypeSet.nonEmpty) {
+        if (classOf[KryoSerializable].isAssignableFrom(c)) {
+          TransformingEncoder(ClassTag(c), BinaryEncoder, KryoSerializationCodec)
+        } else if (classOf[java.io.Serializable].isAssignableFrom(c)) {
+          TransformingEncoder(ClassTag(c), BinaryEncoder, JavaSerializationCodec)
         } else {
-          // add type variables from inheritance hierarchy of the class
-          val parentClassesTypeMap = JavaTypeUtils.getTypeArguments(c, classOf[Object]).
-            asScala.toMap
-          val classTV = parentClassesTypeMap ++ typeVariables
-          // Note that the fields are ordered by name.
-          val fields = properties.map { property =>
-            val readMethod = property.getReadMethod
-            val methodReturnType = readMethod.getGenericReturnType
-            val encoder = encoderFor(methodReturnType, seenTypeSet + c, classTV)
-            // The existence of `javax.annotation.Nonnull`, means this field is not nullable.
-            val hasNonNull = readMethod.isAnnotationPresent(classOf[Nonnull])
-            EncoderField(
-              property.getName,
-              encoder,
-              encoder.nullable && !hasNonNull,
-              Metadata.empty,
-              Option(readMethod.getName),
-              Option(property.getWriteMethod).map(_.getName))
-          }
-          // implies it cannot be assumed a BeanClass.
-          // Check if its super class or interface could be represented by an Encoder
-
-          JavaBeanEncoder(ClassTag(c), fields.toImmutableArraySeq)
+          throw ExecutionErrors.cannotFindEncoderForTypeError(t.getTypeName)
         }
+      } else {
+        // add type variables from inheritance hierarchy of the class
+        val parentClassesTypeMap =
+          JavaTypeUtils.getTypeArguments(c, classOf[Object]).asScala.toMap
+        val classTV = parentClassesTypeMap ++ typeVariables
+        // Note that the fields are ordered by name.
+        val fields = properties.map { property =>
+          val readMethod = property.getReadMethod
+          val methodReturnType = readMethod.getGenericReturnType
+          val encoder = encoderFor(methodReturnType, seenTypeSet + c, classTV)
+          // The existence of `javax.annotation.Nonnull`, means this field is not nullable.
+          val hasNonNull = readMethod.isAnnotationPresent(classOf[Nonnull])
+          EncoderField(
+            property.getName,
+            encoder,
+            encoder.nullable && !hasNonNull,
+            Metadata.empty,
+            Option(readMethod.getName),
+            Option(property.getWriteMethod).map(_.getName))
+        }
+        // implies it cannot be assumed a BeanClass.
+        // Check if its super class or interface could be represented by an Encoder
 
-      case t =>
-        throw ExecutionErrors.cannotFindEncoderForTypeError(t.getTypeName)
-    }
+        JavaBeanEncoder(ClassTag(c), fields.toImmutableArraySeq)
+      }
+
+    case t =>
+      throw ExecutionErrors.cannotFindEncoderForTypeError(t.getTypeName)
+  }
 
   private def getAllSuperClasses(typee: Type): Array[Class[_]] = if (typee eq null) {
     Array.empty
@@ -243,12 +240,13 @@ object JavaTypeInference {
     typee match {
       case clazz: Class[_] =>
         val currentInterfaces = clazz.getInterfaces
-        currentInterfaces ++ (clazz.getSuperclass +: currentInterfaces).flatMap(
-          clz => getAllSuperClasses(clz)) :+ clazz
+        currentInterfaces ++ (clazz.getSuperclass +: currentInterfaces).flatMap(clz =>
+          getAllSuperClasses(clz)) :+ clazz
 
-      case tv: TypeVariable[_] => tv.getBounds.foldLeft(Array.empty[Class[_]]) {
-        case (res, bnd) => res ++ getAllSuperClasses(bnd)
-      }
+      case tv: TypeVariable[_] =>
+        tv.getBounds.foldLeft(Array.empty[Class[_]]) { case (res, bnd) =>
+          res ++ getAllSuperClasses(bnd)
+        }
     }
   }
 
@@ -263,16 +261,16 @@ object JavaTypeInference {
   object UseSerializationEncoder {
     def unapply(th: Throwable): Option[(() => Codec[Any, Array[Byte]], Class[_])] = th match {
       case s: SparkUnsupportedOperationException
-        if s.getErrorClass == ExecutionErrors.ENCODER_NOT_FOUND_ERROR =>
-         s.getMessageParameters.asScala.get(ExecutionErrors.TYPE_NAME) match {
-            case Some(clzzName) if clzzName == classOf[java.io.Serializable].getTypeName
-            => Option(JavaSerializationCodec -> classOf[java.io.Serializable])
+          if s.getErrorClass == ExecutionErrors.ENCODER_NOT_FOUND_ERROR =>
+        s.getMessageParameters.asScala.get(ExecutionErrors.TYPE_NAME) match {
+          case Some(clzzName) if clzzName == classOf[java.io.Serializable].getTypeName =>
+            Option(JavaSerializationCodec -> classOf[java.io.Serializable])
 
-            case Some(clzzName) if clzzName == classOf[KryoSerializable].getTypeName =>
-              Option(KryoSerializationCodec -> classOf[KryoSerializable])
+          case Some(clzzName) if clzzName == classOf[KryoSerializable].getTypeName =>
+            Option(KryoSerializationCodec -> classOf[KryoSerializable])
 
-            case _ => None
-          }
+          case _ => None
+        }
 
       case _ => None
     }

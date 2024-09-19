@@ -169,9 +169,8 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   def cannotFindEncoderForTypeError(typeName: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = ExecutionErrors.ENCODER_NOT_FOUND_ERROR,
-      messageParameters = Map(
-        ExecutionErrors.TYPE_NAME -> typeName,
-        "docroot" -> SparkBuildInfo.spark_doc_root))
+      messageParameters =
+        Map(ExecutionErrors.TYPE_NAME -> typeName, "docroot" -> SparkBuildInfo.spark_doc_root))
   }
 
   def cannotHaveCircularReferencesInBeanClassError(
