@@ -197,7 +197,7 @@ trait StateStoreWriter
 
   def getCheckpointInfo(): Array[StateStoreCheckpointInfo] = {
     assert(conf.stateStoreCheckpointFormatVersion >= 2)
-    val ret = checkpointInfoAccumulator
+    checkpointInfoAccumulator
       .value
       .asScala
       .toSeq
@@ -209,8 +209,6 @@ trait StateStoreWriter
       .sortBy(_._1)
       .map(_._2)
       .toArray
-    logError(s"IIIIIIIIIII $ret")
-    ret
   }
 
   /**

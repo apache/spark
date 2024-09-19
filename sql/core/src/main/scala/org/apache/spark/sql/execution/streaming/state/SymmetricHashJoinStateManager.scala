@@ -827,6 +827,11 @@ object SymmetricHashJoinStateManager {
   def mergeStateStoreCheckpointInfo(
       ci1: StateStoreCheckpointInfo,
       ci2: StateStoreCheckpointInfo): StateStoreCheckpointInfo = {
+    // Stream-stream join has 4 state stores instead of one. So it will generate 4 different
+    // checkpoint IDs. The approach we take here is to merge them into one ID in the
+    // checkpointing path. The driver will process this single checkpointID. When it is passed
+    // back to the executors, they will split it back into 4 IDs and use them to load the state.
+    // This function is used to merge two checkpoint IDs into one.
     assert(ci1.partitionId == ci2.partitionId)
     assert(ci1.batchVersion == ci2.batchVersion)
     assert(ci1.checkpointId.isDefined == ci2.checkpointId.isDefined)
@@ -840,6 +845,22 @@ object SymmetricHashJoinStateManager {
     } else {
       ci1
     }
+  }
+
+  def splitStateStoreCheckpointInfo(
+      partitionId: Int,
+      checkpointUniqueIds: Option[Array[String]]): Array[Option[String]] = {
+    // Stream-stream join has 4 state stores instead of one. So it will generate 4 different
+    // checkpoint IDs. Since we take the approach of merging them into one ID in the
+    // checkpointing path, we need to split them back into 4 IDs when loading the state.
+    // The split logic mirrors the merge logic in `mergeStateStoreCheckpointInfo()`.
+    checkpointUniqueIds.map { ids =>
+        assert(ids.size > partitionId, s"Checkpoint IDs $ids does not have enough partitions")
+        val split = ids(partitionId).split(",")
+        assert(split.size == 4, s"Invalid checkpoint IDs $ids")
+        split.map(Option(_))
+      }
+      .getOrElse(Array.fill[Option[String]](4)(None))
   }
 
   private sealed trait StateStoreType

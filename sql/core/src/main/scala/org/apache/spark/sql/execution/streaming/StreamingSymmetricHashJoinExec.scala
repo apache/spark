@@ -305,12 +305,9 @@ case class StreamingSymmetricHashJoinExec(
 
     // Parse checkpointID string and divide it into individual checkpointIds.
     assert(stateInfo.isDefined, "State info not defined")
-    val checkpointIds = stateInfo.get.checkpointUniqueIds.map { ids =>
-      assert(ids.size > partitionId, s"Checkpoint IDs $ids does not have enough partitions")
-      val split = ids(partitionId).split(",")
-      assert(split.size == 4, s"Invalid checkpoint IDs $ids")
-      split.map(Option(_))
-    }.getOrElse(Array.fill[Option[String]](4)(None))
+    val checkpointIds = SymmetricHashJoinStateManager.splitStateStoreCheckpointInfo(
+      partitionId,
+      stateInfo.get.checkpointUniqueIds)
 
     val inputSchema = left.output ++ right.output
     val postJoinFilter =
