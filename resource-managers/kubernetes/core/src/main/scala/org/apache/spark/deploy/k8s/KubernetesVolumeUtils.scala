@@ -45,6 +45,7 @@ object KubernetesVolumeUtils {
       val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_PATH_KEY"
       val readOnlyKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_READONLY_KEY"
       val subPathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_SUBPATH_KEY"
+      val subPathExprKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_SUBPATHEXPR_KEY"
       val labelKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_LABEL_KEY"
 
       val volumeLabelsMap = properties
@@ -57,6 +58,7 @@ object KubernetesVolumeUtils {
         volumeName = volumeName,
         mountPath = properties(pathKey),
         mountSubPath = properties.getOrElse(subPathKey, ""),
+        mountSubPathExpr = properties.getOrElse(subPathExprKey, ""),
         mountReadOnly = properties.get(readOnlyKey).exists(_.toBoolean),
         volumeConf = parseVolumeSpecificConf(properties,
           volumeType, volumeName, Option(volumeLabelsMap)))
@@ -87,8 +89,11 @@ object KubernetesVolumeUtils {
     volumeType match {
       case KUBERNETES_VOLUMES_HOSTPATH_TYPE =>
         val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_PATH_KEY"
+        val typeKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_TYPE_KEY"
         verifyOptionKey(options, pathKey, KUBERNETES_VOLUMES_HOSTPATH_TYPE)
-        KubernetesHostPathVolumeConf(options(pathKey))
+        // "" means that no checks will be performed before mounting the hostPath volume
+        // backward compatibility default
+        KubernetesHostPathVolumeConf(options(pathKey), options.getOrElse(typeKey, ""))
 
       case KUBERNETES_VOLUMES_PVC_TYPE =>
         val claimNameKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY"

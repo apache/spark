@@ -113,9 +113,10 @@ object KubernetesTestConf {
 
     volumes.foreach { case spec =>
       val (vtype, configs) = spec.volumeConf match {
-        case KubernetesHostPathVolumeConf(path) =>
-          (KUBERNETES_VOLUMES_HOSTPATH_TYPE,
-            Map(KUBERNETES_VOLUMES_OPTIONS_PATH_KEY -> path))
+        case KubernetesHostPathVolumeConf(hostPath, volumeType) =>
+          (KUBERNETES_VOLUMES_HOSTPATH_TYPE, Map(
+            KUBERNETES_VOLUMES_OPTIONS_PATH_KEY -> hostPath,
+            KUBERNETES_VOLUMES_OPTIONS_TYPE_KEY -> volumeType))
 
         case KubernetesPVCVolumeConf(claimName, storageClass, sizeLimit, labels) =>
           val sconf = storageClass
