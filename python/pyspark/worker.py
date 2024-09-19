@@ -57,6 +57,7 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamUDFSerializer,
     ArrowStreamGroupUDFSerializer,
     ApplyInPandasWithStateSerializer,
+    GroupPandasUDFSerializer,
     TransformWithStateInPandasSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_type
@@ -1566,6 +1567,8 @@ def read_udfs(pickleSer, infile, eval_type):
             ser = ArrowStreamUDFSerializer()
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
             ser = ArrowStreamGroupUDFSerializer(_assign_cols_by_name)
+        elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
+            ser = GroupPandasUDFSerializer(timezone, safecheck, _assign_cols_by_name)
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
             # pandas Series. See SPARK-27240.
