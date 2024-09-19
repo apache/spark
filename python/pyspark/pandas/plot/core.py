@@ -756,10 +756,10 @@ class PandasOnSparkPlotAccessor(PandasObject):
 
         Parameters
         ----------
-        x : label or position, default DataFrame.index
-            Column to be used for categories.
-        y : label or position, default All numeric columns in dataframe
+        x : label or position, default All numeric columns in dataframe
             Columns to be plotted from the DataFrame.
+        y : label or position, default DataFrame.index
+            Column to be used for categories.
         **kwds
             Keyword arguments to pass on to
             :meth:`pyspark.pandas.DataFrame.plot` or :meth:`pyspark.pandas.Series.plot`.
@@ -773,8 +773,8 @@ class PandasOnSparkPlotAccessor(PandasObject):
         Notes
         -----
         In Plotly and Matplotlib, the interpretation of `x` and `y` for `barh` plots differs.
-        In Matplotlib, `x` refers to the values and `y` refers to the categories.
-        In Plotly, `x` refers to the categories and `y` refers to the values.
+        In Plotly, `x` refers to the values and `y` refers to the categories.
+        In Matplotlib, `x` refers to the categories and `y` refers to the values.
         Ensure correct axis labeling based on the backend used.
 
         See Also
