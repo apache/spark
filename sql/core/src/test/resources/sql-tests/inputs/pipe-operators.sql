@@ -137,18 +137,18 @@ table courseSales
    );
 
 -- Pivot on multiple pivot columns with aggregate columns of complex data types.
-(select course, `year`, y, a
- from courseSales
- join yearsWithComplexTypes on `year` = y)
+select course, `year`, y, a
+from courseSales
+join yearsWithComplexTypes on `year` = y
 |> pivot (
      max(a)
      for (y, course) in ((2012, 'dotNET'), (2013, 'Java'))
    );
 
 -- Pivot on pivot column of struct type.
-(select earnings, `year`, s
- from courseSales
- join yearsWithComplexTypes on `year` = y)
+select earnings, `year`, s
+from courseSales
+join yearsWithComplexTypes on `year` = y
 |> pivot (
      sum(earnings)
      for s in ((1, 'a'), (2, 'b'))

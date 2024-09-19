@@ -406,9 +406,9 @@ Project [c#x, __pivot_sum(e) AS s AS `sum(e) AS s`#x[0] AS firstYear_s#xL, __piv
 
 
 -- !query
-(select course, `year`, y, a
- from courseSales
- join yearsWithComplexTypes on `year` = y)
+select course, `year`, y, a
+from courseSales
+join yearsWithComplexTypes on `year` = y
 |> pivot (
      max(a)
      for (y, course) in ((2012, 'dotNET'), (2013, 'Java'))
@@ -432,9 +432,9 @@ Aggregate [year#x], [year#x, max(if ((named_struct(y, y#x, course, course#x) <=>
 
 
 -- !query
-(select earnings, `year`, s
- from courseSales
- join yearsWithComplexTypes on `year` = y)
+select earnings, `year`, s
+from courseSales
+join yearsWithComplexTypes on `year` = y
 |> pivot (
      sum(earnings)
      for s in ((1, 'a'), (2, 'b'))

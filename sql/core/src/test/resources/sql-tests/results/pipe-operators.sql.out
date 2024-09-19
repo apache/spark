@@ -361,9 +361,9 @@ dotNET	15000	7500.0	48000	48000.0
 
 
 -- !query
-(select course, `year`, y, a
- from courseSales
- join yearsWithComplexTypes on `year` = y)
+select course, `year`, y, a
+from courseSales
+join yearsWithComplexTypes on `year` = y
 |> pivot (
      max(a)
      for (y, course) in ((2012, 'dotNET'), (2013, 'Java'))
@@ -376,9 +376,9 @@ struct<year:int,{2012, dotNET}:array<int>,{2013, Java}:array<int>>
 
 
 -- !query
-(select earnings, `year`, s
- from courseSales
- join yearsWithComplexTypes on `year` = y)
+select earnings, `year`, s
+from courseSales
+join yearsWithComplexTypes on `year` = y
 |> pivot (
      sum(earnings)
      for s in ((1, 'a'), (2, 'b'))
