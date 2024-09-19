@@ -17,14 +17,16 @@
 package org.apache.spark.sql.classic
 
 import scala.language.implicitConversions
-
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.internal.{ExpressionUtils, RuntimeConfigImpl}
 
 /**
  * Conversions from sql interfaces to the Classic specific implementation.
  *
- * This class is mainly used by the implementation, but is also meant to be used by extension
+ * This class is mainly used by the implementation. It is also meant to be used by extension
  * developers.
  *
  * We provide both a trait and an object. The trait is useful in situations where an extension
@@ -45,6 +47,13 @@ trait ClassicConversions {
 
   implicit def castToImpl[K, V](kvds: api.KeyValueGroupedDataset[K, V])
   : KeyValueGroupedDataset[K, V] = kvds.asInstanceOf[KeyValueGroupedDataset[K, V]]
+
+  /**
+   * Helper that makes it easy to construct a Column from an Expression.
+   */
+  implicit class ColumnConstructorExt(val c: Column.type) {
+    def apply(e: Expression): Column = ExpressionUtils.column(e)
+  }
 }
 
 object ClassicConversions extends ClassicConversions

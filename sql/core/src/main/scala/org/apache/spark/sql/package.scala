@@ -75,13 +75,4 @@ package object sql {
    * with rebasing.
    */
   private[sql] val SPARK_LEGACY_INT96_METADATA_KEY = "org.apache.spark.legacyINT96"
-
-  /**
-   * Implicit helper that makes it easy to construct a Column from an Expression. This allows
-   * developers to create a Column in the same way as in earlier versions of Spark (before 4.0).
-   */
-  @DeveloperApi
-  implicit class ColumnConstructorExt(val c: Column.type) extends AnyVal {
-    def apply(e: Expression): Column = ExpressionUtils.column(e)
-  }
 }

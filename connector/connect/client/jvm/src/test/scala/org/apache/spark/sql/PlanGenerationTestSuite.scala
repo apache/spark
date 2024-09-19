@@ -32,11 +32,12 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.StorageLevel
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{functions => fn, ColumnConstructorExt}
+import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
@@ -3293,7 +3294,7 @@ class PlanGenerationTestSuite
             .setUnparsedIdentifier("id")))
       .setCustomField("abc")
       .build()
-    simple.select(Column(_.setExtension(com.google.protobuf.Any.pack(extension))))
+    simple.select(column(_.setExtension(com.google.protobuf.Any.pack(extension))))
   }
 
   test("crosstab") {
