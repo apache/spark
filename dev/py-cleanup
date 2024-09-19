@@ -18,7 +18,7 @@
 #
 
 # Utility for temporary files cleanup in 'python'.
-#   usage: ./dev/py-cleanup.sh
+#   usage: ./dev/py-cleanup
 
 set -ex
 
