@@ -34,8 +34,8 @@ import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
  * @since 1.4.0
  */
 @Stable
-abstract class DataFrameStatFunctions[DS[U] <: Dataset[U, DS]] {
-  protected def df: DS[Row]
+abstract class DataFrameStatFunctions {
+  protected def df: Dataset[Row]
 
   /**
    * Calculates the approximate quantiles of a numerical column of a DataFrame.
@@ -202,7 +202,7 @@ abstract class DataFrameStatFunctions[DS[U] <: Dataset[U, DS]] {
    *
    * @since 1.4.0
    */
-  def crosstab(col1: String, col2: String): DS[Row]
+  def crosstab(col1: String, col2: String): Dataset[Row]
 
   /**
    * Finding frequent items for columns, possibly with false positives. Using the frequent element
@@ -246,7 +246,7 @@ abstract class DataFrameStatFunctions[DS[U] <: Dataset[U, DS]] {
    * }}}
    * @since 1.4.0
    */
-  def freqItems(cols: Array[String], support: Double): DS[Row] =
+  def freqItems(cols: Array[String], support: Double): Dataset[Row] =
     freqItems(cols.toImmutableArraySeq, support)
 
   /**
@@ -263,7 +263,7 @@ abstract class DataFrameStatFunctions[DS[U] <: Dataset[U, DS]] {
    *   A Local DataFrame with the Array of frequent items for each column.
    * @since 1.4.0
    */
-  def freqItems(cols: Array[String]): DS[Row] = freqItems(cols, 0.01)
+  def freqItems(cols: Array[String]): Dataset[Row] = freqItems(cols, 0.01)
 
   /**
    * (Scala-specific) Finding frequent items for columns, possibly with false positives. Using the
@@ -307,7 +307,7 @@ abstract class DataFrameStatFunctions[DS[U] <: Dataset[U, DS]] {
    *
    * @since 1.4.0
    */
-  def freqItems(cols: Seq[String], support: Double): DS[Row]
+  def freqItems(cols: Seq[String], support: Double): Dataset[Row]
 
   /**
    * (Scala-specific) Finding frequent items for columns, possibly with false positives. Using the
@@ -324,7 +324,7 @@ abstract class DataFrameStatFunctions[DS[U] <: Dataset[U, DS]] {
    *   A Local DataFrame with the Array of frequent items for each column.
    * @since 1.4.0
    */
-  def freqItems(cols: Seq[String]): DS[Row] = freqItems(cols, 0.01)
+  def freqItems(cols: Seq[String]): Dataset[Row] = freqItems(cols, 0.01)
 
   /**
    * Returns a stratified sample without replacement based on the fraction given on each stratum.
@@ -356,7 +356,7 @@ abstract class DataFrameStatFunctions[DS[U] <: Dataset[U, DS]] {
    *
    * @since 1.5.0
    */
-  def sampleBy[T](col: String, fractions: Map[T, Double], seed: Long): DS[Row] = {
+  def sampleBy[T](col: String, fractions: Map[T, Double], seed: Long): Dataset[Row] = {
     sampleBy(Column(col), fractions, seed)
   }
 
@@ -376,7 +376,7 @@ abstract class DataFrameStatFunctions[DS[U] <: Dataset[U, DS]] {
    *
    * @since 1.5.0
    */
-  def sampleBy[T](col: String, fractions: ju.Map[T, jl.Double], seed: Long): DS[Row] = {
+  def sampleBy[T](col: String, fractions: ju.Map[T, jl.Double], seed: Long): Dataset[Row] = {
     sampleBy(col, fractions.asScala.toMap.asInstanceOf[Map[T, Double]], seed)
   }
 
@@ -413,7 +413,7 @@ abstract class DataFrameStatFunctions[DS[U] <: Dataset[U, DS]] {
    *
    * @since 3.0.0
    */
-  def sampleBy[T](col: Column, fractions: Map[T, Double], seed: Long): DS[Row]
+  def sampleBy[T](col: Column, fractions: Map[T, Double], seed: Long): Dataset[Row]
 
   /**
    * (Java-specific) Returns a stratified sample without replacement based on the fraction given
@@ -432,7 +432,7 @@ abstract class DataFrameStatFunctions[DS[U] <: Dataset[U, DS]] {
    *   a new `DataFrame` that represents the stratified sample
    * @since 3.0.0
    */
-  def sampleBy[T](col: Column, fractions: ju.Map[T, jl.Double], seed: Long): DS[Row] = {
+  def sampleBy[T](col: Column, fractions: ju.Map[T, jl.Double], seed: Long): Dataset[Row] = {
     sampleBy(col, fractions.asScala.toMap.asInstanceOf[Map[T, Double]], seed)
   }
 

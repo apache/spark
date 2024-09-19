@@ -52,6 +52,7 @@ import org.apache.spark.sql.catalyst.trees.{TreeNodeTag, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
@@ -215,7 +216,8 @@ private[sql] object Dataset {
 class Dataset[T] private[sql](
     @DeveloperApi @Unstable @transient val queryExecution: QueryExecution,
     @DeveloperApi @Unstable @transient val encoder: Encoder[T])
-  extends api.Dataset[T, Dataset] {
+  extends api.Dataset[T] {
+  type DS[U] = Dataset[U]
   type RGD = RelationalGroupedDataset
 
   @transient lazy val sparkSession: SparkSession = {
