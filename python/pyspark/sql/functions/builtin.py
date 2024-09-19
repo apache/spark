@@ -6015,9 +6015,9 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
 @_try_remote_functions
 def count_min_sketch(
     col: "ColumnOrName",
-    eps: "ColumnOrName",
-    confidence: "ColumnOrName",
-    seed: "ColumnOrName",
+    eps: Union[Column, float],
+    confidence: Union[Column, float],
+    seed: Optional[Union[Column, int]] = None,
 ) -> Column:
     """
     Returns a count-min sketch of a column with the given esp, confidence and seed.
@@ -6031,12 +6031,23 @@ def count_min_sketch(
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to compute on.
-    eps : :class:`~pyspark.sql.Column` or str
+    eps : :class:`~pyspark.sql.Column` or float
         relative error, must be positive
-    confidence : :class:`~pyspark.sql.Column` or str
+
+        .. versionchanged:: 4.0.0
+            `eps` now accepts float value.
+
+    confidence : :class:`~pyspark.sql.Column` or float
         confidence, must be positive and less than 1.0
-    seed : :class:`~pyspark.sql.Column` or str
+
+        .. versionchanged:: 4.0.0
+            `confidence` now accepts float value.
+
+    seed : :class:`~pyspark.sql.Column` or int
         random seed
+
+        .. versionchanged:: 4.0.0
+            `seed` now accepts int value.
 
     Returns
     -------
@@ -6045,12 +6056,42 @@ def count_min_sketch(
 
     Examples
     --------
-    >>> df = spark.createDataFrame([[1], [2], [1]], ['data'])
-    >>> df = df.agg(count_min_sketch(df.data, lit(0.5), lit(0.5), lit(1)).alias('sketch'))
-    >>> df.select(hex(df.sketch).alias('r')).collect()
-    [Row(r='0000000100000000000000030000000100000004000000005D8D6AB90000000000000000000000000000000200000000000000010000000000000000')]
+    Example 1: Using columns as arguments
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.range(100)
+    >>> df.select(sf.count_min_sketch(sf.col("id"), sf.lit(0.5), sf.lit(0.5), sf.lit(1))).show()
+    +---------------------------------+
+    |count_min_sketch(id, 0.5, 0.5, 1)|
+    +---------------------------------+
+    |             [00 00 00 01 00 0...|
+    +---------------------------------+
+
+    Example 2: Using numbers as arguments
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.range(100)
+    >>> df.select(sf.count_min_sketch("id", 0.5, 0.5, 1)).show()
+    +---------------------------------+
+    |count_min_sketch(id, 0.5, 0.5, 1)|
+    +---------------------------------+
+    |             [00 00 00 01 00 0...|
+    +---------------------------------+
+
+    Example 3: Using a random seed
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.range(100)
+    >>> df.select(sf.count_min_sketch("id", 0.5, 0.5)).show() # doctest: +SKIP
+    +-------------------------------------------+
+    |count_min_sketch(id, 0.5, 0.5, -1457846360)|
+    +-------------------------------------------+
+    |                       [00 00 00 01 00 0...|
+    +-------------------------------------------+
     """
-    return _invoke_function_over_columns("count_min_sketch", col, eps, confidence, seed)
+    _eps = lit(eps)
+    _conf = lit(confidence)
+    if seed is None:
+        return _invoke_function_over_columns("count_min_sketch", col, _eps, _conf)
+    else:
+        return _invoke_function_over_columns("count_min_sketch", col, _eps, _conf, lit(seed))
 
 
 @_try_remote_functions
