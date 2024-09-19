@@ -22,7 +22,9 @@ import scala.language.implicitConversions
 import org.apache.spark.rdd.RDD
 
 /** @inheritdoc */
-abstract class SQLImplicits(protected val session: SparkSession) extends api.SQLImplicits[Dataset] {
+abstract class SQLImplicits extends api.SQLImplicits[Dataset] {
+  protected def session: SparkSession
+
   /**
    * Creates a [[Dataset]] from an RDD.
    *

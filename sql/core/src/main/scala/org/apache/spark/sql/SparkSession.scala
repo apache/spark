@@ -752,7 +752,9 @@ class SparkSession private(
 
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
-  object implicits extends SQLImplicits(this)
+  object implicits extends SQLImplicits {
+    override protected def session: SparkSession = self
+  }
   // scalastyle:on
 
   /**

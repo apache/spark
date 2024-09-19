@@ -251,7 +251,9 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group basic
    * @since 1.3.0
    */
-  object implicits extends SQLImplicits(sparkSession)
+  object implicits extends SQLImplicits {
+    override protected def session: SparkSession = sparkSession
+  }
   // scalastyle:on
 
   /**
