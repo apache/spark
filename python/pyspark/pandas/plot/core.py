@@ -479,7 +479,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
         "pie": TopNPlotBase().get_top_n,
         "bar": TopNPlotBase().get_top_n,
         "barh": TopNPlotBase().get_top_n,
-        "scatter": TopNPlotBase().get_top_n,
+        "scatter": SampledPlotBase().get_sampled,
         "area": SampledPlotBase().get_sampled,
         "line": SampledPlotBase().get_sampled,
     }
