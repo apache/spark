@@ -225,6 +225,7 @@ class ClientE2ETestSuite
 
   test("spark deep recursion") {
     var df = spark.range(1)
+    assert(spark.conf.get("spark.connect.grpc.marshallerRecursionLimit").toInt == 2048)
     // spark.connect.grpc.marshallerRecursionLimit must be at least 2048, to handle certain
     // deep recursion cases.
     for (a <- 1 to 2048) {
