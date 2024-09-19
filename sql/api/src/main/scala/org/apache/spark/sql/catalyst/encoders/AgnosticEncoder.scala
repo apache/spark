@@ -254,14 +254,6 @@ object AgnosticEncoders {
   case class JavaDecimalEncoder(dt: DecimalType, override val lenientSerialization: Boolean)
       extends LeafEncoder[JBigDecimal](dt)
 
-  case class JavaSerializableEncoder[T](override val clsTag: ClassTag[T])
-    extends AgnosticEncoder[T] {
-    /** Returns the schema of encoding this type of object as a Row. */
-    override def dataType: DataType = BinaryType
-    override val isPrimitive: Boolean = clsTag.runtimeClass.isPrimitive
-  }
-
-
   val STRICT_DATE_ENCODER: DateEncoder = DateEncoder(lenientSerialization = false)
   val STRICT_LOCAL_DATE_ENCODER: LocalDateEncoder = LocalDateEncoder(lenientSerialization = false)
   val STRICT_TIMESTAMP_ENCODER: TimestampEncoder = TimestampEncoder(lenientSerialization = false)
