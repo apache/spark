@@ -456,6 +456,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     (newPlan, newCond)
   }
 
+   // Returns true if 'query' is guaranteed to return at most 1 row.
    private def guaranteedToReturnOneRow(query: LogicalPlan): Boolean = {
      if (query.maxRows.exists(_ <= 1)) {
        return true
@@ -468,7 +469,18 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
        case Project(_, aggPart: Aggregate) => Some(aggPart)
        case _: LogicalPlan => None
      }
-     (aggNode.isDefined && aggNode.get.groupingExpressions.isEmpty)
+     if (!aggNode.isDefined) {
+       return false
+     }
+     // This is the logic we currently use in CheckAnalysis for aggregates in scalar subqueries.
+     val correlatedEquivalentExprs = getCorrelatedEquivalentInnerExpressions(query)
+     // Grouping expressions, except outer refs and constant expressions - grouping by an
+     // outer ref or a constant is always ok
+     val groupByExprs =
+     ExpressionSet(aggNode.get.groupingExpressions.filter(x => !x.isInstanceOf[OuterReference] &&
+       x.references.nonEmpty))
+     val nonEquivalentGroupByExprs = groupByExprs -- correlatedEquivalentExprs
+     nonEquivalentGroupByExprs.isEmpty
    }
 
   private def rewriteSubQueries(plan: LogicalPlan): LogicalPlan = {

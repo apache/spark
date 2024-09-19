@@ -371,6 +371,11 @@ object SubExprUtils extends PredicateHelper {
  * case the subquery yields no row at all on empty input to the GROUP BY, which evaluates to NULL.
  * It is set in PullupCorrelatedPredicates to true/false, before it is set its value is None.
  * See constructLeftJoins in RewriteCorrelatedScalarSubquery for more details.
+ *
+ * 'needSingleJoin' is set to true if we can't guarantee that the correlated scalar subquery
+ * returns at most 1 row. For such subqueries we use a modification of an outer join called
+ * LeftSingle join. This value is set in It is set in PullupCorrelatedPredicates and
+ * used in RewriteCorrelatedScalarSubquery.
  */
 case class ScalarSubquery(
     plan: LogicalPlan,
