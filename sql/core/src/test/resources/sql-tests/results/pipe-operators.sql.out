@@ -420,7 +420,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42903",
   "messageParameters" : {
     "condition" : "\"(sum(x) = 1)\"",
-    "expressionList" : "sum(t.x)"
+    "expressionList" : "sum(spark_catalog.default.t.x)"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -444,7 +444,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42903",
   "messageParameters" : {
     "condition" : "\"((y = abc) OR ((length(y) + sum(x)) = 1))\"",
-    "expressionList" : "sum(t.x)"
+    "expressionList" : "sum(spark_catalog.default.t.x)"
   },
   "queryContext" : [ {
     "objectType" : "",

@@ -351,9 +351,8 @@ table t
 |> where true
 -- !query analysis
 Filter true
-+- SubqueryAlias t
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -361,9 +360,8 @@ table t
 |> where x + length(y) < 4
 -- !query analysis
 Filter ((x#x + length(y#x)) < 4)
-+- SubqueryAlias t
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -374,9 +372,8 @@ table t
 Filter ((x#x + length(y#x)) < 3)
 +- SubqueryAlias __auto_generated_subquery_name
    +- Filter ((x#x + length(y#x)) < 4)
-      +- SubqueryAlias t
-         +- SubqueryAlias spark_catalog.default.t
-            +- Relation spark_catalog.default.t[x#x,y#x] csv
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -406,9 +403,8 @@ table st
 |> where st.col.i1 = 2
 -- !query analysis
 Filter (col#x.i1 = 2)
-+- SubqueryAlias st
-   +- SubqueryAlias spark_catalog.default.st
-      +- Relation spark_catalog.default.st[x#x,col#x] parquet
++- SubqueryAlias spark_catalog.default.st
+   +- Relation spark_catalog.default.st[x#x,col#x] parquet
 
 
 -- !query
@@ -422,9 +418,8 @@ Filter exists#x [x#x]
 :           +- Filter (outer(x#x) = a#x)
 :              +- SubqueryAlias spark_catalog.default.other
 :                 +- Relation spark_catalog.default.other[a#x,b#x] json
-+- SubqueryAlias t
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -438,9 +433,8 @@ Filter (scalar-subquery#x [x#x] = 1)
 :           +- Filter (outer(x#x) = a#x)
 :              +- SubqueryAlias spark_catalog.default.other
 :                 +- Relation spark_catalog.default.other[a#x,b#x] json
-+- SubqueryAlias t
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -453,7 +447,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42903",
   "messageParameters" : {
     "condition" : "\"(sum(x) = 1)\"",
-    "expressionList" : "sum(t.x)"
+    "expressionList" : "sum(spark_catalog.default.t.x)"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -475,7 +469,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42903",
   "messageParameters" : {
     "condition" : "\"((y = abc) OR ((length(y) + sum(x)) = 1))\"",
-    "expressionList" : "sum(t.x)"
+    "expressionList" : "sum(spark_catalog.default.t.x)"
   },
   "queryContext" : [ {
     "objectType" : "",

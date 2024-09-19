@@ -5862,7 +5862,7 @@ class AstBuilder extends DataTypeAstBuilder
         case s: SubqueryAlias =>
           s
         case u: UnresolvedRelation =>
-          SubqueryAlias(u.name, left)
+          u
         case _ =>
           SubqueryAlias(SubqueryAlias.generateSubqueryName(), left)
       }
