@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.service
 
 import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, Executors, ScheduledExecutorService, TimeUnit}
-import javax.annotation.concurrent.GuardedBy
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
@@ -40,8 +40,6 @@ import org.apache.spark.util.ThreadUtils
  */
 class SparkConnectSessionManager extends Logging {
 
-  private val sessionsLock = new Object
-
   private val sessionStore: ConcurrentMap[SessionKey, SessionHolder] =
     new ConcurrentHashMap[SessionKey, SessionHolder]()
 
@@ -52,8 +50,8 @@ class SparkConnectSessionManager extends Logging {
       .build[SessionKey, SessionHolderInfo]()
 
   /** Executor for the periodic maintenance */
-  @GuardedBy("sessionsLock")
-  private var scheduledExecutor: Option[ScheduledExecutorService] = None
+  private var scheduledExecutor: AtomicReference[ScheduledExecutorService] =
+    new AtomicReference[ScheduledExecutorService]()
 
   private def validateSessionId(
       key: SessionKey,
@@ -75,8 +73,6 @@ class SparkConnectSessionManager extends Logging {
     val holder = getSession(
       key,
       Some(() => {
-        // Executed under sessionsState lock in getSession,  to guard against concurrent removal
-        // and insertion into closedSessionsCache.
         validateSessionCreate(key)
         val holder = SessionHolder(key.userId, key.sessionId, newIsolatedSession())
         holder.initializeSession()
@@ -168,17 +164,14 @@ class SparkConnectSessionManager extends Logging {
 
   def closeSession(key: SessionKey): Unit = {
     val sessionHolder = removeSessionHolder(key)
-    // Rest of the cleanup outside sessionLock - the session cannot be accessed anymore by
-    // getOrCreateIsolatedSession.
+    // Rest of the cleanup: the session cannot be accessed anymore by getOrCreateIsolatedSession.
     sessionHolder.foreach(shutdownSessionHolder(_))
   }
 
   private[connect] def shutdown(): Unit = {
-    sessionsLock.synchronized {
-      scheduledExecutor.foreach { executor =>
-        ThreadUtils.shutdown(executor, FiniteDuration(1, TimeUnit.MINUTES))
-      }
-      scheduledExecutor = None
+    val executor = scheduledExecutor.getAndSet(null)
+    if (executor != null) {
+      ThreadUtils.shutdown(executor, FiniteDuration(1, TimeUnit.MINUTES))
     }
 
     // note: this does not cleanly shut down the sessions, but the server is shutting down.
@@ -199,16 +192,16 @@ class SparkConnectSessionManager extends Logging {
    *
    * The checks are looking to remove sessions that expired.
    */
-  private def schedulePeriodicChecks(): Unit = sessionsLock.synchronized {
-    scheduledExecutor match {
-      case Some(_) => // Already running.
-      case None =>
+  private def schedulePeriodicChecks(): Unit = {
+    var executor = scheduledExecutor.getAcquire()
+    if (executor == null) {
+      executor = Executors.newSingleThreadScheduledExecutor()
+      if (scheduledExecutor.compareAndExchangeRelease(null, executor) == null) {
         val interval = SparkEnv.get.conf.get(CONNECT_SESSION_MANAGER_MAINTENANCE_INTERVAL)
         logInfo(
           log"Starting thread for cleanup of expired sessions every " +
             log"${MDC(INTERVAL, interval)} ms")
-        scheduledExecutor = Some(Executors.newSingleThreadScheduledExecutor())
-        scheduledExecutor.get.scheduleAtFixedRate(
+        executor.scheduleAtFixedRate(
           () => {
             try {
               val defaultInactiveTimeoutMs =
@@ -221,6 +214,7 @@ class SparkConnectSessionManager extends Logging {
           interval,
           interval,
           TimeUnit.MILLISECONDS)
+      }
     }
   }
 
@@ -255,23 +249,17 @@ class SparkConnectSessionManager extends Logging {
 
     // .. and remove them.
     toRemove.foreach { sessionHolder =>
-      // This doesn't use closeSession to be able to do the extra last chance check under lock.
-      val removedSession = {
-        // Last chance - check expiration time and remove under lock if expired.
-        val info = sessionHolder.getSessionHolderInfo
-        if (shouldExpire(info, System.currentTimeMillis())) {
-          logInfo(
-            log"Found session ${MDC(SESSION_HOLD_INFO, info)} that expired " +
-              log"and will be closed.")
-          removeSessionHolder(info.key)
-        } else {
-          None
+      val info = sessionHolder.getSessionHolderInfo
+      if (shouldExpire(info, System.currentTimeMillis())) {
+        logInfo(
+          log"Found session ${MDC(SESSION_HOLD_INFO, info)} that expired " +
+            log"and will be closed.")
+        removeSessionHolder(info.key)
+        try {
+          shutdownSessionHolder(sessionHolder)
+        } catch {
+          case NonFatal(ex) => logWarning("Unexpected exception closing session", ex)
         }
-      }
-      // do shutdown and cleanup outside of lock.
-      try removedSession.foreach(shutdownSessionHolder(_))
-      catch {
-        case NonFatal(ex) => logWarning("Unexpected exception closing session", ex)
       }
     }
     logInfo("Finished periodic run of SparkConnectSessionManager maintenance.")
