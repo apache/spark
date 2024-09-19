@@ -500,7 +500,7 @@ class LiteralExpression(Expression):
                     # is sightly different:
                     # java.time.Duration only applies HOURS, MINUTES, SECONDS units,
                     # while Pandas applies all supported units.
-                    return pd.Timedelta(delta).isoformat()
+                    return pd.Timedelta(delta).isoformat()  # type: ignore[attr-defined]
                 except Exception:
                     pass
         return f"{self._value}"
