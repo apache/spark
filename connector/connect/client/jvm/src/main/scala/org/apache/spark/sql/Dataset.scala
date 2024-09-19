@@ -524,10 +524,26 @@ class Dataset[T] private[sql] (
     result(0)
   }
 
-  /** @inheritdoc */
+  /**
+   * (Scala-specific) Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given
+   * key `func`.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
   def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T] = {
     KeyValueGroupedDatasetImpl[K, T](this, encoderFor[K], func)
   }
+
+  /**
+   * (Java-specific) Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given
+   * key `func`.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def groupByKey[K](func: MapFunction[T, K], encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
+    groupByKey(ToScalaUDF(func))(encoder)
 
   /** @inheritdoc */
   @scala.annotation.varargs
@@ -1464,10 +1480,4 @@ class Dataset[T] private[sql] (
   /** @inheritdoc */
   @scala.annotation.varargs
   override def agg(expr: Column, exprs: Column*): DataFrame = super.agg(expr, exprs: _*)
-
-  /** @inheritdoc */
-  override def groupByKey[K](
-      func: MapFunction[T, K],
-      encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
-    super.groupByKey(func, encoder).asInstanceOf[KeyValueGroupedDataset[K, T]]
 }
