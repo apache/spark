@@ -71,92 +71,92 @@ object JavaTypeInference {
       seenTypeSet: Set[Class[_]],
       typeVariables: Map[TypeVariable[_], Type] = Map.empty,
       forGenericBound: Boolean = false): AgnosticEncoder[_] = t match {
-      case c: Class[_] if !forGenericBound && c == java.lang.Boolean.TYPE => PrimitiveBooleanEncoder
-      case c: Class[_] if !forGenericBound && c == java.lang.Byte.TYPE => PrimitiveByteEncoder
-      case c: Class[_] if !forGenericBound && c == java.lang.Short.TYPE => PrimitiveShortEncoder
-      case c: Class[_] if !forGenericBound && c == java.lang.Integer.TYPE => PrimitiveIntEncoder
-      case c: Class[_] if !forGenericBound && c == java.lang.Long.TYPE => PrimitiveLongEncoder
-      case c: Class[_] if !forGenericBound && c == java.lang.Float.TYPE => PrimitiveFloatEncoder
-      case c: Class[_] if !forGenericBound && c == java.lang.Double.TYPE => PrimitiveDoubleEncoder
 
-      case c: Class[_] if !forGenericBound && c == classOf[java.lang.Boolean] => BoxedBooleanEncoder
-      case c: Class[_] if !forGenericBound && c == classOf[java.lang.Byte] => BoxedByteEncoder
-      case c: Class[_] if !forGenericBound && c == classOf[java.lang.Short] => BoxedShortEncoder
-      case c: Class[_] if !forGenericBound && c == classOf[java.lang.Integer] => BoxedIntEncoder
-      case c: Class[_] if !forGenericBound && c == classOf[java.lang.Long] => BoxedLongEncoder
-      case c: Class[_] if !forGenericBound && c == classOf[java.lang.Float] => BoxedFloatEncoder
-      case c: Class[_] if !forGenericBound && c == classOf[java.lang.Double] => BoxedDoubleEncoder
+    case c: Class[_] if !forGenericBound && c == java.lang.Boolean.TYPE => PrimitiveBooleanEncoder
+    case c: Class[_] if !forGenericBound && c == java.lang.Byte.TYPE => PrimitiveByteEncoder
+    case c: Class[_] if !forGenericBound && c == java.lang.Short.TYPE => PrimitiveShortEncoder
+    case c: Class[_] if !forGenericBound && c == java.lang.Integer.TYPE => PrimitiveIntEncoder
+    case c: Class[_] if !forGenericBound && c == java.lang.Long.TYPE => PrimitiveLongEncoder
+    case c: Class[_] if !forGenericBound && c == java.lang.Float.TYPE => PrimitiveFloatEncoder
+    case c: Class[_] if !forGenericBound && c == java.lang.Double.TYPE => PrimitiveDoubleEncoder
 
-      case c: Class[_] if !forGenericBound && c == classOf[java.lang.String] => StringEncoder
-      case c: Class[_] if !forGenericBound && c == classOf[Array[Byte]] => BinaryEncoder
-      case c: Class[_] if !forGenericBound && c == classOf[java.math.BigDecimal] =>
-        DEFAULT_JAVA_DECIMAL_ENCODER
-      case c: Class[_] if !forGenericBound && c == classOf[java.math.BigInteger] =>
-        JavaBigIntEncoder
-      case c: Class[_] if !forGenericBound && c == classOf[java.time.LocalDate] =>
-        STRICT_LOCAL_DATE_ENCODER
-      case c: Class[_] if !forGenericBound && c == classOf[java.sql.Date] => STRICT_DATE_ENCODER
-      case c: Class[_] if !forGenericBound && c == classOf[java.time.Instant] =>
-        STRICT_INSTANT_ENCODER
-      case c: Class[_] if !forGenericBound && c == classOf[java.sql.Timestamp] =>
-        STRICT_TIMESTAMP_ENCODER
-      case c: Class[_] if !forGenericBound && c == classOf[java.time.LocalDateTime] =>
-        LocalDateTimeEncoder
-      case c: Class[_] if !forGenericBound && c == classOf[java.time.Duration] =>
-        DayTimeIntervalEncoder
-      case c: Class[_] if !forGenericBound && c == classOf[java.time.Period] =>
-        YearMonthIntervalEncoder
+    case c: Class[_] if !forGenericBound && c == classOf[java.lang.Boolean] => BoxedBooleanEncoder
+    case c: Class[_] if !forGenericBound && c == classOf[java.lang.Byte] => BoxedByteEncoder
+    case c: Class[_] if !forGenericBound && c == classOf[java.lang.Short] => BoxedShortEncoder
+    case c: Class[_] if !forGenericBound && c == classOf[java.lang.Integer] => BoxedIntEncoder
+    case c: Class[_] if !forGenericBound && c == classOf[java.lang.Long] => BoxedLongEncoder
+    case c: Class[_] if !forGenericBound && c == classOf[java.lang.Float] => BoxedFloatEncoder
+    case c: Class[_] if !forGenericBound && c == classOf[java.lang.Double] => BoxedDoubleEncoder
 
-      case c: Class[_] if !forGenericBound && c.isEnum => JavaEnumEncoder(ClassTag(c))
+    case c: Class[_] if !forGenericBound && c == classOf[java.lang.String] => StringEncoder
+    case c: Class[_] if !forGenericBound && c == classOf[Array[Byte]] => BinaryEncoder
+    case c: Class[_] if !forGenericBound && c == classOf[java.math.BigDecimal] =>
+      DEFAULT_JAVA_DECIMAL_ENCODER
+    case c: Class[_] if !forGenericBound && c == classOf[java.math.BigInteger] => JavaBigIntEncoder
+    case c: Class[_] if !forGenericBound && c == classOf[java.time.LocalDate] =>
+      STRICT_LOCAL_DATE_ENCODER
+    case c: Class[_] if !forGenericBound && c == classOf[java.sql.Date] => STRICT_DATE_ENCODER
+    case c: Class[_] if !forGenericBound && c == classOf[java.time.Instant] =>
+      STRICT_INSTANT_ENCODER
+    case c: Class[_] if !forGenericBound && c == classOf[java.sql.Timestamp] =>
+      STRICT_TIMESTAMP_ENCODER
+    case c: Class[_] if !forGenericBound && c == classOf[java.time.LocalDateTime] =>
+      LocalDateTimeEncoder
+    case c: Class[_] if !forGenericBound && c == classOf[java.time.Duration] =>
+      DayTimeIntervalEncoder
+    case c: Class[_] if !forGenericBound && c == classOf[java.time.Period] =>
+      YearMonthIntervalEncoder
 
-      case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
-        val udt = c
-          .getAnnotation(classOf[SQLUserDefinedType])
-          .udt()
-          .getConstructor()
-          .newInstance()
-          .asInstanceOf[UserDefinedType[Any]]
-        val udtClass = udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()
-        UDTEncoder(udt, udtClass)
+    case c: Class[_] if !forGenericBound && c.isEnum => JavaEnumEncoder(ClassTag(c))
 
-      case c: Class[_] if UDTRegistration.exists(c.getName) =>
-        val udt = UDTRegistration
-          .getUDTFor(c.getName)
-          .get
-          .getConstructor()
-          .newInstance()
-          .asInstanceOf[UserDefinedType[Any]]
-        UDTEncoder(udt, udt.getClass)
+    case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
+      val udt = c
+        .getAnnotation(classOf[SQLUserDefinedType])
+        .udt()
+        .getConstructor()
+        .newInstance()
+        .asInstanceOf[UserDefinedType[Any]]
+      val udtClass = udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()
+      UDTEncoder(udt, udtClass)
 
-      case c: Class[_] if !forGenericBound && c.isArray =>
-        val elementEncoder = encoderFor(c.getComponentType, seenTypeSet, typeVariables)
-        ArrayEncoder(elementEncoder, elementEncoder.nullable)
+    case c: Class[_] if UDTRegistration.exists(c.getName) =>
+      val udt = UDTRegistration
+        .getUDTFor(c.getName)
+        .get
+        .getConstructor()
+        .newInstance()
+        .asInstanceOf[UserDefinedType[Any]]
+      UDTEncoder(udt, udt.getClass)
 
-      case c: Class[_] if !forGenericBound && classOf[JList[_]].isAssignableFrom(c) =>
-        val element = encoderFor(c.getTypeParameters.array(0), seenTypeSet, typeVariables)
-        IterableEncoder(ClassTag(c), element, element.nullable, lenientSerialization = false)
+    case c: Class[_] if !forGenericBound && c.isArray =>
+      val elementEncoder = encoderFor(c.getComponentType, seenTypeSet, typeVariables)
+      ArrayEncoder(elementEncoder, elementEncoder.nullable)
 
-      case c: Class[_] if !forGenericBound && classOf[JSet[_]].isAssignableFrom(c) =>
-        val element = encoderFor(c.getTypeParameters.array(0), seenTypeSet, typeVariables)
-        IterableEncoder(ClassTag(c), element, element.nullable, lenientSerialization = false)
+    case c: Class[_] if !forGenericBound && classOf[JList[_]].isAssignableFrom(c) =>
+      val element = encoderFor(c.getTypeParameters.array(0), seenTypeSet, typeVariables)
+      IterableEncoder(ClassTag(c), element, element.nullable, lenientSerialization = false)
 
-      case c: Class[_] if !forGenericBound && classOf[JMap[_, _]].isAssignableFrom(c) =>
-        val keyEncoder = encoderFor(c.getTypeParameters.array(0), seenTypeSet, typeVariables)
-        val valueEncoder = encoderFor(c.getTypeParameters.array(1), seenTypeSet, typeVariables)
-        MapEncoder(ClassTag(c), keyEncoder, valueEncoder, valueEncoder.nullable)
+    case c: Class[_] if !forGenericBound && classOf[JSet[_]].isAssignableFrom(c) =>
+      val element = encoderFor(c.getTypeParameters.array(0), seenTypeSet, typeVariables)
+      IterableEncoder(ClassTag(c), element, element.nullable, lenientSerialization = false)
 
-      case tv: TypeVariable[_] =>
-        typeVariables.get(tv) match {
-          case Some(knownType) => encoderFor(knownType, seenTypeSet, typeVariables)
+    case c: Class[_] if !forGenericBound && classOf[JMap[_, _]].isAssignableFrom(c) =>
+      val keyEncoder = encoderFor(c.getTypeParameters.array(0), seenTypeSet, typeVariables)
+      val valueEncoder = encoderFor(c.getTypeParameters.array(1), seenTypeSet, typeVariables)
+      MapEncoder(ClassTag(c), keyEncoder, valueEncoder, valueEncoder.nullable)
 
-          case None =>
-            // Concrete type unknown, check if the bounds can be used to identify a
-            // UDTEncoder and if exception is thrown check if the type extends Serializable
-            val concreteBound = tv.getBounds.collectFirst {
-              case cls: Class[_] => cls
-            }
-            tv.getBounds.flatMap(getAllSuperClasses).foldLeft[(Option[AgnosticEncoder[_]],
-              Option[AgnosticEncoder[_]])](None -> None) {
+    case tv: TypeVariable[_] =>
+      typeVariables.get(tv) match {
+        case Some(knownType) => encoderFor(knownType, seenTypeSet, typeVariables)
+
+        case None =>
+          // Concrete type unknown, check if the bounds can be used to identify a
+          // UDTEncoder and if exception is thrown check if the type extends Serializable
+          val concreteBound = tv.getBounds.collectFirst {
+            case cls: Class[_] => cls
+          }
+          tv.getBounds.flatMap(getAllSuperClasses).
+            foldLeft[(Option[AgnosticEncoder[_]], Option[AgnosticEncoder[_]])](None -> None) {
               case (r@(Some(_), _), _) => r
 
               case (r@(None, serEncoder), bound) =>
@@ -164,9 +164,8 @@ object JavaTypeInference {
                   case Success(value) => (Option(value), serEncoder)
 
                   case Failure(UseSerializationEncoder(codecProvider, clazz)) =>
-                    None ->
-                      Option(TransformingEncoder(ClassTag(concreteBound.getOrElse(clazz)),
-                        BinaryEncoder, codecProvider))
+                    None -> Option(TransformingEncoder(ClassTag(concreteBound.getOrElse(clazz)),
+                      BinaryEncoder, codecProvider))
 
                   case Failure(_) => r
                 }
@@ -177,7 +176,7 @@ object JavaTypeInference {
 
               case _ => throw ExecutionErrors.cannotFindEncoderForTypeError(t.getTypeName)
             }
-        }
+      }
 
       case pt: ParameterizedType if !forGenericBound =>
         encoderFor(pt.getRawType, seenTypeSet, JavaTypeUtils.getTypeArguments(pt).asScala.toMap)
