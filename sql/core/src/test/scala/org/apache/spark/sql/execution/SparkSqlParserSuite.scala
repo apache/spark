@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, Un
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, GreaterThan, Literal, NullsFirst, SortOrder, UnresolvedWindowExpression, UnspecifiedFrame, WindowSpecDefinition, WindowSpecReference}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, PIVOT, PROJECT, UNPIVOT, UNRESOLVED_RELATION}
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, RefreshResource}
@@ -884,11 +885,23 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
   test("Operator pipe SQL syntax") {
     withSQLConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED.key -> "true") {
       // Basic selection.
-      parser.parsePlan("TABLE t |> SELECT 1 AS X")
-      parser.parsePlan("TABLE t |> SELECT 1 AS X, 2 AS Y |> SELECT X + Y AS Z")
-      parser.parsePlan("VALUES (0), (1) tab(col) |> SELECT col * 2 AS result")
+      // Here we check that every parsed plan contains a projection and a source relation or
+      // inline table.
+      def checkPipeSelect(query: String): Unit = {
+        val plan: LogicalPlan = parser.parsePlan(query)
+        assert(plan.containsPattern(PROJECT))
+        assert(plan.containsAnyPattern(UNRESOLVED_RELATION, LOCAL_RELATION))
+      }
+      checkPipeSelect("TABLE t |> SELECT 1 AS X")
+      checkPipeSelect("TABLE t |> SELECT 1 AS X, 2 AS Y |> SELECT X + Y AS Z")
+      checkPipeSelect("VALUES (0), (1) tab(col) |> SELECT col * 2 AS result")
       // PIVOT and UNPIVOT operations
-      parser.parsePlan(
+      def checkPivotUnpivot(query: String): Unit = {
+        val plan: LogicalPlan = parser.parsePlan(query)
+        assert(plan.containsAnyPattern(PIVOT, UNPIVOT))
+        assert(plan.containsAnyPattern(UNRESOLVED_RELATION, LOCAL_RELATION))
+      }
+      checkPivotUnpivot(
         """
           |SELECT * FROM VALUES
           |  ("dotNET", 2012, 10000),
@@ -902,7 +915,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
           |  FOR course IN ('dotNET', 'Java')
           |)
           |""".stripMargin)
-      parser.parsePlan(
+      checkPivotUnpivot(
         """
           |SELECT * FROM VALUES
           |  ("dotNET", 15000, 48000, 22500),

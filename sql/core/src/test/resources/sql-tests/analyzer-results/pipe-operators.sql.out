@@ -235,6 +235,16 @@ Project [pipeselect(scalar-subquery#x [x#x]) AS result#x]
 
 
 -- !query
+select (values (0) tab(col) |> select col) as result
+-- !query analysis
+Project [scalar-subquery#x [] AS result#x]
+:  +- Project [col#x]
+:     +- SubqueryAlias tab
+:        +- LocalRelation [col#x]
++- OneRowRelation
+
+
+-- !query
 table t
 |> select (select any_value(a) from other where x = a limit 1) as result
 -- !query analysis

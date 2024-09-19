@@ -4909,6 +4909,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       )
     }
   }
+
+  test("SPARK-49659: Unsupported scalar subqueries in VALUES") {
+    checkError(
+      exception = intercept[AnalysisException](
+        sql("SELECT * FROM VALUES ((SELECT 1) + (SELECT 2))")
+      ),
+      condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.SCALAR_SUBQUERY_IN_VALUES",
+      parameters = Map(),
+      context = ExpectedContext(
+        fragment = "VALUES ((SELECT 1) + (SELECT 2))",
+        start = 14,
+        stop = 45
+      )
+    )
+  }
 }
 
 case class Foo(bar: Option[String])

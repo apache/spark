@@ -1045,6 +1045,12 @@
     ],
     "sqlState" : "42710"
   },
+  "DATA_SOURCE_EXTERNAL_ERROR" : {
+    "message" : [
+      "Encountered error when saving to external data source."
+    ],
+    "sqlState" : "KD00F"
+  },
   "DATA_SOURCE_NOT_EXIST" : {
     "message" : [
       "Data source '<provider>' not found. Please make sure the data source is registered."
@@ -1582,6 +1588,30 @@
       "<identifier> is not a valid identifier as it has more than 2 name parts."
     ],
     "sqlState" : "42601"
+  },
+  "IDENTITY_COLUMNS_DUPLICATED_SEQUENCE_GENERATOR_OPTION" : {
+    "message" : [
+      "Duplicated IDENTITY column sequence generator option: <sequenceGeneratorOption>."
+    ],
+    "sqlState" : "42601"
+  },
+  "IDENTITY_COLUMNS_ILLEGAL_STEP" : {
+    "message" : [
+      "IDENTITY column step cannot be 0."
+    ],
+    "sqlState" : "42611"
+  },
+  "IDENTITY_COLUMNS_UNSUPPORTED_DATA_TYPE" : {
+    "message" : [
+      "DataType <dataType> is not supported for IDENTITY columns."
+    ],
+    "sqlState" : "428H2"
+  },
+  "IDENTITY_COLUMN_WITH_DEFAULT_VALUE" : {
+    "message" : [
+      "A column cannot have both a default value and an identity column specification but column <colName> has default value: (<defaultValue>) and identity column specification: (<identityColumnSpec>)."
+    ],
+    "sqlState" : "42623"
   },
   "ILLEGAL_DAY_OF_WEEK" : {
     "message" : [
@@ -3118,12 +3148,12 @@
     "subClass" : {
       "NOT_ALLOWED_IN_SCOPE" : {
         "message" : [
-          "Variable <varName> was declared on line <lineNumber>, which is not allowed in this scope."
+          "Declaration of the variable <varName> is not allowed in this scope."
         ]
       },
       "ONLY_AT_BEGINNING" : {
         "message" : [
-          "Variable <varName> can only be declared at the beginning of the compound, but it was declared on line <lineNumber>."
+          "Variable <varName> can only be declared at the beginning of the compound."
         ]
       }
     },
@@ -5300,6 +5330,11 @@
           "<treeNode>"
         ]
       },
+      "SCALAR_SUBQUERY_IN_VALUES" : {
+        "message" : [
+          "Scalar subqueries in the VALUES clause."
+        ]
+      },
       "UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION" : {
         "message" : [
           "Correlated subqueries in the join predicate cannot reference both join inputs:",
@@ -6660,11 +6695,6 @@
   "_LEGACY_ERROR_TEMP_2005" : {
     "message" : [
       "Type <dataType> does not support ordered operations."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2011" : {
-    "message" : [
-      "Unexpected data type <dataType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2013" : {

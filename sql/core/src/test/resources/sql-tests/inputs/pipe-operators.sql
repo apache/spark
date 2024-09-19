@@ -78,6 +78,9 @@ table st
 table t
 |> select (select a from other where x = a limit 1) as result;
 
+-- Pipe operator SELECT inside expression subqueries.
+select (values (0) tab(col) |> select col) as result;
+
 -- Aggregations are allowed within expression subqueries in the pipe operator SELECT list as long as
 -- no aggregate functions exist in the top-level select list.
 table t
