@@ -141,6 +141,7 @@ HAVING	true
 HOUR	false
 HOURS	false
 IDENTIFIER	false
+IDENTITY	false
 IF	false
 IGNORE	false
 ILIKE	false
@@ -148,6 +149,7 @@ IMMEDIATE	false
 IMPORT	false
 IN	true
 INCLUDE	false
+INCREMENT	false
 INDEX	false
 INDEXES	false
 INNER	true

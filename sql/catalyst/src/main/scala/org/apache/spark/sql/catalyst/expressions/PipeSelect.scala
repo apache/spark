@@ -29,7 +29,7 @@ case class PipeSelect(child: Expression)
   extends UnaryExpression with RuntimeReplaceable {
   final override val nodePatterns: Seq[TreePattern] = Seq(PIPE_OPERATOR_SELECT, RUNTIME_REPLACEABLE)
   override def withNewChildInternal(newChild: Expression): Expression = PipeSelect(newChild)
-  override def replacement: Expression = {
+  override lazy val replacement: Expression = {
     def visit(e: Expression): Unit = e match {
       case a: AggregateFunction =>
         // If we used the pipe operator |> SELECT clause to specify an aggregate function, this is
