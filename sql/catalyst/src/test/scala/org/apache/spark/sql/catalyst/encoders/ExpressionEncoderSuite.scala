@@ -20,9 +20,11 @@ package org.apache.spark.sql.catalyst.encoders
 import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 import java.util.Arrays
+
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.classTag
 import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData, ScroogeLikeExample}
