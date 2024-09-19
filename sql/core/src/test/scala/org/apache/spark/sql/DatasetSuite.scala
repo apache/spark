@@ -19,15 +19,18 @@ package org.apache.spark.sql
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
+
 import scala.collection.immutable.HashSet
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
-import scala.collection.mutable
 import scala.util.Random
+
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
+
 import org.apache.spark.{SparkConf, SparkRuntimeException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
@@ -2783,87 +2786,79 @@ class DatasetSuite extends QueryTest
     }
   }
 
-  test("CDPD-73233. Bean class encoding with type parameter implementing Serializable") {
+  test("SPARK-46679 Bean class encoding with type parameter implementing Serializable") {
     // just create encoder
-    Encoders.bean(classOf[MessageWrapper[_]])
-    val msg1 = new MessageWrapper[String]()
-    msg1.setMessage("test1")
-    val msg2 = new MessageWrapper[String]()
-    msg2.setMessage("test2")
-    val expectedData = mutable.Set("test1", "test2")
-    validateParamBeanDatasetWithDirectSerializableBound(Seq(msg1, msg2), expectedData)
+    val enc = Encoders.bean(classOf[MessageWrapper[_]])
+    val data = Seq("test1", "test2").map(str => {
+      val msg = new MessageWrapper[String]()
+      msg.setMessage(str)
+      msg
+    })
+    validateParamBeanDataset(Encoders.bean(classOf[MessageWrapper[String]]),
+      data, mutable.Buffer(data : _*),
+      StructType(Seq(StructField("message", BinaryType, true)))
+    )
   }
 
-  test("CDPD-73233. Bean class encoding with type parameter indirectly extending" +
+  test("SPARK-46679 Bean class encoding with type parameter indirectly extending" +
     " Serializable class") {
     // just create encoder
     Encoders.bean(classOf[BigDecimalMessageWrapper[_]])
-    val msg1 = new BigDecimalMessageWrapper[DerivedBigDecimalExtender]()
-    msg1.setMessage(new DerivedBigDecimalExtender(2.0d))
-    val msg2 = new BigDecimalMessageWrapper[DerivedBigDecimalExtender]()
-    msg2.setMessage(new DerivedBigDecimalExtender(8.0d))
-    val expectedData = mutable.Set(new DerivedBigDecimalExtender(8.0d),
-      new DerivedBigDecimalExtender(2.0d))
-    validateParamBeanDatasetWithInDirectSerializableBound(Seq(msg1, msg2), expectedData)
+
+    val data = Seq(2d, 8d).map(doub => {
+      val bean = new BigDecimalMessageWrapper[DerivedBigDecimalExtender]()
+      bean.setMessage(new DerivedBigDecimalExtender(doub))
+      bean
+    })
+
+    validateParamBeanDataset(
+      Encoders.bean(classOf[BigDecimalMessageWrapper[DerivedBigDecimalExtender]]),
+      data, mutable.Buffer(data: _*),
+      StructType(Seq(StructField("message", BinaryType, true))))
   }
 
-  test("CDPD-73233. test bean class with  generic parameter bound of UDTType") {
+  test("SPARK-46679. test bean class with  generic parameter bound of UDTType") {
     // just create encoder
     UDTRegistration.register(classOf[TestUDT].getName, classOf[TestUDTType].getName)
     val enc = Encoders.bean(classOf[UDTBean[TestUDT]])
-    enc.schema
-    val msg1 = new UDTBean[TestUDT]()
-    msg1.setMessage(new TestUDTImplSub(1, "a"))
-    val msg2 = new UDTBean[TestUDT]()
-    msg2.setMessage(new TestUDTImplSub(2, "b"))
-    val b1 = new UDTBean[TestUDT]
-    b1.setMessage(new TestUDTImpl(1, "a"))
+    val baseData = Seq((1, "a"), (2, "b"))
+    val data = baseData.map(tup => {
+      val bean = new UDTBean[TestUDT]()
+      bean.setMessage(new TestUDTImplSub(tup._1, tup._2))
+      bean
+    })
+    val expectedData = baseData.map(tup => {
+      val bean = new UDTBean[TestUDT]()
+      bean.setMessage(new TestUDTImpl(tup._1, tup._2))
+      bean
+    })
 
-    val b2 = new UDTBean[TestUDT]
-    b2.setMessage(new TestUDTImpl(2, "b"))
-
-    val expectedData = mutable.Set[TestUDT](new TestUDTImpl(1, "a"), new TestUDTImpl(2, "b"))
-    val ds = spark.createDataset(Seq(msg1, msg2))(enc)
-    val df = ds.toDF()
-    val schema = df.schema
-    df.printSchema()
-    assertResult(1)(schema.size)
-    assertResult("message")(schema.head.name)
-    assertResult(new TestUDTType())(schema.head.dataType)
-    val numMessages = ds.collect()
-    assertResult(2)(numMessages.length)
-    numMessages.foreach(m => expectedData.remove(m.getMessage))
-    assert(expectedData.isEmpty)
+    validateParamBeanDataset(
+      Encoders.bean(classOf[UDTBean[TestUDT]]),
+      data, mutable.Buffer(expectedData: _*),
+      StructType(Seq(StructField("message", new TestUDTType(), true))))
   }
 
-  private def validateParamBeanDatasetWithDirectSerializableBound[T <: java.io.Serializable](
-      data: Seq[MessageWrapper[T]],
-      expectedData: mutable.Set[T]): Unit = {
-    val ds = spark.createDataset(data)(Encoders.bean(classOf[MessageWrapper[T]]))
-    val df = ds.toDF()
-    val schema = df.schema
-    assertResult(1)(schema.size)
-    assertResult("message")(schema.head.name)
-    assertResult(BinaryType)(schema.head.dataType)
-    val numMessages = ds.collect()
-    assertResult(2)(numMessages.length)
-    numMessages.foreach(m => expectedData.remove(m.getMessage))
+  private def validateParamBeanDataset[T](
+      encoder: Encoder[T],
+      data: Seq[T],
+      expectedData: mutable.Buffer[T],
+      expectedSchema: StructType): Unit = {
+    val ds = spark.createDataset(data)(encoder)
+    val resultData = ds.collect()
+    assertResult(expectedData.size)(resultData.length)
+    resultData.foreach(e => {
+      val i = expectedData.indexOf(e)
+      assert(i >= 0)
+      expectedData.remove(i)
+    })
     assert(expectedData.isEmpty)
-  }
 
-  private def validateParamBeanDatasetWithInDirectSerializableBound[T <: BigDecimalExtender](
-      data: Seq[BigDecimalMessageWrapper[T]],
-      expectedData: mutable.Set[T]): Unit = {
-    val ds = spark.createDataset(data)(Encoders.bean(classOf[BigDecimalMessageWrapper[T]]))
     val df = ds.toDF()
     val schema = df.schema
-    assertResult(1)(schema.size)
-    assertResult("message")(schema.head.name)
-    assertResult(BinaryType)(schema.head.dataType)
-    val numMessages = ds.collect()
-    assertResult(2)(numMessages.length)
-    numMessages.foreach(m => expectedData.remove(m.getMessage))
-    assert(expectedData.isEmpty)
+    assertResult(expectedSchema)(schema)
+    val resultRows = df.collect()
+    assertResult(data.size)(resultRows.length)
   }
 }
 
@@ -3017,6 +3012,15 @@ class MessageWrapper[T <: java.io.Serializable] extends java.io.Serializable {
   def setMessage(message: T): Unit = {
     this.message = message
   }
+
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case m: MessageWrapper[_] => m.message == this.message
+      case _ => false
+    }
+  }
+
+  override def hashCode(): Int = this.message.hashCode()
 }
 
 class BigDecimalMessageWrapper[T <: BigDecimalExtender] extends java.io.Serializable {
@@ -3027,11 +3031,38 @@ class BigDecimalMessageWrapper[T <: BigDecimalExtender] extends java.io.Serializ
   def setMessage(message: T): Unit = {
     this.message = message
   }
+
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case m: BigDecimalMessageWrapper[_] => m.message == this.message
+      case _ => false
+    }
+  }
+
+  override def hashCode(): Int = this.message.hashCode()
 }
 
-class BigDecimalExtender(doub: Double) extends java.math.BigDecimal(doub * 2)
+class BigDecimalExtender(doub: Double) extends java.math.BigDecimal(doub) {
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case m: BigDecimalExtender => super.equals(m.asInstanceOf[java.math.BigDecimal])
+      case _ => false
+    }
+  }
 
-class DerivedBigDecimalExtender (doub: Double) extends BigDecimalExtender(doub)
+  override def hashCode(): Int = super.hashCode()
+}
+
+class DerivedBigDecimalExtender (doub: Double) extends BigDecimalExtender(doub) {
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case m: DerivedBigDecimalExtender => super.equals(m.asInstanceOf[BigDecimalExtender])
+      case _ => false
+    }
+  }
+
+  override def hashCode(): Int = super.hashCode()
+}
 
 trait TestUDT extends Serializable {
   def intField: Int
