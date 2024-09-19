@@ -34,9 +34,8 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, DE
  *
  * @since 1.6.0
  */
-abstract class SQLImplicits[DS[U] <: Dataset[U]]
-    extends LowPrioritySQLImplicits
-    with Serializable {
+abstract class SQLImplicits extends LowPrioritySQLImplicits with Serializable {
+  type DS[U] <: Dataset[U]
 
   protected def session: SparkSession
 
@@ -276,7 +275,7 @@ abstract class SQLImplicits[DS[U] <: Dataset[U]]
    * @since 1.6.0
    */
   implicit def localSeqToDatasetHolder[T: Encoder](s: Seq[T]): DatasetHolder[T, DS] = {
-    new DatasetHolder[T, DS](session.createDataset(s).asInstanceOf[DS[T]])
+    new DatasetHolder(session.createDataset(s).asInstanceOf[DS[T]])
   }
 
   /**

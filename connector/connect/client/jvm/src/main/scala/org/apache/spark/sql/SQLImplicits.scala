@@ -18,4 +18,6 @@ package org.apache.spark.sql
 
 /** @inheritdoc */
 abstract class SQLImplicits private[sql] (override val session: SparkSession)
-    extends api.SQLImplicits[Dataset]
+    extends api.SQLImplicits {
+  type DS[U] = Dataset[U]
+}

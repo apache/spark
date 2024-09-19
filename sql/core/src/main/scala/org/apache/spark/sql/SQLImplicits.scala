@@ -22,7 +22,9 @@ import scala.language.implicitConversions
 import org.apache.spark.rdd.RDD
 
 /** @inheritdoc */
-abstract class SQLImplicits extends api.SQLImplicits[Dataset] {
+abstract class SQLImplicits extends api.SQLImplicits {
+  type DS[U] = Dataset[U]
+
   protected def session: SparkSession
 
   /**

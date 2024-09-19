@@ -516,7 +516,7 @@ abstract class SparkSession extends Serializable with Closeable {
    *
    * @since 2.0.0
    */
-  val implicits: SQLImplicits[DS]
+  val implicits: SQLImplicits
 
   /**
    * Executes some code block and prints to stdout the time taken to execute the block. This is
