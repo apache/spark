@@ -35,9 +35,11 @@ import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.FileFormat._
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
+import org.apache.spark.sql.execution.metric.{SQLMetric, VariantConstructionMetrics}
 import org.apache.spark.sql.execution.vectorized.{ColumnVectorUtils, ConstantColumnVector}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
+import org.apache.spark.types.variant.VariantMetrics
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.NextIterator
 
@@ -83,8 +85,58 @@ class FileScanRDD(
     val readSchema: StructType,
     val metadataColumns: Seq[AttributeReference] = Seq.empty,
     metadataExtractors: Map[String, PartitionedFile => Any] = Map.empty,
-    options: FileSourceOptions = new FileSourceOptions(CaseInsensitiveMap(Map.empty)))
+    options: FileSourceOptions = new FileSourceOptions(CaseInsensitiveMap(Map.empty)),
+    topLevelVariantMetrics: Option[VariantMetrics] = None,
+    nestedVariantMetrics: Option[VariantMetrics] = None,
+    variantSqlMetrics: Option[Map[String, SQLMetric]] = None)
   extends RDD[InternalRow](sparkSession.sparkContext, Nil) {
+
+  private def updateVariantBuilderMetrics(): Unit = {
+    variantSqlMetrics match {
+      case Some(sqlMetrics) =>
+        topLevelVariantMetrics match {
+          case Some(metrics) =>
+            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_NUMBER_OF_VARIANTS)
+              .add(metrics.variantCount)
+            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_BYTE_SIZE_BOUND)
+              .add(metrics.byteSize)
+            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_NUM_SCALARS)
+              .add(metrics.numScalars)
+            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_NUM_PATHS)
+              .add(metrics.numPaths)
+            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_MAX_DEPTH)
+              .set(
+                Math.max(
+                  sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_MAX_DEPTH).value,
+                  metrics.maxDepth
+                )
+              )
+            metrics.reset()
+          case None =>
+        }
+        nestedVariantMetrics match {
+          case Some(metrics) =>
+            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_NUMBER_OF_VARIANTS)
+              .add(metrics.variantCount)
+            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_BYTE_SIZE_BOUND)
+              .add(metrics.byteSize)
+            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_NUM_SCALARS)
+              .add(metrics.numScalars)
+            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_NUM_PATHS)
+              .add(metrics.numPaths)
+            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_MAX_DEPTH)
+              .set(
+                Math.max(
+                  sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_MAX_DEPTH).value,
+                  metrics.maxDepth
+                )
+              )
+            metrics.reset()
+          case None =>
+        }
+      case None =>
+    }
+  }
 
   private val ignoreCorruptFiles = options.ignoreCorruptFiles
   private val ignoreMissingFiles = options.ignoreMissingFiles
@@ -230,6 +282,10 @@ class FileScanRDD(
 
       /** Advances to the next file. Returns true if a new non-empty iterator is available. */
       private def nextIterator(): Boolean = {
+        // This function is called at the end of each file and before the first file. Therefore,
+        // we update the Variant Metrics at the end of each JSON file and reset the
+        // variant metrics objects to process the next file.
+        updateVariantBuilderMetrics()
         if (files.hasNext) {
           currentFile = files.next()
           updateMetadataRow()

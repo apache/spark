@@ -27,7 +27,7 @@ import org.scalatest.Assertions
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.SQLExecution
+import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
@@ -169,6 +169,17 @@ abstract class QueryTest extends PlanTest {
    */
   protected def checkAnswer(df: => DataFrame, expectedAnswer: Array[Row]): Unit = {
     checkAnswer(df, expectedAnswer.toImmutableArraySeq)
+  }
+
+  /**
+   * Finds a node in the plan that satisfies a given condition in a SparkPlan.
+   */
+  protected def findNode(plan: SparkPlan)(f: SparkPlan => Boolean): Option[SparkPlan] = {
+    plan.children.foldLeft(Option.empty[SparkPlan]) {
+      (l, r) => l.orElse(findNode(r)(f))
+    }.orElse {
+      Option(plan).filter(f)
+    }
   }
 
   /**

@@ -16,11 +16,13 @@
  */
 package org.apache.spark.sql
 
+import java.io.File
+
 import org.apache.spark.sql.QueryTest.sameRows
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.catalyst.expressions.variant.{ToVariantObject, VariantExpressionEvalUtils}
-import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.execution.{FileSourceScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -337,6 +339,269 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
           assert(plan.isInstanceOf[WholeStageCodegenExec] == (codegenMode == "CODEGEN_ONLY"))
         }
       }
+    }
+  }
+
+  test("json scan metrics") {
+    withTempDir { dir =>
+      val fileTemp = new File(dir, "file.json.gz")
+      val file = fileTemp.getAbsolutePath
+      val input = Seq(
+        Row(
+          """[{"a": 1, "g": 432, "b": {"c": {"d": 32}, "e": [891, {"f": 21}]}}""" +
+          """,{"a": {"h":52}, "g": 971, "b": {"c": [{"d": 432}], """ +
+          """"e": [{"h":173},[{"f": 65}], 8]}}]"""
+        ),
+        Row(
+          """{"a": {"h":453}, "g": 121, "b": {"c": [{"d": 27}], "e": [{"h":64}, """ +
+          """[{"f": 27}], 43]}}"""
+        )
+      )
+      // Repartitioning to make sure that there are multiple workers and their stats are combined
+      // correctly.
+      spark
+        .createDataFrame(spark.sparkContext.parallelize(input, 1), StructType.fromDDL("j string"))
+        .repartition(2)
+        .write
+        .option("compression", "gzip")
+        .text(file)
+      // Single Variant Column
+      val singleColumnDf = spark.read.format("json").option("singleVariantColumn", "var").load(file)
+
+      // Make sure that multiple tasks are used and each worker reads at least one row.
+      assert(singleColumnDf.rdd.getNumPartitions == 2)
+      singleColumnDf.rdd.mapPartitionsWithIndex((index, iter) => Iterator((index, iter.size)))
+        .collect()
+        .foreach { case (_, size) => assert(size > 0) }
+
+      val singleColumnResults = singleColumnDf.collect()
+      val singleColumnJsonScanNode = findNode(singleColumnDf.queryExecution.executedPlan)(
+        _.isInstanceOf[FileSourceScanExec]
+      ).get
+      assert(singleColumnJsonScanNode.metrics("variantBuilderTopLevelNumVariants").value == 2)
+      assert(singleColumnJsonScanNode.metrics("variantBuilderNestedNumVariants").value == 0)
+      assert(singleColumnJsonScanNode.metrics("variantBuilderTopLevelMaxDepth").value == 6)
+      assert(singleColumnJsonScanNode.metrics("variantBuilderNestedMaxDepth").value == 0)
+      // Byte Size of Variants
+      val byteSizeActual = singleColumnResults
+        .map(_(0).asInstanceOf[VariantVal])
+        .map(v => v.getValue.length + v.getMetadata.length)
+        .sum
+      assert(
+        singleColumnJsonScanNode
+          .metrics("variantBuilderTopLevelByteSizeBound")
+          .value == byteSizeActual
+      )
+      assert(singleColumnJsonScanNode.metrics("variantBuilderNestedByteSizeBound").value == 0)
+      assert(singleColumnJsonScanNode.metrics("variantBuilderTopLevelNumScalars").value == 17)
+      assert(singleColumnJsonScanNode.metrics("variantBuilderNestedNumScalars").value == 0)
+      assert(singleColumnJsonScanNode.metrics("variantBuilderTopLevelNumPaths").value == 41)
+      assert(singleColumnJsonScanNode.metrics("variantBuilderNestedNumPaths").value == 0)
+
+      // Schema with top level and nested variants
+      val multipleColumnDf =
+        spark.read
+          .format("json")
+          .schema("a variant, g int, b struct<c:variant,e:array<variant>>")
+          .load(file)
+      val multipleColumnResults = multipleColumnDf.collect()
+      val multipleColumnJsonScanNode = findNode(multipleColumnDf.queryExecution.executedPlan)(
+        _.isInstanceOf[FileSourceScanExec]
+      ).get
+
+      // Make sure that multiple tasks are used and each worker reads at least one row.
+      assert(multipleColumnDf.rdd.getNumPartitions == 2)
+      multipleColumnDf.rdd.mapPartitionsWithIndex((index, iter) => Iterator((index, iter.size)))
+        .collect()
+        .foreach { case (_, size) => assert(size > 0) }
+
+      // Number of Variants Produced
+      assert(multipleColumnJsonScanNode.metrics("variantBuilderTopLevelNumVariants").value == 3)
+      assert(multipleColumnJsonScanNode.metrics("variantBuilderNestedNumVariants").value == 11)
+      // Max Depth of Variants
+      assert(multipleColumnJsonScanNode.metrics("variantBuilderTopLevelMaxDepth").value == 1)
+      assert(multipleColumnJsonScanNode.metrics("variantBuilderNestedMaxDepth").value == 2)
+      // Byte Size of Variants
+      val topLevelByteSizeActual = multipleColumnResults
+        .map(_(0).asInstanceOf[VariantVal])
+        .filter(_ != null)
+        .map(v => v.getValue.length + v.getMetadata.length)
+        .sum
+      assert(
+        multipleColumnJsonScanNode
+          .metrics("variantBuilderTopLevelByteSizeBound")
+          .value == topLevelByteSizeActual
+      )
+      val nestedByteSizeActual = multipleColumnDf.filter("g == 432").selectExpr("b.c")
+          .collect()
+          .map(_(0).asInstanceOf[VariantVal])
+          .filter(_ != null)
+          .map(v => v.getValue.length + v.getMetadata.length)
+          .sum + multipleColumnDf
+          .filter("g == 432")
+          .selectExpr("b.e[0]")
+          .collect()
+          .map(_(0).asInstanceOf[VariantVal])
+          .filter(_ != null)
+          .map(v => v.getValue.length + v.getMetadata.length)
+          .sum + multipleColumnDf
+          .filter("g == 432")
+          .selectExpr("b.e[1]")
+          .collect()
+          .map(_(0).asInstanceOf[VariantVal])
+          .filter(_ != null)
+          .map(v => v.getValue.length + v.getMetadata.length)
+          .sum + multipleColumnDf
+          .filter("g == 121")
+          .selectExpr("b.c")
+          .collect()
+          .map(_(0).asInstanceOf[VariantVal])
+          .filter(_ != null)
+          .map(v => v.getValue.length + v.getMetadata.length)
+          .sum + multipleColumnDf
+          .filter("g == 121")
+          .selectExpr("b.e[0]")
+          .collect()
+          .map(_(0).asInstanceOf[VariantVal])
+          .filter(_ != null)
+          .map(v => v.getValue.length + v.getMetadata.length)
+          .sum + multipleColumnDf
+          .filter("g == 121")
+          .selectExpr("b.e[1]")
+          .collect()
+          .map(_(0).asInstanceOf[VariantVal])
+          .filter(_ != null)
+          .map(v => v.getValue.length + v.getMetadata.length)
+          .sum + multipleColumnDf
+          .filter("g == 121")
+          .selectExpr("b.e[2]")
+          .collect()
+          .map(_(0).asInstanceOf[VariantVal])
+          .filter(_ != null)
+          .map(v => v.getValue.length + v.getMetadata.length)
+          .sum + multipleColumnDf
+          .filter("g == 971")
+          .selectExpr("b.c")
+          .collect()
+          .map(_(0).asInstanceOf[VariantVal])
+          .filter(_ != null)
+          .map(v => v.getValue.length + v.getMetadata.length)
+          .sum + multipleColumnDf
+          .filter("g == 971")
+          .selectExpr("b.e[0]")
+          .collect()
+          .map(_(0).asInstanceOf[VariantVal])
+          .filter(_ != null)
+          .map(v => v.getValue.length + v.getMetadata.length)
+          .sum + multipleColumnDf
+          .filter("g == 971")
+          .selectExpr("b.e[1]")
+          .collect()
+          .map(_(0).asInstanceOf[VariantVal])
+          .filter(_ != null)
+          .map(v => v.getValue.length + v.getMetadata.length)
+          .sum + multipleColumnDf
+          .filter("g == 971")
+          .selectExpr("b.e[2]")
+          .collect()
+          .map(_(0).asInstanceOf[VariantVal])
+          .filter(_ != null)
+          .map(v => v.getValue.length + v.getMetadata.length)
+          .sum
+      assert(
+        multipleColumnJsonScanNode
+          .metrics("variantBuilderNestedByteSizeBound")
+          .value == nestedByteSizeActual
+      )
+
+      // Number of scalar values in all variants
+      assert(multipleColumnJsonScanNode.metrics("variantBuilderTopLevelNumScalars").value == 3)
+      assert(multipleColumnJsonScanNode.metrics("variantBuilderNestedNumScalars").value == 11)
+
+      // Number of paths in all variants
+      assert(multipleColumnJsonScanNode.metrics("variantBuilderTopLevelNumPaths").value == 5)
+      assert(multipleColumnJsonScanNode.metrics("variantBuilderNestedNumPaths").value == 23)
+    }
+  }
+
+  test("json scan metrics - no rows") {
+    withTempDir { dir =>
+      val fileTemp = new File(dir, "file.json.gz")
+      val file = fileTemp.getAbsolutePath
+      val input: Seq[Row] = Seq()
+      spark
+        .createDataFrame(spark.sparkContext.parallelize(input, 1), StructType.fromDDL("j string"))
+        .write
+        .option("compression", "gzip")
+        .text(file)
+      // Single Variant Column
+      val singleColumnDf = spark.read.format("json").option("singleVariantColumn", "var").load(file)
+
+      assert(singleColumnDf.rdd.getNumPartitions == 1)
+      singleColumnDf.rdd.mapPartitionsWithIndex((index, iter) => Iterator((index, iter.size)))
+        .collect()
+        .foreach { case (_, size) => assert(size == 0) }
+
+      singleColumnDf.collect()
+      val singleColumnJsonScanNode = findNode(singleColumnDf.queryExecution.executedPlan)(
+        _.isInstanceOf[FileSourceScanExec]
+      ).get
+      assert(singleColumnJsonScanNode.metrics.contains("variantBuilderTopLevelNumVariants"))
+      assert(singleColumnJsonScanNode.metrics("variantBuilderTopLevelNumVariants").value == 0)
+      assert(singleColumnJsonScanNode.metrics("variantBuilderNestedNumVariants").value == 0)
+      assert(singleColumnJsonScanNode.metrics("variantBuilderTopLevelMaxDepth").value == 0)
+      assert(singleColumnJsonScanNode.metrics("variantBuilderNestedMaxDepth").value == 0)
+      assert(singleColumnJsonScanNode.metrics("variantBuilderTopLevelByteSizeBound").value == 0)
+      assert(singleColumnJsonScanNode.metrics("variantBuilderNestedByteSizeBound").value == 0)
+      assert(singleColumnJsonScanNode.metrics("variantBuilderTopLevelNumScalars").value == 0)
+      assert(singleColumnJsonScanNode.metrics("variantBuilderNestedNumScalars").value == 0)
+      assert(singleColumnJsonScanNode.metrics("variantBuilderTopLevelNumPaths").value == 0)
+      assert(singleColumnJsonScanNode.metrics("variantBuilderNestedNumPaths").value == 0)
+
+      // Schema with top level and nested variants
+      val multipleColumnDf =
+        spark.read
+          .format("json")
+          .schema("a variant, g int, b struct<c:variant,e:array<variant>>")
+          .load(file)
+      multipleColumnDf.collect()
+      val multipleColumnJsonScanNode = findNode(multipleColumnDf.queryExecution.executedPlan)(
+        _.isInstanceOf[FileSourceScanExec]
+      ).get
+      // Number of Variants Produced
+      assert(multipleColumnJsonScanNode.metrics("variantBuilderTopLevelNumVariants").value == 0)
+      assert(multipleColumnJsonScanNode.metrics("variantBuilderNestedNumVariants").value == 0)
+      // Max Depth of Variants
+      assert(multipleColumnJsonScanNode.metrics("variantBuilderTopLevelMaxDepth").value == 0)
+      assert(multipleColumnJsonScanNode.metrics("variantBuilderNestedMaxDepth").value == 0)
+      // Byte Size of Variants
+      assert(multipleColumnJsonScanNode.metrics("variantBuilderTopLevelByteSizeBound").value == 0)
+      assert(multipleColumnJsonScanNode.metrics("variantBuilderNestedByteSizeBound").value == 0)
+      // Number of scalar values in all variants
+      assert(multipleColumnJsonScanNode.metrics("variantBuilderTopLevelNumScalars").value == 0)
+      assert(multipleColumnJsonScanNode.metrics("variantBuilderNestedNumScalars").value == 0)
+      // Number of paths in all variants
+      assert(multipleColumnJsonScanNode.metrics("variantBuilderTopLevelNumPaths").value == 0)
+      assert(multipleColumnJsonScanNode.metrics("variantBuilderNestedNumPaths").value == 0)
+    }
+  }
+
+  test("non-json datasource scans don't contain variant metrics") {
+    withTempDir { dir =>
+      val fileTemp = new File(dir, "file.parquet")
+      val file = fileTemp.getAbsolutePath
+      val input: Seq[Row] = Seq()
+      spark
+        .createDataFrame(spark.sparkContext.parallelize(input, 1), StructType.fromDDL("j string"))
+        .write
+        .parquet(file)
+      val df = spark.read.parquet(file)
+
+      df.collect()
+      val node = findNode(df.queryExecution.executedPlan)(
+        _.isInstanceOf[FileSourceScanExec]
+      ).get
+      assert(!node.metrics.contains("variantBuilderTopLevelNumVariants"))
     }
   }
 }

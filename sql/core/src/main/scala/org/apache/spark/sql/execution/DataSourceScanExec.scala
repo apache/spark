@@ -34,14 +34,16 @@ import org.apache.spark.sql.catalyst.util.{truncatedString, CaseInsensitiveMap}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
-import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics, VariantConstructionMetrics}
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.types.variant.VariantMetrics
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
@@ -609,6 +611,16 @@ case class FileSourceScanExec(
     override val disableBucketedScan: Boolean = false)
   extends FileSourceScanLike {
 
+  /** SQL metrics generated for JSON scans involving variants. */
+  protected lazy val variantBuilderMetrics: Map[String, SQLMetric] =
+    VariantConstructionMetrics.createSQLMetrics(sparkContext)
+
+  /** Only report variant metrics if the data source file format is JSON */
+  override lazy val metrics: Map[String, SQLMetric] = super.metrics ++ {
+    if (relation.fileFormat.isInstanceOf[JsonFileFormat]) variantBuilderMetrics
+    else Map.empty[String, SQLMetric]
+  }
+
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
   override lazy val supportsColumnar: Boolean = {
@@ -628,18 +640,39 @@ case class FileSourceScanExec(
     }
   }
 
+  val topLevelVariantMetrics: VariantMetrics = new VariantMetrics()
+  val nestedVariantMetrics: VariantMetrics = new VariantMetrics()
+
   lazy val inputRDD: RDD[InternalRow] = {
     val options = relation.options +
       (FileFormat.OPTION_RETURNING_BATCH -> supportsColumnar.toString)
-    val readFile: (PartitionedFile) => Iterator[InternalRow] =
-      relation.fileFormat.buildReaderWithPartitionValues(
-        sparkSession = relation.sparkSession,
-        dataSchema = relation.dataSchema,
-        partitionSchema = relation.partitionSchema,
-        requiredSchema = requiredSchema,
-        filters = pushedDownFilters,
-        options = options,
-        hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
+    val readFile: (PartitionedFile) => Iterator[InternalRow] = {
+      val hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options)
+      relation.fileFormat match {
+        case f: JsonFileFormat =>
+          f.buildReaderWithPartitionValuesAndVariantMetrics(
+            sparkSession = relation.sparkSession,
+            dataSchema = relation.dataSchema,
+            partitionSchema = relation.partitionSchema,
+            requiredSchema = requiredSchema,
+            filters = pushedDownFilters,
+            options = options,
+            hadoopConf = hadoopConf,
+            topLevelVariantMetrics,
+            nestedVariantMetrics
+          )
+        case _ =>
+          relation.fileFormat.buildReaderWithPartitionValues(
+            sparkSession = relation.sparkSession,
+            dataSchema = relation.dataSchema,
+            partitionSchema = relation.partitionSchema,
+            requiredSchema = requiredSchema,
+            filters = pushedDownFilters,
+            options = options,
+            hadoopConf = hadoopConf
+          )
+      }
+    }
 
     val readRDD = if (bucketedScan) {
       createBucketedReadRDD(relation.bucketSpec.get, readFile, dynamicallySelectedPartitions)
@@ -804,7 +837,8 @@ case class FileSourceScanExec(
     new FileScanRDD(relation.sparkSession, readFile, partitions,
       new StructType(requiredSchema.fields ++ relation.partitionSchema.fields),
       fileConstantMetadataColumns, relation.fileFormat.fileConstantMetadataExtractors,
-      new FileSourceOptions(CaseInsensitiveMap(relation.options)))
+      new FileSourceOptions(CaseInsensitiveMap(relation.options)), Some(topLevelVariantMetrics),
+      Some(nestedVariantMetrics), Some(variantBuilderMetrics))
   }
 
   // Filters unused DynamicPruningExpression expressions - one which has been replaced
