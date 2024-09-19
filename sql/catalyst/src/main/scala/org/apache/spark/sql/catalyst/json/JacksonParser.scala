@@ -121,7 +121,8 @@ class JacksonParser(
 
   private val variantAllowDuplicateKeys = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)
 
-  protected final def parseVariant(isTopLevel: Boolean)(parser: JsonParser): VariantVal = {
+  // isTopLevel helps in distinguishing between top level variant and nested variants for metrics.
+  private final def parseVariant(isTopLevel: Boolean)(parser: JsonParser): VariantVal = {
     // Skips `FIELD_NAME` at the beginning. This check is adapted from `parseJsonToken`, but we
     // cannot directly use the function here because it also handles the `VALUE_NULL` token and
     // returns null (representing a SQL NULL). Instead, we want to return a variant null.
