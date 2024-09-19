@@ -32,7 +32,6 @@ import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.util.Utils
 
 /**
  * Functions for registering user-defined functions. Use `SparkSession.udf` to access this:
@@ -121,9 +120,7 @@ class UDFRegistration private[sql] (session: SparkSession, functionRegistry: Fun
    */
   private[sql] def registerJavaUDAF(name: String, className: String): Unit = {
     try {
-      val clazz = session.artifactManager.withResources {
-        Utils.classForName[AnyRef](className, noSparkClassLoader = true)
-      }
+      val clazz = session.artifactManager.classloader.loadClass(className)
       if (!classOf[UserDefinedAggregateFunction].isAssignableFrom(clazz)) {
         throw QueryCompilationErrors
           .classDoesNotImplementUserDefinedAggregateFunctionError(className)
@@ -140,18 +137,20 @@ class UDFRegistration private[sql] (session: SparkSession, functionRegistry: Fun
 
   // scalastyle:off line.size.limit
   /**
-   * Register a Java UDF class using reflection, for use from pyspark
+   * Register a Java UDF class using it's class name. The class must implement one of the UDF
+   * interfaces in the [[org.apache.spark.sql.api.java]] package, and discoverable by the current
+   * session's class loader.
    *
-   * @param name           udf name
-   * @param className      fully qualified class name of udf
-   * @param returnDataType return type of udf. If it is null, spark would try to infer
+   * @param name           Name of the UDF.
+   * @param className      Fully qualified class name of the UDF.
+   * @param returnDataType Return type of UDF. If it is `null`, Spark would try to infer
    *                       via reflection.
+   *
+   * @since 4.0.0
    */
   def registerJava(name: String, className: String, returnDataType: DataType): Unit = {
     try {
-      val clazz = session.artifactManager.withResources {
-        Utils.classForName[AnyRef](className)
-      }
+      val clazz = session.artifactManager.classloader.loadClass(className)
       val udfInterfaces = clazz.getGenericInterfaces
         .filter(_.isInstanceOf[ParameterizedType])
         .map(_.asInstanceOf[ParameterizedType])

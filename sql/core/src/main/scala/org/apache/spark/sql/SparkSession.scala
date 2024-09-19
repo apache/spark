@@ -739,8 +739,10 @@ class SparkSession private(
     // active session once we are done.
     val old = SparkSession.activeThreadSession.get()
     SparkSession.setActiveSession(this)
-    try block finally {
-      SparkSession.setActiveSession(old)
+    artifactManager.withResources {
+      try block finally {
+        SparkSession.setActiveSession(old)
+      }
     }
   }
 
