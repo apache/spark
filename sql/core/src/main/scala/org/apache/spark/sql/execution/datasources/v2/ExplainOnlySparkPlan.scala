@@ -14,12 +14,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.{api, SparkSession}
+package org.apache.spark.sql.execution.datasources.v2
 
-/** @inheritdoc */
-trait StreamingQuery extends api.StreamingQuery {
-  /** @inheritdoc */
-  override def sparkSession: SparkSession
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.LeafLike
+import org.apache.spark.sql.execution.SparkPlan
+
+case class ExplainOnlySparkPlan(toExplain: LogicalPlan) extends SparkPlan with LeafLike[SparkPlan] {
+
+  override def output: Seq[Attribute] = Nil
+
+  override def simpleString(maxFields: Int): String = {
+    toExplain.simpleString(maxFields)
+  }
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    throw new UnsupportedOperationException()
+  }
 }

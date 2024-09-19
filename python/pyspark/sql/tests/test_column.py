@@ -18,6 +18,8 @@
 
 from enum import Enum
 from itertools import chain
+import datetime
+
 from pyspark.sql import Column, Row
 from pyspark.sql import functions as sf
 from pyspark.sql.types import StructType, StructField, IntegerType, LongType
@@ -279,6 +281,13 @@ class ColumnTestsMixin:
         expression = sf.expr("foo")
         when_cond = sf.when(expression, sf.lit(None))
         self.assertEqual(str(when_cond), "Column<'CASE WHEN foo THEN NULL END'>")
+
+    def test_lit_time_representation(self):
+        dt = datetime.date(2021, 3, 4)
+        self.assertEqual(str(sf.lit(dt)), "Column<'2021-03-04'>")
+
+        ts = datetime.datetime(2021, 3, 4, 12, 34, 56, 1234)
+        self.assertEqual(str(sf.lit(ts)), "Column<'2021-03-04 12:34:56.001234'>")
 
     def test_enum_literals(self):
         class IntEnum(Enum):

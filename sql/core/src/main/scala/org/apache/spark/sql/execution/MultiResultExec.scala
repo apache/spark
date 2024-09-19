@@ -14,12 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.{api, SparkSession}
+package org.apache.spark.sql.execution
 
-/** @inheritdoc */
-trait StreamingQuery extends api.StreamingQuery {
-  /** @inheritdoc */
-  override def sparkSession: SparkSession
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Attribute
+
+case class MultiResultExec(children: Seq[SparkPlan]) extends SparkPlan {
+
+  override def output: Seq[Attribute] = children.lastOption.map(_.output).getOrElse(Nil)
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    children.lastOption.map(_.execute()).getOrElse(sparkContext.emptyRDD)
+  }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[SparkPlan]): MultiResultExec = {
+    copy(children = newChildren)
+  }
 }

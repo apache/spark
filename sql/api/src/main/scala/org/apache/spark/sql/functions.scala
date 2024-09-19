@@ -1714,7 +1714,7 @@ object functions {
    * @group normal_funcs
    * @since 1.5.0
    */
-  def broadcast[DS[U] <: api.Dataset[U, DS]](df: DS[_]): df.type = {
+  def broadcast[DS[U] <: api.Dataset[U]](df: DS[_]): df.type = {
     df.hint("broadcast").asInstanceOf[df.type]
   }
 

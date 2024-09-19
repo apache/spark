@@ -14,12 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.{api, SparkSession}
+package org.apache.spark.sql.catalyst.plans.logical
 
-/** @inheritdoc */
-trait StreamingQuery extends api.StreamingQuery {
-  /** @inheritdoc */
-  override def sparkSession: SparkSession
+/**
+ * A logical plan node that requires execution during analysis.
+ */
+trait ExecutableDuringAnalysis extends LogicalPlan {
+  /**
+   * Returns the logical plan node that should be used for EXPLAIN.
+   */
+  def stageForExplain(): LogicalPlan
 }
