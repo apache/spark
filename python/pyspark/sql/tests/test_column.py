@@ -19,12 +19,13 @@
 from enum import Enum
 from itertools import chain
 import datetime
+import unittest
 
 from pyspark.sql import Column, Row
 from pyspark.sql import functions as sf
 from pyspark.sql.types import StructType, StructField, IntegerType, LongType
 from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, pandas_requirement_message
 
 
 class ColumnTestsMixin:
@@ -288,6 +289,26 @@ class ColumnTestsMixin:
 
         ts = datetime.datetime(2021, 3, 4, 12, 34, 56, 1234)
         self.assertEqual(str(sf.lit(ts)), "Column<'2021-03-04 12:34:56.001234'>")
+
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    def test_lit_delta_representation(self):
+        for delta in [
+            datetime.timedelta(days=1),
+            datetime.timedelta(hours=2),
+            datetime.timedelta(minutes=3),
+            datetime.timedelta(seconds=4),
+            datetime.timedelta(microseconds=5),
+            datetime.timedelta(days=2, hours=21, microseconds=908),
+            datetime.timedelta(days=1, minutes=-3, microseconds=-1001),
+            datetime.timedelta(days=1, hours=2, minutes=3, seconds=4, microseconds=5),
+        ]:
+            import pandas as pd
+
+            # Column<'PT69H0.000908S'> or Column<'P2DT21H0M0.000908S'>
+            s = str(sf.lit(delta))
+
+            # Parse the ISO string representation and compare
+            self.assertTrue(pd.Timedelta(s[8:-2]).to_pytimedelta() == delta)
 
     def test_enum_literals(self):
         class IntEnum(Enum):
