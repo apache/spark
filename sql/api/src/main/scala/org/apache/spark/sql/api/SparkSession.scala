@@ -49,7 +49,7 @@ import org.apache.spark.sql.types.StructType
  *     .getOrCreate()
  * }}}
  */
-abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with Closeable {
+abstract class SparkSession extends Serializable with Closeable {
 
   /**
    * The version of Spark on which this application is running.
@@ -103,7 +103,7 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    *   will initialize the metastore, which may take some time.
    * @since 2.0.0
    */
-  def newSession(): SparkSession[DS]
+  def newSession(): SparkSession
 
   /* --------------------------------- *
    |  Methods for creating DataFrames  |
@@ -115,14 +115,14 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    * @since 2.0.0
    */
   @transient
-  def emptyDataFrame: DS[Row]
+  def emptyDataFrame: Dataset[Row]
 
   /**
    * Creates a `DataFrame` from a local Seq of Product.
    *
    * @since 2.0.0
    */
-  def createDataFrame[A <: Product: TypeTag](data: Seq[A]): DS[Row]
+  def createDataFrame[A <: Product: TypeTag](data: Seq[A]): Dataset[Row]
 
   /**
    * :: DeveloperApi :: Creates a `DataFrame` from a `java.util.List` containing
@@ -133,7 +133,7 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    * @since 2.0.0
    */
   @DeveloperApi
-  def createDataFrame(rows: util.List[Row], schema: StructType): DS[Row]
+  def createDataFrame(rows: util.List[Row], schema: StructType): Dataset[Row]
 
   /**
    * Applies a schema to a List of Java Beans.
@@ -143,7 +143,7 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    *
    * @since 1.6.0
    */
-  def createDataFrame(data: util.List[_], beanClass: Class[_]): DS[Row]
+  def createDataFrame(data: util.List[_], beanClass: Class[_]): Dataset[Row]
 
   /* ------------------------------- *
    |  Methods for creating DataSets  |
@@ -154,7 +154,7 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    *
    * @since 2.0.0
    */
-  def emptyDataset[T: Encoder]: DS[T]
+  def emptyDataset[T: Encoder]: Dataset[T]
 
   /**
    * Creates a [[Dataset]] from a local Seq of data of a given type. This method requires an
@@ -183,7 +183,7 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    *
    * @since 2.0.0
    */
-  def createDataset[T: Encoder](data: Seq[T]): DS[T]
+  def createDataset[T: Encoder](data: Seq[T]): Dataset[T]
 
   /**
    * Creates a [[Dataset]] from a `java.util.List` of a given type. This method requires an
@@ -200,7 +200,7 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    *
    * @since 2.0.0
    */
-  def createDataset[T: Encoder](data: util.List[T]): DS[T]
+  def createDataset[T: Encoder](data: util.List[T]): Dataset[T]
 
   /**
    * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements in a
@@ -208,7 +208,7 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    *
    * @since 2.0.0
    */
-  def range(end: Long): DS[lang.Long]
+  def range(end: Long): Dataset[lang.Long]
 
   /**
    * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements in a
@@ -216,7 +216,7 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    *
    * @since 2.0.0
    */
-  def range(start: Long, end: Long): DS[lang.Long]
+  def range(start: Long, end: Long): Dataset[lang.Long]
 
   /**
    * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements in a
@@ -224,7 +224,7 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    *
    * @since 2.0.0
    */
-  def range(start: Long, end: Long, step: Long): DS[lang.Long]
+  def range(start: Long, end: Long, step: Long): Dataset[lang.Long]
 
   /**
    * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements in a
@@ -232,7 +232,7 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    *
    * @since 2.0.0
    */
-  def range(start: Long, end: Long, step: Long, numPartitions: Int): DS[lang.Long]
+  def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[lang.Long]
 
   /* ------------------------- *
    |  Catalog-related methods  |
@@ -244,7 +244,7 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    *
    * @since 2.0.0
    */
-  def catalog: Catalog[DS]
+  def catalog: Catalog
 
   /**
    * Returns the specified table/view as a `DataFrame`. If it's a table, it must support batch
@@ -259,7 +259,7 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    *   database. Note that, the global temporary view database is also valid here.
    * @since 2.0.0
    */
-  def table(tableName: String): DS[Row]
+  def table(tableName: String): Dataset[Row]
 
   /* ----------------- *
    |  Everything else  |
@@ -281,7 +281,7 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    * @since 3.5.0
    */
   @Experimental
-  def sql(sqlText: String, args: Array[_]): DS[Row]
+  def sql(sqlText: String, args: Array[_]): Dataset[Row]
 
   /**
    * Executes a SQL query substituting named parameters by the given arguments, returning the
@@ -299,7 +299,7 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    * @since 3.4.0
    */
   @Experimental
-  def sql(sqlText: String, args: Map[String, Any]): DS[Row]
+  def sql(sqlText: String, args: Map[String, Any]): Dataset[Row]
 
   /**
    * Executes a SQL query substituting named parameters by the given arguments, returning the
@@ -317,7 +317,7 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    * @since 3.4.0
    */
   @Experimental
-  def sql(sqlText: String, args: util.Map[String, Any]): DS[Row] = {
+  def sql(sqlText: String, args: util.Map[String, Any]): Dataset[Row] = {
     sql(sqlText, args.asScala.toMap)
   }
 
@@ -327,7 +327,7 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    *
    * @since 2.0.0
    */
-  def sql(sqlText: String): DS[Row] = sql(sqlText, Map.empty[String, Any])
+  def sql(sqlText: String): Dataset[Row] = sql(sqlText, Map.empty[String, Any])
 
   /**
    * Add a single artifact to the current session.
@@ -402,6 +402,98 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
   def addArtifacts(uri: URI*): Unit
 
   /**
+   * Add a tag to be assigned to all the operations started by this thread in this session.
+   *
+   * Often, a unit of execution in an application consists of multiple Spark executions.
+   * Application programmers can use this method to group all those jobs together and give a group
+   * tag. The application can use `org.apache.spark.sql.SparkSession.interruptTag` to cancel all
+   * running executions with this tag. For example:
+   * {{{
+   * // In the main thread:
+   * spark.addTag("myjobs")
+   * spark.range(10).map(i => { Thread.sleep(10); i }).collect()
+   *
+   * // In a separate thread:
+   * spark.interruptTag("myjobs")
+   * }}}
+   *
+   * There may be multiple tags present at the same time, so different parts of application may
+   * use different tags to perform cancellation at different levels of granularity.
+   *
+   * @param tag
+   *   The tag to be added. Cannot contain ',' (comma) character or be an empty string.
+   *
+   * @since 4.0.0
+   */
+  def addTag(tag: String): Unit
+
+  /**
+   * Remove a tag previously added to be assigned to all the operations started by this thread in
+   * this session. Noop if such a tag was not added earlier.
+   *
+   * @param tag
+   *   The tag to be removed. Cannot contain ',' (comma) character or be an empty string.
+   *
+   * @since 4.0.0
+   */
+  def removeTag(tag: String): Unit
+
+  /**
+   * Get the operation tags that are currently set to be assigned to all the operations started by
+   * this thread in this session.
+   *
+   * @since 4.0.0
+   */
+  def getTags(): Set[String]
+
+  /**
+   * Clear the current thread's operation tags.
+   *
+   * @since 4.0.0
+   */
+  def clearTags(): Unit
+
+  /**
+   * Request to interrupt all currently running operations of this session.
+   *
+   * @note
+   *   This method will wait up to 60 seconds for the interruption request to be issued.
+   *
+   * @return
+   *   Sequence of operation IDs requested to be interrupted.
+   *
+   * @since 4.0.0
+   */
+  def interruptAll(): Seq[String]
+
+  /**
+   * Request to interrupt all currently running operations of this session with the given job tag.
+   *
+   * @note
+   *   This method will wait up to 60 seconds for the interruption request to be issued.
+   *
+   * @return
+   *   Sequence of operation IDs requested to be interrupted.
+   *
+   * @since 4.0.0
+   */
+  def interruptTag(tag: String): Seq[String]
+
+  /**
+   * Request to interrupt an operation of this session, given its operation ID.
+   *
+   * @note
+   *   This method will wait up to 60 seconds for the interruption request to be issued.
+   *
+   * @return
+   *   The operation ID requested to be interrupted, as a single-element sequence, or an empty
+   *   sequence if the operation is not started by this session.
+   *
+   * @since 4.0.0
+   */
+  def interruptOperation(operationId: String): Seq[String]
+
+  /**
    * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
    * `DataFrame`.
    * {{{
@@ -411,7 +503,7 @@ abstract class SparkSession[DS[U] <: Dataset[U, DS]] extends Serializable with C
    *
    * @since 2.0.0
    */
-  def read: DataFrameReader[DS]
+  def read: DataFrameReader
 
   /**
    * Executes some code block and prints to stdout the time taken to execute the block. This is
