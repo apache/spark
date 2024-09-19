@@ -33,7 +33,7 @@ import org.apache.spark.storage.StorageLevel
  * @since 2.0.0
  */
 @Stable
-abstract class Catalog[DS[U] <: Dataset[U, DS]] {
+abstract class Catalog {
 
   /**
    * Returns the current database (namespace) in this session.
@@ -54,7 +54,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
    *
    * @since 2.0.0
    */
-  def listDatabases(): DS[Database]
+  def listDatabases(): Dataset[Database]
 
   /**
    * Returns a list of databases (namespaces) which name match the specify pattern and available
@@ -62,7 +62,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
    *
    * @since 3.5.0
    */
-  def listDatabases(pattern: String): DS[Database]
+  def listDatabases(pattern: String): Dataset[Database]
 
   /**
    * Returns a list of tables/views in the current database (namespace). This includes all
@@ -70,7 +70,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
    *
    * @since 2.0.0
    */
-  def listTables(): DS[Table]
+  def listTables(): Dataset[Table]
 
   /**
    * Returns a list of tables/views in the specified database (namespace) (the name can be
@@ -79,7 +79,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
    * @since 2.0.0
    */
   @throws[AnalysisException]("database does not exist")
-  def listTables(dbName: String): DS[Table]
+  def listTables(dbName: String): Dataset[Table]
 
   /**
    * Returns a list of tables/views in the specified database (namespace) which name match the
@@ -88,7 +88,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
    * @since 3.5.0
    */
   @throws[AnalysisException]("database does not exist")
-  def listTables(dbName: String, pattern: String): DS[Table]
+  def listTables(dbName: String, pattern: String): Dataset[Table]
 
   /**
    * Returns a list of functions registered in the current database (namespace). This includes all
@@ -96,7 +96,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
    *
    * @since 2.0.0
    */
-  def listFunctions(): DS[Function]
+  def listFunctions(): Dataset[Function]
 
   /**
    * Returns a list of functions registered in the specified database (namespace) (the name can be
@@ -105,7 +105,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
    * @since 2.0.0
    */
   @throws[AnalysisException]("database does not exist")
-  def listFunctions(dbName: String): DS[Function]
+  def listFunctions(dbName: String): Dataset[Function]
 
   /**
    * Returns a list of functions registered in the specified database (namespace) which name match
@@ -115,7 +115,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
    * @since 3.5.0
    */
   @throws[AnalysisException]("database does not exist")
-  def listFunctions(dbName: String, pattern: String): DS[Function]
+  def listFunctions(dbName: String, pattern: String): Dataset[Function]
 
   /**
    * Returns a list of columns for the given table/view or temporary view.
@@ -127,7 +127,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
    * @since 2.0.0
    */
   @throws[AnalysisException]("table does not exist")
-  def listColumns(tableName: String): DS[Column]
+  def listColumns(tableName: String): Dataset[Column]
 
   /**
    * Returns a list of columns for the given table/view in the specified database under the Hive
@@ -143,7 +143,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
    * @since 2.0.0
    */
   @throws[AnalysisException]("database or table does not exist")
-  def listColumns(dbName: String, tableName: String): DS[Column]
+  def listColumns(dbName: String, tableName: String): Dataset[Column]
 
   /**
    * Get the database (namespace) with the specified name (can be qualified with catalog). This
@@ -280,7 +280,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
    * @since 2.0.0
    */
   @deprecated("use createTable instead.", "2.2.0")
-  def createExternalTable(tableName: String, path: String): DS[Row] = {
+  def createExternalTable(tableName: String, path: String): Dataset[Row] = {
     createTable(tableName, path)
   }
 
@@ -293,7 +293,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
    *   identifier is provided, it refers to a table in the current database.
    * @since 2.2.0
    */
-  def createTable(tableName: String, path: String): DS[Row]
+  def createTable(tableName: String, path: String): Dataset[Row]
 
   /**
    * Creates a table from the given path based on a data source and returns the corresponding
@@ -305,7 +305,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
    * @since 2.0.0
    */
   @deprecated("use createTable instead.", "2.2.0")
-  def createExternalTable(tableName: String, path: String, source: String): DS[Row] = {
+  def createExternalTable(tableName: String, path: String, source: String): Dataset[Row] = {
     createTable(tableName, path, source)
   }
 
@@ -318,7 +318,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
    *   identifier is provided, it refers to a table in the current database.
    * @since 2.2.0
    */
-  def createTable(tableName: String, path: String, source: String): DS[Row]
+  def createTable(tableName: String, path: String, source: String): Dataset[Row]
 
   /**
    * Creates a table from the given path based on a data source and a set of options. Then,
@@ -333,7 +333,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
   def createExternalTable(
       tableName: String,
       source: String,
-      options: util.Map[String, String]): DS[Row] = {
+      options: util.Map[String, String]): Dataset[Row] = {
     createTable(tableName, source, options)
   }
 
@@ -349,7 +349,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
   def createTable(
       tableName: String,
       source: String,
-      options: util.Map[String, String]): DS[Row] = {
+      options: util.Map[String, String]): Dataset[Row] = {
     createTable(tableName, source, options.asScala.toMap)
   }
 
@@ -366,7 +366,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
   def createExternalTable(
       tableName: String,
       source: String,
-      options: Map[String, String]): DS[Row] = {
+      options: Map[String, String]): Dataset[Row] = {
     createTable(tableName, source, options)
   }
 
@@ -379,7 +379,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
    *   identifier is provided, it refers to a table in the current database.
    * @since 2.2.0
    */
-  def createTable(tableName: String, source: String, options: Map[String, String]): DS[Row]
+  def createTable(tableName: String, source: String, options: Map[String, String]): Dataset[Row]
 
   /**
    * Create a table from the given path based on a data source, a schema and a set of options.
@@ -395,7 +395,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
       tableName: String,
       source: String,
       schema: StructType,
-      options: util.Map[String, String]): DS[Row] = {
+      options: util.Map[String, String]): Dataset[Row] = {
     createTable(tableName, source, schema, options)
   }
 
@@ -412,7 +412,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
       tableName: String,
       source: String,
       description: String,
-      options: util.Map[String, String]): DS[Row] = {
+      options: util.Map[String, String]): Dataset[Row] = {
     createTable(
       tableName,
       source = source,
@@ -433,7 +433,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
       tableName: String,
       source: String,
       description: String,
-      options: Map[String, String]): DS[Row]
+      options: Map[String, String]): Dataset[Row]
 
   /**
    * Create a table based on the dataset in a data source, a schema and a set of options. Then,
@@ -448,7 +448,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
       tableName: String,
       source: String,
       schema: StructType,
-      options: util.Map[String, String]): DS[Row] = {
+      options: util.Map[String, String]): Dataset[Row] = {
     createTable(tableName, source, schema, options.asScala.toMap)
   }
 
@@ -466,7 +466,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
       tableName: String,
       source: String,
       schema: StructType,
-      options: Map[String, String]): DS[Row] = {
+      options: Map[String, String]): Dataset[Row] = {
     createTable(tableName, source, schema, options)
   }
 
@@ -483,7 +483,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
       tableName: String,
       source: String,
       schema: StructType,
-      options: Map[String, String]): DS[Row]
+      options: Map[String, String]): Dataset[Row]
 
   /**
    * Create a table based on the dataset in a data source, a schema and a set of options. Then,
@@ -499,7 +499,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
       source: String,
       schema: StructType,
       description: String,
-      options: util.Map[String, String]): DS[Row] = {
+      options: util.Map[String, String]): Dataset[Row] = {
     createTable(
       tableName,
       source = source,
@@ -522,7 +522,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
       source: String,
       schema: StructType,
       description: String,
-      options: Map[String, String]): DS[Row]
+      options: Map[String, String]): Dataset[Row]
 
   /**
    * Drops the local temporary view with the given view name in the catalog. If the view has been
@@ -670,7 +670,7 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
    *
    * @since 3.4.0
    */
-  def listCatalogs(): DS[CatalogMetadata]
+  def listCatalogs(): Dataset[CatalogMetadata]
 
   /**
    * Returns a list of catalogs which name match the specify pattern and available in this
@@ -678,5 +678,5 @@ abstract class Catalog[DS[U] <: Dataset[U, DS]] {
    *
    * @since 3.5.0
    */
-  def listCatalogs(pattern: String): DS[CatalogMetadata]
+  def listCatalogs(pattern: String): Dataset[CatalogMetadata]
 }
