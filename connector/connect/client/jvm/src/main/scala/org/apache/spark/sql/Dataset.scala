@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.OrderUtils
+import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
@@ -134,8 +135,8 @@ class Dataset[T] private[sql] (
     val sparkSession: SparkSession,
     @DeveloperApi val plan: proto.Plan,
     val encoder: Encoder[T])
-    extends api.Dataset[T, Dataset] {
-  type RGD = RelationalGroupedDataset
+    extends api.Dataset[T] {
+  type DS[U] = Dataset[U]
 
   import sparkSession.RichColumn
 
