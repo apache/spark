@@ -1429,7 +1429,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.0.0
    */
-  def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T, DS]
+  def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T]
 
   /**
    * (Java-specific) Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given
@@ -1440,7 +1440,7 @@ abstract class Dataset[T] extends Serializable {
    */
   def groupByKey[K](
       func: MapFunction[T, K],
-      encoder: Encoder[K]): KeyValueGroupedDataset[K, T, DS] = {
+      encoder: Encoder[K]): KeyValueGroupedDataset[K, T] = {
     groupByKey(ToScalaUDF(func))(encoder)
   }
 
