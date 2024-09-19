@@ -676,6 +676,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               varName,
               c.defaultExpr.originalSQL)
 
+          case c: Call if c.resolved && c.bound && c.checkArgTypes().isFailure =>
+            c.checkArgTypes() match {
+              case mismatch: TypeCheckResult.DataTypeMismatch =>
+                c.dataTypeMismatch("CALL", mismatch)
+              case _ =>
+                throw SparkException.internalError("Invalid input for procedure")
+            }
+
           case _ => // Falls back to the following checks
         }
 
