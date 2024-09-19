@@ -34,7 +34,7 @@ import org.rocksdb.CompressionType
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.{CreateAtomicTestManager, FileSystemBasedCheckpointFileManager}
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
@@ -167,7 +167,10 @@ trait AlsoTestWithChangelogCheckpointingEnabled
 @SlowSQLTest
 class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with SharedSparkSession {
 
-  sqlConf.setConf(SQLConf.STATE_STORE_PROVIDER_CLASS, classOf[RocksDBStateStoreProvider].getName)
+  override protected def sparkConf: SparkConf = {
+    super.sparkConf
+      .set(SQLConf.STATE_STORE_PROVIDER_CLASS, classOf[RocksDBStateStoreProvider].getName)
+  }
 
   testWithColumnFamilies(
     "RocksDB: check changelog and snapshot version",
@@ -2157,9 +2160,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  private def sqlConf = SQLConf.get.clone()
-
-  private def dbConf = RocksDBConf(StateStoreConf(sqlConf))
+  private def dbConf = RocksDBConf(StateStoreConf(SQLConf.get.clone()))
 
   def withDB[T](
       remoteDir: String,

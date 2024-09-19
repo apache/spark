@@ -384,7 +384,9 @@ object FunctionRegistry {
     expression[Rand]("rand"),
     expression[Rand]("random", true, Some("3.0.0")),
     expression[Randn]("randn"),
+    expression[RandStr]("randstr"),
     expression[Stack]("stack"),
+    expression[Uniform]("uniform"),
     expression[ZeroIfNull]("zeroifnull"),
     CaseWhen.registryEntry,
 

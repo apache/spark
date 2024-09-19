@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{RuntimeConfig, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.DataSourceOptions
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -119,9 +119,9 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           throw StateDataSourceErrors.offsetMetadataLogUnavailable(batchId, checkpointLocation)
         )
 
-        val clonedRuntimeConf = new RuntimeConfig(session.sessionState.conf.clone())
-        OffsetSeqMetadata.setSessionConf(metadata, clonedRuntimeConf)
-        StateStoreConf(clonedRuntimeConf.sqlConf)
+        val clonedSqlConf = session.sessionState.conf.clone()
+        OffsetSeqMetadata.setSessionConf(metadata, clonedSqlConf)
+        StateStoreConf(clonedSqlConf)
 
       case _ =>
         throw StateDataSourceErrors.offsetLogUnavailable(batchId, checkpointLocation)

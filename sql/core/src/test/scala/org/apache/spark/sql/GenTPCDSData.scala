@@ -225,7 +225,7 @@ class TPCDSTables(spark: SparkSession, dsdgenDir: String, scaleFactor: Int)
           // datagen speed files will be truncated to maxRecordsPerFile value, so the final
           // result will be the same.
           val numRows = data.count()
-          val maxRecordPerFile = spark.conf.get(SQLConf.MAX_RECORDS_PER_FILE)
+          val maxRecordPerFile = spark.sessionState.conf.getConf(SQLConf.MAX_RECORDS_PER_FILE)
 
           if (maxRecordPerFile > 0 && numRows > maxRecordPerFile) {
             val numFiles = (numRows.toDouble/maxRecordPerFile).ceil.toInt
