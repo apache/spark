@@ -72,7 +72,7 @@ trait HashJoin extends JoinCodegenSupport {
         case _: InnerLike | RightOuter => right.outputPartitioning
         case x =>
           throw new IllegalArgumentException(
-            s"OutputPart HashJoin should not take $x as the JoinType with building left side")
+            s"HashJoin should not take $x as the JoinType with building left side")
       }
     case BuildRight =>
       joinType match {
@@ -90,7 +90,7 @@ trait HashJoin extends JoinCodegenSupport {
         case _: InnerLike | RightOuter => right.outputOrdering
         case x =>
           throw new IllegalArgumentException(
-            s"OutputOrder HashJoin should not take $x as the JoinType with building left side")
+            s"HashJoin should not take $x as the JoinType with building left side")
       }
     case BuildRight =>
       joinType match {
@@ -193,7 +193,7 @@ trait HashJoin extends JoinCodegenSupport {
   private def outerJoin(
       streamedIter: Iterator[InternalRow],
       hashedRelation: HashedRelation,
-      check: Int => Int): Iterator[InternalRow] = {
+      checkMatches: Int => Int): Iterator[InternalRow] = {
     val joinedRow = new JoinedRow()
     val keyGenerator = streamSideKeyGenerator()
     val nullRow = new GenericInternalRow(buildPlan.output.length)
@@ -222,7 +222,7 @@ trait HashJoin extends JoinCodegenSupport {
               val nextBuildRow = buildIter.next()
               if (boundCondition(joinedRow.withRight(nextBuildRow))) {
                 found = true
-                matches = check(matches)
+                matches = checkMatches(matches)
                 return true
               }
             }
@@ -506,6 +506,8 @@ trait HashJoin extends JoinCodegenSupport {
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
       val found = ctx.freshName("found")
       val matchesFound = ctx.freshName("matchesFound")
+      // For LeftSingle joins generate the check on the number of build rows that match every
+      // probe row. Return an error for >1 matches.
       val initSingleCounter = if (joinType == LeftSingle) {
         s"""
            |int $matchesFound = 0;""".stripMargin

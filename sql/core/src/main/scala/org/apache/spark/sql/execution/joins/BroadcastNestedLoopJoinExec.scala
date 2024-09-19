@@ -138,10 +138,15 @@ case class BroadcastNestedLoopJoinExec(
    *
    *   LeftOuter with BuildRight
    *   RightOuter with BuildLeft
+   *   LeftSingle with BuildRight
+   *
+   * For the (LeftSingle, BuildRight) case we pass 'checkMatches' function that
+   * makes sure there is at most 1 matching build row per every probe tuple.
+   * For all other cases, 'checkMatches' is a no-op.
    */
   private def outerJoin(
       relation: Broadcast[Array[InternalRow]],
-      check: Int => Int): RDD[InternalRow] = {
+      checkMatches: Int => Int): RDD[InternalRow] = {
     streamed.execute().mapPartitionsInternal { streamedIter =>
       val buildRows = relation.value
       val joinedRow = new JoinedRow
@@ -176,7 +181,7 @@ case class BroadcastNestedLoopJoinExec(
             nextIndex += 1
             if (boundCondition(resultRow)) {
               foundMatch = true
-              matches = check(matches)
+              matches = checkMatches(matches)
               return true
             }
           }
@@ -392,13 +397,13 @@ case class BroadcastNestedLoopJoinExec(
       case (LeftOuter, BuildRight) | (RightOuter, BuildLeft) =>
         outerJoin(broadcastedRelation, _ => 0)
       case (LeftSingle, BuildRight) =>
-        val check: Int => Int = matches => {
+        val checkMatches: Int => Int = matches => {
           if (matches > 0) {
             throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows();
           }
           matches + 1
         }
-        outerJoin(broadcastedRelation, check)
+        outerJoin(broadcastedRelation, checkMatches)
       case (LeftSemi, _) =>
         leftExistenceJoin(broadcastedRelation, exists = true)
       case (LeftAnti, _) =>
@@ -519,6 +524,7 @@ case class BroadcastNestedLoopJoinExec(
          |${consume(ctx, resultVars)}
        """.stripMargin
     } else {
+      // For LeftSingle joins, generate the check on the number of matches.
       val initSingleCounter = if (joinType == LeftSingle) {
         s"""
            |int $matchesFound = 0;""".stripMargin
