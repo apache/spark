@@ -303,6 +303,14 @@ case class StreamingSymmetricHashJoinExec(
     val updateStartTimeNs = System.nanoTime
     val joinedRow = new JoinedRow
 
+    // Parse checkpointID string and divide it into individual checkpointIds.
+    assert(stateInfo.isDefined, "State info not defined")
+    val checkpointIds = stateInfo.get.checkpointUniqueIds.map { ids =>
+      assert(ids.size > partitionId, s"Checkpoint IDs $ids does not have enough partitions")
+      val split = ids(partitionId).split(",")
+      assert(split.size == 4, s"Invalid checkpoint IDs $ids")
+      split.map(Option(_))
+    }.getOrElse(Array.fill[Option[String]](4)(None))
 
     val inputSchema = left.output ++ right.output
     val postJoinFilter =
@@ -310,11 +318,11 @@ case class StreamingSymmetricHashJoinExec(
     val leftSideJoiner = new OneSideHashJoiner(
       LeftSide, left.output, leftKeys, leftInputIter,
       condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId,
-      skippedNullValueCount)
+      checkpointIds(0), checkpointIds(1), skippedNullValueCount)
     val rightSideJoiner = new OneSideHashJoiner(
       RightSide, right.output, rightKeys, rightInputIter,
       condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId,
-      skippedNullValueCount)
+      checkpointIds(2), checkpointIds(3), skippedNullValueCount)
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
@@ -506,6 +514,10 @@ case class StreamingSymmetricHashJoinExec(
         val leftSideMetrics = leftSideJoiner.commitStateAndGetMetrics()
         val rightSideMetrics = rightSideJoiner.commitStateAndGetMetrics()
         val combinedMetrics = StateStoreMetrics.combine(Seq(leftSideMetrics, rightSideMetrics))
+        val checkpointInfo = SymmetricHashJoinStateManager.mergeStateStoreCheckpointInfo(
+          leftSideJoiner.getLatestCheckpointInfo(),
+          rightSideJoiner.getLatestCheckpointInfo())
+        setCheckpointInfo(checkpointInfo)
 
         // Update SQL metrics
         numUpdatedStateRows +=
@@ -544,6 +556,7 @@ case class StreamingSymmetricHashJoinExec(
    * @param stateWatermarkPredicate The state watermark predicate. See
    *                                [[StreamingSymmetricHashJoinExec]] for further description of
    *                                state watermarks.
+   * @param oneSideStateInfo  Reconstructed state info for this side
    * @param partitionId A partition ID of source RDD.
    */
   private class OneSideHashJoiner(
@@ -555,6 +568,8 @@ case class StreamingSymmetricHashJoinExec(
       postJoinFilter: (InternalRow) => Boolean,
       stateWatermarkPredicate: Option[JoinStateWatermarkPredicate],
       partitionId: Int,
+      keyToNumValuesCheckpointId: Option[String],
+      keyWithIndexToValueCheckpointId: Option[String],
       skippedNullValueCount: Option[SQLMetric]) {
 
     // Filter the joined rows based on the given condition.
@@ -563,7 +578,8 @@ case class StreamingSymmetricHashJoinExec(
 
     private val joinStateManager = new SymmetricHashJoinStateManager(
       joinSide, inputAttributes, joinKeys, stateInfo, storeConf, hadoopConfBcast.value.value,
-      partitionId, stateFormatVersion, skippedNullValueCount)
+      partitionId, keyToNumValuesCheckpointId, keyWithIndexToValueCheckpointId, stateFormatVersion,
+      skippedNullValueCount)
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
     private[this] val stateKeyWatermarkPredicateFunc = stateWatermarkPredicate match {
@@ -715,6 +731,10 @@ case class StreamingSymmetricHashJoinExec(
     def commitStateAndGetMetrics(): StateStoreMetrics = {
       joinStateManager.commit()
       joinStateManager.metrics
+    }
+
+    def getLatestCheckpointInfo(): StateStoreCheckpointInfo = {
+      joinStateManager.getLatestCheckpointInfo()
     }
 
     def numUpdatedStateRows: Long = updatedStateRowsCount

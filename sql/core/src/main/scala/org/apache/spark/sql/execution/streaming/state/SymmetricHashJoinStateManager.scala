@@ -85,6 +85,8 @@ class SymmetricHashJoinStateManager(
     storeConf: StateStoreConf,
     hadoopConf: Configuration,
     partitionId: Int,
+    keyToNumValuesCheckpointId: Option[String],
+    keyWithIndexToValueCheckpointId: Option[String],
     stateFormatVersion: Int,
     skippedNullValueCount: Option[SQLMetric] = None,
     useStateStoreCoordinator: Boolean = true,
@@ -411,6 +413,12 @@ class SymmetricHashJoinStateManager(
     keyWithIndexToValue.abortIfNeeded()
   }
 
+  def getLatestCheckpointInfo(): StateStoreCheckpointInfo = {
+    SymmetricHashJoinStateManager.mergeStateStoreCheckpointInfo(
+      keyToNumValues.getLatestCheckpointInfo(),
+      keyWithIndexToValue.getLatestCheckpointInfo())
+  }
+
   /** Get the combined metrics of all the state stores */
   def metrics: StateStoreMetrics = {
     val keyToNumValuesMetrics = keyToNumValues.metrics
@@ -451,7 +459,9 @@ class SymmetricHashJoinStateManager(
   Option(TaskContext.get()).foreach { _.addTaskCompletionListener[Unit] { _ => abortIfNeeded() } }
 
   /** Helper trait for invoking common functionalities of a state store. */
-  private abstract class StateStoreHandler(stateStoreType: StateStoreType) extends Logging {
+  private abstract class StateStoreHandler(
+      stateStoreType: StateStoreType,
+      checkpointId: Option[String]) extends Logging {
     private var stateStoreProvider: StateStoreProvider = _
 
     /** StateStore that the subclasses of this class is going to operate on */
@@ -476,6 +486,10 @@ class SymmetricHashJoinStateManager(
 
     def metrics: StateStoreMetrics = stateStore.metrics
 
+    def getLatestCheckpointInfo(): StateStoreCheckpointInfo = {
+      stateStore.getCheckpointInfo
+    }
+
     /** Get the StateStore with the given schema */
     protected def getStateStore(keySchema: StructType, valueSchema: StructType): StateStore = {
       val storeProviderId = StateStoreProviderId(
@@ -485,8 +499,8 @@ class SymmetricHashJoinStateManager(
           "when reading state as data source.")
         StateStore.get(
           storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-          stateInfo.get.storeVersion, stateInfo.get.getCheckpointUniqueId(partitionId),
-          useColumnFamilies = false, storeConf, hadoopConf)
+          stateInfo.get.storeVersion, checkpointId, useColumnFamilies = false,
+          storeConf, hadoopConf)
       } else {
         // This class will manage the state store provider by itself.
         stateStoreProvider = StateStoreProvider.createAndInit(
@@ -501,9 +515,7 @@ class SymmetricHashJoinStateManager(
           stateStoreProvider.asInstanceOf[SupportsFineGrainedReplay]
             .replayStateFromSnapshot(snapshotStartVersion.get, stateInfo.get.storeVersion)
         } else {
-          stateStoreProvider.getStore(
-            stateInfo.get.storeVersion,
-            stateInfo.get.getCheckpointUniqueId(partitionId))
+          stateStoreProvider.getStore(stateInfo.get.storeVersion, checkpointId)
         }
       }
       logInfo(log"Loaded store ${MDC(STATE_STORE_ID, store.id)}")
@@ -525,7 +537,8 @@ class SymmetricHashJoinStateManager(
 
 
   /** A wrapper around a [[StateStore]] that stores [key -> number of values]. */
-  private class KeyToNumValuesStore extends StateStoreHandler(KeyToNumValuesType) {
+  private class KeyToNumValuesStore
+    extends StateStoreHandler(KeyToNumValuesType, keyToNumValuesCheckpointId) {
     private val longValueSchema = new StructType().add("value", "long")
     private val longToUnsafeRow = UnsafeProjection.create(longValueSchema)
     private val valueRow = longToUnsafeRow(new SpecificInternalRow(longValueSchema))
@@ -672,7 +685,7 @@ class SymmetricHashJoinStateManager(
    * state format version - please refer implementations of [[KeyWithIndexToValueRowConverter]].
    */
   private class KeyWithIndexToValueStore(stateFormatVersion: Int)
-    extends StateStoreHandler(KeyWithIndexToValueType) {
+    extends StateStoreHandler(KeyWithIndexToValueType, keyWithIndexToValueCheckpointId) {
 
     private val keyWithIndexExprs = keyAttributes :+ Literal(1L)
     private val keyWithIndexSchema = keySchema.add("index", LongType)
@@ -809,6 +822,24 @@ object SymmetricHashJoinStateManager {
       (keyWithIndexSchema, valueSchema.toStructType))
 
     result
+  }
+
+  def mergeStateStoreCheckpointInfo(
+      ci1: StateStoreCheckpointInfo,
+      ci2: StateStoreCheckpointInfo): StateStoreCheckpointInfo = {
+    assert(ci1.partitionId == ci2.partitionId)
+    assert(ci1.batchVersion == ci2.batchVersion)
+    assert(ci1.checkpointId.isDefined == ci2.checkpointId.isDefined)
+    if (ci1.checkpointId.isDefined && ci2.checkpointId.isDefined) {
+      StateStoreCheckpointInfo(
+        ci1.partitionId,
+        ci1.batchVersion,
+        Some(ci1.checkpointId.get + "," + ci2.checkpointId.get),
+        ci1.baseCheckpointId
+      )
+    } else {
+      ci1
+    }
   }
 
   private sealed trait StateStoreType

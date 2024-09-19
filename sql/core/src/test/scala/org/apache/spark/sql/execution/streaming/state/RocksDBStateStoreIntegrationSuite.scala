@@ -46,6 +46,10 @@ object TestStateStoreWrapper {
   def getCheckpointInfos: List[StateStoreCheckpointInfo] = synchronized {
     checkpointInfos
   }
+
+  def clear(): Unit = synchronized {
+    checkpointInfos = List.empty
+  }
 }
 
 case class TestStateStoreWrapper(innerStore: StateStore) extends StateStore {
@@ -417,6 +421,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
 
   testWithChangelogCheckpointingEnabled(s"checkpointFormatVersion2 validate ID") {
     val providerClassName = classOf[TestStateStoreProviderWrapper].getCanonicalName
+    TestStateStoreWrapper.clear()
     withSQLConf(
       (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName),
       (SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2"),
@@ -433,7 +438,6 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
           .agg(count("*"))
           .as[(Int, Long)]
 
-      // Run the stream with changelog checkpointing disabled.
       testStream(aggregated, Update)(
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
         AddData(inputData, 3),
@@ -443,7 +447,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
         StopStream
       )
 
-      // Run the stream with changelog checkpointing enabled.
+      // Test recovery
       testStream(aggregated, Update)(
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
         AddData(inputData, 3, 2, 1),
@@ -455,7 +459,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
         CheckLastBatch((5, 2))
       )
 
-      // Run the stream with changelog checkpointing disabled.
+      // crash recovery again
       testStream(aggregated, Update)(
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
         AddData(inputData, 4),
@@ -463,8 +467,8 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
       )
     }
     val checkpointInfoList = TestStateStoreWrapper.getCheckpointInfos
+    // We have 6 batches, 2 partitions, and 1 state store per batch
     assert(checkpointInfoList.size == 12)
-    print(checkpointInfoList)
     checkpointInfoList.foreach { l =>
       assert(l.checkpointId.isDefined)
       if (l.batchVersion == 2 || l.batchVersion == 4 || l.batchVersion == 5) {
@@ -481,8 +485,106 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
       b <- checkpointInfoList
       if a.partitionId == b.partitionId && a.batchVersion == b.batchVersion + 1
     } {
-      // Check if checkpointId of 'a' matches baseCheckpointId of 'b'
+      // if batch version exists, it should be the same as the checkpoint ID of the previous batch
       assert(!a.baseCheckpointId.isDefined || b.checkpointId == a.baseCheckpointId)
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled(
+    s"checkpointFormatVersion2 validate ID for stream-stream join") {
+    val providerClassName = classOf[TestStateStoreProviderWrapper].getCanonicalName
+    TestStateStoreWrapper.clear()
+    withSQLConf(
+      (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName),
+      (SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2"),
+      (SQLConf.SHUFFLE_PARTITIONS.key, "2")) {
+      val checkpointDir = Utils.createTempDir().getCanonicalFile
+      checkpointDir.delete()
+
+      val dirForPartition0 = new File(checkpointDir.getAbsolutePath, "/state/0/0")
+      val inputData1 = MemoryStream[Int]
+      val inputData2 = MemoryStream[Int]
+
+      val df1 = inputData1.toDS().toDF("value")
+      val df2 = inputData2.toDS().toDF("value")
+
+      val joined = df1.join(df2, df1("value") === df2("value"))
+
+      testStream(joined, OutputMode.Append)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData1, 3),
+        AddData(inputData2, 3),
+        AddData(inputData1, 2),
+        CheckLastBatch((3, 3)),
+        AddData(inputData2, 2),
+        // This data will be used after restarting the query
+        AddData(inputData1, 5),
+        CheckLastBatch((2, 2)),
+        StopStream
+      )
+
+      // Test recovery.
+      testStream(joined, OutputMode.Append)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData1, 4),
+        AddData(inputData2, 5),
+        CheckLastBatch((5, 5)),
+        AddData(inputData2, 4),
+        // This data will be used after restarting the query
+        AddData(inputData1, 7),
+        CheckLastBatch((4, 4)),
+        StopStream
+      )
+
+      // recovery again
+      testStream(joined, OutputMode.Append)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData1, 6),
+        AddData(inputData2, 6),
+        CheckLastBatch((6, 6)),
+        AddData(inputData2, 7),
+        CheckLastBatch((7, 7)),
+        StopStream
+      )
+    }
+    val checkpointInfoList = TestStateStoreWrapper.getCheckpointInfos
+    // We have 6 batches, 2 partitions, and 4 state stores per batch
+    assert(checkpointInfoList.size == 12 * 4)
+    checkpointInfoList.foreach { l =>
+      assert(l.checkpointId.isDefined)
+      if (l.batchVersion == 2 || l.batchVersion == 4 || l.batchVersion == 6) {
+        assert(l.baseCheckpointId.isDefined)
+      }
+    }
+    assert(checkpointInfoList.count(_.partitionId == 0) == 6 * 4)
+    assert(checkpointInfoList.count(_.partitionId == 1) == 6 * 4)
+    for (i <- 1 to 6) {
+      assert(checkpointInfoList.count(_.batchVersion == i) == 2 * 4)
+    }
+
+    // Here we assume for every task, we fetch checkpointID from the 4 state stores in the same
+    // order. So we can separate checkpointId for different stores based on the order inside the
+    // same (batchId, partitionId) group.
+    val grouped = checkpointInfoList
+      .groupBy(info => (info.batchVersion, info.partitionId))
+      .values
+      .flatMap { infos =>
+        infos.zipWithIndex.map { case (info, index) => index -> info }
+      }
+      .groupBy(_._1)
+      .map { case (_, grouped) =>
+            grouped.map { case (_, info) => info }
+        }
+
+    grouped.foreach { l =>
+      for {
+        a <- l
+        b <- l
+        if a.partitionId == b.partitionId && a.batchVersion == b.batchVersion + 1
+      } {
+        // if batch version exists, it should be the same as the checkpoint ID of the previous batch
+        assert(!a.baseCheckpointId.isDefined || b.checkpointId == a.baseCheckpointId)
+      }
     }
   }
 

@@ -927,21 +927,9 @@ class MicroBatchExecution(
       execCtx: MicroBatchExecutionContext,
       latestExecPlan: SparkPlan): Unit = {
     latestExecPlan.collect {
-      case e: StateStoreSaveExec =>
+      case e: StateStoreWriter =>
         assert(e.stateInfo.isDefined)
         updateCheckpointIdForOperator(execCtx, e.stateInfo.get.operatorId, e.getCheckpointInfo())
-      case e: SessionWindowStateStoreSaveExec =>
-        assert(e.stateInfo.isDefined)
-        updateCheckpointIdForOperator(execCtx, e.stateInfo.get.operatorId, e.getCheckpointInfo())
-      case e: StreamingDeduplicateExec =>
-        assert(e.stateInfo.isDefined)
-        updateCheckpointIdForOperator(execCtx, e.stateInfo.get.operatorId, e.getCheckpointInfo())
-      case e: StreamingDeduplicateWithinWatermarkExec =>
-        assert(e.stateInfo.isDefined)
-        updateCheckpointIdForOperator(execCtx, e.stateInfo.get.operatorId, e.getCheckpointInfo())
-      // TODO Need to deal with FlatMapGroupsWithStateExec, TransformWithStateExec,
-      // FlatMapGroupsInPandasWithStateExec, StreamingSymmetricHashJoinExec,
-      // StreamingGlobalLimitExec later
     }
   }
 

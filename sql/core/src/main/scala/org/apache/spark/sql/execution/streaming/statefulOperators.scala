@@ -209,6 +209,7 @@ trait StateStoreWriter
       .sortBy(_._1)
       .map(_._2)
       .toArray
+    logError(s"IIIIIIIIIII $ret")
     ret
   }
 
@@ -273,8 +274,11 @@ trait StateStoreWriter
     storeMetrics.customMetrics.foreach { case (metric, value) =>
       longMetric(metric.name) += value
     }
+    setCheckpointInfo(store.getCheckpointInfo)
+  }
+
+  protected def setCheckpointInfo(checkpointInfo: StateStoreCheckpointInfo): Unit = {
     if (conf.stateStoreCheckpointFormatVersion >= 2) {
-      val checkpointInfo = store.getCheckpointInfo
       checkpointInfoAccumulator.add(checkpointInfo)
     }
   }
