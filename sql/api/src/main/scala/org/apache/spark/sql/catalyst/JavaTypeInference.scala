@@ -29,8 +29,9 @@ import com.esotericsoftware.kryo.KryoSerializable
 import org.apache.commons.lang3.reflect.{TypeUtils => JavaTypeUtils}
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec, JavaSerializationCodec, KryoSerializationCodec}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, DayTimeIntervalEncoder, DEFAULT_JAVA_DECIMAL_ENCODER, EncoderField, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaEnumEncoder, LocalDateTimeEncoder, MapEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, STRICT_DATE_ENCODER, STRICT_INSTANT_ENCODER, STRICT_LOCAL_DATE_ENCODER, STRICT_TIMESTAMP_ENCODER, StringEncoder, TransformingEncoder, UDTEncoder, YearMonthIntervalEncoder}
+import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -163,12 +164,8 @@ object JavaTypeInference {
                 Try(encoderFor(bound, seenTypeSet, typeVariables, forGenericBound = true)) match {
                   case Success(value) => (Option(value), serEncoder)
 
-                  case Failure(UseSerializationEncoder(codecProvider, clazz)) =>
-                    None -> Option(
-                      TransformingEncoder(
-                        ClassTag(concreteBound.getOrElse(clazz)),
-                        BinaryEncoder,
-                        codecProvider))
+                  case Failure(UseSerializationEncoder(encoderProvider)) =>
+                    None -> Option(encoderProvider(concreteBound.getOrElse(bound)))
 
                   case Failure(_) => r
                 }
@@ -198,9 +195,9 @@ object JavaTypeInference {
       // and loose the data on deser.
       if (properties.isEmpty && seenTypeSet.nonEmpty) {
         if (classOf[KryoSerializable].isAssignableFrom(c)) {
-          TransformingEncoder(ClassTag(c), BinaryEncoder, KryoSerializationCodec)
+          Encoders.kryo(c).asInstanceOf[AgnosticEncoder[_]]
         } else if (classOf[java.io.Serializable].isAssignableFrom(c)) {
-          TransformingEncoder(ClassTag(c), BinaryEncoder, JavaSerializationCodec)
+          Encoders.javaSerialization(c).asInstanceOf[AgnosticEncoder[_]]
         } else {
           throw ExecutionErrors.cannotFindEncoderForTypeError(t.getTypeName)
         }
@@ -234,10 +231,8 @@ object JavaTypeInference {
       throw ExecutionErrors.cannotFindEncoderForTypeError(t.getTypeName)
   }
 
-  private def getAllSuperClasses(typee: Type): Array[Class[_]] = if (typee eq null) {
-    Array.empty
-  } else {
-    typee match {
+  private def getAllSuperClasses(typee: Type): Array[Class[_]] = Option(typee)
+    .map({
       case clazz: Class[_] =>
         val currentInterfaces = clazz.getInterfaces
         currentInterfaces ++ (clazz.getSuperclass +: currentInterfaces).flatMap(clz =>
@@ -247,8 +242,8 @@ object JavaTypeInference {
         tv.getBounds.foldLeft(Array.empty[Class[_]]) { case (res, bnd) =>
           res ++ getAllSuperClasses(bnd)
         }
-    }
-  }
+    })
+    .getOrElse(Array.empty)
 
   def getJavaBeanReadableProperties(beanClass: Class[_]): Array[PropertyDescriptor] = {
     val beanInfo = Introspector.getBeanInfo(beanClass)
@@ -259,15 +254,15 @@ object JavaTypeInference {
   }
 
   object UseSerializationEncoder {
-    def unapply(th: Throwable): Option[(() => Codec[Any, Array[Byte]], Class[_])] = th match {
+    def unapply(th: Throwable): Option[Class[_] => AgnosticEncoder[_]] = th match {
       case s: SparkUnsupportedOperationException
           if s.getErrorClass == ExecutionErrors.ENCODER_NOT_FOUND_ERROR =>
         s.getMessageParameters.asScala.get(ExecutionErrors.TYPE_NAME) match {
           case Some(clzzName) if clzzName == classOf[java.io.Serializable].getTypeName =>
-            Option(JavaSerializationCodec -> classOf[java.io.Serializable])
+            Option(Encoders.javaSerialization(_).asInstanceOf[AgnosticEncoder[_]])
 
           case Some(clzzName) if clzzName == classOf[KryoSerializable].getTypeName =>
-            Option(KryoSerializationCodec -> classOf[KryoSerializable])
+            Option(Encoders.kryo(_).asInstanceOf[AgnosticEncoder[_]])
 
           case _ => None
         }

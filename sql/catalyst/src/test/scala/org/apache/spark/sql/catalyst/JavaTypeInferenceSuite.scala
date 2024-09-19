@@ -23,9 +23,12 @@ import java.util.{HashSet, LinkedList, List => JList, Map => JMap, Set => JSet}
 import scala.beans.{BeanProperty, BooleanBeanProperty}
 import scala.reflect.{classTag, ClassTag}
 
+import com.esotericsoftware.kryo.KryoSerializable
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.JavaTypeInferenceBeans.{JavaBeanWithGenericBase, JavaBeanWithGenericHierarchy, JavaBeanWithGenericsABC}
-import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, JavaSerializationCodec, UDTCaseClass, UDTForCaseClass}
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, UDTCaseClass, UDTForCaseClass}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.types.{DecimalType, MapType, Metadata, StringType, StructField, StructType}
 
@@ -33,16 +36,25 @@ class DummyBean {
   @BeanProperty var bigInteger: BigInteger = _
 }
 
-class ScalaSerializablePojo extends Serializable
-
-class JavaSerializablePojo extends java.io.Serializable
-
 class GenericCollectionBean {
   @BeanProperty var listOfListOfStrings: JList[JList[String]] = _
   @BeanProperty var mapOfDummyBeans: JMap[String, DummyBean] = _
   @BeanProperty var linkedListOfStrings: LinkedList[String] = _
   @BeanProperty var hashSetOfString: HashSet[String] = _
   @BeanProperty var setOfSetOfStrings: JSet[JSet[String]] = _
+}
+
+class ScalaSerializable extends scala.Serializable
+
+class JavaSerializable extends java.io.Serializable
+
+class GenericTypePropertiesBean[S <: JavaSerializable, T <: ScalaSerializable,
+  U <: KryoSerializable, V <: UDTCaseClass] {
+
+  @BeanProperty var javaSerializable: S = _
+  @BeanProperty var scalaSerializable: T = _
+  @BeanProperty var kryoSerializable: U = _
+  @BeanProperty var udtSerializable: V = _
 }
 
 class LeafBean {
@@ -75,10 +87,6 @@ class LeafBean {
   @BeanProperty val readOnlyString = "read-only"
   @BeanProperty var genericNestedBean: JavaBeanWithGenericBase = _
   @BeanProperty var genericNestedBean2: JavaBeanWithGenericsABC[Integer] = _
-  @BeanProperty var scalaSerializableField: scala.Serializable = _
-  @BeanProperty var javaSerializableField: java.io.Serializable = _
-  @BeanProperty var javaSerializablePojo: JavaSerializablePojo = _
-  @BeanProperty var scalaSerializablePojo: ScalaSerializablePojo = _
 
   var nonNullString: String = "value"
   @javax.annotation.Nonnull
@@ -198,6 +206,21 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
     assert(encoder === expected)
   }
 
+  test("resolve bean encoder with generic types as getter/setter") {
+    val encoder = JavaTypeInference.encoderFor(classOf[GenericTypePropertiesBean[_, _, _, _]])
+    val expected = JavaBeanEncoder(ClassTag(classOf[GenericTypePropertiesBean[_, _, _, _]]), Seq(
+      // The order is different from the definition because fields are ordered by name.
+      encoderField("javaSerializable",
+        Encoders.javaSerialization(classOf[JavaSerializable]).asInstanceOf[AgnosticEncoder[_]]),
+      encoderField("kryoSerializable",
+        Encoders.kryo(classOf[KryoSerializable]).asInstanceOf[AgnosticEncoder[_]]),
+      encoderField("scalaSerializable",
+        Encoders.javaSerialization(classOf[ScalaSerializable]).asInstanceOf[AgnosticEncoder[_]]),
+      encoderField("udtSerializable", UDTEncoder(new UDTForCaseClass, classOf[UDTForCaseClass]))
+    ))
+    assert(encoder === expected)
+  }
+
   test("resolve leaf encoders") {
     val encoder = JavaTypeInference.encoderFor(classOf[LeafBean])
     val expected = JavaBeanEncoder(ClassTag(classOf[LeafBean]), Seq(
@@ -228,16 +251,6 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
           encoderField("propertyC", BoxedIntEncoder)
         ))),
       encoderField("instant", STRICT_INSTANT_ENCODER),
-      encoderField("javaSerializableField",
-        TransformingEncoder(
-          classTag[java.io.Serializable],
-          BinaryEncoder,
-          JavaSerializationCodec)),
-      encoderField("javaSerializablePojo",
-        TransformingEncoder(
-          classTag[JavaSerializablePojo],
-          BinaryEncoder,
-          JavaSerializationCodec)),
       encoderField("localDate", STRICT_LOCAL_DATE_ENCODER),
       encoderField("localDateTime", LocalDateTimeEncoder),
       encoderField("monthEnum", JavaEnumEncoder(classTag[java.time.Month])),
@@ -251,15 +264,6 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
       encoderField("primitiveLong", PrimitiveLongEncoder),
       encoderField("primitiveShort", PrimitiveShortEncoder),
       encoderField("readOnlyString", StringEncoder, readOnly = true),
-      encoderField("scalaSerializableField", TransformingEncoder(
-        classTag[scala.Serializable],
-        BinaryEncoder,
-        JavaSerializationCodec)),
-      encoderField("scalaSerializablePojo",
-        TransformingEncoder(
-          classTag[ScalaSerializablePojo],
-          BinaryEncoder,
-          JavaSerializationCodec)),
       encoderField("string", StringEncoder),
       encoderField("timestamp", STRICT_TIMESTAMP_ENCODER)
     ))
