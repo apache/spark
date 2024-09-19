@@ -34,8 +34,6 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, Bi
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
 
-
-
 /**
  * Type-inference utilities for POJOs and Java collections.
  */
