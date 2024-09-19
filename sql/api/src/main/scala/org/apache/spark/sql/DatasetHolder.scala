@@ -32,7 +32,7 @@ import org.apache.spark.sql.api.Dataset
  * @since 1.6.0
  */
 @Stable
-class DatasetHolder[T, DS[U] <: Dataset[U, DS]](ds: DS[T]) {
+class DatasetHolder[T, DS[U] <: Dataset[U]](ds: DS[T]) {
 
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `rdd.toDS("1")` as invoking this toDS and then apply on the returned Dataset.
@@ -40,7 +40,7 @@ class DatasetHolder[T, DS[U] <: Dataset[U, DS]](ds: DS[T]) {
 
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `rdd.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DS[Row] = ds.toDF()
+  def toDF(): DS[Row] = ds.toDF().asInstanceOf[DS[Row]]
 
-  def toDF(colNames: String*): DS[Row] = ds.toDF(colNames: _*)
+  def toDF(colNames: String*): DS[Row] = ds.toDF(colNames: _*).asInstanceOf[DS[Row]]
 }

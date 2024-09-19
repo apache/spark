@@ -34,11 +34,11 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, DE
  *
  * @since 1.6.0
  */
-abstract class SQLImplicits[DS[U] <: Dataset[U, DS]]
+abstract class SQLImplicits[DS[U] <: Dataset[U]]
     extends LowPrioritySQLImplicits
     with Serializable {
 
-  protected def session: SparkSession[DS]
+  protected def session: SparkSession
 
   /**
    * Converts $"col name" into a [[org.apache.spark.sql.Column]].
@@ -239,32 +239,32 @@ abstract class SQLImplicits[DS[U] <: Dataset[U, DS]]
   }
 
   /** @since 1.6.1 */
-  implicit def newIntArrayEncoder: Encoder[Array[Int]] = newArrayEncoder(PrimitiveIntEncoder)
+  implicit val newIntArrayEncoder: Encoder[Array[Int]] = newArrayEncoder(PrimitiveIntEncoder)
 
   /** @since 1.6.1 */
-  implicit def newLongArrayEncoder: Encoder[Array[Long]] = newArrayEncoder(PrimitiveLongEncoder)
+  implicit val newLongArrayEncoder: Encoder[Array[Long]] = newArrayEncoder(PrimitiveLongEncoder)
 
   /** @since 1.6.1 */
-  implicit def newDoubleArrayEncoder: Encoder[Array[Double]] =
+  implicit val newDoubleArrayEncoder: Encoder[Array[Double]] =
     newArrayEncoder(PrimitiveDoubleEncoder)
 
   /** @since 1.6.1 */
-  implicit def newFloatArrayEncoder: Encoder[Array[Float]] =
+  implicit val newFloatArrayEncoder: Encoder[Array[Float]] =
     newArrayEncoder(PrimitiveFloatEncoder)
 
   /** @since 1.6.1 */
-  implicit def newByteArrayEncoder: Encoder[Array[Byte]] = Encoders.BINARY
+  implicit val newByteArrayEncoder: Encoder[Array[Byte]] = Encoders.BINARY
 
   /** @since 1.6.1 */
-  implicit def newShortArrayEncoder: Encoder[Array[Short]] =
+  implicit val newShortArrayEncoder: Encoder[Array[Short]] =
     newArrayEncoder(PrimitiveShortEncoder)
 
   /** @since 1.6.1 */
-  implicit def newBooleanArrayEncoder: Encoder[Array[Boolean]] =
+  implicit val newBooleanArrayEncoder: Encoder[Array[Boolean]] =
     newArrayEncoder(PrimitiveBooleanEncoder)
 
   /** @since 1.6.1 */
-  implicit def newStringArrayEncoder: Encoder[Array[String]] =
+  implicit val newStringArrayEncoder: Encoder[Array[String]] =
     newArrayEncoder(StringEncoder)
 
   /** @since 1.6.1 */
@@ -275,8 +275,9 @@ abstract class SQLImplicits[DS[U] <: Dataset[U, DS]]
    * Creates a [[Dataset]] from a local Seq.
    * @since 1.6.0
    */
-  implicit def localSeqToDatasetHolder[T: Encoder](s: Seq[T]): DatasetHolder[T, DS] =
-    new DatasetHolder(session.createDataset(s))
+  implicit def localSeqToDatasetHolder[T: Encoder](s: Seq[T]): DatasetHolder[T, DS] = {
+    new DatasetHolder[T, DS](session.createDataset(s).asInstanceOf[DS[T]])
+  }
 
   /**
    * An implicit conversion that turns a Scala `Symbol` into a [[org.apache.spark.sql.Column]].
