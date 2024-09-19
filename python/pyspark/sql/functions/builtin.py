@@ -6059,8 +6059,9 @@ def count_min_sketch(
     Example 1: Using columns as arguments
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.range(100)
-    >>> df.select(sf.hex(sf.count_min_sketch("id", 3.0, sf.lit(0.1), sf.lit(1)))).show(truncate=False)
+    >>> spark.range(100).select(
+    ...     sf.hex(sf.count_min_sketch("id", 3.0, sf.lit(0.1), sf.lit(1)))
+    ... ).show(truncate=False)
     +------------------------------------------------------------------------+
     |hex(count_min_sketch(id, 3.0, 0.1, 1))                                  |
     +------------------------------------------------------------------------+
@@ -6070,8 +6071,9 @@ def count_min_sketch(
     Example 2: Using numbers as arguments
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.range(100)
-    >>> df.select(sf.hex(sf.count_min_sketch("id", 1.0, 0.3, 2))).show(truncate=False)
+    >>> spark.range(100).select(
+    ...     sf.hex(sf.count_min_sketch("id", 1.0, 0.3, 2))
+    ... ).show(truncate=False)
     +----------------------------------------------------------------------------------------+
     |hex(count_min_sketch(id, 1.0, 0.3, 2))                                                  |
     +----------------------------------------------------------------------------------------+
@@ -6081,8 +6083,9 @@ def count_min_sketch(
     Example 3: Using a random seed
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.range(100)
-    >>> df.select(sf.hex(sf.count_min_sketch("id", 1.5, 0.6))).show(truncate=False) # doctest: +SKIP
+    >>> spark.range(100).select(
+    ...     sf.hex(sf.count_min_sketch("id", 1.5, 0.6))
+    ... ).show(truncate=False)
     +----------------------------------------------------------------------------------------------------------------------------------------+
     |hex(count_min_sketch(id, 1.5, 0.6, 2120704260))                                                                                         |
     +----------------------------------------------------------------------------------------------------------------------------------------+
