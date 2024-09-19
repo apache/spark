@@ -20,7 +20,6 @@
 name: Build / Spark Connect Python-only (master, Python 3.11)
 
 on:
-  pull_request:
   schedule:
     - cron: '0 19 * * *'
 
