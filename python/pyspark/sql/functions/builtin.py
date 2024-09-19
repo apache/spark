@@ -6060,7 +6060,7 @@ def count_min_sketch(
 
     >>> from pyspark.sql import functions as sf
     >>> spark.range(100).select(
-    ...     sf.hex(sf.count_min_sketch("id", 3.0, sf.lit(0.1), sf.lit(1)))
+    ...     sf.hex(sf.count_min_sketch(sf.col("id"), sf.lit(3.0), sf.lit(0.1), sf.lit(1)))
     ... ).show(truncate=False)
     +------------------------------------------------------------------------+
     |hex(count_min_sketch(id, 3.0, 0.1, 1))                                  |
@@ -6084,7 +6084,7 @@ def count_min_sketch(
 
     >>> from pyspark.sql import functions as sf
     >>> spark.range(100).select(
-    ...     sf.hex(sf.count_min_sketch("id", 1.5, 0.6))
+    ...     sf.hex(sf.count_min_sketch("id", sf.lit(1.5), 0.6))
     ... ).show(truncate=False)
     +----------------------------------------------------------------------------------------------------------------------------------------+
     |hex(count_min_sketch(id, 1.5, 0.6, 2120704260))                                                                                         |
