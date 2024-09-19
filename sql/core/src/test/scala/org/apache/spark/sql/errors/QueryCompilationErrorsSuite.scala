@@ -941,7 +941,7 @@ class QueryCompilationErrorsSuite
         cmd.run(spark)
       },
       condition = "DATA_SOURCE_EXTERNAL_ERROR",
-      sqlState = "KD00F",
+      sqlState = "KD010",
       parameters = Map.empty
     )
   }
