@@ -3832,7 +3832,7 @@ object SQLConf {
       .internal()
       .doc("Allow PruneFilters to remove streaming subplans when we encounter a false filter. " +
         "This flag is to restore prior buggy behavior for broken pipelines.")
-      .version("3.5.2")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
 
