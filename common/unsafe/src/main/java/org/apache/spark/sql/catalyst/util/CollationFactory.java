@@ -773,8 +773,8 @@ public final class CollationFactory {
           ICULocaleMap.get(locale).getDisplayCountry(),
           VersionInfo.ICU_VERSION.toString(),
           COLLATION_PAD_ATTRIBUTE,
-          caseSensitivity == CaseSensitivity.CS,
-          accentSensitivity == AccentSensitivity.AS);
+          accentSensitivity == AccentSensitivity.AS,
+          caseSensitivity == CaseSensitivity.CS);
       }
 
       /**
