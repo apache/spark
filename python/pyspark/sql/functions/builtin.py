@@ -6058,33 +6058,33 @@ def count_min_sketch(
     --------
     Example 1: Using columns as arguments
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.range(100)
-    >>> df.select(sf.count_min_sketch(sf.col("id"), sf.lit(0.5), sf.lit(0.5), sf.lit(1))).show()
-    +---------------------------------+
-    |count_min_sketch(id, 0.5, 0.5, 1)|
-    +---------------------------------+
-    |             [00 00 00 01 00 0...|
-    +---------------------------------+
+    >>> df = spark.range(100, numPartitions=1)
+    >>> df.select(sf.count_min_sketch("id", 0.5, sf.lit(0.5), sf.lit(1))).show(truncate=40)
+    +----------------------------------------+
+    |       count_min_sketch(id, 0.5, 0.5, 1)|
+    +----------------------------------------+
+    |[00 00 00 01 00 00 00 00 00 00 00 64 ...|
+    +----------------------------------------+
 
     Example 2: Using numbers as arguments
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.range(100)
-    >>> df.select(sf.count_min_sketch("id", 0.5, 0.5, 1)).show()
-    +---------------------------------+
-    |count_min_sketch(id, 0.5, 0.5, 1)|
-    +---------------------------------+
-    |             [00 00 00 01 00 0...|
-    +---------------------------------+
+    >>> df = spark.range(100, numPartitions=1)
+    >>> df.select(sf.count_min_sketch("id", 0.5, 0.5, 2)).show(truncate=40)
+    +----------------------------------------+
+    |       count_min_sketch(id, 0.5, 0.5, 2)|
+    +----------------------------------------+
+    |[00 00 00 01 00 00 00 00 00 00 00 64 ...|
+    +----------------------------------------+
 
     Example 3: Using a random seed
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.range(100)
-    >>> df.select(sf.count_min_sketch("id", 0.5, 0.5)).show() # doctest: +SKIP
-    +-------------------------------------------+
-    |count_min_sketch(id, 0.5, 0.5, -1457846360)|
-    +-------------------------------------------+
-    |                       [00 00 00 01 00 0...|
-    +-------------------------------------------+
+    >>> df = spark.range(100, numPartitions=1)
+    >>> df.select(sf.count_min_sketch("id", 0.5, 0.5)).show(truncate=40) # doctest: +SKIP
+    +------------------------------------------+
+    |count_min_sketch(id, 0.5, 0.5, 1679937151)|
+    +------------------------------------------+
+    |  [00 00 00 01 00 00 00 00 00 00 00 64 ...|
+    +------------------------------------------+
     """
     _eps = lit(eps)
     _conf = lit(confidence)
