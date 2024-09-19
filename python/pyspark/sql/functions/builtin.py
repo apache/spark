@@ -11885,12 +11885,13 @@ def randstr(length: Union[Column, int], seed: Optional[Union[Column, int]] = Non
     --------
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([('3',)], ['a'])
-    >>> df.select(sf.randstr(5, 0).alias('result')).show()
+    >>> df.select(sf.randstr(lit(5), lit(0)).alias('result')).show()
     +------+
     |result|
     +------+
-    | ceV0P|
+    | nurJI|
     +------+
+
     """
     if seed is None:
         return _invoke_function_over_columns("randstr", length)
@@ -12296,12 +12297,13 @@ def uniform(
     --------
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([('3',)], ['a'])
-    >>> df.select(sf.uniform(0, 10, 0).alias('result')).show()
+    >>> df.select(sf.uniform(lit(0), lit(10), lit(0)).alias('result')).show()
     +------+
     |result|
     +------+
-    |     7|
+    |     2|
     +------+
+
     """
     if seed is None:
         return _invoke_function_over_columns("uniform", min, max)
