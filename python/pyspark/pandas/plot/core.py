@@ -759,6 +759,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
         x : label or position, default DataFrame.index
             Column to be used for categories.
         y : label or position, default All numeric columns in dataframe
+            Columns to be plotted from the DataFrame.
         **kwds
             Keyword arguments to pass on to
             :meth:`pyspark.pandas.DataFrame.plot` or :meth:`pyspark.pandas.Series.plot`.
