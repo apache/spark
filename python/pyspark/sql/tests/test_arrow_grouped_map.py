@@ -17,6 +17,7 @@
 import inspect
 import os
 import time
+from typing import Iterator
 import unittest
 
 from pyspark.errors import PythonException
@@ -28,6 +29,7 @@ from pyspark.testing.sqlutils import (
     have_pyarrow,
     pyarrow_requirement_message,
 )
+from python.pyspark.testing.utils import assertDataFrameEqual
 
 if have_pyarrow:
     import pyarrow as pa
@@ -55,7 +57,7 @@ def function_variations(func):
     not have_pyarrow,
     pyarrow_requirement_message,  # type: ignore[arg-type]
 )
-class GroupedMapInArrowTestsMixin:
+class GroupedMapInArrowTestsMixin(ReusedSQLTestCase):
     @property
     def data(self):
         return (
@@ -76,9 +78,9 @@ class GroupedMapInArrowTestsMixin:
         grouped_df = df.groupBy((col("id") / 4).cast("int"))
         expected = df.collect()
 
-        # for func_variation in function_variations(func):
-        actual = grouped_df.applyInArrow(func, "id long, value long").collect()
-        self.assertEqual(actual, expected)
+        for func_variation in function_variations(func):
+            actual = grouped_df.applyInArrow(func_variation, "id long, value long").collect()
+            self.assertEqual(actual, expected)
 
     def test_apply_in_arrow_with_key(self):
         def func(key, group):
@@ -301,8 +303,47 @@ class GroupedMapInArrowTestsMixin:
                     self.assertEqual(r.a, "hi")
                     self.assertEqual(r.b, 1)
 
+    def test_apply_in_arrow_batching(self):
+        with self.sql_conf(
+            {"spark.sql.execution.arrow.maxRecordsPerBatch": 2}
+        ):
+            def func(group: Iterator[pa.RecordBatch]):
+                self.assertIsInstance(group, Iterator)
+                batches = list(group)
+                self.assertEqual(len(batches), 2)
+                for batch in batches:
+                    self.assertIsInstance(batch, pa.RecordBatch)
+                    self.assertEqual(batch.schema.names, ["id", "value"])
+                yield from batches
 
-class GroupedMapInArrowTests(GroupedMapInArrowTestsMixin, ReusedSQLTestCase):
+            df = self.spark.range(12).withColumn("value", col("id") * 10)
+            grouped_df = df.groupBy((col("id") / 4).cast("int"))
+
+            actual = grouped_df.applyInArrow(func, "id long, value long")
+            assertDataFrameEqual(actual, df)
+
+    def test_apply_in_arrow_partial_iteration(self):
+        with self.sql_conf(
+            {"spark.sql.execution.arrow.maxRecordsPerBatch": 2}
+        ):
+            def func(group: Iterator[pa.RecordBatch]):
+                first = next(group)
+                yield pa.RecordBatch.from_pylist([
+                    {"value": r.as_py() % 4}
+                    for r in first.column(0)
+                ])
+
+            df = self.spark.range(20)
+            grouped_df = df.groupBy((col("id") % 4).cast("int"))
+            
+            # Should get two records for each group
+            expected = [Row(value=x) for x in [0, 0, 1, 1, 2, 2, 3, 3]]
+
+            actual = grouped_df.applyInArrow(func, "value long")
+            assertDataFrameEqual(actual, expected)
+
+
+class GroupedMapInArrowTests(GroupedMapInArrowTestsMixin):
     @classmethod
     def setUpClass(cls):
         ReusedSQLTestCase.setUpClass()
