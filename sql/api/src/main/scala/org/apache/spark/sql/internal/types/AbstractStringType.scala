@@ -53,10 +53,10 @@ case object StringTypeAnyCollation extends AbstractStringType {
 }
 
 /**
- * Use StringTypeNonCSAICollation for expressions supporting all possible collation types
- * except CS_AI collation types.
+ * Use StringTypeNonCSAICollation for expressions supporting all possible collation types except
+ * CS_AI collation types.
  */
 case object StringTypeNonCSAICollation extends AbstractStringType {
   override private[sql] def acceptsType(other: DataType): Boolean =
-    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].isNonCSAICollation
+    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].isNonCSAI
 }

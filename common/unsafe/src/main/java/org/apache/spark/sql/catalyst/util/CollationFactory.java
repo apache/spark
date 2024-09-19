@@ -924,11 +924,12 @@ public final class CollationFactory {
   /**
    * Returns whether the ICU collation is not Case Sensitive Accent Insensitive
    * for the given collation id.
+   * This method is used in expressions which do not support CS_AI collations.
    */
-  public static Boolean isNonCSAI(int collationId) {
+  public static boolean isCaseSensitiveAndAccentInsensitive(int collationId) {
     return Collation.CollationSpecICU.fromCollationId(collationId).caseSensitivity ==
-            Collation.CollationSpecICU.CaseSensitivity.CI ||
-            Collation.CollationSpecICU.fromCollationId(collationId).accentSensitivity !=
+            Collation.CollationSpecICU.CaseSensitivity.CS &&
+            Collation.CollationSpecICU.fromCollationId(collationId).accentSensitivity ==
             Collation.CollationSpecICU.AccentSensitivity.AI;
   }
 
