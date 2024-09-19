@@ -11889,7 +11889,7 @@ def randstr(length: Union[Column, int], seed: Optional[Union[Column, int]] = Non
     +------+
     |result|
     +------+
-    | nurJI|
+    | ceV0P|
     +------+
 
     """
@@ -12301,7 +12301,7 @@ def uniform(
     +------+
     |result|
     +------+
-    |     2|
+    |     7|
     +------+
 
     """
