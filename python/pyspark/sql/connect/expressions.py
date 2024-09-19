@@ -492,17 +492,14 @@ class LiteralExpression(Expression):
         elif isinstance(self._dataType, DayTimeIntervalType):
             delta = DayTimeIntervalType().fromInternal(self._value)
             if delta is not None and isinstance(delta, datetime.timedelta):
-                try:
-                    import pandas as pd
+                import pandas as pd
 
-                    # Note: timedelta itself does not provide isoformat method.
-                    # Both Pandas and java.time.Duration provide it, but the format
-                    # is sightly different:
-                    # java.time.Duration only applies HOURS, MINUTES, SECONDS units,
-                    # while Pandas applies all supported units.
-                    return pd.Timedelta(delta).isoformat()  # type: ignore[attr-defined]
-                except Exception:
-                    pass
+                # Note: timedelta itself does not provide isoformat method.
+                # Both Pandas and java.time.Duration provide it, but the format
+                # is sightly different:
+                # java.time.Duration only applies HOURS, MINUTES, SECONDS units,
+                # while Pandas applies all supported units.
+                return pd.Timedelta(delta).isoformat()  # type: ignore[attr-defined]
         return f"{self._value}"
 
 
