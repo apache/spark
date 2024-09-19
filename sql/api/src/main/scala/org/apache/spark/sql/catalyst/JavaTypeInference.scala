@@ -70,8 +70,7 @@ object JavaTypeInference {
       t: Type,
       seenTypeSet: Set[Class[_]],
       typeVariables: Map[TypeVariable[_], Type] = Map.empty,
-      forGenericBound: Boolean = false): AgnosticEncoder[_] =
-    t match {
+      forGenericBound: Boolean = false): AgnosticEncoder[_] = t match {
       case c: Class[_] if !forGenericBound && c == java.lang.Boolean.TYPE => PrimitiveBooleanEncoder
       case c: Class[_] if !forGenericBound && c == java.lang.Byte.TYPE => PrimitiveByteEncoder
       case c: Class[_] if !forGenericBound && c == java.lang.Short.TYPE => PrimitiveShortEncoder
