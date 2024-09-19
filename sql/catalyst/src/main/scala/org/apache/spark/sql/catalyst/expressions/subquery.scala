@@ -374,8 +374,8 @@ object SubExprUtils extends PredicateHelper {
  *
  * 'needSingleJoin' is set to true if we can't guarantee that the correlated scalar subquery
  * returns at most 1 row. For such subqueries we use a modification of an outer join called
- * LeftSingle join. This value is set in It is set in PullupCorrelatedPredicates and
- * used in RewriteCorrelatedScalarSubquery.
+ * LeftSingle join. This value is set in PullupCorrelatedPredicates and used in
+ * RewriteCorrelatedScalarSubquery.
  */
 case class ScalarSubquery(
     plan: LogicalPlan,
