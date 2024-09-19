@@ -11862,7 +11862,7 @@ def regexp_like(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def randstr(length: "ColumnOrName", seed: Optional["ColumnOrName"] = None) -> Column:
+def randstr(length: Union[Column, int], seed: Optional[Union[Column, int]] = None) -> Column:
     """Returns a string of the specified length whose characters are chosen uniformly at random from
     the following pool of characters: 0-9, a-z, A-Z. The random seed is optional. The string length
     must be a constant two-byte or four-byte integer (SMALLINT or INT, respectively).
@@ -11883,8 +11883,14 @@ def randstr(length: "ColumnOrName", seed: Optional["ColumnOrName"] = None) -> Co
 
     Examples
     --------
-    >>> spark.createDataFrame([('3',)], ['a']).select(randstr(5).alias('x')).select(isnull('x')).collect()
-    [Row(false)]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('3',)], ['a'])
+    >>> df.select(sf.randstr(5, 0).alias('result')).show()
+    +------+
+    |result|
+    +------+
+    | ceV0P|
+    +------+
     """
     if seed is None:
         return _invoke_function_over_columns("randstr", length)
@@ -12260,7 +12266,9 @@ def unhex(col: "ColumnOrName") -> Column:
 
 @_try_remote_functions
 def uniform(
-    min: "ColumnOrName", max: "ColumnOrName", seed: Optional["ColumnOrName"] = None
+    min: Union[Column, int, float],
+    max: Union[Column, int, float],
+    seed: Optional[Union[Column, int]] = None,
 ) -> Column:
     """Returns a random value with independent and identically distributed (i.i.d.) values with the
     specified range of numbers. The random seed is optional. The provided numbers specifying the
@@ -12286,8 +12294,14 @@ def uniform(
 
     Examples
     --------
-    >>> spark.createDataFrame([('3',)], ['a']).select(uniform(0, 10).alias('x')).select(isnull('x')).collect()
-    [Row(false)]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('3',)], ['a'])
+    >>> df.select(sf.uniform(0, 10, 0).alias('result')).show()
+    +------+
+    |result|
+    +------+
+    |     7|
+    +------+
     """
     if seed is None:
         return _invoke_function_over_columns("uniform", min, max)

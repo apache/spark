@@ -485,7 +485,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "paramIndex" -> "second",
         "inputSql" -> "\"a\"",
         "inputType" -> "\"STRING\"",
-        "requiredType" -> "INT or SMALLINT"),
+        "requiredType" -> "integer or floating-point"),
       context = ExpectedContext(
         contextType = QueryContextType.DataFrame,
         fragment = "uniform",
@@ -499,8 +499,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       intercept[AnalysisException](df.select(expr)),
       condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
-        "inputName" -> "length",
-        "inputType" -> "INT or SMALLINT",
+        "inputName" -> "min",
+        "inputType" -> "integer or floating-point",
         "inputExpr" -> "\"a\"",
         "sqlExpr" -> "\"uniform(a, 10)\""),
       context = ExpectedContext(
