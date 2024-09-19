@@ -6043,7 +6043,7 @@ def count_min_sketch(
         .. versionchanged:: 4.0.0
             `confidence` now accepts float value.
 
-    seed : :class:`~pyspark.sql.Column` or int
+    seed : :class:`~pyspark.sql.Column` or int, optional
         random seed
 
         .. versionchanged:: 4.0.0
@@ -6057,6 +6057,7 @@ def count_min_sketch(
     Examples
     --------
     Example 1: Using columns as arguments
+
     >>> from pyspark.sql import functions as sf
     >>> df = spark.range(100, numPartitions=1)
     >>> df.select(sf.count_min_sketch("id", 0.5, sf.lit(0.5), sf.lit(1))).show(truncate=64)
@@ -6067,6 +6068,7 @@ def count_min_sketch(
     +----------------------------------------------------------------+
 
     Example 2: Using numbers as arguments
+
     >>> from pyspark.sql import functions as sf
     >>> df = spark.range(100, numPartitions=1)
     >>> df.select(sf.count_min_sketch("id", 0.5, 0.5, 2)).show(truncate=64)
@@ -6077,6 +6079,7 @@ def count_min_sketch(
     +----------------------------------------------------------------+
 
     Example 3: Using a random seed
+
     >>> from pyspark.sql import functions as sf
     >>> df = spark.range(100, numPartitions=1)
     >>> df.select(sf.count_min_sketch("id", 0.5, 0.5)).show(truncate=64) # doctest: +SKIP
