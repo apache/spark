@@ -24,7 +24,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.Utils
 
-
 /**
  * The class contains tests for the `DESCRIBE TABLE` command to check V2 table catalogs.
  */
