@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.internal.ExpressionUtils.{column, generateAlias}
@@ -52,8 +53,8 @@ class RelationalGroupedDataset protected[sql](
     protected[sql] val df: DataFrame,
     private[sql] val groupingExprs: Seq[Expression],
     groupType: RelationalGroupedDataset.GroupType)
-  extends api.RelationalGroupedDataset[Dataset] {
-  type RGD = RelationalGroupedDataset
+  extends api.RelationalGroupedDataset {
+
   import RelationalGroupedDataset._
   import df.sparkSession._
 

@@ -124,6 +124,8 @@ object SparkConnectServerUtils {
       // to make the tests exercise reattach.
       "spark.connect.execute.reattachable.senderMaxStreamDuration=1s",
       "spark.connect.execute.reattachable.senderMaxStreamSize=123",
+      // Testing SPARK-49673, setting maxBatchSize to 10MiB
+      s"spark.connect.grpc.arrow.maxBatchSize=${10 * 1024 * 1024}",
       // Disable UI
       "spark.ui.enabled=false")
     Seq("--jars", catalystTestJar) ++ confs.flatMap(v => "--conf" :: v :: Nil)

@@ -96,7 +96,7 @@ class SparkSession private(
     @transient private[sql] val extensions: SparkSessionExtensions,
     @transient private[sql] val initialSessionOptions: Map[String, String],
     @transient private val parentManagedJobTags: Map[String, String])
-  extends api.SparkSession[Dataset] with Logging { self =>
+  extends api.SparkSession with Logging { self =>
 
   // The call site where this SparkSession was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
