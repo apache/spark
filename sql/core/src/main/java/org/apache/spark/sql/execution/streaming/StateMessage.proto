@@ -150,12 +150,15 @@ message UpdateValue {
 }
 
 message Iterator {
+  string iteratorId = 1;
 }
 
 message Keys {
+  string iteratorId = 1;
 }
 
 message Values {
+  string iteratorId = 1;
 }
 
 message RemoveKey {

@@ -220,16 +220,22 @@ class UpdateValue(_message.Message):
     def __init__(self, key: _Optional[bytes] = ..., value: _Optional[bytes] = ...) -> None: ...
 
 class Iterator(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("iteratorId",)
+    ITERATORID_FIELD_NUMBER: _ClassVar[int]
+    iteratorId: str
+    def __init__(self, iteratorId: _Optional[str] = ...) -> None: ...
 
 class Keys(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("iteratorId",)
+    ITERATORID_FIELD_NUMBER: _ClassVar[int]
+    iteratorId: str
+    def __init__(self, iteratorId: _Optional[str] = ...) -> None: ...
 
 class Values(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("iteratorId",)
+    ITERATORID_FIELD_NUMBER: _ClassVar[int]
+    iteratorId: str
+    def __init__(self, iteratorId: _Optional[str] = ...) -> None: ...
 
 class RemoveKey(_message.Message):
     __slots__ = ("key",)

@@ -31,10 +31,11 @@ import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateVariableRequest, ValueStateCall}
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
 
 /**
@@ -60,8 +61,9 @@ class TransformWithStateInPandasStateServer(
     deserializerForTest: TransformWithStateInPandasDeserializer = null,
     arrowStreamWriterForTest: BaseStreamingArrowWriter = null,
     listStatesMapForTest : mutable.HashMap[String, ListStateInfo] = null,
-    listStateIteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null,
-    mapStatesMapForTest : mutable.HashMap[String, MapStateInfo] = null)
+    iteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null,
+    mapStatesMapForTest : mutable.HashMap[String, MapStateInfo] = null,
+    keyValueIteratorMapForTest: mutable.HashMap[String, Iterator[(Row, Row)]] = null)
   extends Runnable with Logging {
   private val keyRowDeserializer: ExpressionEncoder.Deserializer[Row] =
     ExpressionEncoder(groupingKeySchema).resolveAndBind().createDeserializer()
@@ -80,11 +82,12 @@ class TransformWithStateInPandasStateServer(
   } else {
     new mutable.HashMap[String, ListStateInfo]()
   }
-  // A map to store the iterator id -> iterator mapping. This is to keep track of the
-  // current iterator position for each list state in a grouping key in case user tries to fetch
-  // another list state before the current iterator is exhausted.
-  private var listStateIterators = if (listStateIteratorMapForTest != null) {
-    listStateIteratorMapForTest
+  // A map to store the iterator id -> Iterator[Row] mapping. This is to keep track of the
+  // current iterator position for each iterator id in a state variable for a grouping key in case
+  // user tries to fetch another state variable before the current iterator is exhausted. This is
+  // mainly used for list state and map state.
+  private var iterators = if (iteratorMapForTest != null) {
+    iteratorMapForTest
   } else {
     new mutable.HashMap[String, Iterator[Row]]()
   }
@@ -94,6 +97,15 @@ class TransformWithStateInPandasStateServer(
     mapStatesMapForTest
   } else {
     new mutable.HashMap[String, MapStateInfo]()
+  }
+
+  // A map to store the iterator id -> Iterator[(Row, Row)] mapping. This is to keep track of the
+  // current key-value iterator position for each iterator id in a map state for a grouping key in
+  // case user tries to fetch another state variable before the current iterator is exhausted.
+  private var keyValueIterators = if (keyValueIteratorMapForTest != null) {
+    keyValueIteratorMapForTest
+  } else {
+    new mutable.HashMap[String, Iterator[(Row, Row)]]()
   }
 
   def run(): Unit = {
@@ -158,12 +170,12 @@ class TransformWithStateInPandasStateServer(
         val keyRow = PythonSQLUtils.toJVMRow(keyBytes, groupingKeySchema, keyRowDeserializer)
         ImplicitGroupingKeyTracker.setImplicitKey(keyRow)
         // Reset the list state iterators for a new grouping key.
-        listStateIterators = new mutable.HashMap[String, Iterator[Row]]()
+        iterators = new mutable.HashMap[String, Iterator[Row]]()
         sendResponse(0)
       case ImplicitGroupingKeyRequest.MethodCase.REMOVEIMPLICITKEY =>
         ImplicitGroupingKeyTracker.removeImplicitKey()
         // Reset the list state iterators for a new grouping key.
-        listStateIterators = new mutable.HashMap[String, Iterator[Row]]()
+        iterators = new mutable.HashMap[String, Iterator[Row]]()
         sendResponse(0)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
@@ -202,7 +214,7 @@ class TransformWithStateInPandasStateServer(
         val stateName = message.getGetMapState.getStateName
         val keySchema = message.getGetMapState.getSchema
         val valueSchema = message.getGetMapState.getMapStateValueSchema
-        initializeStateVariable(stateName, keySchema, "listState", None)
+        initializeStateVariable(stateName, keySchema, "mapState", None, valueSchema)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
     }
@@ -289,10 +301,10 @@ class TransformWithStateInPandasStateServer(
         sendResponse(0)
       case ListStateCall.MethodCase.LISTSTATEGET =>
         val iteratorId = message.getListStateGet.getIteratorId
-        var iteratorOption = listStateIterators.get(iteratorId)
+        var iteratorOption = iterators.get(iteratorId)
         if (iteratorOption.isEmpty) {
           iteratorOption = Some(listStateInfo.listState.get())
-          listStateIterators.put(iteratorId, iteratorOption.get)
+          iterators.put(iteratorId, iteratorOption.get)
         }
         if (!iteratorOption.get.hasNext) {
           sendResponse(2, s"List state $stateName doesn't contain any value.")
@@ -393,8 +405,142 @@ class TransformWithStateInPandasStateServer(
         mapStateInfo.mapState.updateValue(keyRow, valueRow)
         sendResponse(0)
       case MapStateCall.MethodCase.ITERATOR =>
-        // TODO: add implementation
-        val iterator = mapStateInfo.mapState.iterator()
+        val iteratorId = message.getIterator.getIteratorId
+        var iteratorOption = keyValueIterators.get(iteratorId)
+        if (iteratorOption.isEmpty) {
+          iteratorOption = Some(mapStateInfo.mapState.iterator())
+          keyValueIterators.put(iteratorId, iteratorOption.get)
+        }
+        if (!iteratorOption.get.hasNext) {
+          sendResponse(2, s"Map state $stateName doesn't contain any entry.")
+          return
+        } else {
+          sendResponse(0)
+        }
+        outputStream.flush()
+        val arrowStreamWriter = if (arrowStreamWriterForTest != null) {
+          arrowStreamWriterForTest
+        } else {
+          val keyValueStateSchema: StructType = StructType(
+            Array(
+              // key row serialized as a byte array.
+              StructField("keyRow", BinaryType),
+              // value row serialized as a byte array.
+              StructField("valueRow", BinaryType),
+            )
+          )
+          val arrowSchema = ArrowUtils.toArrowSchema(keyValueStateSchema, timeZoneId,
+            errorOnDuplicatedFieldNames, largeVarTypes)
+          val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+          s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
+          val root = VectorSchemaRoot.create(arrowSchema, allocator)
+          new BaseStreamingArrowWriter(root, new ArrowStreamWriter(root, null, outputStream),
+            arrowTransformWithStateInPandasMaxRecordsPerBatch)
+        }
+        // Only write a single batch in each GET request. Stops writing row if rowCount reaches
+        // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to avoid a case
+        // when there are multiple state variables, user tries to access a different state variable
+        // while the current state variable is not exhausted yet.
+        var rowCount = 0
+        while (iteratorOption.get.hasNext &&
+          rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {
+          val (keyRow, valueRow) = iteratorOption.get.next()
+          val keyBytes = PythonSQLUtils.toPyRow(keyRow)
+          val valueBytes = PythonSQLUtils.toPyRow(valueRow)
+          val internalRow = new GenericInternalRow(
+            Array[Any](
+              keyBytes,
+              valueBytes
+            )
+          )
+          arrowStreamWriter.writeRow(internalRow)
+          rowCount += 1
+        }
+        arrowStreamWriter.finalizeCurrentArrowBatch()
+        sendResponse(0)
+      case MapStateCall.MethodCase.KEYS =>
+        val iteratorId = message.getKeys.getIteratorId
+        var iteratorOption = iterators.get(iteratorId)
+        if (iteratorOption.isEmpty) {
+          iteratorOption = Some(mapStateInfo.mapState.keys())
+          iterators.put(iteratorId, iteratorOption.get)
+        }
+        if (!iteratorOption.get.hasNext) {
+          sendResponse(2, s"Map state $stateName doesn't contain any key.")
+          return
+        } else {
+          sendResponse(0)
+        }
+        outputStream.flush()
+        val arrowStreamWriter = if (arrowStreamWriterForTest != null) {
+          arrowStreamWriterForTest
+        } else {
+          val arrowSchema = ArrowUtils.toArrowSchema(mapStateInfo.keySchema, timeZoneId,
+            errorOnDuplicatedFieldNames, largeVarTypes)
+          val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+          s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
+          val root = VectorSchemaRoot.create(arrowSchema, allocator)
+          new BaseStreamingArrowWriter(root, new ArrowStreamWriter(root, null, outputStream),
+            arrowTransformWithStateInPandasMaxRecordsPerBatch)
+        }
+        val keyRowSerializer = mapStateInfo.keySerializer
+        // Only write a single batch in each GET request. Stops writing row if rowCount reaches
+        // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to avoid a case
+        // when there are multiple state variables, user tries to access a different state variable
+        // while the current state variable is not exhausted yet.
+        var rowCount = 0
+        while (iteratorOption.get.hasNext &&
+          rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {
+          val row = iteratorOption.get.next()
+          val internalRow = keyRowSerializer(row)
+          arrowStreamWriter.writeRow(internalRow)
+          rowCount += 1
+        }
+        arrowStreamWriter.finalizeCurrentArrowBatch()
+      case MapStateCall.MethodCase.VALUES =>
+        val iteratorId = message.getValues.getIteratorId
+        var iteratorOption = iterators.get(iteratorId)
+        if (iteratorOption.isEmpty) {
+          iteratorOption = Some(mapStateInfo.mapState.values())
+          iterators.put(iteratorId, iteratorOption.get)
+        }
+        if (!iteratorOption.get.hasNext) {
+          sendResponse(2, s"Map state $stateName doesn't contain any value.")
+          return
+        } else {
+          sendResponse(0)
+        }
+        outputStream.flush()
+        val arrowStreamWriter = if (arrowStreamWriterForTest != null) {
+          arrowStreamWriterForTest
+        } else {
+          val arrowSchema = ArrowUtils.toArrowSchema(mapStateInfo.valueSchema, timeZoneId,
+            errorOnDuplicatedFieldNames, largeVarTypes)
+          val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+          s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
+          val root = VectorSchemaRoot.create(arrowSchema, allocator)
+          new BaseStreamingArrowWriter(root, new ArrowStreamWriter(root, null, outputStream),
+            arrowTransformWithStateInPandasMaxRecordsPerBatch)
+        }
+        val valueRowSerializer = mapStateInfo.valueSerializer
+        // Only write a single batch in each GET request. Stops writing row if rowCount reaches
+        // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to avoid a case
+        // when there are multiple state variables, user tries to access a different state variable
+        // while the current state variable is not exhausted yet.
+        var rowCount = 0
+        while (iteratorOption.get.hasNext &&
+          rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {
+          val row = iteratorOption.get.next()
+          val internalRow = valueRowSerializer(row)
+          arrowStreamWriter.writeRow(internalRow)
+          rowCount += 1
+        }
+        arrowStreamWriter.finalizeCurrentArrowBatch()
+      case MapStateCall.MethodCase.REMOVEKEY =>
+        val keyBytes = message.getRemoveKey.getKey.toByteArray
+        val keyRow = PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema,
+          mapStateInfo.keyDeserializer)
+        mapStateInfo.mapState.removeKey(keyRow)
         sendResponse(0)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")

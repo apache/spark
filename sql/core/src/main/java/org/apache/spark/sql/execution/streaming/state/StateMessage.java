@@ -18583,6 +18583,18 @@ public final class StateMessage {
   public interface IteratorOrBuilder extends
       // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.execution.streaming.state.Iterator)
       com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>string iteratorId = 1;</code>
+     * @return The iteratorId.
+     */
+    java.lang.String getIteratorId();
+    /**
+     * <code>string iteratorId = 1;</code>
+     * @return The bytes for iteratorId.
+     */
+    com.google.protobuf.ByteString
+        getIteratorIdBytes();
   }
   /**
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.Iterator}
@@ -18597,6 +18609,7 @@ public final class StateMessage {
       super(builder);
     }
     private Iterator() {
+      iteratorId_ = "";
     }
 
     @java.lang.Override
@@ -18624,6 +18637,44 @@ public final class StateMessage {
               org.apache.spark.sql.execution.streaming.state.StateMessage.Iterator.class, org.apache.spark.sql.execution.streaming.state.StateMessage.Iterator.Builder.class);
     }
 
+    public static final int ITERATORID_FIELD_NUMBER = 1;
+    private volatile java.lang.Object iteratorId_;
+    /**
+     * <code>string iteratorId = 1;</code>
+     * @return The iteratorId.
+     */
+    @java.lang.Override
+    public java.lang.String getIteratorId() {
+      java.lang.Object ref = iteratorId_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs = 
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        iteratorId_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string iteratorId = 1;</code>
+     * @return The bytes for iteratorId.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getIteratorIdBytes() {
+      java.lang.Object ref = iteratorId_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b = 
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        iteratorId_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -18638,6 +18689,9 @@ public final class StateMessage {
     @java.lang.Override
     public void writeTo(com.google.protobuf.CodedOutputStream output)
                         throws java.io.IOException {
+      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(iteratorId_)) {
+        com.google.protobuf.GeneratedMessageV3.writeString(output, 1, iteratorId_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -18647,6 +18701,9 @@ public final class StateMessage {
       if (size != -1) return size;
 
       size = 0;
+      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(iteratorId_)) {
+        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(1, iteratorId_);
+      }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
       return size;
@@ -18662,6 +18719,8 @@ public final class StateMessage {
       }
       org.apache.spark.sql.execution.streaming.state.StateMessage.Iterator other = (org.apache.spark.sql.execution.streaming.state.StateMessage.Iterator) obj;
 
+      if (!getIteratorId()
+          .equals(other.getIteratorId())) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
       return true;
     }
@@ -18673,6 +18732,8 @@ public final class StateMessage {
       }
       int hash = 41;
       hash = (19 * hash) + getDescriptor().hashCode();
+      hash = (37 * hash) + ITERATORID_FIELD_NUMBER;
+      hash = (53 * hash) + getIteratorId().hashCode();
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -18801,6 +18862,8 @@ public final class StateMessage {
       @java.lang.Override
       public Builder clear() {
         super.clear();
+        iteratorId_ = "";
+
         return this;
       }
 
@@ -18827,6 +18890,7 @@ public final class StateMessage {
       @java.lang.Override
       public org.apache.spark.sql.execution.streaming.state.StateMessage.Iterator buildPartial() {
         org.apache.spark.sql.execution.streaming.state.StateMessage.Iterator result = new org.apache.spark.sql.execution.streaming.state.StateMessage.Iterator(this);
+        result.iteratorId_ = iteratorId_;
         onBuilt();
         return result;
       }
@@ -18875,6 +18939,10 @@ public final class StateMessage {
 
       public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.Iterator other) {
         if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.Iterator.getDefaultInstance()) return this;
+        if (!other.getIteratorId().isEmpty()) {
+          iteratorId_ = other.iteratorId_;
+          onChanged();
+        }
         this.mergeUnknownFields(other.getUnknownFields());
         onChanged();
         return this;
@@ -18901,6 +18969,11 @@ public final class StateMessage {
               case 0:
                 done = true;
                 break;
+              case 10: {
+                iteratorId_ = input.readStringRequireUtf8();
+
+                break;
+              } // case 10
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -18914,6 +18987,82 @@ public final class StateMessage {
         } finally {
           onChanged();
         } // finally
+        return this;
+      }
+
+      private java.lang.Object iteratorId_ = "";
+      /**
+       * <code>string iteratorId = 1;</code>
+       * @return The iteratorId.
+       */
+      public java.lang.String getIteratorId() {
+        java.lang.Object ref = iteratorId_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          iteratorId_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string iteratorId = 1;</code>
+       * @return The bytes for iteratorId.
+       */
+      public com.google.protobuf.ByteString
+          getIteratorIdBytes() {
+        java.lang.Object ref = iteratorId_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          iteratorId_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string iteratorId = 1;</code>
+       * @param value The iteratorId to set.
+       * @return This builder for chaining.
+       */
+      public Builder setIteratorId(
+          java.lang.String value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  
+        iteratorId_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string iteratorId = 1;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearIteratorId() {
+        
+        iteratorId_ = getDefaultInstance().getIteratorId();
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string iteratorId = 1;</code>
+       * @param value The bytes for iteratorId to set.
+       * @return This builder for chaining.
+       */
+      public Builder setIteratorIdBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  checkByteStringIsUtf8(value);
+        
+        iteratorId_ = value;
+        onChanged();
         return this;
       }
       @java.lang.Override
@@ -18983,6 +19132,18 @@ public final class StateMessage {
   public interface KeysOrBuilder extends
       // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.execution.streaming.state.Keys)
       com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>string iteratorId = 1;</code>
+     * @return The iteratorId.
+     */
+    java.lang.String getIteratorId();
+    /**
+     * <code>string iteratorId = 1;</code>
+     * @return The bytes for iteratorId.
+     */
+    com.google.protobuf.ByteString
+        getIteratorIdBytes();
   }
   /**
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.Keys}
@@ -18997,6 +19158,7 @@ public final class StateMessage {
       super(builder);
     }
     private Keys() {
+      iteratorId_ = "";
     }
 
     @java.lang.Override
@@ -19024,6 +19186,44 @@ public final class StateMessage {
               org.apache.spark.sql.execution.streaming.state.StateMessage.Keys.class, org.apache.spark.sql.execution.streaming.state.StateMessage.Keys.Builder.class);
     }
 
+    public static final int ITERATORID_FIELD_NUMBER = 1;
+    private volatile java.lang.Object iteratorId_;
+    /**
+     * <code>string iteratorId = 1;</code>
+     * @return The iteratorId.
+     */
+    @java.lang.Override
+    public java.lang.String getIteratorId() {
+      java.lang.Object ref = iteratorId_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs = 
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        iteratorId_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string iteratorId = 1;</code>
+     * @return The bytes for iteratorId.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getIteratorIdBytes() {
+      java.lang.Object ref = iteratorId_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b = 
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        iteratorId_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -19038,6 +19238,9 @@ public final class StateMessage {
     @java.lang.Override
     public void writeTo(com.google.protobuf.CodedOutputStream output)
                         throws java.io.IOException {
+      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(iteratorId_)) {
+        com.google.protobuf.GeneratedMessageV3.writeString(output, 1, iteratorId_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -19047,6 +19250,9 @@ public final class StateMessage {
       if (size != -1) return size;
 
       size = 0;
+      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(iteratorId_)) {
+        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(1, iteratorId_);
+      }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
       return size;
@@ -19062,6 +19268,8 @@ public final class StateMessage {
       }
       org.apache.spark.sql.execution.streaming.state.StateMessage.Keys other = (org.apache.spark.sql.execution.streaming.state.StateMessage.Keys) obj;
 
+      if (!getIteratorId()
+          .equals(other.getIteratorId())) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
       return true;
     }
@@ -19073,6 +19281,8 @@ public final class StateMessage {
       }
       int hash = 41;
       hash = (19 * hash) + getDescriptor().hashCode();
+      hash = (37 * hash) + ITERATORID_FIELD_NUMBER;
+      hash = (53 * hash) + getIteratorId().hashCode();
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -19201,6 +19411,8 @@ public final class StateMessage {
       @java.lang.Override
       public Builder clear() {
         super.clear();
+        iteratorId_ = "";
+
         return this;
       }
 
@@ -19227,6 +19439,7 @@ public final class StateMessage {
       @java.lang.Override
       public org.apache.spark.sql.execution.streaming.state.StateMessage.Keys buildPartial() {
         org.apache.spark.sql.execution.streaming.state.StateMessage.Keys result = new org.apache.spark.sql.execution.streaming.state.StateMessage.Keys(this);
+        result.iteratorId_ = iteratorId_;
         onBuilt();
         return result;
       }
@@ -19275,6 +19488,10 @@ public final class StateMessage {
 
       public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.Keys other) {
         if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.Keys.getDefaultInstance()) return this;
+        if (!other.getIteratorId().isEmpty()) {
+          iteratorId_ = other.iteratorId_;
+          onChanged();
+        }
         this.mergeUnknownFields(other.getUnknownFields());
         onChanged();
         return this;
@@ -19301,6 +19518,11 @@ public final class StateMessage {
               case 0:
                 done = true;
                 break;
+              case 10: {
+                iteratorId_ = input.readStringRequireUtf8();
+
+                break;
+              } // case 10
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -19314,6 +19536,82 @@ public final class StateMessage {
         } finally {
           onChanged();
         } // finally
+        return this;
+      }
+
+      private java.lang.Object iteratorId_ = "";
+      /**
+       * <code>string iteratorId = 1;</code>
+       * @return The iteratorId.
+       */
+      public java.lang.String getIteratorId() {
+        java.lang.Object ref = iteratorId_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          iteratorId_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string iteratorId = 1;</code>
+       * @return The bytes for iteratorId.
+       */
+      public com.google.protobuf.ByteString
+          getIteratorIdBytes() {
+        java.lang.Object ref = iteratorId_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          iteratorId_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string iteratorId = 1;</code>
+       * @param value The iteratorId to set.
+       * @return This builder for chaining.
+       */
+      public Builder setIteratorId(
+          java.lang.String value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  
+        iteratorId_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string iteratorId = 1;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearIteratorId() {
+        
+        iteratorId_ = getDefaultInstance().getIteratorId();
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string iteratorId = 1;</code>
+       * @param value The bytes for iteratorId to set.
+       * @return This builder for chaining.
+       */
+      public Builder setIteratorIdBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  checkByteStringIsUtf8(value);
+        
+        iteratorId_ = value;
+        onChanged();
         return this;
       }
       @java.lang.Override
@@ -19383,6 +19681,18 @@ public final class StateMessage {
   public interface ValuesOrBuilder extends
       // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.execution.streaming.state.Values)
       com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>string iteratorId = 1;</code>
+     * @return The iteratorId.
+     */
+    java.lang.String getIteratorId();
+    /**
+     * <code>string iteratorId = 1;</code>
+     * @return The bytes for iteratorId.
+     */
+    com.google.protobuf.ByteString
+        getIteratorIdBytes();
   }
   /**
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.Values}
@@ -19397,6 +19707,7 @@ public final class StateMessage {
       super(builder);
     }
     private Values() {
+      iteratorId_ = "";
     }
 
     @java.lang.Override
@@ -19424,6 +19735,44 @@ public final class StateMessage {
               org.apache.spark.sql.execution.streaming.state.StateMessage.Values.class, org.apache.spark.sql.execution.streaming.state.StateMessage.Values.Builder.class);
     }
 
+    public static final int ITERATORID_FIELD_NUMBER = 1;
+    private volatile java.lang.Object iteratorId_;
+    /**
+     * <code>string iteratorId = 1;</code>
+     * @return The iteratorId.
+     */
+    @java.lang.Override
+    public java.lang.String getIteratorId() {
+      java.lang.Object ref = iteratorId_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs = 
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        iteratorId_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string iteratorId = 1;</code>
+     * @return The bytes for iteratorId.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getIteratorIdBytes() {
+      java.lang.Object ref = iteratorId_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b = 
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        iteratorId_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -19438,6 +19787,9 @@ public final class StateMessage {
     @java.lang.Override
     public void writeTo(com.google.protobuf.CodedOutputStream output)
                         throws java.io.IOException {
+      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(iteratorId_)) {
+        com.google.protobuf.GeneratedMessageV3.writeString(output, 1, iteratorId_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -19447,6 +19799,9 @@ public final class StateMessage {
       if (size != -1) return size;
 
       size = 0;
+      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(iteratorId_)) {
+        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(1, iteratorId_);
+      }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
       return size;
@@ -19462,6 +19817,8 @@ public final class StateMessage {
       }
       org.apache.spark.sql.execution.streaming.state.StateMessage.Values other = (org.apache.spark.sql.execution.streaming.state.StateMessage.Values) obj;
 
+      if (!getIteratorId()
+          .equals(other.getIteratorId())) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
       return true;
     }
@@ -19473,6 +19830,8 @@ public final class StateMessage {
       }
       int hash = 41;
       hash = (19 * hash) + getDescriptor().hashCode();
+      hash = (37 * hash) + ITERATORID_FIELD_NUMBER;
+      hash = (53 * hash) + getIteratorId().hashCode();
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -19601,6 +19960,8 @@ public final class StateMessage {
       @java.lang.Override
       public Builder clear() {
         super.clear();
+        iteratorId_ = "";
+
         return this;
       }
 
@@ -19627,6 +19988,7 @@ public final class StateMessage {
       @java.lang.Override
       public org.apache.spark.sql.execution.streaming.state.StateMessage.Values buildPartial() {
         org.apache.spark.sql.execution.streaming.state.StateMessage.Values result = new org.apache.spark.sql.execution.streaming.state.StateMessage.Values(this);
+        result.iteratorId_ = iteratorId_;
         onBuilt();
         return result;
       }
@@ -19675,6 +20037,10 @@ public final class StateMessage {
 
       public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.Values other) {
         if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.Values.getDefaultInstance()) return this;
+        if (!other.getIteratorId().isEmpty()) {
+          iteratorId_ = other.iteratorId_;
+          onChanged();
+        }
         this.mergeUnknownFields(other.getUnknownFields());
         onChanged();
         return this;
@@ -19701,6 +20067,11 @@ public final class StateMessage {
               case 0:
                 done = true;
                 break;
+              case 10: {
+                iteratorId_ = input.readStringRequireUtf8();
+
+                break;
+              } // case 10
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -19714,6 +20085,82 @@ public final class StateMessage {
         } finally {
           onChanged();
         } // finally
+        return this;
+      }
+
+      private java.lang.Object iteratorId_ = "";
+      /**
+       * <code>string iteratorId = 1;</code>
+       * @return The iteratorId.
+       */
+      public java.lang.String getIteratorId() {
+        java.lang.Object ref = iteratorId_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          iteratorId_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string iteratorId = 1;</code>
+       * @return The bytes for iteratorId.
+       */
+      public com.google.protobuf.ByteString
+          getIteratorIdBytes() {
+        java.lang.Object ref = iteratorId_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          iteratorId_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string iteratorId = 1;</code>
+       * @param value The iteratorId to set.
+       * @return This builder for chaining.
+       */
+      public Builder setIteratorId(
+          java.lang.String value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  
+        iteratorId_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string iteratorId = 1;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearIteratorId() {
+        
+        iteratorId_ = getDefaultInstance().getIteratorId();
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string iteratorId = 1;</code>
+       * @param value The bytes for iteratorId to set.
+       * @return This builder for chaining.
+       */
+      public Builder setIteratorIdBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  checkByteStringIsUtf8(value);
+        
+        iteratorId_ = value;
+        onChanged();
         return this;
       }
       @java.lang.Override
@@ -21466,14 +21913,16 @@ public final class StateMessage {
       "\t\"\016\n\014ListStatePut\"\034\n\013AppendValue\022\r\n\005valu" +
       "e\030\001 \001(\014\"\014\n\nAppendList\"\027\n\010GetValue\022\013\n\003key" +
       "\030\001 \001(\014\"\032\n\013ContainsKey\022\013\n\003key\030\001 \001(\014\")\n\013Up" +
-      "dateValue\022\013\n\003key\030\001 \001(\014\022\r\n\005value\030\002 \001(\014\"\n\n" +
-      "\010Iterator\"\006\n\004Keys\"\010\n\006Values\"\030\n\tRemoveKey" +
-      "\022\013\n\003key\030\001 \001(\014\"\\\n\016SetHandleState\022J\n\005state" +
-      "\030\001 \001(\0162;.org.apache.spark.sql.execution." +
-      "streaming.state.HandleState\"\037\n\tTTLConfig" +
-      "\022\022\n\ndurationMs\030\001 \001(\005*K\n\013HandleState\022\013\n\007C" +
-      "REATED\020\000\022\017\n\013INITIALIZED\020\001\022\022\n\016DATA_PROCES" +
-      "SED\020\002\022\n\n\006CLOSED\020\003b\006proto3"
+      "dateValue\022\013\n\003key\030\001 \001(\014\022\r\n\005value\030\002 \001(\014\"\036\n" +
+      "\010Iterator\022\022\n\niteratorId\030\001 \001(\t\"\032\n\004Keys\022\022\n" +
+      "\niteratorId\030\001 \001(\t\"\034\n\006Values\022\022\n\niteratorI" +
+      "d\030\001 \001(\t\"\030\n\tRemoveKey\022\013\n\003key\030\001 \001(\014\"\\\n\016Set" +
+      "HandleState\022J\n\005state\030\001 \001(\0162;.org.apache." +
+      "spark.sql.execution.streaming.state.Hand" +
+      "leState\"\037\n\tTTLConfig\022\022\n\ndurationMs\030\001 \001(\005" +
+      "*K\n\013HandleState\022\013\n\007CREATED\020\000\022\017\n\013INITIALI" +
+      "ZED\020\001\022\022\n\016DATA_PROCESSED\020\002\022\n\n\006CLOSED\020\003b\006p" +
+      "roto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -21616,19 +22065,19 @@ public final class StateMessage {
     internal_static_org_apache_spark_sql_execution_streaming_state_Iterator_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_Iterator_descriptor,
-        new java.lang.String[] { });
+        new java.lang.String[] { "IteratorId", });
     internal_static_org_apache_spark_sql_execution_streaming_state_Keys_descriptor =
       getDescriptor().getMessageTypes().get(23);
     internal_static_org_apache_spark_sql_execution_streaming_state_Keys_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_Keys_descriptor,
-        new java.lang.String[] { });
+        new java.lang.String[] { "IteratorId", });
     internal_static_org_apache_spark_sql_execution_streaming_state_Values_descriptor =
       getDescriptor().getMessageTypes().get(24);
     internal_static_org_apache_spark_sql_execution_streaming_state_Values_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_Values_descriptor,
-        new java.lang.String[] { });
+        new java.lang.String[] { "IteratorId", });
     internal_static_org_apache_spark_sql_execution_streaming_state_RemoveKey_descriptor =
       getDescriptor().getMessageTypes().get(25);
     internal_static_org_apache_spark_sql_execution_streaming_state_RemoveKey_fieldAccessorTable = new
