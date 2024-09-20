@@ -72,6 +72,7 @@ object TreePattern extends Enumeration  {
   val NOT: Value = Value
   val NULL_CHECK: Value = Value
   val NULL_LITERAL: Value = Value
+  val PIPE_OPERATOR_SELECT: Value = Value
   val SERIALIZE_FROM_OBJECT: Value = Value
   val OR: Value = Value
   val OUTER_REFERENCE: Value = Value
@@ -156,6 +157,7 @@ object TreePattern extends Enumeration  {
 
   // Unresolved Plan patterns (Alphabetically ordered)
   val UNRESOLVED_FUNC: Value = Value
+  val UNRESOLVED_PROCEDURE: Value = Value
   val UNRESOLVED_SUBQUERY_COLUMN_ALIAS: Value = Value
   val UNRESOLVED_TABLE_VALUED_FUNCTION: Value = Value
   val UNRESOLVED_TRANSPOSE: Value = Value

@@ -2473,6 +2473,14 @@ class CollectionExpressionsSuite
       evaluateWithMutableProjection(Shuffle(ai0, seed2)))
     assert(evaluateWithUnsafeProjection(Shuffle(ai0, seed1)) !==
       evaluateWithUnsafeProjection(Shuffle(ai0, seed2)))
+
+    val seed3 = Literal.create(r.nextInt())
+    assert(evaluateWithoutCodegen(new Shuffle(ai0, seed3)) ===
+      evaluateWithoutCodegen(new Shuffle(ai0, seed3)))
+    assert(evaluateWithMutableProjection(new Shuffle(ai0, seed3)) ===
+      evaluateWithMutableProjection(new Shuffle(ai0, seed3)))
+    assert(evaluateWithUnsafeProjection(new Shuffle(ai0, seed3)) ===
+      evaluateWithUnsafeProjection(new Shuffle(ai0, seed3)))
   }
 
   test("Array Except") {

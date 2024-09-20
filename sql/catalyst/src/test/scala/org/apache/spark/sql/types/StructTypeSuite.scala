@@ -564,7 +564,6 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
         .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "1 + 1")
           .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "1 + 1")
           .build())))
-    val error = "fails to parse as a valid literal value"
     assert(ResolveDefaultColumns.existenceDefaultValues(source2).length == 1)
     assert(ResolveDefaultColumns.existenceDefaultValues(source2)(0) == 2)
 
@@ -576,9 +575,13 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
           .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "invalid")
           .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "invalid")
           .build())))
-    assert(intercept[AnalysisException] {
-      ResolveDefaultColumns.existenceDefaultValues(source3)
-    }.getMessage.contains(error))
+
+    checkError(
+      exception = intercept[AnalysisException]{
+        ResolveDefaultColumns.existenceDefaultValues(source3)
+      },
+      condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+      parameters = Map("statement" -> "", "colName" -> "`c1`", "defaultValue" -> "invalid"))
 
     // Negative test: StructType.defaultValues fails because the existence default value fails to
     // resolve.
@@ -592,9 +595,15 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
             ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
             "(SELECT 'abc' FROM missingtable)")
           .build())))
-    assert(intercept[AnalysisException] {
-      ResolveDefaultColumns.existenceDefaultValues(source4)
-    }.getMessage.contains(error))
+
+    checkError(
+      exception = intercept[AnalysisException]{
+        ResolveDefaultColumns.existenceDefaultValues(source4)
+      },
+      condition = "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
+      parameters = Map("statement" -> "",
+        "colName" -> "`c1`",
+        "defaultValue" -> "(SELECT 'abc' FROM missingtable)"))
   }
 
   test("SPARK-46629: Test STRUCT DDL with NOT NULL round trip") {
