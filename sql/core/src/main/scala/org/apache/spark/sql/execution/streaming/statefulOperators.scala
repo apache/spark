@@ -48,7 +48,25 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.{CollectionAccumulator, CompletionIterator, NextIterator, Utils}
 
 
-/** Used to identify the state store for a given operator. */
+/** Used to identify the state store for a given operator.
+ *
+ * checkpointUniqueIds is used to identify the checkpoint used for a specific stateful operator
+ * The basic workflow works as following:
+ * 1. When a stateful operator is created, it passes in the checkpoint IDs for each stateful
+ *    operator through the StatefulOperatorStateInfo.
+ * 2. When a stateful task starts to execute, it will find the checkpointID for its shuffle
+ *    partition and use it to recover the state store. The ID is eventually passed into
+ *    the StateStore layer and eventually  RocksDB State Store, where it is used to make sure
+ *    the it loads the correct checkpoint
+ * 3. When the stateful task is finishing, after the state store is committed, the checkpoint ID
+ *    is fetched from the state store by calling StateStore.getCheckpointInfo() and added to the
+ *    checkpointUniqueIds accumulator by calling StateStoreWriter.setCheckpointInfo().
+ * 4. When ending the batch, MicroBatchExecution calls each stateful operator's getCheckpointInfo()
+ *    which aggregates checkpointIDs from different partitions. The driver will persistent
+ *    it into commit logs (not implemented yet).
+ * 5. When forming the next batch, the driver constructs the StatefulOperatorStateInfo with the
+ *    checkpoint IDs for the previous batch.
+ * */
 case class StatefulOperatorStateInfo(
     checkpointLocation: String,
     queryRunId: UUID,
