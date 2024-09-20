@@ -629,6 +629,8 @@ public class CollationSupportSuite {
     assertStartsWith("İonic", "Io", "UTF8_LCASE", false);
     assertStartsWith("İonic", "i\u0307o", "UTF8_LCASE", true);
     assertStartsWith("İonic", "İo", "UTF8_LCASE", true);
+    assertStartsWith("oİ", "oİ", "UTF8_LCASE", true);
+    assertStartsWith("oİ", "oi̇", "UTF8_LCASE", true);
     // Conditional case mapping (e.g. Greek sigmas).
     assertStartsWith("σ", "σ", "UTF8_BINARY", true);
     assertStartsWith("σ", "ς", "UTF8_BINARY", false);
