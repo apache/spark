@@ -1712,9 +1712,9 @@ class CollationSQLExpressionsSuite
 
   test("Support Mode.eval(buffer)") {
     case class UTF8StringModeTestCase[R](
-      collationId: String,
-      bufferValues: Map[UTF8String, Long],
-      result: R)
+        collationId: String,
+        bufferValues: Map[UTF8String, Long],
+        result: R)
 
     val bufferValuesUTF8String = Map(
       UTF8String.fromString("a") -> 5L,
@@ -1739,9 +1739,9 @@ class CollationSQLExpressionsSuite
 
   test("Support Mode.eval(buffer) with complex types") {
     case class UTF8StringModeTestCase[R](
-      collationId: String,
-      bufferValues: Map[InternalRow, Long],
-      result: R)
+        collationId: String,
+        bufferValues: Map[InternalRow, Long],
+        result: R)
 
     val bufferValuesUTF8String: Map[Any, Long] = Map(
       UTF8String.fromString("a") -> 5L,
