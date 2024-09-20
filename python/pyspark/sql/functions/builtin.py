@@ -11883,20 +11883,19 @@ def randstr(length: Union[Column, int], seed: Optional[Union[Column, int]] = Non
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([('3',)], ['a'])
-    >>> df = df.select(sf.randstr(lit(5), lit(0)).alias('result'))
-    >>> df.selectExpr("result != ''")
-    +------------+
-    |result != ''|
-    +------------+
-    |        true|
-    +------------+
+    >>> spark.createDataFrame([('3',)], ['a']) \\
+    ...   .select(randstr(lit(5), lit(0)).alias('result')) \\
+    ...   .selectExpr("length(result) > 0").show()
+    +--------------------+
+    |(length(result) > 0)|
+    +--------------------+
+    |                true|
+    +--------------------+
     """
     if seed is None:
-        return _invoke_function_over_columns("randstr", length)
+        return _invoke_function("randstr", lit(length))
     else:
-        return _invoke_function_over_columns("randstr", length, seed)
+        return _invoke_function("randstr", lit(length), lit(seed))
 
 
 @_try_remote_functions
@@ -12295,20 +12294,19 @@ def uniform(
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([('3',)], ['a'])
-    >>> df = df.select(sf.uniform(lit(0), lit(10), lit(0)).alias('result'))
-    >>> df.selectExpr("result < 15").show()
-    +-----------+
-    |result < 15|
-    +-----------+
-    |       true|
-    +-----------+
+    >>> spark.createDataFrame([('3',)], ['a']) \\
+    ...    .select(uniform(lit(0), lit(10), lit(0)).alias('result')) \\
+    ...    .selectExpr("result < 15").show()
+    +-------------+
+    |(result < 15)|
+    +-------------+
+    |         true|
+    +-------------+
     """
     if seed is None:
-        return _invoke_function_over_columns("uniform", min, max)
+        return _invoke_function("uniform", lit(min), lit(max))
     else:
-        return _invoke_function_over_columns("uniform", min, max, seed)
+        return _invoke_function("uniform", lit(min), lit(max), lit(seed))
 
 
 @_try_remote_functions

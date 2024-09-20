@@ -1488,7 +1488,6 @@ version
 
 operatorPipeRightSide
     : selectClause
-    | joinRelation
     ;
 
 // When `SQL_standard_keyword_behavior=true`, there are 2 kinds of keywords in Spark SQL.

@@ -5854,9 +5854,7 @@ class AstBuilder extends DataTypeAstBuilder
         windowClause = null,
         relation = left,
         isPipeOperatorSelect = true)
-    }.getOrElse(Option(ctx.joinRelation()).map { c =>
-      withJoinRelation(c, left)
-    }.get)
+    }.get
   }
 
   /**

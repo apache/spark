@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, Un
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, GreaterThan, Literal, NullsFirst, SortOrder, UnresolvedWindowExpression, UnspecifiedFrame, WindowSpecDefinition, WindowSpecReference}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{JOIN, LOCAL_RELATION, PROJECT, TreePattern, UNRESOLVED_RELATION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, PROJECT, UNRESOLVED_RELATION}
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, RefreshResource}
@@ -887,29 +887,14 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       // Basic selection.
       // Here we check that every parsed plan contains a projection and a source relation or
       // inline table.
-      def checkPlan(query: String, pattern: TreePattern): Unit = {
+      def checkPipeSelect(query: String): Unit = {
         val plan: LogicalPlan = parser.parsePlan(query)
-        assert(plan.containsPattern(pattern))
+        assert(plan.containsPattern(PROJECT))
         assert(plan.containsAnyPattern(UNRESOLVED_RELATION, LOCAL_RELATION))
       }
-      def checkPipeSelect(query: String): Unit = checkPlan(query, PROJECT)
       checkPipeSelect("TABLE t |> SELECT 1 AS X")
       checkPipeSelect("TABLE t |> SELECT 1 AS X, 2 AS Y |> SELECT X + Y AS Z")
       checkPipeSelect("VALUES (0), (1) tab(col) |> SELECT col * 2 AS result")
-      // Join operations.
-      def checkJoin(query: String): Unit = checkPlan(query, JOIN)
-      checkJoin(
-        """
-          |SELECT * FROM VALUES
-          |  ("dotNET", 15000, 48000, 22500),
-          |  ("Java", 20000, 30000, NULL)
-          |  AS courseEarnings(course, `2012`, `2013`, `2014`)
-          ||> INNER JOIN (SELECT * FROM VALUES
-          |  ("dotNET", 15000, 48000, 22500),
-          |  ("Java", 20000, 30000, NULL)
-          |  AS otherCourseEarnings(course, `2012`, `2013`, `2014`))
-          |  USING (course)
-          |""".stripMargin)
     }
   }
 }

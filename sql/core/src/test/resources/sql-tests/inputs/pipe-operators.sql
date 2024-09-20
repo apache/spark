@@ -95,12 +95,6 @@ table t
 table t
 |> select y, length(y) + sum(x) as result;
 
--- Joins are supported.
------------------------
-
--- Join operators: negative tests.
-----------------------------------
-
 -- Cleanup.
 -----------
 drop table t;

@@ -550,18 +550,14 @@ abstract class TypeCoercionBase {
   object CaseWhenCoercion extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
       case c: CaseWhen if c.childrenResolved && !haveSameType(c.inputTypesForMerging) =>
-        convert(c)
-    }
-
-    def convert(c: CaseWhen): CaseWhen = {
-      val maybeCommonType = findWiderCommonType(c.inputTypesForMerging)
-      maybeCommonType.map { commonType =>
-        val newBranches = c.branches.map { case (condition, value) =>
-          (condition, castIfNotSameType(value, commonType))
-        }
-        val newElseValue = c.elseValue.map(castIfNotSameType(_, commonType))
-        CaseWhen(newBranches, newElseValue)
-      }.getOrElse(c)
+        val maybeCommonType = findWiderCommonType(c.inputTypesForMerging)
+        maybeCommonType.map { commonType =>
+          val newBranches = c.branches.map { case (condition, value) =>
+            (condition, castIfNotSameType(value, commonType))
+          }
+          val newElseValue = c.elseValue.map(castIfNotSameType(_, commonType))
+          CaseWhen(newBranches, newElseValue)
+        }.getOrElse(c)
     }
   }
 
