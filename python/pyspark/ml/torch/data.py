@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+from functools import cached_property
 from typing import Any, Callable, Iterator
 
 import torch
@@ -28,7 +28,10 @@ class _SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
         self.arrow_file_path = arrow_file_path
         self.num_samples = num_samples
         self.field_types = [field.dataType.simpleString() for field in schema]
-        self.field_converters = [
+
+    @cached_property
+    def field_converters(self):
+        return [
             _SparkPartitionTorchDataset._get_field_converter(field_type)
             for field_type in self.field_types
         ]
