@@ -11892,10 +11892,14 @@ def randstr(length: Union[Column, int], seed: Optional[Union[Column, int]] = Non
     |                true|
     +--------------------+
     """
+    length = _enum_to_value(length)
+    length = lit(length) if isinstance(length, int) else length
     if seed is None:
-        return _invoke_function("randstr", lit(length))
+        return _invoke_function_over_columns("randstr", length)
     else:
-        return _invoke_function("randstr", lit(length), lit(seed))
+        seed = _enum_to_value(seed)
+        seed = lit(seed) if isinstance(seed, int) else seed
+        return _invoke_function_over_columns("randstr", length, seed)
 
 
 @_try_remote_functions
@@ -12303,10 +12307,16 @@ def uniform(
     |         true|
     +-------------+
     """
+    min = _enum_to_value(min)
+    min = lit(min) if isinstance(min, int) else min
+    max = _enum_to_value(max)
+    max = lit(max) if isinstance(max, int) else max
     if seed is None:
-        return _invoke_function("uniform", lit(min), lit(max))
+        return _invoke_function_over_columns("uniform", min, max)
     else:
-        return _invoke_function("uniform", lit(min), lit(max), lit(seed))
+        seed = _enum_to_value(seed)
+        seed = lit(seed) if isinstance(seed, int) else seed
+        return _invoke_function_over_columns("uniform", min, max, seed)
 
 
 @_try_remote_functions
