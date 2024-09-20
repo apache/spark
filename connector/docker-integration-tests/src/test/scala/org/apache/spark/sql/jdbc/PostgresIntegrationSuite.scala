@@ -23,7 +23,7 @@ import java.text.SimpleDateFormat
 import java.time.LocalDateTime
 import java.util.Properties
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions.lit
@@ -363,6 +363,25 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       "0 years 0 mons 0 days 0 hours 2 mins 0.0 secs"))
     assert(rows(0).getSeq(25) == Seq("08:00:2b:01:02:03:04:05"))
     assert(rows(0).getSeq(26) == Seq("10:20:10,14,15"))
+  }
+
+  test("SPARK-49730: syntax error classification") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        val schema = StructType(
+          Seq(StructField("id", IntegerType, true)))
+
+        spark.read
+          .format("jdbc")
+          .schema(schema)
+          .option("url", jdbcUrl)
+          .option("query", "SELECT * FRM tbl")
+          .load()
+      },
+      condition = "FAILED_JDBC.SYNTAX_ERROR",
+      parameters = Map(
+        "url" -> jdbcUrl,
+        "query" -> "SELECT * FROM (SELECT * FRM tbl) SPARK_GEN_SUBQ_0 WHERE 1=0"))
   }
 
   test("query JDBC option") {

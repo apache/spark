@@ -24,10 +24,11 @@ import java.util.Properties
 
 import scala.util.Using
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.ShortType
+import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -117,6 +118,25 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types.length == 2)
     assert(types(0).equals("class java.lang.Integer"))
     assert(types(1).equals("class java.lang.String"))
+  }
+
+  test("SPARK-49730: syntax error classification") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        val schema = StructType(
+          Seq(StructField("id", IntegerType, true)))
+
+        spark.read
+          .format("jdbc")
+          .schema(schema)
+          .option("url", jdbcUrl)
+          .option("query", "SELECT * FRM tbl")
+          .load()
+      },
+      condition = "FAILED_JDBC.SYNTAX_ERROR",
+      parameters = Map(
+        "url" -> jdbcUrl,
+        "query" -> "SELECT * FROM (SELECT * FRM tbl) SPARK_GEN_SUBQ_0 WHERE 1=0"))
   }
 
   test("Numeric types") {
