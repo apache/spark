@@ -73,7 +73,7 @@ class RocksDB(
     hadoopConf: Configuration = new Configuration,
     loggingId: String = "",
     useColumnFamilies: Boolean = false,
-    checkpointFormatVersion: Int = 1) extends Logging {
+    ifEnableCheckpointId: Boolean = false) extends Logging {
 
   case class RocksDBSnapshot(
       checkpointDir: File,
@@ -278,7 +278,7 @@ class RocksDB(
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)}")
     try {
       if (loadedVersion != version ||
-        (checkpointFormatVersion >= 2 && checkpointUniqueId.isDefined &&
+        (ifEnableCheckpointId && checkpointUniqueId.isDefined &&
         (loadedCheckpointId.isEmpty || checkpointUniqueId.get != loadedCheckpointId.get))) {
         closeDB(ignoreException = false)
         // deep copy is needed to avoid race condition
@@ -329,7 +329,7 @@ class RocksDB(
         numKeysOnLoadedVersion = numKeysOnWritingVersion
         fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
       }
-      if (checkpointFormatVersion >= 2) {
+      if (ifEnableCheckpointId) {
         LastCommitBasedCheckpointId = None
         lastCommittedCheckpointId = None
         loadedCheckpointId = checkpointUniqueId
@@ -697,7 +697,7 @@ class RocksDB(
 
       numKeysOnLoadedVersion = numKeysOnWritingVersion
       loadedVersion = newVersion
-      if (checkpointFormatVersion >= 2) {
+      if (ifEnableCheckpointId) {
         LastCommitBasedCheckpointId = loadedCheckpointId
         lastCommittedCheckpointId = sessionCheckpointId
         loadedCheckpointId = sessionCheckpointId

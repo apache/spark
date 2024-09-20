@@ -68,6 +68,12 @@ case class StatefulOperatorStateInfo(
   }
 }
 
+object StatefulOperatorStateInfo {
+  def ifEnableCheckpointId(conf: SQLConf): Boolean = {
+    conf.stateStoreCheckpointFormatVersion >= 2
+  }
+}
+
 /**
  * An operator that reads or writes state from the [[StateStore]].
  * The [[StatefulOperatorStateInfo]] should be filled in by `prepareForExecution` in
@@ -196,7 +202,7 @@ trait StateStoreWriter
   }
 
   def getCheckpointInfo(): Array[StateStoreCheckpointInfo] = {
-    assert(conf.stateStoreCheckpointFormatVersion >= 2)
+    assert(StatefulOperatorStateInfo.ifEnableCheckpointId(conf))
     checkpointInfoAccumulator
       .value
       .asScala
@@ -276,7 +282,7 @@ trait StateStoreWriter
   }
 
   protected def setCheckpointInfo(checkpointInfo: StateStoreCheckpointInfo): Unit = {
-    if (conf.stateStoreCheckpointFormatVersion >= 2) {
+    if (StatefulOperatorStateInfo.ifEnableCheckpointId(conf)) {
       checkpointInfoAccumulator.add(checkpointInfo)
     }
   }
