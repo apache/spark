@@ -99,8 +99,8 @@ case class Mode(
         groupingFunction(t._1))(x => x)((x, y) => (x._1, x._2 + y._2)).values
     }
     def determineBufferingFunction(
-                                    childDataType: DataType): Option[AnyRef => _] = {
-      childDataType match {
+        childDataType: DataType): Option[AnyRef => _] = {
+      childDataType match {å
         case _ if UnsafeRowUtils.isBinaryStable(child.dataType) => None
         case _ => Some(collationAwareTransform(_, childDataType))
       }
