@@ -41,8 +41,8 @@ trait AgnosticEncoder[T] extends Encoder[T] {
   def isPrimitive: Boolean
   def nullable: Boolean = !isPrimitive
   def dataType: DataType
-  override def schema: StructType = StructType(StructField("value", DataType.udtToSqlType(dataType),
-    nullable) :: Nil)
+  override def schema: StructType = StructType(
+    StructField("value", DataType.udtToSqlType(dataType), nullable) :: Nil)
   def lenientSerialization: Boolean = false
   def isStruct: Boolean = false
 }
@@ -109,8 +109,8 @@ object AgnosticEncoders {
       metadata: Metadata,
       readMethod: Option[String] = None,
       writeMethod: Option[String] = None) {
-    def structField: StructField = StructField(name, DataType.udtToSqlType(enc.dataType), nullable,
-      metadata)
+    def structField: StructField =
+      StructField(name, DataType.udtToSqlType(enc.dataType), nullable, metadata)
   }
 
   // Contains a sequence of fields.
@@ -181,7 +181,8 @@ object AgnosticEncoders {
     override def dataType: DataType = udt
     override def clsTag: ClassTag[E] = ClassTag(udt.userClass)
 
-    override def schema: StructType = StructType(StructField("value", udt.sqlType, nullable) :: Nil)
+    override def schema: StructType = StructType(
+      StructField("value", udt.sqlType, nullable) :: Nil)
   }
 
   // Enums are special leafs because we need to capture the class.
