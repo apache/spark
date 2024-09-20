@@ -33,7 +33,7 @@ import org.apache.spark.sql.internal.SQLConf
       * lower - Lower bound of the between check.
       * upper - Upper bound of the between check.
   """,
-  since = "4.0.0",
+  since = "1.0.0",
   group = "conditional_funcs")
 case class Between private(input: Expression, lower: Expression, upper: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules  {
