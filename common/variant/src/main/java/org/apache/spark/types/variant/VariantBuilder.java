@@ -71,7 +71,7 @@ public class VariantBuilder {
   }
 
   public static Variant parseJson(JsonParser parser, boolean allowDuplicateKeys)
-          throws IOException {
+      throws IOException {
     return parseJson(parser, allowDuplicateKeys, new VariantMetrics());
   }
 
@@ -476,7 +476,7 @@ public class VariantBuilder {
   }
 
   private void buildJson(JsonParser parser, VariantMetrics vm, long currentDepth)
-          throws IOException {
+      throws IOException {
     JsonToken token = parser.currentToken();
     if (token == null) {
       throw new JsonParseException(parser, "Unexpected null token");
