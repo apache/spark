@@ -128,8 +128,8 @@ case class Mode(
   }
 
   private def processArrayTypeWithBuffer(
-                                          a: ArrayType,
-                                          data: ArrayData): Seq[Any] = {
+      a: ArrayType,
+      data: ArrayData): Seq[Any] = {
     (0 until data.numElements()).map(i =>
       collationAwareTransform(data.get(i, a.elementType), a.elementType))
   }
