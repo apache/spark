@@ -215,10 +215,20 @@ trait StateStoreWriter
     }
   }
 
+  /**
+   * Aggregator used for the executors to pass new state store checkpoints' IDs to driver.
+   * For the general checkpoint ID workflow, see comments of
+   * class class [[StatefulOperatorStateInfo]]
+   */
   val checkpointInfoAccumulator: CollectionAccumulator[StateStoreCheckpointInfo] = {
     SparkContext.getActive.map(_.collectionAccumulator[StateStoreCheckpointInfo]).get
   }
 
+  /**
+   * Get aggregated checkpoint ID info for all shuffle partitions
+   * For the general checkpoint ID workflow, see comments of
+   * class class [[StatefulOperatorStateInfo]]
+   */
   def getCheckpointInfo(): Array[StateStoreCheckpointInfo] = {
     assert(StatefulOperatorStateInfo.ifEnableCheckpointId(conf))
     checkpointInfoAccumulator
@@ -233,6 +243,16 @@ trait StateStoreWriter
       .sortBy(_._1)
       .map(_._2)
       .toArray
+  }
+
+  /**
+   * The executor reports its state store checkpoint ID, which would be sent back to the driver.
+   * For the general checkpoint ID workflow, see comments of
+   * class class [[StatefulOperatorStateInfo]]
+   */  protected def setCheckpointInfo(checkpointInfo: StateStoreCheckpointInfo): Unit = {
+    if (StatefulOperatorStateInfo.ifEnableCheckpointId(conf)) {
+      checkpointInfoAccumulator.add(checkpointInfo)
+    }
   }
 
   /**
@@ -297,12 +317,6 @@ trait StateStoreWriter
       longMetric(metric.name) += value
     }
     setCheckpointInfo(store.getCheckpointInfo)
-  }
-
-  protected def setCheckpointInfo(checkpointInfo: StateStoreCheckpointInfo): Unit = {
-    if (StatefulOperatorStateInfo.ifEnableCheckpointId(conf)) {
-      checkpointInfoAccumulator.add(checkpointInfo)
-    }
   }
 
   private def stateStoreCustomMetrics: Map[String, SQLMetric] = {
