@@ -126,6 +126,13 @@ private[sql] object CatalogV2Implicits {
       case _ =>
         throw QueryCompilationErrors.missingCatalogAbilityError(plugin, "functions")
     }
+
+    def asProcedureCatalog: ProcedureCatalog = plugin match {
+        case procedureCatalog: ProcedureCatalog =>
+          procedureCatalog
+        case _ =>
+          throw QueryCompilationErrors.missingCatalogAbilityError(plugin, "procedures")
+    }
   }
 
   implicit class NamespaceHelper(namespace: Array[String]) {

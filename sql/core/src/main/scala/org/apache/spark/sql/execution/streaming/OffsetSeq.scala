@@ -26,6 +26,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
 import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExecHelper, StreamingAggregationStateManager, SymmetricHashJoinStateManager}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 
 
@@ -135,20 +136,21 @@ object OffsetSeqMetadata extends Logging {
   }
 
   /** Set the SparkSession configuration with the values in the metadata */
-  def setSessionConf(metadata: OffsetSeqMetadata, sessionConf: RuntimeConfig): Unit = {
+  def setSessionConf(metadata: OffsetSeqMetadata, sessionConf: SQLConf): Unit = {
+    val configs = sessionConf.getAllConfs
     OffsetSeqMetadata.relevantSQLConfs.map(_.key).foreach { confKey =>
 
       metadata.conf.get(confKey) match {
 
         case Some(valueInMetadata) =>
           // Config value exists in the metadata, update the session config with this value
-          val optionalValueInSession = sessionConf.getOption(confKey)
-          if (optionalValueInSession.isDefined && optionalValueInSession.get != valueInMetadata) {
+          val optionalValueInSession = sessionConf.getConfString(confKey, null)
+          if (optionalValueInSession != null && optionalValueInSession != valueInMetadata) {
             logWarning(log"Updating the value of conf '${MDC(CONFIG, confKey)}' in current " +
-              log"session from '${MDC(OLD_VALUE, optionalValueInSession.get)}' " +
+              log"session from '${MDC(OLD_VALUE, optionalValueInSession)}' " +
               log"to '${MDC(NEW_VALUE, valueInMetadata)}'.")
           }
-          sessionConf.set(confKey, valueInMetadata)
+          sessionConf.setConfString(confKey, valueInMetadata)
 
         case None =>
           // For backward compatibility, if a config was not recorded in the offset log,
@@ -157,14 +159,17 @@ object OffsetSeqMetadata extends Logging {
           relevantSQLConfDefaultValues.get(confKey) match {
 
             case Some(defaultValue) =>
-              sessionConf.set(confKey, defaultValue)
+              sessionConf.setConfString(confKey, defaultValue)
               logWarning(log"Conf '${MDC(CONFIG, confKey)}' was not found in the offset log, " +
                 log"using default value '${MDC(DEFAULT_VALUE, defaultValue)}'")
 
             case None =>
-              val valueStr = sessionConf.getOption(confKey).map { v =>
-                s" Using existing session conf value '$v'."
-              }.getOrElse { " No value set in session conf." }
+              val value = sessionConf.getConfString(confKey, null)
+              val valueStr = if (value != null) {
+                s" Using existing session conf value '$value'."
+              } else {
+                " No value set in session conf."
+              }
               logWarning(log"Conf '${MDC(CONFIG, confKey)}' was not found in the offset log. " +
                 log"${MDC(TIP, valueStr)}")
 

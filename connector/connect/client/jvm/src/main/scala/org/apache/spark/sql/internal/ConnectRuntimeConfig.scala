@@ -14,10 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql
+package org.apache.spark.sql.internal
 
 import org.apache.spark.connect.proto.{ConfigRequest, ConfigResponse, KeyValue}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.connect.client.SparkConnectClient
 
 /**
@@ -25,61 +26,31 @@ import org.apache.spark.sql.connect.client.SparkConnectClient
  *
  * @since 3.4.0
  */
-class RuntimeConfig private[sql] (client: SparkConnectClient) extends Logging {
+class ConnectRuntimeConfig private[sql] (client: SparkConnectClient)
+    extends RuntimeConfig
+    with Logging {
 
-  /**
-   * Sets the given Spark runtime configuration property.
-   *
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   def set(key: String, value: String): Unit = {
     executeConfigRequest { builder =>
       builder.getSetBuilder.addPairsBuilder().setKey(key).setValue(value)
     }
   }
 
-  /**
-   * Sets the given Spark runtime configuration property.
-   *
-   * @since 3.4.0
-   */
-  def set(key: String, value: Boolean): Unit = set(key, String.valueOf(value))
-
-  /**
-   * Sets the given Spark runtime configuration property.
-   *
-   * @since 3.4.0
-   */
-  def set(key: String, value: Long): Unit = set(key, String.valueOf(value))
-
-  /**
-   * Returns the value of Spark runtime configuration property for the given key.
-   *
-   * @throws java.util.NoSuchElementException
-   *   if the key is not set and does not have a default value
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   @throws[NoSuchElementException]("if the key is not set")
   def get(key: String): String = getOption(key).getOrElse {
     throw new NoSuchElementException(key)
   }
 
-  /**
-   * Returns the value of Spark runtime configuration property for the given key.
-   *
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   def get(key: String, default: String): String = {
     executeConfigRequestSingleValue { builder =>
       builder.getGetWithDefaultBuilder.addPairsBuilder().setKey(key).setValue(default)
     }
   }
 
-  /**
-   * Returns all properties set in this conf.
-   *
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   def getAll: Map[String, String] = {
     val response = executeConfigRequest { builder =>
       builder.getGetAllBuilder
@@ -92,11 +63,7 @@ class RuntimeConfig private[sql] (client: SparkConnectClient) extends Logging {
     builder.result()
   }
 
-  /**
-   * Returns the value of Spark runtime configuration property for the given key.
-   *
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   def getOption(key: String): Option[String] = {
     val pair = executeConfigRequestSinglePair { builder =>
       builder.getGetOptionBuilder.addKeys(key)
@@ -108,27 +75,14 @@ class RuntimeConfig private[sql] (client: SparkConnectClient) extends Logging {
     }
   }
 
-  /**
-   * Resets the configuration property for the given key.
-   *
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   def unset(key: String): Unit = {
     executeConfigRequest { builder =>
       builder.getUnsetBuilder.addKeys(key)
     }
   }
 
-  /**
-   * Indicates whether the configuration property with the given key is modifiable in the current
-   * session.
-   *
-   * @return
-   *   `true` if the configuration property is modifiable. For static SQL, Spark Core, invalid
-   *   (not existing) and other non-modifiable configuration properties, the returned value is
-   *   `false`.
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   def isModifiable(key: String): Boolean = {
     val modifiable = executeConfigRequestSingleValue { builder =>
       builder.getIsModifiableBuilder.addKeys(key)
