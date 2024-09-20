@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import scala.beans.BeanProperty
 import scala.collection.immutable.HashSet
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -2766,6 +2767,22 @@ class DatasetSuite extends QueryTest
       WithSet(0, HashSet("foo", "bar")), WithSet(1, HashSet("bar", "zoo")))
   }
 
+  test("SPARK-49727: Bean with a serializable POJO looses Data when recreated from" +
+    " corresponding dataframe") {
+    val data = Seq(1, 2, 3).map(id => {
+      val b = new BeanWithPojo()
+      b.setPrimitiveInt(id)
+      b.setPojo(new JavaData(id))
+      b
+    })
+    val enc = Encoders.bean(classOf[BeanWithPojo])
+    val ds = spark.createDataset(data)(enc)
+    val df = ds.toDF()
+    // get data set back
+    val recoveredDS = df.as(enc).collect().toSet
+    assert(recoveredDS == data.toSet)
+  }
+
   test("SPARK-47270: isEmpty does not trigger job execution on CommandResults") {
     withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
       withTable("t1") {
@@ -2913,6 +2930,21 @@ case class WithSet(id: Int, values: Set[String])
 
 case class Generic[T](id: T, value: Double)
 
+class BeanWithPojo {
+  @BeanProperty var primitiveInt: Int = 0
+  @BeanProperty var pojo: JavaData = null
+
+  override def equals(obj: Any): Boolean = obj match {
+    case b: BeanWithPojo => b.primitiveInt == this.primitiveInt &&
+      (((this.pojo eq null) && (b.pojo eq null)) ||
+        ((this.pojo ne null) && (b.pojo ne null) && this.pojo == b.pojo))
+
+    case _ => false
+  }
+
+  override def hashCode(): Int = Option(pojo).hashCode() + this.primitiveInt
+}
+
 case class OtherTuple(_1: String, _2: Int)
 
 case class TupleClass(data: (Int, String))
@@ -2963,6 +2995,7 @@ object KryoData {
 
 /** Used to test Java encoder. */
 class JavaData(val a: Int) extends Serializable {
+  def this() = this(0)
   override def equals(other: Any): Boolean = {
     a == other.asInstanceOf[JavaData].a
   }
