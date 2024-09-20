@@ -92,8 +92,8 @@ case class Mode(
   }
 
   private def getCollationAwareBuffer(
-         childDataType: DataType,
-         buffer: OpenHashMap[AnyRef, Long]): Iterable[(AnyRef, Long)] = {
+      childDataType: DataType,
+      buffer: OpenHashMap[AnyRef, Long]): Iterable[(AnyRef, Long)] = {
     def groupAndReduceBuffer(groupingFunction: AnyRef => _): Iterable[(AnyRef, Long)] = {
       buffer.groupMapReduce(t =>
         groupingFunction(t._1))(x => x)((x, y) => (x._1, x._2 + y._2)).values
