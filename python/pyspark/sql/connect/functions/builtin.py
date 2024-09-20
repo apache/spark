@@ -65,7 +65,6 @@ from pyspark.sql import functions as pysparkfuncs
 from pyspark.sql.types import (
     _from_numpy_type,
     DataType,
-    LongType,
     StructType,
     ArrayType,
     StringType,
