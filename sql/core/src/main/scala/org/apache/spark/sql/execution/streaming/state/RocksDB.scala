@@ -162,13 +162,15 @@ class RocksDB(
   // `LastCommitBasedCheckpointId` as the checkpontID of the previous version that is based on.
   // `loadedCheckpointId` is the checkpointID for the current live DB. After the batch finishes
   // and checkpoint finishes, it will turn into `LastCommitBasedCheckpointId`.
-  // `sessionCheckpointId` store an ID to be used for future checkpoints. It is kept being used
-  // until we have to use a new one. We don't need to reuse any uniqueID, but reusing when possible
-  // can help debug problems.
-  @volatile private var LastCommitBasedCheckpointId: Option[String] = None
-  @volatile private var lastCommittedCheckpointId: Option[String] = None
-  @volatile private var loadedCheckpointId: Option[String] = None
-  @volatile private var sessionCheckpointId: Option[String] = None
+  // `sessionCheckpointId` store an ID to be used for future checkpoints. It will be used as
+  // `lastCommittedCheckpointId` after the checkpoint is committed. It will be reused until
+  // we have to use a new one. We have to update `sessionCheckpointId` if we reload a previous
+  // batch version, because we have to use a new checkpointID for re-committing a version.
+  // The reusing is to help debugging but is not required for the algorithm to work.
+  private var LastCommitBasedCheckpointId: Option[String] = None
+  private var lastCommittedCheckpointId: Option[String] = None
+  private var loadedCheckpointId: Option[String] = None
+  private var sessionCheckpointId: Option[String] = None
 
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L

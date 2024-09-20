@@ -241,7 +241,10 @@ case class StateStoreMetrics(
 case class StateStoreCheckpointInfo(
     partitionId: Int,
     batchVersion: Long,
+    // The checkpoint ID for a checkpoint at `batchVersion`. This is used to identify the checkpoint
     checkpointId: Option[String],
+    // The checkpoint ID for `batchVersion` - 1, that is used to finish this batch. This is used
+    // to validate the batch is processed based on the correct checkpoint.
     baseCheckpointId: Option[String])
 
 object StateStoreMetrics {
