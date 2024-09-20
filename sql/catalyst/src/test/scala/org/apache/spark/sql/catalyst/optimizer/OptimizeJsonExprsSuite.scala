@@ -307,4 +307,21 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
       comparePlans(optimized, query.analyze)
     }
   }
+
+  test("SPARK-49743: prune unnecessary columns from GetArrayStructFields does not change schema") {
+    val options = Map.empty[String, String]
+    val schema1 = ArrayType(StructType.fromDDL("a int, b int"), containsNull = true)
+
+    val field1 = StructField("A", IntegerType) // Instead of "a", use "A" to test case sensitivity.
+    val query1 = testRelation2
+      .select(GetArrayStructFields(
+        JsonToStructs(schema1, options, $"json"), field1, 0, 2, true).as("a"))
+    val optimized1 = Optimizer.execute(query1.analyze)
+
+    val prunedSchema1 = ArrayType(StructType.fromDDL("a int"), containsNull = true)
+    val expected1 = testRelation2
+      .select(GetArrayStructFields(
+        JsonToStructs(prunedSchema1, options, $"json"), field1, 0, 1, true).as("a")).analyze
+    comparePlans(optimized1, expected1)
+  }
 }
