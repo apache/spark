@@ -399,7 +399,7 @@ object functions {
    * @since 4.0.0
    */
   def count_min_sketch(e: Column, eps: Column, confidence: Column): Column =
-    count_min_sketch(e, eps, confidence, lit(SparkClassUtils.random.nextInt))
+    count_min_sketch(e, eps, confidence, lit(SparkClassUtils.random.nextLong))
 
   private[spark] def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
     Column.internalFn("collect_top_k", e, lit(num), lit(reverse))
