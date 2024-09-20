@@ -1759,7 +1759,7 @@ class CollationSQLExpressionsSuite
       UTF8StringModeTestCase("unicode_ci", bufferValuesComplex, "[b,b,b]"),
       UTF8StringModeTestCase("unicode", bufferValuesComplex, "[a,a,a]"))
 
-    testCasesUTF8String.foreach(t => {
+    testCasesUTF8String.foreach { t =>
       val buffer = new OpenHashMap[AnyRef, Long](5)
       val myMode = Mode(child = Literal.create(null, StructType(Seq(
         StructField("f1", StringType(t.collationId), true),
