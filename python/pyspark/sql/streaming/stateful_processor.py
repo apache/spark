@@ -16,7 +16,7 @@
 #
 
 from abc import ABC, abstractmethod
-from typing import Any, List, TYPE_CHECKING, Iterator, Optional, Union, cast
+from typing import Any, List, TYPE_CHECKING, Iterator, Optional, Union, cast, Tuple
 
 from pyspark.sql import Row
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
@@ -80,7 +80,7 @@ class ValueState:
 
 class ListState:
     """
-    Class used for arbitrary stateful operations with transformWithState to capture single value
+    Class used for arbitrary stateful operations with transformWithState to capture list value
     state.
 
     .. versionadded:: 4.0.0
@@ -99,25 +99,25 @@ class ListState:
         """
         return self._list_state_client.exists(self._state_name)
 
-    def get(self) -> Iterator[Row]:
+    def get(self) -> Iterator[Tuple]:
         """
         Get list state with an iterator.
         """
         return ListStateIterator(self._list_state_client, self._state_name)
 
-    def put(self, new_state: List[Any]) -> None:
+    def put(self, new_state: List[Tuple]) -> None:
         """
         Update the values of the list state.
         """
         self._list_state_client.put(self._state_name, self.schema, new_state)
 
-    def append_value(self, new_state: Any) -> None:
+    def append_value(self, new_state: Tuple) -> None:
         """
         Append a new value to the list state.
         """
         self._list_state_client.append_value(self._state_name, self.schema, new_state)
 
-    def append_list(self, new_state: List[Any]) -> None:
+    def append_list(self, new_state: List[Tuple]) -> None:
         """
         Append a list of new values to the list state.
         """

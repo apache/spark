@@ -72,6 +72,9 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
       ValueStateInfo(valueState, stateSchema, stateDeserializer))
     listStateMap = mutable.HashMap[String, ListStateInfo](stateName ->
       ListStateInfo(listState, stateSchema, stateDeserializer, stateSerializer))
+    // Iterator map for list state. Please note that `handleImplicitGroupingKeyRequest` would
+    // reset the iterator map to empty so be careful to call it if you want to access the iterator
+    // map later.
     val listStateIteratorMap = mutable.HashMap[String, Iterator[Row]](iteratorId ->
       Iterator(new GenericRowWithSchema(Array(1), stateSchema)))
     transformWithStateInPandasDeserializer = mock(classOf[TransformWithStateInPandasDeserializer])
@@ -181,6 +184,33 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     verify(listState, times(0)).get()
     verify(arrowStreamWriter).writeRow(any)
     verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+  }
+
+  test("list state get - iterator in map with multiple batches") {
+    val maxRecordsPerBatch = 2
+    val message = ListStateCall.newBuilder().setStateName(stateName)
+      .setListStateGet(ListStateGet.newBuilder().setIteratorId(iteratorId).build()).build()
+    val iteratorMap = mutable.HashMap[String, Iterator[Row]](iteratorId ->
+      Iterator(new GenericRowWithSchema(Array(1), stateSchema),
+        new GenericRowWithSchema(Array(2), stateSchema),
+        new GenericRowWithSchema(Array(3), stateSchema),
+        new GenericRowWithSchema(Array(4), stateSchema)))
+    stateServer = new TransformWithStateInPandasStateServer(serverSocket,
+      statefulProcessorHandle, groupingKeySchema, "", false, false,
+      maxRecordsPerBatch, outputStream, valueStateMap,
+      transformWithStateInPandasDeserializer, arrowStreamWriter, listStateMap, iteratorMap)
+    // First call should send 2 records.
+    stateServer.handleListStateRequest(message)
+    verify(listState, times(0)).get()
+    verify(arrowStreamWriter, times(maxRecordsPerBatch)).writeRow(any)
+    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    // Second call should send the remaining 2 records.
+    stateServer.handleListStateRequest(message)
+    verify(listState, times(0)).get()
+    // Since Mockito's verify counts the total number of calls, the expected number of writeRow call
+    // should be 2 * maxRecordsPerBatch.
+    verify(arrowStreamWriter, times(2 * maxRecordsPerBatch)).writeRow(any)
+    verify(arrowStreamWriter, times(2)).finalizeCurrentArrowBatch()
   }
 
   test("list state get - iterator not in map") {
