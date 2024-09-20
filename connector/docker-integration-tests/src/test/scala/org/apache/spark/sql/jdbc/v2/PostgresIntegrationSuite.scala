@@ -150,14 +150,27 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
         Row(1, Timestamp.valueOf("2024-01-01 01:01:01.0")),
         Row(2, Timestamp.valueOf("2024-02-02 02:02:02.0"))
       ))
+    testFilterPushdown("quarter", "2024-01-01 00:00:00.0",
+      Set(
+        Row(1, Timestamp.valueOf("2024-01-01 01:01:01.0")),
+        Row(2, Timestamp.valueOf("2024-02-02 02:02:02.0"))
+      ))
     testFilterPushdown("MONTH", "2024-02-01 00:00:00.0",
       Set(Row(2, Timestamp.valueOf("2024-02-02 02:02:02.0"))))
-    testFilterPushdown("DAY", "2024-01-01 00:00:00.0",
+    testFilterPushdown("weeK", "2024-01-01 00:00:00.0",
       Set(Row(1, Timestamp.valueOf("2024-01-01 01:01:01.0"))))
-    testFilterPushdown("HOUR", "2024-02-02 02:00:00.0",
+    testFilterPushdown("DaY", "2024-01-01 00:00:00.0",
+      Set(Row(1, Timestamp.valueOf("2024-01-01 01:01:01.0"))))
+    testFilterPushdown("Hour", "2024-02-02 02:00:00.0",
       Set(Row(2, Timestamp.valueOf("2024-02-02 02:02:02.0"))))
-    testFilterPushdown("MINUTE", "2024-01-01 01:01:00.0",
+    testFilterPushdown("minutE", "2024-01-01 01:01:00.0",
       Set(Row(1, Timestamp.valueOf("2024-01-01 01:01:01.0"))))
-    testFilterPushdown("SECOND", "2024-02-02 02:02:03.0", Set())
+    testFilterPushdown("second", "2024-02-02 02:02:03.0", Set())
+    testFilterPushdown("Millisecond", "2024-01-01 01:01:01.0",
+      Set(Row(1, Timestamp.valueOf("2024-01-01 01:01:01.0"))))
+    testFilterPushdown("MicroSecond", "2024-01-01 01:01:01.0",
+      Set(Row(1, Timestamp.valueOf("2024-01-01 01:01:01.0"))))
+    testFilterPushdown("MicroSecondS", "2024-02-02 02:02:02.0",
+      Set(Row(2, Timestamp.valueOf("2024-02-02 02:02:02.0"))))
   }
 }

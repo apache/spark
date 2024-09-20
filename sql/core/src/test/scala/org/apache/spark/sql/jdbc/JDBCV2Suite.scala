@@ -1651,6 +1651,30 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       "PushedFilters: [(DATE_TRUNC('YEAR', TIME1)) = 1641024000000000]"
     checkPushedInfo(df6, expectedPlanFragment6)
     checkAnswer(df6, Seq(Row("amy"), Row("alex")))
+
+    val df7 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "DATE_TRUNC('quarter', time1) = timestamp'2024-07-01 00:00:00'")
+    checkFiltersRemoved(df7)
+    val expectedPlanFragment7 =
+      "PushedFilters: [(DATE_TRUNC('QUARTER', TIME1)) = 1719792000000000]"
+    checkPushedInfo(df7, expectedPlanFragment7)
+    checkAnswer(df7, Seq(Row("adam")))
+
+    val df8 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "DATE_TRUNC('Millisecond', time1) = timestamp'2024-09-05 11:23:45.123'")
+    checkFiltersRemoved(df8)
+    val expectedPlanFragment8 =
+      "PushedFilters: [(DATE_TRUNC('MILLISECOND', TIME1)) = 1725560625123000]"
+    checkPushedInfo(df8, expectedPlanFragment8)
+    checkAnswer(df8, Seq(Row("adam")))
+
+    val df9 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "DATE_TRUNC('MicroseconD', time1) = timestamp'2024-09-05 11:23:45.123456'")
+    checkFiltersRemoved(df9)
+    val expectedPlanFragment9 =
+      "PushedFilters: [(DATE_TRUNC('MICROSECOND', TIME1)) = 1725560625123456]"
+    checkPushedInfo(df9, expectedPlanFragment9)
+    checkAnswer(df9, Seq(Row("adam")))
   }
 
   test("scan with filter push-down with misc functions") {
