@@ -29,7 +29,7 @@ from pyspark.testing.sqlutils import (
     have_pyarrow,
     pyarrow_requirement_message,
 )
-from python.pyspark.testing.utils import assertDataFrameEqual
+from pyspark.testing.utils import assertDataFrameEqual
 
 if have_pyarrow:
     import pyarrow as pa
@@ -57,7 +57,7 @@ def function_variations(func):
     not have_pyarrow,
     pyarrow_requirement_message,  # type: ignore[arg-type]
 )
-class GroupedMapInArrowTestsMixin(ReusedSQLTestCase):
+class GroupedMapInArrowTestsMixin:
     @property
     def data(self):
         return (
@@ -304,10 +304,9 @@ class GroupedMapInArrowTestsMixin(ReusedSQLTestCase):
                     self.assertEqual(r.b, 1)
 
     def test_apply_in_arrow_batching(self):
-        with self.sql_conf(
-            {"spark.sql.execution.arrow.maxRecordsPerBatch": 2}
-        ):
-            def func(group: Iterator[pa.RecordBatch]):
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 2}):
+
+            def func(group):
                 self.assertIsInstance(group, Iterator)
                 batches = list(group)
                 self.assertEqual(len(batches), 2)
@@ -323,19 +322,17 @@ class GroupedMapInArrowTestsMixin(ReusedSQLTestCase):
             assertDataFrameEqual(actual, df)
 
     def test_apply_in_arrow_partial_iteration(self):
-        with self.sql_conf(
-            {"spark.sql.execution.arrow.maxRecordsPerBatch": 2}
-        ):
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 2}):
+
             def func(group: Iterator[pa.RecordBatch]):
                 first = next(group)
-                yield pa.RecordBatch.from_pylist([
-                    {"value": r.as_py() % 4}
-                    for r in first.column(0)
-                ])
+                yield pa.RecordBatch.from_pylist(
+                    [{"value": r.as_py() % 4} for r in first.column(0)]
+                )
 
             df = self.spark.range(20)
             grouped_df = df.groupBy((col("id") % 4).cast("int"))
-            
+
             # Should get two records for each group
             expected = [Row(value=x) for x in [0, 0, 1, 1, 2, 2, 3, 3]]
 
