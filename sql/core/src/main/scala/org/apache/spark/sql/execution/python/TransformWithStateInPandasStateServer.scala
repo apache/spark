@@ -214,6 +214,8 @@ class TransformWithStateInPandasStateServer(
         val stateName = message.getGetMapState.getStateName
         val keySchema = message.getGetMapState.getSchema
         val valueSchema = message.getGetMapState.getMapStateValueSchema
+        logWarning(s"Initalizing map state $stateName with key schema $keySchema and" +
+          s" value schema $valueSchema")
         initializeStateVariable(stateName, keySchema, "mapState", None, valueSchema)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
@@ -226,6 +228,8 @@ class TransformWithStateInPandasStateServer(
         handleValueStateRequest(message.getValueStateCall)
       case StateVariableRequest.MethodCase.LISTSTATECALL =>
         handleListStateRequest(message.getListStateCall)
+      case StateVariableRequest.MethodCase.MAPSTATECALL =>
+        handleMapStateRequest(message.getMapStateCall)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
     }
@@ -358,7 +362,7 @@ class TransformWithStateInPandasStateServer(
 
   private[sql] def handleMapStateRequest(message: MapStateCall): Unit = {
     val stateName = message.getStateName
-    if (!listStates.contains(stateName)) {
+    if (!mapStates.contains(stateName)) {
       logWarning(log"Map state ${MDC(LogKeys.STATE_NAME, stateName)} is not initialized.")
       sendResponse(1, s"Map state $stateName is not initialized.")
       return
@@ -426,7 +430,7 @@ class TransformWithStateInPandasStateServer(
               // key row serialized as a byte array.
               StructField("keyRow", BinaryType),
               // value row serialized as a byte array.
-              StructField("valueRow", BinaryType),
+              StructField("valueRow", BinaryType)
             )
           )
           val arrowSchema = ArrowUtils.toArrowSchema(keyValueStateSchema, timeZoneId,
@@ -605,6 +609,7 @@ class TransformWithStateInPandasStateServer(
               expressionEncoder.createDeserializer(), expressionEncoder.createSerializer(),
               valueExpressionEncoder.createDeserializer(),
               valueExpressionEncoder.createSerializer()))
+          logWarning(s"Map state $stateName initialized: ${mapStates.contains(stateName)}")
           sendResponse(0)
         } else {
           sendResponse(1, s"Map state $stateName already exists")
