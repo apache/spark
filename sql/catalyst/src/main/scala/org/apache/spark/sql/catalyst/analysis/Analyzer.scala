@@ -301,7 +301,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       // ResolveLateralColumnAliasReference for more details.
       ResolveLateralColumnAliasReference ::
       ResolveExpressionsWithNamePlaceholders ::
-      RectifyDeserializerUpcast ::
+      FixUDTDeserializerUpcast ::
       ResolveDeserializer ::
       ResolveNewInstance ::
       ResolveUpCast ::
@@ -3749,7 +3749,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     project
   }
 
-  object RectifyDeserializerUpcast extends Rule[LogicalPlan] {
+  /**
+   * If the incoming child output does not contain any UDT type (which will be the case when
+   * plan is serialized as Row), then the Upcast target which is of UDT Type needs to be
+   * converted into sql type.
+   */
+  object FixUDTDeserializerUpcast extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(DESERIALIZE_TO_OBJECT), UnknownRuleId) {
       case d@DeserializeToObject(deserializer, _, child) if !deserializer.resolved &&
