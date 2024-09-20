@@ -17756,40 +17756,40 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
     Example 1: Shuffling a simple array
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([([1, 20, 3, 5],)], ['data'])
+    >>> df = spark.sql("SELECT ARRAY(1, 20, 3, 5) AS data")
     >>> df.select("*", sf.shuffle(df.data, sf.lit(123))).show()
     +-------------+-------------+
     |         data|shuffle(data)|
     +-------------+-------------+
-    |[1, 20, 3, 5]|[1, 5, 20, 3]|
+    |[1, 20, 3, 5]|[5, 1, 20, 3]|
     +-------------+-------------+
 
     Example 2: Shuffling an array with null values
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([([1, 20, None, 3],)], ['data'])
+    >>> df = spark.sql("SELECT ARRAY(1, 20, NULL, 5) AS data")
     >>> df.select("*", sf.shuffle(sf.col("data"), 234)).show()
     +----------------+----------------+
     |            data|   shuffle(data)|
     +----------------+----------------+
-    |[1, 20, NULL, 3]|[3, 20, NULL, 1]|
+    |[1, 20, NULL, 5]|[NULL, 5, 20, 1]|
     +----------------+----------------+
 
     Example 3: Shuffling an array with duplicate values
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([([1, 2, 2, 3, 3, 3],)], ['data'])
+    >>> df = spark.sql("SELECT ARRAY(1, 2, 2, 3, 3, 3) AS data")
     >>> df.select("*", sf.shuffle("data", 345)).show()
     +------------------+------------------+
     |              data|     shuffle(data)|
     +------------------+------------------+
-    |[1, 2, 2, 3, 3, 3]|[3, 1, 3, 3, 2, 2]|
+    |[1, 2, 2, 3, 3, 3]|[2, 3, 3, 1, 2, 3]|
     +------------------+------------------+
 
     Example 4: Shuffling an array with random seed
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([([1, 2, 2, 3, 3, 3],)], ['data'])
+    >>> df = spark.sql("SELECT ARRAY(1, 2, 2, 3, 3, 3) AS data")
     >>> df.select("*", sf.shuffle("data")).show() # doctest: +SKIP
     +------------------+------------------+
     |              data|     shuffle(data)|
