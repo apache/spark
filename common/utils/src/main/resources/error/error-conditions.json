@@ -1007,7 +1007,7 @@
       },
       "UNSUPPORTED_MODE_DATA_TYPE" : {
         "message" : [
-          "The <mode> does not support the <child> data type, because there is MapType with collated fields."
+          "The <mode> does not support the <child> data type, because there is a \"MAP\" type with keys and/or values that have collated sub-fields."
         ]
       },
       "UNSUPPORTED_UDF_INPUT_TYPE" : {
