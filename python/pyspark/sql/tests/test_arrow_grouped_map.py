@@ -318,8 +318,8 @@ class GroupedMapInArrowTestsMixin:
             df = self.spark.range(12).withColumn("value", col("id") * 10)
             grouped_df = df.groupBy((col("id") / 4).cast("int"))
 
-            actual = grouped_df.applyInArrow(func, "id long, value long")
-            assertDataFrameEqual(actual, df)
+            actual = grouped_df.applyInArrow(func, "id long, value long").collect()
+            assertDataFrameEqual(actual, df.collect())
 
     def test_apply_in_arrow_partial_iteration(self):
         with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 2}):
@@ -336,7 +336,7 @@ class GroupedMapInArrowTestsMixin:
             # Should get two records for each group
             expected = [Row(value=x) for x in [0, 0, 1, 1, 2, 2, 3, 3]]
 
-            actual = grouped_df.applyInArrow(func, "value long")
+            actual = grouped_df.applyInArrow(func, "value long").collect()
             assertDataFrameEqual(actual, expected)
 
 
