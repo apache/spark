@@ -2151,7 +2151,7 @@ CreateVariable defaultvalueexpression(cast(a INT as string), 'a INT'), true
 -- !query
 SELECT from_json('{"a": 1}', var1)
 -- !query analysis
-Project [from_json(StructField(a,IntegerType,true), {"a": 1}, Some(America/Los_Angeles)) AS from_json({"a": 1})#x]
+Project [from_json(StructField(a,IntegerType,true), {"a": 1}, Some(America/Los_Angeles), false) AS from_json({"a": 1})#x]
 +- OneRowRelation
 
 
