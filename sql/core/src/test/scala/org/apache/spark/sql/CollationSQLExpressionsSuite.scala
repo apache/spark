@@ -1907,7 +1907,7 @@ class CollationSQLExpressionsSuite
       ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "{a -> 1}"),
       ModeTestCase("utf8_lcase", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "{b -> 1}"),
       ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "{b -> 1}")
-    ).foreach(t1 => {
+    ).foreach { t1 =>
       def checkThisError(t: ModeTestCase, query: String): Any = {
         val c = s"STRUCT<m1: MAP<STRING COLLATE ${t.collationId.toUpperCase(Locale.ROOT)}, INT>>"
         val c1 = s"\"${c}\""
