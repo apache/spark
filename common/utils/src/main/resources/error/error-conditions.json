@@ -1456,6 +1456,12 @@
     ],
     "sqlState" : "2203G"
   },
+  "FAILED_TO_LOAD_ROUTINE" : {
+    "message" : [
+      "Failed to load routine <routineName>."
+    ],
+    "sqlState" : "38000"
+  },
   "FAILED_TO_PARSE_TOO_COMPLEX" : {
     "message" : [
       "The statement, including potential SQL functions and referenced views, was too complex to parse.",
