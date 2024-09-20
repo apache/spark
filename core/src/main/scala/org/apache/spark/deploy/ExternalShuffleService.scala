@@ -169,6 +169,7 @@ object ExternalShuffleService extends Logging {
     Utils.initDaemon(log)
     val sparkConf = new SparkConf
     Utils.loadDefaultSparkProperties(sparkConf)
+    Logging.uninitialize()
     val securityManager = new SecurityManager(sparkConf)
 
     // we override this value since this service is started from the command line

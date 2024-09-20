@@ -22,6 +22,7 @@ import java.lang.management.ManagementFactory
 import scala.annotation.tailrec
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Worker._
 import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 
@@ -59,6 +60,7 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
 
   // This mutates the SparkConf, so all accesses to it must be made after this line
   propertiesFile = Utils.loadDefaultSparkProperties(conf, propertiesFile)
+  Logging.uninitialize()
 
   conf.get(WORKER_UI_PORT).foreach { webUiPort = _ }
 

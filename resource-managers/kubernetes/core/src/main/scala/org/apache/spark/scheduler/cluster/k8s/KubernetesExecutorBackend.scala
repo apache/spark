@@ -116,6 +116,8 @@ private[spark] object KubernetesExecutorBackend extends Logging {
         }
       }
 
+      Logging.uninitialize()
+
       cfg.hadoopDelegationCreds.foreach { tokens =>
         SparkHadoopUtil.get.addDelegationTokens(tokens, driverConf)
       }

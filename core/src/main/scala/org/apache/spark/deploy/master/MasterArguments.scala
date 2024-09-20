@@ -53,6 +53,7 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) exte
 
   // This mutates the SparkConf, so all accesses to it must be made after this line
   propertiesFile = Utils.loadDefaultSparkProperties(conf, propertiesFile)
+  Logging.uninitialize()
 
   if (conf.contains(MASTER_UI_PORT.key)) {
     webUiPort = conf.get(MASTER_UI_PORT)

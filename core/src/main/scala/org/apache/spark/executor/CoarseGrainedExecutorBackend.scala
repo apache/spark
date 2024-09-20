@@ -468,6 +468,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         }
       }
 
+      Logging.uninitialize()
+
       cfg.hadoopDelegationCreds.foreach { tokens =>
         SparkHadoopUtil.get.addDelegationTokens(tokens, driverConf)
       }
