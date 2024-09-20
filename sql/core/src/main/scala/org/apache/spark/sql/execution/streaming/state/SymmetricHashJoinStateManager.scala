@@ -849,12 +849,12 @@ object SymmetricHashJoinStateManager {
 
   def splitStateStoreCheckpointInfo(
       partitionId: Int,
-      checkpointUniqueIds: Option[Array[String]]): Array[Option[String]] = {
+      checkpointIds: Option[Array[String]]): Array[Option[String]] = {
     // Stream-stream join has 4 state stores instead of one. So it will generate 4 different
     // checkpoint IDs. Since we take the approach of merging them into one ID in the
     // checkpointing path, we need to split them back into 4 IDs when loading the state.
     // The split logic mirrors the merge logic in `mergeStateStoreCheckpointInfo()`.
-    checkpointUniqueIds.map { ids =>
+    checkpointIds.map { ids =>
         assert(ids.size > partitionId, s"Checkpoint IDs $ids does not have enough partitions")
         val split = ids(partitionId).split(",")
         assert(split.size == 4, s"Invalid checkpoint IDs $ids")

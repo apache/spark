@@ -72,7 +72,7 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
     queryRunId: UUID,
     operatorId: Long,
     storeVersion: Long,
-    checkpointUniqueIds: Option[Array[String]],
+    checkpointIds: Option[Array[String]],
     keySchema: StructType,
     valueSchema: StructType,
     keyStateEncoderSpec: KeyStateEncoderSpec,
@@ -91,7 +91,7 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
     val inputIter = dataRDD.iterator(partition, ctxt)
     val store = StateStore.getReadOnly(
       storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
-      checkpointUniqueIds.map(_(partition.index)),
+      checkpointIds.map(_(partition.index)),
       useColumnFamilies, storeConf, hadoopConfBroadcast.value.value)
     storeReadFunction(store, inputIter)
   }

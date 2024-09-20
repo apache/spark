@@ -414,10 +414,10 @@ trait StateStoreProvider {
   def close(): Unit
 
   /** Return an instance of [[StateStore]] representing state data of the given version.
-   * If `checkpointUniqueId` is provided, the instance also needs to match the ID. */
+   * If `checkpointId` is provided, the instance also needs to match the ID. */
   def getStore(
       version: Long,
-      checkpointUniqueId: Option[String] = None): StateStore
+      checkpointId: Option[String] = None): StateStore
 
   /**
    * Return an instance of [[ReadStateStore]] representing state data of the given version
@@ -727,7 +727,7 @@ object StateStore extends Logging {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
-      checkpointUniqueId: Option[String],
+      checkpointId: Option[String],
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
@@ -737,7 +737,7 @@ object StateStore extends Logging {
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
       keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
-    storeProvider.getReadStore(version, checkpointUniqueId)
+    storeProvider.getReadStore(version, checkpointId)
   }
 
   /** Get or create a store associated with the id. */
@@ -747,7 +747,7 @@ object StateStore extends Logging {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
-      checkpointUniqueId: Option[String],
+      checkpointId: Option[String],
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
@@ -757,7 +757,7 @@ object StateStore extends Logging {
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
       keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
-    storeProvider.getStore(version, checkpointUniqueId)
+    storeProvider.getStore(version, checkpointId)
   }
 
   private def getStateStoreProvider(

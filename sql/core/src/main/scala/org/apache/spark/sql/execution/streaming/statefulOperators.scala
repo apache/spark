@@ -50,7 +50,7 @@ import org.apache.spark.util.{CollectionAccumulator, CompletionIterator, NextIte
 
 /** Used to identify the state store for a given operator.
  *
- * checkpointUniqueIds is used to identify the checkpoint used for a specific stateful operator
+ * checkpointIds is used to identify the checkpoint used for a specific stateful operator
  * The basic workflow works as following:
  * 1. When a stateful operator is created, it passes in the checkpoint IDs for each stateful
  *    operator through the StatefulOperatorStateInfo.
@@ -60,7 +60,7 @@ import org.apache.spark.util.{CollectionAccumulator, CompletionIterator, NextIte
  *    the it loads the correct checkpoint
  * 3. When the stateful task is finishing, after the state store is committed, the checkpoint ID
  *    is fetched from the state store by calling StateStore.getCheckpointInfo() and added to the
- *    checkpointUniqueIds accumulator by calling StateStoreWriter.setCheckpointInfo().
+ *    checkpointIds accumulator by calling StateStoreWriter.setCheckpointInfo().
  * 4. When ending the batch, MicroBatchExecution calls each stateful operator's getCheckpointInfo()
  *    which aggregates checkpointIDs from different partitions. The driver will persistent
  *    it into commit logs (not implemented yet).
@@ -73,16 +73,16 @@ case class StatefulOperatorStateInfo(
     operatorId: Long,
     storeVersion: Long,
     numPartitions: Int,
-    checkpointUniqueIds: Option[Array[String]] = None) {
+    checkpointIds: Option[Array[String]] = None) {
 
-  def getCheckpointUniqueId(partitionId: Int): Option[String] = {
-    checkpointUniqueIds.map(_(partitionId))
+  def getCheckpointId(partitionId: Int): Option[String] = {
+    checkpointIds.map(_(partitionId))
   }
 
   override def toString(): String = {
     s"state info [ checkpoint = $checkpointLocation, runId = $queryRunId, " +
       s"opId = $operatorId, ver = $storeVersion, numPartitions = $numPartitions] " +
-      s"checkpointUniqueIds = $checkpointUniqueIds"
+      s"checkpointIds = $checkpointIds"
   }
 }
 
@@ -231,7 +231,7 @@ trait StateStoreWriter
    */
   def getCheckpointInfo(): Array[StateStoreCheckpointInfo] = {
     assert(StatefulOperatorStateInfo.ifEnableCheckpointId(conf))
-    checkpointInfoAccumulator
+    val ret = checkpointInfoAccumulator
       .value
       .asScala
       .toSeq
@@ -243,6 +243,10 @@ trait StateStoreWriter
       .sortBy(_._1)
       .map(_._2)
       .toArray
+    assert(
+      ret.length == getStateInfo.numPartitions,
+      s"ChekpointInfo length: ${ret.length}, numPartitions: ${getStateInfo.numPartitions}")
+    ret
   }
 
   /**

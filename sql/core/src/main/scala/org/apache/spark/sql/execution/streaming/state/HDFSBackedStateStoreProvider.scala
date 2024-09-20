@@ -267,7 +267,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   }
 
   /** Get the state store for reading to specific `version` of the store. */
-  override def getReadStore(version: Long, checkpointUniqueId: Option[String]): ReadStateStore = {
+  override def getReadStore(version: Long, checkpointId: Option[String]): ReadStateStore = {
     val newMap = getLoadedMapForStore(version)
     logInfo(log"Retrieved version ${MDC(LogKeys.STATE_STORE_VERSION, version)} of " +
       log"${MDC(LogKeys.STATE_STORE_PROVIDER, HDFSBackedStateStoreProvider.this)} for readonly")

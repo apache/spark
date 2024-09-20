@@ -272,7 +272,7 @@ class RocksDB(
    */
   def load(
       version: Long,
-      checkpointUniqueId: Option[String] = None,
+      checkpointId: Option[String] = None,
       readOnly: Boolean = false): RocksDB = {
     assert(version >= 0)
     acquire(LoadStore)
@@ -280,8 +280,8 @@ class RocksDB(
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)}")
     try {
       if (loadedVersion != version ||
-        (ifEnableCheckpointId && checkpointUniqueId.isDefined &&
-        (loadedCheckpointId.isEmpty || checkpointUniqueId.get != loadedCheckpointId.get))) {
+        (ifEnableCheckpointId && checkpointId.isDefined &&
+        (loadedCheckpointId.isEmpty || checkpointId.get != loadedCheckpointId.get))) {
         closeDB(ignoreException = false)
         // deep copy is needed to avoid race condition
         // between maintenance and task threads
@@ -334,7 +334,7 @@ class RocksDB(
       if (ifEnableCheckpointId) {
         LastCommitBasedCheckpointId = None
         lastCommittedCheckpointId = None
-        loadedCheckpointId = checkpointUniqueId
+        loadedCheckpointId = checkpointId
         sessionCheckpointId = Some(java.util.UUID.randomUUID.toString)
       }
       lastCommittedCheckpointId = None

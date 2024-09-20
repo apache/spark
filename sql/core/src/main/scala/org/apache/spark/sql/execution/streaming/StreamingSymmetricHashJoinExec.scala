@@ -307,7 +307,7 @@ case class StreamingSymmetricHashJoinExec(
     assert(stateInfo.isDefined, "State info not defined")
     val checkpointIds = SymmetricHashJoinStateManager.splitStateStoreCheckpointInfo(
       partitionId,
-      stateInfo.get.checkpointUniqueIds)
+      stateInfo.get.checkpointIds)
 
     val inputSchema = left.output ++ right.output
     val postJoinFilter =

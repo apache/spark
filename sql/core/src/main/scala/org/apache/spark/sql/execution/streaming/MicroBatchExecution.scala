@@ -134,7 +134,7 @@ class MicroBatchExecution(
   // Store checkpointIDs for state store checkpoints to be committed or have been committed to
   // the commit log.
   // operatorID -> (partitionID -> uniqueID)
-  private val currentCheckpointUniqueId = MutableMap[Long, Array[String]]()
+  private val currentCheckpointId = MutableMap[Long, Array[String]]()
 
   override lazy val logicalPlan: LogicalPlan = {
     assert(queryExecutionThread eq Thread.currentThread,
@@ -843,7 +843,7 @@ class MicroBatchExecution(
         execCtx.offsetSeqMetadata,
         watermarkPropagator,
         execCtx.previousContext.isEmpty,
-        currentCheckpointUniqueId)
+        currentCheckpointId)
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
     }
 
@@ -917,7 +917,7 @@ class MicroBatchExecution(
         execCtx.batchId == -1 || v == execCtx.batchId + 1,
         s"version $v doesn't match current Batch ID ${execCtx.batchId}")
     }
-    currentCheckpointUniqueId.put(opId, checkpointInfo.map { c =>
+    currentCheckpointId.put(opId, checkpointInfo.map { c =>
       assert(c.checkpointId.isDefined)
       c.checkpointId.get
     })

@@ -168,8 +168,8 @@ class TestStateStoreProviderWrapper extends StateStoreProvider {
 
   override def close(): Unit = innerProvider.close()
 
-  override def getStore(version: Long, checkpointUniqueId: Option[String] = None): StateStore = {
-    val innerStateStore = innerProvider.getStore(version, checkpointUniqueId)
+  override def getStore(version: Long, checkpointId: Option[String] = None): StateStore = {
+    val innerStateStore = innerProvider.getStore(version, checkpointId)
     TestStateStoreWrapper(innerStateStore)
   }
 
