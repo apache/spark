@@ -644,8 +644,14 @@ class RocksDB(
           // If we have changed the columnFamilyId mapping, we have set a new
           // snapshot and need to upload this to the DFS even if changelog checkpointing
           // is enabled.
+          var ex: Throwable = null
           if (shouldForceSnapshot.get()) {
-            uploadSnapshot()
+            try {
+              uploadSnapshot()
+            } catch {
+              case t: Throwable =>
+                ex = t
+            }
             shouldForceSnapshot.set(false)
           }
 
@@ -656,6 +662,7 @@ class RocksDB(
           } finally {
             changelogWriter = None
           }
+          if (ex != null) throw ex;
         } else {
           assert(changelogWriter.isEmpty)
           uploadSnapshot()
