@@ -112,10 +112,10 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
       val prunedSchema = StructType(Array(schema(ordinal)))
       g.copy(child = j.copy(schema = prunedSchema), ordinal = 0)
 
-    case g @ GetArrayStructFields(j @ JsonToStructs(schema @ ArrayType(structSchema: StructType),
-      _, _, _), _, ordinal, _, _) if structSchema.length > 1 && j.options.isEmpty =>
+    case g @ GetArrayStructFields(j @ JsonToStructs(ArrayType(schema: StructType, _), _, _, _),
+      _, ordinal, _, _) if schema.length > 1 && j.options.isEmpty =>
       // Obtain the pruned schema by picking the `ordinal` field of the struct.
-      val prunedSchema = ArrayType(StructType(Array(elementSchema(ordinal))), g.containsNull)
+      val prunedSchema = ArrayType(StructType(Array(schema(ordinal))), g.containsNull)
       g.copy(child = j.copy(schema = prunedSchema), ordinal = 0, numFields = 1)
   }
 
