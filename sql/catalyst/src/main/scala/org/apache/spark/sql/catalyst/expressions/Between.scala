@@ -21,7 +21,7 @@ import org.apache.spark.sql.internal.SQLConf
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "Usage: input [NOT] BETWEEN lower AND upper - evaluate if `input` is [not] in between `lower` and `upper`",
+  usage = "input [NOT] _FUNC_ lower AND upper - evaluate if `input` is [not] in between `lower` and `upper`",
   examples = """
     Examples:
       > SELECT 0.5 _FUNC_ 0.1 AND 1.0;
