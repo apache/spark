@@ -1055,7 +1055,7 @@
     "message" : [
       "Encountered error when saving to external data source."
     ],
-    "sqlState" : "KD00F"
+    "sqlState" : "KD010"
   },
   "DATA_SOURCE_NOT_EXIST" : {
     "message" : [
