@@ -164,7 +164,7 @@ object JavaTypeInference {
                 Try(encoderFor(bound, seenTypeSet, typeVariables, forGenericBound = true)) match {
                   case Success(value) => (Option(value), serEncoder)
 
-                  case Failure(UseSerializationEncoder(encoderProvider)) =>
+                  case Failure(UseSerializationEncoder(encoderProvider)) if serEncoder.isEmpty =>
                     None -> Option(encoderProvider(concreteBound.getOrElse(bound)))
 
                   case Failure(_) => r
