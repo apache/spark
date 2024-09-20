@@ -2752,6 +2752,11 @@
         "message" : [
           "A type of keys and values in `map()` must be string, but got <mapType>."
         ]
+      },
+      "NULL_VALUE" : {
+        "message" : [
+          "Values of keys and values in `map()` must be string, but got null in value."
+        ]
       }
     },
     "sqlState" : "42K06"

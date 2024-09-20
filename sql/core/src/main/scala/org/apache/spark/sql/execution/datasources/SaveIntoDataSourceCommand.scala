@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.sql.{Dataset, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, WithCTE}
@@ -46,6 +46,10 @@ case class SaveIntoDataSourceCommand(
   override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    if (options.values.exists(_ == null)) {
+      throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_OPTIONS.NULL_VALUE")
+    }
     var relation: BaseRelation = null
 
     try {

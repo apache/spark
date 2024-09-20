@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, RelationProvider, TableScan}
@@ -70,6 +71,20 @@ class SaveIntoDataSourceCommandSuite extends QueryTest with SharedSparkSession {
     checkAnswer(loadData, Row(0) :: Row(1) :: Nil)
 
     FakeV1DataSource.data = null
+  }
+
+  test("Does not except null value in options") {
+    val invalidOptions: Map[String, String] = Map(
+      "key1" -> "val1",
+      "key2" -> null
+    )
+    val cmd = SaveIntoDataSourceCommand(null, null, invalidOptions, SaveMode.Ignore)
+    checkError(
+      exception = intercept[SparkIllegalArgumentException]{
+        cmd.run(spark)
+      },
+      condition = "INVALID_OPTIONS.NULL_VALUE",
+      parameters = Map.empty)
   }
 
   test("Data type support") {
