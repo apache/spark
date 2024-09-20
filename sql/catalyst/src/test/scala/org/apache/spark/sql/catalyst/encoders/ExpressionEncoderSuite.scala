@@ -20,9 +20,11 @@ package org.apache.spark.sql.catalyst.encoders
 import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 import java.util.Arrays
+
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.classTag
 import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, JavaTypeInference, OptionalData, PrimitiveData, ScroogeLikeExample, UDTBean}
@@ -427,13 +429,12 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(Array(Set(1, 2), Set(2, 3)), "array of sets")
 
   productTest(("UDT", new ExamplePoint(0.1, 0.2)))
-  
-  test("udt schema bug") {
+
+  test("SPARK-49690: UDT schema not showing the sql type") {
     val encoder1 = JavaTypeInference.encoderFor(classOf[UDTBean])
     val expectedSchema = StructType(Seq(StructField("udt", StringType, true)))
     assert(encoder1.schema === expectedSchema)
   }
-
 
   test("AnyVal class with Any fields") {
     val exception = intercept[SparkUnsupportedOperationException](
