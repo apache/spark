@@ -74,6 +74,8 @@ class RocksDB(
     loggingId: String = "",
     useColumnFamilies: Boolean = false) extends Logging {
 
+  import RocksDB._
+
   case class RocksDBSnapshot(
       checkpointDir: File,
       version: Long,
@@ -632,7 +634,12 @@ class RocksDB(
           // is enabled.
           if (shouldForceSnapshot.get()) {
             assert(snapshot.isDefined)
-            uploadSnapshot(snapshot.get)
+            fileManagerMetrics = uploadSnapshot(
+              snapshot.get,
+              fileManager,
+              rocksDBFileMapping.snapshotsPendingUpload,
+              loggingId
+            )
             changelogWriter = None
             changelogWriter.foreach(_.abort())
           } else {
@@ -649,7 +656,12 @@ class RocksDB(
         } else {
           assert(changelogWriter.isEmpty)
           assert(snapshot.isDefined)
-          uploadSnapshot(snapshot.get)
+          fileManagerMetrics = uploadSnapshot(
+            snapshot.get,
+            fileManager,
+            rocksDBFileMapping.snapshotsPendingUpload,
+            loggingId
+          )
         }
       }
 
@@ -689,27 +701,6 @@ class RocksDB(
     } else true
   }
 
-  private def uploadSnapshot(snapshot: RocksDBSnapshot): Unit = {
-    try {
-      val uploadTime = timeTakenMs {
-        fileManager.saveCheckpointToDfs(snapshot.checkpointDir,
-          snapshot.version, snapshot.numKeys, snapshot.fileMapping,
-          Some(snapshot.columnFamilyMapping), Some(snapshot.maxColumnFamilyId))
-        val snapshotInfo = RocksDBVersionSnapshotInfo(snapshot.version, snapshot.dfsFileSuffix)
-        // We are only removing the uploaded snapshot info from the pending set,
-        // to let the file mapping (i.e. query threads) know that the snapshot (i.e. and its files)
-        // have been uploaded to DFS. We don't touch the file mapping here to avoid corrupting it.
-        rocksDBFileMapping.snapshotsPendingUpload.remove(snapshotInfo)
-        fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
-      }
-      logInfo(log"${MDC(LogKeys.LOG_ID, loggingId)}: Upload snapshot of version " +
-        log"${MDC(LogKeys.VERSION_NUM, snapshot.version)}," +
-        log" time taken: ${MDC(LogKeys.TIME_UNITS, uploadTime)} ms")
-    } finally {
-      snapshot.close()
-    }
-  }
-
   /**
    * Drop uncommitted changes, and roll back to previous version.
    */
@@ -739,7 +730,12 @@ class RocksDB(
       }
 
       if (mostRecentSnapshot.isDefined) {
-        uploadSnapshot(mostRecentSnapshot.get)
+        fileManagerMetrics = uploadSnapshot(
+          mostRecentSnapshot.get,
+          fileManager,
+          rocksDBFileMapping.snapshotsPendingUpload,
+          loggingId
+        )
       }
     }
     val cleanupTime = timeTakenMs {
@@ -997,10 +993,43 @@ class RocksDB(
     }
   }
 
-  /** Records the duration of running `body` for the next query progress update. */
-  protected def timeTakenMs(body: => Unit): Long = Utils.timeTakenMs(body)._2
-
   override protected def logName: String = s"${super.logName} $loggingId"
+}
+
+object RocksDB extends Logging {
+
+  /** Upload the snapshot to DFS and remove it from snapshots pending */
+  private def uploadSnapshot(
+      snapshot: RocksDB#RocksDBSnapshot,
+      fileManager: RocksDBFileManager,
+      snapshotsPendingUpload: Set[RocksDBVersionSnapshotInfo],
+      loggingId: String): RocksDBFileManagerMetrics = {
+    var fileManagerMetrics: RocksDBFileManagerMetrics = null
+    try {
+      val uploadTime = timeTakenMs {
+        fileManager.saveCheckpointToDfs(snapshot.checkpointDir,
+          snapshot.version, snapshot.numKeys, snapshot.fileMapping,
+          Some(snapshot.columnFamilyMapping), Some(snapshot.maxColumnFamilyId))
+        fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
+
+        val snapshotInfo = RocksDBVersionSnapshotInfo(snapshot.version, snapshot.dfsFileSuffix)
+        // We are only removing the uploaded snapshot info from the pending set,
+        // to let the file mapping (i.e. query threads) know that the snapshot (i.e. and its files)
+        // have been uploaded to DFS. We don't touch the file mapping here to avoid corrupting it.
+        snapshotsPendingUpload.remove(snapshotInfo)
+      }
+      logInfo(log"${MDC(LogKeys.LOG_ID, loggingId)}: Upload snapshot of version " +
+        log"${MDC(LogKeys.VERSION_NUM, snapshot.version)}," +
+        log" time taken: ${MDC(LogKeys.TIME_UNITS, uploadTime)} ms")
+    } finally {
+      snapshot.close()
+    }
+
+    fileManagerMetrics
+  }
+
+  /** Records the duration of running `body` for the next query progress update. */
+  private def timeTakenMs(body: => Unit): Long = Utils.timeTakenMs(body)._2
 }
 
 // uniquely identifies a Snapshot. Multiple snapshots created for same version will
