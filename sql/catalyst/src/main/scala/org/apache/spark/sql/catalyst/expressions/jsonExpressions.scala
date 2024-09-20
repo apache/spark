@@ -717,9 +717,12 @@ case class JsonToStructs(
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
+  private val variantAllowDuplicateKeys = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)
+
   override def nullSafeEval(json: Any): Any = nullableSchema match {
     case _: VariantType =>
-      VariantExpressionEvalUtils.parseJson(json.asInstanceOf[UTF8String])
+      VariantExpressionEvalUtils.parseJson(json.asInstanceOf[UTF8String],
+        allowDuplicateKeys = variantAllowDuplicateKeys)
     case _ =>
       converter(parser.parse(json.asInstanceOf[UTF8String]))
   }
