@@ -31,7 +31,7 @@ import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.{SparkConf, SparkContext, SparkEnv}
+import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, SparkConnectServiceGrpc}
 import org.apache.spark.connect.proto.SparkConnectServiceGrpc.AsyncService
@@ -461,7 +461,7 @@ object SparkConnectService extends Logging {
       SparkListenerConnectServiceStarted(
         hostAddress,
         isa.getPort,
-        sc.conf,
+        sc.conf.getAll.toMap,
         System.currentTimeMillis()))
   }
 
@@ -529,7 +529,7 @@ object SparkConnectService extends Logging {
 case class SparkListenerConnectServiceStarted(
     hostAddress: String,
     bindingPort: Int,
-    sparkConf: SparkConf,
+    sparkConf: Map[String, String],
     eventTime: Long)
     extends SparkListenerEvent
 
