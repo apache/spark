@@ -17723,7 +17723,7 @@ def array_sort(
 
 
 @_try_remote_functions
-def shuffle(col: "ColumnOrName") -> Column:
+def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> Column:
     """
     Array function: Generates a random permutation of the given array.
 
@@ -17736,6 +17736,10 @@ def shuffle(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         The name of the column or expression to be shuffled.
+    seed : :class:`~pyspark.sql.Column` or int, optional
+        Seed value for the random generator.
+
+        .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -17753,47 +17757,50 @@ def shuffle(col: "ColumnOrName") -> Column:
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([([1, 20, 3, 5],)], ['data'])
-    >>> df.select(sf.shuffle(df.data)).show() # doctest: +SKIP
-    +-------------+
-    |shuffle(data)|
-    +-------------+
-    |[1, 3, 20, 5]|
-    +-------------+
+    >>> df.select("*", sf.shuffle(df.data, sf.lit(123))).show()
+    +-------------+-------------+
+    |         data|shuffle(data)|
+    +-------------+-------------+
+    |[1, 20, 3, 5]|[1, 5, 20, 3]|
+    +-------------+-------------+
 
     Example 2: Shuffling an array with null values
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([([1, 20, None, 3],)], ['data'])
-    >>> df.select(sf.shuffle(df.data)).show() # doctest: +SKIP
-    +----------------+
-    |   shuffle(data)|
-    +----------------+
-    |[20, 3, NULL, 1]|
-    +----------------+
+    >>> df.select("*", sf.shuffle(sf.col("data"), 234)).show()
+    +----------------+----------------+
+    |            data|   shuffle(data)|
+    +----------------+----------------+
+    |[1, 20, NULL, 3]|[3, 20, NULL, 1]|
+    +----------------+----------------+
 
     Example 3: Shuffling an array with duplicate values
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([([1, 2, 2, 3, 3, 3],)], ['data'])
-    >>> df.select(sf.shuffle(df.data)).show() # doctest: +SKIP
-    +------------------+
-    |     shuffle(data)|
-    +------------------+
-    |[3, 2, 1, 3, 2, 3]|
-    +------------------+
+    >>> df.select("*", sf.shuffle("data", 345)).show()
+    +------------------+------------------+
+    |              data|     shuffle(data)|
+    +------------------+------------------+
+    |[1, 2, 2, 3, 3, 3]|[3, 1, 3, 3, 2, 2]|
+    +------------------+------------------+
 
-    Example 4: Shuffling an array with different types of elements
+    Example 4: Shuffling an array with random seed
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([(['a', 'b', 'c', 1, 2, 3],)], ['data'])
-    >>> df.select(sf.shuffle(df.data)).show() # doctest: +SKIP
-    +------------------+
-    |     shuffle(data)|
-    +------------------+
-    |[1, c, 2, a, b, 3]|
-    +------------------+
+    >>> df = spark.createDataFrame([([1, 2, 2, 3, 3, 3],)], ['data'])
+    >>> df.select("*", sf.shuffle("data")).show() # doctest: +SKIP
+    +------------------+------------------+
+    |              data|     shuffle(data)|
+    +------------------+------------------+
+    |[1, 2, 2, 3, 3, 3]|[3, 3, 2, 3, 2, 1]|
+    +------------------+------------------+
     """
-    return _invoke_function_over_columns("shuffle", col)
+    if seed is not None:
+        return _invoke_function_over_columns("shuffle", col, lit(seed))
+    else:
+        return _invoke_function_over_columns("shuffle", col)
 
 
 @_try_remote_functions

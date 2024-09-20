@@ -2206,12 +2206,9 @@ def schema_of_xml(xml: Union[str, Column], options: Optional[Mapping[str, str]] 
 schema_of_xml.__doc__ = pysparkfuncs.schema_of_xml.__doc__
 
 
-def shuffle(col: "ColumnOrName") -> Column:
-    return _invoke_function(
-        "shuffle",
-        _to_col(col),
-        LiteralExpression(random.randint(0, sys.maxsize), LongType()),
-    )
+def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> Column:
+    _seed = lit(random.randint(0, sys.maxsize)) if seed is None else lit(seed)
+    return _invoke_function("shuffle", _to_col(col), _seed)
 
 
 shuffle.__doc__ = pysparkfuncs.shuffle.__doc__
