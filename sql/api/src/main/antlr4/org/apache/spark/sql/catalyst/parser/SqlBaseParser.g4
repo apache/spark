@@ -1492,6 +1492,7 @@ version
 
 operatorPipeRightSide
     : selectClause
+    | whereClause
     ;
 
 // When `SQL_standard_keyword_behavior=true`, there are 2 kinds of keywords in Spark SQL.
