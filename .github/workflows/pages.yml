@@ -26,7 +26,7 @@ on:
 
 concurrency:
   group: 'docs preview'
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   docs:
@@ -35,6 +35,8 @@ jobs:
     permissions:
       id-token: write
       pages: write
+    environment:
+      name: github-pages # https://github.com/actions/deploy-pages/issues/271
     env:
       SPARK_TESTING: 1 # Reduce some noise in the logs
       RELEASE_VERSION: 'In-Progress'
