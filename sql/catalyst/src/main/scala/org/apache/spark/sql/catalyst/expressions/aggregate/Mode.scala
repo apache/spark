@@ -100,7 +100,7 @@ case class Mode(
     }
     def determineBufferingFunction(
         childDataType: DataType): Option[AnyRef => _] = {
-      childDataType match {å
+      childDataType match {
         case _ if UnsafeRowUtils.isBinaryStable(child.dataType) => None
         case _ => Some(collationAwareTransform(_, childDataType))
       }
