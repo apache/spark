@@ -649,6 +649,7 @@ class RocksDB(
             shouldForceSnapshot.set(false)
           }
 
+          // ensure that changelog files are always written
           try {
             assert(changelogWriter.isDefined)
             changelogWriter.foreach(_.commit())

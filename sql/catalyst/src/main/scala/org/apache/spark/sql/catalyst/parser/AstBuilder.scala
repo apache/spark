@@ -5698,6 +5698,28 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Creates a plan for invoking a procedure.
+   *
+   * For example:
+   * {{{
+   *   CALL multi_part_name(v1, v2, ...);
+   *   CALL multi_part_name(v1, param2 => v2, ...);
+   *   CALL multi_part_name(param1 => v1, param2 => v2, ...);
+   * }}}
+   */
+  override def visitCall(ctx: CallContext): LogicalPlan = withOrigin(ctx) {
+    val procedure = withIdentClause(ctx.identifierReference, UnresolvedProcedure)
+    val args = ctx.functionArgument.asScala.map {
+      case expr if expr.namedArgumentExpression != null =>
+        val namedExpr = expr.namedArgumentExpression
+        NamedArgumentExpression(namedExpr.key.getText, expression(namedExpr.value))
+      case expr =>
+        expression(expr)
+    }.toSeq
+    Call(procedure, args)
+  }
+
+  /**
    * Create a TimestampAdd expression.
    */
   override def visitTimestampadd(ctx: TimestampaddContext): Expression = withOrigin(ctx) {

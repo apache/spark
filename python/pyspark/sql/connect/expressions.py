@@ -489,7 +489,17 @@ class LiteralExpression(Expression):
             ts = TimestampNTZType().fromInternal(self._value)
             if ts is not None and isinstance(ts, datetime.datetime):
                 return ts.strftime("%Y-%m-%d %H:%M:%S.%f")
-        # TODO(SPARK-49693): Refine the string representation of timedelta
+        elif isinstance(self._dataType, DayTimeIntervalType):
+            delta = DayTimeIntervalType().fromInternal(self._value)
+            if delta is not None and isinstance(delta, datetime.timedelta):
+                import pandas as pd
+
+                # Note: timedelta itself does not provide isoformat method.
+                # Both Pandas and java.time.Duration provide it, but the format
+                # is sightly different:
+                # java.time.Duration only applies HOURS, MINUTES, SECONDS units,
+                # while Pandas applies all supported units.
+                return pd.Timedelta(delta).isoformat()  # type: ignore[attr-defined]
         return f"{self._value}"
 
 

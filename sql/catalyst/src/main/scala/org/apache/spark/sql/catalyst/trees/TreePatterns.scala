@@ -157,6 +157,7 @@ object TreePattern extends Enumeration  {
 
   // Unresolved Plan patterns (Alphabetically ordered)
   val UNRESOLVED_FUNC: Value = Value
+  val UNRESOLVED_PROCEDURE: Value = Value
   val UNRESOLVED_SUBQUERY_COLUMN_ALIAS: Value = Value
   val UNRESOLVED_TABLE_VALUED_FUNCTION: Value = Value
   val UNRESOLVED_TRANSPOSE: Value = Value
