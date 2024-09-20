@@ -73,6 +73,11 @@ from pyspark.sql.utils import get_active_spark_context, to_java_array, to_scala_
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
 
+try:
+    from pyspark.sql.plot import PySparkPlotAccessor
+except ImportError:
+    PySparkPlotAccessor = None  # type: ignore
+
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
     import pyarrow as pa
@@ -1861,6 +1866,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             errorClass="CLASSIC_OPERATION_NOT_SUPPORTED_ON_DF",
             messageParameters={"member": "queryExecution"},
         )
+
+    @property
+    def plot(self) -> PySparkPlotAccessor:
+        return PySparkPlotAccessor(self)
 
 
 class DataFrameNaFunctions(ParentDataFrameNaFunctions):
