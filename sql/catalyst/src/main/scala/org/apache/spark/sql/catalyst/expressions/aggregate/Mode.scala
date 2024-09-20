@@ -123,7 +123,7 @@ case class Mode(
   }
 
   private def processStructTypeWithBuffer(
-                                           tuples: Seq[(Any, StructField)]): Seq[Any] = {
+      tuples: Seq[(Any, StructField)]): Seq[Any] = {
     tuples.map(t => collationAwareTransform(t._1.asInstanceOf[AnyRef], t._2.dataType))
   }
 
