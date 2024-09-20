@@ -38,8 +38,10 @@ groups = {
     "url_funcs", "hash_funcs", "struct_funcs",
 }
 
-def print_red(text):
+
+def _print_red(text):
     print('\033[31m' + text + '\033[0m')
+
 
 def _list_grouped_function_infos(jvm):
     """
@@ -130,8 +132,8 @@ def _make_pretty_usage(infos):
             func_name = "CASE WHEN"
         expr_usages = re.split(r"(.*%s.*) - " % func_name, info.usage.strip())
         if len(expr_usages) <= 1:
-            print_red("\nThe `usage` of %s is not standardized, please correct it. "
-                      "Refer to: `AesDecrypt`" % (func_name))
+            _print_red("\nThe `usage` of %s is not standardized, please correct it. "
+                       "Refer to: `AesDecrypt`" % (func_name))
             os._exit(-1)
         usages = iter(expr_usages[1:])
 
