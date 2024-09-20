@@ -89,7 +89,7 @@ from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[at
 try:
     from pyspark.sql.plot import PySparkPlotAccessor
 except ImportError:
-    PySparkPlotAccessor = None  # type: ignore[misc]
+    PySparkPlotAccessor = None  # type: ignore
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (

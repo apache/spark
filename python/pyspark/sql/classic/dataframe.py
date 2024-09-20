@@ -76,7 +76,7 @@ from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
 try:
     from pyspark.sql.plot import PySparkPlotAccessor
 except ImportError:
-    PySparkPlotAccessor = None  # type: ignore[misc]
+    PySparkPlotAccessor = None  # type: ignore
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
