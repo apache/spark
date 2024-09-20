@@ -118,7 +118,11 @@ case class Mode(
         CollationFactory.getCollationKey(data.asInstanceOf[UTF8String], st.collationId)
       case _ =>
         throw new SparkUnsupportedOperationException(
-          s"Unsupported data type for collation-aware mode: $dataType")
+          "UNSUPPORTED_MODE_DATA_TYPE",
+          messageParameters =
+            Map("child" -> toSQLType(child.dataType),
+              "mode" -> toSQLId(prettyName))
+        )
     }
   }
 

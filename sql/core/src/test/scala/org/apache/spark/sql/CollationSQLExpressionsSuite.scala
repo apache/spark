@@ -1729,12 +1729,12 @@ class CollationSQLExpressionsSuite
       UTF8StringModeTestCase("unicode_ci", bufferValuesUTF8String, "b"),
       UTF8StringModeTestCase("unicode", bufferValuesUTF8String, "a"))
 
-    testCasesUTF8String.foreach(t => {
+    testCasesUTF8String.foreach { t =>
       val buffer = new OpenHashMap[AnyRef, Long](5)
       val myMode = Mode(child = Literal.create("some_column_name", StringType(t.collationId)))
       t.bufferValues.foreach { case (k, v) => buffer.update(k, v) }
       assert(myMode.eval(buffer).toString.toLowerCase() == t.result.toLowerCase())
-    })
+    }
   }
 
   test("Support Mode.eval(buffer) with complex types") {
@@ -1768,7 +1768,7 @@ class CollationSQLExpressionsSuite
       ))))
       t.bufferValues.foreach { case (k, v) => buffer.update(k, v) }
       assert(myMode.eval(buffer).toString.toLowerCase() == t.result.toLowerCase())
-    })
+    }
   }
 
   test("Support mode for string expression with collated strings in struct") {
@@ -1779,7 +1779,7 @@ class CollationSQLExpressionsSuite
       ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
       ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
     )
-    testCases.foreach(t => {
+    testCases.foreach { t =>
       val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
         (0L to numRepeats).map(_ => s"named_struct('f1'," +
           s" collate('$elt', '${t.collationId}'), 'f2', 1)").mkString(",")
@@ -1793,7 +1793,7 @@ class CollationSQLExpressionsSuite
         val query = s"SELECT lower(mode(i).f1) FROM ${tableName}"
         checkAnswer(sql(query), Row(t.result))
       }
-    })
+    }
   }
 
   test("Support mode for string expression with collated strings in recursively nested struct") {
@@ -1804,7 +1804,7 @@ class CollationSQLExpressionsSuite
       ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
       ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
     )
-    testCases.foreach(t => {
+    testCases.foreach { t =>
       val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
         (0L to numRepeats).map(_ => s"named_struct('f1', " +
           s"named_struct('f2', collate('$elt', '${t.collationId}')), 'f3', 1)").mkString(",")
@@ -1818,7 +1818,7 @@ class CollationSQLExpressionsSuite
         val query = s"SELECT lower(mode(i).f1.f2) FROM ${tableName}"
         checkAnswer(sql(query), Row(t.result))
       }
-    })
+    }
   }
 
   test("Support mode for string expression with collated strings in array complex type") {
@@ -1844,7 +1844,7 @@ class CollationSQLExpressionsSuite
         val query = s"SELECT lower(element_at(mode(i).f2, 1)) FROM ${tableName}"
         checkAnswer(sql(query), Row(t.result))
       }
-    })
+    }
   }
 
   test("Support mode for string expression with collated strings in 3D array type") {
@@ -1870,7 +1870,7 @@ class CollationSQLExpressionsSuite
           s"element_at(element_at(element_at(mode(i),1),1),1)) FROM ${tableName}"
         checkAnswer(sql(query), Row(t.result))
       }
-    })
+    }
   }
 
   test("Support mode for string expression with collated complex type - Highly nested") {
@@ -1881,7 +1881,7 @@ class CollationSQLExpressionsSuite
       ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
       ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
     )
-    testCases.foreach(t => {
+    testCases.foreach { t =>
       val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
         (0L to numRepeats).map(_ => s"array(named_struct('s1', named_struct('a2', " +
           s"array(collate('$elt', '${t.collationId}'))), 'f3', 1))").mkString(",")
@@ -1897,7 +1897,7 @@ class CollationSQLExpressionsSuite
 
           checkAnswer(sql(query), Row(t.result))
       }
-    })
+    }
   }
 
   test("Support mode expression with collated in recursively nested struct with map with keys") {
@@ -1947,7 +1947,6 @@ class CollationSQLExpressionsSuite
         }
       }
     }
-    )
   }
 
   test("SPARK-48430: Map value extraction with collations") {
