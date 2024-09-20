@@ -358,6 +358,20 @@ object SubExprUtils extends PredicateHelper {
       case _ => ExpressionSet().empty
     }
   }
+
+  // Returns grouping expressions of 'aggNode' of a scalar subquery that do not have equivalent
+  // columns in the outer query (bound by equality predicates like 'col = outer(c)').
+  // We use it to analyze whether a scalar subquery is guaranteed to return at most 1 row.
+  def nonEquivalentGroupbyCols(query: LogicalPlan, aggNode: Aggregate): ExpressionSet = {
+    val correlatedEquivalentExprs = getCorrelatedEquivalentInnerExpressions(query)
+    // Grouping expressions, except outer refs and constant expressions - grouping by an
+    // outer ref or a constant is always ok
+    val groupByExprs =
+    ExpressionSet(aggNode.groupingExpressions.filter(x => !x.isInstanceOf[OuterReference] &&
+      x.references.nonEmpty))
+    val nonEquivalentGroupByExprs = groupByExprs -- correlatedEquivalentExprs
+    nonEquivalentGroupByExprs
+  }
 }
 
 /**

@@ -187,14 +187,6 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-reset spark.sql.optimizer.scalarSubqueryUseSingleJoin
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 set spark.sql.optimizer.scalarSubqueryUseSingleJoin = true
 -- !query schema
 struct<key:string,value:string>
@@ -297,14 +289,6 @@ struct<x1:int,x2:int>
 
 -- !query
 reset spark.sql.legacy.scalarSubqueryAllowGroupByNonEqualityCorrelatedPredicate
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-reset spark.sql.optimizer.scalarSubqueryUseSingleJoin
 -- !query schema
 struct<>
 -- !query output

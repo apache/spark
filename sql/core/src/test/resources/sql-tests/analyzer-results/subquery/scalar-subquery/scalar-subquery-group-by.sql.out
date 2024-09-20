@@ -209,12 +209,6 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-reset spark.sql.optimizer.scalarSubqueryUseSingleJoin
--- !query analysis
-ResetCommand spark.sql.optimizer.scalarSubqueryUseSingleJoin
-
-
--- !query
 set spark.sql.optimizer.scalarSubqueryUseSingleJoin = true
 -- !query analysis
 SetCommand (spark.sql.optimizer.scalarSubqueryUseSingleJoin,Some(true))
@@ -346,9 +340,3 @@ Project [x1#x, x2#x]
 reset spark.sql.legacy.scalarSubqueryAllowGroupByNonEqualityCorrelatedPredicate
 -- !query analysis
 ResetCommand spark.sql.legacy.scalarSubqueryAllowGroupByNonEqualityCorrelatedPredicate
-
-
--- !query
-reset spark.sql.optimizer.scalarSubqueryUseSingleJoin
--- !query analysis
-ResetCommand spark.sql.optimizer.scalarSubqueryUseSingleJoin

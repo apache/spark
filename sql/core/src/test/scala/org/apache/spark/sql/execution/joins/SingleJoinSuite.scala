@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint, Project}
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest}
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
 
@@ -68,12 +67,12 @@ class SingleJoinSuite extends SparkPlanTest with SharedSparkSession {
 
 
   private def testSingleJoin(
-                              testName: String,
-                              leftRows: => DataFrame,
-                              rightRows: => DataFrame,
-                              condition: => Option[Expression],
-                              expectedAnswer: Seq[Row],
-                              expectError: Boolean = false): Unit = {
+      testName: String,
+      leftRows: => DataFrame,
+      rightRows: => DataFrame,
+      condition: => Option[Expression],
+      expectedAnswer: Seq[Row],
+      expectError: Boolean = false): Unit = {
 
     def extractJoinParts(): Option[ExtractEquiJoinKeys.ReturnType] = {
       val join = Join(leftRows.logicalPlan, rightRows.logicalPlan,
@@ -95,44 +94,9 @@ class SingleJoinSuite extends SparkPlanTest with SharedSparkSession {
 
     testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastHashJoin") { _ =>
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
-        withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-          val planFunction = (left: SparkPlan, right: SparkPlan) =>
-            EnsureRequirements.apply(BroadcastHashJoinExec(
-              leftKeys, rightKeys, LeftSingle, BuildRight, boundCondition, left, right))
-          if (expectError) {
-            checkSingleJoinError(planFunction)
-          } else {
-            checkAnswer2(leftRows, rightRows, planFunction,
-              expectedAnswer,
-              sortAnswers = true)
-          }
-        }
-      }
-    }
-    testWithWholeStageCodegenOnAndOff(s"$testName using ShuffledHashJoin") { _ =>
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
-        withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-          val planFunction = (left: SparkPlan, right: SparkPlan) =>
-            EnsureRequirements.apply(
-              ShuffledHashJoinExec(
-                leftKeys, rightKeys, LeftSingle, BuildRight, boundCondition, left, right))
-          if (expectError) {
-            checkSingleJoinError(planFunction)
-          } else {
-            checkAnswer2(leftRows, rightRows, planFunction,
-              expectedAnswer,
-              sortAnswers = true)
-          }
-        }
-      }
-    }
-
-
-    testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastNestedLoopJoin") { _ =>
-      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         val planFunction = (left: SparkPlan, right: SparkPlan) =>
-          EnsureRequirements.apply(
-            BroadcastNestedLoopJoinExec(left, right, BuildRight, LeftSingle, condition))
+          EnsureRequirements.apply(BroadcastHashJoinExec(
+            leftKeys, rightKeys, LeftSingle, BuildRight, boundCondition, left, right))
         if (expectError) {
           checkSingleJoinError(planFunction)
         } else {
@@ -140,6 +104,35 @@ class SingleJoinSuite extends SparkPlanTest with SharedSparkSession {
             expectedAnswer,
             sortAnswers = true)
         }
+      }
+    }
+    testWithWholeStageCodegenOnAndOff(s"$testName using ShuffledHashJoin") { _ =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
+        val planFunction = (left: SparkPlan, right: SparkPlan) =>
+          EnsureRequirements.apply(
+            ShuffledHashJoinExec(
+              leftKeys, rightKeys, LeftSingle, BuildRight, boundCondition, left, right))
+        if (expectError) {
+          checkSingleJoinError(planFunction)
+        } else {
+          checkAnswer2(leftRows, rightRows, planFunction,
+            expectedAnswer,
+            sortAnswers = true)
+        }
+      }
+    }
+
+
+    testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastNestedLoopJoin") { _ =>
+      val planFunction = (left: SparkPlan, right: SparkPlan) =>
+        EnsureRequirements.apply(
+          BroadcastNestedLoopJoinExec(left, right, BuildRight, LeftSingle, condition))
+      if (expectError) {
+        checkSingleJoinError(planFunction)
+      } else {
+        checkAnswer2(leftRows, rightRows, planFunction,
+          expectedAnswer,
+          sortAnswers = true)
       }
     }
   }

@@ -27,7 +27,6 @@ set spark.sql.optimizer.scalarSubqueryUseSingleJoin = false;
 select * from x where (select count(*) from y where y1 > x1 group by y1) = 1;
 select *, (select count(*) from y where y1 + y2 = x1 group by y1) from x;
 select *, (select count(*) from y where x1 = y1 and y2 + 10 = x1 + 1 group by y2) from x;
-reset spark.sql.optimizer.scalarSubqueryUseSingleJoin;
 
 -- Same queries, with LeftSingle join
 set spark.sql.optimizer.scalarSubqueryUseSingleJoin = true;
@@ -45,4 +44,3 @@ set spark.sql.legacy.scalarSubqueryAllowGroupByNonEqualityCorrelatedPredicate = 
 set spark.sql.optimizer.scalarSubqueryUseSingleJoin = false;
 select * from x where (select count(*) from y where y1 > x1 group by y1) = 1;
 reset spark.sql.legacy.scalarSubqueryAllowGroupByNonEqualityCorrelatedPredicate;
-reset spark.sql.optimizer.scalarSubqueryUseSingleJoin;

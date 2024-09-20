@@ -531,4 +531,4 @@ WHERE (SELECT max(t2c)
       ) between 1 and 2;
 
 
-SELECT * FROM t0 WHERE t0a = (SELECT distinct(t1c) FROM t1 WHERE t1a = t0a)
+SELECT * FROM t0 WHERE t0a = (SELECT distinct(t1c) FROM t1 WHERE t1a = t0a);

@@ -193,7 +193,7 @@ trait HashJoin extends JoinCodegenSupport {
   private def outerJoin(
       streamedIter: Iterator[InternalRow],
       hashedRelation: HashedRelation,
-      checkMatches: Int => Int): Iterator[InternalRow] = {
+      singleJoin: Boolean = false): Iterator[InternalRow] = {
     val joinedRow = new JoinedRow()
     val keyGenerator = streamSideKeyGenerator()
     val nullRow = new GenericInternalRow(buildPlan.output.length)
@@ -216,20 +216,20 @@ trait HashJoin extends JoinCodegenSupport {
         val buildIter = hashedRelation.get(rowKey)
         new RowIterator {
           private var found = false
-          private var matches = 0
           override def advanceNext(): Boolean = {
             while (buildIter != null && buildIter.hasNext) {
               val nextBuildRow = buildIter.next()
               if (boundCondition(joinedRow.withRight(nextBuildRow))) {
+                if (found && singleJoin) {
+                  throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows();
+                }
                 found = true
-                matches = checkMatches(matches)
                 return true
               }
             }
             if (!found) {
               joinedRow.withRight(nullRow)
               found = true
-              matches = 0
               return true
             }
             false
@@ -333,15 +333,9 @@ trait HashJoin extends JoinCodegenSupport {
       case _: InnerLike =>
         innerJoin(streamedIter, hashed)
       case LeftOuter | RightOuter =>
-        outerJoin(streamedIter, hashed, _ => 0)
+        outerJoin(streamedIter, hashed)
       case LeftSingle =>
-        val check: Int => Int = matches => {
-          if (matches > 0) {
-            throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows();
-          }
-          matches + 1
-        }
-        outerJoin(streamedIter, hashed, check)
+        outerJoin(streamedIter, hashed, singleJoin = true)
       case LeftSemi =>
         semiJoin(streamedIter, hashed)
       case LeftAnti =>
@@ -505,19 +499,11 @@ trait HashJoin extends JoinCodegenSupport {
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
       val found = ctx.freshName("found")
-      val matchesFound = ctx.freshName("matchesFound")
       // For LeftSingle joins generate the check on the number of build rows that match every
       // probe row. Return an error for >1 matches.
-      val initSingleCounter = if (joinType == LeftSingle) {
-        s"""
-           |int $matchesFound = 0;""".stripMargin
-      } else {
-        ""
-      }
       val evaluateSingleCheck = if (joinType == LeftSingle) {
         s"""
-           |$matchesFound = $matchesFound +  1;
-           |if ($matchesFound > 1) {
+           |if ($found) {
            |  throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows();
            |}
            |""".stripMargin
@@ -531,15 +517,14 @@ trait HashJoin extends JoinCodegenSupport {
          |// find matches from HashRelation
          |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
          |boolean $found = false;
-         |${initSingleCounter}
          |// the last iteration of this loop is to emit an empty row if there is no matched rows.
          |while ($matches != null && $matches.hasNext() || !$found) {
          |  UnsafeRow $matched = $matches != null && $matches.hasNext() ?
          |    (UnsafeRow) $matches.next() : null;
          |  ${checkCondition.trim}
          |  if ($conditionPassed) {
-         |    $found = true;
          |    $evaluateSingleCheck
+         |    $found = true;
          |    $numOutput.add(1);
          |    ${consume(ctx, resultVars)}
          |  }

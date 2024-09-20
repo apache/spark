@@ -140,13 +140,12 @@ case class BroadcastNestedLoopJoinExec(
    *   RightOuter with BuildLeft
    *   LeftSingle with BuildRight
    *
-   * For the (LeftSingle, BuildRight) case we pass 'checkMatches' function that
+   * For the (LeftSingle, BuildRight) case we pass 'singleJoin' flag that
    * makes sure there is at most 1 matching build row per every probe tuple.
-   * For all other cases, 'checkMatches' is a no-op.
    */
   private def outerJoin(
       relation: Broadcast[Array[InternalRow]],
-      checkMatches: Int => Int): RDD[InternalRow] = {
+      singleJoin: Boolean = false): RDD[InternalRow] = {
     streamed.execute().mapPartitionsInternal { streamedIter =>
       val buildRows = relation.value
       val joinedRow = new JoinedRow
@@ -162,8 +161,6 @@ case class BroadcastNestedLoopJoinExec(
         private var resultRow: InternalRow = null
         // the next index of buildRows to try
         private var nextIndex: Int = 0
-        // number of build rows matching the current probe row
-        private var matches: Int = 0
 
         @scala.annotation.tailrec
         private def findNextMatch(): Boolean = {
@@ -174,14 +171,15 @@ case class BroadcastNestedLoopJoinExec(
             streamRow = streamedIter.next()
             nextIndex = 0
             foundMatch = false
-            matches = 0
           }
           while (nextIndex < buildRows.length) {
             resultRow = joinedRow(streamRow, buildRows(nextIndex))
             nextIndex += 1
             if (boundCondition(resultRow)) {
+              if (foundMatch && singleJoin) {
+                throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows();
+              }
               foundMatch = true
-              matches = checkMatches(matches)
               return true
             }
           }
@@ -395,15 +393,9 @@ case class BroadcastNestedLoopJoinExec(
       case (_: InnerLike, _) =>
         innerJoin(broadcastedRelation)
       case (LeftOuter, BuildRight) | (RightOuter, BuildLeft) =>
-        outerJoin(broadcastedRelation, _ => 0)
+        outerJoin(broadcastedRelation)
       case (LeftSingle, BuildRight) =>
-        val checkMatches: Int => Int = matches => {
-          if (matches > 0) {
-            throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows();
-          }
-          matches + 1
-        }
-        outerJoin(broadcastedRelation, checkMatches)
+        outerJoin(broadcastedRelation, singleJoin = true)
       case (LeftSemi, _) =>
         leftExistenceJoin(broadcastedRelation, exists = true)
       case (LeftAnti, _) =>
@@ -515,7 +507,6 @@ case class BroadcastNestedLoopJoinExec(
     val shouldOutputRow = ctx.freshName("shouldOutputRow")
     val foundMatch = ctx.freshName("foundMatch")
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val matchesFound = ctx.freshName("matchesFound")
 
     if (buildRowArray.isEmpty) {
       s"""
@@ -525,16 +516,9 @@ case class BroadcastNestedLoopJoinExec(
        """.stripMargin
     } else {
       // For LeftSingle joins, generate the check on the number of matches.
-      val initSingleCounter = if (joinType == LeftSingle) {
-        s"""
-           |int $matchesFound = 0;""".stripMargin
-      } else {
-        ""
-      }
       val evaluateSingleCheck = if (joinType == LeftSingle) {
         s"""
-           |$matchesFound += 1;
-           |if ($matchesFound > 1) {
+           |if ($foundMatch) {
            |  throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows();
            |}
            |""".stripMargin
@@ -543,14 +527,13 @@ case class BroadcastNestedLoopJoinExec(
       }
       s"""
          |boolean $foundMatch = false;
-         |${initSingleCounter}
          |for (int $arrayIndex = 0; $arrayIndex < $buildRowArrayTerm.length; $arrayIndex++) {
          |  UnsafeRow $buildRow = (UnsafeRow) $buildRowArrayTerm[$arrayIndex];
          |  boolean $shouldOutputRow = false;
          |  $checkCondition {
+         |    $evaluateSingleCheck
          |    $shouldOutputRow = true;
          |    $foundMatch = true;
-         |    $evaluateSingleCheck
          |  }
          |  if ($arrayIndex == $buildRowArrayTerm.length - 1 && !$foundMatch) {
          |    $buildRow = null;

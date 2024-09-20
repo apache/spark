@@ -472,15 +472,14 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
      if (!aggNode.isDefined) {
        return false
      }
-     // This is the logic we currently use in CheckAnalysis for aggregates in scalar subqueries.
-     val correlatedEquivalentExprs = getCorrelatedEquivalentInnerExpressions(query)
-     // Grouping expressions, except outer refs and constant expressions - grouping by an
-     // outer ref or a constant is always ok
-     val groupByExprs =
-     ExpressionSet(aggNode.get.groupingExpressions.filter(x => !x.isInstanceOf[OuterReference] &&
-       x.references.nonEmpty))
-     val nonEquivalentGroupByExprs = groupByExprs -- correlatedEquivalentExprs
-     nonEquivalentGroupByExprs.isEmpty
+     println(s"AGG NODE ${aggNode}")
+     val aggregates = aggNode.get.expressions.flatMap(_.collect {
+       case a: AggregateExpression => a
+     })
+     if (aggregates.isEmpty) {
+       return false
+     }
+     nonEquivalentGroupbyCols(query, aggNode.get).isEmpty
    }
 
   private def rewriteSubQueries(plan: LogicalPlan): LogicalPlan = {
