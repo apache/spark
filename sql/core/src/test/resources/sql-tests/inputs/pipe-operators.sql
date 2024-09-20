@@ -133,6 +133,13 @@ table t
 (select x, sum(length(y)) as sum_len from t group by x)
 |> where x = 1;
 
+-- Filtering by referring to the table or table subquery alias.
+table t
+|> where t.x = 1;
+
+table t
+|> where spark_catalog.default.t.x = 1;
+
 -- Filtering using struct fields.
 (select col from st)
 |> where col.i1 = 1;

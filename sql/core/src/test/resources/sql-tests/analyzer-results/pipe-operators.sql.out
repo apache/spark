@@ -388,6 +388,24 @@ Filter (x#x = 1)
 
 
 -- !query
+table t
+|> where t.x = 1
+-- !query analysis
+Filter (x#x = 1)
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> where spark_catalog.default.t.x = 1
+-- !query analysis
+Filter (x#x = 1)
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
 (select col from st)
 |> where col.i1 = 1
 -- !query analysis

@@ -373,6 +373,24 @@ struct<x:int,sum_len:bigint>
 
 
 -- !query
+table t
+|> where t.x = 1
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+1	def
+
+
+-- !query
+table t
+|> where spark_catalog.default.t.x = 1
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+1	def
+
+
+-- !query
 (select col from st)
 |> where col.i1 = 1
 -- !query schema
