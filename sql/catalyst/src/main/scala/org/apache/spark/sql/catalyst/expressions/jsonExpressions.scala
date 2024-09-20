@@ -632,7 +632,8 @@ case class JsonToStructs(
     schema: DataType,
     options: Map[String, String],
     child: Expression,
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String] = None,
+    variantAllowDuplicateKeys: Boolean = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS))
   extends UnaryExpression
   with TimeZoneAwareExpression
   with CodegenFallback
@@ -717,8 +718,6 @@ case class JsonToStructs(
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  private val variantAllowDuplicateKeys = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)
-
   override def nullSafeEval(json: Any): Any = nullableSchema match {
     case _: VariantType =>
       VariantExpressionEvalUtils.parseJson(json.asInstanceOf[UTF8String],
@@ -738,6 +737,12 @@ case class JsonToStructs(
 
   override protected def withNewChildInternal(newChild: Expression): JsonToStructs =
     copy(child = newChild)
+}
+
+object JsonToStructs {
+  def unapply(
+      j: JsonToStructs): Option[(DataType, Map[String, String], Expression, Option[String])] =
+    Some((j.schema, j.options, j.child, j.timeZoneId))
 }
 
 /**
