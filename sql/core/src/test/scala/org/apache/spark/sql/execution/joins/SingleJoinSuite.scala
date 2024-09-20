@@ -122,7 +122,6 @@ class SingleJoinSuite extends SparkPlanTest with SharedSparkSession {
       }
     }
 
-
     testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastNestedLoopJoin") { _ =>
       val planFunction = (left: SparkPlan, right: SparkPlan) =>
         EnsureRequirements.apply(
@@ -202,5 +201,4 @@ class SingleJoinSuite extends SparkPlanTest with SharedSparkSession {
     right,
     Some(EqualTo(emptyFrame.col("c").expr, right.col("c").expr)),
     Seq.empty)
-
 }

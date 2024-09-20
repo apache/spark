@@ -472,7 +472,6 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
      if (!aggNode.isDefined) {
        return false
      }
-     println(s"AGG NODE ${aggNode}")
      val aggregates = aggNode.get.expressions.flatMap(_.collect {
        case a: AggregateExpression => a
      })
