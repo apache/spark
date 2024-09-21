@@ -36,7 +36,7 @@ import org.rocksdb.{RocksDB => NativeRocksDB, _}
 import org.rocksdb.CompressionType._
 import org.rocksdb.TickerType._
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.{LogEntry, Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -175,7 +175,7 @@ class RocksDB(
   @volatile private var lastCommittedCheckpointId: Option[String] = None
   @volatile protected var loadedCheckpointId: Option[String] = None
   @volatile protected var sessionCheckpointId: Option[String] = None
-  @volatile protected var versionToUniqueIdLineage: Array[(Long, Option[String])] = Array.empty
+  @volatile protected[sql] var versionToUniqueIdLineage: Array[(Long, Option[String])] = Array.empty
 
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
@@ -329,17 +329,33 @@ class RocksDB(
         println(s"wei-=-=load should trigger if? ${version != 0 && enableChangelogCheckpointing && checkpointFormatVersion >= 2}")
         println(s"wei-=-=load should trigger if? ${version}, ${enableChangelogCheckpointing}, ${checkpointFormatVersion}")
 
-        if (version != 0 && enableChangelogCheckpointing && checkpointFormatVersion >= 2) {
+        if (version != 0 && checkpointFormatVersion >= 2) {
           // TODO: changelog not always enabled?
-          val changelogReader = fileManager.getChangelogReader(
-            version, useColumnFamilies, checkpointUniqueId)
-          // currLineage contains the version -> uniqueId mapping from the previous snapshot file
-          // to current version's changelog file
-          versionToUniqueIdLineage = changelogReader.lineage.get.map {
-            case (version, uniqueId) => (version, Option(uniqueId))
+          // It is possible that change log checkpointing is first enabled and then disabled.
+          // In that case, loading changelog reader will fail
+          var changelogReader: StateStoreChangelogReader = null
+          try {
+            changelogReader = fileManager.getChangelogReader(
+              version, useColumnFamilies, checkpointUniqueId)
+            // currLineage contains the version -> uniqueId mapping from the previous snapshot file
+            // to current version's changelog file
+            versionToUniqueIdLineage = changelogReader.lineage.get.map {
+              case (version, uniqueId) => (version, Option(uniqueId))
+            }
+            println("wei== versionToUniqueIdLineage in load(): ")
+            versionToUniqueIdLineage.foreach(x => println("wei== " + x._1, x._2))
+            currLineage = Some(versionToUniqueIdLineage)
+          } catch {
+            // This can happen when you first load with changelog enabled and then disable it
+            case e: SparkException
+              if e.getErrorClass == "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE" =>
+            // do nothing
+            case e: Throwable =>
+              throw e
+          } finally {
+            if (changelogReader != null) changelogReader.closeIfNeeded()
+            if (currLineage.isEmpty) currLineage = Some(Array((version, checkpointUniqueId)))
           }
-          println("wei== versionToUniqueIdLineage in load(): ")
-          versionToUniqueIdLineage.foreach(x => println("wei== " + x._1, x._2))
         }
 
         val (latestSnapshotVersion, latestSnapshotUniqueId) = {
@@ -423,6 +439,9 @@ class RocksDB(
       if (conf.resetStatsOnLoad) {
         nativeStats.reset
       }
+      println("wei== versionToUniqueIdLineage in load(): ")
+      versionToUniqueIdLineage.foreach(x => println("wei== " + x._1, x._2))
+
       logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)} " +
         log"with uniqueId ${MDC(LogKeys.UUID, checkpointUniqueId)}")
     } catch {
@@ -535,12 +554,12 @@ class RocksDB(
       endVersion: Long,
       checkpointUniqueIdLineage: Option[Array[(Long, Option[String])]] = None): Unit = {
 
-    println("wei== replayChangelog(), endVersion: " + endVersion)
+    println("wei== replayChangelog(), endVersion: " + endVersion + " loadedVersion: " + loadedVersion)
     checkpointUniqueIdLineage.foreach(x => println("wei== checkpointUniqueIdLineage: " + x.mkString(", ")))
 
     val versionsAndUniqueIds = checkpointUniqueIdLineage match {
       // First entry of lineage corresponds to loadedVersion
-      case Some(lineage) => lineage.drop(1) // TODO: assert lineage.head == loadedVersion
+      case Some(lineage) => lineage // TODO: assert lineage.head == loadedVersion
       case None => (loadedVersion + 1 to endVersion).map((_, None)).toArray
     }
 
@@ -775,7 +794,6 @@ class RocksDB(
                 maxColumnFamilyId.get().toShort,
                 sessionCheckpointId))
             lastSnapshotVersion = newVersion
-            versionToUniqueIdLineage :+ (newVersion, sessionCheckpointId)
           }
         }
       }
@@ -784,6 +802,8 @@ class RocksDB(
         LastCommitBasedCheckpointId = loadedCheckpointId
         lastCommittedCheckpointId = sessionCheckpointId
         loadedCheckpointId = sessionCheckpointId
+        println("wei=-=-=-=-=--=-=- update verionToUniqueIdLineage")
+        versionToUniqueIdLineage = versionToUniqueIdLineage :+ (newVersion, sessionCheckpointId)
       }
 
       logInfo(log"Syncing checkpoint for ${MDC(LogKeys.VERSION_NUM, newVersion)} to DFS")

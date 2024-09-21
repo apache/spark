@@ -295,7 +295,6 @@ abstract class StateStoreChangelogReader(
   def readLineage(): Array[(Long, String)] = {
     val lineageStr = input.readUTF()
     lineageStr.split(" ").map { lineage =>
-      println("wei==lineage: " + lineage)
       val Array(version, uniqueId) = lineage.split(":")
       (version.toLong, uniqueId)
     }

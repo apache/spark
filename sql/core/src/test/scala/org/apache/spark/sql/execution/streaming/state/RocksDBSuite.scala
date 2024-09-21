@@ -94,11 +94,16 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
         .map(_.toLong)
         .sorted
         .toImmutableArraySeq
-      case _ => dir.listFiles.filter(_.getName.endsWith(".changelog"))
-        .map(_.getName.stripSuffix(".changelog").split("_"))
-        .map { case Array(version, _) => version.toLong }
-        .sorted
-        .toImmutableArraySeq
+      case _ =>
+        // scalastyle:off println
+        println("wei changelogverion: ")
+        dir.listFiles.filter(_.getName.endsWith(".changelog")).foreach(println)
+        // scalastyle:on println
+        dir.listFiles.filter(_.getName.endsWith(".changelog"))
+          .map(_.getName.stripSuffix(".changelog").split("_"))
+          .map { case Array(version, _) => version.toLong }
+          .sorted
+          .toImmutableArraySeq
     }
   }
 }
@@ -258,7 +263,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
         ex = intercept[SparkException] {
           db.load(1)
         }
-        if (checkpointFormatVersion == 2 && isChangelogCheckpointingEnabled) {
+        if (checkpointFormatVersion == 2) {
           checkError(
             ex,
             condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
@@ -453,6 +458,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
     }
   }
 
+  // TODO: incompatibility with the the state format version
+
   // A rocksdb instance with changelog checkpointing enabled should be able to load
   // an existing checkpoint without changelog.
   testWithCheckpointFormatVersion(
@@ -462,9 +469,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
     new File(remoteDir).delete() // to make sure that the directory gets created
     val disableChangelogCheckpointingConf =
       dbConf.copy(enableChangelogCheckpointing = false, minVersionsToRetain = 30)
+    val versionToUniqueId = new mutable.HashMap[Long, String]()
     withDB(remoteDir, conf = disableChangelogCheckpointingConf,
       useColumnFamilies = colFamiliesEnabled,
-      checkpointFormatVersion = checkpointFormatVersion) { db =>
+      checkpointFormatVersion = checkpointFormatVersion,
+      versionToUniqueId = versionToUniqueId) { db =>
       for (version <- 1 to 30) {
         db.load(version - 1)
         db.put(version.toString, version.toString)
@@ -481,7 +490,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
         minDeltasForSnapshot = 1)
     withDB(remoteDir, conf = enableChangelogCheckpointingConf,
       useColumnFamilies = colFamiliesEnabled,
-      checkpointFormatVersion = checkpointFormatVersion) { db =>
+      checkpointFormatVersion = checkpointFormatVersion,
+      versionToUniqueId = versionToUniqueId) { db =>
       for (version <- 1 to 30) {
         db.load(version)
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
@@ -509,7 +519,13 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       // Check that snapshots and changelogs get purged correctly.
       db.doMaintenance()
       assert(snapshotVersionsPresent(remoteDir, checkpointFormatVersion) === Seq(30, 60))
-      assert(changelogVersionsPresent(remoteDir, checkpointFormatVersion) === (30 to 60))
+      if (checkpointFormatVersion == 1) {
+        assert(changelogVersionsPresent(remoteDir, checkpointFormatVersion) === (30 to 60))
+      } else {
+        // In checkpoint format V2, a recommit would create a new changelog file
+        // with a different checkpointUniqueId
+        assert(changelogVersionsPresent(remoteDir, checkpointFormatVersion) === (30 to 60) :+ 60)
+      }
       // Verify the content of retained versions.
       for (version <- 30 to 60) {
         db.load(version, readOnly = true)
@@ -528,9 +544,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
     val enableChangelogCheckpointingConf =
       dbConf.copy(enableChangelogCheckpointing = true, minVersionsToRetain = 20,
         minDeltasForSnapshot = 3)
+    val versionToUniqueId = new mutable.HashMap[Long, String]()
     withDB(remoteDir, conf = enableChangelogCheckpointingConf,
       useColumnFamilies = colFamiliesEnabled,
-      checkpointFormatVersion = checkpointFormatVersion) { db =>
+      checkpointFormatVersion = checkpointFormatVersion,
+      versionToUniqueId = versionToUniqueId) { db =>
       for (version <- 1 to 30) {
         db.load(version - 1)
         db.put(version.toString, version.toString)
@@ -539,6 +557,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       }
     }
 
+    println("wei== 123 versionToUniqueId: " + versionToUniqueId)
+
     // Now disable changelog checkpointing in a checkpoint created by a state store
     // that enable changelog checkpointing.
     val disableChangelogCheckpointingConf =
@@ -546,7 +566,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       minDeltasForSnapshot = 1)
     withDB(remoteDir, conf = disableChangelogCheckpointingConf,
       useColumnFamilies = colFamiliesEnabled,
-      checkpointFormatVersion = checkpointFormatVersion) { db =>
+      checkpointFormatVersion = checkpointFormatVersion,
+      versionToUniqueId = versionToUniqueId) { db =>
       for (version <- 1 to 30) {
         db.load(version)
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
@@ -793,6 +814,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
     }
   }
 
+  // TODO: this
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write changelog") {
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
     val fileManager = new RocksDBFileManager(
@@ -2273,7 +2295,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       versionToUniqueId.put(loadedVersion + 1, sessionCheckpointId.get)
 
       println(s"wei== after commit version: $loadedVersion, current versionToUniqueId: " + versionToUniqueId.mkString(", "))
-      super.commit()
+      val ret = super.commit()
+      ret
     }
   }
 
