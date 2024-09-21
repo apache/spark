@@ -21,6 +21,7 @@ import org.apache.spark.{SparkException, SparkNumberFormatException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.exceptions.SqlScriptingException
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -702,7 +703,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
   }
 
   // This is disabled because it fails in non-ANSI mode
-  ignore("simple case mismatched types") {
+  test("simple case mismatched types") {
     val commands =
       """
         |BEGIN
@@ -712,18 +713,26 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         | END CASE;
         |END
         |""".stripMargin
-
-    checkError(
-      exception = intercept[SparkNumberFormatException] (
-        runSqlScript(commands)
-      ),
-      condition = "CAST_INVALID_INPUT",
-      parameters = Map(
-        "expression" -> "'one'",
-        "sourceType" -> "\"STRING\"",
-        "targetType" -> "\"BIGINT\""),
-      context = ExpectedContext(fragment = "\"one\"", start = 23, stop = 27)
-    )
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[SparkNumberFormatException](
+          runSqlScript(commands)
+        ),
+        condition = "CAST_INVALID_INPUT",
+        parameters = Map(
+          "expression" -> "'one'",
+          "sourceType" -> "\"STRING\"",
+          "targetType" -> "\"BIGINT\""),
+        context = ExpectedContext(fragment = "\"one\"", start = 23, stop = 27))
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[SqlScriptingException](
+          runSqlScript(commands)
+        ),
+        condition = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
+        parameters = Map("invalidStatement" -> "\"ONE\""))
+    }
   }
 
   test("simple case compare with null") {
