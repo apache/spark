@@ -29,7 +29,6 @@ from pyspark.testing.sqlutils import (
     have_pyarrow,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual
 
 if have_pyarrow:
     import pyarrow as pa
@@ -319,7 +318,7 @@ class GroupedMapInArrowTestsMixin:
             grouped_df = df.groupBy((col("id") / 4).cast("int"))
 
             actual = grouped_df.applyInArrow(func, "id long, value long").collect()
-            assertDataFrameEqual(actual, df.collect())
+            self.assertEqual(actual, df.collect())
 
     def test_apply_in_arrow_partial_iteration(self):
         with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 2}):
@@ -337,7 +336,7 @@ class GroupedMapInArrowTestsMixin:
             expected = [Row(value=x) for x in [0, 0, 1, 1, 2, 2, 3, 3]]
 
             actual = grouped_df.applyInArrow(func, "value long").collect()
-            assertDataFrameEqual(actual, expected)
+            self.assertEqual(actual, expected)
 
 
 class GroupedMapInArrowTests(GroupedMapInArrowTestsMixin):
