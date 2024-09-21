@@ -31,8 +31,6 @@ github:
     merge: false
     squash: true
     rebase: true
-  ghp_branch: master
-  ghp_path: /docs
 
 notifications:
   pullrequests: reviews@spark.apache.org
