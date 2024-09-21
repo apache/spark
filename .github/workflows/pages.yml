@@ -1,0 +1,92 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+name: GitHub Pages deployment
+
+on:
+  push:
+    branches:
+      - master
+
+concurrency:
+  group: 'docs preview'
+  cancel-in-progress: false
+
+jobs:
+  docs:
+    name: Build and deploy documentation
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      pages: write
+    environment:
+      name: github-pages # https://github.com/actions/deploy-pages/issues/271
+    env:
+      SPARK_TESTING: 1 # Reduce some noise in the logs
+      RELEASE_VERSION: 'In-Progress'
+    steps:
+      - name: Checkout Spark repository
+        uses: actions/checkout@v4
+        with:
+          repository: apache/spark
+          ref: 'master'
+      - name: Install Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 17
+      - name: Install Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+          architecture: x64
+          cache: 'pip'
+      - name: Install Python dependencies
+        run: pip install --upgrade -r dev/requirements.txt
+      - name: Install Ruby for documentation generation
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+      - name: Install Pandoc
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install pandoc
+      - name: Install dependencies for documentation generation
+        run: |
+          cd docs
+          gem install bundler -v 2.4.22 -n /usr/local/bin
+          bundle install --retry=100
+      - name: Run documentation build
+        run: |
+          sed -i".tmp1" 's/SPARK_VERSION:.*$/SPARK_VERSION: '"$RELEASE_VERSION"'/g' docs/_config.yml
+          sed -i".tmp2" 's/SPARK_VERSION_SHORT:.*$/SPARK_VERSION_SHORT: '"$RELEASE_VERSION"'/g' docs/_config.yml
+          sed -i".tmp3" "s/'facetFilters':.*$/'facetFilters': [\"version:$RELEASE_VERSION\"]/g" docs/_config.yml
+          sed -i".tmp4" 's/__version__: str = .*$/__version__: str = "'"$RELEASE_VERSION"'"/' python/pyspark/version.py
+          cd docs
+          SKIP_RDOC=1 bundle exec jekyll build
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'docs/_site'
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
