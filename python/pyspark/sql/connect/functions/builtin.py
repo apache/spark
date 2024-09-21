@@ -71,6 +71,7 @@ from pyspark.sql.types import (
     StringType,
 )
 from pyspark.sql.utils import enum_to_value as _enum_to_value
+from pyspark.util import JVM_INT_MAX
 
 # The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
 # for code reuse.
@@ -1126,11 +1127,12 @@ grouping_id.__doc__ = pysparkfuncs.grouping_id.__doc__
 
 def count_min_sketch(
     col: "ColumnOrName",
-    eps: "ColumnOrName",
-    confidence: "ColumnOrName",
-    seed: "ColumnOrName",
+    eps: Union[Column, float],
+    confidence: Union[Column, float],
+    seed: Optional[Union[Column, int]] = None,
 ) -> Column:
-    return _invoke_function_over_columns("count_min_sketch", col, eps, confidence, seed)
+    _seed = lit(random.randint(0, JVM_INT_MAX)) if seed is None else lit(seed)
+    return _invoke_function_over_columns("count_min_sketch", col, lit(eps), lit(confidence), _seed)
 
 
 count_min_sketch.__doc__ = pysparkfuncs.count_min_sketch.__doc__
@@ -2071,6 +2073,13 @@ def try_parse_json(col: "ColumnOrName") -> Column:
 try_parse_json.__doc__ = pysparkfuncs.try_parse_json.__doc__
 
 
+def to_variant_object(col: "ColumnOrName") -> Column:
+    return _invoke_function("to_variant_object", _to_col(col))
+
+
+to_variant_object.__doc__ = pysparkfuncs.to_variant_object.__doc__
+
+
 def parse_json(col: "ColumnOrName") -> Column:
     return _invoke_function("parse_json", _to_col(col))
 
@@ -2481,8 +2490,14 @@ def sentences(
 sentences.__doc__ = pysparkfuncs.sentences.__doc__
 
 
-def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
-    return _invoke_function("substring", _to_col(str), lit(pos), lit(len))
+def substring(
+    str: "ColumnOrName",
+    pos: Union["ColumnOrName", int],
+    len: Union["ColumnOrName", int],
+) -> Column:
+    _pos = lit(pos) if isinstance(pos, int) else _to_col(pos)
+    _len = lit(len) if isinstance(len, int) else _to_col(len)
+    return _invoke_function("substring", _to_col(str), _pos, _len)
 
 
 substring.__doc__ = pysparkfuncs.substring.__doc__

@@ -41,6 +41,7 @@ from pyspark.errors import (  # noqa: F401
     PythonException,
     UnknownException,
     SparkUpgradeException,
+    PySparkImportError,
     PySparkNotImplementedError,
     PySparkRuntimeError,
 )
@@ -113,6 +114,22 @@ def require_test_compiled() -> None:
             errorClass="TEST_CLASS_NOT_COMPILED",
             messageParameters={"test_class_path": test_class_path},
         )
+
+
+def require_minimum_plotly_version() -> None:
+    """Raise ImportError if plotly is not installed"""
+    minimum_plotly_version = "4.8"
+
+    try:
+        import plotly  # noqa: F401
+    except ImportError as error:
+        raise PySparkImportError(
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={
+                "package_name": "plotly",
+                "minimum_version": str(minimum_plotly_version),
+            },
+        ) from error
 
 
 class ForeachBatchFunction:
@@ -336,7 +353,7 @@ def try_remote_session_classmethod(f: FuncT) -> FuncT:
 
 def dispatch_df_method(f: FuncT) -> FuncT:
     """
-    For the usecases of direct DataFrame.union(df, ...), it checks if self
+    For the use cases of direct DataFrame.method(df, ...), it checks if self
     is a Connect DataFrame or Classic DataFrame, and dispatches.
     """
 
@@ -363,8 +380,8 @@ def dispatch_df_method(f: FuncT) -> FuncT:
 
 def dispatch_col_method(f: FuncT) -> FuncT:
     """
-    For the usecases of direct Column.method(col, ...), it checks if self
-    is a Connect DataFrame or Classic DataFrame, and dispatches.
+    For the use cases of direct Column.method(col, ...), it checks if self
+    is a Connect Column or Classic Column, and dispatches.
     """
 
     @functools.wraps(f)
@@ -390,8 +407,9 @@ def dispatch_col_method(f: FuncT) -> FuncT:
 
 def dispatch_window_method(f: FuncT) -> FuncT:
     """
-    For the usecases of direct Window.method(col, ...), it checks if self
-    is a Connect Window or Classic Window, and dispatches.
+    For use cases of direct Window.method(col, ...), this function dispatches
+    the call to either ConnectWindow or ClassicWindow based on the execution
+    environment.
     """
 
     @functools.wraps(f)
@@ -404,11 +422,6 @@ def dispatch_window_method(f: FuncT) -> FuncT:
             from pyspark.sql.classic.window import Window as ClassicWindow
 
             return getattr(ClassicWindow, f.__name__)(*args, **kwargs)
-
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": f"Window.{f.__name__}"},
-        )
 
     return cast(FuncT, wrapped)
 

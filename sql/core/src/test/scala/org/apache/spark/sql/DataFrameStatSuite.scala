@@ -143,7 +143,7 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         dfx.stat.freqItems(Array("num"))
       },
-      errorClass = "AMBIGUOUS_REFERENCE",
+      condition = "AMBIGUOUS_REFERENCE",
       parameters = Map(
         "name" -> "`num`",
         "referenceNames" -> "[`table1`.`num`, `table2`.`num`]"
@@ -155,7 +155,7 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         dfx.stat.approxQuantile("num", Array(0.1), 0.0)
       },
-      errorClass = "AMBIGUOUS_REFERENCE",
+      condition = "AMBIGUOUS_REFERENCE",
       parameters = Map(
         "name" -> "`num`",
         "referenceNames" -> "[`table1`.`num`, `table2`.`num`]"
@@ -167,7 +167,7 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         dfx.stat.cov("num", "num")
       },
-      errorClass = "AMBIGUOUS_REFERENCE",
+      condition = "AMBIGUOUS_REFERENCE",
       parameters = Map(
         "name" -> "`num`",
         "referenceNames" -> "[`table1`.`num`, `table2`.`num`]"
@@ -177,7 +177,7 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         dfx.stat.corr("num", "num")
       },
-      errorClass = "AMBIGUOUS_REFERENCE",
+      condition = "AMBIGUOUS_REFERENCE",
       parameters = Map(
         "name" -> "`num`",
         "referenceNames" -> "[`table1`.`num`, `table2`.`num`]"
@@ -588,7 +588,7 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkIllegalArgumentException] {
         person2.summary("foo")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2114",
+      condition = "_LEGACY_ERROR_TEMP_2114",
       parameters = Map("stats" -> "foo")
     )
 
@@ -596,7 +596,7 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkIllegalArgumentException] {
         person2.summary("foo%")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2113",
+      condition = "_LEGACY_ERROR_TEMP_2113",
       parameters = Map("stats" -> "foo%")
     )
   }

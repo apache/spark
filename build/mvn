@@ -58,7 +58,7 @@ install_app() {
   local local_checksum="${local_tarball}.${checksum_suffix}"
   local remote_checksum="https://archive.apache.org/dist/${url_path}.${checksum_suffix}"
 
-  local curl_opts="--retry 3 --retry-all-errors --silent --show-error -L"
+  local curl_opts="--retry 3 --silent --show-error -L"
   local wget_opts="--no-verbose"
 
   if [ ! -f "$binary" ]; then

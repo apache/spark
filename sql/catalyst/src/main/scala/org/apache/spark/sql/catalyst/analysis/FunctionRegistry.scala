@@ -384,7 +384,9 @@ object FunctionRegistry {
     expression[Rand]("rand"),
     expression[Rand]("random", true, Some("3.0.0")),
     expression[Randn]("randn"),
+    expression[RandStr]("randstr"),
     expression[Stack]("stack"),
+    expression[Uniform]("uniform"),
     expression[ZeroIfNull]("zeroifnull"),
     CaseWhen.registryEntry,
 
@@ -839,6 +841,7 @@ object FunctionRegistry {
     expressionBuilder("try_variant_get", TryVariantGetExpressionBuilder),
     expression[SchemaOfVariant]("schema_of_variant"),
     expression[SchemaOfVariantAgg]("schema_of_variant_agg"),
+    expression[ToVariantObject]("to_variant_object"),
 
     // cast
     expression[Cast]("cast"),
@@ -919,6 +922,7 @@ object FunctionRegistry {
   registerInternalExpression[EWM]("ewm")
   registerInternalExpression[NullIndex]("null_index")
   registerInternalExpression[CastTimestampNTZToLong]("timestamp_ntz_to_long")
+  registerInternalExpression[ArrayBinarySearch]("array_binary_search")
 
   private def makeExprInfoForVirtualOperator(name: String, usage: String): ExpressionInfo = {
     new ExpressionInfo(
@@ -1156,6 +1160,7 @@ object TableFunctionRegistry {
     generator[PosExplode]("posexplode"),
     generator[PosExplode]("posexplode_outer", outer = true),
     generator[Stack]("stack"),
+    generator[Collations]("collations"),
     generator[SQLKeywords]("sql_keywords"),
     generator[VariantExplode]("variant_explode"),
     generator[VariantExplode]("variant_explode_outer", outer = true)

@@ -57,7 +57,7 @@ private[spark] class DirectByteBufferOutputStream(capacity: Int) extends OutputS
     if (newCapacity < minCapacity) newCapacity = minCapacity
     val oldBuffer = buffer
     oldBuffer.flip()
-    val newBuffer = ByteBuffer.allocateDirect(newCapacity)
+    val newBuffer = Platform.allocateDirectBuffer(newCapacity)
     newBuffer.put(oldBuffer)
     StorageUtils.dispose(oldBuffer)
     buffer = newBuffer

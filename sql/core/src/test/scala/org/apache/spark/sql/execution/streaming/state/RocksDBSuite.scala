@@ -25,6 +25,7 @@ import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.language.implicitConversions
+import scala.util.Random
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
@@ -33,7 +34,7 @@ import org.rocksdb.CompressionType
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.{CreateAtomicTestManager, FileSystemBasedCheckpointFileManager}
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
@@ -166,7 +167,10 @@ trait AlsoTestWithChangelogCheckpointingEnabled
 @SlowSQLTest
 class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with SharedSparkSession {
 
-  sqlConf.setConf(SQLConf.STATE_STORE_PROVIDER_CLASS, classOf[RocksDBStateStoreProvider].getName)
+  override protected def sparkConf: SparkConf = {
+    super.sparkConf
+      .set(SQLConf.STATE_STORE_PROVIDER_CLASS, classOf[RocksDBStateStoreProvider].getName)
+  }
 
   testWithColumnFamilies(
     "RocksDB: check changelog and snapshot version",
@@ -201,7 +205,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
     checkError(
       ex,
-      errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
+      condition = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
       parameters = Map("version" -> "-1")
     )
     ex = intercept[SparkException] {
@@ -209,7 +213,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
     checkError(
       ex,
-      errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
+      condition = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
       parameters = Map("version" -> "-1")
     )
 
@@ -221,7 +225,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       }
       checkError(
         ex,
-        errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
+        condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
         parameters = Map(
           "fileToRead" -> s"$remoteDir/1.changelog"
         )
@@ -807,6 +811,47 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  testWithChangelogCheckpointingEnabled("RocksDB: ensure that changelog files are written " +
+    "and snapshots uploaded optionally with changelog format v2") {
+    withTempDir { dir =>
+      val remoteDir = Utils.createTempDir().toString
+      val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
+      new File(remoteDir).delete() // to make sure that the directory gets created
+      withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
+        db.createColFamilyIfAbsent("test")
+        db.load(0)
+        db.put("a", "1")
+        db.put("b", "2")
+        db.commit()
+        assert(changelogVersionsPresent(remoteDir) == Seq(1))
+        assert(snapshotVersionsPresent(remoteDir) == Seq(1))
+
+        db.load(1)
+        db.put("a", "3")
+        db.put("c", "4")
+        db.commit()
+
+        assert(changelogVersionsPresent(remoteDir) == Seq(1, 2))
+        assert(snapshotVersionsPresent(remoteDir) == Seq(1))
+
+        db.removeColFamilyIfExists("test")
+        db.load(2)
+        db.remove("a")
+        db.put("d", "5")
+        db.commit()
+        assert(changelogVersionsPresent(remoteDir) == Seq(1, 2, 3))
+        assert(snapshotVersionsPresent(remoteDir) == Seq(1, 3))
+
+        db.load(3)
+        db.put("e", "6")
+        db.remove("b")
+        db.commit()
+        assert(changelogVersionsPresent(remoteDir) == Seq(1, 2, 3, 4))
+        assert(snapshotVersionsPresent(remoteDir) == Seq(1, 3))
+      }
+    }
+  }
+
   test("RocksDB: ensure merge operation correctness") {
     withTempDir { dir =>
       val remoteDir = Utils.createTempDir().toString
@@ -1106,7 +1151,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         }
         checkError(
           ex,
-          errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
+          condition = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
           parameters = Map(
             "loggingId" -> "\\[Thread-\\d+\\]",
             "operationType" -> "load_store",
@@ -1134,7 +1179,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         }
         checkError(
           ex,
-          errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
+          condition = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
           parameters = Map(
             "loggingId" -> "\\[Thread-\\d+\\]",
             "operationType" -> "load_store",
@@ -1186,7 +1231,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       }
       checkError(
         e,
-        errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_CHECKPOINT",
+        condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_CHECKPOINT",
         parameters = Map(
           "expectedVersion" -> "v2",
           "actualVersion" -> "v1"
@@ -1770,6 +1815,138 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  testWithChangelogCheckpointingEnabled("reloading the same version") {
+    // Keep executing the same batch for two or more times. Some queries with ForEachBatch
+    // will cause this behavior.
+    // The test was accidentally fixed by SPARK-48586 (https://github.com/apache/spark/pull/47130)
+    val remoteDir = Utils.createTempDir().toString
+    val conf = dbConf.copy(minDeltasForSnapshot = 2, compactOnCommit = false)
+    new File(remoteDir).delete() // to make sure that the directory gets created
+    withDB(remoteDir, conf = conf) { db =>
+      // load the same version of pending snapshot uploading
+      // This is possible because after committing version x, we can continue to x+1, and replay
+      // x+1. The replay will load a checkpoint by version x. At this moment, the snapshot
+      // uploading may not be finished.
+      // Previously this generated a problem: new files generated by reloading are added to
+      // local -> cloud file map and the information is used to skip some files uploading, which is
+      // wrong because these files aren't a part of the RocksDB checkpoint.
+      // This test was accidentally fixed by
+      // SPARK-48931 (https://github.com/apache/spark/pull/47393)
+
+      db.load(0)
+      db.put("foo", "bar")
+      // Snapshot checkpoint not needed
+      db.commit()
+
+      // Continue using local DB
+      db.load(1)
+      db.put("foo", "bar")
+      // Should create a local RocksDB snapshot
+      db.commit()
+      // Upload the local RocksDB snapshot to the cloud with 2.zip
+      db.doMaintenance()
+
+      // This will reload Db from the cloud.
+      db.load(1)
+      db.put("foo", "bar")
+      // Should create another local snapshot
+      db.commit()
+
+      // Continue using local DB
+      db.load(2)
+      db.put("foo", "bar")
+      // Snapshot checkpoint not needed
+      db.commit()
+
+      // Reload DB from the cloud, loading from 2.zip
+      db.load(2)
+      db.put("foo", "bar")
+      // Snapshot checkpoint not needed
+      db.commit()
+
+      // Will upload local snapshot and overwrite 2.zip
+      db.doMaintenance()
+
+      // Reload new 2.zip just uploaded to validate it is not corrupted.
+      db.load(2)
+      db.put("foo", "bar")
+      db.commit()
+
+      // Test the maintenance thread is delayed even after the next snapshot is created.
+      // There will be two outstanding snapshots.
+      for (batchVersion <- 3 to 6) {
+        db.load(batchVersion)
+        db.put("foo", "bar")
+        // In batchVersion 3 and 5, it will generate a local snapshot but won't be uploaded.
+        db.commit()
+      }
+      db.doMaintenance()
+
+      // Test the maintenance is called after each batch. This tests a common case where
+      // maintenance tasks finish quickly.
+      for (batchVersion <- 7 to 10) {
+        for (j <- 0 to 1) {
+          db.load(batchVersion)
+          db.put("foo", "bar")
+          db.commit()
+          db.doMaintenance()
+        }
+      }
+    }
+  }
+
+  for (randomSeed <- 1 to 8) {
+    for (ifTestSkipBatch <- 0 to 1) {
+      testWithChangelogCheckpointingEnabled(
+        s"randomized snapshotting $randomSeed ifTestSkipBatch $ifTestSkipBatch") {
+        // The unit test simulates the case where batches can be reloaded and maintenance tasks
+        // can be delayed. After each batch, we randomly decide whether we would move onto the
+        // next batch, and whetehr maintenance task is executed.
+        val remoteDir = Utils.createTempDir().toString
+        val conf = dbConf.copy(minDeltasForSnapshot = 3, compactOnCommit = false)
+        new File(remoteDir).delete() // to make sure that the directory gets created
+        withDB(remoteDir, conf = conf) { db =>
+          // A second DB is opened to simulate another executor that runs some batches that
+          // skipped in the current DB.
+          withDB(remoteDir, conf = conf) { db2 =>
+            val random = new Random(randomSeed)
+            var curVer: Int = 0
+            for (i <- 1 to 100) {
+              db.load(curVer)
+              db.put("foo", "bar")
+              db.commit()
+              // For a one in five chance, maintenance task is executed. The chance is created to
+              // simulate the case where snapshot isn't immediatelly uploaded, and even delayed
+              // so that the next snapshot is ready. We create a snapshot in every 3 batches, so
+              // with 1/5 chance, it is more likely to create longer maintenance delay.
+              if (random.nextInt(5) == 0) {
+                db.doMaintenance()
+              }
+              // For half the chance, we move to the next version, and half the chance we keep the
+              // same version. When the same version is kept, the DB will be reloaded.
+              if (random.nextInt(2) == 0) {
+                val inc = if (ifTestSkipBatch == 1) {
+                  random.nextInt(3)
+                } else {
+                  1
+                }
+                if (inc > 1) {
+                  // Create changelog files in the gap
+                  for (j <- 1 to inc - 1) {
+                    db2.load(curVer + j)
+                    db2.put("foo", "bar")
+                    db2.commit()
+                  }
+                }
+                curVer = curVer + inc
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("validate Rocks DB SST files do not have a VersionIdMismatch" +
     " when metadata file is not overwritten - scenario 1") {
     val fmClass = "org.apache.spark.sql.execution.streaming.state." +
@@ -2024,9 +2201,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  private def sqlConf = SQLConf.get.clone()
-
-  private def dbConf = RocksDBConf(StateStoreConf(sqlConf))
+  private def dbConf = RocksDBConf(StateStoreConf(SQLConf.get.clone()))
 
   def withDB[T](
       remoteDir: String,

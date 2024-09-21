@@ -686,7 +686,7 @@ class CollationSQLExpressionsSuite
           val testQuery = sql(query)
           testQuery.collect()
         },
-        errorClass = "INVALID_FORMAT.MISMATCH_INPUT",
+        condition = "INVALID_FORMAT.MISMATCH_INPUT",
         parameters = Map("inputType" -> "\"STRING\"", "input" -> "xx", "format" -> "999")
       )
     }
@@ -982,6 +982,7 @@ class CollationSQLExpressionsSuite
       StringToMapTestCase("1/AX2/BX3/C", "x", "/", "UNICODE_CI",
         Map("1" -> "A", "2" -> "B", "3" -> "C"))
     )
+    val unsupportedTestCase = StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UNICODE_AI", null)
     testCases.foreach(t => {
       // Unit test.
       val text = Literal.create(t.text, StringType(t.collation))
@@ -996,6 +997,29 @@ class CollationSQLExpressionsSuite
         assert(sql(query).schema.fields.head.dataType.sameType(dataType))
       }
     })
+    // Test unsupported collation.
+    withSQLConf(SQLConf.DEFAULT_COLLATION.key -> unsupportedTestCase.collation) {
+      val query =
+        s"select str_to_map('${unsupportedTestCase.text}', '${unsupportedTestCase.pairDelim}', " +
+        s"'${unsupportedTestCase.keyValueDelim}')"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(query).collect()
+        },
+        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        sqlState = Some("42K09"),
+        parameters = Map(
+          "sqlExpr" -> ("\"str_to_map('a:1,b:2,c:3' collate UNICODE_AI, " +
+            "'?' collate UNICODE_AI, '?' collate UNICODE_AI)\""),
+          "paramIndex" -> "first",
+          "inputSql" -> "\"'a:1,b:2,c:3' collate UNICODE_AI\"",
+          "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
+          "requiredType" -> "\"STRING\""),
+        context = ExpectedContext(
+          fragment = "str_to_map('a:1,b:2,c:3', '?', '?')",
+          start = 7,
+          stop = 41))
+    }
   }
 
   test("Support RaiseError misc expression with collation") {
@@ -1015,7 +1039,7 @@ class CollationSQLExpressionsSuite
           exception = intercept[SparkRuntimeException] {
             sql(query).collect()
           },
-          errorClass = "USER_RAISED_EXCEPTION",
+          condition = "USER_RAISED_EXCEPTION",
           parameters = Map("errorMessage" -> t.errorMessage)
         )
       }
@@ -1193,7 +1217,7 @@ class CollationSQLExpressionsSuite
       exception = intercept[AnalysisException] {
         sql("SELECT mask(collate('ab-CD-12-@$','UNICODE'),collate('X','UNICODE_CI'),'x','0','#')")
       },
-      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      condition = "COLLATION_MISMATCH.EXPLICIT",
       parameters = Map("explicitTypes" -> "`string collate UNICODE`, `string collate UNICODE_CI`")
     )
   }
@@ -1385,7 +1409,7 @@ class CollationSQLExpressionsSuite
           val testQuery = sql(query)
           testQuery.collect()
         },
-        errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map("badRecord" -> "{\"a\":1,", "failFastMode" -> "FAILFAST")
       )
     }
@@ -1489,7 +1513,7 @@ class CollationSQLExpressionsSuite
           val testQuery = sql(query)
           testQuery.collect()
         },
-        errorClass = "INVALID_VARIANT_CAST",
+        condition = "INVALID_VARIANT_CAST",
         parameters = Map("value" -> "\"Spark\"", "dataType" -> "\"INT\"")
       )
     }
@@ -1576,9 +1600,9 @@ class CollationSQLExpressionsSuite
       SchemaOfVariantTestCase("null", "UTF8_BINARY", "VOID"),
       SchemaOfVariantTestCase("[]", "UTF8_LCASE", "ARRAY<VOID>"),
       SchemaOfVariantTestCase("[{\"a\":true,\"b\":0}]", "UNICODE",
-        "ARRAY<STRUCT<a: BOOLEAN, b: BIGINT>>"),
+        "ARRAY<OBJECT<a: BOOLEAN, b: BIGINT>>"),
       SchemaOfVariantTestCase("[{\"A\":\"x\",\"B\":-1.00}]", "UNICODE_CI",
-        "ARRAY<STRUCT<A: STRING COLLATE UNICODE_CI, B: DECIMAL(1,0)>>")
+        "ARRAY<OBJECT<A: STRING COLLATE UNICODE_CI, B: DECIMAL(1,0)>>")
     )
 
     // Supported collations
@@ -1607,9 +1631,9 @@ class CollationSQLExpressionsSuite
       SchemaOfVariantAggTestCase("('1'), ('2'), ('3')", "UTF8_BINARY", "BIGINT"),
       SchemaOfVariantAggTestCase("('true'), ('false'), ('true')", "UTF8_LCASE", "BOOLEAN"),
       SchemaOfVariantAggTestCase("('{\"a\": 1}'), ('{\"b\": true}'), ('{\"c\": 1.23}')",
-        "UNICODE", "STRUCT<a: BIGINT, b: BOOLEAN, c: DECIMAL(3,2)>"),
+        "UNICODE", "OBJECT<a: BIGINT, b: BOOLEAN, c: DECIMAL(3,2)>"),
       SchemaOfVariantAggTestCase("('{\"A\": \"x\"}'), ('{\"B\": 9.99}'), ('{\"C\": 0}')",
-        "UNICODE_CI", "STRUCT<A: STRING COLLATE UNICODE_CI, B: DECIMAL(3,2), C: BIGINT>")
+        "UNICODE_CI", "OBJECT<A: STRING COLLATE UNICODE_CI, B: DECIMAL(3,2), C: BIGINT>")
     )
 
     // Supported collations
@@ -1770,7 +1794,7 @@ class CollationSQLExpressionsSuite
             exception = intercept[AnalysisException] {
               sql(query)
             },
-            errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+            condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
             parameters = params,
             queryContext = Array(
               ExpectedContext(objectType = "",
@@ -1821,7 +1845,7 @@ class CollationSQLExpressionsSuite
             exception = intercept[AnalysisException] {
               sql(query)
             },
-            errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+            condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
             parameters = params,
             queryContext = Array(
               ExpectedContext(objectType = "",
@@ -1869,7 +1893,7 @@ class CollationSQLExpressionsSuite
             exception = intercept[AnalysisException] {
               sql(query)
             },
-            errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+            condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
             parameters = params,
             queryContext = Array(
               ExpectedContext(objectType = "",
@@ -2319,7 +2343,7 @@ class CollationSQLExpressionsSuite
       exception = intercept[ExtendedAnalysisException] {
         sql(queryFail).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_STATIC_METHOD",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_STATIC_METHOD",
       parameters = Map(
         "methodName" -> "toHexString",
         "className" -> "java.lang.Integer",

@@ -22,7 +22,8 @@
         "functionName": "avg",
         "arguments": [{
           "unresolvedAttribute": {
-            "unparsedIdentifier": "a"
+            "unparsedIdentifier": "a",
+            "planId": "0"
           }
         }]
       }
@@ -31,7 +32,8 @@
         "functionName": "avg",
         "arguments": [{
           "unresolvedAttribute": {
-            "unparsedIdentifier": "b"
+            "unparsedIdentifier": "b",
+            "planId": "0"
           }
         }]
       }

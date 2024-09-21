@@ -120,6 +120,69 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.Window"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.Window$"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.WindowSpec"),
+
+    // SPARK-49423: Consolidate Observation in sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Observation"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Observation$"),
+
+    // SPARK-49414: Remove Logging from DataFrameReader.
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.DataFrameReader"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logName"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.log"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logInfo"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logDebug"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logTrace"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logWarning"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logError"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logInfo"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logDebug"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logTrace"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logWarning"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logError"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.isTraceEnabled"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.initializeLogIfNecessary"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.initializeLogIfNecessary"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.initializeLogIfNecessary$default$2"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.initializeForcefully"),
+
+    // SPARK-49425: Create a shared DataFrameWriter interface.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrameWriter"),
+
+    // SPARK-49284: Shared Catalog interface.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.catalog.CatalogMetadata"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.catalog.Column"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.catalog.Database"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.catalog.Function"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.catalog.Table"),
+
+    // SPARK-49426: Shared DataFrameWriterV2
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CreateTableWriter"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrameWriterV2"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WriteConfigMethods"),
+
+    // SPARK-49424: Shared Encoders
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders$"),
+
+    // SPARK-49413: Create a shared RuntimeConfig interface.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RuntimeConfig"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RuntimeConfig$"),
+
+    // SPARK-49287: Shared Streaming interfaces
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.scheduler.SparkListenerEvent"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ForeachWriter"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.SourceProgress"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.SourceProgress$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StateOperatorProgress"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StateOperatorProgress$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener$Event"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener$QueryIdleEvent"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener$QueryProgressEvent"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener$QueryStartedEvent"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener$QueryTerminatedEvent"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryStatus"),
   )
 
   // Default exclude rules
@@ -138,6 +201,8 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.execution.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.internal.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.errors.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.classic.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.connect.*"),
     // DSv2 catalog and expression APIs are unstable yet. We should enable this back.
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.catalog.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.expressions.*"),
