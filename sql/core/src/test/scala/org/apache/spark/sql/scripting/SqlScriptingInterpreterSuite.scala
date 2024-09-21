@@ -702,7 +702,6 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(commands, expected)
   }
 
-  // This is disabled because it fails in non-ANSI mode
   test("simple case mismatched types") {
     val commands =
       """
