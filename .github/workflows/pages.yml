@@ -20,9 +20,10 @@
 name: GitHub Pages deployment
 
 on:
-  push:
-    branches:
-      - master
+#  push:
+#    branches:
+#      - master
+  workflow_dispatch:
 
 concurrency:
   group: 'docs preview'
