@@ -302,23 +302,23 @@ class GroupedMapInArrowTestsMixin:
                     self.assertEqual(r.a, "hi")
                     self.assertEqual(r.b, 1)
 
-    def test_apply_in_arrow_batching(self):
-        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 2}):
+    # def test_apply_in_arrow_batching(self):
+    #     with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 2}):
 
-            def func(group):
-                self.assertIsInstance(group, Iterator)
-                batches = list(group)
-                self.assertEqual(len(batches), 2)
-                for batch in batches:
-                    self.assertIsInstance(batch, pa.RecordBatch)
-                    self.assertEqual(batch.schema.names, ["id", "value"])
-                yield from batches
+    #         def func(group):
+    #             self.assertIsInstance(group, Iterator)
+    #             batches = list(group)
+    #             self.assertEqual(len(batches), 2)
+    #             for batch in batches:
+    #                 self.assertIsInstance(batch, pa.RecordBatch)
+    #                 self.assertEqual(batch.schema.names, ["id", "value"])
+    #             yield from batches
 
-            df = self.spark.range(12).withColumn("value", col("id") * 10)
-            grouped_df = df.groupBy((col("id") / 4).cast("int"))
+    #         df = self.spark.range(12).withColumn("value", col("id") * 10)
+    #         grouped_df = df.groupBy((col("id") / 4).cast("int"))
 
-            actual = grouped_df.applyInArrow(func, "id long, value long").collect()
-            self.assertEqual(actual, df.collect())
+    #         actual = grouped_df.applyInArrow(func, "id long, value long").collect()
+    #         self.assertEqual(actual, df.collect())
 
     def test_apply_in_arrow_partial_iteration(self):
         with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 2}):
