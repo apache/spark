@@ -777,7 +777,18 @@ public final class CollationFactory {
           throw collationInvalidNameException(originalName);
         } else {
           String locale = collationName.substring(0, lastPos);
-          String remainingSpecifiers = collationName.substring(lastPos);
+          int collationId = ICULocaleToId.get(ICULocaleMapUppercase.get(locale));
+
+          // No other specifiers present.
+          if(collationName.equals(locale)){
+            return collationId;
+          }
+
+          if(collationName.charAt(locale.length()) != '_'){
+            throw collationInvalidNameException(originalName);
+          }
+          // Extract remaining specifiers and trim "_" separator.
+          String remainingSpecifiers = collationName.substring(lastPos + 1);
 
           // Initialize default specifier flags.
           boolean isCaseSpecifierSet = false;
@@ -788,8 +799,6 @@ public final class CollationFactory {
           SpaceTrimming spaceTrimming = SpaceTrimming.TRIM;          // Default: No Trim
 
           String[] specifiers = remainingSpecifiers.split("_");
-
-          int collationId = ICULocaleToId.get(ICULocaleMapUppercase.get(locale));
 
           // Iterate through specifiers and set corresponding flags
           for (String specifier : specifiers) {
