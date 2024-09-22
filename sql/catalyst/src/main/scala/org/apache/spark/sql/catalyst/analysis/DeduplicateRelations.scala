@@ -105,11 +105,15 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
     case p: LogicalPlan if p.isStreaming => (plan, false)
 
     case m: MultiInstanceRelation =>
-      deduplicateAndRenew[LogicalPlan with MultiInstanceRelation](
-        existingRelations,
-        m,
-        _.output.map(_.exprId.id),
-        node => node.newInstance().asInstanceOf[LogicalPlan with MultiInstanceRelation])
+      val planWrapper = RelationWrapper(m.getClass, m.output.map(_.exprId.id))
+      if (existingRelations.contains(planWrapper)) {
+        val newNode = m.newInstance()
+        newNode.copyTagsFrom(m)
+        (newNode, true)
+      } else {
+        existingRelations.add(planWrapper)
+        (m, false)
+      }
 
     case p: Project =>
       deduplicateAndRenew[Project](

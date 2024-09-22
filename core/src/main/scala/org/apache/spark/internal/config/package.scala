@@ -271,6 +271,18 @@ package object config {
       .toSequence
       .createWithDefault(GarbageCollectionMetrics.OLD_GENERATION_BUILTIN_GARBAGE_COLLECTORS)
 
+  private[spark] val EVENT_LOG_INCLUDE_TASK_METRICS_ACCUMULATORS =
+    ConfigBuilder("spark.eventLog.includeTaskMetricsAccumulators")
+      .doc("Whether to include TaskMetrics' underlying accumulator values in the event log (as " +
+        "part of the Task/Stage/Job metrics' 'Accumulables' fields. This configuration defaults " +
+        "to false because the TaskMetrics values are already logged in the 'Task Metrics' " +
+        "fields (so the accumulator updates are redundant). This flag exists only as a " +
+        "backwards-compatibility escape hatch for applications that might rely on the old " +
+        "behavior. See SPARK-42204 for details.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite")
       .version("1.0.0")
@@ -1374,7 +1386,6 @@ package object config {
 
   private[spark] val SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR =
     ConfigBuilder("spark.shuffle.accurateBlockSkewedFactor")
-      .internal()
       .doc("A shuffle block is considered as skewed and will be accurately recorded in " +
         "HighlyCompressedMapStatus if its size is larger than this factor multiplying " +
         "the median shuffle block size or SHUFFLE_ACCURATE_BLOCK_THRESHOLD. It is " +

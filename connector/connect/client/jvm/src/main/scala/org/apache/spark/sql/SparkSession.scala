@@ -17,11 +17,13 @@
 package org.apache.spark.sql
 
 import java.net.URI
+import java.nio.file.{Files, Paths}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
+import scala.util.Try
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import io.grpc.ClientInterceptor
@@ -39,7 +41,7 @@ import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, Spar
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.{CatalogImpl, SessionCleaner, SqlApiConf}
+import org.apache.spark.sql.internal.{CatalogImpl, ConnectRuntimeConfig, SessionCleaner, SqlApiConf}
 import org.apache.spark.sql.internal.ColumnNodeToProtoConverter.{toExpr, toTypedExpr}
 import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.streaming.StreamingQueryManager
@@ -67,7 +69,7 @@ import org.apache.spark.util.ArrayImplicits._
 class SparkSession private[sql] (
     private[sql] val client: SparkConnectClient,
     private val planIdGenerator: AtomicLong)
-    extends api.SparkSession[Dataset]
+    extends api.SparkSession
     with Logging {
 
   private[this] val allocator = new RootAllocator()
@@ -86,16 +88,8 @@ class SparkSession private[sql] (
     client.hijackServerSideSessionIdForTesting(suffix)
   }
 
-  /**
-   * Runtime configuration interface for Spark.
-   *
-   * This is the interface through which the user can get and set all Spark configurations that
-   * are relevant to Spark SQL. When getting the value of a config, his defaults to the value set
-   * in server, if any.
-   *
-   * @since 3.4.0
-   */
-  val conf: RuntimeConfig = new RuntimeConfig(client)
+  /** @inheritdoc */
+  val conf: RuntimeConfig = new ConnectRuntimeConfig(client)
 
   /** @inheritdoc */
   @transient
@@ -212,16 +206,7 @@ class SparkSession private[sql] (
     sql(query, Array.empty)
   }
 
-  /**
-   * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
-   * `DataFrame`.
-   * {{{
-   *   sparkSession.read.parquet("/path/to/file.parquet")
-   *   sparkSession.read.schema(schema).json("/path/to/file.json")
-   * }}}
-   *
-   * @since 3.4.0
-   */
+  /** @inheritdoc */
   def read: DataFrameReader = new DataFrameReader(this)
 
   /**
@@ -237,12 +222,7 @@ class SparkSession private[sql] (
 
   lazy val streams: StreamingQueryManager = new StreamingQueryManager(this)
 
-  /**
-   * Interface through which the user may create, drop, alter or query underlying databases,
-   * tables, functions etc.
-   *
-   * @since 3.5.0
-   */
+  /** @inheritdoc */
   lazy val catalog: Catalog = new CatalogImpl(this)
 
   /** @inheritdoc */
@@ -440,7 +420,7 @@ class SparkSession private[sql] (
    *
    * @since 3.5.0
    */
-  def interruptAll(): Seq[String] = {
+  override def interruptAll(): Seq[String] = {
     client.interruptAll().getInterruptedIdsList.asScala.toSeq
   }
 
@@ -453,7 +433,7 @@ class SparkSession private[sql] (
    *
    * @since 3.5.0
    */
-  def interruptTag(tag: String): Seq[String] = {
+  override def interruptTag(tag: String): Seq[String] = {
     client.interruptTag(tag).getInterruptedIdsList.asScala.toSeq
   }
 
@@ -466,7 +446,7 @@ class SparkSession private[sql] (
    *
    * @since 3.5.0
    */
-  def interruptOperation(operationId: String): Seq[String] = {
+  override def interruptOperation(operationId: String): Seq[String] = {
     client.interruptOperation(operationId).getInterruptedIdsList.asScala.toSeq
   }
 
@@ -497,65 +477,17 @@ class SparkSession private[sql] (
     SparkSession.onSessionClose(this)
   }
 
-  /**
-   * Add a tag to be assigned to all the operations started by this thread in this session.
-   *
-   * Often, a unit of execution in an application consists of multiple Spark executions.
-   * Application programmers can use this method to group all those jobs together and give a group
-   * tag. The application can use `org.apache.spark.sql.SparkSession.interruptTag` to cancel all
-   * running running executions with this tag. For example:
-   * {{{
-   * // In the main thread:
-   * spark.addTag("myjobs")
-   * spark.range(10).map(i => { Thread.sleep(10); i }).collect()
-   *
-   * // In a separate thread:
-   * spark.interruptTag("myjobs")
-   * }}}
-   *
-   * There may be multiple tags present at the same time, so different parts of application may
-   * use different tags to perform cancellation at different levels of granularity.
-   *
-   * @param tag
-   *   The tag to be added. Cannot contain ',' (comma) character or be an empty string.
-   *
-   * @since 3.5.0
-   */
-  def addTag(tag: String): Unit = {
-    client.addTag(tag)
-  }
+  /** @inheritdoc */
+  override def addTag(tag: String): Unit = client.addTag(tag)
 
-  /**
-   * Remove a tag previously added to be assigned to all the operations started by this thread in
-   * this session. Noop if such a tag was not added earlier.
-   *
-   * @param tag
-   *   The tag to be removed. Cannot contain ',' (comma) character or be an empty string.
-   *
-   * @since 3.5.0
-   */
-  def removeTag(tag: String): Unit = {
-    client.removeTag(tag)
-  }
+  /** @inheritdoc */
+  override def removeTag(tag: String): Unit = client.removeTag(tag)
 
-  /**
-   * Get the tags that are currently set to be assigned to all the operations started by this
-   * thread.
-   *
-   * @since 3.5.0
-   */
-  def getTags(): Set[String] = {
-    client.getTags()
-  }
+  /** @inheritdoc */
+  override def getTags(): Set[String] = client.getTags()
 
-  /**
-   * Clear the current thread's operation tags.
-   *
-   * @since 3.5.0
-   */
-  def clearTags(): Unit = {
-    client.clearTags()
-  }
+  /** @inheritdoc */
+  override def clearTags(): Unit = client.clearTags()
 
   /**
    * We cannot deserialize a connect [[SparkSession]] because of a class clash on the server side.
@@ -591,6 +523,10 @@ class SparkSession private[sql] (
 object SparkSession extends Logging {
   private val MAX_CACHED_SESSIONS = 100
   private val planIdGenerator = new AtomicLong
+  private var server: Option[Process] = None
+  private[sql] val sparkOptions = sys.props.filter { p =>
+    p._1.startsWith("spark.") && p._2.nonEmpty
+  }.toMap
 
   private val sessions = CacheBuilder
     .newBuilder()
@@ -621,6 +557,51 @@ object SparkSession extends Logging {
     if (getActiveSession.isEmpty) {
       setActiveSession(session)
     }
+  }
+
+  /**
+   * Create a new Spark Connect server to connect locally.
+   */
+  private[sql] def withLocalConnectServer[T](f: => T): T = {
+    synchronized {
+      val remoteString = sparkOptions
+        .get("spark.remote")
+        .orElse(Option(System.getProperty("spark.remote"))) // Set from Spark Submit
+        .orElse(sys.env.get(SparkConnectClient.SPARK_REMOTE))
+
+      val maybeConnectScript =
+        Option(System.getenv("SPARK_HOME")).map(Paths.get(_, "sbin", "start-connect-server.sh"))
+
+      if (server.isEmpty &&
+        remoteString.exists(_.startsWith("local")) &&
+        maybeConnectScript.exists(Files.exists(_))) {
+        server = Some {
+          val args =
+            Seq(maybeConnectScript.get.toString, "--master", remoteString.get) ++ sparkOptions
+              .filter(p => !p._1.startsWith("spark.remote"))
+              .flatMap { case (k, v) => Seq("--conf", s"$k=$v") }
+          val pb = new ProcessBuilder(args: _*)
+          // So don't exclude spark-sql jar in classpath
+          pb.environment().remove(SparkConnectClient.SPARK_REMOTE)
+          pb.start()
+        }
+
+        // Let the server start. We will directly request to set the configurations
+        // and this sleep makes less noisy with retries.
+        Thread.sleep(2000L)
+        System.setProperty("spark.remote", "sc://localhost")
+
+        // scalastyle:off runtimeaddshutdownhook
+        Runtime.getRuntime.addShutdownHook(new Thread() {
+          override def run(): Unit = if (server.isDefined) {
+            new ProcessBuilder(maybeConnectScript.get.toString)
+              .start()
+          }
+        })
+        // scalastyle:on runtimeaddshutdownhook
+      }
+    }
+    f
   }
 
   /**
@@ -765,6 +746,16 @@ object SparkSession extends Logging {
     }
 
     private def applyOptions(session: SparkSession): Unit = {
+      // Only attempts to set Spark SQL configurations.
+      // If the configurations are static, it might throw an exception so
+      // simply ignore it for now.
+      sparkOptions
+        .filter { case (k, _) =>
+          k.startsWith("spark.sql.")
+        }
+        .foreach { case (key, value) =>
+          Try(session.conf.set(key, value))
+        }
       options.foreach { case (key, value) =>
         session.conf.set(key, value)
       }
@@ -787,7 +778,7 @@ object SparkSession extends Logging {
      *
      * @since 3.5.0
      */
-    def create(): SparkSession = {
+    def create(): SparkSession = withLocalConnectServer {
       val session = tryCreateSessionFromClient()
         .getOrElse(SparkSession.this.create(builder.configuration))
       setDefaultAndActiveSession(session)
@@ -807,7 +798,7 @@ object SparkSession extends Logging {
      *
      * @since 3.5.0
      */
-    def getOrCreate(): SparkSession = {
+    def getOrCreate(): SparkSession = withLocalConnectServer {
       val session = tryCreateSessionFromClient()
         .getOrElse({
           var existingSession = sessions.get(builder.configuration)

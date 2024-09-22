@@ -20,8 +20,10 @@ package org.apache.spark.sql
 import java.net.URI
 import java.nio.file.Paths
 import java.util.{ServiceLoader, UUID}
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
+import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
@@ -57,7 +59,7 @@ import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
-import org.apache.spark.util.{CallSite, SparkFileUtils, Utils}
+import org.apache.spark.util.{CallSite, SparkFileUtils, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -92,8 +94,9 @@ class SparkSession private(
     @transient private val existingSharedState: Option[SharedState],
     @transient private val parentSessionState: Option[SessionState],
     @transient private[sql] val extensions: SparkSessionExtensions,
-    @transient private[sql] val initialSessionOptions: Map[String, String])
-  extends api.SparkSession[Dataset] with Logging { self =>
+    @transient private[sql] val initialSessionOptions: Map[String, String],
+    @transient private val parentManagedJobTags: Map[String, String])
+  extends api.SparkSession with Logging { self =>
 
   // The call site where this SparkSession was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
@@ -107,7 +110,12 @@ class SparkSession private(
   private[sql] def this(
       sc: SparkContext,
       initialSessionOptions: java.util.HashMap[String, String]) = {
-    this(sc, None, None, applyAndLoadExtensions(sc), initialSessionOptions.asScala.toMap)
+    this(
+      sc,
+      existingSharedState = None,
+      parentSessionState = None,
+      applyAndLoadExtensions(sc), initialSessionOptions.asScala.toMap,
+      parentManagedJobTags = Map.empty)
   }
 
   private[sql] def this(sc: SparkContext) = this(sc, new java.util.HashMap[String, String]())
@@ -121,6 +129,18 @@ class SparkSession private(
     SparkSession.getActiveSession.filterNot(_.sparkContext.isStopped).map(_.sessionState.conf)
       .getOrElse(SQLConf.getFallbackConf)
   })
+
+  /** Tag to mark all jobs owned by this session. */
+  private[sql] lazy val sessionJobTag = s"spark-session-$sessionUUID"
+
+  /**
+   * A map to hold the mapping from user-defined tags to the real tags attached to Jobs.
+   * Real tag have the current session ID attached: `"tag1" -> s"spark-session-$sessionUUID-tag1"`.
+   */
+  @transient
+  private[sql] lazy val managedJobTags: ConcurrentHashMap[String, String] = {
+    new ConcurrentHashMap(parentManagedJobTags.asJava)
+  }
 
   /** @inheritdoc */
   def version: String = SPARK_VERSION
@@ -173,16 +193,8 @@ class SparkSession private(
   @transient
   val sqlContext: SQLContext = new SQLContext(this)
 
-  /**
-   * Runtime configuration interface for Spark.
-   *
-   * This is the interface through which the user can get and set all Spark and Hadoop
-   * configurations that are relevant to Spark SQL. When getting the value of a config,
-   * this defaults to the value set in the underlying `SparkContext`, if any.
-   *
-   * @since 2.0.0
-   */
-  @transient lazy val conf: RuntimeConfig = new RuntimeConfig(sessionState.conf)
+  /** @inheritdoc */
+  @transient lazy val conf: RuntimeConfig = new RuntimeConfigImpl(sessionState.conf)
 
   /**
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
@@ -243,7 +255,8 @@ class SparkSession private(
       Some(sharedState),
       parentSessionState = None,
       extensions,
-      initialSessionOptions)
+      initialSessionOptions,
+      parentManagedJobTags = Map.empty)
   }
 
   /**
@@ -264,8 +277,10 @@ class SparkSession private(
       Some(sharedState),
       Some(sessionState),
       extensions,
-      Map.empty)
+      Map.empty,
+      managedJobTags.asScala.toMap)
     result.sessionState // force copy of SessionState
+    result.managedJobTags // force copy of userDefinedToRealTagsMap
     result
   }
 
@@ -480,12 +495,7 @@ class SparkSession private(
    |  Catalog-related methods  |
    * ------------------------- */
 
-  /**
-   * Interface through which the user may create, drop, alter or query underlying
-   * databases, tables, functions etc.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @transient lazy val catalog: Catalog = new CatalogImpl(self)
 
   /** @inheritdoc */
@@ -649,16 +659,84 @@ class SparkSession private(
     artifactManager.addLocalArtifacts(uri.flatMap(Artifact.parseArtifacts))
   }
 
+  /** @inheritdoc */
+  override def addTag(tag: String): Unit = {
+    SparkContext.throwIfInvalidTag(tag)
+    managedJobTags.put(tag, s"spark-session-$sessionUUID-$tag")
+  }
+
+  /** @inheritdoc */
+  override def removeTag(tag: String): Unit = managedJobTags.remove(tag)
+
+  /** @inheritdoc */
+  override def getTags(): Set[String] = managedJobTags.keys().asScala.toSet
+
+  /** @inheritdoc */
+  override def clearTags(): Unit = managedJobTags.clear()
+
   /**
-   * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
-   * `DataFrame`.
-   * {{{
-   *   sparkSession.read.parquet("/path/to/file.parquet")
-   *   sparkSession.read.schema(schema).json("/path/to/file.json")
-   * }}}
+   * Request to interrupt all currently running SQL operations of this session.
    *
-   * @since 2.0.0
+   * @note Only DataFrame/SQL operations started by this session can be interrupted.
+   *
+   * @note This method will wait up to 60 seconds for the interruption request to be issued.
+
+   * @return Sequence of SQL execution IDs requested to be interrupted.
+
+   * @since 4.0.0
    */
+  override def interruptAll(): Seq[String] =
+    doInterruptTag(sessionJobTag, "as part of cancellation of all jobs")
+
+  /**
+   * Request to interrupt all currently running SQL operations of this session with the given
+   * job tag.
+   *
+   * @note Only DataFrame/SQL operations started by this session can be interrupted.
+   *
+   * @note This method will wait up to 60 seconds for the interruption request to be issued.
+   *
+   * @return Sequence of SQL execution IDs requested to be interrupted.
+
+   * @since 4.0.0
+   */
+  override def interruptTag(tag: String): Seq[String] = {
+    val realTag = managedJobTags.get(tag)
+    if (realTag == null) return Seq.empty
+    doInterruptTag(realTag, s"part of cancelled job tags $tag")
+  }
+
+  private def doInterruptTag(tag: String, reason: String): Seq[String] = {
+    val cancelledTags =
+      sparkContext.cancelJobsWithTagWithFuture(tag, reason)
+
+    ThreadUtils.awaitResult(cancelledTags, 60.seconds)
+      .flatMap(job => Option(job.properties.getProperty(SQLExecution.EXECUTION_ROOT_ID_KEY)))
+  }
+
+  /**
+   * Request to interrupt a SQL operation of this session, given its SQL execution ID.
+   *
+   * @note Only DataFrame/SQL operations started by this session can be interrupted.
+   *
+   * @note This method will wait up to 60 seconds for the interruption request to be issued.
+   *
+   * @return The execution ID requested to be interrupted, as a single-element sequence, or an empty
+   *    sequence if the operation is not started by this session.
+   *
+   * @since 4.0.0
+   */
+  override def interruptOperation(operationId: String): Seq[String] = {
+    scala.util.Try(operationId.toLong).toOption match {
+      case Some(executionIdToBeCancelled) =>
+        val tagToBeCancelled = SQLExecution.executionIdJobTag(this, executionIdToBeCancelled)
+        doInterruptTag(tagToBeCancelled, reason = "")
+      case None =>
+        throw new IllegalArgumentException("executionId must be a number in string form.")
+    }
+  }
+
+  /** @inheritdoc */
   def read: DataFrameReader = new DataFrameReader(self)
 
   /**
@@ -744,7 +822,7 @@ class SparkSession private(
   }
 
   /**
-   * Execute a block of code with the this session set as the active session, and restore the
+   * Execute a block of code with this session set as the active session, and restore the
    * previous session on completion.
    */
   private[sql] def withActive[T](block: => T): T = {
@@ -759,7 +837,8 @@ class SparkSession private(
   }
 
   private[sql] def leafNodeDefaultParallelism: Int = {
-    conf.get(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM).getOrElse(sparkContext.defaultParallelism)
+    sessionState.conf.getConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM)
+      .getOrElse(sparkContext.defaultParallelism)
   }
 
   private[sql] object Converter extends ColumnNodeToExpressionConverter with Serializable {
@@ -979,7 +1058,12 @@ object SparkSession extends Logging {
         loadExtensions(extensions)
         applyExtensions(sparkContext, extensions)
 
-        session = new SparkSession(sparkContext, None, None, extensions, options.toMap)
+        session = new SparkSession(sparkContext,
+          existingSharedState = None,
+          parentSessionState = None,
+          extensions,
+          initialSessionOptions = options.toMap,
+          parentManagedJobTags = Map.empty)
         setDefaultSession(session)
         setActiveSession(session)
         registerContextListener(sparkContext)
@@ -1124,13 +1208,13 @@ object SparkSession extends Logging {
   private[sql] def getOrCloneSessionWithConfigsOff(
       session: SparkSession,
       configurations: Seq[ConfigEntry[Boolean]]): SparkSession = {
-    val configsEnabled = configurations.filter(session.conf.get[Boolean])
+    val configsEnabled = configurations.filter(session.sessionState.conf.getConf[Boolean])
     if (configsEnabled.isEmpty) {
       session
     } else {
       val newSession = session.cloneSession()
       configsEnabled.foreach(conf => {
-        newSession.conf.set(conf, false)
+        newSession.sessionState.conf.setConf(conf, false)
       })
       newSession
     }

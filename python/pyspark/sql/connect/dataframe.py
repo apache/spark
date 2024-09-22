@@ -86,6 +86,10 @@ from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
 
+try:
+    from pyspark.sql.plot import PySparkPlotAccessor
+except ImportError:
+    PySparkPlotAccessor = None  # type: ignore
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -1783,7 +1787,7 @@ class DataFrame(ParentDataFrame):
                     )
                 )
             else:
-                # TODO: revisit vanilla Spark's Dataset.col
+                # TODO: revisit classic Spark's Dataset.col
                 # if (sparkSession.sessionState.conf.supportQuotedRegexColumnName) {
                 #   colRegex(colName)
                 # } else {
@@ -1857,6 +1861,12 @@ class DataFrame(ParentDataFrame):
         pdf, ei = self._session.client.to_pandas(query, self._plan.observations)
         self._execution_info = ei
         return pdf
+
+    def transpose(self, indexColumn: Optional["ColumnOrName"] = None) -> ParentDataFrame:
+        return DataFrame(
+            plan.Transpose(self._plan, [F._to_col(indexColumn)] if indexColumn is not None else []),
+            self._session,
+        )
 
     @property
     def schema(self) -> StructType:
@@ -2232,6 +2242,10 @@ class DataFrame(ParentDataFrame):
     @property
     def executionInfo(self) -> Optional["ExecutionInfo"]:
         return self._execution_info
+
+    @property
+    def plot(self) -> PySparkPlotAccessor:
+        return PySparkPlotAccessor(self)
 
 
 class DataFrameNaFunctions(ParentDataFrameNaFunctions):

@@ -64,7 +64,7 @@ trait DropNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"DROP NAMESPACE $catalog.unknown")
     }
     checkError(e,
-      errorClass = "SCHEMA_NOT_FOUND",
+      condition = "SCHEMA_NOT_FOUND",
       parameters = Map("schemaName" -> s"`$catalog`.`unknown`"))
   }
 
@@ -78,7 +78,7 @@ trait DropNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"DROP NAMESPACE $catalog.ns")
     }
     checkError(e,
-      errorClass = "SCHEMA_NOT_EMPTY",
+      condition = "SCHEMA_NOT_EMPTY",
       parameters = Map("schemaName" -> "`ns`"))
     sql(s"DROP TABLE $catalog.ns.table")
 

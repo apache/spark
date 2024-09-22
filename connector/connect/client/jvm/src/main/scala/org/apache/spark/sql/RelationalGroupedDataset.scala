@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.connect.ConnectConversions._
 
 /**
  * A set of methods for aggregations on a `DataFrame`, created by [[Dataset#groupBy groupBy]],
@@ -39,8 +40,7 @@ class RelationalGroupedDataset private[sql] (
     groupType: proto.Aggregate.GroupType,
     pivot: Option[proto.Aggregate.Pivot] = None,
     groupingSets: Option[Seq[proto.Aggregate.GroupingSets]] = None)
-    extends api.RelationalGroupedDataset[Dataset] {
-  type RGD = RelationalGroupedDataset
+    extends api.RelationalGroupedDataset {
   import df.sparkSession.RichColumn
 
   protected def toDF(aggExprs: Seq[Column]): DataFrame = {
@@ -80,12 +80,7 @@ class RelationalGroupedDataset private[sql] (
     colNames.map(df.col)
   }
 
-  /**
-   * Returns a `KeyValueGroupedDataset` where the data is grouped by the grouping expressions of
-   * current `RelationalGroupedDataset`.
-   *
-   * @since 3.5.0
-   */
+  /** @inheritdoc */
   def as[K: Encoder, T: Encoder]: KeyValueGroupedDataset[K, T] = {
     KeyValueGroupedDatasetImpl[K, T](df, encoderFor[K], encoderFor[T], groupingExprs)
   }

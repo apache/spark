@@ -29,7 +29,7 @@ import org.apache.spark.internal.LogKeys.CLASS_LOADER
 import org.apache.spark.security.SocketAuthServer
 import org.apache.spark.sql.{internal, Column, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -69,7 +69,10 @@ private[sql] object PythonSQLUtils extends Logging {
 
   // This is needed when generating SQL documentation for built-in functions.
   def listBuiltinFunctionInfos(): Array[ExpressionInfo] = {
-    FunctionRegistry.functionSet.flatMap(f => FunctionRegistry.builtin.lookupFunction(f)).toArray
+    (FunctionRegistry.functionSet.flatMap(f => FunctionRegistry.builtin.lookupFunction(f)) ++
+      TableFunctionRegistry.functionSet.flatMap(
+        f => TableFunctionRegistry.builtin.lookupFunction(f))).
+      groupBy(_.getName).map(v => v._2.head).toArray
   }
 
   private def listAllSQLConfigs(): Seq[(String, String, String, String)] = {
@@ -152,6 +155,9 @@ private[sql] object PythonSQLUtils extends Logging {
   def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
     Column.internalFn("collect_top_k", e, lit(num), lit(reverse))
 
+  def binary_search(e: Column, value: Column): Column =
+    Column.internalFn("array_binary_search", e, value)
+
   def pandasProduct(e: Column, ignoreNA: Boolean): Column =
     Column.internalFn("pandas_product", e, lit(ignoreNA))
 
@@ -172,6 +178,13 @@ private[sql] object PythonSQLUtils extends Logging {
 
   def pandasCovar(col1: Column, col2: Column, ddof: Int): Column =
     Column.internalFn("pandas_covar", col1, col2, lit(ddof))
+
+  /**
+   * A long column that increases one by one.
+   * This is for 'distributed-sequence' default index in pandas API on Spark.
+   */
+  def distributed_sequence_id(): Column =
+    Column.internalFn("distributed_sequence_id")
 
   def unresolvedNamedLambdaVariable(name: String): Column =
     Column(internal.UnresolvedNamedLambdaVariable.apply(name))

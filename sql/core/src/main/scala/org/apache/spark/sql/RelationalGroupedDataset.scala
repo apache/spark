@@ -22,13 +22,13 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
-import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.internal.ExpressionUtils.{column, generateAlias}
@@ -53,8 +53,8 @@ class RelationalGroupedDataset protected[sql](
     protected[sql] val df: DataFrame,
     private[sql] val groupingExprs: Seq[Expression],
     groupType: RelationalGroupedDataset.GroupType)
-  extends api.RelationalGroupedDataset[Dataset] {
-  type RGD = RelationalGroupedDataset
+  extends api.RelationalGroupedDataset {
+
   import RelationalGroupedDataset._
   import df.sparkSession._
 
@@ -117,23 +117,14 @@ class RelationalGroupedDataset protected[sql](
     columnExprs.map(column)
   }
 
-
-  /**
-   * Returns a `KeyValueGroupedDataset` where the data is grouped by the grouping expressions
-   * of current `RelationalGroupedDataset`.
-   *
-   * @since 3.0.0
-   */
+  /** @inheritdoc */
   def as[K: Encoder, T: Encoder]: KeyValueGroupedDataset[K, T] = {
-    val keyEncoder = encoderFor[K]
-    val valueEncoder = encoderFor[T]
-
     val (qe, groupingAttributes) =
       handleGroupingExpression(df.logicalPlan, df.sparkSession, groupingExprs)
 
     new KeyValueGroupedDataset(
-      keyEncoder,
-      valueEncoder,
+      implicitly[Encoder[K]],
+      implicitly[Encoder[T]],
       qe,
       df.logicalPlan.output,
       groupingAttributes)

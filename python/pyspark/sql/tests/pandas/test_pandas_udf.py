@@ -339,6 +339,19 @@ class PandasUDFTestsMixin:
         self.assertEqual(df.schema[0].dataType.simpleString(), "interval day to second")
         self.assertEqual(df.first()[0], datetime.timedelta(microseconds=123))
 
+    def test_pandas_udf_return_type_error(self):
+        import pandas as pd
+
+        @pandas_udf("s string")
+        def upper(s: pd.Series) -> pd.Series:
+            return s.str.upper()
+
+        df = self.spark.createDataFrame([("a",)], schema="s string")
+
+        self.assertRaisesRegex(
+            PythonException, "Invalid return type", df.select(upper("s")).collect
+        )
+
 
 class PandasUDFTests(PandasUDFTestsMixin, ReusedSQLTestCase):
     pass

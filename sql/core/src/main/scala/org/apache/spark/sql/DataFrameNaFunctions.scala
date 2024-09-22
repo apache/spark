@@ -21,6 +21,7 @@ import java.{lang => jl}
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.ExpressionUtils.column
@@ -33,7 +34,7 @@ import org.apache.spark.sql.types._
  */
 @Stable
 final class DataFrameNaFunctions private[sql](df: DataFrame)
-  extends api.DataFrameNaFunctions[Dataset] {
+  extends api.DataFrameNaFunctions {
   import df.sparkSession.RichColumn
 
   protected def drop(minNonNulls: Option[Int]): Dataset[Row] = {

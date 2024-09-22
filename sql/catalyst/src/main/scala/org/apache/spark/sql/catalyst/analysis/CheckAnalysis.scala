@@ -250,6 +250,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           context = u.origin.getQueryContext,
           summary = u.origin.context.summary)
 
+      case u: UnresolvedInlineTable if unresolvedInlineTableContainsScalarSubquery(u) =>
+        throw QueryCompilationErrors.inlineTableContainsScalarSubquery(u)
+
       case command: V2PartitionCommand =>
         command.table match {
           case r @ ResolvedTable(_, _, table, _) => table match {
@@ -672,6 +675,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               "DECLARE VARIABLE",
               varName,
               c.defaultExpr.originalSQL)
+
+          case c: Call if c.resolved && c.bound && c.checkArgTypes().isFailure =>
+            c.checkArgTypes() match {
+              case mismatch: TypeCheckResult.DataTypeMismatch =>
+                c.dataTypeMismatch("CALL", mismatch)
+              case _ =>
+                throw SparkException.internalError("Invalid input for procedure")
+            }
 
           case _ => // Falls back to the following checks
         }
@@ -1557,6 +1568,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           }
         }
       case _ =>
+    }
+  }
+
+  private def unresolvedInlineTableContainsScalarSubquery(
+      unresolvedInlineTable: UnresolvedInlineTable) = {
+    unresolvedInlineTable.rows.exists { row =>
+      row.exists { expression =>
+        expression.exists(_.isInstanceOf[ScalarSubquery])
+      }
     }
   }
 }

@@ -36,7 +36,12 @@ groups = {
     "bitwise_funcs", "conversion_funcs", "csv_funcs",
     "xml_funcs", "lambda_funcs", "collection_funcs",
     "url_funcs", "hash_funcs", "struct_funcs",
+    "table_funcs", "variant_funcs"
 }
+
+
+def _print_red(text):
+    print('\033[31m' + text + '\033[0m')
 
 
 def _list_grouped_function_infos(jvm):
@@ -126,7 +131,13 @@ def _make_pretty_usage(infos):
             func_name = "\\" + func_name
         elif (info.name == "when"):
             func_name = "CASE WHEN"
-        usages = iter(re.split(r"(.*%s.*) - " % func_name, info.usage.strip())[1:])
+        expr_usages = re.split(r"(.*%s.*) - " % func_name, info.usage.strip())
+        if len(expr_usages) <= 1:
+            _print_red("\nThe `usage` of %s is not standardized, please correct it. "
+                       "Refer to: `AesDecrypt`" % (func_name))
+            os._exit(-1)
+        usages = iter(expr_usages[1:])
+
         for (sig, description) in zip(usages, usages):
             result.append("    <tr>")
             result.append("      <td>%s</td>" % sig)
