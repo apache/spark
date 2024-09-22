@@ -395,6 +395,8 @@ public final class CollationFactory {
 
       protected abstract CollationMeta buildCollationMeta();
 
+      protected abstract String normalizedCollationName();
+
       static List<CollationIdentifier> listCollations() {
         return Stream.concat(
           CollationSpecUTF8.listCollations().stream(),
@@ -443,11 +445,16 @@ public final class CollationFactory {
       protected static Collation UTF8_LCASE_COLLATION =
         new CollationSpecUTF8(CaseSensitivity.LCASE, SpaceTrimming.NONE).buildCollation();
 
+      private final CaseSensitivity caseSensitivity;
+      private final SpaceTrimming spaceTrimming;
       private final int collationId;
 
       private CollationSpecUTF8(
           CaseSensitivity caseSensitivity,
           SpaceTrimming spaceTrimming) {
+        this.caseSensitivity = caseSensitivity;
+        this.spaceTrimming = spaceTrimming;
+
         int collationId =
           SpecifierUtils.setSpecValue(0, CASE_SENSITIVITY_OFFSET, caseSensitivity);
         this.collationId =
@@ -456,14 +463,42 @@ public final class CollationFactory {
 
       private static int collationNameToId(String originalName, String collationName)
           throws SparkException {
+
+        int baseId;
+        String collationNamePrefix;
+
         if (collationName.startsWith(UTF8_BINARY_COLLATION.collationName)) {
-          return UTF8_BINARY_COLLATION_ID;
+          baseId = UTF8_BINARY_COLLATION_ID;
+          collationNamePrefix = UTF8_BINARY_COLLATION.collationName;
         } else if (collationName.startsWith(UTF8_LCASE_COLLATION.collationName)) {
-          return UTF8_LCASE_COLLATION_ID;
+          baseId = UTF8_LCASE_COLLATION_ID;
+          collationNamePrefix = UTF8_LCASE_COLLATION.collationName;
         } else {
           // Throw exception with original (before case conversion) collation name.
           throw collationInvalidNameException(originalName);
         }
+
+        String remainingSpecifiers = collationName.substring(collationNamePrefix.length());
+        if(remainingSpecifiers.isEmpty()) {
+          return baseId;
+        }
+        if(!remainingSpecifiers.startsWith("_")){
+          throw collationInvalidNameException(originalName);
+        }
+
+        SpaceTrimming spaceTrimming = SpaceTrimming.NONE;
+        String remainingSpec = remainingSpecifiers.substring(1);
+        if (remainingSpec.equals("LTRIM")) {
+          spaceTrimming = SpaceTrimming.LTRIM;
+        } else if (remainingSpec.equals("RTRIM")) {
+          spaceTrimming = SpaceTrimming.RTRIM;
+        } else if(remainingSpec.equals("TRIM")) {
+          spaceTrimming = SpaceTrimming.TRIM;
+        } else {
+          throw collationInvalidNameException(originalName);
+        }
+
+        return SpecifierUtils.setSpecValue(baseId, SPACE_TRIMMING_OFFSET, spaceTrimming);
       }
 
       private static CollationSpecUTF8 fromCollationId(int collationId) {
@@ -479,8 +514,7 @@ public final class CollationFactory {
 
       @Override
       protected Collation buildCollation() {
-        // At this transient moment, collationId with space trimming might be used but should be ignored
-        if (SpecifierUtils.getSpecValue(collationId,  CASE_SENSITIVITY_OFFSET, CaseSensitivity.LCASE.ordinal()) == 0) {
+        if (caseSensitivity == CaseSensitivity.UNSPECIFIED) {
           return new Collation(
             UTF8_BINARY_COLLATION_NAME,
             PROVIDER_SPARK,
@@ -507,31 +541,52 @@ public final class CollationFactory {
 
       @Override
       protected CollationMeta buildCollationMeta() {
-        if (collationId == UTF8_BINARY_COLLATION_ID) {
+        if (caseSensitivity == CaseSensitivity.UNSPECIFIED) {
           return new CollationMeta(
             CATALOG,
             SCHEMA,
-            UTF8_BINARY_COLLATION_NAME,
+            normalizedCollationName(),
             /* language = */ null,
             /* country = */ null,
             /* icuVersion = */ null,
             COLLATION_PAD_ATTRIBUTE,
             /* accentSensitivity = */ true,
             /* caseSensitivity = */ true,
-            /* spaceTrimming = */ SpaceTrimming.NONE.toString());
+            spaceTrimming.toString());
         } else {
           return new CollationMeta(
             CATALOG,
             SCHEMA,
-            UTF8_LCASE_COLLATION_NAME,
+            normalizedCollationName(),
             /* language = */ null,
             /* country = */ null,
             /* icuVersion = */ null,
             COLLATION_PAD_ATTRIBUTE,
             /* accentSensitivity = */ true,
             /* caseSensitivity = */ false,
-            /* spaceTrimming = */ SpaceTrimming.NONE.toString());
+            spaceTrimming.toString());
         }
+      }
+
+      /**
+       * Compute normalized collation name. Components of collation name are given in order:
+       * - Base collation name (UTF8_BINARY or UTF8_LCASE)
+       * - Optional space trimming when non-default preceded by underscore
+       * Examples: UTF8_BINARY, UTF8_BINARY_LCASE_LTRIM, UTF8_BINARY_TRIM.
+       */
+      @Override
+      protected String normalizedCollationName() {
+        StringBuilder builder = new StringBuilder();
+        if(SpecifierUtils.getSpecValue(collationId,  CASE_SENSITIVITY_OFFSET, CaseSensitivity.LCASE.ordinal()) == 0){
+          builder.append(UTF8_BINARY_COLLATION_NAME);
+        }else{
+          builder.append(UTF8_LCASE_COLLATION_NAME);
+        }
+        if (spaceTrimming != SpaceTrimming.NONE) {
+          builder.append('_');
+          builder.append(spaceTrimming.toString());
+        }
+        return builder.toString();
       }
 
       static List<CollationIdentifier> listCollations() {
@@ -679,6 +734,7 @@ public final class CollationFactory {
 
       private final CaseSensitivity caseSensitivity;
       private final AccentSensitivity accentSensitivity;
+      private final SpaceTrimming spaceTrimming;
       private final String locale;
       private final int collationId;
 
@@ -690,6 +746,7 @@ public final class CollationFactory {
         this.locale = locale;
         this.caseSensitivity = caseSensitivity;
         this.accentSensitivity = accentSensitivity;
+        this.spaceTrimming = spaceTrimming;
         // Construct collation ID from locale, case-sensitivity and accent-sensitivity specifiers.
         int collationId = ICULocaleToId.get(locale);
         // Mandatory ICU implementation provider.
@@ -856,7 +913,7 @@ public final class CollationFactory {
         // Freeze ICU collator to ensure thread safety.
         collator.freeze();
         return new Collation(
-          collationName(),
+          normalizedCollationName(),
           PROVIDER_ICU,
           collator,
           (s1, s2) -> collator.compare(s1.toValidString(), s2.toValidString()),
@@ -872,25 +929,26 @@ public final class CollationFactory {
         return new CollationMeta(
           CATALOG,
           SCHEMA,
-          collationName(),
+          normalizedCollationName(),
           ICULocaleMap.get(locale).getDisplayLanguage(),
           ICULocaleMap.get(locale).getDisplayCountry(),
           VersionInfo.ICU_VERSION.toString(),
           COLLATION_PAD_ATTRIBUTE,
           accentSensitivity == AccentSensitivity.AS,
           caseSensitivity == CaseSensitivity.CS,
-          getSpaceTrimming(collationId).toString());
+          spaceTrimming.toString());
       }
 
       /**
        * Compute normalized collation name. Components of collation name are given in order:
        * - Locale name
-       * - Optional space trimming when non-default preceded by underscore
        * - Optional case sensitivity when non-default preceded by underscore
        * - Optional accent sensitivity when non-default preceded by underscore
+       * - Optional space trimming when non-default preceded by underscore
        * Examples: en, en_USA_CI_LTRIM, en_USA_CI_AI, en_USA_CI_AI_TRIM, sr_Cyrl_SRB_AI.
        */
-      private String collationName() {
+      @Override
+      protected String normalizedCollationName() {
         StringBuilder builder = new StringBuilder();
         builder.append(locale);
         if (caseSensitivity != CaseSensitivity.CS) {
@@ -901,7 +959,6 @@ public final class CollationFactory {
           builder.append('_');
           builder.append(accentSensitivity.toString());
         }
-        SpaceTrimming spaceTrimming = getSpaceTrimming(collationId);
         if(spaceTrimming != SpaceTrimming.NONE) {
           builder.append('_');
           builder.append(spaceTrimming.toString());
