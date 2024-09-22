@@ -2893,8 +2893,8 @@ private[spark] class DAGScheduler(
       val finalException = exception.collect {
         // If the error is user-facing (defines error class and is not internal error), we don't
         // wrap it with "Job aborted" and expose this error to the end users directly.
-        case st: Exception with SparkThrowable if st.getErrorClass != null &&
-            !SparkThrowableHelper.isInternalError(st.getErrorClass) =>
+        case st: Exception with SparkThrowable if st.getCondition != null &&
+            !SparkThrowableHelper.isInternalError(st.getCondition) =>
           st
       }.getOrElse {
         new SparkException(s"Job aborted due to stage failure: $reason", cause = exception.orNull)

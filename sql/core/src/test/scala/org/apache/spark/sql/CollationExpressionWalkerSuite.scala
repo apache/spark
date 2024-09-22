@@ -736,7 +736,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
             assert(resultUTF8.collect() === resultUTF8Lcase.collect())
           }
         } catch {
-          case e: SparkRuntimeException => assert(e.getErrorClass == "USER_RAISED_EXCEPTION")
+          case e: SparkRuntimeException => assert(e.getCondition == "USER_RAISED_EXCEPTION")
           case other: Throwable => throw other
         }
       }

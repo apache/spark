@@ -1099,7 +1099,7 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
       val exc = intercept[StateStoreSnapshotPartitionNotFound] {
         stateDfError.show()
       }
-      assert(exc.getErrorClass === "CANNOT_LOAD_STATE_STORE.SNAPSHOT_PARTITION_ID_NOT_FOUND")
+      assert(exc.getCondition === "CANNOT_LOAD_STATE_STORE.SNAPSHOT_PARTITION_ID_NOT_FOUND")
     }
   }
 

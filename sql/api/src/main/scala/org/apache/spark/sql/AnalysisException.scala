@@ -139,7 +139,7 @@ class AnalysisException protected (
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass.orNull
+  override def getCondition: String = errorClass.orNull
 
   override def getQueryContext: Array[QueryContext] = context
 

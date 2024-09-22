@@ -3238,7 +3238,7 @@ class AstBuilder extends DataTypeAstBuilder
     } catch {
       case e: SparkArithmeticException =>
         throw new ParseException(
-          errorClass = e.getErrorClass,
+          errorClass = e.getCondition,
           messageParameters = e.getMessageParameters.asScala.toMap,
           ctx)
     }
@@ -3534,7 +3534,7 @@ class AstBuilder extends DataTypeAstBuilder
         // Keep error class of SparkIllegalArgumentExceptions and enrich it with query context
         case se: SparkIllegalArgumentException =>
           val pe = new ParseException(
-            errorClass = se.getErrorClass,
+            errorClass = se.getCondition,
             messageParameters = se.getMessageParameters.asScala.toMap,
             ctx)
           pe.setStackTrace(se.getStackTrace)

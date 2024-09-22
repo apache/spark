@@ -840,7 +840,7 @@ class DataSourceV2SQLSuiteV1Filter
           val exception = intercept[SparkRuntimeException] {
             insertNullValueAndCheck()
           }
-          assert(exception.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
+          assert(exception.getCondition == "NOT_NULL_ASSERT_VIOLATION")
         }
     }
   }
