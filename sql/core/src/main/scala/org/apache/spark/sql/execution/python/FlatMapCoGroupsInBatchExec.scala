@@ -42,6 +42,7 @@ trait FlatMapCoGroupsInBatchExec extends SparkPlan with BinaryExecNode with Pyth
   protected val pythonEvalType: Int
 
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
+  private val largeVarTypes = conf.arrowUseLargeVarTypes
   private val arrowMaxRecordsPerBatch = conf.arrowMaxRecordsPerBatch
   private val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
   private val pythonUDF = func.asInstanceOf[PythonUDF]
@@ -85,6 +86,7 @@ trait FlatMapCoGroupsInBatchExec extends SparkPlan with BinaryExecNode with Pyth
           DataTypeUtils.fromAttributes(leftDedup),
           DataTypeUtils.fromAttributes(rightDedup),
           sessionLocalTimeZone,
+          largeVarTypes,
           arrowMaxRecordsPerBatch,
           pythonRunnerConf,
           pythonMetrics,

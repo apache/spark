@@ -42,6 +42,7 @@ abstract class BaseGroupedArrowPythonRunner[IN](
     evalType: Int,
     argOffsets: Array[Array[Int]],
     timeZoneId: String,
+    largeVarTypes: Boolean,
     arrowMaxRecordsPerBatch: Int,
     conf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
@@ -103,8 +104,8 @@ abstract class BaseGroupedArrowPythonRunner[IN](
       schema: StructType,
       dataOut: DataOutputStream,
       name: String): Unit = {
-    val arrowSchema =
-      ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames = true)
+    val arrowSchema = ArrowUtils.toArrowSchema(
+      schema, timeZoneId, errorOnDuplicatedFieldNames = true, largeVarTypes)
     val allocator = ArrowUtils.rootAllocator.newChildAllocator(
       s"stdout writer for $pythonExec ($name)", 0, Long.MaxValue)
     val root = VectorSchemaRoot.create(arrowSchema, allocator)

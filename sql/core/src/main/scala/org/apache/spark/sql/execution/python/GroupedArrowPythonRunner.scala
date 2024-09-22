@@ -35,14 +35,15 @@ class GroupedArrowPythonRunner(
     argOffsets: Array[Array[Int]],
     schema: StructType,
     timeZoneId: String,
+    largeVarTypes: Boolean,
     arrowMaxRecordsPerBatch: Int,
     conf: Map[String, String],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     profiler: Option[String])
   extends BaseGroupedArrowPythonRunner[Iterator[InternalRow]](
-    funcs, evalType, argOffsets, timeZoneId, arrowMaxRecordsPerBatch, conf, pythonMetrics,
-    jobArtifactUUID, profiler) {
+    funcs, evalType, argOffsets, timeZoneId, largeVarTypes, arrowMaxRecordsPerBatch, conf,
+    pythonMetrics, jobArtifactUUID, profiler) {
 
   override protected def writeNextGroup(
       group: Iterator[InternalRow],
