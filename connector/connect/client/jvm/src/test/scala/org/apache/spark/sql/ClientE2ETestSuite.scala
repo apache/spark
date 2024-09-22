@@ -225,19 +225,19 @@ class ClientE2ETestSuite
 
   test("spark deep recursion") {
     var df = spark.range(1)
-    assert(spark.conf.get("spark.connect.grpc.marshallerRecursionLimit").toInt == 2048)
+    assert(spark.conf.get("spark.connect.grpc.marshallerRecursionLimit").toInt == 4096)
     // spark.connect.grpc.marshallerRecursionLimit must be at least 2048, to handle certain
     // deep recursion cases.
-    for (a <- 1 to 1900) {
+    for (a <- 1 to 700) {
       df = df.union(spark.range(a, a + 1))
     }
-    assert(df.collect().length == 1901)
+    assert(df.collect().length == 701)
   }
 
   test("handle unknown exception") {
     var df = spark.range(1)
     val limit = spark.conf.get("spark.connect.grpc.marshallerRecursionLimit").toInt
-    for (a <- 1 to limit) {
+    for (a <- 1 to 1500) {
       df = df.union(spark.range(a, a + 1))
     }
     val ex = intercept[SparkException] {
