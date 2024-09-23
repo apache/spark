@@ -93,6 +93,8 @@ class JavaSerializable(val value: Int) extends Serializable {
   }
 }
 
+class UDTDerivedClass(urii: java.net.URI) extends UDTCaseClass(urii)
+
 /** For testing UDT for a case class */
 @SQLUserDefinedType(udt = classOf[UDTForCaseClass])
 case class UDTCaseClass(uri: java.net.URI)
