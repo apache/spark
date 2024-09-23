@@ -97,7 +97,7 @@ class QueryExecution(
 
   def analyzed: LogicalPlan = lazyAnalyzed.get
 
-  private val lazyCommandExecuted = Lazy {
+  private val lazyCommandExecuted = LazyTry {
     mode match {
       case CommandExecutionMode.NON_ROOT => analyzed.mapChildren(eagerlyExecuteCommands)
       case CommandExecutionMode.ALL => eagerlyExecuteCommands(analyzed)
@@ -240,7 +240,7 @@ class QueryExecution(
    * Given QueryExecution is not a public class, end users are discouraged to use this: please
    * use `Dataset.rdd` instead where conversion will be applied.
    */
-  def toRDD: RDD[InternalRow] = lazyToRdd.get
+  def toRdd: RDD[InternalRow] = lazyToRdd.get
 
   /** Get the metrics observed during the execution of the query plan. */
   def observedMetrics: Map[String, Row] = CollectMetricsExec.collect(executedPlan)
