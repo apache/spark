@@ -817,20 +817,6 @@ class RocksDBFileManager(
 }
 
 /**
- * Track file mappings in RocksDB across local and remote directories
- * @param versionToRocksDBFiles Mapping of RocksDB files used across versions for maintenance
- * @param localFilesToDfsFiles Mapping of the exact Dfs file used to create a local SST file
- * The reason localFilesToDfsFiles is a separate map because versionToRocksDBFiles can contain
- *  multiple similar SST files to a particular local file (for example 1.sst can map to 1-UUID1.sst
- * in v1 and 1-UUID2.sst in v2). We need to capture the exact file used to ensure Version ID
- * compatibility across SST files and RocksDB manifest.
- */
-
-case class RocksDBFileMappings(
-    versionToRocksDBFiles: ConcurrentHashMap[Long, Seq[RocksDBImmutableFile]],
-    localFilesToDfsFiles: ConcurrentHashMap[String, RocksDBImmutableFile])
-
-/**
  * Metrics regarding RocksDB file sync between local and DFS.
  */
 case class RocksDBFileManagerMetrics(
