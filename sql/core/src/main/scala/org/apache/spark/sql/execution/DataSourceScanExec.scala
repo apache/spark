@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics, VariantCons
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructType, VariantType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.types.variant.VariantMetrics
 import org.apache.spark.util.ArrayImplicits._
@@ -615,10 +615,15 @@ case class FileSourceScanExec(
   protected lazy val variantBuilderMetrics: Map[String, SQLMetric] =
     VariantConstructionMetrics.createSQLMetrics(sparkContext)
 
-  /** Only report variant metrics if the data source file format is JSON */
+  /**
+   * Only report variant metrics if the data source file format is JSON and the schema
+   * contains a Variant
+   */
   override lazy val metrics: Map[String, SQLMetric] = super.metrics ++ {
-    if (relation.fileFormat.isInstanceOf[JsonFileFormat]) variantBuilderMetrics
-    else Map.empty[String, SQLMetric]
+    if (relation.fileFormat.isInstanceOf[JsonFileFormat] &&
+      requiredSchema.existsRecursively(_.isInstanceOf[VariantType])) {
+      variantBuilderMetrics
+    } else Map.empty[String, SQLMetric]
   }
 
   // Note that some vals referring the file-based relation are lazy intentionally
