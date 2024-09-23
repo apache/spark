@@ -2887,6 +2887,30 @@ class DataSourceV2SQLSuiteV1Filter
         "config" -> "\"spark.sql.catalog.not_exist_catalog\""))
   }
 
+  test("SPARK-49757: Test for SET CATALOG statement with IDENTIFIER") {
+    val catalogManager = spark.sessionState.catalogManager
+    assert(catalogManager.currentCatalog.name() == SESSION_CATALOG_NAME)
+
+    // Set catalog to testcat using IDENTIFIER
+    sql("SET CATALOG IDENTIFIER('testcat')")
+    assert(catalogManager.currentCatalog.name() == "testcat")
+
+    // Set catalog to testcat2 using IDENTIFIER with parameter
+    spark.sql("SET CATALOG IDENTIFIER(:param)", Map("param" -> "testcat2"))
+    assert(catalogManager.currentCatalog.name() == "testcat2")
+
+    // Attempt to set a non-existent catalog using IDENTIFIER
+    checkError(
+      exception = intercept[CatalogNotFoundException] {
+        sql("SET CATALOG IDENTIFIER('not_exist_catalog')")
+      },
+      condition = "CATALOG_NOT_FOUND",
+      parameters = Map(
+        "catalogName" -> "`not_exist_catalog`",
+        "config" -> "\"spark.sql.catalog.not_exist_catalog\"")
+    )
+  }
+
   test("SPARK-35973: ShowCatalogs") {
     val schema = new StructType()
       .add("catalog", StringType, nullable = false)
