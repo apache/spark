@@ -180,7 +180,7 @@ class StatefulProcessorApiClient:
         state_call_command.stateName = state_name
         state_call_command.schema = key_schema.json()
         state_call_command.mapStateValueSchema = value_schema.json()
-        call = stateMessage.StatefulProcessorCall(getListState=state_call_command)
+        call = stateMessage.StatefulProcessorCall(getMapState=state_call_command)
         message = stateMessage.StateRequest(statefulProcessorCall=call)
 
         self._send_proto_message(message.SerializeToString())

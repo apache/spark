@@ -214,8 +214,6 @@ class TransformWithStateInPandasStateServer(
         val stateName = message.getGetMapState.getStateName
         val keySchema = message.getGetMapState.getSchema
         val valueSchema = message.getGetMapState.getMapStateValueSchema
-        logWarning(s"Initalizing map state $stateName with key schema $keySchema and" +
-          s" value schema $valueSchema")
         initializeStateVariable(stateName, keySchema, "mapState", None, valueSchema)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
@@ -377,7 +375,7 @@ class TransformWithStateInPandasStateServer(
           sendResponse(2, s"state $stateName doesn't exist")
         }
       case MapStateCall.MethodCase.GETVALUE =>
-        val keyBytes = message.getContainsKey.getKey.toByteArray
+        val keyBytes = message.getGetValue.getKey.toByteArray
         val keyRow = PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema,
           mapStateInfo.keyDeserializer)
         val value = mapStateInfo.mapState.getValue(keyRow)
@@ -407,6 +405,7 @@ class TransformWithStateInPandasStateServer(
         val valueRow = PythonSQLUtils.toJVMRow(valueBytes, mapStateInfo.valueSchema,
           mapStateInfo.valueDeserializer)
         mapStateInfo.mapState.updateValue(keyRow, valueRow)
+        val value = mapStateInfo.mapState.getValue(keyRow)
         sendResponse(0)
       case MapStateCall.MethodCase.ITERATOR =>
         val iteratorId = message.getIterator.getIteratorId
@@ -461,7 +460,6 @@ class TransformWithStateInPandasStateServer(
           rowCount += 1
         }
         arrowStreamWriter.finalizeCurrentArrowBatch()
-        sendResponse(0)
       case MapStateCall.MethodCase.KEYS =>
         val iteratorId = message.getKeys.getIteratorId
         var iteratorOption = iterators.get(iteratorId)
@@ -609,7 +607,6 @@ class TransformWithStateInPandasStateServer(
               expressionEncoder.createDeserializer(), expressionEncoder.createSerializer(),
               valueExpressionEncoder.createDeserializer(),
               valueExpressionEncoder.createSerializer()))
-          logWarning(s"Map state $stateName initialized: ${mapStates.contains(stateName)}")
           sendResponse(0)
         } else {
           sendResponse(1, s"Map state $stateName already exists")

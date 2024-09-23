@@ -169,9 +169,11 @@ class MapStateClient:
         else:
             # If the index is at the end of the DataFrame, remove the state from the dictionary.
             self.key_value_dict.pop(iterator_id, None)
-        key_row = pandas_df.iloc[index, 0]
-        value_row = pandas_df.iloc[index, 1]
-        return Row(**key_row.to_dict()), Row(**value_row.to_dict())
+        key_row_bytes = pandas_df.iloc[index, 0]
+        value_row_bytes = pandas_df.iloc[index, 1]
+        key_row = self._stateful_processor_api_client._deserialize_from_bytes(key_row_bytes)
+        value_row = self._stateful_processor_api_client._deserialize_from_bytes(value_row_bytes)
+        return key_row, value_row
 
     def get_row(self, state_name: str, iterator_id: str, is_key: bool) -> Any:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
