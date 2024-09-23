@@ -932,6 +932,10 @@ class DataFrame(ParentDataFrame):
         return table[0][0].as_py()
 
     def withColumns(self, *colsMap: Dict[str, Column]) -> ParentDataFrame:
+        # Below code is to help enable kwargs in future.
+        assert len(colsMap) == 1
+        colsMap = colsMap[0]  # type: ignore[assignment]
+
         if not isinstance(colsMap, dict):
             raise PySparkTypeError(
                 errorClass="NOT_DICT",
