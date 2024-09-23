@@ -19,9 +19,12 @@ package org.apache.spark.sql.catalyst
 
 import java.math.BigInteger
 import java.util.{HashSet, LinkedList, List => JList, Map => JMap, Set => JSet}
+
 import scala.beans.{BeanProperty, BooleanBeanProperty}
-import scala.reflect.{ClassTag, classTag}
+import scala.reflect.{classTag, ClassTag}
+
 import com.esotericsoftware.kryo.KryoSerializable
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.JavaTypeInferenceBeans.{JavaBeanWithGenericBase, JavaBeanWithGenericHierarchy, JavaBeanWithGenericsABC}
