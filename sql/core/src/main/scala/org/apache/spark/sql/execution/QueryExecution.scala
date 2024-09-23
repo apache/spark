@@ -46,8 +46,8 @@ import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata, WatermarkPropagator}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.{LazyTry, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy
