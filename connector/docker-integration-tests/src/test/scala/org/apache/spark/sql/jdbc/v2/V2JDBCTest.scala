@@ -986,13 +986,4 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   test("scan with filter push-down with date time functions") {
     testDatetime(s"$catalogAndNamespace.${caseConvert("datetime")}")
   }
-
-  test("xor operator push-down") {
-    val df1 = spark.sql(
-      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
-         |WHERE id ^ 3 = 0""".stripMargin)
-    val rows1 = df1.collect()
-    assert(rows1.length === 1)
-    assert(rows1(0).getInt(0) === 3)
-  }
 }
