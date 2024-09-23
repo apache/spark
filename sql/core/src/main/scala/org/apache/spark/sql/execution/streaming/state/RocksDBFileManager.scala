@@ -145,7 +145,9 @@ class RocksDBFileManager(
 
   private def codec = CompressionCodec.createCodec(sparkConf, codecName)
 
+  // This is set when a version is loaded/committed. Hence only set by a query thread.
   private var maxSeenVersion: Option[Long] = None
+  // This is set during deletion of old versions. Hence only set by a maintenance thread.
   private var minSeenVersion = 1L
 
   @volatile private var rootDirChecked: Boolean = false
