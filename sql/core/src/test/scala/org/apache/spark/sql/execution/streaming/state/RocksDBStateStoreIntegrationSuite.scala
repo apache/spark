@@ -456,7 +456,8 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
         AddData(inputData, 4, 4, 4, 4),
         CheckLastBatch((4, 4)),
         AddData(inputData, 5, 5),
-        CheckLastBatch((5, 2))
+        CheckLastBatch((5, 2)),
+        StopStream
       )
 
       // crash recovery again
@@ -512,9 +513,8 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
 
       testStream(joined, OutputMode.Append)(
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
-        AddData(inputData1, 3),
+        AddData(inputData1, 3, 2),
         AddData(inputData2, 3),
-        AddData(inputData1, 2),
         CheckLastBatch((3, 3)),
         AddData(inputData2, 2),
         // This data will be used after restarting the query
@@ -548,17 +548,20 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
       )
     }
     val checkpointInfoList = TestStateStoreWrapper.getCheckpointInfos
-    // We have 6 batches, 2 partitions, and 4 state stores per batch
-    assert(checkpointInfoList.size == 12 * 4)
+    // We sometimes add data to both data sources before CheckLastBatch(). They could be picked
+    // up by one or two batches. There will be at least 6 batches, but less than 12.
+    assert(checkpointInfoList.size % 8 == 0)
+    val numBatches = checkpointInfoList.size / 8
+    assert(numBatches >= 6 && numBatches < 12)
+
     checkpointInfoList.foreach { l =>
       assert(l.checkpointId.isDefined)
-      if (l.batchVersion == 2 || l.batchVersion == 4 || l.batchVersion == 6) {
-        assert(l.baseCheckpointId.isDefined)
-      }
     }
-    assert(checkpointInfoList.count(_.partitionId == 0) == 6 * 4)
-    assert(checkpointInfoList.count(_.partitionId == 1) == 6 * 4)
-    for (i <- 1 to 6) {
+    assert(checkpointInfoList.count(_.baseCheckpointId.isDefined) == (numBatches - 3) * 8)
+
+    assert(checkpointInfoList.count(_.partitionId == 0) == numBatches * 4)
+    assert(checkpointInfoList.count(_.partitionId == 1) == numBatches * 4)
+    for (i <- 1 to numBatches) {
       assert(checkpointInfoList.count(_.batchVersion == i) == 2 * 4)
     }
 
@@ -585,6 +588,75 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
         // if batch version exists, it should be the same as the checkpoint ID of the previous batch
         assert(!a.baseCheckpointId.isDefined || b.checkpointId == a.baseCheckpointId)
       }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled(s"checkpointFormatVersion2 validate DropDuplicates") {
+    val providerClassName = classOf[TestStateStoreProviderWrapper].getCanonicalName
+    TestStateStoreWrapper.clear()
+    withSQLConf(
+      (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName),
+      (SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2"),
+      (SQLConf.SHUFFLE_PARTITIONS.key, "2")) {
+      val checkpointDir = Utils.createTempDir().getCanonicalFile
+      checkpointDir.delete()
+
+      val inputData = MemoryStream[Int]
+      val deduplicated = inputData
+        .toDF()
+        .dropDuplicates("value")
+        .as[Int]
+
+      testStream(deduplicated, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 3),
+        CheckLastBatch(3),
+        AddData(inputData, 3, 2),
+        CheckLastBatch(2),
+        AddData(inputData, 3, 2, 1),
+        CheckLastBatch(1),
+        StopStream
+      )
+
+      // Test recovery
+      testStream(deduplicated, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 4, 1, 3),
+        CheckLastBatch(4),
+        AddData(inputData, 5, 4, 4),
+        CheckLastBatch(5),
+        StopStream
+      )
+
+      // crash recovery again
+      testStream(deduplicated, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 4, 7),
+        CheckLastBatch(7)
+      )
+    }
+
+    val checkpointInfoList = TestStateStoreWrapper.getCheckpointInfos
+    // We expect batches and state stores as per previous tests, adapting for DropDuplicates
+    assert(checkpointInfoList.size == 12) // 6 batches x 2 partitions
+    checkpointInfoList.foreach { l =>
+      assert(l.checkpointId.isDefined)
+      if (l.batchVersion == 2 || l.batchVersion == 3 || l.batchVersion == 5) {
+        assert(l.baseCheckpointId.isDefined)
+      }
+    }
+    assert(checkpointInfoList.count(_.partitionId == 0) == 6)
+    assert(checkpointInfoList.count(_.partitionId == 1) == 6)
+    for (i <- 1 to 6) {
+      assert(checkpointInfoList.count(_.batchVersion == i) == 2)
+    }
+    for {
+      a <- checkpointInfoList
+      b <- checkpointInfoList
+      if a.partitionId == b.partitionId && a.batchVersion == b.batchVersion + 1
+    } {
+      // Check that checkpoint IDs are correctly chained across batches
+      assert(!a.baseCheckpointId.isDefined || b.checkpointId == a.baseCheckpointId)
     }
   }
 
