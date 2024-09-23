@@ -48,6 +48,11 @@ object CollateExpressionBuilder extends ExpressionBuilder {
       case Seq(e: Expression, collationExpr: Expression) =>
         (collationExpr.dataType, collationExpr.foldable) match {
           case (_: StringType, true) =>
+            val collationId = collationExpr.dataType.asInstanceOf[StringType].collationId
+            if(!SQLConf.get.trimCollationEnabled &&
+              CollationFactory.usesTrimCollation(collationId)) {
+              throw QueryCompilationErrors.trimCollationNotEnabledError()
+            }
             val evalCollation = collationExpr.eval()
             if (evalCollation == null) {
               throw QueryCompilationErrors.unexpectedNullError("collation", collationExpr)
@@ -86,6 +91,8 @@ case class Collate(child: Expression, collationName: String)
   override def sql: String = s"$prettyName(${child.sql}, $collationName)"
 
   override def toString: String = s"$prettyName($child, $collationName)"
+
+  val usesTrimCollation = CollationFactory.usesTrimCollation(collationId)
 }
 
 // scalastyle:off line.contains.tab
@@ -112,4 +119,7 @@ case class Collation(child: Expression)
     Literal.create(collationName, SQLConf.get.defaultStringType)
   }
   override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+
+  val usesTrimCollation = CollationFactory.usesTrimCollation(
+    child.dataType.asInstanceOf[StringType].collationId)
 }

@@ -1105,6 +1105,13 @@ public final class CollationFactory {
             Collation.CollationSpecICU.AccentSensitivity.AI;
   }
 
+  /**
+   * Returns whether the collation uses trim collation for the given collation id.
+   */
+  public static boolean usesTrimCollation(int collationId) {
+    return Collation.CollationSpec.getSpaceTrimming(collationId) != Collation.CollationSpec.SpaceTrimming.NONE;
+  }
+
   public static void assertValidProvider(String provider) throws SparkException {
     if (!SUPPORTED_PROVIDERS.contains(provider.toLowerCase())) {
       Map<String, String> params = Map.of(
