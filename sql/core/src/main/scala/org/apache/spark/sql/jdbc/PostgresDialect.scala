@@ -23,6 +23,7 @@ import java.util
 import java.util.Locale
 
 import scala.util.Using
+import scala.util.control.NonFatal
 
 import org.apache.spark.internal.LogKeys.COLUMN_NAME
 import org.apache.spark.internal.MDC
@@ -30,7 +31,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.connector.expressions.{Expression, NamedReference}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -295,6 +296,28 @@ private case class PostgresDialect()
         }
       case unsupported: UnsupportedOperationException => throw unsupported
       case _ => super.classifyException(e, errorClass, messageParameters, description)
+    }
+  }
+
+  class PostgresSQLBuilder extends JDBCSQLBuilder {
+    override def visitExtract(field: String, source: String): String = {
+      field match {
+        case "DAY_OF_YEAR" => s"EXTRACT(DOY FROM $source)"
+        case "YEAR_OF_WEEK" => s"EXTRACT(YEAR FROM $source)"
+        case "DAY_OF_WEEK" => s"EXTRACT(DOW FROM $source)"
+        case _ => super.visitExtract(field, source)
+      }
+    }
+  }
+
+  override def compileExpression(expr: Expression): Option[String] = {
+    val postgresSQLBuilder = new PostgresSQLBuilder()
+    try {
+      Some(postgresSQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
     }
   }
 
