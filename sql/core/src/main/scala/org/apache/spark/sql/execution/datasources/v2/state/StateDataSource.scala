@@ -29,15 +29,16 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.DataSourceOptions
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.{JoinSideValues, STATE_VAR_NAME}
+import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.{JoinSideValues, READ_REGISTERED_TIMERS, STATE_VAR_NAME}
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues.JoinSideValues
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.{StateMetadataPartitionReader, StateMetadataTableEntry}
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
-import org.apache.spark.sql.execution.streaming.{CommitLog, OffsetSeqLog, OffsetSeqMetadata, TransformWithStateOperatorProperties, TransformWithStateVariableInfo}
+import org.apache.spark.sql.execution.streaming.{CommitLog, OffsetSeqLog, OffsetSeqMetadata, TimerStateUtils, TransformWithStateOperatorProperties, TransformWithStateVariableInfo}
 import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateSchemaCompatibilityChecker, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreProviderId}
 import org.apache.spark.sql.sources.DataSourceRegister
+import org.apache.spark.sql.streaming.TimeMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.SerializableConfiguration
@@ -132,7 +133,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       sourceOptions: StateSourceOptions,
       stateStoreMetadata: Array[StateMetadataTableEntry]): Unit = {
     val twsShortName = "transformWithStateExec"
-    if (sourceOptions.stateVarName.isDefined) {
+    if (sourceOptions.stateVarName.isDefined || sourceOptions.readRegisteredTimers) {
       // Perform checks for transformWithState operator in case state variable name is provided
       require(stateStoreMetadata.size == 1)
       val opMetadata = stateStoreMetadata.head
@@ -153,10 +154,21 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           "No state variable names are defined for the transformWithState operator")
       }
 
+      val twsOperatorProperties = TransformWithStateOperatorProperties.fromJson(operatorProperties)
+      val timeMode = twsOperatorProperties.timeMode
+      if (sourceOptions.readRegisteredTimers && timeMode == TimeMode.None().toString) {
+        throw StateDataSourceErrors.invalidOptionValue(READ_REGISTERED_TIMERS,
+          "Registered timers are not available in TimeMode=None.")
+      }
+
       // if the state variable is not one of the defined/available state variables, then we
       // fail the query
-      val stateVarName = sourceOptions.stateVarName.get
-      val twsOperatorProperties = TransformWithStateOperatorProperties.fromJson(operatorProperties)
+      val stateVarName = if (sourceOptions.readRegisteredTimers) {
+        getTimerStateVarName(timeMode)
+      } else {
+        sourceOptions.stateVarName.get
+      }
+
       val stateVars = twsOperatorProperties.stateVariables
       if (stateVars.filter(stateVar => stateVar.stateName == stateVarName).size != 1) {
         throw StateDataSourceErrors.invalidOptionValue(STATE_VAR_NAME,
@@ -189,6 +201,14 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     stateStoreMetadata
   }
 
+  private def getTimerStateVarName(timeMode: String): String = {
+    if (timeMode == TimeMode.EventTime.toString) {
+      TimerStateUtils.EVENT_TIMERS_STATE_NAME + TimerStateUtils.KEY_TO_TIMESTAMP_CF
+    } else {
+      TimerStateUtils.PROC_TIMERS_STATE_NAME + TimerStateUtils.KEY_TO_TIMESTAMP_CF
+    }
+  }
+
   private def getStoreMetadataAndRunChecks(sourceOptions: StateSourceOptions):
     StateStoreReaderInfo = {
     val storeMetadata = getStateStoreMetadata(sourceOptions)
@@ -196,9 +216,10 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     var keyStateEncoderSpecOpt: Option[KeyStateEncoderSpec] = None
     var stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema] = None
     var transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo] = None
+    var timeMode: String = TimeMode.None.toString
 
     if (sourceOptions.joinSide == JoinSideValues.none) {
-      val stateVarName = sourceOptions.stateVarName
+      var stateVarName = sourceOptions.stateVarName
         .getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME)
 
       // Read the schema file path from operator metadata version v2 onwards
@@ -208,6 +229,12 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
         val storeMetadataEntry = storeMetadata.head
         val operatorProperties = TransformWithStateOperatorProperties.fromJson(
           storeMetadataEntry.operatorPropertiesJson)
+        timeMode = operatorProperties.timeMode
+
+        if (sourceOptions.readRegisteredTimers) {
+          stateVarName = getTimerStateVarName(timeMode)
+        }
+
         val stateVarInfoList = operatorProperties.stateVariables
           .filter(stateVar => stateVar.stateName == stateVarName)
         require(stateVarInfoList.size == 1, s"Failed to find unique state variable info " +
@@ -303,7 +330,8 @@ case class StateSourceOptions(
     readChangeFeed: Boolean,
     fromSnapshotOptions: Option[FromSnapshotOptions],
     readChangeFeedOptions: Option[ReadChangeFeedOptions],
-    stateVarName: Option[String]) {
+    stateVarName: Option[String],
+    readRegisteredTimers: Boolean) {
   def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
 
   override def toString: String = {
@@ -334,6 +362,7 @@ object StateSourceOptions extends DataSourceOptions {
   val CHANGE_START_BATCH_ID = newOption("changeStartBatchId")
   val CHANGE_END_BATCH_ID = newOption("changeEndBatchId")
   val STATE_VAR_NAME = newOption("stateVarName")
+  val READ_REGISTERED_TIMERS = newOption("readRegisteredTimers")
 
   object JoinSideValues extends Enumeration {
     type JoinSideValues = Value
@@ -373,6 +402,19 @@ object StateSourceOptions extends DataSourceOptions {
     // Check if the state variable name is provided. Used with the transformWithState operator.
     val stateVarName = Option(options.get(STATE_VAR_NAME))
       .map(_.trim)
+
+    val readRegisteredTimers = try {
+      Option(options.get(READ_REGISTERED_TIMERS))
+        .map(_.toBoolean).getOrElse(false)
+    } catch {
+      case _: IllegalArgumentException =>
+        throw StateDataSourceErrors.invalidOptionValue(READ_REGISTERED_TIMERS,
+          "Boolean value is expected")
+    }
+
+    if (readRegisteredTimers && stateVarName.isDefined) {
+      throw StateDataSourceErrors.conflictOptions(Seq(READ_REGISTERED_TIMERS, STATE_VAR_NAME))
+    }
 
     val joinSide = try {
       Option(options.get(JOIN_SIDE))
@@ -477,7 +519,8 @@ object StateSourceOptions extends DataSourceOptions {
 
     StateSourceOptions(
       resolvedCpLocation, batchId.get, operatorId, storeName, joinSide,
-      readChangeFeed, fromSnapshotOptions, readChangeFeedOptions, stateVarName)
+      readChangeFeed, fromSnapshotOptions, readChangeFeedOptions,
+      stateVarName, readRegisteredTimers)
   }
 
   private def resolvedCheckpointLocation(

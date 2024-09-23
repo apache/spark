@@ -318,6 +318,25 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     }
   }
 
+  private def addTimerColFamily(): Unit = {
+    val stateName = if (timeMode == TimeMode.EventTime()) {
+      TimerStateUtils.EVENT_TIMERS_STATE_NAME + TimerStateUtils.KEY_TO_TIMESTAMP_CF
+    } else {
+      TimerStateUtils.PROC_TIMERS_STATE_NAME + TimerStateUtils.KEY_TO_TIMESTAMP_CF
+    }
+
+    val timerEncoder = new TimerKeyEncoder(keyExprEnc)
+    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
+      getTimerStateSchema(stateName, timerEncoder.schemaForKeyRow, timerEncoder.schemaForValueRow)
+    columnFamilySchemas.put(stateName, colFamilySchema)
+    val stateVariableInfo = TransformWithStateVariableUtils.getTimerState(stateName)
+    stateVariableInfos.put(stateName, stateVariableInfo)
+  }
+
+  if (timeMode != TimeMode.None()) {
+    addTimerColFamily()
+  }
+
   override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state", PRE_INIT)
     val colFamilySchema = StateStoreColumnFamilySchemaUtils.

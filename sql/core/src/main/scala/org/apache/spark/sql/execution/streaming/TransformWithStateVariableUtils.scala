@@ -43,6 +43,10 @@ object TransformWithStateVariableUtils {
   def getMapState(stateName: String, ttlEnabled: Boolean): TransformWithStateVariableInfo = {
     TransformWithStateVariableInfo(stateName, StateVariableType.MapState, ttlEnabled)
   }
+
+  def getTimerState(stateName: String): TransformWithStateVariableInfo = {
+    TransformWithStateVariableInfo(stateName, StateVariableType.ValueState, ttlEnabled = false)
+  }
 }
 
 // Enum of possible State Variable types

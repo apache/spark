@@ -21,9 +21,9 @@ import java.time.Duration
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, TestClass}
-import org.apache.spark.sql.functions.explode
+import org.apache.spark.sql.functions.{explode, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{ExpiredTimerInfo, InputMapRow, ListState, MapInputEvent, MapOutputEvent, MapStateTTLProcessor, OutputMode, RunningCountStatefulProcessor, StatefulProcessor, StateStoreMetricsTest, TestMapStateProcessor, TimeMode, TimerValues, TransformWithStateSuiteUtils, Trigger, TTLConfig, ValueState}
+import org.apache.spark.sql.streaming.{ExpiredTimerInfo, InputMapRow, ListState, MapInputEvent, MapOutputEvent, MapStateTTLProcessor, MaxEventTimeStatefulProcessor, OutputMode, RunningCountStatefulProcessor, RunningCountStatefulProcessorWithProcTimeTimerUpdates, StatefulProcessor, StateStoreMetricsTest, TestMapStateProcessor, TimeMode, TimerValues, TransformWithStateSuiteUtils, Trigger, TTLConfig, ValueState}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
 /** Stateful processor of single value state var with non-primitive type */
@@ -478,6 +478,96 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
               Map(Row("key2") -> Row(Row(2), 61000L),
                 Row("key1") -> Row(Row(1), 61000L))))
         )
+      }
+    }
+  }
+
+  test("state data source - processing-time timers integration") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { tempDir =>
+        val clock = new StreamManualClock
+
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(
+            new RunningCountStatefulProcessorWithProcTimeTimerUpdates(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
+            checkpointLocation = tempDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("a", "1")), // at batch 0, ts = 1, timer = "a" -> [6] (= 1 + 5)
+          AddData(inputData, "a"),
+          AdvanceManualClock(2 * 1000),
+          CheckNewAnswer(("a", "2")), // at batch 1, ts = 3, timer = "a" -> [9.5] (2 + 7.5)
+          StopStream)
+
+        val stateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.READ_REGISTERED_TIMERS, true)
+          .load()
+
+        val resultDf = stateReaderDf.selectExpr(
+       "key.key.value AS groupingKey",
+          "key.expiryTimestampMs AS expiryTimestamp",
+          "partition_id")
+
+        checkAnswer(resultDf,
+          Seq(Row("a", 10500L, 0)))
+      }
+    }
+  }
+
+  test("state data source - event-time timers integration") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { tempDir =>
+        val inputData = MemoryStream[(String, Int)]
+        val result =
+          inputData.toDS()
+            .select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
+            .withWatermark("eventTime", "10 seconds")
+            .as[(String, Long)]
+            .groupByKey(_._1)
+            .transformWithState(
+              new MaxEventTimeStatefulProcessor(),
+              TimeMode.EventTime(),
+              OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = tempDir.getCanonicalPath),
+
+          AddData(inputData, ("a", 11), ("a", 13), ("a", 15)),
+          // Max event time = 15. Timeout timestamp for "a" = 15 + 5 = 20. Watermark = 15 - 10 = 5.
+          CheckNewAnswer(("a", 15)), // Output = max event time of a
+
+          AddData(inputData, ("a", 4)), // Add data older than watermark for "a"
+          CheckNewAnswer(), // No output as data should get filtered by watermark
+          StopStream)
+
+        val stateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.READ_REGISTERED_TIMERS, true)
+          .load()
+
+        val resultDf = stateReaderDf.selectExpr(
+          "key.key.value AS groupingKey",
+          "key.expiryTimestampMs AS expiryTimestamp",
+          "partition_id")
+
+        checkAnswer(resultDf,
+          Seq(Row("a", 20000L, 0)))
       }
     }
   }
