@@ -18,9 +18,10 @@
 package org.apache.spark.sql
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.api.Dataset
 
 /**
- * A container for a [[Dataset]], used for implicit conversions in Scala.
+ * A container for a [[org.apache.spark.sql.api.Dataset]], used for implicit conversions in Scala.
  *
  * To use this, import implicit conversions in SQL:
  * {{{
@@ -31,15 +32,15 @@ import org.apache.spark.annotation.Stable
  * @since 1.6.0
  */
 @Stable
-case class DatasetHolder[T] private[sql](private val ds: Dataset[T]) {
+class DatasetHolder[T, DS[U] <: Dataset[U]](ds: DS[T]) {
 
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `rdd.toDS("1")` as invoking this toDS and then apply on the returned Dataset.
-  def toDS(): Dataset[T] = ds
+  def toDS(): DS[T] = ds
 
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `rdd.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DataFrame = ds.toDF()
+  def toDF(): DS[Row] = ds.toDF().asInstanceOf[DS[Row]]
 
-  def toDF(colNames: String*): DataFrame = ds.toDF(colNames : _*)
+  def toDF(colNames: String*): DS[Row] = ds.toDF(colNames: _*).asInstanceOf[DS[Row]]
 }
