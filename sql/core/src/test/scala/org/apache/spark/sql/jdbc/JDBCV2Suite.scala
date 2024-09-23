@@ -1661,18 +1661,18 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df7, Seq(Row("adam")))
 
     val df8 = sql("SELECT name FROM h2.test.datetime WHERE " +
-      "DATE_TRUNC('Millisecond', time1) = timestamp'2024-09-05 11:23:45.123'")
+      "DATE_TRUNC('Millisecond', time1) = timestamp'2024-09-05 11:23:45.000'")
     checkFiltersRemoved(df8)
     val expectedPlanFragment8 =
-      "PushedFilters: [(DATE_TRUNC('Millisecond', TIME1)) = 1725560625123000]"
+      "PushedFilters: [(DATE_TRUNC('Millisecond', TIME1)) = 1725560625000000]"
     checkPushedInfo(df8, expectedPlanFragment8)
     checkAnswer(df8, Seq(Row("adam")))
 
     val df9 = sql("SELECT name FROM h2.test.datetime WHERE " +
-      "DATE_TRUNC('MicroseconD', time1) = timestamp'2024-09-05 11:23:45.123456'")
+      "DATE_TRUNC('MicroseconD', time1) = timestamp'2024-09-05 11:23:45.000000'")
     checkFiltersRemoved(df9)
     val expectedPlanFragment9 =
-      "PushedFilters: [(DATE_TRUNC('MicroseconD', TIME1)) = 1725560625123456]"
+      "PushedFilters: [(DATE_TRUNC('MicroseconD', TIME1)) = 1725560625000000]"
     checkPushedInfo(df9, expectedPlanFragment9)
     checkAnswer(df9, Seq(Row("adam")))
   }
