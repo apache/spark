@@ -3039,16 +3039,20 @@ object Encode {
       legacyCharsets: Boolean,
       legacyErrorAction: Boolean): Array[Byte] = {
     val toCharset = charset.toString
-    if (input.numBytes == 0 || ("UTF-8".equalsIgnoreCase(toCharset) && input.isValid)) {
-      return input.getBytes
-    }
-    val encoder = CharsetProvider.newEncoder(toCharset, legacyCharsets, legacyErrorAction)
-    try {
-      val bb = encoder.encode(CharBuffer.wrap(input.toString))
-      JavaUtils.bufferToArray(bb)
-    } catch {
-      case _: CharacterCodingException =>
-        throw QueryExecutionErrors.malformedCharacterCoding("encode", toCharset)
+    if ("UTF-8".equalsIgnoreCase(toCharset) && input.isValid) {
+      input.getBytes
+    } else {
+      val encoder = CharsetProvider.newEncoder(toCharset, legacyCharsets, legacyErrorAction)
+      if (input.numBytes == 0) {
+        return input.getBytes
+      }
+      try {
+        val bb = encoder.encode(CharBuffer.wrap(input.toString))
+        JavaUtils.bufferToArray(bb)
+      } catch {
+        case _: CharacterCodingException =>
+          throw QueryExecutionErrors.malformedCharacterCoding("encode", toCharset)
+      }
     }
   }
 }

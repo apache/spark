@@ -26,6 +26,8 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch,
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.util.CharsetProvider
+import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
@@ -2086,5 +2088,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(bytes === expected)
     checkEvaluation(Encode(Literal(str), Literal("UTF-8")), expected)
     checkEvaluation(Encode(Literal(UTF8String.EMPTY_UTF8), Literal("UTF-8")), Array.emptyByteArray)
+    checkErrorInExpression[SparkIllegalArgumentException](
+      Encode(Literal(UTF8String.EMPTY_UTF8), Literal("UTF-12345")),
+      condition = "INVALID_PARAMETER_VALUE.CHARSET",
+      parameters = Map(
+        "charset" -> "UTF-12345",
+        "functionName" -> toSQLId("encode"),
+        "parameter" -> toSQLId("charset"),
+        "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", ")))
   }
 }
