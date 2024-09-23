@@ -298,6 +298,10 @@ statement
         LEFT_PAREN columns=multipartIdentifierPropertyList RIGHT_PAREN
         (OPTIONS options=propertyList)?                                #createIndex
     | DROP INDEX (IF EXISTS)? identifier ON TABLE? identifierReference #dropIndex
+    | CALL identifierReference
+        LEFT_PAREN
+        (functionArgument (COMMA functionArgument)*)?
+        RIGHT_PAREN                                                    #call
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
@@ -1488,6 +1492,7 @@ version
 
 operatorPipeRightSide
     : selectClause
+    | whereClause
     ;
 
 // When `SQL_standard_keyword_behavior=true`, there are 2 kinds of keywords in Spark SQL.
@@ -1851,6 +1856,7 @@ nonReserved
     | BY
     | BYTE
     | CACHE
+    | CALL
     | CALLED
     | CASCADE
     | CASE
