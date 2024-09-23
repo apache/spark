@@ -3039,7 +3039,7 @@ object Encode {
       legacyCharsets: Boolean,
       legacyErrorAction: Boolean): Array[Byte] = {
     val toCharset = charset.toString
-    if (input.numBytes == 0 || ("UTF-8".equalsIgnoreCase(toCharset) && input.isValid())) {
+    if (input.numBytes == 0 || ("UTF-8".equalsIgnoreCase(toCharset) && input.isValid)) {
       return input.getBytes
     }
     val encoder = CharsetProvider.newEncoder(toCharset, legacyCharsets, legacyErrorAction)

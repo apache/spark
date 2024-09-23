@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -2075,5 +2076,15 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         )
       )
     )
+  }
+
+  test("SPARK-48712: Check whether input is valid utf-8 string or not before entering fast path") {
+    val str = UTF8String.fromBytes(Array[Byte](-1, -2, -3, -4))
+    assert(!str.isValid, "please use a string that is not valid UTF-8 for testing")
+    val expected = Array[Byte](-17, -65, -67, -17, -65, -67, -17, -65, -67, -17, -65, -67)
+    val bytes = Encode.encode(str, UTF8String.fromString("UTF-8"), false, false)
+    assert(bytes === expected)
+    checkEvaluation(Encode(Literal(str), Literal("UTF-8")), expected)
+    checkEvaluation(Encode(Literal(UTF8String.EMPTY_UTF8), Literal("UTF-8")), Array.emptyByteArray)
   }
 }
