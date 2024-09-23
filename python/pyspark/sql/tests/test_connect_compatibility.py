@@ -27,6 +27,8 @@ class ConnectCompatibilityTestsMixin:
         from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
         from pyspark.sql.classic.column import Column as ClassicColumn
         from pyspark.sql.connect.column import Column as ConnectColumn
+        from pyspark.sql.session import SparkSession as ClassicSparkSession
+        from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
 
         def get_public_methods(cls):
             """Get public methods of a class."""
@@ -47,19 +49,71 @@ class ConnectCompatibilityTestsMixin:
                 classic_signature = inspect.signature(classic_methods[method])
                 connect_signature = inspect.signature(connect_methods[method])
 
-                self.assertEqual(
-                    classic_signature,
-                    connect_signature,
-                    f"Signature mismatch in {cls_name} method '{method}'\n"
-                    f"Classic: {classic_signature}\n"
-                    f"Connect: {connect_signature}",
-                )
+                # createDataFrame cannot be the same since RDD is not supported from Spark Connect
+                if not method == "createDataFrame":
+                    self.assertEqual(
+                        classic_signature,
+                        connect_signature,
+                        f"Signature mismatch in {cls_name} method '{method}'\n"
+                        f"Classic: {classic_signature}\n"
+                        f"Connect: {connect_signature}",
+                    )
+
+        def check_missing_methods(classic_cls, connect_cls, cls_name, expected_missing_methods):
+            """Check for expected missing methods between classic and connect classes."""
+            classic_methods = get_public_methods(classic_cls)
+            connect_methods = get_public_methods(connect_cls)
+
+            # Identify missing methods
+            classic_only_methods = set(classic_methods.keys()) - set(connect_methods.keys())
+
+            # Compare the actual missing methods with the expected ones
+            self.assertEqual(
+                classic_only_methods,
+                expected_missing_methods,
+                f"{cls_name}: Unexpected missing methods in Connect: {classic_only_methods}",
+            )
 
         # DataFrame API signature comparison
         compare_method_signatures(ClassicDataFrame, ConnectDataFrame, "DataFrame")
 
         # Column API signature comparison
         compare_method_signatures(ClassicColumn, ConnectColumn, "Column")
+
+        # SparkSession API signature comparison
+        compare_method_signatures(ClassicSparkSession, ConnectSparkSession, "SparkSession")
+
+        # Expected missing methods for DataFrame
+        expected_missing_methods_for_dataframe = {
+            "inputFiles",
+            "isLocal",
+            "semanticHash",
+            "isEmpty",
+        }
+
+        # DataFrame missing method check
+        check_missing_methods(
+            ClassicDataFrame, ConnectDataFrame, "DataFrame", expected_missing_methods_for_dataframe
+        )
+
+        # Expected missing methods for Column (if any, replace with actual values)
+        expected_missing_methods_for_column = set()
+
+        # Column missing method check
+        check_missing_methods(
+            ClassicColumn, ConnectColumn, "Column", expected_missing_methods_for_column
+        )
+
+        # Expected missing methods for SparkSession (if any, replace with actual values)
+        expected_missing_methods_for_spark_session = {"newSession"}
+
+        # SparkSession missing method check
+        check_missing_methods(
+            ClassicSparkSession,
+            ConnectSparkSession,
+            "SparkSession",
+            expected_missing_methods_for_spark_session,
+        )
 
 
 class ConnectCompatibilityTests(ConnectCompatibilityTestsMixin, ReusedSQLTestCase):

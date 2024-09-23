@@ -511,7 +511,7 @@ class DataFrame(ParentDataFrame):
             session=self._session,
         )
 
-    def filter(self, condition: "ColumnOrName") -> ParentDataFrame:
+    def filter(self, condition: Union[Column, str]) -> ParentDataFrame:
         if isinstance(condition, str):
             expr = F.expr(condition)
         else:

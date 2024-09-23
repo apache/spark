@@ -1063,7 +1063,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         jdf = self._jdf.selectExpr(self._jseq(expr))
         return DataFrame(jdf, self.sparkSession)
 
-    def filter(self, condition: "ColumnOrName") -> ParentDataFrame:
+    def filter(self, condition: Union[Column, str]) -> ParentDataFrame:
         if isinstance(condition, str):
             jdf = self._jdf.filter(condition)
         elif isinstance(condition, Column):
