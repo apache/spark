@@ -112,7 +112,7 @@ class ConnectCompatibilityTestsMixin:
             ClassicColumn, ConnectColumn, "Column", expected_missing_properties_for_column
         )
 
-        # Expected missing properties for SparkSession (if any, replace with actual values)
+        # Expected missing properties for SparkSession
         expected_missing_properties_for_spark_session = {"sparkContext", "version"}
 
         # SparkSession properties comparison
