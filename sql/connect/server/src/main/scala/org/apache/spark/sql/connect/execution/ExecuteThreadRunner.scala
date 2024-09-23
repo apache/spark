@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.connect.execution
 
-import scala.concurrent.{ExecutionContext, Promise}
+import java.util.concurrent.atomic.AtomicInteger
+
 import scala.jdk.CollectionConverters._
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.google.protobuf.Message
@@ -32,7 +32,7 @@ import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteSessionTag, SparkConnectService}
 import org.apache.spark.sql.connect.utils.ErrorUtils
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * This class launches the actual execution in an execution thread. The execution pushes the
@@ -40,68 +40,65 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  */
 private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends Logging {
 
-  private val promise: Promise[Unit] = Promise[Unit]()
+  /** The thread state. */
+  private val state: AtomicInteger = new AtomicInteger(ThreadState.notStarted)
 
   // The newly created thread will inherit all InheritableThreadLocals used by Spark,
   // e.g. SparkContext.localProperties. If considering implementing a thread-pool,
   // forwarding of thread locals needs to be taken into account.
-  private val executionThread: ExecutionThread = new ExecutionThread(promise)
-
-  private var started: Boolean = false
-
-  private var interrupted: Boolean = false
-
-  private var completed: Boolean = false
-
-  private val lock = new Object
+  private val executionThread: ExecutionThread = new ExecutionThread()
 
   /** Launches the execution in a background thread, returns immediately. */
   private[connect] def start(): Unit = {
-    lock.synchronized {
-      assert(!started)
-      // Do not start if already interrupted.
-      if (!interrupted) {
-        executionThread.start()
-        started = true
-      }
+    if (state.getAcquire() == ThreadState.notStarted) {
+      executionThread.start()
+
+      // If the thread is started earlier than this, the thread will change the state itself.
+      state.compareAndExchangeRelease(ThreadState.notStarted, ThreadState.started)
     }
   }
 
   /**
-   * Register a callback that gets executed after completion/interruption of the execution thread.
-   */
-  private[connect] def processOnCompletion(callback: Try[Unit] => Unit): Unit = {
-    promise.future.onComplete(callback)(ExecuteThreadRunner.namedExecutionContext)
-  }
-
-  /**
-   * Interrupt the executing thread.
+   * Interrupts the execution thread if the thread is running and has yet to be completed.
+   *
    * @return
-   *   true if it was not interrupted before, false if it was already interrupted or completed.
+   *   true if the thread is running and interrupted.
    */
   private[connect] def interrupt(): Boolean = {
-    lock.synchronized {
-      if (!started && !interrupted) {
-        // execution thread hasn't started yet, and will not be started.
-        // handle the interrupted error here directly.
-        interrupted = true
-        ErrorUtils.handleError(
-          "execute",
-          executeHolder.responseObserver,
-          executeHolder.sessionHolder.userId,
-          executeHolder.sessionHolder.sessionId,
-          Some(executeHolder.eventsManager),
-          interrupted)(new SparkSQLException("OPERATION_CANCELED", Map.empty))
-        true
-      } else if (!interrupted && !completed) {
-        // checking completed prevents sending interrupt onError after onCompleted
-        interrupted = true
-        executionThread.interrupt()
-        true
+    var currentState = state.getAcquire()
+    while (currentState == ThreadState.notStarted || currentState == ThreadState.started) {
+      val newState = if (currentState == ThreadState.notStarted) {
+        ThreadState.interrupted
       } else {
-        false
+        ThreadState.startedInterrupted
       }
+
+      val prevState = state.compareAndExchangeRelease(currentState, newState)
+      if (prevState == currentState) {
+        if (prevState == ThreadState.notStarted) {
+          // The execution thread has not been started, and will never be started.
+          try {
+            ErrorUtils.handleError(
+              "execute",
+              executeHolder.responseObserver,
+              executeHolder.sessionHolder.userId,
+              executeHolder.sessionHolder.sessionId,
+              Some(executeHolder.eventsManager),
+              true)(new SparkSQLException("OPERATION_CANCELED", Map.empty))
+          } finally {
+            return false
+          }
+        } else {
+          // Interrupt execution.
+          executionThread.interrupt()
+          return true
+        }
+      }
+      currentState = prevState
     }
+
+    // Already interrupted, completed, or not started.
+    false
   }
 
   private def execute(): Unit = {
@@ -118,15 +115,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
           executeHolder.sessionHolder.session.sparkContext.cancelJobsWithTag(
             executeHolder.jobTag,
             s"A job with the same tag ${executeHolder.jobTag} has failed.")
-          // Rely on an internal interrupted flag, because Thread.interrupted() could be cleared,
-          // and different exceptions like InterruptedException, ClosedByInterruptException etc.
-          // could be thrown.
-          if (interrupted) {
-            throw new SparkSQLException("OPERATION_CANCELED", Map.empty)
-          } else {
-            // Rethrown the original error.
-            throw e
-          }
+          // Rethrow the original error.
+          throw e
       } finally {
         executeHolder.sessionHolder.session.sparkContext.removeJobTag(executeHolder.jobTag)
         SparkConnectService.executionListener.foreach(_.removeJobTag(executeHolder.jobTag))
@@ -139,23 +129,50 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         }
       }
     } catch {
-      ErrorUtils.handleError(
-        "execute",
-        executeHolder.responseObserver,
-        executeHolder.sessionHolder.userId,
-        executeHolder.sessionHolder.sessionId,
-        Some(executeHolder.eventsManager),
-        interrupted)
+      case e: Throwable if state.getAcquire() != ThreadState.startedInterrupted =>
+        ErrorUtils.handleError(
+          "execute",
+          executeHolder.responseObserver,
+          executeHolder.sessionHolder.userId,
+          executeHolder.sessionHolder.sessionId,
+          Some(executeHolder.eventsManager),
+          false)(e)
+    } finally {
+      // Make sure to transition to completed in order to prevent the thread from being interrupted
+      // afterwards.
+      var currentState = state.getAcquire()
+      while (currentState == ThreadState.started ||
+        currentState == ThreadState.startedInterrupted) {
+        val interrupted = currentState == ThreadState.startedInterrupted
+        val prevState = state.compareAndExchangeRelease(currentState, ThreadState.completed)
+        if (prevState == currentState) {
+          if (interrupted) {
+            try {
+              ErrorUtils.handleError(
+                "execute",
+                executeHolder.responseObserver,
+                executeHolder.sessionHolder.userId,
+                executeHolder.sessionHolder.sessionId,
+                Some(executeHolder.eventsManager),
+                true)(new SparkSQLException("OPERATION_CANCELED", Map.empty))
+            } finally {
+              executeHolder.cleanup()
+            }
+          }
+          return
+        }
+        currentState = prevState
+      }
     }
   }
 
   // Inner executeInternal is wrapped by execute() for error handling.
-  private def executeInternal() = {
-    // synchronized - check if already got interrupted while starting.
-    lock.synchronized {
-      if (interrupted) {
-        throw new InterruptedException()
-      }
+  private def executeInternal(): Unit = {
+    val prevState = state.compareAndExchangeRelease(ThreadState.notStarted, ThreadState.started)
+    if (prevState != ThreadState.notStarted && prevState != ThreadState.started) {
+      // Silently return, expecting that the caller would handle the interruption.
+      assert(prevState != ThreadState.completed)
+      return
     }
 
     // `withSession` ensures that session-specific artifacts (such as JARs and class files) are
@@ -226,17 +243,13 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
               observedMetrics ++ accumulatedInPython))
       }
 
-      lock.synchronized {
-        // Synchronized before sending ResultComplete, and up until completing the result stream
-        // to prevent a situation in which a client of reattachable execution receives
-        // ResultComplete, and proceeds to send ReleaseExecute, and that triggers an interrupt
-        // before it finishes.
-
-        if (interrupted) {
-          // check if it got interrupted at the very last moment
-          throw new InterruptedException()
-        }
-        completed = true // no longer interruptible
+      // State transition should be atomic to prevent a situation in which a client of reattachable
+      // execution receives ResultComplete, and proceeds to send ReleaseExecute, and that triggers
+      // an interrupt before it finishes.
+      if (state.compareAndExchangeRelease(
+          ThreadState.started,
+          ThreadState.completed) == ThreadState.started) {
+        // Now, the execution cannot be interrupted.
 
         // If the request starts a long running iterator (e.g. StreamingQueryListener needs
         // a long-running iterator to continuously stream back events, it runs in a separate
@@ -311,21 +324,36 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       .build()
   }
 
-  private class ExecutionThread(onCompletionPromise: Promise[Unit])
+  private class ExecutionThread()
       extends Thread(s"SparkConnectExecuteThread_opId=${executeHolder.operationId}") {
-    override def run(): Unit = {
-      try {
-        execute()
-        onCompletionPromise.success(())
-      } catch {
-        case NonFatal(e) =>
-          onCompletionPromise.failure(e)
-      }
-    }
+    override def run(): Unit = execute()
   }
 }
 
-private[connect] object ExecuteThreadRunner {
-  private implicit val namedExecutionContext: ExecutionContext = ExecutionContext
-    .fromExecutor(ThreadUtils.newDaemonSingleThreadExecutor("SparkConnectExecuteThreadCallback"))
+/**
+ * Defines possible execution thread states.
+ *
+ * The state transitions as follows.
+ *   - notStarted -> interrupted.
+ *   - notStarted -> started -> startedInterrupted -> completed.
+ *   - notStarted -> started -> completed.
+ *
+ * The thread can only be interrupted if the thread is in the startedInterrupted state.
+ */
+private object ThreadState {
+
+  /** The thread has not started: transition to interrupted or started. */
+  val notStarted: Int = 0
+
+  /** Execution was interrupted: terminal state. */
+  val interrupted: Int = 1
+
+  /** The thread has started: transition to startedInterrupted or completed. */
+  val started: Int = 2
+
+  /** The thread has started and execution was interrupted: transition to completed. */
+  val startedInterrupted: Int = 3
+
+  /** Execution was completed: terminal state. */
+  val completed: Int = 4
 }
