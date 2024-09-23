@@ -69,7 +69,7 @@ import org.apache.spark.util.ArrayImplicits._
 class SparkSession private[sql] (
     private[sql] val client: SparkConnectClient,
     private val planIdGenerator: AtomicLong)
-    extends api.SparkSession[Dataset]
+    extends api.SparkSession
     with Logging {
 
   private[this] val allocator = new RootAllocator()

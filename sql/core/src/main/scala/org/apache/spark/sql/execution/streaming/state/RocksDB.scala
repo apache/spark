@@ -632,6 +632,7 @@ class RocksDB(
           // If we have changed the columnFamilyId mapping, we have set a new
           // snapshot and need to upload this to the DFS even if changelog checkpointing
           // is enabled.
+          var isUploaded = false
           if (shouldForceSnapshot.get()) {
             assert(snapshot.isDefined)
             fileManagerMetrics = uploadSnapshot(
@@ -640,18 +641,21 @@ class RocksDB(
               rocksDBFileMapping.snapshotsPendingUpload,
               loggingId
             )
-            changelogWriter = None
-            changelogWriter.foreach(_.abort())
-          } else {
-            try {
-              assert(changelogWriter.isDefined)
-              changelogWriter.foreach(_.commit())
+            isUploaded = true
+            shouldForceSnapshot.set(false)
+          }
+
+          // ensure that changelog files are always written
+          try {
+            assert(changelogWriter.isDefined)
+            changelogWriter.foreach(_.commit())
+            if (!isUploaded) {
               snapshot.foreach(s => {
                 snapshotsToUploadQueue.offer(s)
               })
-            } finally {
-              changelogWriter = None
             }
+          } finally {
+            changelogWriter = None
           }
         } else {
           assert(changelogWriter.isEmpty)

@@ -90,7 +90,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
       }
 
     // Don't replace ScalarSubquery if its plan is an aggregate that may suffer from a COUNT bug.
-    case s @ ScalarSubquery(_, _, _, _, _, mayHaveCountBug)
+    case s @ ScalarSubquery(_, _, _, _, _, mayHaveCountBug, _)
       if conf.getConf(SQLConf.DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG) &&
         mayHaveCountBug.nonEmpty && mayHaveCountBug.get =>
       s
@@ -1007,7 +1007,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
           replaceFoldable(j.withNewChildren(newChildren).asInstanceOf[Join], foldableMap)
         val missDerivedAttrsSet: AttributeSet = AttributeSet(newJoin.joinType match {
           case _: InnerLike | LeftExistence(_) => Nil
-          case LeftOuter => newJoin.right.output
+          case LeftOuter | LeftSingle => newJoin.right.output
           case RightOuter => newJoin.left.output
           case FullOuter => newJoin.left.output ++ newJoin.right.output
           case _ => Nil

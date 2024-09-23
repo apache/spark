@@ -81,6 +81,7 @@ trait ExpressionWithRandomSeed extends Expression {
 
 private[catalyst] object ExpressionWithRandomSeed {
   def expressionToSeed(e: Expression, source: String): Option[Long] = e match {
+    case IntegerLiteral(seed) => Some(seed)
     case LongLiteral(seed) => Some(seed)
     case Literal(null, _) => None
     case _ => throw QueryCompilationErrors.invalidRandomSeedParameter(source, e)
