@@ -164,7 +164,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       // if the state variable is not one of the defined/available state variables, then we
       // fail the query
       val stateVarName = if (sourceOptions.readRegisteredTimers) {
-        getTimerStateVarName(timeMode)
+        TimerStateUtils.getTimerStateVarName(timeMode)
       } else {
         sourceOptions.stateVarName.get
       }
@@ -201,14 +201,6 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     stateStoreMetadata
   }
 
-  private def getTimerStateVarName(timeMode: String): String = {
-    if (timeMode == TimeMode.EventTime.toString) {
-      TimerStateUtils.EVENT_TIMERS_STATE_NAME + TimerStateUtils.KEY_TO_TIMESTAMP_CF
-    } else {
-      TimerStateUtils.PROC_TIMERS_STATE_NAME + TimerStateUtils.KEY_TO_TIMESTAMP_CF
-    }
-  }
-
   private def getStoreMetadataAndRunChecks(sourceOptions: StateSourceOptions):
     StateStoreReaderInfo = {
     val storeMetadata = getStateStoreMetadata(sourceOptions)
@@ -232,7 +224,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
         timeMode = operatorProperties.timeMode
 
         if (sourceOptions.readRegisteredTimers) {
-          stateVarName = getTimerStateVarName(timeMode)
+          stateVarName = TimerStateUtils.getTimerStateVarName(timeMode)
         }
 
         val stateVarInfoList = operatorProperties.stateVariables
