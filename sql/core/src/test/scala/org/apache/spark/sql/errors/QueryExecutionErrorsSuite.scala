@@ -734,8 +734,7 @@ class QueryExecutionErrorsSuite
           parameters = Map(
             "value" -> sourceValue,
             "sourceType" -> s""""${sourceType.sql}"""",
-            "targetType" -> s""""$it"""",
-            "ansiConfig" -> s""""${SQLConf.ANSI_ENABLED.key}""""),
+            "targetType" -> s""""$it""""),
           sqlState = "22003")
       }
     }
@@ -1177,7 +1176,7 @@ class QueryExecutionErrorsSuite
     val enc: ExpressionEncoder[Row] = ExpressionEncoder(rowEnc)
     val deserializer = AttributeReference.apply("v", IntegerType)()
     implicit val im: ExpressionEncoder[Row] = new ExpressionEncoder[Row](
-      enc.objSerializer, deserializer, enc.clsTag)
+      rowEnc, enc.objSerializer, deserializer)
 
     checkError(
       exception = intercept[SparkRuntimeException] {

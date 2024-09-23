@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project, Sort, Union}
@@ -527,43 +528,30 @@ class SubquerySuite extends QueryTest
   test("SPARK-18504 extra GROUP BY column in correlated scalar subquery is not permitted") {
     withTempView("v") {
       Seq((1, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("v")
-
-      val exception = intercept[AnalysisException] {
-        sql("select (select sum(-1) from v t2 where t1.c2 = t2.c1 group by t2.c2) sum from v t1")
+      val exception = intercept[SparkRuntimeException] {
+        sql("select (select sum(-1) from v t2 where t1.c2 = t2.c1 group by t2.c2) sum from v t1").
+          collect()
       }
       checkError(
         exception,
-        condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-          "NON_CORRELATED_COLUMNS_IN_GROUP_BY",
-        parameters = Map("value" -> "c2"),
-        sqlState = None,
-        context = ExpectedContext(
-          fragment = "(select sum(-1) from v t2 where t1.c2 = t2.c1 group by t2.c2)",
-          start = 7, stop = 67)) }
+        condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS"
+      )
+    }
   }
 
   test("non-aggregated correlated scalar subquery") {
-    val exception1 = intercept[AnalysisException] {
-      sql("select a, (select b from l l2 where l2.a = l1.a) sum_b from l l1")
+    val exception1 = intercept[SparkRuntimeException] {
+      sql("select a, (select b from l l2 where l2.a = l1.a) sum_b from l l1").collect()
     }
     checkError(
       exception1,
-      condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-        "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
-      parameters = Map.empty,
-      context = ExpectedContext(
-        fragment = "(select b from l l2 where l2.a = l1.a)", start = 10, stop = 47))
-    val exception2 = intercept[AnalysisException] {
-      sql("select a, (select b from l l2 where l2.a = l1.a group by 1) sum_b from l l1")
-    }
-    checkErrorMatchPVals(
-      exception2,
-      condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-        "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
-      parameters = Map.empty[String, String],
-      sqlState = None,
-      context = ExpectedContext(
-        fragment = "(select b from l l2 where l2.a = l1.a group by 1)", start = 10, stop = 58))
+      condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS"
+    )
+    checkAnswer(
+      sql("select a, (select b from l l2 where l2.a = l1.a group by 1) sum_b from l l1"),
+      Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) ::
+        Row(null, null) :: Row(null, null) :: Row(6, null) :: Nil
+    )
   }
 
   test("non-equal correlated scalar subquery") {
