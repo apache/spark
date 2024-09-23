@@ -775,99 +775,97 @@ public final class CollationFactory {
         }
         if (lastPos == -1) {
           throw collationInvalidNameException(originalName);
-        } else {
-          String locale = collationName.substring(0, lastPos);
-          int collationId = ICULocaleToId.get(ICULocaleMapUppercase.get(locale));
+        }
+        String locale = collationName.substring(0, lastPos);
+        int collationId = ICULocaleToId.get(ICULocaleMapUppercase.get(locale));
+        collationId = SpecifierUtils.setSpecValue(collationId,
+          IMPLEMENTATION_PROVIDER_OFFSET, ImplementationProvider.ICU);
 
-          // No other specifiers present.
-          if(collationName.equals(locale)){
-            return collationId;
-          }
-
-          if(collationName.charAt(locale.length()) != '_'){
-            throw collationInvalidNameException(originalName);
-          }
-          // Extract remaining specifiers and trim "_" separator.
-          String remainingSpecifiers = collationName.substring(lastPos + 1);
-
-          // Initialize default specifier flags.
-          boolean isCaseSpecifierSet = false;
-          boolean isAccentSpecifierSet = false;
-          boolean isSpaceTrimmingSpecifierSet = false;
-          CaseSensitivity caseSensitivity = CaseSensitivity.CS;         // Default: Case Sensitive
-          AccentSensitivity accentSensitivity = AccentSensitivity.AS;    // Default: Accent Sensitive
-          SpaceTrimming spaceTrimming = SpaceTrimming.TRIM;          // Default: No Trim
-
-          String[] specifiers = remainingSpecifiers.split("_");
-
-          // Iterate through specifiers and set corresponding flags
-          for (String specifier : specifiers) {
-            switch (specifier) {
-              case "CI":
-                if (isCaseSpecifierSet) {
-                  throw collationInvalidNameException(originalName);
-                }
-                caseSensitivity = CaseSensitivity.CI;
-                isCaseSpecifierSet = true;
-                break;
-              case "CS":
-                if (isCaseSpecifierSet) {
-                  throw collationInvalidNameException(originalName);
-                }
-                caseSensitivity = CaseSensitivity.CS;
-                isCaseSpecifierSet = true;
-                break;
-              case "AI":
-                if (isAccentSpecifierSet) {
-                  throw collationInvalidNameException(originalName);
-                }
-                accentSensitivity = AccentSensitivity.AI;
-                isAccentSpecifierSet = true;
-                break;
-              case "AS":
-                if (isAccentSpecifierSet) {
-                  throw collationInvalidNameException(originalName);
-                }
-                accentSensitivity = AccentSensitivity.AS;
-                isAccentSpecifierSet = true;
-                break;
-              case "LTRIM":
-                if (isSpaceTrimmingSpecifierSet) {
-                  throw collationInvalidNameException(originalName);
-                }
-                spaceTrimming = SpaceTrimming.LTRIM;
-                isSpaceTrimmingSpecifierSet = true;
-                break;
-              case "RTRIM":
-                if (isSpaceTrimmingSpecifierSet) {
-                  throw collationInvalidNameException(originalName);
-                }
-                spaceTrimming = SpaceTrimming.RTRIM;
-                isSpaceTrimmingSpecifierSet = true;
-                break;
-              case "TRIM":
-                if (isSpaceTrimmingSpecifierSet) {
-                  throw collationInvalidNameException(originalName);
-                }
-                spaceTrimming = SpaceTrimming.TRIM;
-                isSpaceTrimmingSpecifierSet = true;
-                break;
-              default:
-                throw collationInvalidNameException(originalName);
-            }
-          }
-
-          // Build collation ID from computed specifiers.
-          collationId = SpecifierUtils.setSpecValue(collationId,
-                  IMPLEMENTATION_PROVIDER_OFFSET, ImplementationProvider.ICU);
-          collationId = SpecifierUtils.setSpecValue(collationId,
-                  CASE_SENSITIVITY_OFFSET, caseSensitivity);
-          collationId = SpecifierUtils.setSpecValue(collationId,
-                  ACCENT_SENSITIVITY_OFFSET, accentSensitivity);
-          collationId = SpecifierUtils.setSpecValue(collationId,
-                  SPACE_TRIMMING_OFFSET, spaceTrimming);
+        // No other specifiers present.
+        if(collationName.equals(locale)){
           return collationId;
         }
+        if(collationName.charAt(locale.length()) != '_'){
+          throw collationInvalidNameException(originalName);
+        }
+        // Extract remaining specifiers and trim "_" separator.
+        String remainingSpecifiers = collationName.substring(lastPos + 1);
+
+        // Initialize default specifier flags.
+        boolean isCaseSpecifierSet = false;
+        boolean isAccentSpecifierSet = false;
+        boolean isSpaceTrimmingSpecifierSet = false;
+        CaseSensitivity caseSensitivity = CaseSensitivity.CS;         // Default: Case Sensitive
+        AccentSensitivity accentSensitivity = AccentSensitivity.AS;    // Default: Accent Sensitive
+        SpaceTrimming spaceTrimming = SpaceTrimming.TRIM;          // Default: No Trim
+
+        String[] specifiers = remainingSpecifiers.split("_");
+
+        // Iterate through specifiers and set corresponding flags
+        for (String specifier : specifiers) {
+          switch (specifier) {
+            case "CI":
+              if (isCaseSpecifierSet) {
+                throw collationInvalidNameException(originalName);
+              }
+              caseSensitivity = CaseSensitivity.CI;
+              isCaseSpecifierSet = true;
+              break;
+            case "CS":
+              if (isCaseSpecifierSet) {
+                throw collationInvalidNameException(originalName);
+              }
+              caseSensitivity = CaseSensitivity.CS;
+              isCaseSpecifierSet = true;
+              break;
+            case "AI":
+              if (isAccentSpecifierSet) {
+                throw collationInvalidNameException(originalName);
+              }
+              accentSensitivity = AccentSensitivity.AI;
+              isAccentSpecifierSet = true;
+              break;
+            case "AS":
+              if (isAccentSpecifierSet) {
+                throw collationInvalidNameException(originalName);
+              }
+              accentSensitivity = AccentSensitivity.AS;
+              isAccentSpecifierSet = true;
+              break;
+            case "LTRIM":
+              if (isSpaceTrimmingSpecifierSet) {
+                throw collationInvalidNameException(originalName);
+              }
+              spaceTrimming = SpaceTrimming.LTRIM;
+              isSpaceTrimmingSpecifierSet = true;
+              break;
+            case "RTRIM":
+              if (isSpaceTrimmingSpecifierSet) {
+                throw collationInvalidNameException(originalName);
+              }
+              spaceTrimming = SpaceTrimming.RTRIM;
+              isSpaceTrimmingSpecifierSet = true;
+              break;
+            case "TRIM":
+              if (isSpaceTrimmingSpecifierSet) {
+                throw collationInvalidNameException(originalName);
+              }
+              spaceTrimming = SpaceTrimming.TRIM;
+              isSpaceTrimmingSpecifierSet = true;
+              break;
+            default:
+              throw collationInvalidNameException(originalName);
+          }
+        }
+
+        // Build collation ID from computed specifiers.
+        collationId = SpecifierUtils.setSpecValue(collationId,
+          CASE_SENSITIVITY_OFFSET, caseSensitivity);
+        collationId = SpecifierUtils.setSpecValue(collationId,
+          ACCENT_SENSITIVITY_OFFSET, accentSensitivity);
+        collationId = SpecifierUtils.setSpecValue(collationId,
+          SPACE_TRIMMING_OFFSET, spaceTrimming);
+        return collationId;
       }
 
       private static CollationSpecICU fromCollationId(int collationId) {
