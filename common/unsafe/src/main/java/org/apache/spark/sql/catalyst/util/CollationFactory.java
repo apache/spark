@@ -797,7 +797,7 @@ public final class CollationFactory {
         boolean isSpaceTrimmingSpecifierSet = false;
         CaseSensitivity caseSensitivity = CaseSensitivity.CS;         // Default: Case Sensitive
         AccentSensitivity accentSensitivity = AccentSensitivity.AS;    // Default: Accent Sensitive
-        SpaceTrimming spaceTrimming = SpaceTrimming.TRIM;          // Default: No Trim
+        SpaceTrimming spaceTrimming = SpaceTrimming.NONE;          // Default: No Trim
 
         String[] specifiers = remainingSpecifiers.split("_");
 
