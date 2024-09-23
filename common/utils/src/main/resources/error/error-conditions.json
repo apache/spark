@@ -72,7 +72,7 @@
   },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
-      "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
+      "<message>.<alternative>"
     ],
     "sqlState" : "22003"
   },
