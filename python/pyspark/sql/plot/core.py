@@ -152,7 +152,7 @@ class PySparkPlotAccessor:
         y : str or list of str
             Name(s) of the column(s) to use for the vertical axis.
             Multiple columns can be plotted.
-        **kwds : optional
+        **kwargs : optional
             Additional keyword arguments.
 
         Returns
@@ -187,21 +187,28 @@ class PySparkPlotAccessor:
         y : str or list of str
             Name(s) of the column(s) to use for the vertical axis.
             Multiple columns can be plotted.
-        **kwds : optional
+        **kwargs : optional
             Additional keyword arguments.
 
         Returns
         -------
         :class:`plotly.graph_objs.Figure`
 
+        Notes
+        -----
+        In Plotly and Matplotlib, the interpretation of `x` and `y` for `barh` plots differs.
+        In Plotly, `x` refers to the values and `y` refers to the categories.
+        In Matplotlib, `x` refers to the categories and `y` refers to the values.
+        Ensure correct axis labeling based on the backend used.
+
         Examples
         --------
         >>> data = [("A", 10, 1.5), ("B", 30, 2.5), ("C", 20, 3.5)]
         >>> columns = ["category", "int_val", "float_val"]
         >>> df = spark.createDataFrame(data, columns)
-        >>> df.plot.barh(x="category", y="int_val")  # doctest: +SKIP
+        >>> df.plot.barh(x="int_val", y="category")  # doctest: +SKIP
         >>> df.plot.barh(
-        ...     x="category", y=["int_val", "float_val"]
+        ...     x=["int_val", "float_val"], y="category"
         ... )  # doctest: +SKIP
         """
         return self(kind="barh", x=x, y=y, **kwargs)
