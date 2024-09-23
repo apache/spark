@@ -871,6 +871,20 @@ class QueryCompilationErrorsSuite
   test("SPARK-49666: the trim collation feature is off without collate builder call") {
     withSQLConf(SQLConf.TRIM_COLLATION_ENABLED.key -> "false") {
       Seq(
+        "CREATE TABLE t(col STRING COLLATE EN_TRIM_CI) USING parquet",
+        "CREATE TABLE t(col STRING COLLATE UTF8_LCASE_TRIM) USING parquet",
+        "SELECT 'aaa' COLLATE UNICODE_LTRIM_CI",
+      ).foreach { sqlText =>
+        checkError(
+          exception = intercept[AnalysisException](sql(sqlText)),
+          condition = "UNSUPPORTED_FEATURE.TRIM_COLLATION")
+      }
+    }
+  }
+
+  test("SPARK-49666: the trim collation feature is off with collate builder call") {
+    withSQLConf(SQLConf.TRIM_COLLATION_ENABLED.key -> "false") {
+      Seq(
         "SELECT collate('aaa', 'UNICODE_TRIM')",
         "SELECT collate('aaa', 'UTF8_BINARY_TRIM')",
         "SELECT collate('aaa', 'EN_AI_RTRIM')",
