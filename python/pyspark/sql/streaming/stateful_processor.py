@@ -16,13 +16,12 @@
 #
 
 from abc import ABC, abstractmethod
-from typing import Any, List, TYPE_CHECKING, Iterator, Optional, Union, cast, Tuple
+from typing import Any, List, TYPE_CHECKING, Iterator, Optional, Union, Tuple
 
-from pyspark.sql import Row
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.streaming.list_state_client import ListStateClient, ListStateIterator
 from pyspark.sql.streaming.value_state_client import ValueStateClient
-from pyspark.sql.types import StructType, _create_row, _parse_datatype_string
+from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
@@ -51,19 +50,14 @@ class ValueState:
         """
         return self._value_state_client.exists(self._state_name)
 
-    def get(self) -> Optional[Row]:
+    def get(self) -> Optional[Tuple]:
         """
         Get the state value if it exists. Returns None if the state variable does not have a value.
         """
         value = self._value_state_client.get(self._state_name)
         if value is None:
             return None
-        schema = self.schema
-        if isinstance(schema, str):
-            schema = cast(StructType, _parse_datatype_string(schema))
-        # Create the Row using the values and schema fields
-        row = _create_row(schema.fieldNames(), value)
-        return row
+        return value
 
     def update(self, new_value: Any) -> None:
         """

@@ -17,7 +17,7 @@
 from typing import Dict, Iterator, List, Union, cast, Tuple
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
-from pyspark.sql.types import Row, StructType, TYPE_CHECKING, _parse_datatype_string
+from pyspark.sql.types import StructType, TYPE_CHECKING, _parse_datatype_string
 from pyspark.errors import PySparkRuntimeError
 import uuid
 
@@ -180,8 +180,8 @@ class ListStateIterator:
         # list state do not interfere with each other.
         self.iterator_id = str(uuid.uuid4())
 
-    def __iter__(self) -> Iterator[Row]:
+    def __iter__(self) -> Iterator[Tuple]:
         return self
 
-    def __next__(self) -> Row:
+    def __next__(self) -> Tuple:
         return self.list_state_client.get(self.state_name, self.iterator_id)

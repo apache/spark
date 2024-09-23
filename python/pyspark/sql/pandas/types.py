@@ -53,12 +53,17 @@ from pyspark.sql.types import (
 )
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
 from pyspark.loose_version import LooseVersion
+from pyspark.sql.utils import has_numpy
+
+if has_numpy:
+    import numpy as np
 
 if TYPE_CHECKING:
     import pandas as pd
     import pyarrow as pa
 
     from pyspark.sql.pandas._typing import SeriesLike as PandasSeriesLike
+    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
 
 
 def to_arrow_type(
@@ -1344,3 +1349,34 @@ def _deduplicate_field_names(dt: DataType) -> DataType:
         )
     else:
         return dt
+
+
+def _to_numpy_type(type: DataType) -> Optional["np.dtype"]:
+    """Convert Spark data type to NumPy type."""
+    import numpy as np
+
+    if type == ByteType():
+        return np.dtype("int8")
+    elif type == ShortType():
+        return np.dtype("int16")
+    elif type == IntegerType():
+        return np.dtype("int32")
+    elif type == LongType():
+        return np.dtype("int64")
+    elif type == FloatType():
+        return np.dtype("float32")
+    elif type == DoubleType():
+        return np.dtype("float64")
+    return None
+
+
+def convert_pandas_using_numpy_type(
+    df: "PandasDataFrameLike", schema: StructType
+) -> "PandasDataFrameLike":
+    for field in schema.fields:
+        if isinstance(
+            field.dataType, (ByteType, ShortType, LongType, FloatType, DoubleType, IntegerType)
+        ):
+            np_type = _to_numpy_type(field.dataType)
+            df[field.name] = df[field.name].astype(np_type)
+    return df

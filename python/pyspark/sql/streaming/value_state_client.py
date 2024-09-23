@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Union, cast, Tuple
+from typing import Union, cast, Tuple
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.types import StructType, _parse_datatype_string
@@ -49,7 +49,7 @@ class ValueStateClient:
                 f"Error checking value state exists: " f"{response_message[1]}"
             )
 
-    def get(self, state_name: str) -> Any:
+    def get(self, state_name: str) -> Tuple:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
         get_call = stateMessage.Get()
@@ -63,8 +63,8 @@ class ValueStateClient:
         if status == 0:
             if len(response_message[2]) == 0:
                 return None
-            row = self._stateful_processor_api_client._deserialize_from_bytes(response_message[2])
-            return row
+            data = self._stateful_processor_api_client._deserialize_from_bytes(response_message[2])
+            return tuple(data)
         else:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error getting value state: " f"{response_message[1]}")
