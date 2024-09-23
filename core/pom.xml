@@ -558,6 +558,7 @@
               <include>org.eclipse.jetty:jetty-util</include>
               <include>org.eclipse.jetty:jetty-server</include>
               <include>com.google.guava:guava</include>
+              <include>com.google.guava:failureaccess</include>
               <include>com.google.protobuf:*</include>
               <!-- While shading new dependencies, please also update LICENSE/NOTICE files in the
                 core/src/main/resources/META-INF if necessary -->

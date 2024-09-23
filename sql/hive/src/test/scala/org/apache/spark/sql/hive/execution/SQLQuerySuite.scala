@@ -79,13 +79,13 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   test("query global temp view") {
     val df = Seq(1).toDF("i1")
     df.createGlobalTempView("tbl1")
-    val global_temp_db = spark.conf.get(GLOBAL_TEMP_DATABASE)
+    val global_temp_db = spark.conf.get(GLOBAL_TEMP_DATABASE.key)
     checkAnswer(spark.sql(s"select * from ${global_temp_db}.tbl1"), Row(1))
     spark.sql(s"drop view ${global_temp_db}.tbl1")
   }
 
   test("non-existent global temp view") {
-    val global_temp_db = spark.conf.get(GLOBAL_TEMP_DATABASE)
+    val global_temp_db = spark.conf.get(GLOBAL_TEMP_DATABASE.key)
     val e = intercept[AnalysisException] {
       spark.sql(s"select * from ${global_temp_db}.nonexistentview")
     }
@@ -246,7 +246,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
     checkKeywordsExist(sql("describe function  `between`"),
       "Function: between",
-      "Usage: input [NOT] BETWEEN lower AND upper - " +
+      "input [NOT] between lower AND upper - " +
         "evaluate if `input` is [not] in between `lower` and `upper`")
 
     checkKeywordsExist(sql("describe function  `case`"),

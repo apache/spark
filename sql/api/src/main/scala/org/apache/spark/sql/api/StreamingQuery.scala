@@ -29,7 +29,7 @@ import org.apache.spark.sql.streaming.{StreamingQueryException, StreamingQueryPr
  * @since 2.0.0
  */
 @Evolving
-trait StreamingQuery[DS[U] <: Dataset[U, DS]] {
+trait StreamingQuery {
 
   /**
    * Returns the user-specified name of the query, or null if not specified. This name can be
@@ -62,7 +62,7 @@ trait StreamingQuery[DS[U] <: Dataset[U, DS]] {
    *
    * @since 2.0.0
    */
-  def sparkSession: SparkSession[DS]
+  def sparkSession: SparkSession
 
   /**
    * Returns `true` if this query is actively running.

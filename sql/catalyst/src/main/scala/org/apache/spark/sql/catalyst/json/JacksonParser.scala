@@ -231,7 +231,7 @@ class JacksonParser(
             )
         }
 
-        Some(InternalRow(new GenericArrayData(res.toArray)))
+        Some(InternalRow(new GenericArrayData(res.toArray[Any])))
     }
   }
 

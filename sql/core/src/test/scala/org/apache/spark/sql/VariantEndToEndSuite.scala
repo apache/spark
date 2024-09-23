@@ -18,6 +18,7 @@ package org.apache.spark.sql
 
 import java.io.File
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.QueryTest.sameRows
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
@@ -30,6 +31,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarArray
 import org.apache.spark.types.variant.VariantBuilder
+import org.apache.spark.types.variant.VariantUtil._
 import org.apache.spark.unsafe.types.VariantVal
 
 class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
@@ -39,8 +41,10 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     def check(input: String, output: String = null): Unit = {
       val df = Seq(input).toDF("v")
       val variantDF = df.select(to_json(parse_json(col("v"))))
+      val variantDF2 = df.select(to_json(from_json(col("v"), VariantType)))
       val expected = if (output != null) output else input
       checkAnswer(variantDF, Seq(Row(expected)))
+      checkAnswer(variantDF2, Seq(Row(expected)))
     }
 
     check("null")
@@ -602,6 +606,85 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
         _.isInstanceOf[FileSourceScanExec]
       ).get
       assert(!node.metrics.contains("variantBuilderTopLevelNumVariants"))
+    }
+  }
+
+  test("non-variant schemas don't generate variant metrics") {
+    withTempDir { dir =>
+      val fileTemp = new File(dir, "file.json.gz")
+      val file = fileTemp.getAbsolutePath
+      val input = Seq(
+        Row(
+          """[{"a": 1, "g": 432, "b": {"c": "d", "e": [891, 43]}}""" +
+            """,{"a": {"h":52}, "g": 971, "b": {"c": "d", """ +
+            """"e": [8]}}]"""
+        ),
+        Row(
+          """{"a": 3, "g": 121, "b": {"c": "d", "e": [-323, """ +
+            """456, 43]}}"""
+        )
+      )
+      spark
+        .createDataFrame(spark.sparkContext.parallelize(input, 1), StructType.fromDDL("j string"))
+        .repartition(2)
+        .write
+        .option("compression", "gzip")
+        .text(file)
+
+      val multipleColumnDf =
+        spark.read
+          .format("json")
+          .schema("a int, g int, b struct<c:string,e:array<int>>")
+          .load(file)
+      multipleColumnDf.collect()
+      val multipleColumnJsonScanNode = findNode(multipleColumnDf.queryExecution.executedPlan)(
+        _.isInstanceOf[FileSourceScanExec]
+      ).get
+
+      // Make sure that multiple tasks are used and each worker reads at least one row.
+      assert(multipleColumnDf.rdd.getNumPartitions == 2)
+      multipleColumnDf.rdd.mapPartitionsWithIndex((index, iter) => Iterator((index, iter.size)))
+        .collect()
+        .foreach { case (_, size) => assert(size > 0) }
+
+      assert(!multipleColumnJsonScanNode.metrics.contains("variantBuilderTopLevelNumVariants"))
+      assert(!multipleColumnJsonScanNode.metrics.contains("variantBuilderNestedNumVariants"))
+      assert(!multipleColumnJsonScanNode.metrics.contains("variantBuilderTopLevelMaxDepth"))
+      assert(!multipleColumnJsonScanNode.metrics.contains("variantBuilderNestedMaxDepth"))
+      assert(!multipleColumnJsonScanNode.metrics.contains("variantBuilderTopLevelByteSizeBound"))
+      assert(!multipleColumnJsonScanNode.metrics.contains("variantBuilderNestedByteSizeBound"))
+      assert(!multipleColumnJsonScanNode.metrics.contains("variantBuilderTopLevelNumScalars"))
+      assert(!multipleColumnJsonScanNode.metrics.contains("variantBuilderNestedNumScalars"))
+      assert(!multipleColumnJsonScanNode.metrics.contains("variantBuilderTopLevelNumPaths"))
+      assert(!multipleColumnJsonScanNode.metrics.contains("variantBuilderNestedNumPaths"))
+    }
+  }
+
+  test("from_json(_, 'variant') with duplicate keys") {
+    val json: String = """{"a": 1, "b": 2, "c": "3", "a": 4}"""
+    withSQLConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS.key -> "true") {
+      val df = Seq(json).toDF("j")
+        .selectExpr("from_json(j,'variant')")
+      val actual = df.collect().head(0).asInstanceOf[VariantVal]
+      val expectedValue: Array[Byte] = Array(objectHeader(false, 1, 1),
+        /* size */ 3,
+        /* id list */ 0, 1, 2,
+        /* offset list */ 4, 0, 2, 6,
+        /* field data */ primitiveHeader(INT1), 2, shortStrHeader(1), '3',
+        primitiveHeader(INT1), 4)
+      val expectedMetadata: Array[Byte] = Array(VERSION, 3, 0, 1, 2, 3, 'a', 'b', 'c')
+      assert(actual === new VariantVal(expectedValue, expectedMetadata))
+    }
+    withSQLConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS.key -> "false") {
+      val df = Seq(json).toDF("j")
+        .selectExpr("from_json(j,'variant')")
+      checkError(
+        exception = intercept[SparkThrowable] {
+          df.collect()
+        },
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map("badRecord" -> json, "failFastMode" -> "FAILFAST")
+      )
     }
   }
 }
