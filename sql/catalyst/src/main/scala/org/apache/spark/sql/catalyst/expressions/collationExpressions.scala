@@ -48,11 +48,6 @@ object CollateExpressionBuilder extends ExpressionBuilder {
       case Seq(e: Expression, collationExpr: Expression) =>
         (collationExpr.dataType, collationExpr.foldable) match {
           case (_: StringType, true) =>
-            val collationId = collationExpr.dataType.asInstanceOf[StringType].collationId
-            if(!SQLConf.get.trimCollationEnabled &&
-              CollationFactory.usesTrimCollation(collationId)) {
-              throw QueryCompilationErrors.trimCollationNotEnabledError()
-            }
             val evalCollation = collationExpr.eval()
             if (evalCollation == null) {
               throw QueryCompilationErrors.unexpectedNullError("collation", collationExpr)

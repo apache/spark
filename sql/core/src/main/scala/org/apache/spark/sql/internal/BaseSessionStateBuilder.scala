@@ -225,6 +225,7 @@ abstract class BaseSessionStateBuilder(
         HiveOnlyCheck +:
         TableCapabilityCheck +:
         CommandCheck +:
+        TrimCollationCheck +:
         ViewSyncSchemaToMetaStore +:
         customCheckRules
   }

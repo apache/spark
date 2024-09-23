@@ -4886,11 +4886,6 @@
           "Catalog <catalogName> does not support <operation>."
         ]
       },
-      "COLLATION" : {
-        "message" : [
-          "Collation is not yet supported."
-        ]
-      },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
         "message" : [
           "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY."
@@ -5116,6 +5111,11 @@
       "TRANSFORM_NON_HIVE" : {
         "message" : [
           "TRANSFORM with SERDE is only supported in hive mode."
+        ]
+      },
+      "TRIM_COLLATION" : {
+        "message" : [
+          "TRIM specifier in the collation."
         ]
       }
     },

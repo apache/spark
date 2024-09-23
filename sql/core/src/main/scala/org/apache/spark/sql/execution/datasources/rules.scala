@@ -639,7 +639,7 @@ case class QualifyLocationWithWarehouse(catalog: SessionCatalog) extends Rule[Lo
   }
 }
 
-object CollationCheck extends (LogicalPlan => Unit) {
+object TrimCollationCheck extends (LogicalPlan => Unit) {
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
       operator: LogicalPlan =>

@@ -868,6 +868,20 @@ class QueryCompilationErrorsSuite
         "inputTypes" -> "[\"INT\", \"STRING\", \"STRING\"]"))
   }
 
+  test("SPARK-49666: the trim collation feature is off without collate builder call") {
+    withSQLConf(SQLConf.TRIM_COLLATION_ENABLED.key -> "false") {
+      Seq(
+        "SELECT collate('aaa', 'UNICODE_TRIM')",
+        "SELECT collate('aaa', 'UTF8_BINARY_TRIM')",
+        "SELECT collate('aaa', 'EN_AI_RTRIM')",
+      ).foreach { sqlText =>
+        checkError(
+          exception = intercept[AnalysisException](sql(sqlText)),
+          condition = "UNSUPPORTED_FEATURE.TRIM_COLLATION")
+      }
+    }
+  }
+
   test("UNSUPPORTED_CALL: call the unsupported method update()") {
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
