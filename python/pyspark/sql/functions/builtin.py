@@ -9091,15 +9091,19 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     :class:`~pyspark.sql.Column`
         timestamp value as :class:`pyspark.sql.types.TimestampType` type.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.try_to_timestamp`
+
     Examples
     --------
     Example 1: Convert string to a timestamp
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(sf.try_to_timestamp(df.t).alias('dt')).show()
+    >>> df.select(sf.to_timestamp(df.t)).show()
     +-------------------+
-    |                 dt|
+    |    to_timestamp(t)|
     +-------------------+
     |1997-02-28 10:30:00|
     +-------------------+
@@ -9108,12 +9112,12 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(sf.try_to_timestamp(df.t, sf.lit('yyyy-MM-dd HH:mm:ss')).alias('dt')).show()
-    +-------------------+
-    |                 dt|
-    +-------------------+
-    |1997-02-28 10:30:00|
-    +-------------------+
+    >>> df.select(sf.to_timestamp(df.t, 'yyyy-MM-dd HH:mm:ss')).show()
+    +------------------------------------+
+    |to_timestamp(t, yyyy-MM-dd HH:mm:ss)|
+    +------------------------------------+
+    |                 1997-02-28 10:30:00|
+    +------------------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -9138,6 +9142,10 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
         column values to convert.
     format: str, optional
         format to use to convert timestamp values.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_timestamp`
 
     Examples
     --------
