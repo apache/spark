@@ -25,7 +25,7 @@ import _root_.java.lang
 import _root_.java.net.URI
 import _root_.java.util
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Unstable}
 import org.apache.spark.sql.{Encoder, Row, RuntimeConfig}
 import org.apache.spark.sql.types.StructType
 
@@ -91,6 +91,15 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 2.0.0
    */
   def udf: UDFRegistration
+
+  /**
+   * Returns a `StreamingQueryManager` that allows managing all the `StreamingQuery`s active on
+   * `this`.
+   *
+   * @since 2.0.0
+   */
+  @Unstable
+  def streams: StreamingQueryManager
 
   /**
    * Start a new session with isolated SQL configurations, temporary tables, registered functions

@@ -220,6 +220,7 @@ class SparkSession private[sql] (
    */
   def readStream: DataStreamReader = new DataStreamReader(this)
 
+  /** @inheritdoc */
   lazy val streams: StreamingQueryManager = new StreamingQueryManager(this)
 
   /** @inheritdoc */

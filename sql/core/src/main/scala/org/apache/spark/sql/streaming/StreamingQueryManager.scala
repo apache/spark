@@ -27,7 +27,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, QUERY_ID, RUN_ID}
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{api, DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog}
@@ -47,7 +47,9 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
 @Evolving
 class StreamingQueryManager private[sql] (
     sparkSession: SparkSession,
-    sqlConf: SQLConf) extends Logging {
+    sqlConf: SQLConf)
+  extends api.StreamingQueryManager
+  with Logging {
 
   private[sql] val stateStoreCoordinator =
     StateStoreCoordinatorRef.forDriver(sparkSession.sparkContext.env)
@@ -70,7 +72,7 @@ class StreamingQueryManager private[sql] (
    *   failed. The exception is the exception of the last failed query.
    */
   @GuardedBy("awaitTerminationLock")
-  private var lastTerminatedQueryException: Option[StreamingQueryException] = null
+  private var lastTerminatedQueryException: Option[StreamingQueryException] = _
 
   try {
     sparkSession.sparkContext.conf.get(STREAMING_QUERY_LISTENERS).foreach { classNames =>
@@ -90,51 +92,20 @@ class StreamingQueryManager private[sql] (
       throw QueryExecutionErrors.registeringStreamingQueryListenerError(e)
   }
 
-  /**
-   * Returns a list of active queries associated with this SQLContext
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def active: Array[StreamingQuery] = activeQueriesSharedLock.synchronized {
     activeQueries.values.toArray
   }
 
-  /**
-   * Returns the query if there is an active query with the given id, or null.
-   *
-   * @since 2.1.0
-   */
+  /** @inheritdoc */
   def get(id: UUID): StreamingQuery = activeQueriesSharedLock.synchronized {
     activeQueries.get(id).orNull
   }
 
-  /**
-   * Returns the query if there is an active query with the given id, or null.
-   *
-   * @since 2.1.0
-   */
+  /** @inheritdoc */
   def get(id: String): StreamingQuery = get(UUID.fromString(id))
 
-  /**
-   * Wait until any of the queries on the associated SQLContext has terminated since the
-   * creation of the context, or since `resetTerminated()` was called. If any query was terminated
-   * with an exception, then the exception will be thrown.
-   *
-   * If a query has terminated, then subsequent calls to `awaitAnyTermination()` will either
-   * return immediately (if the query was terminated by `query.stop()`),
-   * or throw the exception immediately (if the query was terminated with exception). Use
-   * `resetTerminated()` to clear past terminations and wait for new terminations.
-   *
-   * In the case where multiple queries have terminated since `resetTermination()` was called,
-   * if any query has terminated with exception, then `awaitAnyTermination()` will
-   * throw any of the exception. For correctly documenting exceptions across multiple queries,
-   * users need to stop all of them after any of them terminates with exception, and then check the
-   * `query.exception()` for each query.
-   *
-   * @throws StreamingQueryException if any query has terminated with an exception
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @throws[StreamingQueryException]
   def awaitAnyTermination(): Unit = {
     awaitTerminationLock.synchronized {
@@ -147,27 +118,7 @@ class StreamingQueryManager private[sql] (
     }
   }
 
-  /**
-   * Wait until any of the queries on the associated SQLContext has terminated since the
-   * creation of the context, or since `resetTerminated()` was called. Returns whether any query
-   * has terminated or not (multiple may have terminated). If any query has terminated with an
-   * exception, then the exception will be thrown.
-   *
-   * If a query has terminated, then subsequent calls to `awaitAnyTermination()` will either
-   * return `true` immediately (if the query was terminated by `query.stop()`),
-   * or throw the exception immediately (if the query was terminated with exception). Use
-   * `resetTerminated()` to clear past terminations and wait for new terminations.
-   *
-   * In the case where multiple queries have terminated since `resetTermination()` was called,
-   * if any query has terminated with exception, then `awaitAnyTermination()` will
-   * throw any of the exception. For correctly documenting exceptions across multiple queries,
-   * users need to stop all of them after any of them terminates with exception, and then check the
-   * `query.exception()` for each query.
-   *
-   * @throws StreamingQueryException if any query has terminated with an exception
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @throws[StreamingQueryException]
   def awaitAnyTermination(timeoutMs: Long): Boolean = {
 
@@ -187,42 +138,24 @@ class StreamingQueryManager private[sql] (
     }
   }
 
-  /**
-   * Forget about past terminated queries so that `awaitAnyTermination()` can be used again to
-   * wait for new terminations.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def resetTerminated(): Unit = {
     awaitTerminationLock.synchronized {
       lastTerminatedQueryException = null
     }
   }
 
-  /**
-   * Register a [[StreamingQueryListener]] to receive up-calls for life cycle events of
-   * [[StreamingQuery]].
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def addListener(listener: StreamingQueryListener): Unit = {
     listenerBus.addListener(listener)
   }
 
-  /**
-   * Deregister a [[StreamingQueryListener]].
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def removeListener(listener: StreamingQueryListener): Unit = {
     listenerBus.removeListener(listener)
   }
 
-  /**
-   * List all [[StreamingQueryListener]]s attached to this [[StreamingQueryManager]].
-   *
-   * @since 3.0.0
-   */
+  /** @inheritdoc */
   def listListeners(): Array[StreamingQueryListener] = {
     listenerBus.listeners.asScala.toArray
   }
