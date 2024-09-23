@@ -330,8 +330,10 @@ case object VariantGet {
   def checkDataType(dataType: DataType, allowStructsAndMaps: Boolean = true): Boolean =
     dataType match {
     case _: NumericType | BooleanType | _: StringType | BinaryType | _: DatetimeType |
-        VariantType | _: DayTimeIntervalType | _: YearMonthIntervalType =>
+        VariantType =>
       true
+    case _: DayTimeIntervalType | _: YearMonthIntervalType
+      if SQLConf.get.allowIntervalTypesInVariant => true
     case ArrayType(elementType, _) => checkDataType(elementType, allowStructsAndMaps)
     case MapType(_: StringType, valueType, _) if allowStructsAndMaps =>
         checkDataType(valueType, allowStructsAndMaps)
@@ -426,10 +428,10 @@ case object VariantGet {
           case Type.TIMESTAMP_NTZ => Literal(v.getLong, TimestampNTZType)
           case Type.FLOAT => Literal(v.getFloat, FloatType)
           case Type.BINARY => Literal(v.getBinary, BinaryType)
-          case Type.YEAR_MONTH_INTERVAL =>
+          case Type.YEAR_MONTH_INTERVAL if SQLConf.get.allowIntervalTypesInVariant =>
             val fields: IntervalFields = v.getYearMonthIntervalFields
             Literal(v.getLong.toInt, YearMonthIntervalType(fields.startField, fields.endField))
-          case Type.DAY_TIME_INTERVAL =>
+          case Type.DAY_TIME_INTERVAL if SQLConf.get.allowIntervalTypesInVariant =>
             val fields: IntervalFields = v.getDayTimeIntervalFields
             Literal(v.getLong, DayTimeIntervalType(fields.startField, fields.endField))
           // We have handled other cases and should never reach here. This case is only intended

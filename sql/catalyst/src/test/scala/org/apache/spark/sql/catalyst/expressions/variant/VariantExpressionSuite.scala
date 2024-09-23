@@ -426,6 +426,55 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       ).eval()
     )
 
+    // Test interval flag
+    Seq(false, true).foreach(intervalEnabled => {
+      withSQLConf(SQLConf.ALLOW_INTERVAL_TYPES_IN_VARIANT.key ->
+        intervalEnabled.toString) {
+        val emptyMetadata = Array[Byte](VERSION, 0, 0)
+
+        val resolver = ResolveTimeZone
+        // int to variant year-month interval
+        assert(resolver.resolveTimeZones(variantGet(2147483647.toString, "$",
+          YearMonthIntervalType(0, 1))).resolved == intervalEnabled)
+
+        // decimal to variant day-time interval
+        assert(resolver.resolveTimeZones(variantGet("9223372036854.775807", "$",
+          DayTimeIntervalType(0, 3))).resolved == intervalEnabled)
+
+        // year-month interval to variant
+        assert(resolver.resolveTimeZones(Cast(Cast(Literal(0), YearMonthIntervalType(0, 0)),
+          VariantType)).resolved == intervalEnabled)
+
+        // day-time interval to variant
+        assert(resolver.resolveTimeZones(Cast(Cast(Literal(0L), DayTimeIntervalType(0, 0)),
+          VariantType)).resolved == intervalEnabled)
+
+        if (!intervalEnabled) {
+          // variant year-month interval to int
+          checkErrorInExpression[SparkRuntimeException](
+            VariantGet(
+              Literal(new VariantVal(Array(primitiveHeader(YEAR_MONTH_INTERVAL), 0, 0, 0, 0, 0),
+                emptyMetadata)), Literal("$"), IntegerType, failOnError = true
+            ),
+            "UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT",
+            Map("id" -> "19")
+          )
+
+          // variant day-time interval to int
+          checkErrorInExpression[SparkRuntimeException](
+            VariantGet(
+              Literal(
+                new VariantVal(Array(primitiveHeader(DAY_TIME_INTERVAL), 0, 0, 0, 0, 0, 0, 0, 0, 0),
+                  emptyMetadata)
+              ), Literal("$"), IntegerType, failOnError = true
+            ),
+            "UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT",
+            Map("id" -> "20")
+          )
+        }
+      }
+    })
+
     // Source type is double. Always use scientific notation to avoid decimal.
     testVariantGet("1E0", "$", BooleanType, true)
     testVariantGet("0E0", "$", BooleanType, false)
@@ -857,6 +906,43 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     })
 
+    // toJson should work regardless of the ALLOW_INTERVAL_TYPES_IN_VARIANT flag
+    Seq(false, true).foreach(intervalEnabled => {
+      withSQLConf(SQLConf.ALLOW_INTERVAL_TYPES_IN_VARIANT.key ->
+        intervalEnabled.toString) {
+        // corner + random cases
+        Seq(0, 2147483647, -2147483648, 345344843, -4357342).foreach(input => {
+          for (startField <- YearMonthIntervalType.YEAR to YearMonthIntervalType.MONTH) {
+            for (endField <- startField to YearMonthIntervalType.MONTH) {
+              val headerByte = startField | (endField << 1)
+              checkToJson(Array(primitiveHeader(YEAR_MONTH_INTERVAL), headerByte.toByte,
+                (input & 0xFF).toByte, ((input >> 8) & 0xFF).toByte,
+                ((input >> 16) & 0xFF).toByte, ((input >> 24) & 0xFF).toByte),
+                "\"" + Literal(input, YearMonthIntervalType(startField.toByte, endField.toByte)) +
+                  "\"")
+            }
+          }
+        })
+
+        // corner + random cases
+        Seq(0L, 9223372036854775807L, -9223372036854775808L, 2374234381L, -23467681L)
+          .foreach(input => {
+          for (startField <- DayTimeIntervalType.DAY to DayTimeIntervalType.SECOND) {
+            for (endField <- startField to DayTimeIntervalType.SECOND) {
+              val headerByte = startField | (endField << 2)
+              checkToJson(Array(primitiveHeader(DAY_TIME_INTERVAL), headerByte.toByte,
+                (input & 0xFF).toByte, ((input >> 8) & 0xFF).toByte,
+                ((input >> 16) & 0xFF).toByte, ((input >> 24) & 0xFF).toByte,
+                ((input >> 32) & 0xFF).toByte, ((input >> 40) & 0xFF).toByte,
+                ((input >> 48) & 0xFF).toByte, ((input >> 56) & 0xFF).toByte),
+                "\"" + Literal(input, DayTimeIntervalType(startField.toByte, endField.toByte)) +
+                  "\"")
+            }
+          }
+        })
+      }
+    })
+
     checkToJsonFail(Array(primitiveHeader(25)), 25)
 
     def littleEndianLong(value: Long): Array[Byte] =
@@ -1096,6 +1182,24 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       )
     }
     checkErrorInSchemaOf(Array(primitiveHeader(25)), 25)
+  }
+
+  test("schema_of_variant - interval flag shouldn't matter") {
+    def testSchemaOf(value: Array[Byte], expected: String): Unit = {
+      val emptyMetadata = Array[Byte](VERSION, 0, 0)
+      val input = Literal(new VariantVal(value, emptyMetadata))
+      checkEvaluation(SchemaOfVariant(input).replacement, expected)
+    }
+
+    Seq(false, true).foreach(intervalEnabled => {
+      withSQLConf(SQLConf.ALLOW_INTERVAL_TYPES_IN_VARIANT.key ->
+        intervalEnabled.toString) {
+        testSchemaOf(Array(primitiveHeader(YEAR_MONTH_INTERVAL), 0, 0, 0, 0, 0),
+          "INTERVAL YEAR")
+        testSchemaOf(Array(primitiveHeader(DAY_TIME_INTERVAL), 0, 0, 0, 0, 0, 0, 0, 0, 0),
+          "INTERVAL DAY")
+      }
+    })
   }
 
   test("malformed interval type") {

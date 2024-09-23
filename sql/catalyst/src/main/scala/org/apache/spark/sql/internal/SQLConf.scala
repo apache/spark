@@ -4429,6 +4429,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ALLOW_INTERVAL_TYPES_IN_VARIANT = buildConf("spark.sql.variant.allowIntervalTypes")
+    .internal()
+    .doc("When true, allow working with year-month and day-time intervals types in the variants. " +
+      "This flag allows day-time and year-month interval types to be cast to variant and " +
+      "variants representing these interval types to be cast to other types. This flag does " +
+      "not prohibit variants representing these types from being read and transformed to " +
+      "json strings.")
+    .booleanConf
+    .createWithDefault(Utils.isTesting)
+
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
       .internal()
@@ -5566,6 +5576,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def streamingSessionWindowMergeSessionInLocalPartition: Boolean =
     getConf(STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION)
+
+  def allowIntervalTypesInVariant: Boolean = getConf(ALLOW_INTERVAL_TYPES_IN_VARIANT)
 
   override def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
 

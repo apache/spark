@@ -371,4 +371,70 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
       )
     }
   }
+
+  test("variant - enable interval flag") {
+    withSQLConf(SQLConf.ALLOW_INTERVAL_TYPES_IN_VARIANT.key -> "false") {
+      // Top level intervals
+      assert(intercept[AnalysisException] {
+        sql("select interval '1' month::variant as v")
+      }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+      assert(intercept[AnalysisException] {
+        sql("select interval '1' day::variant as v")
+      }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+      // struct<interval>
+      assert(intercept[AnalysisException] {
+        sql("select named_struct('i', interval '1' month)::variant as v")
+      }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+      assert(intercept[AnalysisException] {
+        sql("select named_struct('i', interval '1' day)::variant as v")
+      }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+      // struct<struct<interval>>
+      assert(intercept[AnalysisException] {
+        sql("select struct(named_struct('i', interval '1' month))::variant as v")
+      }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+      assert(intercept[AnalysisException] {
+        sql("select struct(named_struct('i', interval '1' day))::variant as v")
+      }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+      // array<interval>
+      assert(intercept[AnalysisException] {
+        sql("select array(interval '1' month)::variant as v")
+      }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+      assert(intercept[AnalysisException] {
+        sql("select array(interval '1' day)::variant as v")
+      }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+      // map<string, interval>
+      assert(intercept[AnalysisException] {
+        sql("select map('i', interval '1' month)::variant as v")
+      }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+      assert(intercept[AnalysisException] {
+        sql("select map('i', interval '1' day)::variant as v")
+      }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+      // map<string, struct<interval>>
+      assert(intercept[AnalysisException] {
+        sql("select map('i', struct(interval '1' month))::variant as v")
+      }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+      assert(intercept[AnalysisException] {
+        sql("select map('i', struct(interval '1' day))::variant as v")
+      }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+      val tableName = "_v"
+      withTable(tableName) {
+        sql(s"create table $tableName (" +
+          s"i1 interval month," +
+          s"i2 interval day," +
+          s"i3 struct<i interval month>," +
+          s"i4 struct<i interval day>," +
+          s"i5 array<interval month>," +
+          s"i6 array<interval day>," +
+          s"i7 map<string, interval month>," +
+          s"i8 map<string, interval day>," +
+          s"i9 struct<i struct<i map<string, array<interval month>>>>," +
+          s"i10 struct<i struct<i map<string, array<interval day>>>>)")
+        (1 to 10).foreach { i =>
+          assert(intercept[AnalysisException] {
+            sql(s"select i$i::variant from $tableName")
+          }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+        }
+      }
+    }
+  }
 }
