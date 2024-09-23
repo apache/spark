@@ -47,14 +47,13 @@ class CoGroupedArrowPythonRunner(
     pythonMetrics, jobArtifactUUID, profiler) {
 
   override protected def writeNextGroup(
-      group: (Iterator[InternalRow],
-      Iterator[InternalRow]),
+      group: (Iterator[InternalRow], Iterator[InternalRow]),
       dataOut: DataOutputStream): Unit = {
     val (leftGroup, rightGroup) = group
 
     dataOut.writeInt(2)
-    writeSingleStream(leftGroup, leftSchema, dataOut, "left")
-    writeSingleStream(rightGroup, rightSchema, dataOut, "right")
+    writeSingleStream(leftGroup, leftSchema, dataOut, Some("left"))
+    writeSingleStream(rightGroup, rightSchema, dataOut, Some("right"))
   }
 }
 

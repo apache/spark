@@ -25,7 +25,6 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
 
 
-
 /**
  * Python UDF Runner for grouped udfs.
  */
@@ -49,6 +48,6 @@ class GroupedArrowPythonRunner(
       group: Iterator[InternalRow],
       dataOut: DataOutputStream): Unit = {
     dataOut.writeInt(1)
-    writeSingleStream(group, schema, dataOut, "batch")
+    writeSingleStream(group, schema, dataOut)
   }
 }

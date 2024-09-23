@@ -33,7 +33,6 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 
 
-
 /**
  * Python UDF Runner for grouped udfs.
  */
@@ -103,7 +102,7 @@ abstract class BaseGroupedArrowPythonRunner[IN](
       group: Iterator[InternalRow],
       schema: StructType,
       dataOut: DataOutputStream,
-      name: String): Unit = {
+      name: Option[String] = None): Unit = {
     val arrowSchema = ArrowUtils.toArrowSchema(
       schema, timeZoneId, errorOnDuplicatedFieldNames = true, largeVarTypes)
     val allocator = ArrowUtils.rootAllocator.newChildAllocator(
