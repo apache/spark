@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.{ByteBuffer, CharBuffer}
 import java.nio.charset.CharacterCodingException
-import java.text.{BreakIterator, DecimalFormat, DecimalFormatSymbols}
+import java.text.{DecimalFormat, DecimalFormatSymbols}
 import java.util.{Base64 => JBase64, HashMap, Locale, Map => JMap}
 
 import scala.collection.mutable.ArrayBuffer
@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LO
 import org.apache.spark.sql.catalyst.util.{ArrayData, CharsetProvider, CollationFactory, CollationSupport, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation}
+import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation, StringTypeNonCSAICollation}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -609,6 +609,8 @@ case class Contains(left: Expression, right: Expression) extends StringPredicate
     defineCodeGen(ctx, ev, (c1, c2) =>
       CollationSupport.Contains.genCode(c1, c2, collationId))
   }
+  override def inputTypes : Seq[AbstractDataType] =
+    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation)
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
 }
@@ -650,6 +652,10 @@ case class StartsWith(left: Expression, right: Expression) extends StringPredica
     defineCodeGen(ctx, ev, (c1, c2) =>
       CollationSupport.StartsWith.genCode(c1, c2, collationId))
   }
+
+  override def inputTypes : Seq[AbstractDataType] =
+    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation, StringTypeNonCSAICollation)
+
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
 }
@@ -691,6 +697,10 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
     defineCodeGen(ctx, ev, (c1, c2) =>
       CollationSupport.EndsWith.genCode(c1, c2, collationId))
   }
+
+  override def inputTypes : Seq[AbstractDataType] =
+    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation, StringTypeNonCSAICollation)
+
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)
 }
@@ -919,7 +929,7 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
 
   override def dataType: DataType = srcExpr.dataType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeAnyCollation, StringTypeAnyCollation, StringTypeAnyCollation)
+    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation, StringTypeNonCSAICollation)
   override def first: Expression = srcExpr
   override def second: Expression = searchExpr
   override def third: Expression = replaceExpr
@@ -1167,7 +1177,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
 
   override def dataType: DataType = srcExpr.dataType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeAnyCollation, StringTypeAnyCollation, StringTypeAnyCollation)
+    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation, StringTypeNonCSAICollation)
   override def first: Expression = srcExpr
   override def second: Expression = matchingExpr
   override def third: Expression = replaceExpr
@@ -1394,6 +1404,9 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     CollationSupport.StringTrim.exec(srcString, trimString, collationId)
 
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation)
+
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(
       srcStr = newChildren.head,
@@ -1501,6 +1514,9 @@ case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     CollationSupport.StringTrimLeft.exec(srcString, trimString, collationId)
 
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation)
+
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): StringTrimLeft =
     copy(
@@ -1561,6 +1577,9 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     CollationSupport.StringTrimRight.exec(srcString, trimString, collationId)
 
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation)
+
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): StringTrimRight =
     copy(
@@ -1595,7 +1614,7 @@ case class StringInstr(str: Expression, substr: Expression)
   override def right: Expression = substr
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
+    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation)
 
   override def nullSafeEval(string: Any, sub: Any): Any = {
     CollationSupport.StringInstr.
@@ -1643,7 +1662,7 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
 
   override def dataType: DataType = strExpr.dataType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeAnyCollation, StringTypeAnyCollation, IntegerType)
+    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation, IntegerType)
   override def first: Expression = strExpr
   override def second: Expression = delimExpr
   override def third: Expression = countExpr
@@ -1701,7 +1720,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
   override def nullable: Boolean = substr.nullable || str.nullable
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeAnyCollation, StringTypeAnyCollation, IntegerType)
+    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation, IntegerType)
 
   override def eval(input: InternalRow): Any = {
     val s = start.eval(input)
@@ -1969,13 +1988,10 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     if (pattern == null) {
       null
     } else {
-      val sb = new StringBuffer()
-      val formatter = new java.util.Formatter(sb, Locale.US)
-
+      val formatter = new java.util.Formatter(Locale.US)
       val arglist = children.tail.map(_.eval(input).asInstanceOf[AnyRef])
-      formatter.format(pattern.asInstanceOf[UTF8String].toString, arglist: _*)
-
-      UTF8String.fromString(sb.toString)
+      UTF8String.fromString(
+        formatter.format(pattern.asInstanceOf[UTF8String].toString, arglist: _*).toString)
     }
   }
 
@@ -2006,19 +2022,16 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 
     val form = ctx.freshName("formatter")
     val formatter = classOf[java.util.Formatter].getName
-    val sb = ctx.freshName("sb")
-    val stringBuffer = classOf[StringBuffer].getName
     ev.copy(code = code"""
       ${pattern.code}
       boolean ${ev.isNull} = ${pattern.isNull};
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
       if (!${ev.isNull}) {
-        $stringBuffer $sb = new $stringBuffer();
-        $formatter $form = new $formatter($sb, ${classOf[Locale].getName}.US);
+        $formatter $form = new $formatter(${classOf[Locale].getName}.US);
         Object[] $argList = new Object[$numArgLists];
         $argListCodes
-        $form.format(${pattern.value}.toString(), $argList);
-        ${ev.value} = UTF8String.fromString($sb.toString());
+        ${ev.value} = UTF8String.fromString(
+          $form.format(${pattern.value}.toString(), $argList).toString());
       }""")
   }
 
@@ -3333,13 +3346,36 @@ case class FormatNumber(x: Expression, d: Expression)
 
 /**
  * Splits a string into arrays of sentences, where each sentence is an array of words.
- * The 'lang' and 'country' arguments are optional, and if omitted, the default locale is used.
+ * The `lang` and `country` arguments are optional, their default values are all '',
+ *  - When they are omitted:
+ *    1. If they are both omitted, the `Locale.ROOT - locale(language='', country='')` is used.
+ *       The `Locale.ROOT` is regarded as the base locale of all locales, and is used as the
+ *       language/country neutral locale for the locale sensitive operations.
+ *    2. If the `country` is omitted, the `locale(language, country='')` is used.
+ *  - When they are null:
+ *    1. If they are both `null`, the `Locale.US - locale(language='en', country='US')` is used.
+ *    2. If the `language` is null and the `country` is not null,
+ *       the `Locale.US - locale(language='en', country='US')` is used.
+ *    3. If the `language` is not null and the `country` is null, the `locale(language)` is used.
+ *    4. If neither is `null`, the `locale(language, country)` is used.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str[, lang, country]) - Splits `str` into an array of array of words.",
+  usage = "_FUNC_(str[, lang[, country]]) - Splits `str` into an array of array of words.",
+  arguments = """
+    Arguments:
+      * str - A STRING expression to be parsed.
+      * lang - An optional STRING expression with a language code from ISO 639 Alpha-2 (e.g. 'DE'),
+          Alpha-3, or a language subtag of up to 8 characters.
+      * country - An optional STRING expression with a country code from ISO 3166 alpha-2 country
+          code or a UN M.49 numeric-3 area code.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Hi there! Good morning.');
+       [["Hi","there"],["Good","morning"]]
+      > SELECT _FUNC_('Hi there! Good morning.', 'en');
+       [["Hi","there"],["Good","morning"]]
+      > SELECT _FUNC_('Hi there! Good morning.', 'en', 'US');
        [["Hi","there"],["Good","morning"]]
   """,
   since = "2.0.0",
@@ -3348,7 +3384,9 @@ case class Sentences(
     str: Expression,
     language: Expression = Literal(""),
     country: Expression = Literal(""))
-  extends TernaryExpression with ImplicitCastInputTypes with CodegenFallback {
+  extends TernaryExpression
+  with ImplicitCastInputTypes
+  with RuntimeReplaceable {
 
   def this(str: Expression) = this(str, Literal(""), Literal(""))
   def this(str: Expression, language: Expression) = this(str, language, Literal(""))
@@ -3362,49 +3400,18 @@ case class Sentences(
   override def second: Expression = language
   override def third: Expression = country
 
-  override def eval(input: InternalRow): Any = {
-    val string = str.eval(input)
-    if (string == null) {
-      null
-    } else {
-      val languageStr = language.eval(input).asInstanceOf[UTF8String]
-      val countryStr = country.eval(input).asInstanceOf[UTF8String]
-      val locale = if (languageStr != null && countryStr != null) {
-        new Locale(languageStr.toString, countryStr.toString)
-      } else {
-        Locale.US
-      }
-      getSentences(string.asInstanceOf[UTF8String].toString, locale)
-    }
-  }
-
-  private def getSentences(sentences: String, locale: Locale) = {
-    val bi = BreakIterator.getSentenceInstance(locale)
-    bi.setText(sentences)
-    var idx = 0
-    val result = new ArrayBuffer[GenericArrayData]
-    while (bi.next != BreakIterator.DONE) {
-      val sentence = sentences.substring(idx, bi.current)
-      idx = bi.current
-
-      val wi = BreakIterator.getWordInstance(locale)
-      var widx = 0
-      wi.setText(sentence)
-      val words = new ArrayBuffer[UTF8String]
-      while (wi.next != BreakIterator.DONE) {
-        val word = sentence.substring(widx, wi.current)
-        widx = wi.current
-        if (Character.isLetterOrDigit(word.charAt(0))) words += UTF8String.fromString(word)
-      }
-      result += new GenericArrayData(words)
-    }
-    new GenericArrayData(result)
-  }
+  override def replacement: Expression =
+    StaticInvoke(
+      classOf[ExpressionImplUtils],
+      dataType,
+      "getSentences",
+      Seq(str, language, country),
+      inputTypes,
+      propagateNull = false)
 
   override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Sentences =
     copy(str = newFirst, language = newSecond, country = newThird)
-
 }
 
 /**
@@ -3475,7 +3482,7 @@ case class SplitPart (
       false)
   override def nodeName: String = "split_part"
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeAnyCollation, StringTypeAnyCollation, IntegerType)
+    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation, IntegerType)
   def children: Seq[Expression] = Seq(str, delimiter, partNum)
   protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression = {
     copy(str = newChildren.apply(0), delimiter = newChildren.apply(1),

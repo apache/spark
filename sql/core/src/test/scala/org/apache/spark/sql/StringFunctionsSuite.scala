@@ -714,6 +714,34 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(sentences($"str", $"language", $"country")),
       Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
 
+    checkAnswer(
+      df.selectExpr("sentences(str, language)"),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
+    checkAnswer(
+      df.select(sentences($"str", $"language")),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
+    checkAnswer(
+      df.selectExpr("sentences(str)"),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
+    checkAnswer(
+      df.select(sentences($"str")),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
+    checkAnswer(
+      df.selectExpr("sentences(str, null, null)"),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
+    checkAnswer(
+      df.selectExpr("sentences(str, '', null)"),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
+    checkAnswer(
+      df.selectExpr("sentences(str, null)"),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
     // Type coercion
     checkAnswer(
       df.selectExpr("sentences(null)", "sentences(10)", "sentences(3.14)"),

@@ -160,6 +160,14 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrameWriterV2"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WriteConfigMethods"),
 
+    // SPARK-49424: Shared Encoders
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders$"),
+
+    // SPARK-49413: Create a shared RuntimeConfig interface.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RuntimeConfig"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RuntimeConfig$"),
+
     // SPARK-49287: Shared Streaming interfaces
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.scheduler.SparkListenerEvent"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ForeachWriter"),
@@ -193,6 +201,8 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.execution.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.internal.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.errors.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.classic.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.connect.*"),
     // DSv2 catalog and expression APIs are unstable yet. We should enable this back.
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.catalog.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.expressions.*"),
