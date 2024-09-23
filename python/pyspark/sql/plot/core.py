@@ -50,27 +50,46 @@ class PySparkTopNPlotBase:
 
 class PySparkSampledPlotBase:
     def get_sampled(self, sdf: "DataFrame") -> "pd.DataFrame":
-        from pyspark.sql import SparkSession
+        from pyspark.sql import SparkSession, Observation
+        from pyspark.sql import functions as F
 
         session = SparkSession.getActiveSession()
         if session is None:
             raise PySparkRuntimeError(errorClass="NO_ACTIVE_SESSION", messageParameters=dict())
 
-        sample_ratio = session.conf.get("spark.sql.pyspark.plotting.sample_ratio")
         max_rows = int(
             session.conf.get("spark.sql.pyspark.plotting.max_rows")  # type: ignore[arg-type]
         )
 
-        if sample_ratio is None:
-            fraction = 1 / (sdf.count() / max_rows)
-            fraction = min(1.0, fraction)
-        else:
-            fraction = float(sample_ratio)
+        observation = Observation("pyspark plotting")
 
-        sampled_sdf = sdf.sample(fraction=fraction)
+        rand_col_name = "__pyspark_plotting_sampled_plot_base_rand__"
+        id_col_name = "__pyspark_plotting_sampled_plot_base_id__"
+
+        sampled_sdf = (
+            sdf.observe(observation, F.count(F.lit(1)).alias("count"))
+            .select(
+                "*",
+                F.rand().alias(rand_col_name),
+                F.monotonically_increasing_id().alias(id_col_name),
+            )
+            .sort(rand_col_name)
+            .limit(max_rows + 1)
+            .coalesce(1)
+            .sortWithinPartitions(id_col_name)
+            .drop(rand_col_name, id_col_name)
+        )
         pdf = sampled_sdf.toPandas()
 
-        return pdf
+        if len(pdf) > max_rows:
+            try:
+                self.fraction = float(max_rows) / observation.get["count"]
+            except Exception:
+                pass
+            return pdf[:max_rows]
+        else:
+            self.fraction = 1.0
+            return pdf
 
 
 class PySparkPlotAccessor:
