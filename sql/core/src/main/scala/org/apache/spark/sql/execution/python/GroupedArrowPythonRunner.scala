@@ -49,6 +49,6 @@ class GroupedArrowPythonRunner(
       group: Iterator[InternalRow],
       dataOut: DataOutputStream): Unit = {
     dataOut.writeInt(1)
-    writeSingleGroup(group, schema, dataOut, "batch")
+    writeSingleStream(group, schema, dataOut, "batch")
   }
 }

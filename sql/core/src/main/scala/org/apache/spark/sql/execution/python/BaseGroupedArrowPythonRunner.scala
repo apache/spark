@@ -99,7 +99,7 @@ abstract class BaseGroupedArrowPythonRunner[IN](
     }
   }
 
-  protected def writeSingleGroup(
+  protected def writeSingleStream(
       group: Iterator[InternalRow],
       schema: StructType,
       dataOut: DataOutputStream,

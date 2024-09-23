@@ -53,8 +53,8 @@ class CoGroupedArrowPythonRunner(
     val (leftGroup, rightGroup) = group
 
     dataOut.writeInt(2)
-    writeSingleGroup(leftGroup, leftSchema, dataOut, "left")
-    writeSingleGroup(rightGroup, rightSchema, dataOut, "right")
+    writeSingleStream(leftGroup, leftSchema, dataOut, "left")
+    writeSingleStream(rightGroup, rightSchema, dataOut, "right")
   }
 }
 
