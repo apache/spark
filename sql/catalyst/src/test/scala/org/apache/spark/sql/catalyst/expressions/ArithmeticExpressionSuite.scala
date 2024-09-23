@@ -119,20 +119,16 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       checkErrorInExpression[SparkArithmeticException](
         UnaryMinus(Literal(Long.MinValue)), "ARITHMETIC_OVERFLOW",
-        Map("message" -> "long overflow", "alternative" -> "",
-          "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)))
+        Map("message" -> "long overflow", "alternative" -> ""))
       checkErrorInExpression[SparkArithmeticException](
         UnaryMinus(Literal(Int.MinValue)), "ARITHMETIC_OVERFLOW",
-        Map("message" -> "integer overflow", "alternative" -> "",
-          "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)))
+        Map("message" -> "integer overflow", "alternative" -> ""))
       checkErrorInExpression[SparkArithmeticException](
         UnaryMinus(Literal(Short.MinValue)), "ARITHMETIC_OVERFLOW",
-        Map("message" -> "short overflow", "alternative" -> "",
-          "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)))
+        Map("message" -> "short overflow", "alternative" -> ""))
       checkErrorInExpression[SparkArithmeticException](
         UnaryMinus(Literal(Byte.MinValue)), "ARITHMETIC_OVERFLOW",
-        Map("message" -> "byte overflow", "alternative" -> "",
-          "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)))
+        Map("message" -> "byte overflow", "alternative" -> ""))
       checkEvaluation(UnaryMinus(positiveShortLit), (- positiveShort).toShort)
       checkEvaluation(UnaryMinus(negativeShortLit), (- negativeShort).toShort)
       checkEvaluation(UnaryMinus(positiveIntLit), - positiveInt)

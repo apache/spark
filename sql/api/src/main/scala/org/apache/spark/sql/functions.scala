@@ -7874,6 +7874,23 @@ object functions {
     Column.fn("make_interval", years, months, weeks, days, hours, mins, secs)
 
   /**
+   * This is a special version of `url_decode` that performs the same operation, but returns a
+   * NULL value instead of raising an error if the decoding cannot be performed.
+   *
+   * @group url_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
+    Column.fn("try_make_interval", years, months, weeks, days, hours, mins, secs)
+
+  /**
    * Make interval from years, months, weeks, days, hours and mins.
    *
    * @group datetime_funcs

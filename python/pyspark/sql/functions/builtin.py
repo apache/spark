@@ -19915,6 +19915,159 @@ def make_dt_interval(
     _secs = lit(decimal.Decimal(0)) if secs is None else secs
     return _invoke_function_over_columns("make_dt_interval", _days, _hours, _mins, _secs)
 
+@_try_remote_functions
+def try_make_interval(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    weeks: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+) -> Column:
+    """
+    This is a special version of `make_interval` that performs the same operation, but returns a
+    NULL value instead of raising an error if the decoding cannot be performed.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    years : :class:`~pyspark.sql.Column` or str, optional
+        The number of years, positive or negative.
+    months : :class:`~pyspark.sql.Column` or str, optional
+        The number of months, positive or negative.
+    weeks : :class:`~pyspark.sql.Column` or str, optional
+        The number of weeks, positive or negative.
+    days : :class:`~pyspark.sql.Column` or str, optional
+        The number of days, positive or negative.
+    hours : :class:`~pyspark.sql.Column` or str, optional
+        The number of hours, positive or negative.
+    mins : :class:`~pyspark.sql.Column` or str, optional
+        The number of minutes, positive or negative.
+    secs : :class:`~pyspark.sql.Column` or str, optional
+        The number of seconds with the fractional part in microsecond precision.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column that contains an interval.
+
+    Examples
+    --------
+
+    Example 1: Try make interval from years, months, weeks, days, hours, mins and secs.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.try_make_interval(
+    ...     df.year, df.month, df.week, df.day, df.hour, df.min, df.sec)
+    ... ).show(truncate=False)
+    +---------------------------------------------------------------+
+    |make_interval(year, month, week, day, hour, min, sec)          |
+    +---------------------------------------------------------------+
+    |100 years 11 months 8 days 12 hours 30 minutes 1.001001 seconds|
+    +---------------------------------------------------------------+
+
+    Example 2: Try make interval from years, months, weeks, days, hours and mins.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.try_make_interval(
+    ...     df.year, df.month, df.week, df.day, df.hour, df.min)
+    ... ).show(truncate=False)
+    +---------------------------------------------------+
+    |make_interval(year, month, week, day, hour, min, 0)|
+    +---------------------------------------------------+
+    |100 years 11 months 8 days 12 hours 30 minutes     |
+    +---------------------------------------------------+
+
+    Example 3: Try make interval from years, months, weeks, days and hours.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.try_make_interval(
+    ...     df.year, df.month, df.week, df.day, df.hour)
+    ... ).show(truncate=False)
+    +-------------------------------------------------+
+    |make_interval(year, month, week, day, hour, 0, 0)|
+    +-------------------------------------------------+
+    |100 years 11 months 8 days 12 hours              |
+    +-------------------------------------------------+
+
+    Example 4: Try make interval from years, months, weeks and days.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.try_make_interval(df.year, df.month, df.week, df.day)).show(truncate=False)
+    +----------------------------------------------+
+    |make_interval(year, month, week, day, 0, 0, 0)|
+    +----------------------------------------------+
+    |100 years 11 months 8 days                    |
+    +----------------------------------------------+
+
+    Example 5: Try make interval from years, months and weeks.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.try_make_interval(df.year, df.month, df.week)).show(truncate=False)
+    +--------------------------------------------+
+    |make_interval(year, month, week, 0, 0, 0, 0)|
+    +--------------------------------------------+
+    |100 years 11 months 7 days                  |
+    +--------------------------------------------+
+
+    Example 6: Try make interval from years and months.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.try_make_interval(df.year, df.month)).show(truncate=False)
+    +-----------------------------------------+
+    |make_interval(year, month, 0, 0, 0, 0, 0)|
+    +-----------------------------------------+
+    |100 years 11 months                      |
+    +-----------------------------------------+
+
+    Example 7: Try make interval from years.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.try_make_interval(df.year)).show(truncate=False)
+    +-------------------------------------+
+    |make_interval(year, 0, 0, 0, 0, 0, 0)|
+    +-------------------------------------+
+    |100 years                            |
+    +-------------------------------------+
+
+    Example 8: Try make interval.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.try_make_interval()).show(truncate=False)
+    +----------------------------------+
+    |make_interval(0, 0, 0, 0, 0, 0, 0)|
+    +----------------------------------+
+    |0 seconds                         |
+    +----------------------------------+
+    """
+    _years = lit(0) if years is None else years
+    _months = lit(0) if months is None else months
+    _weeks = lit(0) if weeks is None else weeks
+    _days = lit(0) if days is None else days
+    _hours = lit(0) if hours is None else hours
+    _mins = lit(0) if mins is None else mins
+    _secs = lit(decimal.Decimal(0)) if secs is None else secs
+    return _invoke_function_over_columns(
+        "try_make_interval", _years, _months, _weeks, _days, _hours, _mins, _secs
+    )
 
 @_try_remote_functions
 def make_interval(

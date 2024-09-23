@@ -227,7 +227,6 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22003",
   "messageParameters" : {
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
-    "config" : "\"spark.sql.ansi.enabled\"",
     "message" : "long overflow"
   },
   "queryContext" : [ {
@@ -250,7 +249,6 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22003",
   "messageParameters" : {
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
-    "config" : "\"spark.sql.ansi.enabled\"",
     "message" : "long overflow"
   },
   "queryContext" : [ {

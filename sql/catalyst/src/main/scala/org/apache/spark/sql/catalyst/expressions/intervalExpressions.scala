@@ -246,7 +246,7 @@ case class DivideInterval(
       > SELECT _FUNC_(0, 1, 0, 1, 0, 0, 100.000001);
        1 months 1 days 1 minutes 40.000001 seconds
   """,
-  since = "3.0.0",
+  since = "4.0.0",
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class TryMakeInterval(
@@ -270,6 +270,31 @@ case class TryMakeInterval(
       secs: Expression) =
     this(years, months, weeks, days, hours, mins, secs,
       MakeInterval(years, months, weeks, days, hours, mins, secs, failOnError = false))
+
+  def this(
+      years: Expression,
+      months: Expression,
+      weeks: Expression,
+      days: Expression,
+      hours: Expression,
+      mins: Expression) =
+    this(years, months, weeks, days, hours, mins, Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)))
+
+  def this(
+      years: Expression,
+      months: Expression,
+      weeks: Expression,
+      days: Expression,
+      hours: Expression) = {
+    this(years, months, weeks, days, hours, Literal(0))
+  }
+  def this(years: Expression, months: Expression, weeks: Expression, days: Expression) =
+    this(years, months, weeks, days, Literal(0))
+  def this(years: Expression, months: Expression, weeks: Expression) =
+    this(years, months, weeks, Literal(0))
+  def this(years: Expression, months: Expression) = this(years, months, Literal(0))
+  def this(years: Expression) = this(years, Literal(0))
+  def this() = this(Literal(0))
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(replacement = newChild)

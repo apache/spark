@@ -73,13 +73,13 @@ If `spark.sql.ansi.enabled` is `false`, then the decimal type will produce `null
 ```sql
 -- `spark.sql.ansi.enabled=true`
 SELECT 2147483647 + 1;
-org.apache.spark.SparkArithmeticException: [ARITHMETIC_OVERFLOW] integer overflow. Use 'try_add' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
+org.apache.spark.SparkArithmeticException: [ARITHMETIC_OVERFLOW] integer overflow. Use 'try_add' to tolerate overflow and return NULL instead.
 == SQL(line 1, position 8) ==
 SELECT 2147483647 + 1
        ^^^^^^^^^^^^^^
 
 SELECT abs(-2147483648);
-org.apache.spark.SparkArithmeticException: [ARITHMETIC_OVERFLOW] integer overflow. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
+org.apache.spark.SparkArithmeticException: [ARITHMETIC_OVERFLOW] integer overflow.
 
 -- `spark.sql.ansi.enabled=false`
 SELECT 2147483647 + 1;
