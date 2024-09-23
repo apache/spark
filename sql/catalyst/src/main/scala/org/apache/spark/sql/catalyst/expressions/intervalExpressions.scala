@@ -249,6 +249,62 @@ case class DivideInterval(
   since = "3.0.0",
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
+case class TryMakeInterval(
+    years: Expression,
+    months: Expression,
+    weeks: Expression,
+    days: Expression,
+    hours: Expression,
+    mins: Expression,
+    secs: Expression,
+    replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+
+  def this(
+      years: Expression,
+      months: Expression,
+      weeks: Expression,
+      days: Expression,
+      hours: Expression,
+      mins: Expression,
+      secs: Expression) =
+    this(years, months, weeks, days, hours, mins, secs,
+      MakeInterval(years, months, weeks, days, hours, mins, secs, failOnError = false))
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(replacement = newChild)
+  }
+
+  override def parameters: Seq[Expression] = Seq(years, months, weeks, days, hours, mins, secs)
+
+  override def prettyName: String = "try_make_interval"
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_([years[, months[, weeks[, days[, hours[, mins[, secs]]]]]]]) - Make interval from years, months, weeks, days, hours, mins and secs.",
+  arguments = """
+    Arguments:
+      * years - the number of years, positive or negative
+      * months - the number of months, positive or negative
+      * weeks - the number of weeks, positive or negative
+      * days - the number of days, positive or negative
+      * hours - the number of hours, positive or negative
+      * mins - the number of minutes, positive or negative
+      * secs - the number of seconds with the fractional part in microsecond precision.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(100, 11, 1, 1, 12, 30, 01.001001);
+       100 years 11 months 8 days 12 hours 30 minutes 1.001001 seconds
+      > SELECT _FUNC_(100, null, 3);
+       NULL
+      > SELECT _FUNC_(0, 1, 0, 1, 0, 0, 100.000001);
+       1 months 1 days 1 minutes 40.000001 seconds
+  """,
+  since = "3.0.0",
+  group = "datetime_funcs")
+// scalastyle:on line.size.limit
 case class MakeInterval(
     years: Expression,
     months: Expression,
@@ -324,7 +380,8 @@ case class MakeInterval(
     } catch {
       case e: ArithmeticException =>
         if (failOnError) {
-          throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage)
+          throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage,
+            hint = "try_make_interval")
         } else {
           null
         }
