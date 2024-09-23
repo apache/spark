@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import io.grpc.ClientInterceptor
@@ -130,8 +130,17 @@ class SparkSession private[sql] (
 
   /** @inheritdoc */
   def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = {
-    val encoder = JavaTypeInference.encoderFor(beanClass.asInstanceOf[Class[Any]])
-    createDataset(encoder, data.iterator().asScala).toDF()
+    JavaTypeInference.setSparkClientFlag
+    val encoderTry = Try {
+      JavaTypeInference.encoderFor(beanClass.asInstanceOf[Class[Any]])
+    }
+    JavaTypeInference.unsetSparkClientFlag
+    encoderTry match {
+      case Success(encoder) => createDataset(encoder, data.iterator().asScala).toDF()
+
+      case Failure(exception) => throw exception
+    }
+
   }
 
   /** @inheritdoc */

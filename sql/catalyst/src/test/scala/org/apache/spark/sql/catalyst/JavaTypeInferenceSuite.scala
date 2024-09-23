@@ -225,6 +225,16 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
     assert(encoder === expected)
   }
 
+  test("exception for bean encoder with generic types as getter/setter for spark client") {
+    JavaTypeInference.setSparkClientFlag
+    val thrown = intercept[Exception] {
+      JavaTypeInference.encoderFor(classOf[GenericTypePropertiesBean[_, _, _, _, _]])
+    }
+    JavaTypeInference.unsetSparkClientFlag
+   assert(thrown.getMessage.
+     indexOf("[ENCODER_NOT_FOUND] Not found an encoder of the type U ") != -1)
+  }
+
   test("resolve leaf encoders") {
     val encoder = JavaTypeInference.encoderFor(classOf[LeafBean])
     val expected = JavaBeanEncoder(ClassTag(classOf[LeafBean]), Seq(

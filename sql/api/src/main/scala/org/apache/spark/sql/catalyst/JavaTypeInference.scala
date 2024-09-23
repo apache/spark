@@ -42,6 +42,8 @@ import org.apache.spark.util.ArrayImplicits._
  */
 object JavaTypeInference {
 
+  private val clientConnectFlag = ThreadLocal.withInitial[Boolean](() => false)
+
   /**
    * Infers the corresponding SQL data type of a Java type.
    * @param beanType
@@ -234,10 +236,11 @@ object JavaTypeInference {
       baseClass: Option[Class[_]],
       serializableEncodersOnly: Boolean = false): Option[AgnosticEncoder[_]] =
     if (serializableEncodersOnly) {
+      val isClientConnect = clientConnectFlag.get()
       assert(typesToCheck.size == 1)
       typesToCheck
         .flatMap(c => {
-          if (classOf[KryoSerializable].isAssignableFrom(c)) {
+          if (!isClientConnect && classOf[KryoSerializable].isAssignableFrom(c)) {
             Seq(Encoders.kryo(c).asInstanceOf[AgnosticEncoder[_]])
           } else if (classOf[java.io.Serializable].isAssignableFrom(c)) {
             Seq(Encoders.javaSerialization(c).asInstanceOf[AgnosticEncoder[_]])
@@ -311,7 +314,9 @@ object JavaTypeInference {
           case Some(clzzName) if clzzName == classOf[java.io.Serializable].getTypeName =>
             Option(Encoders.javaSerialization(_).asInstanceOf[AgnosticEncoder[_]])
 
-          case Some(clzzName) if clzzName == classOf[KryoSerializable].getTypeName =>
+          case Some(clzzName)
+              if !clientConnectFlag.get() &&
+                clzzName == classOf[KryoSerializable].getTypeName =>
             Option(Encoders.kryo(_).asInstanceOf[AgnosticEncoder[_]])
 
           case _ => None
@@ -320,4 +325,7 @@ object JavaTypeInference {
       case _ => None
     }
   }
+
+  private[sql] def setSparkClientFlag = this.clientConnectFlag.set(true)
+  private[sql] def unsetSparkClientFlag = this.clientConnectFlag.set(false)
 }
