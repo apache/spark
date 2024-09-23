@@ -59,6 +59,7 @@ public class VariantBuilder {
 
   /**
    * Similar {@link #parseJson(String, boolean)}, but takes a JSON parser instead of string input.
+   * The variantMetrics object is used to collect statistics about the variant being built.
    */
   public static Variant parseJson(JsonParser parser, boolean allowDuplicateKeys,
                                   VariantMetrics variantMetrics) throws IOException {
@@ -70,6 +71,11 @@ public class VariantBuilder {
     return builder.result();
   }
 
+  /**
+   * Similar to {@link #parseJson(JsonParser, boolean, VariantMetrics)}, but does not require the
+   * caller to provide a VariantMetrics object and therefore, the caller cannot collect statistics
+   * about the variant being built.
+   */
   public static Variant parseJson(JsonParser parser, boolean allowDuplicateKeys)
       throws IOException {
     return parseJson(parser, allowDuplicateKeys, new VariantMetrics());

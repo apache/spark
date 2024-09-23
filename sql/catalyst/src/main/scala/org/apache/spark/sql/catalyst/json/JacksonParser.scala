@@ -130,18 +130,10 @@ class JacksonParser(
       parser.nextToken()
     }
     try {
-      val v = if (isTopLevel) {
-        topLevelVariantMetrics match {
-          case Some(metrics) =>
-            VariantBuilder.parseJson(parser, variantAllowDuplicateKeys, metrics)
-          case None => VariantBuilder.parseJson(parser, variantAllowDuplicateKeys)
-        }
-      } else {
-        nestedVariantMetrics match {
-          case Some(metrics) =>
-            VariantBuilder.parseJson(parser, variantAllowDuplicateKeys, metrics)
-          case None => VariantBuilder.parseJson(parser, variantAllowDuplicateKeys)
-        }
+      val vm = if (isTopLevel) topLevelVariantMetrics else nestedVariantMetrics
+      val v = vm match {
+        case Some(metrics) => VariantBuilder.parseJson(parser, variantAllowDuplicateKeys, metrics)
+        case None => VariantBuilder.parseJson(parser, variantAllowDuplicateKeys)
       }
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
@@ -240,6 +232,14 @@ class JacksonParser(
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
    * to a value according to a desired schema.
+   *
+   * @param isRoot Whether this converter is for the root schema or not.
+   * @param isChildOfRoot Whether this converter is an immediate child of the root schema or not.
+   *                      This information is important because singleVariantColumn schemas have
+   *                      VariantType at the root, but schemas where VariantType is an immediate
+   *                      child of the root struct schema should also be treated as containing top
+   *                      level variants even though the Variant is not the absolute root of the
+   *                      schema.
    */
   def makeConverter(dataType: DataType, isRoot: Boolean,
                     isChildOfRoot: Boolean): ValueConverter = dataType match {
