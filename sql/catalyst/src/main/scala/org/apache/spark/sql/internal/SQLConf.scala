@@ -1859,8 +1859,10 @@ object SQLConf {
 
   val WHOLESTAGE_CODEGEN_ENABLED = buildConf("spark.sql.codegen.wholeStage")
     .internal()
-    .doc("When true, the whole stage (of multiple operators) will be compiled into single java" +
-      " method.")
+    .doc("When true, the whole stage (of multiple operators) will be compiled into single java " +
+      "method. In some scenarios(for example, long running Spark Thrift Server), you may need " +
+      "to set the JVM flags(for example, `-XX:PerMethodRecompilationCutoff=10000`) to avoid " +
+      "performance regression.")
     .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
