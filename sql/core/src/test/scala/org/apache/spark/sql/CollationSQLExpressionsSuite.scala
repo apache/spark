@@ -23,7 +23,7 @@ import java.util.Locale
 
 import scala.collection.immutable.Seq
 
-import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkThrowable}
+import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
@@ -1947,6 +1947,47 @@ class CollationSQLExpressionsSuite
         }
       }
     }
+  }
+
+  test("UDT with collation  - Mode (throw exception)") {
+    /*
+         * - UTF8_BINARY       -> 0
+     * - UTF8_LCASE        -> 1
+     * - UNICODE           -> 0x20000000
+     * - UNICODE_AI        -> 0x20010000
+     * - UNICODE_CI        -> 0x20020000
+     * - UNICODE_CI_AI     -> 0x20030000
+     * - af                -> 0x20000001
+     * - af_CI_AI          -> 0x20030001
+     */
+    case class ModeTestCase(collationId: String, bufferValues: Map[String, Long], result: String)
+    Seq(
+      ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("utf8_lcase", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
+    ).foreach { t1 =>
+      if (t1.collationId != "utf8_binary") {
+        checkError(
+          exception = intercept[SparkUnsupportedOperationException] {
+            Mode(
+              child = Literal.create(null,
+                MapType(StringType(t1.collationId), IntegerType))
+            ).collationAwareTransform(
+              data = Map.empty[String, Any],
+              dataType = MapType(StringType(t1.collationId), IntegerType)
+            )
+          },
+          condition = "DATATYPE_MISMATCH",
+          parameters = Map(
+            ("sqlExpr", "\"mode(null)\""),
+            ("child", "\"MapType(StringType(UTF8_LCASE),IntegerType)\""),
+            ("mode", "`mode`")),
+          queryContext = Seq(ExpectedContext("mode(null)", 18, 24)).toArray
+        )
+      }
+    }
+
   }
 
   test("SPARK-48430: Map value extraction with collations") {

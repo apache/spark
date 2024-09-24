@@ -108,7 +108,7 @@ case class Mode(
     determineBufferingFunction(childDataType).map(groupAndReduceBuffer).getOrElse(buffer)
   }
 
-  private def collationAwareTransform(data: AnyRef, dataType: DataType): AnyRef = {
+  protected[sql] def collationAwareTransform(data: AnyRef, dataType: DataType): AnyRef = {
     dataType match {
       case _ if UnsafeRowUtils.isBinaryStable(dataType) => data
       case st: StructType =>
@@ -118,10 +118,7 @@ case class Mode(
         CollationFactory.getCollationKey(data.asInstanceOf[UTF8String], st.collationId)
       case _ =>
         throw new SparkUnsupportedOperationException(
-          "UNSUPPORTED_MODE_DATA_TYPE",
-          messageParameters =
-            Map("child" -> toSQLType(child.dataType),
-              "mode" -> toSQLId(prettyName))
+          "DIVIDE_BY_ZERO"
         )
     }
   }
