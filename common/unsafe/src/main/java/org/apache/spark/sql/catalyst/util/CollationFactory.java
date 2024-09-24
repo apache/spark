@@ -806,52 +806,28 @@ public final class CollationFactory {
         for (String specifier : specifiers) {
           switch (specifier) {
             case "CI":
-              if (isCaseSpecifierSet) {
-                throw collationInvalidNameException(originalName);
-              }
-              caseSensitivity = CaseSensitivity.CI;
-              isCaseSpecifierSet = true;
-              break;
             case "CS":
               if (isCaseSpecifierSet) {
                 throw collationInvalidNameException(originalName);
               }
-              caseSensitivity = CaseSensitivity.CS;
+              caseSensitivity = CaseSensitivity.valueOf(specifier);
               isCaseSpecifierSet = true;
               break;
             case "AI":
-              if (isAccentSpecifierSet) {
-                throw collationInvalidNameException(originalName);
-              }
-              accentSensitivity = AccentSensitivity.AI;
-              isAccentSpecifierSet = true;
-              break;
             case "AS":
               if (isAccentSpecifierSet) {
                 throw collationInvalidNameException(originalName);
               }
-              accentSensitivity = AccentSensitivity.AS;
+              accentSensitivity = AccentSensitivity.valueOf(specifier);
               isAccentSpecifierSet = true;
               break;
             case "LTRIM":
-              if (isSpaceTrimmingSpecifierSet) {
-                throw collationInvalidNameException(originalName);
-              }
-              spaceTrimming = SpaceTrimming.LTRIM;
-              isSpaceTrimmingSpecifierSet = true;
-              break;
             case "RTRIM":
-              if (isSpaceTrimmingSpecifierSet) {
-                throw collationInvalidNameException(originalName);
-              }
-              spaceTrimming = SpaceTrimming.RTRIM;
-              isSpaceTrimmingSpecifierSet = true;
-              break;
             case "TRIM":
               if (isSpaceTrimmingSpecifierSet) {
                 throw collationInvalidNameException(originalName);
               }
-              spaceTrimming = SpaceTrimming.TRIM;
+              spaceTrimming = SpaceTrimming.valueOf(specifier);
               isSpaceTrimmingSpecifierSet = true;
               break;
             default:
