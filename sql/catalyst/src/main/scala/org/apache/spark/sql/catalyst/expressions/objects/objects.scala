@@ -86,11 +86,29 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
 
   // Returns true if we can trust all values of the given DataType can be serialized.
   private def trustedSerializable(dt: DataType): Boolean = {
-    // Right now we conservatively block all ObjectType (Java objects) regardless of
-    // serializability, because the type-level info with java.io.Serializable and
-    // java.io.Externalizable marker interfaces are not strong guarantees.
+    // Right now we conservatively block all ObjectType (Java objects) except for
+    // it's `cls` equal to `Array[JavaBoxedPrimitive]` & `JavaBoxedPrimitive`
+    // regardless of serializability, because the type-level info with java.io.Serializable
+    // and java.io.Externalizable marker interfaces are not strong guarantees.
     // This restriction can be relaxed in the future to expose more optimizations.
-    !dt.existsRecursively(_.isInstanceOf[ObjectType])
+    !dt.existsRecursively {
+      case ObjectType(cls) if cls == classOf[Array[java.lang.Boolean]] => false
+      case ObjectType(cls) if cls == classOf[Array[java.lang.Byte]] => false
+      case ObjectType(cls) if cls == classOf[Array[java.lang.Short]] => false
+      case ObjectType(cls) if cls == classOf[Array[java.lang.Integer]] => false
+      case ObjectType(cls) if cls == classOf[Array[java.lang.Long]] => false
+      case ObjectType(cls) if cls == classOf[Array[java.lang.Float]] => false
+      case ObjectType(cls) if cls == classOf[Array[java.lang.Double]] => false
+      case ObjectType(cls) if cls == classOf[java.lang.Boolean] => false
+      case ObjectType(cls) if cls == classOf[java.lang.Byte] => false
+      case ObjectType(cls) if cls == classOf[java.lang.Short] => false
+      case ObjectType(cls) if cls == classOf[java.lang.Integer] => false
+      case ObjectType(cls) if cls == classOf[java.lang.Long] => false
+      case ObjectType(cls) if cls == classOf[java.lang.Float] => false
+      case ObjectType(cls) if cls == classOf[java.lang.Double] => false
+      case ObjectType(_) => true
+      case _ => false
+    }
   }
 
   /**
