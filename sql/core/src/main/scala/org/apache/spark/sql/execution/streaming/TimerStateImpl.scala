@@ -86,6 +86,7 @@ class TimerStateImpl(
 
   /**
    * Function to check if the timer for the given key and timestamp is already registered
+   *
    * @param expiryTimestampMs - expiry timestamp of the timer
    * @return - true if the timer is already registered, false otherwise
    */
@@ -99,6 +100,7 @@ class TimerStateImpl(
 
   /**
    * Function to add a new timer for the given key and timestamp
+   *
    * @param expiryTimestampMs - expiry timestamp of the timer
    */
   def registerTimer(expiryTimestampMs: Long): Unit = {
@@ -116,6 +118,7 @@ class TimerStateImpl(
 
   /**
    * Function to remove the timer for the given key and timestamp
+   *
    * @param expiryTimestampMs - expiry timestamp of the timer
    */
   def deleteTimer(expiryTimestampMs: Long): Unit = {
@@ -178,41 +181,6 @@ class TimerStateImpl(
         } else {
           finished = true
           null.asInstanceOf[(Any, Long)]
-        }
-      }
-
-      override protected def close(): Unit = { }
-    }
-  }
-
-  /**
-   * Function to get all the expired registered timers for all grouping keys.
-   * Returning the grouping key as UnsafeRow to avoid unnecessary (de)serialization
-   * for internal use.
-   *
-   * @param expiryTimestampMs Threshold for expired timestamp in milliseconds, this function
-   *                          will return all timers that have timestamp less than passed threshold.
-   * @return - iterator of all the registered timers for all grouping keys
-   */
-  def getExpiredTimersWithKeyRow(expiryTimestampMs: Long): Iterator[(UnsafeRow, Long)] = {
-    // this iter is increasingly sorted on timestamp
-    val iter = store.iterator(tsToKeyCFName)
-
-    new NextIterator[(UnsafeRow, Long)] {
-      override protected def getNext(): (UnsafeRow, Long) = {
-        if (iter.hasNext) {
-          val rowPair = iter.next()
-          val keyRow = rowPair.key
-          val result = getTimerRowFromSecIndex(keyRow)
-          if (result._2 < expiryTimestampMs) {
-            (keyRow.getStruct(1, keyExprEnc.schema.length), result._2)
-          } else {
-            finished = true
-            null.asInstanceOf[(UnsafeRow, Long)]
-          }
-        } else {
-          finished = true
-          null.asInstanceOf[(UnsafeRow, Long)]
         }
       }
 

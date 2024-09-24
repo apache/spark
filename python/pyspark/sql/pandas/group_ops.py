@@ -531,7 +531,7 @@ class PandasGroupedOpsMixin:
                     if (timeMode == "processingtime" and expiry_timestamp < batch_timestamp) or\
                             (timeMode == "eventtime" and expiry_timestamp < watermark_timestamp):
                         result_iter_list.append(statefulProcessor.handleInputRows(
-                            (key_obj,), iter([]),
+                            key_obj, iter([]),
                             TimerValues(batch_timestamp, watermark_timestamp),
                             ExpiredTimerInfo(True, expiry_timestamp)))
 
