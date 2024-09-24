@@ -250,7 +250,10 @@ object SparkBuild extends PomBuild {
         // reduce the cost of migration in subsequent versions.
         "-Wconf:cat=deprecation&msg=it will become a keyword in Scala 3:e",
         // SPARK-46938 to prevent enum scan on pmml-model, under spark-mllib module.
-        "-Wconf:cat=other&site=org.dmg.pmml.*:w"
+        "-Wconf:cat=other&site=org.dmg.pmml.*:w",
+        // Some deprecated method/value/class calls is a compilation error in Scala 2.13.15.
+        "-Wconf:cat=deprecation&msg=^(?=.*?method|value|object|trait|class|constructor)(?=.*?in)(?=.*?deprecated).+$:w",
+        "-Wconf:cat=deprecation&msg=shadowing a nested class of a parent is deprecated but class Val shadows class Val defined in class Enumeration; rename the class to something else:w"
       )
     }
   )
