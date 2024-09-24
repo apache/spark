@@ -1526,6 +1526,103 @@ case class ArrayContains(left: Expression, right: Expression)
 }
 
 /**
+ * This expression converts data of `ArrayData` to an array of java type.
+ *
+ * NOTE: When the data type of expression is `ArrayType`, and the expression is foldable,
+ * the `ConstantFolding` can do constant folding optimization automatically,
+ * (avoiding frequent calls to `ArrayData.to{XXX}Array()`).
+ */
+case class ToJavaArray(array: Expression)
+  extends UnaryExpression
+  with NullIntolerant
+  with RuntimeReplaceable
+  with QueryErrorsBase {
+
+  override def checkInputDataTypes(): TypeCheckResult = array.dataType match {
+    case ArrayType(_, _) =>
+      TypeCheckResult.TypeCheckSuccess
+    case _ =>
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> toSQLType(ArrayType),
+          "inputSql" -> toSQLExpr(array),
+          "inputType" -> toSQLType(array.dataType))
+      )
+  }
+
+  override def foldable: Boolean = array.foldable
+
+  override def child: Expression = array
+  override def prettyName: String = "to_java_array"
+
+  @transient lazy val elementType: DataType =
+    array.dataType.asInstanceOf[ArrayType].elementType
+  private def resultArrayElementNullable: Boolean =
+    array.dataType.asInstanceOf[ArrayType].containsNull
+  private def isPrimitiveType: Boolean = CodeGenerator.isPrimitiveType(elementType)
+  private def canPerformFast: Boolean = isPrimitiveType && !resultArrayElementNullable
+
+  @transient private lazy val elementObjectType = ObjectType(classOf[DataType])
+  @transient private lazy val dataTypeFunctionNameArgumentsInputTypes:
+    (DataType, String, Seq[Expression], Seq[AbstractDataType]) = {
+    if (canPerformFast) {
+      elementType match {
+        case BooleanType => (ObjectType(classOf[Array[Boolean]]), "toBooleanArray",
+          Seq(array), Seq(array.dataType))
+        case ByteType => (ObjectType(classOf[Array[Byte]]), "toByteArray",
+          Seq(array), Seq(array.dataType))
+        case ShortType => (ObjectType(classOf[Array[Short]]), "toShortArray",
+          Seq(array), Seq(array.dataType))
+        case IntegerType => (ObjectType(classOf[Array[Int]]), "toIntArray",
+          Seq(array), Seq(array.dataType))
+        case LongType => (ObjectType(classOf[Array[Long]]), "toLongArray",
+          Seq(array), Seq(array.dataType))
+        case FloatType => (ObjectType(classOf[Array[Float]]), "toFloatArray",
+          Seq(array), Seq(array.dataType))
+        case DoubleType => (ObjectType(classOf[Array[Double]]), "toDoubleArray",
+          Seq(array), Seq(array.dataType))
+      }
+    } else if (isPrimitiveType) {
+      elementType match {
+        case BooleanType => (ObjectType(classOf[Array[java.lang.Boolean]]), "toBoxedBooleanArray",
+          Seq(array), Seq(array.dataType))
+        case ByteType => (ObjectType(classOf[Array[java.lang.Byte]]), "toBoxedByteArray",
+          Seq(array), Seq(array.dataType))
+        case ShortType => (ObjectType(classOf[Array[java.lang.Short]]), "toBoxedShortArray",
+          Seq(array), Seq(array.dataType))
+        case IntegerType => (ObjectType(classOf[Array[java.lang.Integer]]), "toBoxedIntArray",
+          Seq(array), Seq(array.dataType))
+        case LongType => (ObjectType(classOf[Array[java.lang.Long]]), "toBoxedLongArray",
+          Seq(array), Seq(array.dataType))
+        case FloatType => (ObjectType(classOf[Array[java.lang.Float]]), "toBoxedFloatArray",
+          Seq(array), Seq(array.dataType))
+        case DoubleType => (ObjectType(classOf[Array[java.lang.Double]]), "toBoxedDoubleArray",
+          Seq(array), Seq(array.dataType))
+      }
+    } else {
+      (ObjectType(classOf[Array[Object]]), "toObjectArray",
+        Seq(array, Literal(elementType, elementObjectType)), Seq(array.dataType, elementObjectType))
+    }
+  }
+
+  override def dataType: DataType = dataTypeFunctionNameArgumentsInputTypes._1
+
+  override def replacement: Expression = {
+    StaticInvoke(
+      classOf[ArrayExpressionUtils],
+      dataTypeFunctionNameArgumentsInputTypes._1,
+      dataTypeFunctionNameArgumentsInputTypes._2,
+      dataTypeFunctionNameArgumentsInputTypes._3,
+      dataTypeFunctionNameArgumentsInputTypes._4)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(array = newChild)
+}
+
+/**
  * Searches the specified array for the specified object using the binary search algorithm.
  *
  * NOTE: The input array must be in ascending order before calling this method; if the array is
@@ -1602,12 +1699,7 @@ case class ArrayBinarySearch(array: Expression, value: Expression)
 
   @transient private lazy val elementType: DataType =
     array.dataType.asInstanceOf[ArrayType].elementType
-  @transient private lazy val resultArrayElementNullable: Boolean =
-    array.dataType.asInstanceOf[ArrayType].containsNull
-
   @transient private lazy val isPrimitiveType: Boolean = CodeGenerator.isPrimitiveType(elementType)
-  @transient private lazy val canPerformFastBinarySearch: Boolean = isPrimitiveType &&
-    elementType != BooleanType && !resultArrayElementNullable
 
   @transient private lazy val comp: Comparator[Any] = new Comparator[Any] with Serializable {
     private val ordering = array.dataType match {
@@ -1618,39 +1710,28 @@ case class ArrayBinarySearch(array: Expression, value: Expression)
     override def compare(o1: Any, o2: Any): Int =
       (o1, o2) match {
         case (null, null) => 0
-        case (null, _) => 1
-        case (_, null) => -1
+        case (null, _) => -1
+        case (_, null) => 1
         case _ => ordering.compare(o1, o2)
       }
   }
 
-  @transient private lazy val elementObjectType = ObjectType(classOf[DataType])
-  @transient private lazy val  comparatorObjectType = ObjectType(classOf[Comparator[Object]])
-  override def replacement: Expression =
-    if (canPerformFastBinarySearch) {
-      StaticInvoke(
-        classOf[ArrayExpressionUtils],
-        IntegerType,
-        "binarySearch",
-        Seq(array, value),
-        inputTypes)
-    } else if (isPrimitiveType) {
-      StaticInvoke(
-        classOf[ArrayExpressionUtils],
-        IntegerType,
-        "binarySearchNullSafe",
-        Seq(array, value),
-        inputTypes)
+  @transient private lazy val comparatorObjectType = ObjectType(classOf[Comparator[Object]])
+
+  override def replacement: Expression = {
+    val toJavaArray = ToJavaArray(array)
+    val (arguments, inputTypes) = if (isPrimitiveType) {
+      (Seq(toJavaArray, value), Seq(toJavaArray.dataType, value.dataType))
     } else {
-      StaticInvoke(
-        classOf[ArrayExpressionUtils],
-        IntegerType,
-        "binarySearch",
-        Seq(Literal(elementType, elementObjectType),
-          Literal(comp, comparatorObjectType),
-          array,
-          value),
-        elementObjectType +: comparatorObjectType +: inputTypes)
+      (Seq(toJavaArray, value, Literal(comp, comparatorObjectType)),
+        Seq(toJavaArray.dataType, value.dataType, comparatorObjectType))
+    }
+    StaticInvoke(
+      classOf[ArrayExpressionUtils],
+      IntegerType,
+      "binarySearch",
+      arguments,
+      inputTypes)
   }
 
   override def prettyName: String = "array_binary_search"
