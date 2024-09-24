@@ -891,7 +891,10 @@ class QueryCompilationErrorsSuite
       ).foreach { sqlText =>
         checkError(
           exception = intercept[AnalysisException](sql(sqlText)),
-          condition = "UNSUPPORTED_FEATURE.TRIM_COLLATION")
+          condition = "UNSUPPORTED_FEATURE.TRIM_COLLATION",
+          parameters = Map.empty,
+          context = ExpectedContext(
+            fragment = sqlText.substring(7), start = 7, stop = sqlText.length - 1))
       }
     }
   }
