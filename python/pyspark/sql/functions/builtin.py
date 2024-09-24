@@ -20114,7 +20114,6 @@ def try_make_interval(
     +---------------------------------------------------------------+
     |100 years 11 months 8 days 12 hours 30 minutes 1.001001 seconds|
     +---------------------------------------------------------------+
-
     Example 2: Try make interval from years, months, weeks, days, hours and mins.
 
     >>> import pyspark.sql.functions as sf
@@ -20128,7 +20127,6 @@ def try_make_interval(
     +---------------------------------------------------+
     |100 years 11 months 8 days 12 hours 30 minutes     |
     +---------------------------------------------------+
-
     Example 3: Try make interval from years, months, weeks, days and hours.
 
     >>> import pyspark.sql.functions as sf
@@ -20142,7 +20140,6 @@ def try_make_interval(
     +-------------------------------------------------+
     |100 years 11 months 8 days 12 hours              |
     +-------------------------------------------------+
-
     Example 4: Try make interval from years, months, weeks and days.
 
     >>> import pyspark.sql.functions as sf
@@ -20154,7 +20151,6 @@ def try_make_interval(
     +----------------------------------------------+
     |100 years 11 months 8 days                    |
     +----------------------------------------------+
-
     Example 5: Try make interval from years, months and weeks.
 
     >>> import pyspark.sql.functions as sf
@@ -20166,7 +20162,6 @@ def try_make_interval(
     +--------------------------------------------+
     |100 years 11 months 7 days                  |
     +--------------------------------------------+
-
     Example 6: Try make interval from years and months.
 
     >>> import pyspark.sql.functions as sf
@@ -20178,7 +20173,6 @@ def try_make_interval(
     +-----------------------------------------+
     |100 years 11 months                      |
     +-----------------------------------------+
-
     Example 7: Try make interval from years.
 
     >>> import pyspark.sql.functions as sf
@@ -20190,7 +20184,6 @@ def try_make_interval(
     +-------------------------------------+
     |100 years                            |
     +-------------------------------------+
-
     Example 8: Try make interval.
 
     >>> import pyspark.sql.functions as sf

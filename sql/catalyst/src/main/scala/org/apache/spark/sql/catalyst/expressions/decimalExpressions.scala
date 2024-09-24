@@ -166,7 +166,7 @@ case class CheckOverflowInSum(
     val value = child.eval(input)
     if (value == null) {
       if (nullOnOverflow) null
-      else throw QueryExecutionErrors.overflowInSumOfDecimalError(context)
+      else throw QueryExecutionErrors.overflowInSumOfDecimalError(context, hint = "try_sum")
     } else {
       value.asInstanceOf[Decimal].toPrecision(
         dataType.precision,
@@ -183,7 +183,7 @@ case class CheckOverflowInSum(
     val nullHandling = if (nullOnOverflow) {
       ""
     } else {
-      s"throw QueryExecutionErrors.overflowInSumOfDecimalError($errorContextCode);"
+      s"""throw QueryExecutionErrors.overflowInSumOfDecimalError($errorContextCode, "try_sum");"""
     }
     // scalastyle:off line.size.limit
     val code = code"""
@@ -270,7 +270,8 @@ case class DecimalDivideWithOverflowCheck(
       if (nullOnOverflow)  {
         null
       } else {
-        throw QueryExecutionErrors.overflowInSumOfDecimalError(getContextOrNull())
+        throw QueryExecutionErrors.overflowInSumOfDecimalError(
+          getContextOrNull(), hint = "try_average")
       }
     } else {
       val value2 = right.eval(input)
@@ -286,7 +287,8 @@ case class DecimalDivideWithOverflowCheck(
     val nullHandling = if (nullOnOverflow) {
       ""
     } else {
-      s"throw QueryExecutionErrors.overflowInSumOfDecimalError($errorContextCode);"
+      s"""throw QueryExecutionErrors.overflowInSumOfDecimalError($errorContextCode,
+        | "try_average");""".stripMargin
     }
 
     val eval1 = left.genCode(ctx)

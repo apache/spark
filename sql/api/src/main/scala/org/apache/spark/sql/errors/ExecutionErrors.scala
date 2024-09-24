@@ -125,7 +125,7 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
       errorClass = "ARITHMETIC_OVERFLOW",
       messageParameters = Map(
         "message" -> message,
-        "alternative" -> alternative),
+        "try_alternative" -> alternative),
       context = getQueryContext(context),
       summary = getSummary(context))
   }

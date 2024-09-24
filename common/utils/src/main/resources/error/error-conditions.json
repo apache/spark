@@ -72,7 +72,7 @@
   },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
-      "<message>.<alternative>"
+      "<message>.<try_alternative>"
     ],
     "sqlState" : "22003"
   },
