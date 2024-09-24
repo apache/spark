@@ -840,7 +840,7 @@ mechanism (see `java.util.ServiceLoader`). Implementations of
 `org.apache.spark.security.HadoopDelegationTokenProvider` can be made available to Spark
 by listing their names in the corresponding file in the jar's `META-INF/services` directory.
 
-Delegation token support is currently only supported in YARN and Mesos modes. Consult the
+Delegation token support is currently only supported in YARN, Kubernetes and Mesos modes. Consult the
 deployment-specific page for more information.
 
 The following options provides finer-grained control for this feature:
