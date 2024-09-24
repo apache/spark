@@ -516,7 +516,7 @@ public final class CollationFactory {
       protected Collation buildCollation() {
         if (caseSensitivity == CaseSensitivity.UNSPECIFIED) {
           return new Collation(
-            UTF8_BINARY_COLLATION_NAME,
+            normalizedCollationName(),
             PROVIDER_SPARK,
             null,
             UTF8String::binaryCompare,
@@ -527,7 +527,7 @@ public final class CollationFactory {
             /* supportsLowercaseEquality = */ false);
         } else {
           return new Collation(
-            UTF8_LCASE_COLLATION_NAME,
+            normalizedCollationName(),
             PROVIDER_SPARK,
             null,
             CollationAwareUTF8String::compareLowerCase,
@@ -577,7 +577,7 @@ public final class CollationFactory {
       @Override
       protected String normalizedCollationName() {
         StringBuilder builder = new StringBuilder();
-        if(SpecifierUtils.getSpecValue(collationId,  CASE_SENSITIVITY_OFFSET, CaseSensitivity.LCASE.ordinal()) == 0){
+        if(caseSensitivity == CaseSensitivity.UNSPECIFIED){
           builder.append(UTF8_BINARY_COLLATION_NAME);
         }else{
           builder.append(UTF8_LCASE_COLLATION_NAME);
@@ -721,16 +721,16 @@ public final class CollationFactory {
       }
 
       private static final int UNICODE_COLLATION_ID = new CollationSpecICU(
-          "UNICODE",
-          CaseSensitivity.CS,
-          AccentSensitivity.AS,
-          SpaceTrimming.NONE).collationId;
+        "UNICODE",
+        CaseSensitivity.CS,
+        AccentSensitivity.AS,
+        SpaceTrimming.NONE).collationId;
 
       private static final int UNICODE_CI_COLLATION_ID = new CollationSpecICU(
-          "UNICODE",
-          CaseSensitivity.CI,
-          AccentSensitivity.AS,
-          SpaceTrimming.NONE).collationId;
+        "UNICODE",
+        CaseSensitivity.CI,
+        AccentSensitivity.AS,
+        SpaceTrimming.NONE).collationId;
 
       private final CaseSensitivity caseSensitivity;
       private final AccentSensitivity accentSensitivity;

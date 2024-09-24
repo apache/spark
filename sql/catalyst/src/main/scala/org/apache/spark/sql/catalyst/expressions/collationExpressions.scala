@@ -87,7 +87,7 @@ case class Collate(child: Expression, collationName: String)
 
   override def toString: String = s"$prettyName($child, $collationName)"
 
-  val usesTrimCollation = CollationFactory.usesTrimCollation(collationId)
+  val usesTrimCollation : Boolean = CollationFactory.usesTrimCollation(collationId)
 }
 
 // scalastyle:off line.contains.tab
@@ -115,6 +115,6 @@ case class Collation(child: Expression)
   }
   override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
-  val usesTrimCollation = CollationFactory.usesTrimCollation(
+  val usesTrimCollation: Boolean = CollationFactory.usesTrimCollation(
     child.dataType.asInstanceOf[StringType].collationId)
 }

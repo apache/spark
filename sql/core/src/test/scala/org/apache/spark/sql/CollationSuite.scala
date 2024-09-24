@@ -85,7 +85,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       "utf8_lcase",
       "unicode",
       "unicode_ci",
-      "unicode_ltrim_ci",
+      "unicode_ci_ltrim",
       "utf8_lcase_trim",
       "utf8_binary_rtrim"
     ).foreach {
