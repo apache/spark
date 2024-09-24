@@ -106,22 +106,23 @@ abstract class StreamingQueryManager {
   def resetTerminated(): Unit
 
   /**
-   * Register a [[StreamingQueryListener]] to receive up-calls for life cycle events of
-   * [[StreamingQuery]].
+   * Register a [[org.apache.spark.sql.streaming.StreamingQueryListener]] to receive up-calls for
+   * life cycle events of [[StreamingQuery]].
    *
    * @since 2.0.0
    */
   def addListener(listener: StreamingQueryListener): Unit
 
   /**
-   * Deregister a [[StreamingQueryListener]].
+   * Deregister a [[org.apache.spark.sql.streaming.StreamingQueryListener]].
    *
    * @since 2.0.0
    */
   def removeListener(listener: StreamingQueryListener): Unit
 
   /**
-   * List all [[StreamingQueryListener]]s attached to this [[StreamingQueryManager]].
+   * List all [[org.apache.spark.sql.streaming.StreamingQueryListener]]s attached to this
+   * [[StreamingQueryManager]].
    *
    * @since 3.0.0
    */
