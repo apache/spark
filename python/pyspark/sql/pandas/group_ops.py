@@ -503,8 +503,12 @@ class PandasGroupedOpsMixin:
 
             statefulProcessorApiClient.set_implicit_key(key)
 
-            batch_timestamp = statefulProcessorApiClient.get_batch_timestamp()
-            watermark_timestamp = statefulProcessorApiClient.get_watermark_timestamp()
+            if timeMode != "none":
+                batch_timestamp = statefulProcessorApiClient.get_batch_timestamp()
+                watermark_timestamp = statefulProcessorApiClient.get_watermark_timestamp()
+            else:
+                batch_timestamp = -1
+                watermark_timestamp = -1
             # process with invalid expiry timer info and emit data rows
             data_iter = statefulProcessor.handleInputRows(
                 key, inputRows, TimerValues(batch_timestamp, watermark_timestamp), ExpiredTimerInfo(False))
@@ -519,17 +523,13 @@ class PandasGroupedOpsMixin:
             else:
                 expiry_list_iter = []
 
-            result_iter_list = []
+            result_iter_list = [data_iter]
             # process with valid expiry time info and with empty input rows,
             # only timer related rows will be emitted
             for expiry_list in expiry_list_iter:
                 for key_obj, expiry_timestamp in expiry_list:
-                    if timeMode == "processingtime" and expiry_timestamp < batch_timestamp:
-                        result_iter_list.append(statefulProcessor.handleInputRows(
-                            (key_obj,), iter([]),
-                            TimerValues(batch_timestamp, watermark_timestamp),
-                            ExpiredTimerInfo(True, expiry_timestamp)))
-                    elif timeMode == "eventtime" and expiry_timestamp < watermark_timestamp:
+                    if (timeMode == "processingtime" and expiry_timestamp < batch_timestamp) or\
+                            (timeMode == "eventtime" and expiry_timestamp < watermark_timestamp):
                         result_iter_list.append(statefulProcessor.handleInputRows(
                             (key_obj,), iter([]),
                             TimerValues(batch_timestamp, watermark_timestamp),
@@ -537,7 +537,6 @@ class PandasGroupedOpsMixin:
 
             # TODO(SPARK-49603) set the handle state in the lazily initialized iterator
 
-            result_iter_list.insert(0, data_iter)
             result = itertools.chain(*result_iter_list)
 
             return result
