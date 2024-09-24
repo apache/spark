@@ -29,6 +29,7 @@ import scala.collection.mutable.{HashMap => MutableHashMap}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.MRJobConfig
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords.{GetNewApplicationResponse, SubmitApplicationRequest}
 import org.apache.hadoop.yarn.api.records._
@@ -666,6 +667,21 @@ class ClientSuite extends SparkFunSuite with Matchers {
     // path to be the same as the original path
     assertUserClasspathUrls(cluster = false, gatewayRootPath)
     assertUserClasspathUrls(cluster = true, replacementRootPath)
+  }
+
+  test("default app master SPARK_USER") {
+    val sparkConf = new SparkConf()
+    val client = createClient(sparkConf)
+    val env = client.setupLaunchEnv(new Path("/staging/dir/path"), Seq())
+    env("SPARK_USER") should be (UserGroupInformation.getCurrentUser().getShortUserName())
+  }
+
+  test("override app master SPARK_USER") {
+    val sparkConf = new SparkConf()
+        .set("spark.yarn.appMasterEnv.SPARK_USER", "overrideuser")
+    val client = createClient(sparkConf)
+    val env = client.setupLaunchEnv(new Path("/staging/dir/path"), Seq())
+    env("SPARK_USER") should be ("overrideuser")
   }
 
   private val matching = Seq(
