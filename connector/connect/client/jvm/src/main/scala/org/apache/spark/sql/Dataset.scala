@@ -1035,12 +1035,7 @@ class Dataset[T] private[sql] (
     new MergeIntoWriterImpl[T](table, this, condition)
   }
 
-  /**
-   * Interface for saving the content of the streaming Dataset out into external storage.
-   *
-   * @group basic
-   * @since 3.5.0
-   */
+  /** @inheritdoc */
   def writeStream: DataStreamWriter[T] = {
     new DataStreamWriter[T](this)
   }
