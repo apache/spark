@@ -225,6 +225,7 @@ object SchemaUtil {
       "change_type" -> classOf[StringType],
       "key" -> classOf[StructType],
       "value" -> classOf[StructType],
+      "list_element" -> classOf[StructType],
       "list_value" -> classOf[ArrayType],
       "map_value" -> classOf[MapType],
       "user_map_key" -> classOf[StructType],
@@ -243,7 +244,7 @@ object SchemaUtil {
 
         case ListState =>
           if (sourceOptions.flattenCollectionTypes) {
-            Seq("key", "value", "partition_id")
+            Seq("key", "list_element", "partition_id")
           } else {
             Seq("key", "list_value", "partition_id")
           }
@@ -290,7 +291,7 @@ object SchemaUtil {
         if (stateSourceOptions.flattenCollectionTypes) {
           new StructType()
             .add("key", stateStoreColFamilySchema.keySchema)
-            .add("value", stateStoreColFamilySchema.valueSchema)
+            .add("list_element", stateStoreColFamilySchema.valueSchema)
             .add("partition_id", IntegerType)
         } else {
           new StructType()

@@ -318,7 +318,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
 
         val resultDf = flattenedReaderDf.selectExpr(
           "key.value AS groupingKey",
-          "value.value AS valueList")
+          "list_element.value AS valueList")
         checkAnswer(resultDf,
           Seq(Row("session1", "group1"), Row("session1", "group2"), Row("session1", "group4"),
             Row("session2", "group1"), Row("session3", "group7")))
@@ -394,7 +394,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
 
         val outputDf = flattenedStateReaderDf
           .selectExpr("key.value AS groupingKey",
-            "value.value.value AS groupId")
+            "list_element.value.value AS groupId")
 
         checkAnswer(outputDf,
           Seq(Row("session1", "group1"), Row("session1", "group2"), Row("session1", "group4"),
