@@ -195,7 +195,7 @@
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.12.0</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
-    <guava.version>33.2.1-jre</guava.version>
+    <guava.version>33.3.1-jre</guava.version>
     <gson.version>2.11.0</gson.version>
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.0.12</jersey.version>
@@ -291,7 +291,7 @@
     <spark.test.docker.removePulledImage>true</spark.test.docker.removePulledImage>
 
     <!-- Version used in Connect -->
-    <connect.guava.version>33.2.1-jre</connect.guava.version>
+    <connect.guava.version>33.3.1-jre</connect.guava.version>
     <guava.failureaccess.version>1.0.2</guava.failureaccess.version>
     <io.grpc.version>1.62.2</io.grpc.version>
     <mima.version>1.1.4</mima.version>
