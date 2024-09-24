@@ -325,6 +325,55 @@ Distinct
 
 -- !query
 table t
+|> select *
+-- !query analysis
+Project [x#x, y#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> select * except (y)
+-- !query analysis
+Project [x#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> select /*+ repartition(3) */ *
+-- !query analysis
+Repartition 3, true
++- Project [x#x, y#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> select /*+ repartition(3) */ distinct x
+-- !query analysis
+Repartition 3, true
++- Distinct
+   +- Project [x#x]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> select /*+ repartition(3) */ all x
+-- !query analysis
+Repartition 3, true
++- Project [x#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
 |> select sum(x) as result
 -- !query analysis
 org.apache.spark.sql.AnalysisException
@@ -361,6 +410,229 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 34,
     "stopIndex" : 39,
     "fragment" : "sum(x)"
+  } ]
+}
+
+
+-- !query
+table t
+|> where true
+-- !query analysis
+Filter true
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> where x + length(y) < 4
+-- !query analysis
+Filter ((x#x + length(y#x)) < 4)
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> where x + length(y) < 4
+|> where x + length(y) < 3
+-- !query analysis
+Filter ((x#x + length(y#x)) < 3)
++- SubqueryAlias __auto_generated_subquery_name
+   +- Filter ((x#x + length(y#x)) < 4)
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+(select x, sum(length(y)) as sum_len from t group by x)
+|> where x = 1
+-- !query analysis
+Filter (x#x = 1)
++- SubqueryAlias __auto_generated_subquery_name
+   +- Aggregate [x#x], [x#x, sum(length(y#x)) AS sum_len#xL]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> where t.x = 1
+-- !query analysis
+Filter (x#x = 1)
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> where spark_catalog.default.t.x = 1
+-- !query analysis
+Filter (x#x = 1)
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+(select col from st)
+|> where col.i1 = 1
+-- !query analysis
+Filter (col#x.i1 = 1)
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [col#x]
+      +- SubqueryAlias spark_catalog.default.st
+         +- Relation spark_catalog.default.st[x#x,col#x] parquet
+
+
+-- !query
+table st
+|> where st.col.i1 = 2
+-- !query analysis
+Filter (col#x.i1 = 2)
++- SubqueryAlias spark_catalog.default.st
+   +- Relation spark_catalog.default.st[x#x,col#x] parquet
+
+
+-- !query
+table t
+|> where exists (select a from other where x = a limit 1)
+-- !query analysis
+Filter exists#x [x#x]
+:  +- GlobalLimit 1
+:     +- LocalLimit 1
+:        +- Project [a#x]
+:           +- Filter (outer(x#x) = a#x)
+:              +- SubqueryAlias spark_catalog.default.other
+:                 +- Relation spark_catalog.default.other[a#x,b#x] json
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> where (select any_value(a) from other where x = a limit 1) = 1
+-- !query analysis
+Filter (scalar-subquery#x [x#x] = 1)
+:  +- GlobalLimit 1
+:     +- LocalLimit 1
+:        +- Aggregate [any_value(a#x, false) AS any_value(a)#x]
+:           +- Filter (outer(x#x) = a#x)
+:              +- SubqueryAlias spark_catalog.default.other
+:                 +- Relation spark_catalog.default.other[a#x,b#x] json
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> where sum(x) = 1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_WHERE_CONDITION",
+  "sqlState" : "42903",
+  "messageParameters" : {
+    "condition" : "\"(sum(x) = 1)\"",
+    "expressionList" : "sum(spark_catalog.default.t.x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 27,
+    "fragment" : "table t\n|> where sum(x) = 1"
+  } ]
+}
+
+
+-- !query
+table t
+|> where y = 'abc' or length(y) + sum(x) = 1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_WHERE_CONDITION",
+  "sqlState" : "42903",
+  "messageParameters" : {
+    "condition" : "\"((y = abc) OR ((length(y) + sum(x)) = 1))\"",
+    "expressionList" : "sum(spark_catalog.default.t.x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 52,
+    "fragment" : "table t\n|> where y = 'abc' or length(y) + sum(x) = 1"
+  } ]
+}
+
+
+-- !query
+table t
+|> where first_value(x) over (partition by y) = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "messageParameters" : {
+    "clauseName" : "WHERE"
+  }
+}
+
+
+-- !query
+select * from t where first_value(x) over (partition by y) = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "messageParameters" : {
+    "clauseName" : "WHERE"
+  }
+}
+
+
+-- !query
+table t
+|> select x, length(y) as z
+|> where x + length(y) < 4
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`x`, `z`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 57,
+    "stopIndex" : 57,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
+(select x, sum(length(y)) as sum_len from t group by x)
+|> where sum(length(y)) = 3
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`x`, `sum_len`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 77,
+    "stopIndex" : 77,
+    "fragment" : "y"
   } ]
 }
 

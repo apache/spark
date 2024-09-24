@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.datasources.WriteFilesSpec
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.util.NextIterator
+import org.apache.spark.util.{LazyTry, NextIterator}
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
 object SparkPlan {
@@ -182,6 +182,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /** Specifies sort order for each partition requirements on the input data for this operator. */
   def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
+  @transient
+  private val executeRDD = LazyTry {
+    doExecute()
+  }
+
   /**
    * Returns the result of this query as an RDD[InternalRow] by delegating to `doExecute` after
    * preparations.
@@ -192,7 +197,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     if (isCanonicalizedPlan) {
       throw SparkException.internalError("A canonicalized plan is not supposed to be executed.")
     }
-    doExecute()
+    executeRDD.get
+  }
+
+  private val executeBroadcastBcast = LazyTry {
+    doExecuteBroadcast()
   }
 
   /**
@@ -205,7 +214,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     if (isCanonicalizedPlan) {
       throw SparkException.internalError("A canonicalized plan is not supposed to be executed.")
     }
-    doExecuteBroadcast()
+    executeBroadcastBcast.get.asInstanceOf[broadcast.Broadcast[T]]
+  }
+
+  private val executeColumnarRDD = LazyTry {
+    doExecuteColumnar()
   }
 
   /**
@@ -219,7 +232,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     if (isCanonicalizedPlan) {
       throw SparkException.internalError("A canonicalized plan is not supposed to be executed.")
     }
-    doExecuteColumnar()
+    executeColumnarRDD.get
   }
 
   /**
