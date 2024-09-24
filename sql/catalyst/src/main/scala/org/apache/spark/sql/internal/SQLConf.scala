@@ -3171,9 +3171,9 @@ object SQLConf {
 
   val PYSPARK_PLOT_MAX_ROWS =
     buildConf("spark.sql.pyspark.plotting.max_rows")
-      .doc(
-        "The visual limit on top-n-based plots. If set to 1000, the first 1000 data points " +
-        "will be used for plotting.")
+      .doc("The visual limit on plots. If set to 1000 for top-n-based plots, the first 1000 " +
+        "data points will be used for plotting. For sampled-based plots, 1000 data points " +
+        "will be randomly sampled.")
       .version("4.0.0")
       .intConf
       .createWithDefault(1000)
