@@ -3021,14 +3021,14 @@
           "LATERAL can only be used with subquery and table-valued functions."
         ]
       },
-      "MULTI_PART_NAME" : {
-        "message" : [
-          "<statement> with multiple part function name(<funcName>) is not allowed."
-        ]
-      },
       "MULTI_PART_CATALOG_NAME" : {
         "message" : [
           "<statement> with multiple part catalog name(<catalogName>) is not allowed."
+        ]
+      },
+      "MULTI_PART_NAME" : {
+        "message" : [
+          "<statement> with multiple part function name(<funcName>) is not allowed."
         ]
       },
       "OPTION_IS_INVALID" : {
