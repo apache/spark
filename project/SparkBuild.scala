@@ -234,7 +234,8 @@ object SparkBuild extends PomBuild {
         // replace -Xfatal-warnings with fine-grained configuration, since 2.13.2
         // verbose warning on deprecation, error on all others
         // see `scalac -Wconf:help` for details
-        "-Wconf:cat=deprecation:wv,any:e",
+        "-Wconf:any:e",
+        "-Wconf:cat=deprecation:wv",
         // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
         "-Wunused:imports",
         "-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:e",
@@ -250,10 +251,7 @@ object SparkBuild extends PomBuild {
         // reduce the cost of migration in subsequent versions.
         "-Wconf:cat=deprecation&msg=it will become a keyword in Scala 3:e",
         // SPARK-46938 to prevent enum scan on pmml-model, under spark-mllib module.
-        "-Wconf:cat=other&site=org.dmg.pmml.*:w",
-        // Some deprecated calls is a compilation error in Scala 2.13.15.
-        "-Wconf:cat=deprecation&msg=^(?=.*?method|value|object|trait|class|constructor)(?=.*?in)(?=.*?deprecated).+$:w",
-        "-Wconf:cat=deprecation&msg=shadowing a nested class of a parent is deprecated:w"
+        "-Wconf:cat=other&site=org.dmg.pmml.*:w"
       )
     }
   )
