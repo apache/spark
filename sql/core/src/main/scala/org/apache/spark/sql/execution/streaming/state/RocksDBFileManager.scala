@@ -367,14 +367,29 @@ class RocksDBFileManager(
     val path = new Path(dfsRootDir)
     if (fm.exists(path)) {
       val files = fm.list(path).map(_.getPath)
-      val changelogFileVersions = files
-        .filter(onlyChangelogFiles.accept(_))
-        .map(_.getName.stripSuffix(".changelog"))
-        .map(_.toLong)
-      val snapshotFileVersions = files
-        .filter(onlyZipFiles.accept(_))
-        .map(_.getName.stripSuffix(".zip"))
-        .map(_.toLong)
+      val changelogFileVersions = if (checkpointFormatVersion == 1) {
+        files
+          .filter(onlyChangelogFiles.accept(_))
+          .map(_.getName.stripSuffix(".changelog"))
+          .map(_.toLong)
+      } else {
+        files
+          .filter(onlyChangelogFiles.accept(_))
+          .map(_.getName.stripSuffix(".changelog").split("_"))
+          .map { case Array(version, _) => version.toLong }
+      }
+      val snapshotFileVersions = if (checkpointFormatVersion == 1) {
+        files
+          .filter(onlyZipFiles.accept(_))
+          .map(_.getName.stripSuffix(".zip"))
+          .map(_.toLong)
+      } else {
+        files
+          .filter(onlyZipFiles.accept(_))
+          .map(_.getName.stripSuffix(".zip").split("_"))
+          .map { case Array(version, _) =>
+            version.toLong }
+      }
       val versions = changelogFileVersions ++ snapshotFileVersions
       versions.foldLeft(0L)(math.max)
     } else {
