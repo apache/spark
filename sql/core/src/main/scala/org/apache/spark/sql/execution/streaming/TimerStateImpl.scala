@@ -86,7 +86,6 @@ class TimerStateImpl(
 
   /**
    * Function to check if the timer for the given key and timestamp is already registered
-   *
    * @param expiryTimestampMs - expiry timestamp of the timer
    * @return - true if the timer is already registered, false otherwise
    */
@@ -100,7 +99,6 @@ class TimerStateImpl(
 
   /**
    * Function to add a new timer for the given key and timestamp
-   *
    * @param expiryTimestampMs - expiry timestamp of the timer
    */
   def registerTimer(expiryTimestampMs: Long): Unit = {
@@ -118,7 +116,6 @@ class TimerStateImpl(
 
   /**
    * Function to remove the timer for the given key and timestamp
-   *
    * @param expiryTimestampMs - expiry timestamp of the timer
    */
   def deleteTimer(expiryTimestampMs: Long): Unit = {
@@ -184,7 +181,7 @@ class TimerStateImpl(
         }
       }
 
-      override protected def close(): Unit = {}
+      override protected def close(): Unit = { }
     }
   }
 }
