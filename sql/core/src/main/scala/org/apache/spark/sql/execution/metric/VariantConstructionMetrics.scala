@@ -63,7 +63,7 @@ object VariantConstructionMetrics {
     VariantMetricDescriptor(
       VARIANT_BUILDER_TOP_LEVEL_MAX_DEPTH,
       SQLMetrics.MAX_METRIC,
-      "variant top-level - total number of paths"
+      "variant top-level - max depth"
     ),
     VariantMetricDescriptor(
       VARIANT_BUILDER_NESTED_NUMBER_OF_VARIANTS,
@@ -88,7 +88,7 @@ object VariantConstructionMetrics {
     VariantMetricDescriptor(
       VARIANT_BUILDER_NESTED_MAX_DEPTH,
       SQLMetrics.MAX_METRIC,
-      "variant nested - total number of paths"
+      "variant nested - max depth"
     )
   )
 
