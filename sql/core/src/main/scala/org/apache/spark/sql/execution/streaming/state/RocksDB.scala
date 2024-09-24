@@ -115,7 +115,7 @@ class RocksDB(
     tableFormatConfig.setPinL0FilterAndIndexBlocksInCache(true)
   }
 
-  private val rocksDbOptions = new Options() // options to open the RocksDB
+  private[state] val rocksDbOptions = new Options() // options to open the RocksDB
 
   rocksDbOptions.setCreateIfMissing(true)
 
