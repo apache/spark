@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.datasources.v2.state.utils
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.AnalysisException
@@ -24,9 +25,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceErrors, StateSourceOptions}
+import org.apache.spark.sql.execution.streaming.{StateVariableType, TransformWithStateVariableInfo}
 import org.apache.spark.sql.execution.streaming.StateVariableType._
-import org.apache.spark.sql.execution.streaming.TransformWithStateVariableInfo
-import org.apache.spark.sql.execution.streaming.state.{StateStoreColFamilySchema, UnsafeRowPair}
+import org.apache.spark.sql.execution.streaming.state.{ReadStateStore, StateStoreColFamilySchema, UnsafeRowPair}
 import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, LongType, MapType, StringType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -356,5 +357,58 @@ object SchemaUtil {
     new StructType()
       .add("key", groupingKeySchema)
       .add("userKey", userKeySchema.get)
+  }
+
+  def processStateEntries(
+      stateVarType: StateVariableType,
+      stateVarName: String,
+      store: ReadStateStore,
+      compositeKeySchema: StructType,
+      partitionId: Int,
+      stateSourceOptions: StateSourceOptions): Iterator[InternalRow] = {
+    stateVarType match {
+      case StateVariableType.ValueState =>
+        store
+          .iterator(stateVarName)
+          .map { pair =>
+            unifyStateRowPair((pair.key, pair.value), partitionId)
+          }
+
+      case StateVariableType.ListState =>
+        if (stateSourceOptions.flattenCollectionTypes) {
+          store
+            .iterator(stateVarName)
+            .flatMap { pair =>
+              val key = pair.key
+              val result = store.valuesIterator(key, stateVarName)
+              result.map { entry =>
+                SchemaUtil.unifyStateRowPair((key, entry), partitionId)
+              }
+            }
+        } else {
+          store
+            .iterator(stateVarName)
+            .map { pair =>
+              val key = pair.key
+              val result = store.valuesIterator(key, stateVarName)
+              val unsafeRowArr = ArrayBuffer[UnsafeRow]()
+              result.foreach { entry =>
+                unsafeRowArr += entry.copy()
+              }
+              // convert the list of values to array type
+              val arrData = new GenericArrayData(unsafeRowArr.toArray)
+              // convert the list of values to a single row
+              SchemaUtil.unifyStateRowPairWithMultipleValues((key, arrData), partitionId)
+            }
+        }
+
+      case StateVariableType.MapState =>
+        unifyMapStateRowPair(store.iterator(stateVarName),
+          compositeKeySchema, partitionId, stateSourceOptions)
+
+      case _ =>
+        throw new IllegalStateException(
+          s"Unsupported state variable type: $stateVarType")
+    }
   }
 }

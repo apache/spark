@@ -16,12 +16,9 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.state
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
-import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.{StateVariableType, TransformWithStateVariableInfo}
@@ -178,48 +175,6 @@ class StatePartitionReader(
     }
   }
 
-  private def processListStateEntries(stateVarName: String): Iterator[InternalRow] = {
-    if (partition.sourceOptions.flattenCollectionTypes) {
-      store
-        .iterator(stateVarName)
-        .flatMap { pair =>
-          val key = pair.key
-          val result = store.valuesIterator(key, stateVarName)
-          result.map { entry =>
-            SchemaUtil.unifyStateRowPair((key, entry), partition.partition)
-          }
-        }
-    } else {
-      store
-        .iterator(stateVarName)
-        .map { pair =>
-          val key = pair.key
-          val result = store.valuesIterator(key, stateVarName)
-          val unsafeRowArr = ArrayBuffer[UnsafeRow]()
-          result.foreach { entry =>
-            unsafeRowArr += entry.copy()
-          }
-          // convert the list of values to array type
-          val arrData = new GenericArrayData(unsafeRowArr.toArray)
-          // convert the list of values to a single row
-          SchemaUtil.unifyStateRowPairWithMultipleValues((key, arrData), partition.partition)
-        }
-    }
-  }
-
-  private def processValueStateEntries(stateVarName: String): Iterator[InternalRow] = {
-    store
-      .iterator(stateVarName)
-      .map { pair =>
-        SchemaUtil.unifyStateRowPair((pair.key, pair.value), partition.partition)
-      }
-  }
-
-  private def processMapStateEntries(stateVarName: String): Iterator[InternalRow] = {
-    SchemaUtil.unifyMapStateRowPair(store.iterator(stateVarName), keySchema, partition.partition,
-      partition.sourceOptions)
-  }
-
   override lazy val iter: Iterator[InternalRow] = {
     val stateVarName = stateVariableInfoOpt
       .map(_.stateName).getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME)
@@ -227,21 +182,8 @@ class StatePartitionReader(
     if (stateVariableInfoOpt.isDefined) {
       val stateVariableInfo = stateVariableInfoOpt.get
       val stateVarType = stateVariableInfo.stateVariableType
-
-      stateVarType match {
-        case StateVariableType.ValueState =>
-          processValueStateEntries(stateVarName)
-
-        case StateVariableType.ListState =>
-          processListStateEntries(stateVarName)
-
-        case StateVariableType.MapState =>
-          processMapStateEntries(stateVarName)
-
-        case _ =>
-          throw new IllegalStateException(
-            s"Unsupported state variable type: $stateVarType")
-      }
+      SchemaUtil.processStateEntries(stateVarType, stateVarName, store,
+        keySchema, partition.partition, partition.sourceOptions)
     } else {
       store
         .iterator(stateVarName)
