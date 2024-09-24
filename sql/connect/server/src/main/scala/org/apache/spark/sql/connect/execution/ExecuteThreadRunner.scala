@@ -63,7 +63,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   }
 
   /**
-   * Interrupts the execution thread if the thread is running and has yet to be completed.
+   * Interrupts the execution thread if the execution has been interrupted by this method call.
    *
    * @return
    *   true if the thread is running and interrupted.
@@ -91,13 +91,13 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
               Some(executeHolder.eventsManager),
               true)(new SparkSQLException("OPERATION_CANCELED", Map.empty))
           } finally {
-            return false
+            executeHolder.cleanup()
           }
         } else {
           // Interrupt execution.
           executionThread.interrupt()
-          return true
         }
+        return true
       }
       currentState = prevState
     }
