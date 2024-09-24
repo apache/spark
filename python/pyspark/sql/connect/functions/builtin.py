@@ -70,7 +70,6 @@ from pyspark.sql.types import (
     StringType,
 )
 from pyspark.sql.utils import enum_to_value as _enum_to_value
-from pyspark.util import JVM_INT_MAX
 
 # The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
 # for code reuse.
@@ -1130,7 +1129,7 @@ def count_min_sketch(
     confidence: Union[Column, float],
     seed: Optional[Union[Column, int]] = None,
 ) -> Column:
-    _seed = lit(random.randint(0, JVM_INT_MAX)) if seed is None else lit(seed)
+    _seed = lit(random.randint(0, sys.maxsize)) if seed is None else lit(seed)
     return _invoke_function_over_columns("count_min_sketch", col, lit(eps), lit(confidence), _seed)
 
 
