@@ -90,24 +90,7 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
     // serializability, because the type-level info with java.io.Serializable and
     // java.io.Externalizable marker interfaces are not strong guarantees.
     // This restriction can be relaxed in the future to expose more optimizations.
-    !dt.existsRecursively {
-      case ObjectType(cls) if cls == classOf[Array[java.lang.Boolean]] => false
-      case ObjectType(cls) if cls == classOf[Array[java.lang.Byte]] => false
-      case ObjectType(cls) if cls == classOf[Array[java.lang.Short]] => false
-      case ObjectType(cls) if cls == classOf[Array[java.lang.Integer]] => false
-      case ObjectType(cls) if cls == classOf[Array[java.lang.Long]] => false
-      case ObjectType(cls) if cls == classOf[Array[java.lang.Float]] => false
-      case ObjectType(cls) if cls == classOf[Array[java.lang.Double]] => false
-      case ObjectType(cls) if cls == classOf[java.lang.Boolean] => false
-      case ObjectType(cls) if cls == classOf[java.lang.Byte] => false
-      case ObjectType(cls) if cls == classOf[java.lang.Short] => false
-      case ObjectType(cls) if cls == classOf[java.lang.Integer] => false
-      case ObjectType(cls) if cls == classOf[java.lang.Long] => false
-      case ObjectType(cls) if cls == classOf[java.lang.Float] => false
-      case ObjectType(cls) if cls == classOf[java.lang.Double] => false
-      case ObjectType(_) => true
-      case _ => false
-    }
+    !dt.existsRecursively(_.isInstanceOf[ObjectType])
   }
 
   /**
