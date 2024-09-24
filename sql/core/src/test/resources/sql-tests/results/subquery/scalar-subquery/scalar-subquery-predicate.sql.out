@@ -906,11 +906,3 @@ WHERE (SELECT max(t2c)
 struct<t1a:int,t1b:int,t1c:int>
 -- !query output
 
-
-
--- !query
-SELECT * FROM t0 WHERE t0a = (SELECT distinct(t1c) FROM t1 WHERE t1a = t0a)
--- !query schema
-struct<t0a:int,t0b:int>
--- !query output
-

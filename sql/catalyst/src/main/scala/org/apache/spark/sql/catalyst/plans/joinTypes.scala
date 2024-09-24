@@ -95,10 +95,6 @@ case object LeftAnti extends JoinType {
   override def sql: String = "LEFT ANTI"
 }
 
-case object LeftSingle extends JoinType {
-  override def sql: String = "LEFT SINGLE"
-}
-
 case class ExistenceJoin(exists: Attribute) extends JoinType {
   override def sql: String = {
     // This join type is only used in the end of optimizer and physical plans, we will not

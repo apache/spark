@@ -9091,19 +9091,15 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     :class:`~pyspark.sql.Column`
         timestamp value as :class:`pyspark.sql.types.TimestampType` type.
 
-    See Also
-    --------
-    :meth:`pyspark.sql.functions.try_to_timestamp`
-
     Examples
     --------
     Example 1: Convert string to a timestamp
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(sf.to_timestamp(df.t)).show()
+    >>> df.select(sf.try_to_timestamp(df.t).alias('dt')).show()
     +-------------------+
-    |    to_timestamp(t)|
+    |                 dt|
     +-------------------+
     |1997-02-28 10:30:00|
     +-------------------+
@@ -9112,12 +9108,12 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(sf.to_timestamp(df.t, 'yyyy-MM-dd HH:mm:ss')).show()
-    +------------------------------------+
-    |to_timestamp(t, yyyy-MM-dd HH:mm:ss)|
-    +------------------------------------+
-    |                 1997-02-28 10:30:00|
-    +------------------------------------+
+    >>> df.select(sf.try_to_timestamp(df.t, sf.lit('yyyy-MM-dd HH:mm:ss')).alias('dt')).show()
+    +-------------------+
+    |                 dt|
+    +-------------------+
+    |1997-02-28 10:30:00|
+    +-------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -9142,10 +9138,6 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
         column values to convert.
     format: str, optional
         format to use to convert timestamp values.
-
-    See Also
-    --------
-    :meth:`pyspark.sql.functions.to_timestamp`
 
     Examples
     --------
@@ -17731,7 +17723,7 @@ def array_sort(
 
 
 @_try_remote_functions
-def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> Column:
+def shuffle(col: "ColumnOrName") -> Column:
     """
     Array function: Generates a random permutation of the given array.
 
@@ -17744,10 +17736,6 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
     ----------
     col : :class:`~pyspark.sql.Column` or str
         The name of the column or expression to be shuffled.
-    seed : :class:`~pyspark.sql.Column` or int, optional
-        Seed value for the random generator.
-
-        .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -17764,51 +17752,48 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
     Example 1: Shuffling a simple array
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.sql("SELECT ARRAY(1, 20, 3, 5) AS data")
-    >>> df.select("*", sf.shuffle(df.data, sf.lit(123))).show()
-    +-------------+-------------+
-    |         data|shuffle(data)|
-    +-------------+-------------+
-    |[1, 20, 3, 5]|[5, 1, 20, 3]|
-    +-------------+-------------+
+    >>> df = spark.createDataFrame([([1, 20, 3, 5],)], ['data'])
+    >>> df.select(sf.shuffle(df.data)).show() # doctest: +SKIP
+    +-------------+
+    |shuffle(data)|
+    +-------------+
+    |[1, 3, 20, 5]|
+    +-------------+
 
     Example 2: Shuffling an array with null values
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.sql("SELECT ARRAY(1, 20, NULL, 5) AS data")
-    >>> df.select("*", sf.shuffle(sf.col("data"), 234)).show()
-    +----------------+----------------+
-    |            data|   shuffle(data)|
-    +----------------+----------------+
-    |[1, 20, NULL, 5]|[NULL, 5, 20, 1]|
-    +----------------+----------------+
+    >>> df = spark.createDataFrame([([1, 20, None, 3],)], ['data'])
+    >>> df.select(sf.shuffle(df.data)).show() # doctest: +SKIP
+    +----------------+
+    |   shuffle(data)|
+    +----------------+
+    |[20, 3, NULL, 1]|
+    +----------------+
 
     Example 3: Shuffling an array with duplicate values
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.sql("SELECT ARRAY(1, 2, 2, 3, 3, 3) AS data")
-    >>> df.select("*", sf.shuffle("data", 345)).show()
-    +------------------+------------------+
-    |              data|     shuffle(data)|
-    +------------------+------------------+
-    |[1, 2, 2, 3, 3, 3]|[2, 3, 3, 1, 2, 3]|
-    +------------------+------------------+
+    >>> df = spark.createDataFrame([([1, 2, 2, 3, 3, 3],)], ['data'])
+    >>> df.select(sf.shuffle(df.data)).show() # doctest: +SKIP
+    +------------------+
+    |     shuffle(data)|
+    +------------------+
+    |[3, 2, 1, 3, 2, 3]|
+    +------------------+
 
-    Example 4: Shuffling an array with random seed
+    Example 4: Shuffling an array with different types of elements
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.sql("SELECT ARRAY(1, 2, 2, 3, 3, 3) AS data")
-    >>> df.select("*", sf.shuffle("data")).show() # doctest: +SKIP
-    +------------------+------------------+
-    |              data|     shuffle(data)|
-    +------------------+------------------+
-    |[1, 2, 2, 3, 3, 3]|[3, 3, 2, 3, 2, 1]|
-    +------------------+------------------+
+    >>> df = spark.createDataFrame([(['a', 'b', 'c', 1, 2, 3],)], ['data'])
+    >>> df.select(sf.shuffle(df.data)).show() # doctest: +SKIP
+    +------------------+
+    |     shuffle(data)|
+    +------------------+
+    |[1, c, 2, a, b, 3]|
+    +------------------+
     """
-    if seed is not None:
-        return _invoke_function_over_columns("shuffle", col, lit(seed))
-    else:
-        return _invoke_function_over_columns("shuffle", col)
+    return _invoke_function_over_columns("shuffle", col)
 
 
 @_try_remote_functions

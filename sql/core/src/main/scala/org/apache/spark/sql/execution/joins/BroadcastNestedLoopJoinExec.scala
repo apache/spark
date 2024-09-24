@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{CodegenSupport, ExplainUtils, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.ArrayImplicits._
@@ -64,15 +63,13 @@ case class BroadcastNestedLoopJoinExec(
 
   override def outputPartitioning: Partitioning = (joinType, buildSide) match {
     case (_: InnerLike, _) | (LeftOuter, BuildRight) | (RightOuter, BuildLeft) |
-         (LeftSingle, BuildRight) | (LeftSemi, BuildRight) | (LeftAnti, BuildRight) =>
-      streamed.outputPartitioning
+         (LeftSemi, BuildRight) | (LeftAnti, BuildRight) => streamed.outputPartitioning
     case _ => super.outputPartitioning
   }
 
   override def outputOrdering: Seq[SortOrder] = (joinType, buildSide) match {
     case (_: InnerLike, _) | (LeftOuter, BuildRight) | (RightOuter, BuildLeft) |
-         (LeftSingle, BuildRight) | (LeftSemi, BuildRight) | (LeftAnti, BuildRight) =>
-      streamed.outputOrdering
+         (LeftSemi, BuildRight) | (LeftAnti, BuildRight) => streamed.outputOrdering
     case _ => Nil
   }
 
@@ -90,7 +87,7 @@ case class BroadcastNestedLoopJoinExec(
     joinType match {
       case _: InnerLike =>
         left.output ++ right.output
-      case LeftOuter | LeftSingle =>
+      case LeftOuter =>
         left.output ++ right.output.map(_.withNullability(true))
       case RightOuter =>
         left.output.map(_.withNullability(true)) ++ right.output
@@ -138,14 +135,8 @@ case class BroadcastNestedLoopJoinExec(
    *
    *   LeftOuter with BuildRight
    *   RightOuter with BuildLeft
-   *   LeftSingle with BuildRight
-   *
-   * For the (LeftSingle, BuildRight) case we pass 'singleJoin' flag that
-   * makes sure there is at most 1 matching build row per every probe tuple.
    */
-  private def outerJoin(
-      relation: Broadcast[Array[InternalRow]],
-      singleJoin: Boolean = false): RDD[InternalRow] = {
+  private def outerJoin(relation: Broadcast[Array[InternalRow]]): RDD[InternalRow] = {
     streamed.execute().mapPartitionsInternal { streamedIter =>
       val buildRows = relation.value
       val joinedRow = new JoinedRow
@@ -176,9 +167,6 @@ case class BroadcastNestedLoopJoinExec(
             resultRow = joinedRow(streamRow, buildRows(nextIndex))
             nextIndex += 1
             if (boundCondition(resultRow)) {
-              if (foundMatch && singleJoin) {
-                throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows();
-              }
               foundMatch = true
               return true
             }
@@ -394,18 +382,12 @@ case class BroadcastNestedLoopJoinExec(
         innerJoin(broadcastedRelation)
       case (LeftOuter, BuildRight) | (RightOuter, BuildLeft) =>
         outerJoin(broadcastedRelation)
-      case (LeftSingle, BuildRight) =>
-        outerJoin(broadcastedRelation, singleJoin = true)
       case (LeftSemi, _) =>
         leftExistenceJoin(broadcastedRelation, exists = true)
       case (LeftAnti, _) =>
         leftExistenceJoin(broadcastedRelation, exists = false)
       case (_: ExistenceJoin, _) =>
         existenceJoin(broadcastedRelation)
-      case (LeftSingle, BuildLeft) =>
-        throw new IllegalArgumentException(
-          s"BroadcastNestedLoopJoin should not use the left side as build when " +
-            s"executing a LeftSingle join")
       case _ =>
         /**
          * LeftOuter with BuildLeft
@@ -428,7 +410,7 @@ case class BroadcastNestedLoopJoinExec(
 
   override def supportCodegen: Boolean = (joinType, buildSide) match {
     case (_: InnerLike, _) | (LeftOuter, BuildRight) | (RightOuter, BuildLeft) |
-         (LeftSemi | LeftAnti, BuildRight) | (LeftSingle, BuildRight) => true
+         (LeftSemi | LeftAnti, BuildRight) => true
     case _ => false
   }
 
@@ -446,7 +428,6 @@ case class BroadcastNestedLoopJoinExec(
     (joinType, buildSide) match {
       case (_: InnerLike, _) => codegenInner(ctx, input)
       case (LeftOuter, BuildRight) | (RightOuter, BuildLeft) => codegenOuter(ctx, input)
-      case (LeftSingle, BuildRight) => codegenOuter(ctx, input)
       case (LeftSemi, BuildRight) => codegenLeftExistence(ctx, input, exists = true)
       case (LeftAnti, BuildRight) => codegenLeftExistence(ctx, input, exists = false)
       case _ =>
@@ -492,9 +473,7 @@ case class BroadcastNestedLoopJoinExec(
      """.stripMargin
   }
 
-  private def codegenOuter(
-      ctx: CodegenContext,
-      input: Seq[ExprCode]): String = {
+  private def codegenOuter(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val (buildRowArray, buildRowArrayTerm) = prepareBroadcast(ctx)
     val (buildRow, checkCondition, _) = getJoinCondition(ctx, input, streamed, broadcast)
     val buildVars = genOneSideJoinVars(ctx, buildRow, broadcast, setDefaultValue = true)
@@ -515,23 +494,12 @@ case class BroadcastNestedLoopJoinExec(
          |${consume(ctx, resultVars)}
        """.stripMargin
     } else {
-      // For LeftSingle joins, generate the check on the number of matches.
-      val evaluateSingleCheck = if (joinType == LeftSingle) {
-        s"""
-           |if ($foundMatch) {
-           |  throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows();
-           |}
-           |""".stripMargin
-      } else {
-        ""
-      }
       s"""
          |boolean $foundMatch = false;
          |for (int $arrayIndex = 0; $arrayIndex < $buildRowArrayTerm.length; $arrayIndex++) {
          |  UnsafeRow $buildRow = (UnsafeRow) $buildRowArrayTerm[$arrayIndex];
          |  boolean $shouldOutputRow = false;
          |  $checkCondition {
-         |    $evaluateSingleCheck
          |    $shouldOutputRow = true;
          |    $foundMatch = true;
          |  }

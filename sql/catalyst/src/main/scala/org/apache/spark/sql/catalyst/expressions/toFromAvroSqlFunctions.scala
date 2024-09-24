@@ -61,9 +61,6 @@ case class FromAvro(child: Expression, jsonFormatSchema: Expression, options: Ex
   override def second: Expression = jsonFormatSchema
   override def third: Expression = options
 
-  def this(child: Expression, jsonFormatSchema: Expression) =
-    this(child, jsonFormatSchema, Literal.create(null))
-
   override def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Expression = {
     copy(child = newFirst, jsonFormatSchema = newSecond, options = newThird)

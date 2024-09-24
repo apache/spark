@@ -99,6 +99,48 @@ case class InMemoryTableScanExec(
         relation.cacheBuilder.serializer.supportsColumnarOutput(relation.schema)
   }
 
+  private lazy val columnarInputRDD: RDD[ColumnarBatch] = {
+    val numOutputRows = longMetric("numOutputRows")
+    val buffers = filteredCachedBatches()
+    relation.cacheBuilder.serializer.convertCachedBatchToColumnarBatch(
+      buffers,
+      relation.output,
+      attributes,
+      conf).map { cb =>
+      numOutputRows += cb.numRows()
+      cb
+    }
+  }
+
+  private lazy val inputRDD: RDD[InternalRow] = {
+    if (enableAccumulatorsForTest) {
+      readPartitions.setValue(0)
+      readBatches.setValue(0)
+    }
+
+    val numOutputRows = longMetric("numOutputRows")
+    // Using these variables here to avoid serialization of entire objects (if referenced
+    // directly) within the map Partitions closure.
+    val relOutput = relation.output
+    val serializer = relation.cacheBuilder.serializer
+
+    // update SQL metrics
+    val withMetrics =
+      filteredCachedBatches().mapPartitionsInternal { iter =>
+        if (enableAccumulatorsForTest && iter.hasNext) {
+          readPartitions.add(1)
+        }
+        iter.map { batch =>
+          if (enableAccumulatorsForTest) {
+            readBatches.add(1)
+          }
+          numOutputRows += batch.numRows
+          batch
+        }
+      }
+    serializer.convertCachedBatchToInternalRow(withMetrics, relOutput, attributes, conf)
+  }
+
   override def output: Seq[Attribute] = attributes
 
   private def cachedPlan = relation.cachedPlan match {
@@ -149,47 +191,11 @@ case class InMemoryTableScanExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    // Resulting RDD is cached and reused by SparkPlan.executeRDD
-    if (enableAccumulatorsForTest) {
-      readPartitions.setValue(0)
-      readBatches.setValue(0)
-    }
-
-    val numOutputRows = longMetric("numOutputRows")
-    // Using these variables here to avoid serialization of entire objects (if referenced
-    // directly) within the map Partitions closure.
-    val relOutput = relation.output
-    val serializer = relation.cacheBuilder.serializer
-
-    // update SQL metrics
-    val withMetrics =
-      filteredCachedBatches().mapPartitionsInternal { iter =>
-        if (enableAccumulatorsForTest && iter.hasNext) {
-          readPartitions.add(1)
-        }
-        iter.map { batch =>
-          if (enableAccumulatorsForTest) {
-            readBatches.add(1)
-          }
-          numOutputRows += batch.numRows
-          batch
-        }
-      }
-    serializer.convertCachedBatchToInternalRow(withMetrics, relOutput, attributes, conf)
+    inputRDD
   }
 
   protected override def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    // Resulting RDD is cached and reused by SparkPlan.executeColumnarRDD
-    val numOutputRows = longMetric("numOutputRows")
-    val buffers = filteredCachedBatches()
-    relation.cacheBuilder.serializer.convertCachedBatchToColumnarBatch(
-      buffers,
-      relation.output,
-      attributes,
-      conf).map { cb =>
-      numOutputRows += cb.numRows()
-      cb
-    }
+    columnarInputRDD
   }
 
   override def isMaterialized: Boolean = relation.cacheBuilder.isCachedColumnBuffersLoaded

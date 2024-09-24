@@ -1748,21 +1748,3 @@ Project [t1a#x, t1b#x, t1c#x]
       +- View (`t1`, [t1a#x, t1b#x, t1c#x])
          +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
             +- LocalRelation [col1#x, col2#x, col3#x]
-
-
--- !query
-SELECT * FROM t0 WHERE t0a = (SELECT distinct(t1c) FROM t1 WHERE t1a = t0a)
--- !query analysis
-Project [t0a#x, t0b#x]
-+- Filter (t0a#x = scalar-subquery#x [t0a#x])
-   :  +- Distinct
-   :     +- Project [t1c#x]
-   :        +- Filter (t1a#x = outer(t0a#x))
-   :           +- SubqueryAlias t1
-   :              +- View (`t1`, [t1a#x, t1b#x, t1c#x])
-   :                 +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
-   :                    +- LocalRelation [col1#x, col2#x, col3#x]
-   +- SubqueryAlias t0
-      +- View (`t0`, [t0a#x, t0b#x])
-         +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
-            +- LocalRelation [col1#x, col2#x]

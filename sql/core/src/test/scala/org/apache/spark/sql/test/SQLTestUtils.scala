@@ -240,7 +240,7 @@ private[sql] trait SQLTestUtilsBase
    * but the implicits import is needed in the constructor.
    */
   protected object testImplicits extends SQLImplicits {
-    override protected def session: SparkSession = self.spark
+    protected override def session: SparkSession = self.spark
     implicit def toRichColumn(c: Column): SparkSession#RichColumn = session.RichColumn(c)
   }
 

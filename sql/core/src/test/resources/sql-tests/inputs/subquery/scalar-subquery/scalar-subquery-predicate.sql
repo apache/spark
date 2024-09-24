@@ -529,6 +529,3 @@ FROM t1
 WHERE (SELECT max(t2c)
        FROM t2 WHERE t1b = t2b
       ) between 1 and 2;
-
-
-SELECT * FROM t0 WHERE t0a = (SELECT distinct(t1c) FROM t1 WHERE t1a = t0a);

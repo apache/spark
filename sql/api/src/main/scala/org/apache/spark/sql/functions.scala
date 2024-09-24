@@ -7252,18 +7252,7 @@ object functions {
    * @group array_funcs
    * @since 2.4.0
    */
-  def shuffle(e: Column): Column = shuffle(e, lit(SparkClassUtils.random.nextLong))
-
-  /**
-   * Returns a random permutation of the given array.
-   *
-   * @note
-   *   The function is non-deterministic.
-   *
-   * @group array_funcs
-   * @since 4.0.0
-   */
-  def shuffle(e: Column, seed: Column): Column = Column.fn("shuffle", e, seed)
+  def shuffle(e: Column): Column = Column.fn("shuffle", e, lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns a reversed string or an array with reverse order of elements.

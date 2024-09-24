@@ -27,7 +27,7 @@ import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteSessionTag, SparkConnectService}
@@ -113,7 +113,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       } catch {
         // Need to catch throwable instead of NonFatal, because e.g. InterruptedException is fatal.
         case e: Throwable =>
-          logDebug(log"Exception in execute: ${MDC(LogKeys.EXCEPTION, e)}")
+          logDebug(s"Exception in execute: $e")
           // Always cancel all remaining execution after error.
           executeHolder.sessionHolder.session.sparkContext.cancelJobsWithTag(
             executeHolder.jobTag,
@@ -298,7 +298,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         ProtoUtils.abbreviate(request, maxLevel = 8).toString)
     } catch {
       case NonFatal(e) =>
-        logWarning(log"Fail to extract debug information: ${MDC(LogKeys.EXCEPTION, e)}")
+        logWarning("Fail to extract debug information", e)
         "UNKNOWN"
     }
   }
