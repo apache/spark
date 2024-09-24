@@ -178,12 +178,15 @@ sealed trait TimestampFormatter extends Serializable {
   def validatePatternString(checkLegacy: Boolean): Unit
 
   /**
-   * Parses a time in a string and if the string is valid time, then returns the
-   * Optional String value.
+   * Parses a time in a string and if the string is valid time, then returns the Optional String
+   * value.
    *
-   * @param s - string with time to parse
-   * @return An optional string of time. The result is None on invalid input.
-   * @throws ParseException can be thrown by legacy parser
+   * @param s
+   *   \- string with time to parse
+   * @return
+   *   An optional string of time. The result is None on invalid input.
+   * @throws ParseException
+   *   can be thrown by legacy parser
    */
   @throws(classOf[ParseException])
   def parseTimeOptional(s: String, inferTimeAsString: Boolean): Option[String] = {
