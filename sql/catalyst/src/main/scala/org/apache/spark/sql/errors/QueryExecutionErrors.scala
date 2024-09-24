@@ -295,8 +295,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
-  def overflowInSumOfDecimalError(context: QueryContext): ArithmeticException = {
-    arithmeticOverflowError("Overflow in sum of decimals", context = context)
+  def overflowInSumOfDecimalError(context: QueryContext, hint: String = ""): ArithmeticException = {
+    arithmeticOverflowError("Overflow in sum of decimals", hint = hint, context = context)
   }
 
   def overflowInIntegralDivideError(context: QueryContext): ArithmeticException = {

@@ -201,8 +201,8 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
-    "message" : "integer overflow"
+    "message" : "integer overflow",
+    "try_alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -235,8 +235,8 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
-    "message" : "integer overflow"
+    "message" : "integer overflow",
+    "try_alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -269,8 +269,8 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
-    "message" : "integer overflow"
+    "message" : "integer overflow",
+    "try_alternative" : " Use 'try_add' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -304,8 +304,8 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
-    "message" : "integer overflow"
+    "message" : "integer overflow",
+    "try_alternative" : " Use 'try_add' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -339,8 +339,8 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : " Use 'try_subtract' to tolerate overflow and return NULL instead.",
-    "message" : "integer overflow"
+    "message" : "integer overflow",
+    "try_alternative" : " Use 'try_subtract' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -374,8 +374,8 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : " Use 'try_subtract' to tolerate overflow and return NULL instead.",
-    "message" : "integer overflow"
+    "message" : "integer overflow",
+    "try_alternative" : " Use 'try_subtract' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",

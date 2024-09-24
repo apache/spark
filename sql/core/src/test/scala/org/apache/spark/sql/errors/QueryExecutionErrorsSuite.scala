@@ -707,7 +707,7 @@ class QueryExecutionErrorsSuite
       condition = "ARITHMETIC_OVERFLOW",
       parameters = Map(
         "message" -> "integer overflow",
-        "alternative" -> ""))
+        "try_alternative" -> ""))
   }
 
   test("FAILED_PARSE_STRUCT_TYPE: parsing invalid struct type") {
