@@ -3026,6 +3026,11 @@
           "<statement> with multiple part function name(<funcName>) is not allowed."
         ]
       },
+      "MULTI_PART_CATALOG_NAME" : {
+        "message" : [
+          "<statement> with multiple part catalog name(<catalogName>) is not allowed."
+        ]
+      },
       "OPTION_IS_INVALID" : {
         "message" : [
           "option or property key <key> is invalid; only <supported> are supported"
