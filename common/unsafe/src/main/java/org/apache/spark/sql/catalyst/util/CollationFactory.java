@@ -792,12 +792,13 @@ public final class CollationFactory {
         String remainingSpecifiers = collationName.substring(lastPos + 1);
 
         // Initialize default specifier flags.
+        // Case sensitive, accent sensitive, no space trimming.
         boolean isCaseSpecifierSet = false;
         boolean isAccentSpecifierSet = false;
         boolean isSpaceTrimmingSpecifierSet = false;
-        CaseSensitivity caseSensitivity = CaseSensitivity.CS;         // Default: Case Sensitive
-        AccentSensitivity accentSensitivity = AccentSensitivity.AS;    // Default: Accent Sensitive
-        SpaceTrimming spaceTrimming = SpaceTrimming.NONE;          // Default: No Trim
+        CaseSensitivity caseSensitivity = CaseSensitivity.CS;
+        AccentSensitivity accentSensitivity = AccentSensitivity.AS;
+        SpaceTrimming spaceTrimming = SpaceTrimming.NONE;
 
         String[] specifiers = remainingSpecifiers.split("_");
 

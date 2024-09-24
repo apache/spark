@@ -2558,10 +2558,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitCollateClause(ctx: CollateClauseContext): String = withOrigin(ctx) {
     val collationName = ctx.collationName.getText
-    if (!SQLConf.get.trimCollationEnabled &&
-      (collationName.toUpperCase().contains("TRIM") ||
-        collationName.toUpperCase().contains("LTRIM") ||
-        collationName.toUpperCase().contains("RTRIM"))) {
+    if (!SQLConf.get.trimCollationEnabled && collationName.toUpperCase().contains("TRIM")) {
       throw QueryCompilationErrors.trimCollationNotEnabledError()
     }
     ctx.identifier.getText

@@ -18,8 +18,10 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
+
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.jdk.CollectionConverters._
+
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._

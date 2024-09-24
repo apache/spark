@@ -760,7 +760,7 @@ object SQLConf {
       .createOptional
 
   lazy val TRIM_COLLATION_ENABLED =
-    buildConf("spark.sql.trimCollation.enabled")
+    buildConf("spark.sql.collation.trim.enabled")
       .doc("Trim collation feature is under development and its use should be done under this" +
         "feature flag.")
       .version("4.0.0")

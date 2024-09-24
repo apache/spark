@@ -150,10 +150,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitSetCollation(ctx: SetCollationContext): LogicalPlan = withOrigin(ctx) {
     val collationName = ctx.collationName.getText
-    if (!SQLConf.get.trimCollationEnabled &&
-      (collationName.toUpperCase().contains("TRIM") ||
-        collationName.toUpperCase().contains("LTRIM") ||
-        collationName.toUpperCase().contains("RTRIM"))) {
+    if (!SQLConf.get.trimCollationEnabled && collationName.toUpperCase().contains("TRIM")) {
       throw QueryCompilationErrors.trimCollationNotEnabledError()
     }
     val key = SQLConf.DEFAULT_COLLATION.key
