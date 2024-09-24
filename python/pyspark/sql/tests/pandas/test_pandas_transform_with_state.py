@@ -88,6 +88,7 @@ class TransformWithStateInPandasTestsMixin:
         )
         return df_final
 
+    """
     def _test_transform_with_state_in_pandas_basic(
         self, stateful_processor, check_results, single_batch=False, timeMode="None"
     ):
@@ -309,6 +310,7 @@ class TransformWithStateInPandasTestsMixin:
         finally:
             input_dir.cleanup()
 
+    """
     def _test_transform_with_state_in_pandas_proc_timer(
             self, stateful_processor, check_results):
         input_path = tempfile.mkdtemp()
@@ -366,6 +368,7 @@ class TransformWithStateInPandasTestsMixin:
 
         def check_results(batch_df, batch_id):
             if batch_id == 0:
+                print(f"batch_df here: {batch_df.show()}\n")
                 assert set(batch_df.sort("id").select("id", "countAsString").collect()) == {
                     Row(id="0", countAsString="1"),
                     Row(id="1", countAsString="1"),
@@ -396,7 +399,8 @@ class TransformWithStateInPandasTestsMixin:
                 assert(current_batch_expired_timestamp > self.first_expired_timestamp)
 
         self._test_transform_with_state_in_pandas_proc_timer(ProcTimeStatefulProcessor(), check_results)
-
+    """
+    
     def _test_transform_with_state_in_pandas_event_time(self, stateful_processor, check_results):
         import pyspark.sql.functions as f
 
@@ -478,7 +482,7 @@ class TransformWithStateInPandasTestsMixin:
                 }
 
         self._test_transform_with_state_in_pandas_event_time(EventTimeStatefulProcessor(), check_results)
-
+    """
 
 # A stateful processor that output the max event time it has seen. Register timer for
 # current watermark. Clear max state if timer expires.

@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateVariableRequest, TimerRequest, TimerStateCallCommand, TimerValueRequest, ValueStateCall}
 import org.apache.spark.sql.streaming.{TTLConfig, ValueState}
-import org.apache.spark.sql.types.{LongType, StructField, StructType}
+import org.apache.spark.sql.types.{BinaryType, LongType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
 
 /**
@@ -160,7 +160,7 @@ class TransformWithStateInPandasStateServer(
         val expiryTimestamp = expiryRequest.getExpiryTimestampMs
         if (!expiryTimestampIter.isDefined) {
           expiryTimestampIter =
-            Option(statefulProcessorHandle.getExpiredTimersWithKeyRow(expiryTimestamp))
+            Option(statefulProcessorHandle.getExpiredTimers(expiryTimestamp))
         }
         // expiryTimestampIter could be None in the TWSPandasServerSuite
         if (!expiryTimestampIter.isDefined || !expiryTimestampIter.get.hasNext) {
@@ -169,10 +169,10 @@ class TransformWithStateInPandasStateServer(
         } else {
           sendResponse(0)
           val outputSchema = new StructType()
-            .add("key", groupingKeySchema)
+            .add("key", BinaryType)
             .add(StructField("timestamp", LongType))
           sendIteratorAsArrowBatches(expiryTimestampIter.get, outputSchema) { data =>
-            InternalRow(data._1, data._2)
+            InternalRow(PythonSQLUtils.toPyRow(data._1.asInstanceOf[Row]), data._2)
           }
         }
 
