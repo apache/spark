@@ -301,8 +301,28 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
       }
       checkError(exc, "STDS_CONFLICT_OPTIONS", "42613",
         Map("options" ->
-          s"['${StateSourceOptions.READ_REGISTERED_TIMERS
-            }', '${StateSourceOptions.STATE_VAR_NAME}']"))
+          s"['${
+            StateSourceOptions.READ_REGISTERED_TIMERS
+          }', '${StateSourceOptions.STATE_VAR_NAME}']"))
+    }
+  }
+
+  test("ERROR: trying to specify non boolean value for " +
+    "flattenCollectionTypes") {
+    withTempDir { tempDir =>
+      runDropDuplicatesQuery(tempDir.getAbsolutePath)
+
+      val exc = intercept[StateDataSourceInvalidOptionValue] {
+        spark.read.format("statestore")
+          // trick to bypass getting the last committed batch before validating operator ID
+          .option(StateSourceOptions.BATCH_ID, 0)
+          .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, "test")
+          .load(tempDir.getAbsolutePath)
+      }
+      checkError(exc, "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE", Some("42616"),
+        Map("optionName" -> StateSourceOptions.FLATTEN_COLLECTION_TYPES,
+          "message" -> ".*"),
+        matchPVals = true)
     }
   }
 }

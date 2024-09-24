@@ -162,9 +162,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       withTable(tableName) {
         sql(
           s"""
-             |CREATE TABLE $tableName
-             |(id INT, c1 STRING COLLATE UNICODE, c2 string)
-             |USING parquet
+             |CREATE TABLE $tableName (
+             |  id INT,
+             |  c1 STRING COLLATE UNICODE,
+             |  c2 STRING,
+             |  struct_col STRUCT<col1: STRING COLLATE UNICODE, col2: STRING>,
+             |  array_col ARRAY<STRING COLLATE UNICODE>,
+             |  map_col MAP<STRING COLLATE UNICODE, STRING>
+             |) USING parquet
              |CLUSTERED BY (${bucketColumns.mkString(",")})
              |INTO 4 BUCKETS""".stripMargin
         )
@@ -175,14 +180,20 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     createTable("c2")
     createTable("id", "c2")
 
-    Seq(Seq("c1"), Seq("c1", "id"), Seq("c1", "c2")).foreach { bucketColumns =>
+    val failBucketingColumns = Seq(
+      Seq("c1"), Seq("c1", "id"), Seq("c1", "c2"),
+      Seq("struct_col"), Seq("array_col"), Seq("map_col")
+    )
+
+    failBucketingColumns.foreach { bucketColumns =>
       checkError(
         exception = intercept[AnalysisException] {
           createTable(bucketColumns: _*)
         },
         condition = "INVALID_BUCKET_COLUMN_DATA_TYPE",
-        parameters = Map("type" -> "\"STRING COLLATE UNICODE\"")
-      );
+        parameters = Map("type" -> ".*STRING COLLATE UNICODE.*"),
+        matchPVals = true
+      )
     }
   }
 

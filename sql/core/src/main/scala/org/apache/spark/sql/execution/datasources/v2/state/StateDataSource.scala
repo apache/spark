@@ -323,13 +323,15 @@ case class StateSourceOptions(
     fromSnapshotOptions: Option[FromSnapshotOptions],
     readChangeFeedOptions: Option[ReadChangeFeedOptions],
     stateVarName: Option[String],
-    readRegisteredTimers: Boolean) {
+    readRegisteredTimers: Boolean,
+    flattenCollectionTypes: Boolean) {
   def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
 
   override def toString: String = {
     var desc = s"StateSourceOptions(checkpointLocation=$resolvedCpLocation, batchId=$batchId, " +
       s"operatorId=$operatorId, storeName=$storeName, joinSide=$joinSide, " +
-      s"stateVarName=${stateVarName.getOrElse("None")}"
+      s"stateVarName=${stateVarName.getOrElse("None")}, +" +
+      s"flattenCollectionTypes=$flattenCollectionTypes"
     if (fromSnapshotOptions.isDefined) {
       desc += s", snapshotStartBatchId=${fromSnapshotOptions.get.snapshotStartBatchId}"
       desc += s", snapshotPartitionId=${fromSnapshotOptions.get.snapshotPartitionId}"
@@ -355,6 +357,7 @@ object StateSourceOptions extends DataSourceOptions {
   val CHANGE_END_BATCH_ID = newOption("changeEndBatchId")
   val STATE_VAR_NAME = newOption("stateVarName")
   val READ_REGISTERED_TIMERS = newOption("readRegisteredTimers")
+  val FLATTEN_COLLECTION_TYPES = newOption("flattenCollectionTypes")
 
   object JoinSideValues extends Enumeration {
     type JoinSideValues = Value
@@ -406,6 +409,15 @@ object StateSourceOptions extends DataSourceOptions {
 
     if (readRegisteredTimers && stateVarName.isDefined) {
       throw StateDataSourceErrors.conflictOptions(Seq(READ_REGISTERED_TIMERS, STATE_VAR_NAME))
+    }
+
+    val flattenCollectionTypes = try {
+      Option(options.get(FLATTEN_COLLECTION_TYPES))
+        .map(_.toBoolean).getOrElse(true)
+    } catch {
+      case _: IllegalArgumentException =>
+        throw StateDataSourceErrors.invalidOptionValue(FLATTEN_COLLECTION_TYPES,
+          "Boolean value is expected")
     }
 
     val joinSide = try {
@@ -512,7 +524,7 @@ object StateSourceOptions extends DataSourceOptions {
     StateSourceOptions(
       resolvedCpLocation, batchId.get, operatorId, storeName, joinSide,
       readChangeFeed, fromSnapshotOptions, readChangeFeedOptions,
-      stateVarName, readRegisteredTimers)
+      stateVarName, readRegisteredTimers, flattenCollectionTypes)
   }
 
   private def resolvedCheckpointLocation(

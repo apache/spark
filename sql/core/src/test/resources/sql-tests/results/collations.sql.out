@@ -2213,8 +2213,8 @@ struct<endswith(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase
 false
 false
 false
-false
-false
+true
+true
 true
 true
 true
