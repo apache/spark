@@ -35,6 +35,12 @@ message StateResponse {
   bytes value = 3;
 }
 
+message StateResponseWithLongTypeVal {
+  int32 statusCode = 1;
+  string errorMessage = 2;
+  int64 value = 3;
+}
+
 message StatefulProcessorCall {
   oneof method {
     SetHandleState setHandleState = 1;

@@ -33,7 +33,7 @@ import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, StatefulProcessorCall, StateRequest, StateResponse, StateVariableRequest, TimerRequest, TimerStateCallCommand, TimerValueRequest, ValueStateCall}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateVariableRequest, TimerRequest, TimerStateCallCommand, TimerValueRequest, ValueStateCall}
 import org.apache.spark.sql.streaming.{TTLConfig, ValueState}
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
@@ -145,14 +145,12 @@ class TransformWithStateInPandasStateServer(
           case TimerValueRequest.MethodCase.GETPROCESSINGTIMER =>
             val procTimestamp: Long =
               if (batchTimestampMs.isDefined) batchTimestampMs.get else -1L
-            val byteString = PythonResponseWriterUtils.serializeLongToByteString(procTimestamp)
-            sendResponse(0, null, byteString)
+            sendResponseWithLongVal(0, null, procTimestamp)
           case TimerValueRequest.MethodCase.GETWATERMARK =>
             val eventTimestamp: Long =
               if (eventTimeWatermarkForEviction.isDefined) eventTimeWatermarkForEviction.get
               else -1L
-            val byteString = PythonResponseWriterUtils.serializeLongToByteString(eventTimestamp)
-            sendResponse(0, null, byteString)
+            sendResponseWithLongVal(0, null, eventTimestamp)
           case _ =>
             throw new IllegalArgumentException("Invalid timer value method call")
         }
@@ -359,12 +357,20 @@ class TransformWithStateInPandasStateServer(
       outputStream.write(responseMessageBytes)
     }
 
-    def serializeLongToByteString(longValue: Long): ByteString = {
-      // ByteBuffer defaults to big-endian byte order.
-      // This is accordingly deserialized as big-endian on Python client.
-      val valueBytes =
-      java.nio.ByteBuffer.allocate(8).putLong(longValue).array()
-      ByteString.copyFrom(valueBytes)
+    def sendResponseWithLongVal(
+        status: Int,
+        errorMessage: String = null,
+        longVal: Long): Unit = {
+      val responseMessageBuilder = StateResponseWithLongTypeVal.newBuilder().setStatusCode(status)
+      if (status != 0 && errorMessage != null) {
+        responseMessageBuilder.setErrorMessage(errorMessage)
+      }
+      responseMessageBuilder.setValue(longVal)
+      val responseMessage = responseMessageBuilder.build()
+      val responseMessageBytes = responseMessage.toByteArray
+      val byteLength = responseMessageBytes.length
+      outputStream.writeInt(byteLength)
+      outputStream.write(responseMessageBytes)
     }
 
     def sendIteratorAsArrowBatches[T](

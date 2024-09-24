@@ -222,15 +222,13 @@ class StatefulProcessorApiClient:
         message = stateMessage.StateRequest(timerRequest=timer_request)
 
         self._send_proto_message(message.SerializeToString())
-        response_message = self._receive_proto_message()
+        response_message = self._receive_proto_message_with_long_value()
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error getting processing timestamp: " f"{response_message[1]}")
         else:
-            if len(response_message[2]) == 0:
-                return -1
-            timestamp = self._deserialize_long_from_bytes(response_message[2])
+            timestamp = response_message[2]
             return timestamp
 
     def get_watermark_timestamp(self) -> int:
@@ -242,15 +240,13 @@ class StatefulProcessorApiClient:
         message = stateMessage.StateRequest(timerRequest=timer_request)
 
         self._send_proto_message(message.SerializeToString())
-        response_message = self._receive_proto_message()
+        response_message = self._receive_proto_message_with_long_value()
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error getting eventtime timestamp: " f"{response_message[1]}")
         else:
-            if len(response_message[2]) == 0:
-                return -1
-            timestamp = self._deserialize_long_from_bytes(response_message[2])
+            timestamp = response_message[2]
             return timestamp
 
     def _send_proto_message(self, message: bytes) -> None:
@@ -267,6 +263,15 @@ class StatefulProcessorApiClient:
         length = read_int(self.sockfile)
         bytes = self.sockfile.read(length)
         message = stateMessage.StateResponse()
+        message.ParseFromString(bytes)
+        return message.statusCode, message.errorMessage, message.value
+
+    def _receive_proto_message_with_long_value(self) -> Tuple[int, str, int]:
+        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+
+        length = read_int(self.sockfile)
+        bytes = self.sockfile.read(length)
+        message = stateMessage.StateResponseWithLongTypeVal()
         message.ParseFromString(bytes)
         return message.statusCode, message.errorMessage, message.value
 
@@ -294,9 +299,6 @@ class StatefulProcessorApiClient:
 
         row_value = Row(*converted)
         return self.pickleSer.dumps(schema.toInternal(row_value))
-
-    def _deserialize_long_from_bytes(self, values: bytes) -> int:
-        return int.from_bytes(values, byteorder='big')
 
     def _deserialize_from_bytes(self, value: bytes) -> Any:
         return self.pickleSer.loads(value)

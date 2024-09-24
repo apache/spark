@@ -13,61 +13,63 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x12StateMessage.proto\x12.org.apache.spark.sql.execution.streaming.state\"\xbf\x03\n\x0cStateRequest\x12\x0f\n\x07version\x18\x01 \x01(\x05\x12\x66\n\x15statefulProcessorCall\x18\x02 \x01(\x0b\x32\x45.org.apache.spark.sql.execution.streaming.state.StatefulProcessorCallH\x00\x12\x64\n\x14stateVariableRequest\x18\x03 \x01(\x0b\x32\x44.org.apache.spark.sql.execution.streaming.state.StateVariableRequestH\x00\x12p\n\x1aimplicitGroupingKeyRequest\x18\x04 \x01(\x0b\x32J.org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequestH\x00\x12T\n\x0ctimerRequest\x18\x05 \x01(\x0b\x32<.org.apache.spark.sql.execution.streaming.state.TimerRequestH\x00\x42\x08\n\x06method\"H\n\rStateResponse\x12\x12\n\nstatusCode\x18\x01 \x01(\x05\x12\x14\n\x0c\x65rrorMessage\x18\x02 \x01(\t\x12\r\n\x05value\x18\x03 \x01(\x0c\"\xea\x03\n\x15StatefulProcessorCall\x12X\n\x0esetHandleState\x18\x01 \x01(\x0b\x32>.org.apache.spark.sql.execution.streaming.state.SetHandleStateH\x00\x12Y\n\rgetValueState\x18\x02 \x01(\x0b\x32@.org.apache.spark.sql.execution.streaming.state.StateCallCommandH\x00\x12X\n\x0cgetListState\x18\x03 \x01(\x0b\x32@.org.apache.spark.sql.execution.streaming.state.StateCallCommandH\x00\x12W\n\x0bgetMapState\x18\x04 \x01(\x0b\x32@.org.apache.spark.sql.execution.streaming.state.StateCallCommandH\x00\x12_\n\x0etimerStateCall\x18\x05 \x01(\x0b\x32\x45.org.apache.spark.sql.execution.streaming.state.TimerStateCallCommandH\x00\x42\x08\n\x06method\"z\n\x14StateVariableRequest\x12X\n\x0evalueStateCall\x18\x01 \x01(\x0b\x32>.org.apache.spark.sql.execution.streaming.state.ValueStateCallH\x00\x42\x08\n\x06method\"\xe0\x01\n\x1aImplicitGroupingKeyRequest\x12X\n\x0esetImplicitKey\x18\x01 \x01(\x0b\x32>.org.apache.spark.sql.execution.streaming.state.SetImplicitKeyH\x00\x12^\n\x11removeImplicitKey\x18\x02 \x01(\x0b\x32\x41.org.apache.spark.sql.execution.streaming.state.RemoveImplicitKeyH\x00\x42\x08\n\x06method\"\xda\x01\n\x0cTimerRequest\x12^\n\x11timerValueRequest\x18\x01 \x01(\x0b\x32\x41.org.apache.spark.sql.execution.streaming.state.TimerValueRequestH\x00\x12`\n\x12\x65xpiryTimerRequest\x18\x02 \x01(\x0b\x32\x42.org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequestH\x00\x42\x08\n\x06method\"\xd4\x01\n\x11TimerValueRequest\x12_\n\x12getProcessingTimer\x18\x01 \x01(\x0b\x32\x41.org.apache.spark.sql.execution.streaming.state.GetProcessingTimeH\x00\x12T\n\x0cgetWatermark\x18\x02 \x01(\x0b\x32<.org.apache.spark.sql.execution.streaming.state.GetWatermarkH\x00\x42\x08\n\x06method\"/\n\x12\x45xpiryTimerRequest\x12\x19\n\x11\x65xpiryTimestampMs\x18\x01 \x01(\x03\"\x13\n\x11GetProcessingTime\"\x0e\n\x0cGetWatermark\"}\n\x10StateCallCommand\x12\x11\n\tstateName\x18\x01 \x01(\t\x12\x0e\n\x06schema\x18\x02 \x01(\t\x12\x46\n\x03ttl\x18\x03 \x01(\x0b\x32\x39.org.apache.spark.sql.execution.streaming.state.TTLConfig\"\x8f\x02\n\x15TimerStateCallCommand\x12Q\n\x08register\x18\x01 \x01(\x0b\x32=.org.apache.spark.sql.execution.streaming.state.RegisterTimerH\x00\x12M\n\x06\x64\x65lete\x18\x02 \x01(\x0b\x32;.org.apache.spark.sql.execution.streaming.state.DeleteTimerH\x00\x12J\n\x04list\x18\x03 \x01(\x0b\x32:.org.apache.spark.sql.execution.streaming.state.ListTimersH\x00\x42\x08\n\x06method\"\xe1\x02\n\x0eValueStateCall\x12\x11\n\tstateName\x18\x01 \x01(\t\x12H\n\x06\x65xists\x18\x02 \x01(\x0b\x32\x36.org.apache.spark.sql.execution.streaming.state.ExistsH\x00\x12\x42\n\x03get\x18\x03 \x01(\x0b\x32\x33.org.apache.spark.sql.execution.streaming.state.GetH\x00\x12\\\n\x10valueStateUpdate\x18\x04 \x01(\x0b\x32@.org.apache.spark.sql.execution.streaming.state.ValueStateUpdateH\x00\x12\x46\n\x05\x63lear\x18\x05 \x01(\x0b\x32\x35.org.apache.spark.sql.execution.streaming.state.ClearH\x00\x42\x08\n\x06method\"\x1d\n\x0eSetImplicitKey\x12\x0b\n\x03key\x18\x01 \x01(\x0c\"\x13\n\x11RemoveImplicitKey\"\x08\n\x06\x45xists\"\x05\n\x03Get\"*\n\rRegisterTimer\x12\x19\n\x11\x65xpiryTimestampMs\x18\x01 \x01(\x03\"(\n\x0b\x44\x65leteTimer\x12\x19\n\x11\x65xpiryTimestampMs\x18\x01 \x01(\x03\"\x0c\n\nListTimers\"!\n\x10ValueStateUpdate\x12\r\n\x05value\x18\x01 \x01(\x0c\"\x07\n\x05\x43lear\"\\\n\x0eSetHandleState\x12J\n\x05state\x18\x01 \x01(\x0e\x32;.org.apache.spark.sql.execution.streaming.state.HandleState\"\x1f\n\tTTLConfig\x12\x12\n\ndurationMs\x18\x01 \x01(\x05*`\n\x0bHandleState\x12\x0b\n\x07\x43REATED\x10\x00\x12\x0f\n\x0bINITIALIZED\x10\x01\x12\x12\n\x0e\x44\x41TA_PROCESSED\x10\x02\x12\x13\n\x0fTIMER_PROCESSED\x10\x03\x12\n\n\x06\x43LOSED\x10\x04\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x12StateMessage.proto\x12.org.apache.spark.sql.execution.streaming.state\"\xbf\x03\n\x0cStateRequest\x12\x0f\n\x07version\x18\x01 \x01(\x05\x12\x66\n\x15statefulProcessorCall\x18\x02 \x01(\x0b\x32\x45.org.apache.spark.sql.execution.streaming.state.StatefulProcessorCallH\x00\x12\x64\n\x14stateVariableRequest\x18\x03 \x01(\x0b\x32\x44.org.apache.spark.sql.execution.streaming.state.StateVariableRequestH\x00\x12p\n\x1aimplicitGroupingKeyRequest\x18\x04 \x01(\x0b\x32J.org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequestH\x00\x12T\n\x0ctimerRequest\x18\x05 \x01(\x0b\x32<.org.apache.spark.sql.execution.streaming.state.TimerRequestH\x00\x42\x08\n\x06method\"H\n\rStateResponse\x12\x12\n\nstatusCode\x18\x01 \x01(\x05\x12\x14\n\x0c\x65rrorMessage\x18\x02 \x01(\t\x12\r\n\x05value\x18\x03 \x01(\x0c\"W\n\x1cStateResponseWithLongTypeVal\x12\x12\n\nstatusCode\x18\x01 \x01(\x05\x12\x14\n\x0c\x65rrorMessage\x18\x02 \x01(\t\x12\r\n\x05value\x18\x03 \x01(\x03\"\xea\x03\n\x15StatefulProcessorCall\x12X\n\x0esetHandleState\x18\x01 \x01(\x0b\x32>.org.apache.spark.sql.execution.streaming.state.SetHandleStateH\x00\x12Y\n\rgetValueState\x18\x02 \x01(\x0b\x32@.org.apache.spark.sql.execution.streaming.state.StateCallCommandH\x00\x12X\n\x0cgetListState\x18\x03 \x01(\x0b\x32@.org.apache.spark.sql.execution.streaming.state.StateCallCommandH\x00\x12W\n\x0bgetMapState\x18\x04 \x01(\x0b\x32@.org.apache.spark.sql.execution.streaming.state.StateCallCommandH\x00\x12_\n\x0etimerStateCall\x18\x05 \x01(\x0b\x32\x45.org.apache.spark.sql.execution.streaming.state.TimerStateCallCommandH\x00\x42\x08\n\x06method\"z\n\x14StateVariableRequest\x12X\n\x0evalueStateCall\x18\x01 \x01(\x0b\x32>.org.apache.spark.sql.execution.streaming.state.ValueStateCallH\x00\x42\x08\n\x06method\"\xe0\x01\n\x1aImplicitGroupingKeyRequest\x12X\n\x0esetImplicitKey\x18\x01 \x01(\x0b\x32>.org.apache.spark.sql.execution.streaming.state.SetImplicitKeyH\x00\x12^\n\x11removeImplicitKey\x18\x02 \x01(\x0b\x32\x41.org.apache.spark.sql.execution.streaming.state.RemoveImplicitKeyH\x00\x42\x08\n\x06method\"\xda\x01\n\x0cTimerRequest\x12^\n\x11timerValueRequest\x18\x01 \x01(\x0b\x32\x41.org.apache.spark.sql.execution.streaming.state.TimerValueRequestH\x00\x12`\n\x12\x65xpiryTimerRequest\x18\x02 \x01(\x0b\x32\x42.org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequestH\x00\x42\x08\n\x06method\"\xd4\x01\n\x11TimerValueRequest\x12_\n\x12getProcessingTimer\x18\x01 \x01(\x0b\x32\x41.org.apache.spark.sql.execution.streaming.state.GetProcessingTimeH\x00\x12T\n\x0cgetWatermark\x18\x02 \x01(\x0b\x32<.org.apache.spark.sql.execution.streaming.state.GetWatermarkH\x00\x42\x08\n\x06method\"/\n\x12\x45xpiryTimerRequest\x12\x19\n\x11\x65xpiryTimestampMs\x18\x01 \x01(\x03\"\x13\n\x11GetProcessingTime\"\x0e\n\x0cGetWatermark\"}\n\x10StateCallCommand\x12\x11\n\tstateName\x18\x01 \x01(\t\x12\x0e\n\x06schema\x18\x02 \x01(\t\x12\x46\n\x03ttl\x18\x03 \x01(\x0b\x32\x39.org.apache.spark.sql.execution.streaming.state.TTLConfig\"\x8f\x02\n\x15TimerStateCallCommand\x12Q\n\x08register\x18\x01 \x01(\x0b\x32=.org.apache.spark.sql.execution.streaming.state.RegisterTimerH\x00\x12M\n\x06\x64\x65lete\x18\x02 \x01(\x0b\x32;.org.apache.spark.sql.execution.streaming.state.DeleteTimerH\x00\x12J\n\x04list\x18\x03 \x01(\x0b\x32:.org.apache.spark.sql.execution.streaming.state.ListTimersH\x00\x42\x08\n\x06method\"\xe1\x02\n\x0eValueStateCall\x12\x11\n\tstateName\x18\x01 \x01(\t\x12H\n\x06\x65xists\x18\x02 \x01(\x0b\x32\x36.org.apache.spark.sql.execution.streaming.state.ExistsH\x00\x12\x42\n\x03get\x18\x03 \x01(\x0b\x32\x33.org.apache.spark.sql.execution.streaming.state.GetH\x00\x12\\\n\x10valueStateUpdate\x18\x04 \x01(\x0b\x32@.org.apache.spark.sql.execution.streaming.state.ValueStateUpdateH\x00\x12\x46\n\x05\x63lear\x18\x05 \x01(\x0b\x32\x35.org.apache.spark.sql.execution.streaming.state.ClearH\x00\x42\x08\n\x06method\"\x1d\n\x0eSetImplicitKey\x12\x0b\n\x03key\x18\x01 \x01(\x0c\"\x13\n\x11RemoveImplicitKey\"\x08\n\x06\x45xists\"\x05\n\x03Get\"*\n\rRegisterTimer\x12\x19\n\x11\x65xpiryTimestampMs\x18\x01 \x01(\x03\"(\n\x0b\x44\x65leteTimer\x12\x19\n\x11\x65xpiryTimestampMs\x18\x01 \x01(\x03\"\x0c\n\nListTimers\"!\n\x10ValueStateUpdate\x12\r\n\x05value\x18\x01 \x01(\x0c\"\x07\n\x05\x43lear\"\\\n\x0eSetHandleState\x12J\n\x05state\x18\x01 \x01(\x0e\x32;.org.apache.spark.sql.execution.streaming.state.HandleState\"\x1f\n\tTTLConfig\x12\x12\n\ndurationMs\x18\x01 \x01(\x05*`\n\x0bHandleState\x12\x0b\n\x07\x43REATED\x10\x00\x12\x0f\n\x0bINITIALIZED\x10\x01\x12\x12\n\x0e\x44\x41TA_PROCESSED\x10\x02\x12\x13\n\x0fTIMER_PROCESSED\x10\x03\x12\n\n\x06\x43LOSED\x10\x04\x62\x06proto3')
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'StateMessage_pb2', globals())
 if _descriptor._USE_C_DESCRIPTORS == False:
 
   DESCRIPTOR._options = None
-  _HANDLESTATE._serialized_start=3057
-  _HANDLESTATE._serialized_end=3153
+  _HANDLESTATE._serialized_start=3146
+  _HANDLESTATE._serialized_end=3242
   _STATEREQUEST._serialized_start=71
   _STATEREQUEST._serialized_end=518
   _STATERESPONSE._serialized_start=520
   _STATERESPONSE._serialized_end=592
-  _STATEFULPROCESSORCALL._serialized_start=595
-  _STATEFULPROCESSORCALL._serialized_end=1085
-  _STATEVARIABLEREQUEST._serialized_start=1087
-  _STATEVARIABLEREQUEST._serialized_end=1209
-  _IMPLICITGROUPINGKEYREQUEST._serialized_start=1212
-  _IMPLICITGROUPINGKEYREQUEST._serialized_end=1436
-  _TIMERREQUEST._serialized_start=1439
-  _TIMERREQUEST._serialized_end=1657
-  _TIMERVALUEREQUEST._serialized_start=1660
-  _TIMERVALUEREQUEST._serialized_end=1872
-  _EXPIRYTIMERREQUEST._serialized_start=1874
-  _EXPIRYTIMERREQUEST._serialized_end=1921
-  _GETPROCESSINGTIME._serialized_start=1923
-  _GETPROCESSINGTIME._serialized_end=1942
-  _GETWATERMARK._serialized_start=1944
-  _GETWATERMARK._serialized_end=1958
-  _STATECALLCOMMAND._serialized_start=1960
-  _STATECALLCOMMAND._serialized_end=2085
-  _TIMERSTATECALLCOMMAND._serialized_start=2088
-  _TIMERSTATECALLCOMMAND._serialized_end=2359
-  _VALUESTATECALL._serialized_start=2362
-  _VALUESTATECALL._serialized_end=2715
-  _SETIMPLICITKEY._serialized_start=2717
-  _SETIMPLICITKEY._serialized_end=2746
-  _REMOVEIMPLICITKEY._serialized_start=2748
-  _REMOVEIMPLICITKEY._serialized_end=2767
-  _EXISTS._serialized_start=2769
-  _EXISTS._serialized_end=2777
-  _GET._serialized_start=2779
-  _GET._serialized_end=2784
-  _REGISTERTIMER._serialized_start=2786
-  _REGISTERTIMER._serialized_end=2828
-  _DELETETIMER._serialized_start=2830
-  _DELETETIMER._serialized_end=2870
-  _LISTTIMERS._serialized_start=2872
-  _LISTTIMERS._serialized_end=2884
-  _VALUESTATEUPDATE._serialized_start=2886
-  _VALUESTATEUPDATE._serialized_end=2919
-  _CLEAR._serialized_start=2921
-  _CLEAR._serialized_end=2928
-  _SETHANDLESTATE._serialized_start=2930
-  _SETHANDLESTATE._serialized_end=3022
-  _TTLCONFIG._serialized_start=3024
-  _TTLCONFIG._serialized_end=3055
+  _STATERESPONSEWITHLONGTYPEVAL._serialized_start=594
+  _STATERESPONSEWITHLONGTYPEVAL._serialized_end=681
+  _STATEFULPROCESSORCALL._serialized_start=684
+  _STATEFULPROCESSORCALL._serialized_end=1174
+  _STATEVARIABLEREQUEST._serialized_start=1176
+  _STATEVARIABLEREQUEST._serialized_end=1298
+  _IMPLICITGROUPINGKEYREQUEST._serialized_start=1301
+  _IMPLICITGROUPINGKEYREQUEST._serialized_end=1525
+  _TIMERREQUEST._serialized_start=1528
+  _TIMERREQUEST._serialized_end=1746
+  _TIMERVALUEREQUEST._serialized_start=1749
+  _TIMERVALUEREQUEST._serialized_end=1961
+  _EXPIRYTIMERREQUEST._serialized_start=1963
+  _EXPIRYTIMERREQUEST._serialized_end=2010
+  _GETPROCESSINGTIME._serialized_start=2012
+  _GETPROCESSINGTIME._serialized_end=2031
+  _GETWATERMARK._serialized_start=2033
+  _GETWATERMARK._serialized_end=2047
+  _STATECALLCOMMAND._serialized_start=2049
+  _STATECALLCOMMAND._serialized_end=2174
+  _TIMERSTATECALLCOMMAND._serialized_start=2177
+  _TIMERSTATECALLCOMMAND._serialized_end=2448
+  _VALUESTATECALL._serialized_start=2451
+  _VALUESTATECALL._serialized_end=2804
+  _SETIMPLICITKEY._serialized_start=2806
+  _SETIMPLICITKEY._serialized_end=2835
+  _REMOVEIMPLICITKEY._serialized_start=2837
+  _REMOVEIMPLICITKEY._serialized_end=2856
+  _EXISTS._serialized_start=2858
+  _EXISTS._serialized_end=2866
+  _GET._serialized_start=2868
+  _GET._serialized_end=2873
+  _REGISTERTIMER._serialized_start=2875
+  _REGISTERTIMER._serialized_end=2917
+  _DELETETIMER._serialized_start=2919
+  _DELETETIMER._serialized_end=2959
+  _LISTTIMERS._serialized_start=2961
+  _LISTTIMERS._serialized_end=2973
+  _VALUESTATEUPDATE._serialized_start=2975
+  _VALUESTATEUPDATE._serialized_end=3008
+  _CLEAR._serialized_start=3010
+  _CLEAR._serialized_end=3017
+  _SETHANDLESTATE._serialized_start=3019
+  _SETHANDLESTATE._serialized_end=3111
+  _TTLCONFIG._serialized_start=3113
+  _TTLCONFIG._serialized_end=3144
 # @@protoc_insertion_point(module_scope)

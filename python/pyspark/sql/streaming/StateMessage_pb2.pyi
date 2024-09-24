@@ -110,6 +110,16 @@ class StateResponse(_message.Message):
     value: bytes
     def __init__(self, statusCode: Optional[int] = ..., errorMessage: Optional[str] = ..., value: Optional[bytes] = ...) -> None: ...
 
+class StateResponseWithLongTypeVal(_message.Message):
+    __slots__ = ["errorMessage", "statusCode", "value"]
+    ERRORMESSAGE_FIELD_NUMBER: ClassVar[int]
+    STATUSCODE_FIELD_NUMBER: ClassVar[int]
+    VALUE_FIELD_NUMBER: ClassVar[int]
+    errorMessage: str
+    statusCode: int
+    value: int
+    def __init__(self, statusCode: Optional[int] = ..., errorMessage: Optional[str] = ..., value: Optional[int] = ...) -> None: ...
+
 class StateVariableRequest(_message.Message):
     __slots__ = ["valueStateCall"]
     VALUESTATECALL_FIELD_NUMBER: ClassVar[int]
