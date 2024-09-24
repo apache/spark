@@ -521,14 +521,8 @@ class PandasGroupedOpsMixin:
             )
 
             result_iter_list = [data_iter]
-            if len(expiry_list_iter) > 0:
-                raise Exception(f"i wonder key equals to row, key is: {key}, "
-                                f"key type: {type(key)}"
-                                f"row is: {expiry_list_iter[0][0]}, "
-                                f"equals: {key[0] == expiry_list_iter[0][0]}")
             # process with valid expiry time info and with empty input rows,
             # only timer related rows will be emitted
-            """
             if expiry_list_iter is not None:
                 for expiry_list in expiry_list_iter:
                     for key_obj, expiry_timestamp in expiry_list:
@@ -542,7 +536,6 @@ class PandasGroupedOpsMixin:
                                 (key_obj,), iter([]),
                                 TimerValues(batch_timestamp, watermark_timestamp),
                                 ExpiredTimerInfo(True, expiry_timestamp)))
-            """
 
             # TODO(SPARK-49603) set the handle state in the lazily initialized iterator
 

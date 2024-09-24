@@ -185,7 +185,7 @@ class StatefulProcessorApiClient:
                 # TODO(SPARK-49233): Classify user facing errors.
                 raise PySparkRuntimeError(f"Error getting expiry timers: " f"{response_message[1]}")
 
-    def get_expiry_timers_iterator(self, expiry_timestamp: int) -> list[Any, int]:
+    def get_expiry_timers_iterator(self, expiry_timestamp: int) -> list[Tuple, int]:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
         # while True:
         expiry_timer_call = stateMessage.ExpiryTimerRequest(expiryTimestampMs=expiry_timestamp)
@@ -209,7 +209,7 @@ class StatefulProcessorApiClient:
                 d_k = self.pickleSer.loads(batch_df.at[i, 'key'])
                 # raise Exception(f"I am in expiry timestamp list, {d_k}")
                 timestamp = batch_df.at[i, 'timestamp'].item()
-                result_list.append((d_k, timestamp))
+                result_list.append((tuple(d_k), timestamp))
             # yield result_list
             return result_list
         else:
