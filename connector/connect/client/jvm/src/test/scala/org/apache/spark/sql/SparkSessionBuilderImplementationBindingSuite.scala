@@ -27,7 +27,7 @@ class SparkSessionBuilderImplementationBindingSuite
     with api.SparkSessionBuilderImplementationBindingSuite
     with RemoteSparkSession {
   override protected def configure(builder: SparkSessionBuilder): builder.type = {
-    // We need to set this configuration becayse the port used by the server is random.
+    // We need to set this configuration because the port used by the server is random.
     builder.remote(s"sc://localhost:$serverPort")
   }
 }

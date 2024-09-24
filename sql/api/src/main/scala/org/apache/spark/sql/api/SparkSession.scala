@@ -558,7 +558,7 @@ object SparkSession extends SparkSessionCompanion {
 /**
  * Companion of a [[SparkSession]].
  */
-abstract class SparkSessionCompanion {
+private[sql] abstract class SparkSessionCompanion {
 
   /**
    * Creates a [[SparkSessionBuilder]] for constructing a [[SparkSession]].
