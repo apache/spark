@@ -419,6 +419,47 @@ case class Acosh(child: Expression)
 }
 
 /**
+ * Try to convert a num from one base to another
+ *
+ * @param numExpr the number to be converted
+ * @param fromBaseExpr from which base
+ * @param toBaseExpr to which base
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(num, from_base, to_base) - Convert `num` from `from_base` to `to_base`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('100', 2, 10);
+       4
+      > SELECT _FUNC_(-10, 16, -10);
+       -16
+  """,
+  since = "4.0.0",
+  group = "math_funcs")
+case class TryConv(
+    numExpr: Expression,
+    fromBaseExpr: Expression,
+    toBaseExpr: Expression,
+    replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+
+  def this(
+      numExpr: Expression,
+      fromBaseExpr: Expression,
+      toBaseExpr: Expression) =
+    this(numExpr, fromBaseExpr, toBaseExpr,
+      Conv(numExpr, fromBaseExpr, toBaseExpr, failOnError = false))
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(replacement = newChild)
+  }
+
+  override def parameters: Seq[Expression] = Seq(numExpr, fromBaseExpr, toBaseExpr)
+
+  override def prettyName: String = "try_conv"
+}
+
+/**
  * Convert a num from one base to another
  *
  * @param numExpr the number to be converted
@@ -440,14 +481,14 @@ case class Conv(
     numExpr: Expression,
     fromBaseExpr: Expression,
     toBaseExpr: Expression,
-    ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends TernaryExpression
     with ImplicitCastInputTypes
     with NullIntolerant
     with SupportQueryContext {
 
   def this(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression) =
-    this(numExpr, fromBaseExpr, toBaseExpr, ansiEnabled = SQLConf.get.ansiEnabled)
+    this(numExpr, fromBaseExpr, toBaseExpr, failOnError = SQLConf.get.ansiEnabled)
 
   override def first: Expression = numExpr
   override def second: Expression = fromBaseExpr
@@ -462,16 +503,16 @@ case class Conv(
       num.asInstanceOf[UTF8String].trim().getBytes,
       fromBase.asInstanceOf[Int],
       toBase.asInstanceOf[Int],
-      ansiEnabled,
+      failOnError,
       getContextOrNull())
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val numconv = NumberConverter.getClass.getName.stripSuffix("$")
-    val context = getContextOrNullCode(ctx, ansiEnabled)
+    val context = getContextOrNullCode(ctx, failOnError)
     nullSafeCodeGen(ctx, ev, (num, from, to) =>
       s"""
-       ${ev.value} = $numconv.convert($num.trim().getBytes(), $from, $to, $ansiEnabled, $context);
+       ${ev.value} = $numconv.convert($num.trim().getBytes(), $from, $to, $failOnError, $context);
        if (${ev.value} == null) {
          ${ev.isNull} = true;
        }
@@ -483,7 +524,7 @@ case class Conv(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
     copy(numExpr = newFirst, fromBaseExpr = newSecond, toBaseExpr = newThird)
 
-  override def initQueryContext(): Option[QueryContext] = if (ansiEnabled) {
+  override def initQueryContext(): Option[QueryContext] = if (failOnError) {
     Some(origin.context)
   } else {
     None

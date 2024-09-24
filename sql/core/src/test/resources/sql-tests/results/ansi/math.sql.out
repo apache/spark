@@ -721,7 +721,7 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
+    "alternative" : " Use 'try_conv' to tolerate overflow and return NULL instead.",
     "message" : "Overflow in function conv()"
   },
   "queryContext" : [ {
@@ -744,7 +744,7 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
+    "alternative" : " Use 'try_conv' to tolerate overflow and return NULL instead.",
     "message" : "Overflow in function conv()"
   },
   "queryContext" : [ {
@@ -767,7 +767,7 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
+    "alternative" : " Use 'try_conv' to tolerate overflow and return NULL instead.",
     "message" : "Overflow in function conv()"
   },
   "queryContext" : [ {
