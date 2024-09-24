@@ -609,8 +609,8 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           .load()
 
         val resultDf = stateReaderDf.selectExpr(
-       "key.key.value AS groupingKey",
-          "key.expiryTimestampMs AS expiryTimestamp",
+       "key.value AS groupingKey",
+          "expiration_timestamp_ms AS expiryTimestamp",
           "partition_id")
 
         checkAnswer(resultDf,
@@ -655,8 +655,8 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           .load()
 
         val resultDf = stateReaderDf.selectExpr(
-          "key.key.value AS groupingKey",
-          "key.expiryTimestampMs AS expiryTimestamp",
+          "key.value AS groupingKey",
+          "expiration_timestamp_ms AS expiryTimestamp",
           "partition_id")
 
         checkAnswer(resultDf,
