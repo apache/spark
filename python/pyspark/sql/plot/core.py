@@ -50,8 +50,7 @@ class PySparkTopNPlotBase:
 
 class PySparkSampledPlotBase:
     def get_sampled(self, sdf: "DataFrame") -> "pd.DataFrame":
-        from pyspark.sql import SparkSession, Observation
-        from pyspark.sql import functions as F
+        from pyspark.sql import SparkSession, Observation, functions as F
 
         session = SparkSession.getActiveSession()
         if session is None:
