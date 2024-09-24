@@ -60,6 +60,11 @@ case class CollectMetricsExec(
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
+  override def resetMetrics(): Unit = {
+    accumulator.reset()
+    super.resetMetrics()
+  }
+
   override protected def doExecute(): RDD[InternalRow] = {
     val collector = accumulator
     collector.reset()

@@ -1423,6 +1423,28 @@ abstract class Dataset[T] extends Serializable {
   def reduce(func: ReduceFunction[T]): T = reduce(ToScalaUDF(func))
 
   /**
+   * (Scala-specific) Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given
+   * key `func`.
+   *
+   * @group typedrel
+   * @since 2.0.0
+   */
+  def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T]
+
+  /**
+   * (Java-specific) Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given
+   * key `func`.
+   *
+   * @group typedrel
+   * @since 2.0.0
+   */
+  def groupByKey[K](
+      func: MapFunction[T, K],
+      encoder: Encoder[K]): KeyValueGroupedDataset[K, T] = {
+    groupByKey(ToScalaUDF(func))(encoder)
+  }
+
+  /**
    * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns
    * set. This is the reverse to `groupBy(...).pivot(...).agg(...)`, except for the aggregation,
    * which cannot be reversed.
@@ -2994,6 +3016,14 @@ abstract class Dataset[T] extends Serializable {
    * @since 4.0.0
    */
   def mergeInto(table: String, condition: Column): MergeIntoWriter[T]
+
+  /**
+   * Interface for saving the content of the streaming Dataset out into external storage.
+   *
+   * @group basic
+   * @since 2.0.0
+   */
+  def writeStream: DataStreamWriter[T]
 
   /**
    * Create a write configuration builder for v2 sources.

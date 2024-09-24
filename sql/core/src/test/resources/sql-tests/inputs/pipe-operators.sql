@@ -12,7 +12,7 @@ drop table if exists st;
 create table st(x int, col struct<i1:int, i2:int>) using parquet;
 insert into st values (1, (2, 3));
 
--- Selection operators: positive tests.
+-- SELECT operators: positive tests.
 ---------------------------------------
 
 -- Selecting a constant.
@@ -85,7 +85,24 @@ table t
 table t
 |> select distinct x, y;
 
--- Selection operators: negative tests.
+-- SELECT * is supported.
+table t
+|> select *;
+
+table t
+|> select * except (y);
+
+-- Hints are supported.
+table t
+|> select /*+ repartition(3) */ *;
+
+table t
+|> select /*+ repartition(3) */ distinct x;
+
+table t
+|> select /*+ repartition(3) */ all x;
+
+-- SELECT operators: negative tests.
 ---------------------------------------
 
 -- Aggregate functions are not allowed in the pipe operator SELECT list.
@@ -94,6 +111,79 @@ table t
 
 table t
 |> select y, length(y) + sum(x) as result;
+
+-- WHERE operators: positive tests.
+-----------------------------------
+
+-- Filtering with a constant predicate.
+table t
+|> where true;
+
+-- Filtering with a predicate based on attributes from the input relation.
+table t
+|> where x + length(y) < 4;
+
+-- Two consecutive filters are allowed.
+table t
+|> where x + length(y) < 4
+|> where x + length(y) < 3;
+
+-- It is possible to use the WHERE operator instead of the HAVING clause when processing the result
+-- of aggregations. For example, this WHERE operator is equivalent to the normal SQL "HAVING x = 1".
+(select x, sum(length(y)) as sum_len from t group by x)
+|> where x = 1;
+
+-- Filtering by referring to the table or table subquery alias.
+table t
+|> where t.x = 1;
+
+table t
+|> where spark_catalog.default.t.x = 1;
+
+-- Filtering using struct fields.
+(select col from st)
+|> where col.i1 = 1;
+
+table st
+|> where st.col.i1 = 2;
+
+-- Expression subqueries in the WHERE clause.
+table t
+|> where exists (select a from other where x = a limit 1);
+
+-- Aggregations are allowed within expression subqueries in the pipe operator WHERE clause as long
+-- no aggregate functions exist in the top-level expression predicate.
+table t
+|> where (select any_value(a) from other where x = a limit 1) = 1;
+
+-- WHERE operators: negative tests.
+-----------------------------------
+
+-- Aggregate functions are not allowed in the top-level WHERE predicate.
+-- (Note: to implement this behavior, perform the aggregation first separately and then add a
+-- pipe-operator WHERE clause referring to the result of aggregate expression(s) therein).
+table t
+|> where sum(x) = 1;
+
+table t
+|> where y = 'abc' or length(y) + sum(x) = 1;
+
+-- Window functions are not allowed in the WHERE clause (pipe operators or otherwise).
+table t
+|> where first_value(x) over (partition by y) = 1;
+
+select * from t where first_value(x) over (partition by y) = 1;
+
+-- Pipe operators may only refer to attributes produced as output from the directly-preceding
+-- pipe operator, not from earlier ones.
+table t
+|> select x, length(y) as z
+|> where x + length(y) < 4;
+
+-- If the WHERE clause wants to filter rows produced by an aggregation, it is not valid to try to
+-- refer to the aggregate functions directly; it is necessary to use aliases instead.
+(select x, sum(length(y)) as sum_len from t group by x)
+|> where sum(length(y)) = 3;
 
 -- Cleanup.
 -----------

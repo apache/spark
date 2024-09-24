@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql
 
-import java.lang.reflect.Modifier
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
+import scala.reflect.runtime.universe.runtimeMirror
 import scala.util.Random
 
 import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
@@ -82,7 +82,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "bucket", "days", "hours", "months", "years", // Datasource v2 partition transformations
       "product", // Discussed in https://github.com/apache/spark/pull/30745
       "unwrap_udt",
-      "collect_top_k",
       "timestamp_add",
       "timestamp_diff"
     )
@@ -92,10 +91,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val word_pattern = """\w*"""
 
     // Set of DataFrame functions in org.apache.spark.sql.functions
-    val dataFrameFunctions = functions.getClass
-      .getDeclaredMethods
-      .filter(m => Modifier.isPublic(m.getModifiers))
-      .map(_.getName)
+    val dataFrameFunctions = runtimeMirror(getClass.getClassLoader)
+      .reflect(functions)
+      .symbol
+      .typeSignature
+      .decls
+      .filter(s => s.isMethod && s.isPublic)
+      .map(_.name.toString)
       .toSet
       .filter(_.matches(word_pattern))
       .diff(excludedDataFrameFunctions)

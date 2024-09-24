@@ -14,28 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql
+
+package org.apache.spark.sql.catalyst.plans.logical
 
 /**
- * A container for a [[Dataset]], used for implicit conversions in Scala.
- *
- * To use this, import implicit conversions in SQL:
- * {{{
- *   val spark: SparkSession = ...
- *   import spark.implicits._
- * }}}
- *
- * @since 3.4.0
+ * A logical plan node that requires execution during analysis.
  */
-case class DatasetHolder[T] private[sql] (private val ds: Dataset[T]) {
-
-  // This is declared with parentheses to prevent the Scala compiler from treating
-  // `rdd.toDS("1")` as invoking this toDS and then apply on the returned Dataset.
-  def toDS(): Dataset[T] = ds
-
-  // This is declared with parentheses to prevent the Scala compiler from treating
-  // `rdd.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DataFrame = ds.toDF()
-
-  def toDF(colNames: String*): DataFrame = ds.toDF(colNames: _*)
+trait ExecutableDuringAnalysis extends LogicalPlan {
+  /**
+   * Returns the logical plan node that should be used for EXPLAIN.
+   */
+  def stageForExplain(): LogicalPlan
 }
