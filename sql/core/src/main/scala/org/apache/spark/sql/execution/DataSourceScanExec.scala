@@ -842,8 +842,9 @@ case class FileSourceScanExec(
     new FileScanRDD(relation.sparkSession, readFile, partitions,
       new StructType(requiredSchema.fields ++ relation.partitionSchema.fields),
       fileConstantMetadataColumns, relation.fileFormat.fileConstantMetadataExtractors,
-      new FileSourceOptions(CaseInsensitiveMap(relation.options)), Some(topLevelVariantMetrics),
-      Some(nestedVariantMetrics), Some(variantBuilderMetrics))
+      new FileSourceOptions(CaseInsensitiveMap(relation.options)),
+      Some(new FileScanMetrics(Some(topLevelVariantMetrics), Some(nestedVariantMetrics))),
+      Some(variantBuilderMetrics))
   }
 
   // Filters unused DynamicPruningExpression expressions - one which has been replaced
