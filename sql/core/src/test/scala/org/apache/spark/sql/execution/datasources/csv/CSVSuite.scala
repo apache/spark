@@ -3306,7 +3306,7 @@ abstract class CSVSuite
   }
 
   test("SPARK-40667: validate CSV Options") {
-    assert(CSVOptions.getAllOptions.size == 39)
+    assert(CSVOptions.getAllOptions.size == 40)
     // Please add validation on any new CSV options here
     assert(CSVOptions.isValidOption("header"))
     assert(CSVOptions.isValidOption("inferSchema"))
@@ -3347,6 +3347,7 @@ abstract class CSVSuite
     assert(CSVOptions.isValidOption("sep"))
     assert(CSVOptions.isValidOption("delimiter"))
     assert(CSVOptions.isValidOption("columnPruning"))
+    assert(CSVOptions.isValidOption("inferStringTypeForTimeOnlyColumn"))
     // Please add validation on any new parquet options with alternative here
     assert(CSVOptions.getAlternativeOption("sep").contains("delimiter"))
     assert(CSVOptions.getAlternativeOption("delimiter").contains("sep"))
