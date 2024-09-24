@@ -73,6 +73,21 @@ class DataFramePlotPlotlyTestsMixin:
         self._check_fig_data("bar", fig["data"][0], ["A", "B", "C"], [10, 30, 20], "int_val")
         self._check_fig_data("bar", fig["data"][1], ["A", "B", "C"], [1.5, 2.5, 3.5], "float_val")
 
+    def test_barh_plot(self):
+        # single column as vertical axis
+        fig = self.sdf.plot(kind="barh", x="category", y="int_val")
+        self._check_fig_data("barh", fig["data"][0], ["A", "B", "C"], [10, 30, 20])
+
+        # multiple columns as vertical axis
+        fig = self.sdf.plot.barh(x="category", y=["int_val", "float_val"])
+        self._check_fig_data("barh", fig["data"][0], ["A", "B", "C"], [10, 30, 20], "int_val")
+        self._check_fig_data("barh", fig["data"][1], ["A", "B", "C"], [1.5, 2.5, 3.5], "float_val")
+
+        # multiple columns as horizontal axis
+        fig = self.sdf.plot.barh(x=["int_val", "float_val"], y="category")
+        self._check_fig_data("barh", fig["data"][0], [10, 30, 20], ["A", "B", "C"], "int_val")
+        self._check_fig_data("barh", fig["data"][1], [1.5, 2.5, 3.5], ["A", "B", "C"], "float_val")
+
     def test_scatter_plot(self):
         fig = self.sdf2.plot(kind="scatter", x="length", y="width")
         self._check_fig_data(
