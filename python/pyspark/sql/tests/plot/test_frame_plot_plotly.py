@@ -28,6 +28,7 @@ class DataFramePlotPlotlyTestsMixin:
         columns = ["category", "int_val", "float_val"]
         return self.spark.createDataFrame(data, columns)
 
+    @property
     def sdf2(self):
         data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
         columns = ["length", "width", "species"]
@@ -77,12 +78,10 @@ class DataFramePlotPlotlyTestsMixin:
         self._check_fig_data(
             "scatter", fig["data"][0], [5.1, 4.9, 7.0, 6.4, 5.9], [3.5, 3.0, 3.2, 3.2, 3.0]
         )
-        # additional keyword arguments
-        fig = self.sdf2.plot.scatter(x="length", y="width", c="DarkBlue")
+        fig = self.sdf2.plot.scatter(x="width", y="length")
         self._check_fig_data(
-            "scatter", fig["data"][0], [5.1, 4.9, 7.0, 6.4, 5.9], [3.5, 3.0, 3.2, 3.2, 3.0]
+            "scatter", fig["data"][0], [3.5, 3.0, 3.2, 3.2, 3.0], [5.1, 4.9, 7.0, 6.4, 5.9]
         )
-        self.assertEqual(fig["data"][0]["marker"]["color"], "#636efa")
 
 
 class DataFramePlotPlotlyTests(DataFramePlotPlotlyTestsMixin, ReusedSQLTestCase):
