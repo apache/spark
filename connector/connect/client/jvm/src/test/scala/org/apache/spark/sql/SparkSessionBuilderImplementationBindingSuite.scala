@@ -23,9 +23,9 @@ import org.apache.spark.sql.test.{ConnectFunSuite, RemoteSparkSession}
  * Make sure the api.SparkSessionBuilder binds to Connect implementation.
  */
 class SparkSessionBuilderImplementationBindingSuite
-  extends ConnectFunSuite
-  with api.SparkSessionBuilderImplementationBindingSuite
-  with RemoteSparkSession {
+    extends ConnectFunSuite
+    with api.SparkSessionBuilderImplementationBindingSuite
+    with RemoteSparkSession {
   override protected def configure(builder: SparkSessionBuilder): builder.type = {
     // We need to set this configuration becayse the port used by the server is random.
     builder.remote(s"sc://localhost:$serverPort")

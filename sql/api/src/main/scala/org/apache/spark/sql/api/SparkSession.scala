@@ -559,6 +559,7 @@ object SparkSession extends SparkSessionCompanion {
  * Companion of a [[SparkSession]].
  */
 abstract class SparkSessionCompanion {
+
   /**
    * Creates a [[SparkSessionBuilder]] for constructing a [[SparkSession]].
    *
@@ -575,27 +576,29 @@ abstract class SparkSessionBuilder {
   protected val options = new scala.collection.mutable.HashMap[String, String]
 
   /**
-   * Sets a name for the application, which will be shown in the Spark web UI.
-   * If no application name is set, a randomly generated name will be used.
+   * Sets a name for the application, which will be shown in the Spark web UI. If no application
+   * name is set, a randomly generated name will be used.
    *
    * @since 2.0.0
    */
   def appName(name: String): this.type = config("spark.app.name", name)
 
   /**
-   * Sets the Spark master URL to connect to, such as "local" to run locally, "local[4]" to
-   * run locally with 4 cores, or "spark://master:7077" to run on a Spark standalone cluster.
+   * Sets the Spark master URL to connect to, such as "local" to run locally, "local[4]" to run
+   * locally with 4 cores, or "spark://master:7077" to run on a Spark standalone cluster.
    *
-   * @note this is only supported in Classic.
+   * @note
+   *   this is only supported in Classic.
    * @since 2.0.0
    */
   def master(master: String): this.type = config("spark.master", master)
 
   /**
-   * Enables Hive support, including connectivity to a persistent Hive metastore, support for
-   * Hive serdes, and Hive user-defined functions.
+   * Enables Hive support, including connectivity to a persistent Hive metastore, support for Hive
+   * serdes, and Hive user-defined functions.
    *
-   * @note this is only supported in Classic.
+   * @note
+   *   this is only supported in Classic.
    * @since 2.0.0
    */
   def enableHiveSupport(): this.type = config("spark.sql.catalogImplementation", "hive")
@@ -603,16 +606,18 @@ abstract class SparkSessionBuilder {
   /**
    * Sets the Spark Connect remote URL.
    *
-   * @note this is only supported in Connect.
+   * @note
+   *   this is only supported in Connect.
    * @since 3.5.0
    */
   def remote(connectionString: String): this.type
 
   /**
-   * Sets a config option. Options set using this method are automatically propagated to
-   * both `SparkConf` and SparkSession's own configuration.
+   * Sets a config option. Options set using this method are automatically propagated to both
+   * `SparkConf` and SparkSession's own configuration.
    *
-   * @note this is only supported in Connect mode.
+   * @note
+   *   this is only supported in Connect mode.
    * @since 2.0.0
    */
   def config(key: String, value: String): this.type = synchronized {
@@ -621,8 +626,8 @@ abstract class SparkSessionBuilder {
   }
 
   /**
-   * Sets a config option. Options set using this method are automatically propagated to
-   * both `SparkConf` and SparkSession's own configuration.
+   * Sets a config option. Options set using this method are automatically propagated to both
+   * `SparkConf` and SparkSession's own configuration.
    *
    * @since 2.0.0
    */
@@ -632,8 +637,8 @@ abstract class SparkSessionBuilder {
   }
 
   /**
-   * Sets a config option. Options set using this method are automatically propagated to
-   * both `SparkConf` and SparkSession's own configuration.
+   * Sets a config option. Options set using this method are automatically propagated to both
+   * `SparkConf` and SparkSession's own configuration.
    *
    * @since 2.0.0
    */
@@ -643,8 +648,8 @@ abstract class SparkSessionBuilder {
   }
 
   /**
-   * Sets a config option. Options set using this method are automatically propagated to
-   * both `SparkConf` and SparkSession's own configuration.
+   * Sets a config option. Options set using this method are automatically propagated to both
+   * `SparkConf` and SparkSession's own configuration.
    *
    * @since 2.0.0
    */
@@ -654,14 +659,14 @@ abstract class SparkSessionBuilder {
   }
 
   /**
-   * Sets a config option. Options set using this method are automatically propagated to
-   * both `SparkConf` and SparkSession's own configuration.
+   * Sets a config option. Options set using this method are automatically propagated to both
+   * `SparkConf` and SparkSession's own configuration.
    *
    * @since 3.4.0
    */
   def config(map: Map[String, Any]): this.type = synchronized {
-    map.foreach {
-      kv: (String, Any) => {
+    map.foreach { kv: (String, Any) =>
+      {
         options += kv._1 -> kv._2.toString
       }
     }
@@ -669,8 +674,8 @@ abstract class SparkSessionBuilder {
   }
 
   /**
-   * Sets a config option. Options set using this method are automatically propagated to
-   * both `SparkConf` and SparkSession's own configuration.
+   * Sets a config option. Options set using this method are automatically propagated to both
+   * `SparkConf` and SparkSession's own configuration.
    *
    * @since 3.4.0
    */
@@ -679,17 +684,16 @@ abstract class SparkSessionBuilder {
   }
 
   /**
-   * Gets an existing [[SparkSession]] or, if there is no existing one, creates a new
-   * one based on the options set in this builder.
+   * Gets an existing [[SparkSession]] or, if there is no existing one, creates a new one based on
+   * the options set in this builder.
    *
-   * This method first checks whether there is a valid thread-local SparkSession,
-   * and if yes, return that one. It then checks whether there is a valid global
-   * default SparkSession, and if yes, return that one. If no valid global default
-   * SparkSession exists, the method creates a new SparkSession and assigns the
-   * newly created SparkSession as the global default.
+   * This method first checks whether there is a valid thread-local SparkSession, and if yes,
+   * return that one. It then checks whether there is a valid global default SparkSession, and if
+   * yes, return that one. If no valid global default SparkSession exists, the method creates a
+   * new SparkSession and assigns the newly created SparkSession as the global default.
    *
-   * In case an existing SparkSession is returned, the non-static config options specified in
-   * this builder will be applied to the existing SparkSession.
+   * In case an existing SparkSession is returned, the non-static config options specified in this
+   * builder will be applied to the existing SparkSession.
    *
    * @since 2.0.0
    */
