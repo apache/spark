@@ -54,10 +54,7 @@ class ValueState:
         """
         Get the state value if it exists. Returns None if the state variable does not have a value.
         """
-        value = self._value_state_client.get(self._state_name)
-        if value is None:
-            return None
-        return value
+        return self._value_state_client.get(self._state_name)
 
     def update(self, new_value: Any) -> None:
         """
