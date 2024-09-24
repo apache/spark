@@ -5090,6 +5090,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val SCALAR_SUBQUERY_USE_SINGLE_JOIN =
+    buildConf("spark.sql.optimizer.scalarSubqueryUseSingleJoin")
+      .internal()
+      .doc("When set to true, use LEFT_SINGLE join for correlated scalar subqueries where " +
+        "optimizer can't prove that only 1 row will be returned")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ALLOW_SUBQUERY_EXPRESSIONS_IN_LAMBDAS_AND_HIGHER_ORDER_FUNCTIONS =
     buildConf("spark.sql.analyzer.allowSubqueryExpressionsInLambdasOrHigherOrderFunctions")
       .internal()

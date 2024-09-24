@@ -16,12 +16,12 @@ Project [from_csv(StructField(cube,IntegerType,true), 1, Some(America/Los_Angele
 -- !query
 select from_json('{"create":1}', 'create INT')
 -- !query analysis
-Project [from_json(StructField(create,IntegerType,true), {"create":1}, Some(America/Los_Angeles)) AS from_json({"create":1})#x]
+Project [from_json(StructField(create,IntegerType,true), {"create":1}, Some(America/Los_Angeles), false) AS from_json({"create":1})#x]
 +- OneRowRelation
 
 
 -- !query
 select from_json('{"cube":1}', 'cube INT')
 -- !query analysis
-Project [from_json(StructField(cube,IntegerType,true), {"cube":1}, Some(America/Los_Angeles)) AS from_json({"cube":1})#x]
+Project [from_json(StructField(cube,IntegerType,true), {"cube":1}, Some(America/Los_Angeles), false) AS from_json({"cube":1})#x]
 +- OneRowRelation
