@@ -226,7 +226,7 @@
     and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>17.0.0</arrow.version>
-    <ammonite.version>3.0.0-M2</ammonite.version>
+    <ammonite.version>3.0.0</ammonite.version>
     <jjwt.version>0.12.6</jjwt.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
