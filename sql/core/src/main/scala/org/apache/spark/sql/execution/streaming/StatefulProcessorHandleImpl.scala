@@ -308,6 +308,12 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
   private val stateVariableInfos: mutable.Map[String, TransformWithStateVariableInfo] =
     new mutable.HashMap[String, TransformWithStateVariableInfo]()
 
+  // If timeMode is not None, add a timer column family schema to the operator metadata so that
+  // registered timers can be read using the state data source reader.
+  if (timeMode != TimeMode.None()) {
+    addTimerColFamily()
+  }
+
   def getColumnFamilySchemas: Map[String, StateStoreColFamilySchema] = columnFamilySchemas.toMap
 
   def getStateVariableInfos: Map[String, TransformWithStateVariableInfo] = stateVariableInfos.toMap
@@ -326,12 +332,6 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     columnFamilySchemas.put(stateName, colFamilySchema)
     val stateVariableInfo = TransformWithStateVariableUtils.getTimerState(stateName)
     stateVariableInfos.put(stateName, stateVariableInfo)
-  }
-
-  // If timeMode is not None, add a timer column family schema to the operator metadata so that
-  // registered timers can be read using the state data source reader.
-  if (timeMode != TimeMode.None()) {
-    addTimerColFamily()
   }
 
   override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
