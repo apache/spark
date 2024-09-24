@@ -71,9 +71,6 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
     SQLConf.get.getConfString(rocksdbChangelogCheckpointingConfKey) == "true"
 
   def snapshotVersionsPresent(dir: File, checkpointFormatVersion: Int = 1): Seq[Long] = {
-    // scalastyle:off println
-    println("wei== all snapshotfiles: " +
-      dir.listFiles.filter(_.getName.endsWith(".zip")).mkString(","))
     checkpointFormatVersion match {
       case 1 => dir.listFiles.filter(_.getName.endsWith(".zip"))
         .map(_.getName.stripSuffix(".zip"))
@@ -96,10 +93,6 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
         .sorted
         .toImmutableArraySeq
       case _ =>
-        // scalastyle:off println
-        println("wei changelogverion: ")
-        dir.listFiles.filter(_.getName.endsWith(".changelog")).foreach(println)
-        // scalastyle:on println
         dir.listFiles.filter(_.getName.endsWith(".changelog"))
           .map(_.getName.stripSuffix(".changelog").split("_"))
           .map { case Array(version, _) => version.toLong }
@@ -108,7 +101,6 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
     }
   }
 }
-// scalastyle:on println
 
 trait AlsoTestWithRocksDBFeatures
   extends SQLTestUtils with RocksDBStateStoreChangelogCheckpointingTestUtil {
@@ -557,8 +549,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
         db.commit()
       }
     }
-
-    println("wei== 123 versionToUniqueId: " + versionToUniqueId)
 
     // Now disable changelog checkpointing in a checkpoint created by a state store
     // that enable changelog checkpointing.
@@ -1277,7 +1267,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       assert(CreateAtomicTestManager.cancelCalledInCreateAtomic)
     }
   }
-  
+
   testWithCheckpointFormatVersion("disallow concurrent updates to the same RocksDB instance",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) {
     case (checkpointFormatVersion, colFamiliesEnabled) =>
@@ -2372,15 +2362,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       useColumnFamilies, checkpointFormatVersion = 2) {
     import java.util.UUID
 
-    // scalastyle:off
-
     override def load(
         version: Long,
         ckptId: Option[String] = None,
         readOnly: Boolean = false): RocksDB = {
       assert(ckptId.isEmpty, "Checkpoint ID should not be provided for test")
-
-      println(s"wei== before load version: $version, current versionToUniqueId: " + versionToUniqueId.mkString(", "))
 
       var checkpointUniqueId = versionToUniqueId.get(version)
       // if checkpointUniqueId is not found, create one and put in to the map
@@ -2389,22 +2375,16 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
         versionToUniqueId.put(version, uniqueId)
         checkpointUniqueId = Some(uniqueId)
       }
-      println(s"wei== after load version: $version, current versionToUniqueId: " + versionToUniqueId.mkString(", "))
       super.load(version, checkpointUniqueId, readOnly)
     }
 
     override def commit(): Long = {
-      println(s"wei== before commit version: $loadedVersion, current versionToUniqueId: " + versionToUniqueId.mkString(", "))
       // loadedVersion and loadedCheckpointId got updated after commit
       versionToUniqueId.put(loadedVersion + 1, sessionCheckpointId.get)
-
-      println(s"wei== after commit version: $loadedVersion, current versionToUniqueId: " + versionToUniqueId.mkString(", "))
       val ret = super.commit()
       ret
     }
   }
-
-  // scalastyle:on
 
   // withDB override with checkpoint format v2
   def withDB[T](

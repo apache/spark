@@ -45,7 +45,6 @@ import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
-// scalastyle:off
 
 /**
  * Class responsible for syncing RocksDB checkpoint files from local disk to DFS.
@@ -543,14 +542,11 @@ class RocksDBFileManager(
           .sortBy(_._1)
     }
 
-    println("wei== sortedSnapshotVersionsAndUniqueIds: " + sortedSnapshotVersionsAndUniqueIds.mkString(", "))
-
     // Return if no versions generated yet
     if (sortedSnapshotVersionsAndUniqueIds.isEmpty) return
 
     // Find the versions to delete
     val maxSnapshotVersionPresent = sortedSnapshotVersionsAndUniqueIds.last._1
-    println("wei== maxSnapshotVersionPresent: " + maxSnapshotVersionPresent)
 
     // In order to reconstruct numVersionsToRetain version, retain the latest snapshot
     // that satisfies (version <= maxSnapshotVersionPresent - numVersionsToRetain + 1).
@@ -561,8 +557,6 @@ class RocksDBFileManager(
       .filter(_ <= maxSnapshotVersionPresent - numVersionsToRetain + 1)
       .foldLeft(0L)(math.max)
 
-    println("wei== minVersionToRetain: " + minVersionToRetain)
-
     // When snapshotVersionToDelete is non-empty, there are at least 2 snapshot versions.
     // We only delete orphan files when there are at least 2 versions,
     // which avoid deleting files for running tasks.
@@ -570,8 +564,6 @@ class RocksDBFileManager(
       .filter(_._1 < minVersionToRetain)
     val snapshotVersionsToDelete = snapshotVersionsAndUniqueIdsToDelete.map(_._1)
     if (snapshotVersionsAndUniqueIdsToDelete.isEmpty) return
-
-    println("wei=== snapshotVersionsToDelete: " + snapshotVersionsToDelete.mkString(", "))
 
     // Resolve RocksDB files for all the versions and find the max version each file is used
     val fileToMaxUsedVersion = new mutable.HashMap[String, Long]
@@ -589,8 +581,6 @@ class RocksDBFileManager(
     val filesToDelete = fileToMaxUsedVersion.filter {
       case (_, v) => snapshotVersionsToDelete.contains(v)
     }
-
-    println("wei== filesToDelete: " + filesToDelete.mkString(", "))
 
     val sstDir = new Path(dfsRootDir, RocksDBImmutableFile.SST_FILES_DFS_SUBDIR)
     val logDir = new Path(dfsRootDir, RocksDBImmutableFile.LOG_FILES_DFS_SUBDIR)
