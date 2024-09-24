@@ -244,19 +244,8 @@ class SparkSession private[sql] (
   lazy val udf: UDFRegistration = new UDFRegistration(this)
 
   // scalastyle:off
-  // Disable style checker so "implicits" object can start with lowercase i
-  /**
-   * (Scala-specific) Implicit methods available in Scala for converting common names and Symbols
-   * into [[Column]]s, and for converting common Scala objects into DataFrame`s.
-   *
-   * {{{
-   *   val sparkSession = SparkSession.builder.getOrCreate()
-   *   import sparkSession.implicits._
-   * }}}
-   *
-   * @since 3.4.0
-   */
-  object implicits extends SQLImplicits(this) with Serializable
+  /** @inheritdoc */
+  object implicits extends SQLImplicits(this)
   // scalastyle:on
 
   /** @inheritdoc */

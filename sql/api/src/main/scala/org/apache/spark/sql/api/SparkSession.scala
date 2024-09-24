@@ -517,6 +517,19 @@ abstract class SparkSession extends Serializable with Closeable {
   def readStream: DataStreamReader
 
   /**
+   * (Scala-specific) Implicit methods available in Scala for converting common Scala objects into
+   * `DataFrame`s.
+   *
+   * {{{
+   *   val sparkSession = SparkSession.builder.getOrCreate()
+   *   import sparkSession.implicits._
+   * }}}
+   *
+   * @since 2.0.0
+   */
+  val implicits: SQLImplicits
+
+  /**
    * Executes some code block and prints to stdout the time taken to execute the block. This is
    * available in Scala only and is used primarily for interactive testing and debugging.
    *

@@ -3018,6 +3018,14 @@ abstract class Dataset[T] extends Serializable {
   def mergeInto(table: String, condition: Column): MergeIntoWriter[T]
 
   /**
+   * Interface for saving the content of the streaming Dataset out into external storage.
+   *
+   * @group basic
+   * @since 2.0.0
+   */
+  def writeStream: DataStreamWriter[T]
+
+  /**
    * Create a write configuration builder for v2 sources.
    *
    * This builder is used to configure and execute write operations. For example, to append to an
