@@ -91,7 +91,7 @@ object CompressionSchemeBenchmark extends BenchmarkBase with AllCompressionSchem
 
     schemes.filter(_.supports(tpe)).foreach { scheme =>
       val (compressFunc, compressionRatio, buf) = prepareEncodeInternal(count, tpe, scheme, input)
-      val label = s"${getFormattedClassName(scheme)}(${"%.3f".format(compressionRatio)})"
+      val label = s"${getFormattedClassName(scheme)}(${compressionRatio.formatted("%.3f")})"
 
       benchmark.addCase(label)({ i: Int =>
         for (n <- 0L until iters) {
