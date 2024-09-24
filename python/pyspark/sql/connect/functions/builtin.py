@@ -1015,10 +1015,10 @@ def uniform(
 ) -> Column:
     if seed is None:
         return _invoke_function_over_columns(
-            "uniform", min, max, lit(random.randint(0, sys.maxsize))
+            "uniform", lit(min), lit(max), lit(random.randint(0, sys.maxsize))
         )
     else:
-        return _invoke_function_over_columns("uniform", min, max, seed)
+        return _invoke_function_over_columns("uniform", lit(min), lit(max), lit(seed))
 
 
 uniform.__doc__ = pysparkfuncs.uniform.__doc__
@@ -2596,9 +2596,11 @@ regexp_like.__doc__ = pysparkfuncs.regexp_like.__doc__
 
 def randstr(length: Union[Column, int], seed: Optional[Union[Column, int]] = None) -> Column:
     if seed is None:
-        return _invoke_function_over_columns("randstr", length, lit(random.randint(0, sys.maxsize)))
+        return _invoke_function_over_columns(
+            "randstr", lit(length), lit(random.randint(0, sys.maxsize))
+        )
     else:
-        return _invoke_function_over_columns("randstr", length, seed)
+        return _invoke_function_over_columns("randstr", lit(length), lit(seed))
 
 
 randstr.__doc__ = pysparkfuncs.randstr.__doc__
