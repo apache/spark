@@ -116,6 +116,7 @@ private[spark] object KubernetesExecutorBackend extends Logging {
         }
       }
 
+      // Initialize logging system again after `spark.log.structuredLogging.enabled` takes effect
       Logging.uninitialize()
 
       cfg.hadoopDelegationCreds.foreach { tokens =>

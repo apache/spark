@@ -53,6 +53,7 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
 
   // This mutates the SparkConf, so all accesses to it must be made after this line
   Utils.loadDefaultSparkProperties(conf, propertiesFile)
+  // Initialize logging system again after `spark.log.structuredLogging.enabled` takes effect
   Logging.uninitialize()
 
   // scalastyle:off line.size.limit println

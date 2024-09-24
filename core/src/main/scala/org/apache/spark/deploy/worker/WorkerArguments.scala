@@ -60,6 +60,7 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
 
   // This mutates the SparkConf, so all accesses to it must be made after this line
   propertiesFile = Utils.loadDefaultSparkProperties(conf, propertiesFile)
+  // Initialize logging system again after `spark.log.structuredLogging.enabled` takes effect
   Logging.uninitialize()
 
   conf.get(WORKER_UI_PORT).foreach { webUiPort = _ }
