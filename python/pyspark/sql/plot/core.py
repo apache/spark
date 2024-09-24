@@ -93,9 +93,11 @@ class PySparkSampledPlotBase:
 
 class PySparkPlotAccessor:
     plot_data_map = {
+        "area": PySparkSampledPlotBase().get_sampled,
         "bar": PySparkTopNPlotBase().get_top_n,
         "barh": PySparkTopNPlotBase().get_top_n,
         "line": PySparkSampledPlotBase().get_sampled,
+        "scatter": PySparkSampledPlotBase().get_sampled,
     }
     _backends = {}  # type: ignore[var-annotated]
 
@@ -230,3 +232,70 @@ class PySparkPlotAccessor:
         ... )  # doctest: +SKIP
         """
         return self(kind="barh", x=x, y=y, **kwargs)
+
+    def scatter(self, x: str, y: str, **kwargs: Any) -> "Figure":
+        """
+        Create a scatter plot with varying marker point size and color.
+
+        The coordinates of each point are defined by two dataframe columns and
+        filled circles are used to represent each point. This kind of plot is
+        useful to see complex correlations between two variables. Points could
+        be for instance natural 2D coordinates like longitude and latitude in
+        a map or, in general, any pair of metrics that can be plotted against
+        each other.
+
+        Parameters
+        ----------
+        x : str
+            Name of column to use as horizontal coordinates for each point.
+        y : str or list of str
+            Name of column to use as vertical coordinates for each point.
+        **kwargs: Optional
+            Additional keyword arguments.
+
+        Returns
+        -------
+        :class:`plotly.graph_objs.Figure`
+
+        Examples
+        --------
+        >>> data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
+        >>> columns = ['length', 'width', 'species']
+        >>> df = spark.createDataFrame(data, columns)
+        >>> df.plot.scatter(x='length', y='width')  # doctest: +SKIP
+        """
+        return self(kind="scatter", x=x, y=y, **kwargs)
+
+    def area(self, x: str, y: str, **kwargs: Any) -> "Figure":
+        """
+        Draw a stacked area plot.
+
+        An area plot displays quantitative data visually.
+
+        Parameters
+        ----------
+        x : str
+            Name of column to use for the horizontal axis.
+        y : str or list of str
+            Name(s) of the column(s) to plot.
+        **kwargs: Optional
+            Additional keyword arguments.
+
+        Returns
+        -------
+        :class:`plotly.graph_objs.Figure`
+
+        Examples
+        --------
+        >>> from datetime import datetime
+        >>> data = [
+        ...     (3, 5, 20, datetime(2018, 1, 31)),
+        ...     (2, 5, 42, datetime(2018, 2, 28)),
+        ...     (3, 6, 28, datetime(2018, 3, 31)),
+        ...     (9, 12, 62, datetime(2018, 4, 30))
+        ... ]
+        >>> columns = ["sales", "signups", "visits", "date"]
+        >>> df = spark.createDataFrame(data, columns)
+        >>> df.plot.area(x='date', y=['sales', 'signups', 'visits'])  # doctest: +SKIP
+        """
+        return self(kind="area", x=x, y=y, **kwargs)
