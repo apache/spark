@@ -3178,20 +3178,6 @@ object SQLConf {
       .intConf
       .createWithDefault(1000)
 
-  val PYSPARK_PLOT_SAMPLE_RATIO =
-    buildConf("spark.sql.pyspark.plotting.sample_ratio")
-      .doc(
-        "The proportion of data that will be plotted for sample-based plots. It is determined " +
-          "based on spark.sql.pyspark.plotting.max_rows if not explicitly set."
-      )
-      .version("4.0.0")
-      .doubleConf
-      .checkValue(
-        ratio => ratio >= 0.0 && ratio <= 1.0,
-        "The value should be between 0.0 and 1.0 inclusive."
-      )
-      .createOptional
-
   val ARROW_SPARKR_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.sparkr.enabled")
       .doc("When true, make use of Apache Arrow for columnar data transfers in SparkR. " +
@@ -5906,8 +5892,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonUDFWorkerFaulthandlerEnabled: Boolean = getConf(PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED)
 
   def pysparkPlotMaxRows: Int = getConf(PYSPARK_PLOT_MAX_ROWS)
-
-  def pysparkPlotSampleRatio: Option[Double] = getConf(PYSPARK_PLOT_SAMPLE_RATIO)
 
   def arrowSparkREnabled: Boolean = getConf(ARROW_SPARKR_EXECUTION_ENABLED)
 
