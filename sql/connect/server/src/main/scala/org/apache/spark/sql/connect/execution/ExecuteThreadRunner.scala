@@ -48,13 +48,17 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   // forwarding of thread locals needs to be taken into account.
   private val executionThread: ExecutionThread = new ExecutionThread()
 
-  /** Launches the execution in a background thread, returns immediately. */
+  /**
+   * Launches the execution in a background thread, returns immediately. This method is expected
+   * to be invoked only once for an ExecuteHolder.
+   */
   private[connect] def start(): Unit = {
-    if (state.getAcquire() == ThreadState.notStarted) {
+    val currentState = state.getAcquire()
+    if (currentState == ThreadState.notStarted) {
       executionThread.start()
-
-      // If the thread is started earlier than this, the thread will change the state itself.
-      state.compareAndExchangeRelease(ThreadState.notStarted, ThreadState.started)
+    } else {
+      // This assertion does not hold if it is called more than once.
+      assert(currentState == ThreadState.interrupted)
     }
   }
 
@@ -76,7 +80,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       val prevState = state.compareAndExchangeRelease(currentState, newState)
       if (prevState == currentState) {
         if (prevState == ThreadState.notStarted) {
-          // The execution thread has not been started, and will never be started.
+          // The execution thread has not been started, or will immediately return because the state
+          // transition happens at the beginning of executeInternal.
           try {
             ErrorUtils.handleError(
               "execute",
@@ -169,9 +174,9 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   // Inner executeInternal is wrapped by execute() for error handling.
   private def executeInternal(): Unit = {
     val prevState = state.compareAndExchangeRelease(ThreadState.notStarted, ThreadState.started)
-    if (prevState != ThreadState.notStarted && prevState != ThreadState.started) {
+    if (prevState != ThreadState.notStarted) {
       // Silently return, expecting that the caller would handle the interruption.
-      assert(prevState != ThreadState.completed)
+      assert(prevState == ThreadState.interrupted)
       return
     }
 
@@ -245,7 +250,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
 
       // State transition should be atomic to prevent a situation in which a client of reattachable
       // execution receives ResultComplete, and proceeds to send ReleaseExecute, and that triggers
-      // an interrupt before it finishes.
+      // an interrupt before it finishes. Failing to transition to completed means that the thread
+      // was interrupted, and that will be checked at the end of the execution.
       if (state.compareAndExchangeRelease(
           ThreadState.started,
           ThreadState.completed) == ThreadState.started) {
