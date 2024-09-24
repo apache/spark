@@ -1618,12 +1618,7 @@ class Dataset[T] private[sql](
     new MergeIntoWriterImpl[T](table, this, condition)
   }
 
-  /**
-   * Interface for saving the content of the streaming Dataset out into external storage.
-   *
-   * @group basic
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def writeStream: DataStreamWriter[T] = {
     if (!isStreaming) {
       logicalPlan.failAnalysis(
