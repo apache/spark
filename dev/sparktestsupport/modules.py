@@ -550,6 +550,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_resources",
         "pyspark.sql.tests.plot.test_frame_plot",
         "pyspark.sql.tests.plot.test_frame_plot_plotly",
+        "pyspark.sql.tests.test_connect_compatibility",
     ],
 )
 

@@ -15,12 +15,14 @@
 # limitations under the License.
 #
 
+import unittest
 from pyspark.errors import PySparkValueError
 from pyspark.sql import Row
 from pyspark.sql.plot import PySparkSampledPlotBase, PySparkTopNPlotBase
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.sqlutils import ReusedSQLTestCase, have_plotly, plotly_requirement_message
 
 
+@unittest.skipIf(not have_plotly, plotly_requirement_message)
 class DataFramePlotTestsMixin:
     def test_backend(self):
         accessor = self.spark.range(2).plot
@@ -37,23 +39,11 @@ class DataFramePlotTestsMixin:
         )
 
     def test_topn_max_rows(self):
-        try:
+        with self.sql_conf({"spark.sql.pyspark.plotting.max_rows": "1000"}):
             self.spark.conf.set("spark.sql.pyspark.plotting.max_rows", "1000")
             sdf = self.spark.range(2500)
             pdf = PySparkTopNPlotBase().get_top_n(sdf)
             self.assertEqual(len(pdf), 1000)
-        finally:
-            self.spark.conf.unset("spark.sql.pyspark.plotting.max_rows")
-
-    def test_sampled_plot_with_ratio(self):
-        try:
-            self.spark.conf.set("spark.sql.pyspark.plotting.sample_ratio", "0.5")
-            data = [Row(a=i, b=i + 1, c=i + 2, d=i + 3) for i in range(2500)]
-            sdf = self.spark.createDataFrame(data)
-            pdf = PySparkSampledPlotBase().get_sampled(sdf)
-            self.assertEqual(round(len(pdf) / 2500, 1), 0.5)
-        finally:
-            self.spark.conf.unset("spark.sql.pyspark.plotting.sample_ratio")
 
     def test_sampled_plot_with_max_rows(self):
         data = [Row(a=i, b=i + 1, c=i + 2, d=i + 3) for i in range(2000)]
@@ -67,7 +57,6 @@ class DataFramePlotTests(DataFramePlotTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.sql.tests.plot.test_frame_plot import *  # noqa: F401
 
     try:

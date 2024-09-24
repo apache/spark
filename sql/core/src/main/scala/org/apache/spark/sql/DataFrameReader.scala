@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlOptions}
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -54,7 +55,9 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 @Stable
 class DataFrameReader private[sql](sparkSession: SparkSession)
-  extends api.DataFrameReader[Dataset] {
+  extends api.DataFrameReader {
+  override type DS[U] = Dataset[U]
+
   format(sparkSession.sessionState.conf.defaultDataSourceName)
 
   /** @inheritdoc */

@@ -42,7 +42,8 @@ private[sql] case class AvroDataToCatalyst(
     val dt = SchemaConverters.toSqlType(
       expectedSchema,
       avroOptions.useStableIdForUnionType,
-      avroOptions.stableIdPrefixForUnionType).dataType
+      avroOptions.stableIdPrefixForUnionType,
+      avroOptions.recursiveFieldMaxDepth).dataType
     parseMode match {
       // With PermissiveMode, the output Catalyst row might contain columns of null values for
       // corrupt records, even if some of the columns are not nullable in the user-provided schema.
@@ -69,7 +70,8 @@ private[sql] case class AvroDataToCatalyst(
       dataType,
       avroOptions.datetimeRebaseModeInRead,
       avroOptions.useStableIdForUnionType,
-      avroOptions.stableIdPrefixForUnionType)
+      avroOptions.stableIdPrefixForUnionType,
+      avroOptions.recursiveFieldMaxDepth)
 
   @transient private var decoder: BinaryDecoder = _
 

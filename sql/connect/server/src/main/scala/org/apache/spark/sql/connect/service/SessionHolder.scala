@@ -444,8 +444,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    */
   private[connect] def usePlanCache(rel: proto.Relation, cachePlan: Boolean)(
       transform: proto.Relation => LogicalPlan): LogicalPlan = {
-    val planCacheEnabled =
-      Option(session).forall(_.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED, true))
+    val planCacheEnabled = Option(session)
+      .forall(_.sessionState.conf.getConf(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED, true))
     // We only cache plans that have a plan ID.
     val hasPlanId = rel.hasCommon && rel.getCommon.hasPlanId
 

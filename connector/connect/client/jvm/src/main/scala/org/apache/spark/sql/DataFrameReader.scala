@@ -25,6 +25,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.types.StructType
 
@@ -35,8 +36,8 @@ import org.apache.spark.sql.types.StructType
  * @since 3.4.0
  */
 @Stable
-class DataFrameReader private[sql] (sparkSession: SparkSession)
-    extends api.DataFrameReader[Dataset] {
+class DataFrameReader private[sql] (sparkSession: SparkSession) extends api.DataFrameReader {
+  type DS[U] = Dataset[U]
 
   /** @inheritdoc */
   override def format(source: String): this.type = super.format(source)

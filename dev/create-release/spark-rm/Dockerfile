@@ -137,6 +137,7 @@ RUN python3.9 -m pip list
 
 RUN gem install --no-document "bundler:2.4.22"
 RUN ln -s "$(which python3.9)" "/usr/local/bin/python"
+RUN ln -s "$(which python3.9)" "/usr/local/bin/python3"
 
 WORKDIR /opt/spark-rm/output
 

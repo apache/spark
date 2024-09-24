@@ -36,7 +36,8 @@ import org.apache.spark.sql.types.StructType
  * @since 1.4.0
  */
 @Stable
-abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
+abstract class DataFrameReader {
+  type DS[U] <: Dataset[U]
 
   /**
    * Specifies the input data source format.
@@ -151,7 +152,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    *
    * @since 1.4.0
    */
-  def load(): DS[Row]
+  def load(): Dataset[Row]
 
   /**
    * Loads input in as a `DataFrame`, for data sources that require a path (e.g. data backed by a
@@ -159,7 +160,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    *
    * @since 1.4.0
    */
-  def load(path: String): DS[Row]
+  def load(path: String): Dataset[Row]
 
   /**
    * Loads input in as a `DataFrame`, for data sources that support multiple paths. Only works if
@@ -168,7 +169,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    * @since 1.6.0
    */
   @scala.annotation.varargs
-  def load(paths: String*): DS[Row]
+  def load(paths: String*): Dataset[Row]
 
   /**
    * Construct a `DataFrame` representing the database table accessible via JDBC URL url named
@@ -181,7 +182,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    *
    * @since 1.4.0
    */
-  def jdbc(url: String, table: String, properties: util.Properties): DS[Row] = {
+  def jdbc(url: String, table: String, properties: util.Properties): Dataset[Row] = {
     assertNoSpecifiedSchema("jdbc")
     // properties should override settings in extraOptions.
     this.extraOptions ++= properties.asScala
@@ -225,7 +226,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
       lowerBound: Long,
       upperBound: Long,
       numPartitions: Int,
-      connectionProperties: util.Properties): DS[Row] = {
+      connectionProperties: util.Properties): Dataset[Row] = {
     // columnName, lowerBound, upperBound and numPartitions override settings in extraOptions.
     this.extraOptions ++= Map(
       "partitionColumn" -> columnName,
@@ -262,7 +263,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
       url: String,
       table: String,
       predicates: Array[String],
-      connectionProperties: util.Properties): DS[Row]
+      connectionProperties: util.Properties): Dataset[Row]
 
   /**
    * Loads a JSON file and returns the results as a `DataFrame`.
@@ -271,7 +272,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    *
    * @since 1.4.0
    */
-  def json(path: String): DS[Row] = {
+  def json(path: String): Dataset[Row] = {
     // This method ensures that calls that explicit need single argument works, see SPARK-16009
     json(Seq(path): _*)
   }
@@ -292,7 +293,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def json(paths: String*): DS[Row] = {
+  def json(paths: String*): Dataset[Row] = {
     validateJsonSchema()
     format("json").load(paths: _*)
   }
@@ -308,7 +309,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    *   input Dataset with one JSON object per record
    * @since 2.2.0
    */
-  def json(jsonDataset: DS[String]): DS[Row]
+  def json(jsonDataset: DS[String]): Dataset[Row]
 
    /**
    * Loads a `JavaRDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON
@@ -345,7 +346,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    *
    * @since 2.0.0
    */
-  def csv(path: String): DS[Row] = {
+  def csv(path: String): Dataset[Row] = {
     // This method ensures that calls that explicit need single argument works, see SPARK-16009
     csv(Seq(path): _*)
   }
@@ -371,7 +372,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    *   input Dataset with one CSV row per record
    * @since 2.2.0
    */
-  def csv(csvDataset: DS[String]): DS[Row]
+  def csv(csvDataset: DS[String]): Dataset[Row]
 
   /**
    * Loads CSV files and returns the result as a `DataFrame`.
@@ -387,7 +388,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def csv(paths: String*): DS[Row] = format("csv").load(paths: _*)
+  def csv(paths: String*): Dataset[Row] = format("csv").load(paths: _*)
 
   /**
    * Loads a XML file and returns the result as a `DataFrame`. See the documentation on the other
@@ -395,7 +396,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    *
    * @since 4.0.0
    */
-  def xml(path: String): DS[Row] = {
+  def xml(path: String): Dataset[Row] = {
     // This method ensures that calls that explicit need single argument works, see SPARK-16009
     xml(Seq(path): _*)
   }
@@ -414,7 +415,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    * @since 4.0.0
    */
   @scala.annotation.varargs
-  def xml(paths: String*): DS[Row] = {
+  def xml(paths: String*): Dataset[Row] = {
     validateXmlSchema()
     format("xml").load(paths: _*)
   }
@@ -429,7 +430,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    *   input Dataset with one XML object per record
    * @since 4.0.0
    */
-  def xml(xmlDataset: DS[String]): DS[Row]
+  def xml(xmlDataset: DS[String]): Dataset[Row]
 
   /**
    * Loads a Parquet file, returning the result as a `DataFrame`. See the documentation on the
@@ -437,7 +438,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    *
    * @since 2.0.0
    */
-  def parquet(path: String): DS[Row] = {
+  def parquet(path: String): Dataset[Row] = {
     // This method ensures that calls that explicit need single argument works, see SPARK-16009
     parquet(Seq(path): _*)
   }
@@ -452,7 +453,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    * @since 1.4.0
    */
   @scala.annotation.varargs
-  def parquet(paths: String*): DS[Row] = format("parquet").load(paths: _*)
+  def parquet(paths: String*): Dataset[Row] = format("parquet").load(paths: _*)
 
   /**
    * Loads an ORC file and returns the result as a `DataFrame`.
@@ -461,7 +462,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    *   input path
    * @since 1.5.0
    */
-  def orc(path: String): DS[Row] = {
+  def orc(path: String): Dataset[Row] = {
     // This method ensures that calls that explicit need single argument works, see SPARK-16009
     orc(Seq(path): _*)
   }
@@ -478,7 +479,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def orc(paths: String*): DS[Row] = format("orc").load(paths: _*)
+  def orc(paths: String*): Dataset[Row] = format("orc").load(paths: _*)
 
   /**
    * Returns the specified table/view as a `DataFrame`. If it's a table, it must support batch
@@ -493,7 +494,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    *   database. Note that, the global temporary view database is also valid here.
    * @since 1.4.0
    */
-  def table(tableName: String): DS[Row]
+  def table(tableName: String): Dataset[Row]
 
   /**
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named
@@ -502,7 +503,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    *
    * @since 2.0.0
    */
-  def text(path: String): DS[Row] = {
+  def text(path: String): Dataset[Row] = {
     // This method ensures that calls that explicit need single argument works, see SPARK-16009
     text(Seq(path): _*)
   }
@@ -530,14 +531,14 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    * @since 1.6.0
    */
   @scala.annotation.varargs
-  def text(paths: String*): DS[Row] = format("text").load(paths: _*)
+  def text(paths: String*): Dataset[Row] = format("text").load(paths: _*)
 
   /**
    * Loads text files and returns a [[Dataset]] of String. See the documentation on the other
    * overloaded `textFile()` method for more details.
    * @since 2.0.0
    */
-  def textFile(path: String): DS[String] = {
+  def textFile(path: String): Dataset[String] = {
     // This method ensures that calls that explicit need single argument works, see SPARK-16009
     textFile(Seq(path): _*)
   }
@@ -565,7 +566,7 @@ abstract class DataFrameReader[DS[U] <: Dataset[U, DS]] {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def textFile(paths: String*): DS[String] = {
+  def textFile(paths: String*): Dataset[String] = {
     assertNoSpecifiedSchema("textFile")
     text(paths: _*).select("value").as(StringEncoder)
   }

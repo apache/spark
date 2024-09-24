@@ -32,6 +32,7 @@ BUCKETS	false
 BY	false
 BYTE	false
 CACHE	false
+CALL	false
 CALLED	false
 CASCADE	false
 CASE	false
@@ -48,7 +49,6 @@ CLUSTERED	false
 CODEGEN	false
 COLLATE	false
 COLLATION	false
-COLLATIONS	false
 COLLECTION	false
 COLUMN	false
 COLUMNS	false
@@ -142,6 +142,7 @@ HAVING	false
 HOUR	false
 HOURS	false
 IDENTIFIER	false
+IDENTITY	false
 IF	false
 IGNORE	false
 ILIKE	false
@@ -149,6 +150,7 @@ IMMEDIATE	false
 IMPORT	false
 IN	false
 INCLUDE	false
+INCREMENT	false
 INDEX	false
 INDEXES	false
 INNER	false

@@ -7417,7 +7417,7 @@
         "standard": "N",
         "usedBy": ["Databricks"]
     },
-    "KD00F": {
+    "KD010": {
         "description": "external data source failure",
         "origin": "Databricks",
         "standard": "N",
