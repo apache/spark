@@ -176,8 +176,19 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         assert(ex.isInstanceOf[StateDataSourceInvalidOptionValue])
         assert(ex.getMessage.contains("State variable non-exist is not defined"))
 
-        // TODO: this should be removed when readChangeFeed is supported for value state
+        // Verify that trying to read timers in TimeMode as None fails
         val ex1 = intercept[Exception] {
+          spark.read
+            .format("statestore")
+            .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+            .option(StateSourceOptions.READ_REGISTERED_TIMERS, true)
+            .load()
+        }
+        assert(ex1.isInstanceOf[StateDataSourceInvalidOptionValue])
+        assert(ex1.getMessage.contains("Registered timers are not available"))
+
+        // TODO: this should be removed when readChangeFeed is supported for value state
+        val ex2 = intercept[Exception] {
           spark.read
             .format("statestore")
             .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
@@ -186,7 +197,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
             .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
             .load()
         }
-        assert(ex1.isInstanceOf[StateDataSourceConflictOptions])
+        assert(ex2.isInstanceOf[StateDataSourceConflictOptions])
       }
     }
   }
