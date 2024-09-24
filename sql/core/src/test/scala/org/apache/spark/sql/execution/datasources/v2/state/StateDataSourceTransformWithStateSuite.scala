@@ -392,6 +392,17 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           .option(StateSourceOptions.STATE_VAR_NAME, "groupsListWithTTL")
           .load()
 
+        val flattenedResultDf = flattenedStateReaderDf
+          .selectExpr("list_element.ttlExpirationMs AS ttlExpirationMs")
+        var flattenedCount = 0L
+        flattenedResultDf.collect().foreach { row =>
+          flattenedCount = flattenedCount + 1
+          assert(row.getLong(0) > 0)
+        }
+
+        // verify that 5 state rows are present
+        assert(flattenedCount === 5)
+
         val outputDf = flattenedStateReaderDf
           .selectExpr("key.value AS groupingKey",
             "list_element.value.value AS groupId")
