@@ -304,7 +304,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def overflowInConvError(context: QueryContext): ArithmeticException = {
-    arithmeticOverflowError("Overflow in function conv()", context = context)
+    arithmeticOverflowError("Overflow in function conv()", hint = "try_conv", context = context)
   }
 
   def mapSizeExceedArraySizeWhenZipMapError(size: Int): SparkRuntimeException = {

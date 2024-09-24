@@ -618,6 +618,13 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
 ceiling.__doc__ = pysparkfuncs.ceiling.__doc__
 
 
+def try_conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
+    return _invoke_function("try_conv", _to_col(col), lit(fromBase), lit(toBase))
+
+
+try_conv.__doc__ = pysparkfuncs.conv.__doc__
+
+
 def conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
     return _invoke_function("conv", _to_col(col), lit(fromBase), lit(toBase))
 
