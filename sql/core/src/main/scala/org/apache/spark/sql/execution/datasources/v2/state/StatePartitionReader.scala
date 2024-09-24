@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.v2.state
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
-import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.{StateVariableType, TransformWithStateVariableInfo}
@@ -75,9 +74,11 @@ abstract class StatePartitionReaderBase(
     StructType(Array(StructField("__dummy__", NullType)))
 
   protected val keySchema = {
-    if (!SchemaUtil.isMapStateVariable(stateVariableInfoOpt)) {
+    if (SchemaUtil.checkVariableType(stateVariableInfoOpt, StateVariableType.MapState)) {
+      SchemaUtil.getCompositeKeySchema(schema, partition.sourceOptions)
+    } else {
       SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
-    } else SchemaUtil.getCompositeKeySchema(schema)
+    }
   }
 
   protected val valueSchema = if (stateVariableInfoOpt.isDefined) {
@@ -98,12 +99,8 @@ abstract class StatePartitionReaderBase(
       false
     }
 
-    val useMultipleValuesPerKey = if (stateVariableInfoOpt.isDefined &&
-      stateVariableInfoOpt.get.stateVariableType == StateVariableType.ListState) {
-      true
-    } else {
-      false
-    }
+    val useMultipleValuesPerKey = SchemaUtil.checkVariableType(stateVariableInfoOpt,
+      StateVariableType.ListState)
 
     val provider = StateStoreProvider.createAndInit(
       stateStoreProviderId, keySchema, valueSchema, keyStateEncoderSpec,
@@ -149,7 +146,7 @@ abstract class StatePartitionReaderBase(
 
 /**
  * An implementation of [[StatePartitionReaderBase]] for the normal mode of State Data
- * Source. It reads the the state at a particular batchId.
+ * Source. It reads the state at a particular batchId.
  */
 class StatePartitionReader(
     storeConf: StateStoreConf,
@@ -181,41 +178,17 @@ class StatePartitionReader(
   override lazy val iter: Iterator[InternalRow] = {
     val stateVarName = stateVariableInfoOpt
       .map(_.stateName).getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME)
-    if (SchemaUtil.isMapStateVariable(stateVariableInfoOpt)) {
-      SchemaUtil.unifyMapStateRowPair(
-        store.iterator(stateVarName), keySchema, partition.partition)
+
+    if (stateVariableInfoOpt.isDefined) {
+      val stateVariableInfo = stateVariableInfoOpt.get
+      val stateVarType = stateVariableInfo.stateVariableType
+      SchemaUtil.processStateEntries(stateVarType, stateVarName, store,
+        keySchema, partition.partition, partition.sourceOptions)
     } else {
       store
         .iterator(stateVarName)
         .map { pair =>
-          stateVariableInfoOpt match {
-            case Some(stateVarInfo) =>
-              val stateVarType = stateVarInfo.stateVariableType
-
-              stateVarType match {
-                case StateVariableType.ValueState =>
-                  SchemaUtil.unifyStateRowPair((pair.key, pair.value), partition.partition)
-
-                case StateVariableType.ListState =>
-                  val key = pair.key
-                  val result = store.valuesIterator(key, stateVarName)
-                  var unsafeRowArr: Seq[UnsafeRow] = Seq.empty
-                  result.foreach { entry =>
-                    unsafeRowArr = unsafeRowArr :+ entry.copy()
-                  }
-                  // convert the list of values to array type
-                  val arrData = new GenericArrayData(unsafeRowArr.toArray)
-                  SchemaUtil.unifyStateRowPairWithMultipleValues((pair.key, arrData),
-                    partition.partition)
-
-                case _ =>
-                  throw new IllegalStateException(
-                    s"Unsupported state variable type: $stateVarType")
-              }
-
-            case None =>
-              SchemaUtil.unifyStateRowPair((pair.key, pair.value), partition.partition)
-          }
+          SchemaUtil.unifyStateRowPair((pair.key, pair.value), partition.partition)
         }
     }
   }
