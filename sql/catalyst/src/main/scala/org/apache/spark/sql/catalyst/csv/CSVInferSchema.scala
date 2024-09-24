@@ -213,8 +213,15 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   }
 
   private def tryParseTimestamp(field: String): DataType = {
-    // This case infers a custom `dataFormat` is set.
-    if (timestampParser.parseOptional(field).isDefined) {
+    /**
+     * This case infers Time only column to String
+     * if the `inferStringTypeForTimeOnlyColumnFlag` is true
+     */
+    if (timestampParser.parseTimeOptional
+    (field, options.inferStringTypeForTimeOnlyColumnFlag).isDefined) {
+      stringType()
+    } // This case infers a custom `dataFormat` is set.
+    else if (timestampParser.parseOptional(field).isDefined) {
       TimestampType
     } else {
       tryParseBoolean(field)

@@ -122,6 +122,8 @@ class CSVOptions(
 
   val headerFlag = getBool(HEADER)
   val inferSchemaFlag = getBool(INFER_SCHEMA)
+  val inferStringTypeForTimeOnlyColumnFlag =
+    getBool(INFER_STRING_TYPE_FOR_TIME_ONLY_COLUMN, default = false)
   val ignoreLeadingWhiteSpaceInRead = getBool(IGNORE_LEADING_WHITESPACE, default = false)
   val ignoreTrailingWhiteSpaceInRead = getBool(IGNORE_TRAILING_WHITESPACE, default = false)
 
@@ -396,4 +398,5 @@ object CSVOptions extends DataSourceOptions {
   val DELIMITER = "delimiter"
   newOption(SEP, DELIMITER)
   val COLUMN_PRUNING = newOption("columnPruning")
+  val INFER_STRING_TYPE_FOR_TIME_ONLY_COLUMN = newOption("inferStringTypeForTimeOnlyColumn")
 }

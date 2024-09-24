@@ -68,6 +68,48 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
     assert(inferSchema.inferField(IntegerType, textValueOne) == expectedTypeOne)
   }
 
+  test("String fields types are inferred for time only columns") {
+    val options = new CSVOptions(Map("inferStringTypeForTimeOnlyColumn" -> "true"), false, "UTC")
+    val inferSchema = new CSVInferSchema(options)
+
+    assert(inferSchema.inferField(NullType, "") == NullType)
+    assert(inferSchema.inferField(NullType, null) == NullType)
+    assert(inferSchema.inferField(NullType, "100000000000") == LongType)
+    assert(inferSchema.inferField(NullType, "60") == IntegerType)
+    assert(inferSchema.inferField(NullType, "3.5") == DoubleType)
+    assert(inferSchema.inferField(NullType, "test") == StringType)
+    assert(inferSchema.inferField(NullType, "2015-08-20 15:57:00") == TimestampType)
+    assert(inferSchema.inferField(NullType, "True") == BooleanType)
+    assert(inferSchema.inferField(NullType, "FAlSE") == BooleanType)
+    assert(inferSchema.inferField(NullType, "10:11:12") == StringType)
+
+    val textValueOne = Long.MaxValue.toString + "0"
+    val decimalValueOne = new java.math.BigDecimal(textValueOne)
+    val expectedTypeOne = DecimalType(decimalValueOne.precision, decimalValueOne.scale)
+    assert(inferSchema.inferField(NullType, textValueOne) == expectedTypeOne)
+  }
+
+  test("Timestamp field types are inferred for time only columns") {
+    val options = new CSVOptions(Map.empty[String, String], false, "UTC")
+    val inferSchema = new CSVInferSchema(options)
+
+    assert(inferSchema.inferField(NullType, "") == NullType)
+    assert(inferSchema.inferField(NullType, null) == NullType)
+    assert(inferSchema.inferField(NullType, "100000000000") == LongType)
+    assert(inferSchema.inferField(NullType, "60") == IntegerType)
+    assert(inferSchema.inferField(NullType, "3.5") == DoubleType)
+    assert(inferSchema.inferField(NullType, "test") == StringType)
+    assert(inferSchema.inferField(NullType, "2015-08-20 15:57:00") == TimestampType)
+    assert(inferSchema.inferField(NullType, "True") == BooleanType)
+    assert(inferSchema.inferField(NullType, "FAlSE") == BooleanType)
+    assert(inferSchema.inferField(NullType, "10:11:12") == TimestampType)
+
+    val textValueOne = Long.MaxValue.toString + "0"
+    val decimalValueOne = new java.math.BigDecimal(textValueOne)
+    val expectedTypeOne = DecimalType(decimalValueOne.precision, decimalValueOne.scale)
+    assert(inferSchema.inferField(NullType, textValueOne) == expectedTypeOne)
+  }
+
   test("Timestamp field types are inferred correctly via custom data format") {
     var options = new CSVOptions(Map("timestampFormat" -> "yyyy-mm"), false, "UTC")
     var inferSchema = new CSVInferSchema(options)

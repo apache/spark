@@ -603,6 +603,33 @@ trait SparkDateTimeUtils {
     }
   }
 
+  /**
+   * Trims and parses a given UTF8 time string value, returning the corresponding [[String]] value.
+   *
+   * - If the input string is not a valid time string, the return value is [[None]].
+   * - If the input is a valid time string and `parseAsString` is true,
+   * the return value is a [[String]].
+   *
+   * @param input The UTF8 time string to be parsed.
+   * @param inferTimeAsString Boolean flag to determine whether to return the time
+   *                      string as [[String]] if valid.
+   */
+
+  def stringToTime(s: UTF8String, inferTimeAsString: Boolean): Option[String] = {
+    try {
+      val (segments, parsedZoneId, justTime) = parseTimestampString(s)
+      if (segments.isEmpty) {
+        return None
+      }
+      if(inferTimeAsString && justTime) {
+        return Some(s.toString)
+      }
+      None
+    } catch {
+      case NonFatal(_) => None
+    }
+  }
+
   def stringToTimestampAnsi(
       s: UTF8String,
       timeZoneId: ZoneId,
