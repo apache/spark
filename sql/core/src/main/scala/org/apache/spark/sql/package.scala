@@ -18,9 +18,7 @@
 package org.apache.spark
 
 import org.apache.spark.annotation.{DeveloperApi, Unstable}
-import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.SparkStrategy
-import org.apache.spark.sql.internal.ExpressionUtils
 
 /**
  * Allows the execution of relational queries, including those expressed in SQL using Spark.

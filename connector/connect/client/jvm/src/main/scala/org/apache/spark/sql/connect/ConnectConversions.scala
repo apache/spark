@@ -81,8 +81,6 @@ trait ConnectConversions {
   @DeveloperApi
   implicit class ColumnConstructorExt(val c: Column.type) {
     def apply(e: proto.Expression): Column = column(e)
-
-    def apply(f: proto.Expression.Builder => Unit): Column = column(f)
   }
 }
 

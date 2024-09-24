@@ -17,11 +17,11 @@
 package org.apache.spark.sql.classic
 
 import scala.language.implicitConversions
+
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.internal.{ExpressionUtils, RuntimeConfigImpl}
+import org.apache.spark.sql.internal.ExpressionUtils
 
 /**
  * Conversions from sql interfaces to the Classic specific implementation.
