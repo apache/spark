@@ -514,8 +514,14 @@ public final class CollationFactory {
       }
 
       private static boolean isValidCollationId(int collationId) {
-        collationId = SpecifierUtils.removeSpec(collationId, SPACE_TRIMMING_OFFSET, SPACE_TRIMMING_MASK);
-        collationId = SpecifierUtils.removeSpec(collationId, CASE_SENSITIVITY_OFFSET, CASE_SENSITIVITY_MASK);
+        collationId = SpecifierUtils.removeSpec(
+          collationId,
+          SPACE_TRIMMING_OFFSET,
+          SPACE_TRIMMING_MASK);
+        collationId = SpecifierUtils.removeSpec(
+          collationId,
+          CASE_SENSITIVITY_OFFSET,
+          CASE_SENSITIVITY_MASK);
         return collationId == 0;
       }
 
@@ -1093,7 +1099,8 @@ public final class CollationFactory {
    * Returns whether the collation uses trim collation for the given collation id.
    */
   public static boolean usesTrimCollation(int collationId) {
-    return Collation.CollationSpec.getSpaceTrimming(collationId) != Collation.CollationSpec.SpaceTrimming.NONE;
+    return Collation.CollationSpec.getSpaceTrimming(collationId) !=
+      Collation.CollationSpec.SpaceTrimming.NONE;
   }
 
   public static void assertValidProvider(String provider) throws SparkException {
