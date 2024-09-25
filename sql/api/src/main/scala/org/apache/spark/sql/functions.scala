@@ -1897,6 +1897,26 @@ object functions {
   def randn(): Column = randn(SparkClassUtils.random.nextLong)
 
   /**
+   * Returns a string of the specified length whose characters are chosen uniformly at random from
+   * the following pool of characters: 0-9, a-z, A-Z. The string length must be a constant
+   * two-byte or four-byte integer (SMALLINT or INT, respectively).
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def randstr(length: Column): Column = Column.fn("randstr", length)
+
+  /**
+   * Returns a string of the specified length whose characters are chosen uniformly at random from
+   * the following pool of characters: 0-9, a-z, A-Z, with the chosen random seed. The string
+   * length must be a constant two-byte or four-byte integer (SMALLINT or INT, respectively).
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def randstr(length: Column, seed: Column): Column = Column.fn("randstr", length, seed)
+
+  /**
    * Partition ID.
    *
    * @note
@@ -3739,6 +3759,31 @@ object functions {
    * @since 3.5.0
    */
   def stack(cols: Column*): Column = Column.fn("stack", cols: _*)
+
+  /**
+   * Returns a random value with independent and identically distributed (i.i.d.) values with the
+   * specified range of numbers. The provided numbers specifying the minimum and maximum values of
+   * the range must be constant. If both of these numbers are integers, then the result will also
+   * be an integer. Otherwise if one or both of these are floating-point numbers, then the result
+   * will also be a floating-point number.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def uniform(min: Column, max: Column): Column = Column.fn("uniform", min, max)
+
+  /**
+   * Returns a random value with independent and identically distributed (i.i.d.) values with the
+   * specified range of numbers, with the chosen random seed. The provided numbers specifying the
+   * minimum and maximum values of the range must be constant. If both of these numbers are
+   * integers, then the result will also be an integer. Otherwise if one or both of these are
+   * floating-point numbers, then the result will also be a floating-point number.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def uniform(min: Column, max: Column, seed: Column): Column =
+    Column.fn("uniform", min, max, seed)
 
   /**
    * Returns a random value with independent and identically distributed (i.i.d.) uniformly

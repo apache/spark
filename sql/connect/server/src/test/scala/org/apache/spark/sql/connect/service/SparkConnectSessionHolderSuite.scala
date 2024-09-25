@@ -413,4 +413,13 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     planner.transformRelation(query, cachePlan = true)
     assertPlanCache(sessionHolder, Some(Set()))
   }
+
+  test("Test duplicate operation IDs") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    sessionHolder.addOperationId("DUMMY")
+    val ex = intercept[IllegalStateException] {
+      sessionHolder.addOperationId("DUMMY")
+    }
+    assert(ex.getMessage.contains("already exists"))
+  }
 }
