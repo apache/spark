@@ -288,17 +288,15 @@ object JavaTypeInference {
     val typeSeeen = mutable.Set.empty[Type]
     while (queue.nonEmpty) {
       val typeToCheck = queue.dequeue()
-      if (!typeSeeen.contains(typeToCheck)) {
-        typeSeeen += typeToCheck
-        typeToCheck match {
-          case clazz: Class[_] =>
-            result += clazz
-            queue ++= clazz.getInterfaces
-            Option(clazz.getSuperclass).foreach(queue += _)
+      typeSeeen += typeToCheck
+      typeToCheck match {
+        case clazz: Class[_] =>
+          result += clazz
+          queue ++= clazz.getInterfaces.filterNot(typeSeeen.contains)
+          Option(clazz.getSuperclass).filterNot(typeSeeen.contains).foreach(queue += _)
 
-          case tv: TypeVariable[_] =>
-            queue ++= tv.getBounds
-        }
+        case tv: TypeVariable[_] =>
+          queue ++= tv.getBounds.filterNot(typeSeeen.contains)
       }
     }
     result.toSeq
