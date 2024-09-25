@@ -81,7 +81,56 @@ case class PartitionedFile(
  */
 case class FileScanMetrics(
     topLevelVariantMetrics: Option[VariantMetrics] = None,
-    nestedVariantMetrics: Option[VariantMetrics] = None)
+    nestedVariantMetrics: Option[VariantMetrics] = None) {
+
+  // Update SQL metrics with the data in topLevelVariantMetrics and nestedVariantMetrics
+  def updateSQLMetrics(sqlMetrics: Option[Map[String, SQLMetric]]): Unit = {
+    sqlMetrics match {
+      case Some(sqlMetrics) =>
+        topLevelVariantMetrics match {
+          case Some(metrics) =>
+            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_NUMBER_OF_VARIANTS)
+              .add(metrics.variantCount)
+            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_BYTE_SIZE_BOUND)
+              .add(metrics.byteSize)
+            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_NUM_SCALARS)
+              .add(metrics.numScalars)
+            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_NUM_PATHS)
+              .add(metrics.numPaths)
+            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_MAX_DEPTH)
+              .set(
+                Math.max(
+                  sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_MAX_DEPTH).value,
+                  metrics.maxDepth
+                )
+              )
+            metrics.reset()
+          case None =>
+        }
+        nestedVariantMetrics match {
+          case Some(metrics) =>
+            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_NUMBER_OF_VARIANTS)
+              .add(metrics.variantCount)
+            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_BYTE_SIZE_BOUND)
+              .add(metrics.byteSize)
+            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_NUM_SCALARS)
+              .add(metrics.numScalars)
+            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_NUM_PATHS)
+              .add(metrics.numPaths)
+            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_MAX_DEPTH)
+              .set(
+                Math.max(
+                  sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_MAX_DEPTH).value,
+                  metrics.maxDepth
+                )
+              )
+            metrics.reset()
+          case None =>
+        }
+      case None =>
+    }
+  }
+}
 
 /**
  * An RDD that scans a list of file partitions.
@@ -102,58 +151,6 @@ class FileScanRDD(
     fileScanMetricsObject: Option[FileScanMetrics] = None,
     sqlMetrics: Option[Map[String, SQLMetric]] = None)
   extends RDD[InternalRow](sparkSession.sparkContext, Nil) {
-
-  private def updateVariantBuilderMetrics(): Unit = {
-    sqlMetrics match {
-      case Some(sqlMetrics) =>
-        fileScanMetricsObject match {
-          case Some(metricsObject) =>
-            metricsObject.topLevelVariantMetrics match {
-              case Some(metrics) =>
-                sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_NUMBER_OF_VARIANTS)
-                  .add(metrics.variantCount)
-                sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_BYTE_SIZE_BOUND)
-                  .add(metrics.byteSize)
-                sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_NUM_SCALARS)
-                  .add(metrics.numScalars)
-                sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_NUM_PATHS)
-                  .add(metrics.numPaths)
-                sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_MAX_DEPTH)
-                  .set(
-                    Math.max(
-                      sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_MAX_DEPTH)
-                        .value,
-                      metrics.maxDepth
-                    )
-                  )
-                metrics.reset()
-              case None =>
-            }
-            metricsObject.nestedVariantMetrics match {
-              case Some(metrics) =>
-                sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_NUMBER_OF_VARIANTS)
-                  .add(metrics.variantCount)
-                sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_BYTE_SIZE_BOUND)
-                  .add(metrics.byteSize)
-                sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_NUM_SCALARS)
-                  .add(metrics.numScalars)
-                sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_NUM_PATHS)
-                  .add(metrics.numPaths)
-                sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_MAX_DEPTH)
-                  .set(
-                    Math.max(
-                      sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_MAX_DEPTH).value,
-                      metrics.maxDepth
-                    )
-                  )
-                metrics.reset()
-              case None =>
-            }
-          case None =>
-        }
-      case None =>
-    }
-  }
 
   private val ignoreCorruptFiles = options.ignoreCorruptFiles
   private val ignoreMissingFiles = options.ignoreMissingFiles
@@ -302,7 +299,10 @@ class FileScanRDD(
         // This function is called at the end of each file and before the first file. Therefore,
         // we update the Variant Metrics at the end of each JSON file and reset the
         // variant metrics objects to process the next file.
-        updateVariantBuilderMetrics()
+        fileScanMetricsObject match {
+          case Some(metrics) => metrics.updateSQLMetrics(sqlMetrics)
+          case None =>
+        }
         if (files.hasNext) {
           currentFile = files.next()
           updateMetadataRow()
