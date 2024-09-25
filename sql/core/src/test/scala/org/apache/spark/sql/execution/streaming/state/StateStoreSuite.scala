@@ -1095,7 +1095,6 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
       val store = provider.getStore(0)
       assert(!store.hasCommitted)
-      logWarning(s"Version 0 has been loaded but not committed.")
       assert(get(store, "a", 0) === None)
       assert(store.iterator().isEmpty)
       assert(store.metrics.numKeys === 0)
