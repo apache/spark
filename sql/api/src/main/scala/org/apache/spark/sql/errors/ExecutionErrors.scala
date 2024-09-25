@@ -123,9 +123,7 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
     } else ""
     new SparkArithmeticException(
       errorClass = "ARITHMETIC_OVERFLOW",
-      messageParameters = Map(
-        "message" -> message,
-        "try_alternative" -> alternative),
+      messageParameters = Map("message" -> message, "try_alternative" -> alternative),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
