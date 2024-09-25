@@ -1130,10 +1130,21 @@ class TypesTestsMixin:
     def test_cast_to_udt_with_udt(self):
         row = Row(point=ExamplePoint(1.0, 2.0), python_only_point=PythonOnlyPoint(1.0, 2.0))
         df = self.spark.createDataFrame([row])
-        with self.assertRaises(AnalysisException):
-            df.select(F.col("point").cast(PythonOnlyUDT())).collect()
-        with self.assertRaises(AnalysisException):
-            df.select(F.col("python_only_point").cast(ExamplePointUDT())).collect()
+        result = df.select(F.col("point").cast(PythonOnlyUDT())).collect()
+        self.assertEqual(
+            result,
+            [
+                Row(point=PythonOnlyPoint(1.0, 2.0))
+            ],
+        )
+
+        result = df.select(F.col("python_only_point").cast(ExamplePointUDT())).collect()
+        self.assertEqual(
+            result,
+            [
+                Row(python_only_point=ExamplePoint(1.0, 2.0))
+            ],
+        )
 
     def test_struct_type(self):
         struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
