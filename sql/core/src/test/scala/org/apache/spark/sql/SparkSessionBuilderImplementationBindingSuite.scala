@@ -14,15 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql
 
-package org.apache.spark
+import org.apache.spark.sql.test.SharedSparkSession
 
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-
-package object sql {
-  type DataFrame = Dataset[Row]
-
-  private[sql] def encoderFor[E: Encoder]: AgnosticEncoder[E] = {
-    implicitly[Encoder[E]].asInstanceOf[AgnosticEncoder[E]]
-  }
-}
+/**
+ * Make sure the api.SparkSessionBuilder binds to Classic implementation.
+ */
+class SparkSessionBuilderImplementationBindingSuite
+  extends SharedSparkSession
+  with api.SparkSessionBuilderImplementationBindingSuite

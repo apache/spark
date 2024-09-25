@@ -70,7 +70,6 @@ from pyspark.sql.types import (
     StringType,
 )
 from pyspark.sql.utils import enum_to_value as _enum_to_value
-from pyspark.util import JVM_INT_MAX
 
 # The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
 # for code reuse.
@@ -1008,6 +1007,22 @@ def unhex(col: "ColumnOrName") -> Column:
 unhex.__doc__ = pysparkfuncs.unhex.__doc__
 
 
+def uniform(
+    min: Union[Column, int, float],
+    max: Union[Column, int, float],
+    seed: Optional[Union[Column, int]] = None,
+) -> Column:
+    if seed is None:
+        return _invoke_function_over_columns(
+            "uniform", lit(min), lit(max), lit(random.randint(0, sys.maxsize))
+        )
+    else:
+        return _invoke_function_over_columns("uniform", lit(min), lit(max), lit(seed))
+
+
+uniform.__doc__ = pysparkfuncs.uniform.__doc__
+
+
 def approxCountDistinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
     warnings.warn("Deprecated in 3.4, use approx_count_distinct instead.", FutureWarning)
     return approx_count_distinct(col, rsd)
@@ -1130,7 +1145,7 @@ def count_min_sketch(
     confidence: Union[Column, float],
     seed: Optional[Union[Column, int]] = None,
 ) -> Column:
-    _seed = lit(random.randint(0, JVM_INT_MAX)) if seed is None else lit(seed)
+    _seed = lit(random.randint(0, sys.maxsize)) if seed is None else lit(seed)
     return _invoke_function_over_columns("count_min_sketch", col, lit(eps), lit(confidence), _seed)
 
 
@@ -2580,6 +2595,18 @@ def regexp_like(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 
 
 regexp_like.__doc__ = pysparkfuncs.regexp_like.__doc__
+
+
+def randstr(length: Union[Column, int], seed: Optional[Union[Column, int]] = None) -> Column:
+    if seed is None:
+        return _invoke_function_over_columns(
+            "randstr", lit(length), lit(random.randint(0, sys.maxsize))
+        )
+    else:
+        return _invoke_function_over_columns("randstr", lit(length), lit(seed))
+
+
+randstr.__doc__ = pysparkfuncs.randstr.__doc__
 
 
 def regexp_count(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
