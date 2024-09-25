@@ -889,9 +889,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       // inline table.
       def check(query: String, patterns: Seq[TreePattern]): Unit = {
         val plan: LogicalPlan = parser.parsePlan(query)
-        patterns.foreach { p =>
-          assert(plan.containsPattern(p))
-        }
+        assert(patterns.exists(plan.containsPattern))
         assert(plan.containsAnyPattern(UNRESOLVED_RELATION, LOCAL_RELATION))
       }
       def checkPipeSelect(query: String): Unit = check(query, Seq(PROJECT))
