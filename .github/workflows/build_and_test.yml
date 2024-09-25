@@ -1162,9 +1162,3 @@ jobs:
           cd ui-test
           npm install --save-dev
           node --experimental-vm-modules node_modules/.bin/jest
-
-  maven-test:
-    name: "Run Maven Test"
-    permissions:
-      packages: write
-    uses: ./.github/workflows/maven_test.yml
