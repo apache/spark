@@ -47,7 +47,7 @@ public class LevelDBIterator implements DBIterator {
         try {
           close();
         } catch (IOException ioe) {
-          throw Throwables.propagate(ioe);
+          throw new RuntimeException(ioe);
         }
       }
       return next != null;

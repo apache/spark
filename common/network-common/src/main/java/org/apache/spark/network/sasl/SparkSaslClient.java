@@ -62,7 +62,7 @@ public class SparkSaslClient implements SaslEncryptionBackend {
       this.saslClient = Sasl.createSaslClient(new String[] { DIGEST }, null, null, DEFAULT_REALM,
         saslProps, new ClientCallbackHandler());
     } catch (SaslException e) {
-      throw Throwables.propagate(e);
+      throw new RuntimeException(e);
     }
   }
 
@@ -72,7 +72,7 @@ public class SparkSaslClient implements SaslEncryptionBackend {
       try {
         return saslClient.evaluateChallenge(new byte[0]);
       } catch (SaslException e) {
-        throw Throwables.propagate(e);
+        throw new RuntimeException(e);
       }
     } else {
       return new byte[0];
@@ -98,7 +98,7 @@ public class SparkSaslClient implements SaslEncryptionBackend {
     try {
       return saslClient != null ? saslClient.evaluateChallenge(token) : new byte[0];
     } catch (SaslException e) {
-      throw Throwables.propagate(e);
+      throw new RuntimeException(e);
     }
   }
 

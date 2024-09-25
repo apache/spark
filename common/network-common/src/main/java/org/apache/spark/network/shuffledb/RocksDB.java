@@ -37,7 +37,8 @@ public class RocksDB implements DB {
       try {
         db.put(key, value);
       } catch (RocksDBException e) {
-        throw Throwables.propagate(e);
+        Throwables.throwIfUnchecked(e);
+        throw new RuntimeException(e);
       }
     }
 
@@ -46,7 +47,8 @@ public class RocksDB implements DB {
       try {
         return db.get(key);
       } catch (RocksDBException e) {
-        throw Throwables.propagate(e);
+        Throwables.throwIfUnchecked(e);
+        throw new RuntimeException(e);
       }
     }
 

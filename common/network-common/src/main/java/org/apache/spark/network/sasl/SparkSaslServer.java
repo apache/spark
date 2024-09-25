@@ -94,7 +94,7 @@ public class SparkSaslServer implements SaslEncryptionBackend {
       this.saslServer = Sasl.createSaslServer(DIGEST, null, DEFAULT_REALM, saslProps,
         new DigestCallbackHandler());
     } catch (SaslException e) {
-      throw Throwables.propagate(e);
+      throw new RuntimeException(e);
     }
   }
 
@@ -119,7 +119,7 @@ public class SparkSaslServer implements SaslEncryptionBackend {
     try {
       return saslServer != null ? saslServer.evaluateResponse(token) : new byte[0];
     } catch (SaslException e) {
-      throw Throwables.propagate(e);
+      throw new RuntimeException(e);
     }
   }
 
