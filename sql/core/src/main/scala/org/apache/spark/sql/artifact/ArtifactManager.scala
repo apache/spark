@@ -72,7 +72,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
       s"$artifactURI${File.separator}classes${File.separator}")
 
   protected[sql] lazy val state: JobArtifactState = {
-    val isIsolated = session.sparkContext.conf.get("spark.repl.class.isolatedUri", "true")
+    val isIsolated = session.sparkContext.conf.get("spark.repl.class.isolatedUri", "false")
     val replClassURIOpt = if (isIsolated == "true") Some(replClassURI) else None
     JobArtifactState(session.sessionUUID, replClassURIOpt)
   }
