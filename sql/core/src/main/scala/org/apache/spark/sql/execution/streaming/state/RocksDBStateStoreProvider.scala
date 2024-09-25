@@ -721,13 +721,12 @@ class RocksDBStateStoreChangeDataReader(
         }
 
         val nextRecord = reader.next()
-
         val colFamilyIdBytes: Array[Byte] = colFamilyIdBytesOpt.get
-
-        val keyArrayWithColFamilyId = new Array[Byte](colFamilyIdBytes.size)
-        Array.copy(nextRecord._2, 0, keyArrayWithColFamilyId, 0, colFamilyIdBytes.size)
-
-        if (java.util.Arrays.equals(keyArrayWithColFamilyId, colFamilyIdBytes)) {
+        val endIndex = colFamilyIdBytes.size
+        // Function checks for byte arrays being equal
+        // from index 0 to endIndex - 1 (both inclusive)
+        if (java.util.Arrays.equals(nextRecord._2, 0, endIndex,
+          colFamilyIdBytes, 0, endIndex)) {
           currRecord = nextRecord
         }
       }
