@@ -20,8 +20,10 @@ package org.apache.spark.sql
 import java.net.URI
 import java.nio.file.Paths
 import java.util.{ServiceLoader, UUID}
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
+import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
@@ -57,7 +59,7 @@ import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
-import org.apache.spark.util.{CallSite, SparkFileUtils, Utils}
+import org.apache.spark.util.{CallSite, SparkFileUtils, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -92,8 +94,9 @@ class SparkSession private(
     @transient private val existingSharedState: Option[SharedState],
     @transient private val parentSessionState: Option[SessionState],
     @transient private[sql] val extensions: SparkSessionExtensions,
-    @transient private[sql] val initialSessionOptions: Map[String, String])
-  extends api.SparkSession[Dataset] with Logging { self =>
+    @transient private[sql] val initialSessionOptions: Map[String, String],
+    @transient private val parentManagedJobTags: Map[String, String])
+  extends api.SparkSession with Logging { self =>
 
   // The call site where this SparkSession was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
@@ -107,7 +110,12 @@ class SparkSession private(
   private[sql] def this(
       sc: SparkContext,
       initialSessionOptions: java.util.HashMap[String, String]) = {
-    this(sc, None, None, applyAndLoadExtensions(sc), initialSessionOptions.asScala.toMap)
+    this(
+      sc,
+      existingSharedState = None,
+      parentSessionState = None,
+      applyAndLoadExtensions(sc), initialSessionOptions.asScala.toMap,
+      parentManagedJobTags = Map.empty)
   }
 
   private[sql] def this(sc: SparkContext) = this(sc, new java.util.HashMap[String, String]())
@@ -121,6 +129,18 @@ class SparkSession private(
     SparkSession.getActiveSession.filterNot(_.sparkContext.isStopped).map(_.sessionState.conf)
       .getOrElse(SQLConf.getFallbackConf)
   })
+
+  /** Tag to mark all jobs owned by this session. */
+  private[sql] lazy val sessionJobTag = s"spark-session-$sessionUUID"
+
+  /**
+   * A map to hold the mapping from user-defined tags to the real tags attached to Jobs.
+   * Real tag have the current session ID attached: `"tag1" -> s"spark-session-$sessionUUID-tag1"`.
+   */
+  @transient
+  private[sql] lazy val managedJobTags: ConcurrentHashMap[String, String] = {
+    new ConcurrentHashMap(parentManagedJobTags.asJava)
+  }
 
   /** @inheritdoc */
   def version: String = SPARK_VERSION
@@ -173,16 +193,8 @@ class SparkSession private(
   @transient
   val sqlContext: SQLContext = new SQLContext(this)
 
-  /**
-   * Runtime configuration interface for Spark.
-   *
-   * This is the interface through which the user can get and set all Spark and Hadoop
-   * configurations that are relevant to Spark SQL. When getting the value of a config,
-   * this defaults to the value set in the underlying `SparkContext`, if any.
-   *
-   * @since 2.0.0
-   */
-  @transient lazy val conf: RuntimeConfig = new RuntimeConfig(sessionState.conf)
+  /** @inheritdoc */
+  @transient lazy val conf: RuntimeConfig = new RuntimeConfigImpl(sessionState.conf)
 
   /**
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
@@ -243,7 +255,8 @@ class SparkSession private(
       Some(sharedState),
       parentSessionState = None,
       extensions,
-      initialSessionOptions)
+      initialSessionOptions,
+      parentManagedJobTags = Map.empty)
   }
 
   /**
@@ -264,8 +277,10 @@ class SparkSession private(
       Some(sharedState),
       Some(sessionState),
       extensions,
-      Map.empty)
+      Map.empty,
+      managedJobTags.asScala.toMap)
     result.sessionState // force copy of SessionState
+    result.managedJobTags // force copy of userDefinedToRealTagsMap
     result
   }
 
@@ -645,6 +660,83 @@ class SparkSession private(
   }
 
   /** @inheritdoc */
+  override def addTag(tag: String): Unit = {
+    SparkContext.throwIfInvalidTag(tag)
+    managedJobTags.put(tag, s"spark-session-$sessionUUID-$tag")
+  }
+
+  /** @inheritdoc */
+  override def removeTag(tag: String): Unit = managedJobTags.remove(tag)
+
+  /** @inheritdoc */
+  override def getTags(): Set[String] = managedJobTags.keys().asScala.toSet
+
+  /** @inheritdoc */
+  override def clearTags(): Unit = managedJobTags.clear()
+
+  /**
+   * Request to interrupt all currently running SQL operations of this session.
+   *
+   * @note Only DataFrame/SQL operations started by this session can be interrupted.
+   *
+   * @note This method will wait up to 60 seconds for the interruption request to be issued.
+
+   * @return Sequence of SQL execution IDs requested to be interrupted.
+
+   * @since 4.0.0
+   */
+  override def interruptAll(): Seq[String] =
+    doInterruptTag(sessionJobTag, "as part of cancellation of all jobs")
+
+  /**
+   * Request to interrupt all currently running SQL operations of this session with the given
+   * job tag.
+   *
+   * @note Only DataFrame/SQL operations started by this session can be interrupted.
+   *
+   * @note This method will wait up to 60 seconds for the interruption request to be issued.
+   *
+   * @return Sequence of SQL execution IDs requested to be interrupted.
+
+   * @since 4.0.0
+   */
+  override def interruptTag(tag: String): Seq[String] = {
+    val realTag = managedJobTags.get(tag)
+    if (realTag == null) return Seq.empty
+    doInterruptTag(realTag, s"part of cancelled job tags $tag")
+  }
+
+  private def doInterruptTag(tag: String, reason: String): Seq[String] = {
+    val cancelledTags =
+      sparkContext.cancelJobsWithTagWithFuture(tag, reason)
+
+    ThreadUtils.awaitResult(cancelledTags, 60.seconds)
+      .flatMap(job => Option(job.properties.getProperty(SQLExecution.EXECUTION_ROOT_ID_KEY)))
+  }
+
+  /**
+   * Request to interrupt a SQL operation of this session, given its SQL execution ID.
+   *
+   * @note Only DataFrame/SQL operations started by this session can be interrupted.
+   *
+   * @note This method will wait up to 60 seconds for the interruption request to be issued.
+   *
+   * @return The execution ID requested to be interrupted, as a single-element sequence, or an empty
+   *    sequence if the operation is not started by this session.
+   *
+   * @since 4.0.0
+   */
+  override def interruptOperation(operationId: String): Seq[String] = {
+    scala.util.Try(operationId.toLong).toOption match {
+      case Some(executionIdToBeCancelled) =>
+        val tagToBeCancelled = SQLExecution.executionIdJobTag(this, executionIdToBeCancelled)
+        doInterruptTag(tagToBeCancelled, reason = "")
+      case None =>
+        throw new IllegalArgumentException("executionId must be a number in string form.")
+    }
+  }
+
+  /** @inheritdoc */
   def read: DataFrameReader = new DataFrameReader(self)
 
   /**
@@ -660,19 +752,8 @@ class SparkSession private(
 
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
-  /**
-   * (Scala-specific) Implicit methods available in Scala for converting
-   * common Scala objects into `DataFrame`s.
-   *
-   * {{{
-   *   val sparkSession = SparkSession.builder.getOrCreate()
-   *   import sparkSession.implicits._
-   * }}}
-   *
-   * @since 2.0.0
-   */
-  object implicits extends SQLImplicits with Serializable {
-    protected override def session: SparkSession = SparkSession.this
+  object implicits extends SQLImplicits {
+    override protected def session: SparkSession = self
   }
   // scalastyle:on
 
@@ -730,7 +811,7 @@ class SparkSession private(
   }
 
   /**
-   * Execute a block of code with the this session set as the active session, and restore the
+   * Execute a block of code with this session set as the active session, and restore the
    * previous session on completion.
    */
   private[sql] def withActive[T](block: => T): T = {
@@ -747,7 +828,8 @@ class SparkSession private(
   }
 
   private[sql] def leafNodeDefaultParallelism: Int = {
-    conf.get(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM).getOrElse(sparkContext.defaultParallelism)
+    sessionState.conf.getConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM)
+      .getOrElse(sparkContext.defaultParallelism)
   }
 
   private[sql] object Converter extends ColumnNodeToExpressionConverter with Serializable {
@@ -773,129 +855,64 @@ class SparkSession private(
 
 
 @Stable
-object SparkSession extends Logging {
+object SparkSession extends api.SparkSessionCompanion with Logging {
 
   /**
    * Builder for [[SparkSession]].
    */
   @Stable
-  class Builder extends Logging {
-
-    private[this] val options = new scala.collection.mutable.HashMap[String, String]
+  class Builder extends api.SparkSessionBuilder {
 
     private[this] val extensions = new SparkSessionExtensions
 
     private[this] var userSuppliedContext: Option[SparkContext] = None
 
-    private[spark] def sparkContext(sparkContext: SparkContext): Builder = synchronized {
+    private[spark] def sparkContext(sparkContext: SparkContext): this.type = synchronized {
       userSuppliedContext = Option(sparkContext)
       this
     }
 
-    /**
-     * Sets a name for the application, which will be shown in the Spark web UI.
-     * If no application name is set, a randomly generated name will be used.
-     *
-     * @since 2.0.0
-     */
-    def appName(name: String): Builder = config("spark.app.name", name)
+    /** @inheritdoc */
+    override def remote(connectionString: String): this.type = this
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to
-     * both `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 2.0.0
-     */
-    def config(key: String, value: String): Builder = synchronized {
-      options += key -> value
-      this
-    }
+    /** @inheritdoc */
+    override def appName(name: String): this.type = super.appName(name)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to
-     * both `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 2.0.0
-     */
-    def config(key: String, value: Long): Builder = synchronized {
-      options += key -> value.toString
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: String): this.type = super.config(key, value)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to
-     * both `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 2.0.0
-     */
-    def config(key: String, value: Double): Builder = synchronized {
-      options += key -> value.toString
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: Long): this.type = super.config(key, value)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to
-     * both `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 2.0.0
-     */
-    def config(key: String, value: Boolean): Builder = synchronized {
-      options += key -> value.toString
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: Double): this.type = super.config(key, value)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to
-     * both `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 3.4.0
-     */
-    def config(map: Map[String, Any]): Builder = synchronized {
-      map.foreach {
-        kv: (String, Any) => {
-          options += kv._1 -> kv._2.toString
-        }
-      }
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: Boolean): this.type = super.config(key, value)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to
-     * both `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 3.4.0
-     */
-    def config(map: java.util.Map[String, Any]): Builder = synchronized {
-      config(map.asScala.toMap)
-    }
+    /** @inheritdoc */
+    override def config(map: Map[String, Any]): this.type = super.config(map)
+
+    /** @inheritdoc */
+    override def config(map: java.util.Map[String, Any]): this.type = super.config(map)
 
     /**
      * Sets a list of config options based on the given `SparkConf`.
      *
      * @since 2.0.0
      */
-    def config(conf: SparkConf): Builder = synchronized {
+    def config(conf: SparkConf): this.type = synchronized {
       conf.getAll.foreach { case (k, v) => options += k -> v }
       this
     }
 
-    /**
-     * Sets the Spark master URL to connect to, such as "local" to run locally, "local[4]" to
-     * run locally with 4 cores, or "spark://master:7077" to run on a Spark standalone cluster.
-     *
-     * @since 2.0.0
-     */
-    def master(master: String): Builder = config("spark.master", master)
+    /** @inheritdoc */
+    override def master(master: String): this.type = super.master(master)
 
-    /**
-     * Enables Hive support, including connectivity to a persistent Hive metastore, support for
-     * Hive serdes, and Hive user-defined functions.
-     *
-     * @since 2.0.0
-     */
-    def enableHiveSupport(): Builder = synchronized {
+    /** @inheritdoc */
+    override def enableHiveSupport(): this.type = synchronized {
       if (hiveClassesArePresent) {
-        config(CATALOG_IMPLEMENTATION.key, "hive")
+        super.enableHiveSupport()
       } else {
         throw new IllegalArgumentException(
           "Unable to instantiate SparkSession with Hive support because " +
@@ -909,27 +926,12 @@ object SparkSession extends Logging {
      *
      * @since 2.2.0
      */
-    def withExtensions(f: SparkSessionExtensions => Unit): Builder = synchronized {
+    def withExtensions(f: SparkSessionExtensions => Unit): this.type = synchronized {
       f(extensions)
       this
     }
 
-    /**
-     * Gets an existing [[SparkSession]] or, if there is no existing one, creates a new
-     * one based on the options set in this builder.
-     *
-     * This method first checks whether there is a valid thread-local SparkSession,
-     * and if yes, return that one. It then checks whether there is a valid global
-     * default SparkSession, and if yes, return that one. If no valid global default
-     * SparkSession exists, the method creates a new SparkSession and assigns the
-     * newly created SparkSession as the global default.
-     *
-     * In case an existing SparkSession is returned, the non-static config options specified in
-     * this builder will be applied to the existing SparkSession.
-     *
-     * @since 2.0.0
-     */
-    def getOrCreate(): SparkSession = synchronized {
+    private def build(forceCreate: Boolean): SparkSession = synchronized {
       val sparkConf = new SparkConf()
       options.foreach { case (k, v) => sparkConf.set(k, v) }
 
@@ -937,20 +939,28 @@ object SparkSession extends Logging {
         assertOnDriver()
       }
 
+      def clearSessionIfDead(session: SparkSession): SparkSession = {
+        if ((session ne null) && !session.sparkContext.isStopped) {
+          session
+        } else {
+          null
+        }
+      }
+
       // Get the session from current thread's active session.
-      var session = activeThreadSession.get()
-      if ((session ne null) && !session.sparkContext.isStopped) {
-        applyModifiableSettings(session, new java.util.HashMap[String, String](options.asJava))
-        return session
+      val active = clearSessionIfDead(activeThreadSession.get())
+      if (!forceCreate && (active ne null)) {
+        applyModifiableSettings(active, new java.util.HashMap[String, String](options.asJava))
+        return active
       }
 
       // Global synchronization so we will only set the default session once.
       SparkSession.synchronized {
         // If the current thread does not have an active session, get it from the global session.
-        session = defaultSession.get()
-        if ((session ne null) && !session.sparkContext.isStopped) {
-          applyModifiableSettings(session, new java.util.HashMap[String, String](options.asJava))
-          return session
+        val default = clearSessionIfDead(defaultSession.get())
+        if (!forceCreate && (default ne null)) {
+          applyModifiableSettings(default, new java.util.HashMap[String, String](options.asJava))
+          return default
         }
 
         // No active nor global default session. Create a new one.
@@ -967,14 +977,28 @@ object SparkSession extends Logging {
         loadExtensions(extensions)
         applyExtensions(sparkContext, extensions)
 
-        session = new SparkSession(sparkContext, None, None, extensions, options.toMap)
-        setDefaultSession(session)
-        setActiveSession(session)
+        val session = new SparkSession(sparkContext,
+          existingSharedState = None,
+          parentSessionState = None,
+          extensions,
+          initialSessionOptions = options.toMap,
+          parentManagedJobTags = Map.empty)
+        if (default eq null) {
+          setDefaultSession(session)
+        }
+        if (active eq null) {
+          setActiveSession(session)
+        }
         registerContextListener(sparkContext)
+        session
       }
-
-      return session
     }
+
+    /** @inheritdoc */
+    def getOrCreate(): SparkSession = build(forceCreate = false)
+
+    /** @inheritdoc */
+    def create(): SparkSession = build(forceCreate = true)
   }
 
   /**
@@ -1112,13 +1136,13 @@ object SparkSession extends Logging {
   private[sql] def getOrCloneSessionWithConfigsOff(
       session: SparkSession,
       configurations: Seq[ConfigEntry[Boolean]]): SparkSession = {
-    val configsEnabled = configurations.filter(session.conf.get[Boolean])
+    val configsEnabled = configurations.filter(session.sessionState.conf.getConf[Boolean])
     if (configsEnabled.isEmpty) {
       session
     } else {
       val newSession = session.cloneSession()
       configsEnabled.foreach(conf => {
-        newSession.conf.set(conf, false)
+        newSession.sessionState.conf.setConf(conf, false)
       })
       newSession
     }

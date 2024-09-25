@@ -1187,11 +1187,15 @@ class DatasetSuite extends QueryTest
       exception = intercept[AnalysisException] {
         df.as[KryoData]
       },
-      condition = "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+      condition = "CANNOT_UP_CAST_DATATYPE",
       parameters = Map(
-        "sqlExpr" -> "\"a\"",
-        "srcType" -> "\"DOUBLE\"",
-        "targetType" -> "\"BINARY\""))
+        "expression" -> "a",
+        "sourceType" -> "\"DOUBLE\"",
+        "targetType" -> "\"BINARY\"",
+        "details" -> ("The type path of the target object is:\n- root class: " +
+          "\"org.apache.spark.sql.KryoData\"\n" +
+          "You can either add an explicit cast to the input data or choose a " +
+          "higher precision type of the field in the target object")))
   }
 
   test("Java encoder") {

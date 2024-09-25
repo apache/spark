@@ -216,6 +216,28 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   def cannotUseKryoSerialization(): SparkRuntimeException = {
     new SparkRuntimeException(errorClass = "CANNOT_USE_KRYO", messageParameters = Map.empty)
   }
+
+  def notPublicClassError(name: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2229",
+      messageParameters = Map("name" -> name))
+  }
+
+  def primitiveTypesNotSupportedError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2230")
+  }
+
+  def elementsOfTupleExceedLimitError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2150")
+  }
+
+  def invalidAgnosticEncoderError(encoder: AnyRef): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_AGNOSTIC_ENCODER",
+      messageParameters = Map(
+        "encoderType" -> encoder.getClass.getName,
+        "docroot" -> SparkBuildInfo.spark_doc_root))
+  }
 }
 
 private[sql] object ExecutionErrors extends ExecutionErrors

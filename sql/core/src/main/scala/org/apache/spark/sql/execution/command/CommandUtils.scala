@@ -330,7 +330,7 @@ object CommandUtils extends Logging {
     val attributePercentiles = mutable.HashMap[Attribute, ArrayData]()
     if (attrsToGenHistogram.nonEmpty) {
       val percentiles = (0 to conf.histogramNumBins)
-        .map(i => i.toDouble / conf.histogramNumBins).toArray
+        .map(i => i.toDouble / conf.histogramNumBins).toArray[Any]
 
       val namedExprs = attrsToGenHistogram.map { attr =>
         val aggFunc =
