@@ -752,19 +752,8 @@ class SparkSession private(
 
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
-  /**
-   * (Scala-specific) Implicit methods available in Scala for converting
-   * common Scala objects into `DataFrame`s.
-   *
-   * {{{
-   *   val sparkSession = SparkSession.builder.getOrCreate()
-   *   import sparkSession.implicits._
-   * }}}
-   *
-   * @since 2.0.0
-   */
-  object implicits extends SQLImplicits with Serializable {
-    protected override def session: SparkSession = SparkSession.this
+  object implicits extends SQLImplicits {
+    override protected def session: SparkSession = self
   }
   // scalastyle:on
 
@@ -864,129 +853,64 @@ class SparkSession private(
 
 
 @Stable
-object SparkSession extends Logging {
+object SparkSession extends api.SparkSessionCompanion with Logging {
 
   /**
    * Builder for [[SparkSession]].
    */
   @Stable
-  class Builder extends Logging {
-
-    private[this] val options = new scala.collection.mutable.HashMap[String, String]
+  class Builder extends api.SparkSessionBuilder {
 
     private[this] val extensions = new SparkSessionExtensions
 
     private[this] var userSuppliedContext: Option[SparkContext] = None
 
-    private[spark] def sparkContext(sparkContext: SparkContext): Builder = synchronized {
+    private[spark] def sparkContext(sparkContext: SparkContext): this.type = synchronized {
       userSuppliedContext = Option(sparkContext)
       this
     }
 
-    /**
-     * Sets a name for the application, which will be shown in the Spark web UI.
-     * If no application name is set, a randomly generated name will be used.
-     *
-     * @since 2.0.0
-     */
-    def appName(name: String): Builder = config("spark.app.name", name)
+    /** @inheritdoc */
+    override def remote(connectionString: String): this.type = this
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to
-     * both `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 2.0.0
-     */
-    def config(key: String, value: String): Builder = synchronized {
-      options += key -> value
-      this
-    }
+    /** @inheritdoc */
+    override def appName(name: String): this.type = super.appName(name)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to
-     * both `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 2.0.0
-     */
-    def config(key: String, value: Long): Builder = synchronized {
-      options += key -> value.toString
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: String): this.type = super.config(key, value)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to
-     * both `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 2.0.0
-     */
-    def config(key: String, value: Double): Builder = synchronized {
-      options += key -> value.toString
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: Long): this.type = super.config(key, value)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to
-     * both `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 2.0.0
-     */
-    def config(key: String, value: Boolean): Builder = synchronized {
-      options += key -> value.toString
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: Double): this.type = super.config(key, value)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to
-     * both `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 3.4.0
-     */
-    def config(map: Map[String, Any]): Builder = synchronized {
-      map.foreach {
-        kv: (String, Any) => {
-          options += kv._1 -> kv._2.toString
-        }
-      }
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: Boolean): this.type = super.config(key, value)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to
-     * both `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 3.4.0
-     */
-    def config(map: java.util.Map[String, Any]): Builder = synchronized {
-      config(map.asScala.toMap)
-    }
+    /** @inheritdoc */
+    override def config(map: Map[String, Any]): this.type = super.config(map)
+
+    /** @inheritdoc */
+    override def config(map: java.util.Map[String, Any]): this.type = super.config(map)
 
     /**
      * Sets a list of config options based on the given `SparkConf`.
      *
      * @since 2.0.0
      */
-    def config(conf: SparkConf): Builder = synchronized {
+    def config(conf: SparkConf): this.type = synchronized {
       conf.getAll.foreach { case (k, v) => options += k -> v }
       this
     }
 
-    /**
-     * Sets the Spark master URL to connect to, such as "local" to run locally, "local[4]" to
-     * run locally with 4 cores, or "spark://master:7077" to run on a Spark standalone cluster.
-     *
-     * @since 2.0.0
-     */
-    def master(master: String): Builder = config("spark.master", master)
+    /** @inheritdoc */
+    override def master(master: String): this.type = super.master(master)
 
-    /**
-     * Enables Hive support, including connectivity to a persistent Hive metastore, support for
-     * Hive serdes, and Hive user-defined functions.
-     *
-     * @since 2.0.0
-     */
-    def enableHiveSupport(): Builder = synchronized {
+    /** @inheritdoc */
+    override def enableHiveSupport(): this.type = synchronized {
       if (hiveClassesArePresent) {
-        config(CATALOG_IMPLEMENTATION.key, "hive")
+        super.enableHiveSupport()
       } else {
         throw new IllegalArgumentException(
           "Unable to instantiate SparkSession with Hive support because " +
@@ -1000,27 +924,12 @@ object SparkSession extends Logging {
      *
      * @since 2.2.0
      */
-    def withExtensions(f: SparkSessionExtensions => Unit): Builder = synchronized {
+    def withExtensions(f: SparkSessionExtensions => Unit): this.type = synchronized {
       f(extensions)
       this
     }
 
-    /**
-     * Gets an existing [[SparkSession]] or, if there is no existing one, creates a new
-     * one based on the options set in this builder.
-     *
-     * This method first checks whether there is a valid thread-local SparkSession,
-     * and if yes, return that one. It then checks whether there is a valid global
-     * default SparkSession, and if yes, return that one. If no valid global default
-     * SparkSession exists, the method creates a new SparkSession and assigns the
-     * newly created SparkSession as the global default.
-     *
-     * In case an existing SparkSession is returned, the non-static config options specified in
-     * this builder will be applied to the existing SparkSession.
-     *
-     * @since 2.0.0
-     */
-    def getOrCreate(): SparkSession = synchronized {
+    private def build(forceCreate: Boolean): SparkSession = synchronized {
       val sparkConf = new SparkConf()
       options.foreach { case (k, v) => sparkConf.set(k, v) }
 
@@ -1028,20 +937,28 @@ object SparkSession extends Logging {
         assertOnDriver()
       }
 
+      def clearSessionIfDead(session: SparkSession): SparkSession = {
+        if ((session ne null) && !session.sparkContext.isStopped) {
+          session
+        } else {
+          null
+        }
+      }
+
       // Get the session from current thread's active session.
-      var session = activeThreadSession.get()
-      if ((session ne null) && !session.sparkContext.isStopped) {
-        applyModifiableSettings(session, new java.util.HashMap[String, String](options.asJava))
-        return session
+      val active = clearSessionIfDead(activeThreadSession.get())
+      if (!forceCreate && (active ne null)) {
+        applyModifiableSettings(active, new java.util.HashMap[String, String](options.asJava))
+        return active
       }
 
       // Global synchronization so we will only set the default session once.
       SparkSession.synchronized {
         // If the current thread does not have an active session, get it from the global session.
-        session = defaultSession.get()
-        if ((session ne null) && !session.sparkContext.isStopped) {
-          applyModifiableSettings(session, new java.util.HashMap[String, String](options.asJava))
-          return session
+        val default = clearSessionIfDead(defaultSession.get())
+        if (!forceCreate && (default ne null)) {
+          applyModifiableSettings(default, new java.util.HashMap[String, String](options.asJava))
+          return default
         }
 
         // No active nor global default session. Create a new one.
@@ -1058,19 +975,28 @@ object SparkSession extends Logging {
         loadExtensions(extensions)
         applyExtensions(sparkContext, extensions)
 
-        session = new SparkSession(sparkContext,
+        val session = new SparkSession(sparkContext,
           existingSharedState = None,
           parentSessionState = None,
           extensions,
           initialSessionOptions = options.toMap,
           parentManagedJobTags = Map.empty)
-        setDefaultSession(session)
-        setActiveSession(session)
+        if (default eq null) {
+          setDefaultSession(session)
+        }
+        if (active eq null) {
+          setActiveSession(session)
+        }
         registerContextListener(sparkContext)
+        session
       }
-
-      return session
     }
+
+    /** @inheritdoc */
+    def getOrCreate(): SparkSession = build(forceCreate = false)
+
+    /** @inheritdoc */
+    def create(): SparkSession = build(forceCreate = true)
   }
 
   /**

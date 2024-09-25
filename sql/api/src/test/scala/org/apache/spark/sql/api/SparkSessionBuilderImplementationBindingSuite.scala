@@ -14,28 +14,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql
+package org.apache.spark.sql.api
+
+// scalastyle:off funsuite
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.funsuite.AnyFunSuite
+
+import org.apache.spark.sql.functions.sum
 
 /**
- * A container for a [[Dataset]], used for implicit conversions in Scala.
- *
- * To use this, import implicit conversions in SQL:
- * {{{
- *   val spark: SparkSession = ...
- *   import spark.implicits._
- * }}}
- *
- * @since 3.4.0
+ * Test suite for SparkSession implementation binding.
  */
-case class DatasetHolder[T] private[sql] (private val ds: Dataset[T]) {
+trait SparkSessionBuilderImplementationBindingSuite extends AnyFunSuite with BeforeAndAfterAll {
+// scalastyle:on
+  protected def configure(builder: SparkSessionBuilder): builder.type = builder
 
-  // This is declared with parentheses to prevent the Scala compiler from treating
-  // `rdd.toDS("1")` as invoking this toDS and then apply on the returned Dataset.
-  def toDS(): Dataset[T] = ds
-
-  // This is declared with parentheses to prevent the Scala compiler from treating
-  // `rdd.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DataFrame = ds.toDF()
-
-  def toDF(colNames: String*): DataFrame = ds.toDF(colNames: _*)
+  test("range") {
+    val session = configure(SparkSession.builder()).getOrCreate()
+    import session.implicits._
+    val df = session.range(10).agg(sum("id")).as[Long]
+    assert(df.head() == 45)
+  }
 }
