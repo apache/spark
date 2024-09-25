@@ -279,7 +279,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def ansiDateTimeError(e: Exception): SparkDateTimeException = {
     new SparkDateTimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2000",
+      errorClass = "ANSI_DATE_TIME_FIELD_OUT_OF_BOUNDS",
       messageParameters = Map(
         "message" -> e.getMessage,
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
@@ -289,7 +289,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def ansiIllegalArgumentError(message: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2000",
+      errorClass = "ANSI_DATE_TIME_FIELD_OUT_OF_BOUNDS",
       messageParameters = Map(
         "message" -> message,
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
