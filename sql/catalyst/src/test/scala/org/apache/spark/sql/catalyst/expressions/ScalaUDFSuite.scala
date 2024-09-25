@@ -49,7 +49,7 @@ class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
     val variantUdf = ScalaUDF(
       (v: VariantVal) => v,
       VariantType,
-      ParseJson(Literal("{\"a\": \"b\"}")).replacement :: Nil,
+      ParseJson(Literal("{\"a\": \"b\"}")) :: Nil,
       Option(resolvedEncoder[VariantVal]()) :: Nil)
     checkEvaluation(VariantGet(variantUdf, Literal("$.a"), StringType, true), "b")
   }
@@ -58,7 +58,7 @@ class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
     val variantUdf = ScalaUDF(
       (v: VariantVal) => v.toString(),
       StringType,
-      ParseJson(Literal("{\"a\": \"b\"}")).replacement :: Nil,
+      ParseJson(Literal("{\"a\": \"b\"}")) :: Nil,
       Option(resolvedEncoder[VariantVal]()) :: Nil)
     checkEvaluation(variantUdf, "{\"a\":\"b\"}")
   }

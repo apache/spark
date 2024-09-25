@@ -943,10 +943,10 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-48150: ParseJson expression nullability") {
-    assert(!ParseJson(Literal("["), failOnError = true).replacement.nullable)
-    assert(ParseJson(Literal("["), failOnError = false).replacement.nullable)
+    assert(!ParseJson(Literal("["), failOnError = true).nullable)
+    assert(ParseJson(Literal("["), failOnError = false).nullable)
     checkEvaluation(
-      ParseJson(Literal("["), failOnError = false).replacement,
+      ParseJson(Literal("["), failOnError = false),
       null
     )
   }

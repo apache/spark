@@ -52,6 +52,8 @@ class SQLMetric(
   // _value will always be either initValue or non-negative.
   private var _value = initValue
 
+  def getValue(): Long = _value
+
   override def copy(): SQLMetric = {
     val newAcc = new SQLMetric(metricType, initValue)
     newAcc._value = _value
@@ -86,6 +88,13 @@ class SQLMetric(
     if (v >= 0) {
       if (isZero) _value = 0
       _value += v
+    }
+  }
+
+  // Update the value with the max of the current value and the given value.
+  def updateMax(v: Long): Unit = {
+    if (_value == SQLMetrics.MIN_MAX_SENTINEL_VALUE || v > _value) {
+      _value = v
     }
   }
 

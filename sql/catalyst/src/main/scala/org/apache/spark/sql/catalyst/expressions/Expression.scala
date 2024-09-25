@@ -35,6 +35,7 @@ import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.MULTI_COMMUTATIVE_OP_OPT_THRESHOLD
 import org.apache.spark.sql.types._
+import org.apache.spark.types.variant.VariantMetrics
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the basic expression abstract classes in Catalyst.
@@ -116,6 +117,9 @@ abstract class Expression extends TreeNode[Expression] {
    * By default leaf expressions are deterministic as Nil.forall(_.deterministic) returns true.
    */
   lazy val deterministic: Boolean = children.forall(_.deterministic)
+
+  val isVariantConstructorExpression: Boolean = false
+  val variantMetrics: VariantMetrics = new VariantMetrics()
 
   def nullable: Boolean
 

@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.json.JsonInferSchema
-import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, VARIANT_GET}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{PARSE_JSON, TreePattern, VARIANT_GET}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, QuotingUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -53,18 +53,36 @@ import org.apache.spark.unsafe.types._
  *                    the string does not represent a valid JSON value.
  */
 case class ParseJson(child: Expression, failOnError: Boolean = true)
-  extends UnaryExpression with ExpectsInputTypes with RuntimeReplaceable {
+  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
-  override lazy val replacement: Expression = StaticInvoke(
-    VariantExpressionEvalUtils.getClass,
-    VariantType,
-    "parseJson",
-    Seq(
-      child,
-      Literal(SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS), BooleanType),
-      Literal(failOnError, BooleanType)),
-    inputTypes :+ BooleanType :+ BooleanType,
-    returnNullable = !failOnError)
+  override val isVariantConstructorExpression: Boolean = true
+
+  protected override def nullSafeEval(input: Any): Any =
+    VariantExpressionEvalUtils.parseJson(input.asInstanceOf[UTF8String],
+      SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS), failOnError, variantMetrics)
+
+  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childCode = child.genCode(ctx)
+    val cls = variant.VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
+    val allowDuplicateKeysArg = ctx.addReferenceObj("allowDuplicateKeys",
+      SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS))
+    val failOnErrorArg = ctx.addReferenceObj("failOnError", failOnError)
+    val variantMetricsArg = ctx.addReferenceObj("variantMetrics", variantMetrics)
+    val javaType = JavaCode.javaType(VariantType)
+    val code =
+      code"""
+        ${childCode.code}
+        boolean ${ev.isNull} = ${childCode.isNull};
+        $javaType ${ev.value} = ${CodeGenerator.defaultValue(VariantType)};
+        if (!${childCode.isNull}) {
+          ${ev.value} = $cls.parseJson(${childCode.value}, $allowDuplicateKeysArg, $failOnErrorArg,
+            $variantMetricsArg);
+        }
+      """
+    ev.copy(code = code)
+  }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(PARSE_JSON)
 
   override def inputTypes: Seq[AbstractDataType] = StringTypeAnyCollation :: Nil
 

@@ -21,6 +21,7 @@ import java.util.concurrent.{Future => JFuture}
 import java.util.concurrent.TimeUnit._
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
 
@@ -31,9 +32,9 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics, VariantConstructionMetrics}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.sql.types.{LongType, StructType, VariantType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
@@ -46,6 +47,11 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     with OrderPreservingUnaryExecNode {
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+
+  lazy val variantBuilderMetrics: Map[String, SQLMetric] =
+    VariantConstructionMetrics.createSQLMetrics(sparkContext)
+
+  override lazy val metrics: Map[String, SQLMetric] = variantBuilderMetrics
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
@@ -65,6 +71,28 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     references.filter(a => usedMoreThanOnce.contains(a.exprId))
   }
 
+  private def getTopLevelAndNestedVariantExpressions(
+      expr: Expression,
+      isTopLevel: Boolean,
+      topLevelVariantExpressions: ArrayBuffer[Expression],
+      nestedVariantExpressions: ArrayBuffer[Expression]): Unit = {
+    if (expr.isVariantConstructorExpression) {
+      if (isTopLevel && expr.dataType == VariantType) {
+        topLevelVariantExpressions += expr
+      } else {
+        nestedVariantExpressions += expr
+      }
+    }
+    expr.children.foreach { child =>
+      val childIsTopLevel: Boolean = expr match {
+        case _: Alias => true
+        case _ => false
+      }
+      getTopLevelAndNestedVariantExpressions(child, childIsTopLevel, topLevelVariantExpressions,
+        nestedVariantExpressions)
+    }
+  }
+
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val exprs = bindReferences[Expression](projectList, child.output)
     val (subExprsCode, resultVars, localValInputs) = if (conf.subexpressionEliminationEnabled) {
@@ -78,7 +106,61 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     } else {
       ("", exprs.map(_.genCode(ctx)), Seq.empty)
     }
-
+    val topLevelVariantCountMetric =
+      metricTerm(ctx, VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_NUMBER_OF_VARIANTS)
+    val topLevelVariantByteSizeMetric =
+      metricTerm(ctx, VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_BYTE_SIZE_BOUND)
+    val topLevelVariantNumScalarsMetric =
+      metricTerm(ctx, VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_NUM_SCALARS)
+    val topLevelVariantNumPathsMetric =
+      metricTerm(ctx, VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_NUM_PATHS)
+    val topLevelVariantMaxDepthMetric =
+      metricTerm(ctx, VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_MAX_DEPTH)
+    val nestedVariantCountMetric =
+      metricTerm(ctx, VariantConstructionMetrics.VARIANT_BUILDER_NESTED_NUMBER_OF_VARIANTS)
+    val nestedVariantByteSizeMetric =
+      metricTerm(ctx, VariantConstructionMetrics.VARIANT_BUILDER_NESTED_BYTE_SIZE_BOUND)
+    val nestedVariantNumScalarsMetric =
+      metricTerm(ctx, VariantConstructionMetrics.VARIANT_BUILDER_NESTED_NUM_SCALARS)
+    val nestedVariantNumPathsMetric =
+      metricTerm(ctx, VariantConstructionMetrics.VARIANT_BUILDER_NESTED_NUM_PATHS)
+    val nestedVariantMaxDepthMetric =
+      metricTerm(ctx, VariantConstructionMetrics.VARIANT_BUILDER_NESTED_MAX_DEPTH)
+    val topLevelVariantExpressions: ArrayBuffer[Expression] = new ArrayBuffer[Expression]()
+    val nestedVariantExpressions: ArrayBuffer[Expression] = new ArrayBuffer[Expression]()
+    if (topLevelVariantExpressions.isEmpty && nestedVariantExpressions.isEmpty) exprs.foreach {
+      case expr: Expression =>
+        getTopLevelAndNestedVariantExpressions(expr, isTopLevel = true, topLevelVariantExpressions,
+          nestedVariantExpressions)
+      case _ =>
+    }
+    val topLevelVariantMetricUpdateCode: Seq[String] = topLevelVariantExpressions.zipWithIndex.map {
+      case (expr: Expression, i) if expr.isVariantConstructorExpression =>
+        val variantMetricsObject = ctx.addReferenceObj(s"variantMetrics$i", expr.variantMetrics)
+        s"""
+           |$topLevelVariantCountMetric.add($variantMetricsObject.variantCount);
+           |$topLevelVariantByteSizeMetric.add($variantMetricsObject.byteSize);
+           |$topLevelVariantNumScalarsMetric.add($variantMetricsObject.numScalars);
+           |$topLevelVariantNumPathsMetric.add($variantMetricsObject.numPaths);
+           |$topLevelVariantMaxDepthMetric.updateMax($variantMetricsObject.maxDepth);
+           |$variantMetricsObject.reset();
+           |""".stripMargin
+      case _ => ""
+    }.toSeq
+    val nestedVariantMetricUpdateCode: Seq[String] = nestedVariantExpressions.zipWithIndex.map {
+      case (expr: Expression, i) if expr.isVariantConstructorExpression =>
+        val variantMetricsObject =
+          ctx.addReferenceObj(s"nestedVariantMetrics$i", expr.variantMetrics)
+        s"""
+           |$nestedVariantCountMetric.add($variantMetricsObject.variantCount);
+           |$nestedVariantByteSizeMetric.add($variantMetricsObject.byteSize);
+           |$nestedVariantNumScalarsMetric.add($variantMetricsObject.numScalars);
+           |$nestedVariantNumPathsMetric.add($variantMetricsObject.numPaths);
+           |$nestedVariantMaxDepthMetric.updateMax($variantMetricsObject.maxDepth);
+           |$variantMetricsObject.reset();
+           |""".stripMargin
+      case _ => ""
+    }.toSeq
     // Evaluation of non-deterministic expressions can't be deferred.
     val nonDeterministicAttrs = projectList.filterNot(_.deterministic).map(_.toAttribute)
     s"""
@@ -87,11 +169,53 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
        |$subExprsCode
        |${evaluateRequiredVariables(output, resultVars, AttributeSet(nonDeterministicAttrs))}
        |${consume(ctx, resultVars)}
+       |${topLevelVariantMetricUpdateCode.mkString("\n")}
+       |${nestedVariantMetricUpdateCode.mkString("\n")}
      """.stripMargin
+  }
+
+  def updateVariantMetrics(
+      topLevelVariantExpressions: Seq[Expression],
+      nestedVariantExpressions: Seq[Expression]): Unit = {
+    topLevelVariantExpressions.foreach { expression =>
+      variantBuilderMetrics(VariantConstructionMetrics
+        .VARIANT_BUILDER_TOP_LEVEL_NUMBER_OF_VARIANTS).add(expression.variantMetrics.variantCount)
+      variantBuilderMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_BYTE_SIZE_BOUND)
+        .add(expression.variantMetrics.byteSize)
+      variantBuilderMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_NUM_SCALARS)
+        .add(expression.variantMetrics.numScalars)
+      variantBuilderMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_NUM_PATHS)
+        .add(expression.variantMetrics.numPaths)
+      variantBuilderMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_MAX_DEPTH)
+        .updateMax(expression.variantMetrics.maxDepth)
+      expression.variantMetrics.reset()
+    }
+    nestedVariantExpressions.foreach { expression =>
+      variantBuilderMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_NUMBER_OF_VARIANTS)
+        .add(expression.variantMetrics.variantCount)
+      variantBuilderMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_BYTE_SIZE_BOUND)
+        .add(expression.variantMetrics.byteSize)
+      variantBuilderMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_NUM_SCALARS)
+        .add(expression.variantMetrics.numScalars)
+      variantBuilderMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_NUM_PATHS)
+        .add(expression.variantMetrics.numPaths)
+      variantBuilderMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_MAX_DEPTH)
+        .updateMax(expression.variantMetrics.maxDepth)
+      expression.variantMetrics.reset()
+    }
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val evaluatorFactory = new ProjectEvaluatorFactory(projectList, child.output)
+    val topLevelVariantExpressions: ArrayBuffer[Expression] = new ArrayBuffer()
+    val nestedVariantExpressions: ArrayBuffer[Expression] = new ArrayBuffer()
+    evaluatorFactory.initializeLambda = (e: Seq[Expression]) => {
+      e.foreach(getTopLevelAndNestedVariantExpressions(_, isTopLevel = true,
+        topLevelVariantExpressions, nestedVariantExpressions))
+    }
+    evaluatorFactory.metricsUpdateLambda = () => {
+      updateVariantMetrics(topLevelVariantExpressions.toSeq, nestedVariantExpressions.toSeq)
+    }
     if (conf.usePartitionEvaluator) {
       child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
     } else {

@@ -23,7 +23,7 @@ import org.apache.spark.sql.QueryTest.sameRows
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.catalyst.expressions.variant.{ToVariantObject, VariantExpressionEvalUtils}
-import org.apache.spark.sql.execution.{FileSourceScanExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{FileSourceScanExec, ProjectExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -72,6 +72,72 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
         """{"c": [], "b": 0, "a": null, "a": {"x": 0, "x": 1}, "b": 1, "b": 2, "c": [3]}""",
         """{"a":{"x":1},"b":2,"c":[3]}"""
       )
+    }
+  }
+
+  test("parse_json metrics") {
+    // There are some redundant computations in this test which subexpression elimination would
+    // remove. However, we disable subexpression elimination to test the metrics.
+    withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "false") {
+      Seq("NO_CODEGEN", "CODEGEN_ONLY").foreach { codegenMode =>
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+          val tableName = "parseJsonMetricsTable"
+          withTable(tableName) {
+            sql(s"create table $tableName (i int, s1 string, s2 string, s3 string, s4 int)")
+            sql("insert into " + tableName + " values(" +
+              /* i= */ "32, " +
+              /* s1= */ """'{"a": 43, "b": {"c": "Variants are powerful!"}}', """ +
+              /* s2= */ """'431', """ +
+              /* s3= */ """'{"a": [{"b": 5, "c": [32, {"d": 430, "e": """ +
+              """"Nested Variants!"}]}]}',""" +
+              /* s4= */ "null)")
+            sql("insert into " + tableName + " values(" +
+              /* i= */ "893, " +
+              /* s1= */ """'{"d": [1, 2], "e": [""" +
+              """[{"f": {"g": {"h": "Variants are flexible!"}}}], [{"f": 654}]]}', """ +
+              /* s2= */ """'"Variants are scalable!"', """ +
+              /* s3= */ """'{"a": [{"b": 43, "c": [null, {"f": """ +
+              """"Variants are fast!", "g": "Variants are cool!"}]}]}',""" +
+              /* s4= */ "null)")
+            sql("insert into " + tableName + " values(null, null, null, null, null)")
+
+            val nestedDf = sql(
+              s"select i," +
+                /* top_level */ "parse_json(s1), " +
+                /* top_level */ "parse_json(s2), " +
+                /* nested */ "is_variant_null(parse_json(s1)), " +
+                /* random column in between */ "s4 + 3, " +
+                /* nested */ "variant_get(parse_json(s2), '$.a'), " +
+                /* nested */ "struct(is_variant_null(parse_json(s1)), parse_json(s2)) " +
+                s"from $tableName"
+            )
+            nestedDf.collect()
+            assert(nestedDf.queryExecution.executedPlan
+              .isInstanceOf[WholeStageCodegenExec] == (codegenMode == "CODEGEN_ONLY"))
+
+            val nestedProjectNode =
+              findNode(nestedDf.queryExecution.executedPlan)(_.isInstanceOf[ProjectExec]).get
+            val topLevelTotBytesActual = nestedDf.collect()
+              .map(r => Seq(r(1).asInstanceOf[VariantVal], r(2).asInstanceOf[VariantVal]))
+              .filter(_(0) != null)
+              .map(v => v(0).getValue.length + v(0).getMetadata.length +
+                v(1).getValue.length + v(1).getMetadata.length).sum
+            assert(nestedProjectNode.metrics("variantBuilderTopLevelByteSizeBound").value ==
+              topLevelTotBytesActual)
+            assert(nestedProjectNode.metrics("variantBuilderTopLevelNumVariants").value == 4)
+            assert(nestedProjectNode.metrics("variantBuilderTopLevelNumScalars").value == 8)
+            assert(nestedProjectNode.metrics("variantBuilderTopLevelNumPaths").value == 19)
+            assert(nestedProjectNode.metrics("variantBuilderTopLevelMaxDepth").value == 6)
+
+            assert(nestedProjectNode.metrics("variantBuilderNestedByteSizeBound").value ==
+              topLevelTotBytesActual * 2)
+            assert(nestedProjectNode.metrics("variantBuilderNestedNumVariants").value == 8)
+            assert(nestedProjectNode.metrics("variantBuilderNestedNumScalars").value == 16)
+            assert(nestedProjectNode.metrics("variantBuilderNestedNumPaths").value == 38)
+            assert(nestedProjectNode.metrics("variantBuilderNestedMaxDepth").value == 6)
+          }
+        }
+      }
     }
   }
 

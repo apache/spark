@@ -19,10 +19,16 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, InterpretedUnsafeProjection, UnsafeProjection}
 
 class ProjectEvaluatorFactory(projectList: Seq[Expression], childOutput: Seq[Attribute])
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
+
+  // Can be used to update metrics related to the data being processed
+  var metricsUpdateLambda: () => Unit = () => ()
+
+  // Used to set up initial metadata for other tasks like metrics collection
+  var initializeLambda: Seq[Expression] => Unit = (_: Seq[Expression]) => ()
 
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] = {
     new ProjectPartitionEvaluator
@@ -34,6 +40,12 @@ class ProjectEvaluatorFactory(projectList: Seq[Expression], childOutput: Seq[Att
         inputs: Iterator[InternalRow]*): Iterator[InternalRow] = {
       assert(inputs.length == 1)
       val project = UnsafeProjection.create(projectList, childOutput)
+      project match {
+        case p: InterpretedUnsafeProjection =>
+          p.initializeLambda = initializeLambda
+          p.metricsUpdateLambda = metricsUpdateLambda
+        case _ =>
+      }
       project.initialize(partitionIndex)
       inputs.head.map(project)
     }

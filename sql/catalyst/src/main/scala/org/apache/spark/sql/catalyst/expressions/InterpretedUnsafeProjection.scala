@@ -36,6 +36,12 @@ import org.apache.spark.util.ArrayImplicits._
 class InterpretedUnsafeProjection(expressions: Array[Expression]) extends UnsafeProjection {
   import InterpretedUnsafeProjection._
 
+  // Can be used to update metrics related to the data being processed
+  var metricsUpdateLambda: () => Unit = () => ()
+
+  // Used to set up initial metadata for other tasks like metrics collection
+  var initializeLambda: Seq[Expression] => Unit = (_: Seq[Expression]) => ()
+
   private[this] val subExprEliminationEnabled = SQLConf.get.subexpressionEliminationEnabled
   private[this] val exprs =
     prepareExpressions(expressions.toImmutableArraySeq, subExprEliminationEnabled)
@@ -71,6 +77,7 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
 
   override def initialize(partitionIndex: Int): Unit = {
     initializeExprs(exprs, partitionIndex)
+    initializeLambda(exprs)
   }
 
   override def apply(row: InternalRow): UnsafeRow = {
@@ -84,6 +91,8 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
       values(i) = exprs(i).eval(row)
       i += 1
     }
+
+    metricsUpdateLambda()
 
     // Write the intermediate row to an unsafe row.
     rowWriter.reset()

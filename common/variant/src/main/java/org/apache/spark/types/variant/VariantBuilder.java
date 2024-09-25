@@ -50,11 +50,16 @@ public class VariantBuilder {
    * the SIZE_LIMIT (for example, this could be a maximum of 16 MiB).
    * @throws IOException if any JSON parsing error happens.
    */
-  public static Variant parseJson(String json, boolean allowDuplicateKeys) throws IOException {
+  public static Variant parseJson(String json, boolean allowDuplicateKeys,
+                                  VariantMetrics variantMetrics) throws IOException {
     try (JsonParser parser = new JsonFactory().createParser(json)) {
       parser.nextToken();
-      return parseJson(parser, allowDuplicateKeys);
+      return parseJson(parser, allowDuplicateKeys, variantMetrics);
     }
+  }
+
+  public static Variant parseJson(String json, boolean allowDuplicateKeys) throws IOException {
+    return parseJson(json, allowDuplicateKeys, new VariantMetrics());
   }
 
   /**
