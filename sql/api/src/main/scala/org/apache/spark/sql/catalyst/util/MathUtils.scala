@@ -85,8 +85,10 @@ object MathUtils {
 
   def floorDiv(a: Long, b: Long): Long = withOverflow(Math.floorDiv(a, b), hint = "try_divide")
 
+  // TODO(SPARK-49631): When used, please provide appropriate hint.
   def floorMod(a: Int, b: Int): Int = withOverflow(Math.floorMod(a, b))
 
+  // TODO(SPARK-49631): When used, please provide appropriate hint.
   def floorMod(a: Long, b: Long): Long = withOverflow(Math.floorMod(a, b))
 
   def withOverflow[A](f: => A, hint: String = "", context: QueryContext = null): A = {
