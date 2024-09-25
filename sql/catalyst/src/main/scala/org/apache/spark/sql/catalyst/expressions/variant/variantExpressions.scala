@@ -64,6 +64,7 @@ case class ParseJson(child: Expression, failOnError: Boolean = true)
   protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childCode = child.genCode(ctx)
     val cls = variant.VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
+    val tmp = ctx.freshVariable("tmp", classOf[VariantVal])
     val allowDuplicateKeysArg = ctx.addReferenceObj("allowDuplicateKeys",
       SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS))
     val failOnErrorArg = ctx.addReferenceObj("failOnError", failOnError)
@@ -75,8 +76,13 @@ case class ParseJson(child: Expression, failOnError: Boolean = true)
         boolean ${ev.isNull} = ${childCode.isNull};
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(VariantType)};
         if (!${childCode.isNull}) {
-          ${ev.value} = $cls.parseJson(${childCode.value}, $allowDuplicateKeysArg, $failOnErrorArg,
-            $variantMetricsArg);
+          $javaType $tmp = $cls.parseJson(${childCode.value}, $allowDuplicateKeysArg,
+            $failOnErrorArg, $variantMetricsArg);
+          if ($tmp == null) {
+            ${ev.isNull} = true;
+          } else {
+            ${ev.value} = $tmp;
+          }
         }
       """
     ev.copy(code = code)
