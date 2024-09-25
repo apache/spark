@@ -95,6 +95,9 @@ object Main extends Logging {
       // initialization in certain cases, there's an initialization order issue that prevents
       // this from being set after SparkContext is instantiated.
       conf.set("spark.repl.class.outputDir", outputDir.getAbsolutePath())
+      // In Spark Classic REPL we need to disable the isolated REPL URI because the artifacts
+      // are stored only in the shared location "spark.repl.class.outputDir".
+      conf.set("spark.repl.class.isIsolated", "false")
       if (execUri != null) {
         conf.set("spark.executor.uri", execUri)
       }

@@ -67,12 +67,15 @@ class ArtifactManager(session: SparkSession) extends Logging {
       s"$artifactRootURI${File.separator}${session.sessionUUID}")
 
   // The base directory/URI where all class file artifacts are stored for this `sessionUUID`.
-  protected[artifact] val (classDir, classURI): (Path, String) =
+  protected[artifact] val (classDir, replClassURI): (Path, String) =
     (ArtifactUtils.concatenatePaths(artifactPath, "classes"),
       s"$artifactURI${File.separator}classes${File.separator}")
 
-  protected[sql] val state: JobArtifactState =
-    JobArtifactState(session.sessionUUID, Option(classURI))
+  protected[sql] lazy val state: JobArtifactState = {
+    val isIsolated = session.sparkContext.conf.get("spark.repl.class.isIsolated", "true")
+    val replClassURIOpt = if (isIsolated == "true") Some(replClassURI) else None
+    JobArtifactState(session.sessionUUID, replClassURIOpt)
+  }
 
   def withResources[T](f: => T): T = {
     Utils.withContextClassLoader(classloader) {
