@@ -705,18 +705,7 @@ abstract class TypeCoercionBase {
       case e if !e.childrenResolved => e
 
       case b @ BinaryOperator(left, right)
-          if canHandleTypeCoercion(left.dataType, right.dataType) =>
-        findTightestCommonType(left.dataType, right.dataType).map { commonType =>
-          if (b.inputType.acceptsType(commonType)) {
-            // If the expression accepts the tightest common type, cast to that.
-            val newLeft = if (left.dataType == commonType) left else Cast(left, commonType)
-            val newRight = if (right.dataType == commonType) right else Cast(right, commonType)
-            b.withNewChildren(Seq(newLeft, newRight))
-          } else {
-            // Otherwise, don't do anything with the expression.
-            b
-          }
-        }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
+        if canHandleTypeCoercion(left.dataType, right.dataType) => binaryOperatorImplicitCast(b)
 
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
@@ -754,6 +743,24 @@ abstract class TypeCoercionBase {
         }
         udf.copy(children = children)
     }
+
+    private[analysis] def binaryOperatorImplicitCast(binaryOperator: BinaryOperator): Expression = {
+      val left = binaryOperator.left
+      val right = binaryOperator.right
+      findTightestCommonType(left.dataType, right.dataType).map { commonType =>
+        if (binaryOperator.inputType.acceptsType(commonType)) {
+          // If the expression accepts the tightest common type, cast to that.
+          val newLeft = if (left.dataType == commonType) left else Cast(left, commonType)
+          val newRight = if (right.dataType == commonType) right else Cast(right, commonType)
+          binaryOperator.withNewChildren(Seq(newLeft, newRight))
+        } else {
+          // Otherwise, don't do anything with the expression.
+          binaryOperator
+        }
+      // If there is no applicable conversion, leave expression unchanged.
+      }.getOrElse(binaryOperator)
+    }
+
 
     private def udfInputToCastType(input: DataType, expectedType: DataType): DataType = {
       (input, expectedType) match {

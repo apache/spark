@@ -197,37 +197,44 @@ object DecimalPrecision extends TypeCoercionRule {
     // Promote integers inside a binary expression with fixed-precision decimals to decimals,
     // and fixed-precision decimals in an expression with floats / doubles to doubles
     case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
-      (left, right) match {
-        // Promote literal integers inside a binary expression with fixed-precision decimals to
-        // decimals. The precision and scale are the ones strictly needed by the integer value.
-        // Requiring more precision than necessary may lead to a useless loss of precision.
-        // Consider the following example: multiplying a column which is DECIMAL(38, 18) by 2.
-        // If we use the default precision and scale for the integer type, 2 is considered a
-        // DECIMAL(10, 0). According to the rules, the result would be DECIMAL(38 + 10 + 1, 18),
-        // which is out of range and therefore it will become DECIMAL(38, 7), leading to
-        // potentially loosing 11 digits of the fractional part. Using only the precision needed
-        // by the Literal, instead, the result would be DECIMAL(38 + 1 + 1, 18), which would
-        // become DECIMAL(38, 16), safely having a much lower precision loss.
-        case (l: Literal, r) if r.dataType.isInstanceOf[DecimalType] &&
-            l.dataType.isInstanceOf[IntegralType] &&
-            literalPickMinimumPrecision =>
-          b.withNewChildren(Seq(Cast(l, DataTypeUtils.fromLiteral(l)), r))
-        case (l, r: Literal) if l.dataType.isInstanceOf[DecimalType] &&
-            r.dataType.isInstanceOf[IntegralType] &&
-            literalPickMinimumPrecision =>
-          b.withNewChildren(Seq(l, Cast(r, DataTypeUtils.fromLiteral(r))))
-        // Promote integers inside a binary expression with fixed-precision decimals to decimals,
-        // and fixed-precision decimals in an expression with floats / doubles to doubles
-        case (l @ IntegralTypeExpression(), r @ DecimalExpression(_, _)) =>
-          b.withNewChildren(Seq(Cast(l, DecimalType.forType(l.dataType)), r))
-        case (l @ DecimalExpression(_, _), r @ IntegralTypeExpression()) =>
-          b.withNewChildren(Seq(l, Cast(r, DecimalType.forType(r.dataType))))
-        case (l, r @ DecimalExpression(_, _)) if isFloat(l.dataType) =>
-          b.withNewChildren(Seq(l, Cast(r, DoubleType)))
-        case (l @ DecimalExpression(_, _), r) if isFloat(r.dataType) =>
-          b.withNewChildren(Seq(Cast(l, DoubleType), r))
-        case _ => b
-      }
+      promoteIntegerLiterals(b, literalPickMinimumPrecision)
+  }
+
+  private[analysis] def promoteIntegerLiterals(
+      binaryOperator: BinaryOperator,
+      literalPickMinimumPrecision: Boolean): Expression = {
+    (binaryOperator.left, binaryOperator.right) match {
+      // Promote literal integers inside a binary expression with fixed-precision decimals to
+      // decimals. The precision and scale are the ones strictly needed by the integer value.
+      // Requiring more precision than necessary may lead to a useless loss of precision.
+      // Consider the following example: multiplying a column which is DECIMAL(38, 18) by 2.
+      // If we use the default precision and scale for the integer type, 2 is considered a
+      // DECIMAL(10, 0). According to the rules, the result would be DECIMAL(38 + 10 + 1, 18),
+      // which is out of range and therefore it will become DECIMAL(38, 7), leading to
+      // potentially loosing 11 digits of the fractional part. Using only the precision needed
+      // by the Literal, instead, the result would be DECIMAL(38 + 1 + 1, 18), which would
+      // become DECIMAL(38, 16), safely having a much lower precision loss.
+      case (l: Literal, r)
+        if r.dataType.isInstanceOf[DecimalType] &&
+          l.dataType.isInstanceOf[IntegralType] &&
+          literalPickMinimumPrecision =>
+        binaryOperator.withNewChildren(Seq(Cast(l, DataTypeUtils.fromLiteral(l)), r))
+      case (l, r: Literal) if l.dataType.isInstanceOf[DecimalType] &&
+        r.dataType.isInstanceOf[IntegralType] &&
+        literalPickMinimumPrecision =>
+        binaryOperator.withNewChildren(Seq(l, Cast(r, DataTypeUtils.fromLiteral(r))))
+      // Promote integers inside a binary expression with fixed-precision decimals to decimals,
+      // and fixed-precision decimals in an expression with floats / doubles to doubles
+      case (l@IntegralTypeExpression(), r@DecimalExpression(_, _)) =>
+        binaryOperator.withNewChildren(Seq(Cast(l, DecimalType.forType(l.dataType)), r))
+      case (l@DecimalExpression(_, _), r@IntegralTypeExpression()) =>
+        binaryOperator.withNewChildren(Seq(l, Cast(r, DecimalType.forType(r.dataType))))
+      case (l, r@DecimalExpression(_, _)) if isFloat(l.dataType) =>
+        binaryOperator.withNewChildren(Seq(l, Cast(r, DoubleType)))
+      case (l@DecimalExpression(_, _), r) if isFloat(r.dataType) =>
+        binaryOperator.withNewChildren(Seq(Cast(l, DoubleType), r))
+      case _ => binaryOperator
+    }
   }
 
 }
