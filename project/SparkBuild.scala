@@ -45,24 +45,24 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer, tokenProviderKafka010, sqlKafka010, avro, protobuf) = Seq(
-    "catalyst", "sql", "hive", "hive-thriftserver", "token-provider-kafka-0-10", "sql-kafka-0-10", "avro", "protobuf"
-  ).map(ProjectRef(buildLocation, _))
+  val sqlProjects@Seq(sqlApi, catalyst, sql, hive, hiveThriftServer, tokenProviderKafka010, sqlKafka010, avro, protobuf) =
+    Seq("sql-api", "catalyst", "sql", "hive", "hive-thriftserver", "token-provider-kafka-0-10",
+      "sql-kafka-0-10", "avro", "protobuf").map(ProjectRef(buildLocation, _))
 
   val streamingProjects@Seq(streaming, streamingKafka010) =
     Seq("streaming", "streaming-kafka-0-10").map(ProjectRef(buildLocation, _))
 
-  val connectCommon = ProjectRef(buildLocation, "connect-common")
-  val connect = ProjectRef(buildLocation, "connect")
-  val connectClient = ProjectRef(buildLocation, "connect-client-jvm")
+  val connectProjects@Seq(connectCommon, connect, connectClient, connectShims) =
+    Seq("connect-common", "connect", "connect-client-jvm", "connect-shims")
+      .map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
-    commonUtils, sqlApi, variant, _*
+    commonUtils, variant, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
-    "tags", "sketch", "kvstore", "common-utils", "sql-api", "variant"
-  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connectCommon, connect, connectClient)
+    "tags", "sketch", "kvstore", "common-utils", "variant"
+  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ connectProjects
 
   val optionallyEnabledProjects@Seq(kubernetes, yarn,
     sparkGangliaLgpl, streamingKinesisAsl,
@@ -354,12 +354,18 @@ object SparkBuild extends PomBuild {
 
   // Note ordering of these settings matter.
   /* Enable shared settings on all projects */
-  (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
-    .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
+  val everyProject = (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
+  everyProject.foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
       ExcludedDependencies.settings ++ Checkstyle.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
+
+  /** Remove connect shims from every project except the ones used by the connect client. */
+  val projectsWithShims = Set(sqlApi, connectCommon, connectClient)
+  everyProject.filterNot(projectsWithShims).foreach {
+    enable(ExcludeShims.settings)
+  }
 
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
@@ -1080,6 +1086,18 @@ object ExcludedDependencies {
       ExclusionRule(organization = "com.sun.jersey"),
       ExclusionRule(organization = "ch.qos.logback"),
       ExclusionRule("javax.ws.rs", "jsr311-api"))
+  )
+}
+
+/**
+ * This excludes the spark-connect-shims module from a module. This is needed because SBT (or the
+ * POM reader) does not seem to respect module exclusions.
+ */
+object ExcludeShims {
+  lazy val settings = Seq(
+    Compile / internalDependencyClasspath ~= { cp =>
+      cp.filterNot(_.data.name.contains("spark-connect-shims"))
+    }
   )
 }
 
