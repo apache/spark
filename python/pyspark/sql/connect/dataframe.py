@@ -1260,7 +1260,7 @@ class DataFrame(ParentDataFrame):
         res._cached_schema = self._merge_cached_schema(other)
         return res
 
-    def where(self, condition: "ColumnOrName") -> ParentDataFrame:
+    def where(self, condition: Union[Column, str]) -> ParentDataFrame:
         if not isinstance(condition, (str, Column)):
             raise PySparkTypeError(
                 errorClass="NOT_COLUMN_OR_STR",
