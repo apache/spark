@@ -2402,8 +2402,8 @@ object functions {
   def ceiling(e: Column): Column = Column.fn("ceiling", e)
 
   /**
-   * This is a special version of `conv` that performs the same operation, but returns a
-   * NULL value instead of raising an error if the decoding cannot be performed.
+   * This is a special version of `conv` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the decoding cannot be performed.
    *
    * @group math_funcs
    * @since 4.0.0
