@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{RuntimeConfig, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.DataSourceOptions
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -119,9 +119,9 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           throw StateDataSourceErrors.offsetMetadataLogUnavailable(batchId, checkpointLocation)
         )
 
-        val clonedRuntimeConf = new RuntimeConfig(session.sessionState.conf.clone())
-        OffsetSeqMetadata.setSessionConf(metadata, clonedRuntimeConf)
-        StateStoreConf(clonedRuntimeConf.sqlConf)
+        val clonedSqlConf = session.sessionState.conf.clone()
+        OffsetSeqMetadata.setSessionConf(metadata, clonedSqlConf)
+        StateStoreConf(clonedSqlConf)
 
       case _ =>
         throw StateDataSourceErrors.offsetLogUnavailable(batchId, checkpointLocation)
@@ -303,13 +303,15 @@ case class StateSourceOptions(
     readChangeFeed: Boolean,
     fromSnapshotOptions: Option[FromSnapshotOptions],
     readChangeFeedOptions: Option[ReadChangeFeedOptions],
-    stateVarName: Option[String]) {
+    stateVarName: Option[String],
+    flattenCollectionTypes: Boolean) {
   def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
 
   override def toString: String = {
     var desc = s"StateSourceOptions(checkpointLocation=$resolvedCpLocation, batchId=$batchId, " +
       s"operatorId=$operatorId, storeName=$storeName, joinSide=$joinSide, " +
-      s"stateVarName=${stateVarName.getOrElse("None")}"
+      s"stateVarName=${stateVarName.getOrElse("None")}, +" +
+      s"flattenCollectionTypes=$flattenCollectionTypes"
     if (fromSnapshotOptions.isDefined) {
       desc += s", snapshotStartBatchId=${fromSnapshotOptions.get.snapshotStartBatchId}"
       desc += s", snapshotPartitionId=${fromSnapshotOptions.get.snapshotPartitionId}"
@@ -334,6 +336,7 @@ object StateSourceOptions extends DataSourceOptions {
   val CHANGE_START_BATCH_ID = newOption("changeStartBatchId")
   val CHANGE_END_BATCH_ID = newOption("changeEndBatchId")
   val STATE_VAR_NAME = newOption("stateVarName")
+  val FLATTEN_COLLECTION_TYPES = newOption("flattenCollectionTypes")
 
   object JoinSideValues extends Enumeration {
     type JoinSideValues = Value
@@ -373,6 +376,15 @@ object StateSourceOptions extends DataSourceOptions {
     // Check if the state variable name is provided. Used with the transformWithState operator.
     val stateVarName = Option(options.get(STATE_VAR_NAME))
       .map(_.trim)
+
+    val flattenCollectionTypes = try {
+      Option(options.get(FLATTEN_COLLECTION_TYPES))
+        .map(_.toBoolean).getOrElse(true)
+    } catch {
+      case _: IllegalArgumentException =>
+        throw StateDataSourceErrors.invalidOptionValue(FLATTEN_COLLECTION_TYPES,
+          "Boolean value is expected")
+    }
 
     val joinSide = try {
       Option(options.get(JOIN_SIDE))
@@ -477,7 +489,8 @@ object StateSourceOptions extends DataSourceOptions {
 
     StateSourceOptions(
       resolvedCpLocation, batchId.get, operatorId, storeName, joinSide,
-      readChangeFeed, fromSnapshotOptions, readChangeFeedOptions, stateVarName)
+      readChangeFeed, fromSnapshotOptions, readChangeFeedOptions, stateVarName,
+      flattenCollectionTypes)
   }
 
   private def resolvedCheckpointLocation(

@@ -389,6 +389,18 @@ object functions {
   def count_min_sketch(e: Column, eps: Column, confidence: Column, seed: Column): Column =
     Column.fn("count_min_sketch", e, eps, confidence, seed)
 
+  /**
+   * Returns a count-min sketch of a column with the given esp, confidence and seed. The result is
+   * an array of bytes, which can be deserialized to a `CountMinSketch` before usage. Count-min
+   * sketch is a probabilistic data structure used for cardinality estimation using sub-linear
+   * space.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def count_min_sketch(e: Column, eps: Column, confidence: Column): Column =
+    count_min_sketch(e, eps, confidence, lit(SparkClassUtils.random.nextLong))
+
   private[spark] def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
     Column.internalFn("collect_top_k", e, lit(num), lit(reverse))
 
@@ -1714,7 +1726,7 @@ object functions {
    * @group normal_funcs
    * @since 1.5.0
    */
-  def broadcast[DS[U] <: api.Dataset[U, DS]](df: DS[_]): df.type = {
+  def broadcast[DS[U] <: api.Dataset[U]](df: DS[_]): df.type = {
     df.hint("broadcast").asInstanceOf[df.type]
   }
 
@@ -7240,7 +7252,18 @@ object functions {
    * @group array_funcs
    * @since 2.4.0
    */
-  def shuffle(e: Column): Column = Column.fn("shuffle", e, lit(SparkClassUtils.random.nextLong))
+  def shuffle(e: Column): Column = shuffle(e, lit(SparkClassUtils.random.nextLong))
+
+  /**
+   * Returns a random permutation of the given array.
+   *
+   * @note
+   *   The function is non-deterministic.
+   *
+   * @group array_funcs
+   * @since 4.0.0
+   */
+  def shuffle(e: Column, seed: Column): Column = Column.fn("shuffle", e, seed)
 
   /**
    * Returns a reversed string or an array with reverse order of elements.

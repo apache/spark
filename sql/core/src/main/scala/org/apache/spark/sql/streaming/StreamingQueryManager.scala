@@ -27,7 +27,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, QUERY_ID, RUN_ID}
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog}
@@ -241,7 +241,7 @@ class StreamingQueryManager private[sql] (
   private def createQuery(
       userSpecifiedName: Option[String],
       userSpecifiedCheckpointLocation: Option[String],
-      df: DataFrame,
+      df: Dataset[_],
       extraOptions: Map[String, String],
       sink: Table,
       outputMode: OutputMode,
@@ -322,7 +322,7 @@ class StreamingQueryManager private[sql] (
   private[sql] def startQuery(
       userSpecifiedName: Option[String],
       userSpecifiedCheckpointLocation: Option[String],
-      df: DataFrame,
+      df: Dataset[_],
       extraOptions: Map[String, String],
       sink: Table,
       outputMode: OutputMode,
@@ -364,7 +364,7 @@ class StreamingQueryManager private[sql] (
         .orElse(activeQueries.get(query.id)) // shouldn't be needed but paranoia ...
 
       val shouldStopActiveRun =
-        sparkSession.conf.get(SQLConf.STREAMING_STOP_ACTIVE_RUN_ON_RESTART)
+        sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_STOP_ACTIVE_RUN_ON_RESTART)
       if (activeOption.isDefined) {
         if (shouldStopActiveRun) {
           val oldQuery = activeOption.get

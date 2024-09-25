@@ -5698,6 +5698,28 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Creates a plan for invoking a procedure.
+   *
+   * For example:
+   * {{{
+   *   CALL multi_part_name(v1, v2, ...);
+   *   CALL multi_part_name(v1, param2 => v2, ...);
+   *   CALL multi_part_name(param1 => v1, param2 => v2, ...);
+   * }}}
+   */
+  override def visitCall(ctx: CallContext): LogicalPlan = withOrigin(ctx) {
+    val procedure = withIdentClause(ctx.identifierReference, UnresolvedProcedure)
+    val args = ctx.functionArgument.asScala.map {
+      case expr if expr.namedArgumentExpression != null =>
+        val namedExpr = expr.namedArgumentExpression
+        NamedArgumentExpression(namedExpr.key.getText, expression(namedExpr.value))
+      case expr =>
+        expression(expr)
+    }.toSeq
+    Call(procedure, args)
+  }
+
+  /**
    * Create a TimestampAdd expression.
    */
   override def visitTimestampadd(ctx: TimestampaddContext): Expression = withOrigin(ctx) {
@@ -5854,9 +5876,22 @@ class AstBuilder extends DataTypeAstBuilder
         windowClause = null,
         relation = left,
         isPipeOperatorSelect = true)
+    }.getOrElse(Option(ctx.whereClause).map { c =>
+      // Add a table subquery boundary between the new filter and the input plan if one does not
+      // already exist. This helps the analyzer behave as if we had added the WHERE clause after a
+      // table subquery containing the input plan.
+      val withSubqueryAlias = left match {
+        case s: SubqueryAlias =>
+          s
+        case u: UnresolvedRelation =>
+          u
+        case _ =>
+          SubqueryAlias(SubqueryAlias.generateSubqueryName(), left)
+      }
+      withWhereClause(c, withSubqueryAlias)
     }.getOrElse(Option(ctx.sample).map { c =>
       withSample(c, left)
-    }.get)
+    }.get))
   }
 
   /**

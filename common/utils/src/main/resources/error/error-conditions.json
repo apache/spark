@@ -1,4 +1,10 @@
 {
+  "ADD_DEFAULT_UNSUPPORTED" : {
+    "message" : [
+      "Failed to execute <statementType> command because DEFAULT values are not supported when adding new columns to previously existing target data source with table provider: \"<dataSource>\"."
+    ],
+    "sqlState" : "42623"
+  },
   "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION" : {
     "message" : [
       "Non-deterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
@@ -1049,7 +1055,7 @@
     "message" : [
       "Encountered error when saving to external data source."
     ],
-    "sqlState" : "KD00F"
+    "sqlState" : "KD010"
   },
   "DATA_SOURCE_NOT_EXIST" : {
     "message" : [
@@ -1095,6 +1101,12 @@
       "For example: `UPDATE SET c1 = DEFAULT` is allowed, but `UPDATE T SET c1 = DEFAULT + 1` is not allowed."
     ],
     "sqlState" : "42608"
+  },
+  "DEFAULT_UNSUPPORTED" : {
+    "message" : [
+      "Failed to execute <statementType> command because DEFAULT values are not supported for target data source with table provider: \"<dataSource>\"."
+    ],
+    "sqlState" : "42623"
   },
   "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED" : {
     "message" : [
@@ -1443,6 +1455,12 @@
       "Failed to convert the row value <value> of the class <class> to the target SQL type <sqlType> in the JSON format."
     ],
     "sqlState" : "2203G"
+  },
+  "FAILED_TO_LOAD_ROUTINE" : {
+    "message" : [
+      "Failed to load routine <routineName>."
+    ],
+    "sqlState" : "38000"
   },
   "FAILED_TO_PARSE_TOO_COMPLEX" : {
     "message" : [
@@ -1995,6 +2013,12 @@
       }
     },
     "sqlState" : "42903"
+  },
+  "INVALID_AGNOSTIC_ENCODER" : {
+    "message" : [
+      "Found an invalid agnostic encoder. Expects an instance of AgnosticEncoder but got <encoderType>. For more information consult '<docroot>/api/java/index.html?org/apache/spark/sql/Encoder.html'."
+    ],
+    "sqlState" : "42001"
   },
   "INVALID_ARRAY_INDEX" : {
     "message" : [
@@ -6665,21 +6689,6 @@
   "_LEGACY_ERROR_TEMP_1338" : {
     "message" : [
       "Sinks cannot request distribution and ordering in continuous execution mode."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1344" : {
-    "message" : [
-      "Invalid DEFAULT value for column <fieldName>: <defaultValue> fails to parse as a valid literal value."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1345" : {
-    "message" : [
-      "Failed to execute <statementType> command because DEFAULT values are not supported for target data source with table provider: \"<dataSource>\"."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1346" : {
-    "message" : [
-      "Failed to execute <statementType> command because DEFAULT values are not supported when adding new columns to previously existing target data source with table provider: \"<dataSource>\"."
     ]
   },
   "_LEGACY_ERROR_TEMP_2000" : {
