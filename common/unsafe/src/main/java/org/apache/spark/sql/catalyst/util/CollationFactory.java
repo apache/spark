@@ -271,7 +271,8 @@ public final class CollationFactory {
 
       /**
        * Bits 19-18 having value 00 for no space trimming, 01 for left space trimming
-       * 10 for right space trimming and 11 for both sides space trimming.
+       * 10 for right space trimming and 11 for both sides space trimming. Bits 21, 20
+       * remained reserved (and fixed to 0) for future use.
        */
       protected enum SpaceTrimming {
         NONE, LTRIM, RTRIM, TRIM
@@ -592,7 +593,7 @@ public final class CollationFactory {
         StringBuilder builder = new StringBuilder();
         if(caseSensitivity == CaseSensitivity.UNSPECIFIED){
           builder.append(UTF8_BINARY_COLLATION_NAME);
-        }else{
+        } else{
           builder.append(UTF8_LCASE_COLLATION_NAME);
         }
         if (spaceTrimming != SpaceTrimming.NONE) {
