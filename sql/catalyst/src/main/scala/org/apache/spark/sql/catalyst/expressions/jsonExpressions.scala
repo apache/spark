@@ -970,7 +970,6 @@ case class SchemaOfJson(
 case class LengthOfJsonArray(child: Expression)
   extends UnaryExpression
   with ExpectsInputTypes
-  with NullIntolerant
   with RuntimeReplaceable {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)

@@ -29,6 +29,10 @@ import org.apache.spark.unsafe.types.UTF8String;
 public class JsonExpressionUtils {
 
   public static Integer lengthOfJsonArray(UTF8String json) {
+    // return null for null input
+    if (json == null) {
+      return null;
+    }
     try (JsonParser jsonParser =
         CreateJacksonParser.utf8String(SharedFactory.jsonFactory(), json)) {
       if (jsonParser.nextToken() == null) {
