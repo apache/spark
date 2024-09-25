@@ -3217,6 +3217,14 @@ object SQLConf {
       .intConf
       .createWithDefault(10000)
 
+  val ARROW_TRANSFORM_WITH_STATE_IN_PANDAS_MAX_RECORDS_PER_BATCH =
+    buildConf("spark.sql.execution.arrow.transformWithStateInPandas.maxRecordsPerBatch")
+      .doc("When using TransformWithStateInPandas, limit the maximum number of state records " +
+        "that can be written to a single ArrowRecordBatch in memory.")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(10000)
+
   val ARROW_EXECUTION_USE_LARGE_VAR_TYPES =
     buildConf("spark.sql.execution.arrow.useLargeVarTypes")
       .doc("When using Apache Arrow, use large variable width vectors for string and binary " +
@@ -5898,6 +5906,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def arrowPySparkFallbackEnabled: Boolean = getConf(ARROW_PYSPARK_FALLBACK_ENABLED)
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
+
+  def arrowTransformWithStateInPandasMaxRecordsPerBatch: Int =
+    getConf(ARROW_TRANSFORM_WITH_STATE_IN_PANDAS_MAX_RECORDS_PER_BATCH)
 
   def arrowUseLargeVarTypes: Boolean = getConf(ARROW_EXECUTION_USE_LARGE_VAR_TYPES)
 

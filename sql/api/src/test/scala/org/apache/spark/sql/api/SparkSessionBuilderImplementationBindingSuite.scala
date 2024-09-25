@@ -14,15 +14,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.api
 
-package org.apache.spark
+// scalastyle:off funsuite
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.funsuite.AnyFunSuite
 
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
+import org.apache.spark.sql.functions.sum
 
-package object sql {
-  type DataFrame = Dataset[Row]
+/**
+ * Test suite for SparkSession implementation binding.
+ */
+trait SparkSessionBuilderImplementationBindingSuite extends AnyFunSuite with BeforeAndAfterAll {
+// scalastyle:on
+  protected def configure(builder: SparkSessionBuilder): builder.type = builder
 
-  private[sql] def encoderFor[E: Encoder]: AgnosticEncoder[E] = {
-    implicitly[Encoder[E]].asInstanceOf[AgnosticEncoder[E]]
+  test("range") {
+    val session = configure(SparkSession.builder()).getOrCreate()
+    import session.implicits._
+    val df = session.range(10).agg(sum("id")).as[Long]
+    assert(df.head() == 45)
   }
 }

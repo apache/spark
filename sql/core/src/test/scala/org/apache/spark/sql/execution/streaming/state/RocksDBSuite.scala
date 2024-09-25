@@ -526,12 +526,12 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
     val conf = RocksDBConf().copy(compression = "zstd")
     withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
-      assert(db.columnFamilyOptions.compressionType() == CompressionType.ZSTD_COMPRESSION)
+      assert(db.rocksDbOptions.compressionType() == CompressionType.ZSTD_COMPRESSION)
     }
 
     // Test the default is LZ4
     withDB(remoteDir, conf = RocksDBConf().copy(), useColumnFamilies = colFamiliesEnabled) { db =>
-      assert(db.columnFamilyOptions.compressionType() == CompressionType.LZ4_COMPRESSION)
+      assert(db.rocksDbOptions.compressionType() == CompressionType.LZ4_COMPRESSION)
     }
   }
 

@@ -14,15 +14,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql
 
-package org.apache.spark
+import org.apache.spark.sql.api.SparkSessionBuilder
+import org.apache.spark.sql.test.{ConnectFunSuite, RemoteSparkSession}
 
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-
-package object sql {
-  type DataFrame = Dataset[Row]
-
-  private[sql] def encoderFor[E: Encoder]: AgnosticEncoder[E] = {
-    implicitly[Encoder[E]].asInstanceOf[AgnosticEncoder[E]]
+/**
+ * Make sure the api.SparkSessionBuilder binds to Connect implementation.
+ */
+class SparkSessionBuilderImplementationBindingSuite
+    extends ConnectFunSuite
+    with api.SparkSessionBuilderImplementationBindingSuite
+    with RemoteSparkSession {
+  override protected def configure(builder: SparkSessionBuilder): builder.type = {
+    // We need to set this configuration because the port used by the server is random.
+    builder.remote(s"sc://localhost:$serverPort")
   }
 }

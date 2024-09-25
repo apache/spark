@@ -299,3 +299,4 @@ class PySparkPlotAccessor:
         >>> df.plot.area(x='date', y=['sales', 'signups', 'visits'])  # doctest: +SKIP
         """
         return self(kind="area", x=x, y=y, **kwargs)
+

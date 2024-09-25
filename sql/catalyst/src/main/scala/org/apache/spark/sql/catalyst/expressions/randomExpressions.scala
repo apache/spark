@@ -206,15 +206,18 @@ object Randn {
   """,
   since = "4.0.0",
   group = "math_funcs")
-case class Uniform(min: Expression, max: Expression, seedExpression: Expression)
+case class Uniform(min: Expression, max: Expression, seedExpression: Expression, hideSeed: Boolean)
   extends RuntimeReplaceable with TernaryLike[Expression] with RDG {
-  def this(min: Expression, max: Expression) = this(min, max, UnresolvedSeed)
+  def this(min: Expression, max: Expression) =
+    this(min, max, UnresolvedSeed, hideSeed = true)
+  def this(min: Expression, max: Expression, seedExpression: Expression) =
+    this(min, max, seedExpression, hideSeed = false)
 
   final override lazy val deterministic: Boolean = false
   override val nodePatterns: Seq[TreePattern] =
     Seq(RUNTIME_REPLACEABLE, EXPRESSION_WITH_RANDOM_SEED)
 
-  override val dataType: DataType = {
+  override def dataType: DataType = {
     val first = min.dataType
     val second = max.dataType
     (min.dataType, max.dataType) match {
@@ -238,6 +241,10 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression)
   private def integer(t: DataType): Boolean = t match {
     case _: ShortType | _: IntegerType | _: LongType => true
     case _ => false
+  }
+
+  override def sql: String = {
+    s"uniform(${min.sql}, ${max.sql}${if (hideSeed) "" else s", ${seedExpression.sql}"})"
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -277,11 +284,11 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression)
   override def third: Expression = seedExpression
 
   override def withNewSeed(newSeed: Long): Expression =
-    Uniform(min, max, Literal(newSeed, LongType))
+    Uniform(min, max, Literal(newSeed, LongType), hideSeed)
 
   override def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
-    Uniform(newFirst, newSecond, newThird)
+    Uniform(newFirst, newSecond, newThird, hideSeed)
 
   override def replacement: Expression = {
     if (Seq(min, max, seedExpression).exists(_.dataType == NullType)) {
@@ -300,6 +307,13 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression)
   }
 }
 
+object Uniform {
+  def apply(min: Expression, max: Expression): Uniform =
+    Uniform(min, max, UnresolvedSeed, hideSeed = true)
+  def apply(min: Expression, max: Expression, seedExpression: Expression): Uniform =
+    Uniform(min, max, seedExpression, hideSeed = false)
+}
+
 @ExpressionDescription(
   usage = """
     _FUNC_(length[, seed]) - Returns a string of the specified length whose characters are chosen
@@ -315,9 +329,13 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression)
   """,
   since = "4.0.0",
   group = "string_funcs")
-case class RandStr(length: Expression, override val seedExpression: Expression)
+case class RandStr(
+    length: Expression, override val seedExpression: Expression, hideSeed: Boolean)
   extends ExpressionWithRandomSeed with BinaryLike[Expression] with Nondeterministic {
-  def this(length: Expression) = this(length, UnresolvedSeed)
+  def this(length: Expression) =
+    this(length, UnresolvedSeed, hideSeed = true)
+  def this(length: Expression, seedExpression: Expression) =
+    this(length, seedExpression, hideSeed = false)
 
   override def nullable: Boolean = false
   override def dataType: DataType = StringType
@@ -339,9 +357,14 @@ case class RandStr(length: Expression, override val seedExpression: Expression)
     rng = new XORShiftRandom(seed + partitionIndex)
   }
 
-  override def withNewSeed(newSeed: Long): Expression = RandStr(length, Literal(newSeed, LongType))
+  override def withNewSeed(newSeed: Long): Expression =
+    RandStr(length, Literal(newSeed, LongType), hideSeed)
   override def withNewChildrenInternal(newFirst: Expression, newSecond: Expression): Expression =
-    RandStr(newFirst, newSecond)
+    RandStr(newFirst, newSecond, hideSeed)
+
+  override def sql: String = {
+    s"randstr(${length.sql}${if (hideSeed) "" else s", ${seedExpression.sql}"})"
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     var result: TypeCheckResult = TypeCheckResult.TypeCheckSuccess
@@ -422,3 +445,11 @@ case class RandStr(length: Expression, override val seedExpression: Expression)
       isNull = FalseLiteral)
   }
 }
+
+object RandStr {
+  def apply(length: Expression): RandStr =
+    RandStr(length, UnresolvedSeed, hideSeed = true)
+  def apply(length: Expression, seedExpression: Expression): RandStr =
+    RandStr(length, seedExpression, hideSeed = false)
+}
+
