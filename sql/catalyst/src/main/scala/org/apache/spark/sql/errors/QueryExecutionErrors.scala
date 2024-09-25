@@ -2766,7 +2766,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "functionName" -> toSQLId(functionName),
         "parameter" -> toSQLId("charset"),
         "charset" -> charset,
-        "charsets" -> CharsetProvider.VALID_CHARSETS.toSeq.sorted.mkString(", ")))
+        "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", ")))
   }
 
   def malformedCharacterCoding(functionName: String, charset: String): RuntimeException = {

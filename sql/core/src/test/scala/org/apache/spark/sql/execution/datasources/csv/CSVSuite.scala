@@ -271,7 +271,7 @@ abstract class CSVSuite
         "charset" -> "1-9588-osi",
         "functionName" -> toSQLId("CSVOptions"),
         "parameter" -> toSQLId("charset"),
-        "charsets" -> CharsetProvider.VALID_CHARSETS.toSeq.sorted.mkString(", "))
+        "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", "))
     )
   }
 
@@ -655,7 +655,7 @@ abstract class CSVSuite
         "charset" -> "1-9588-osi",
         "functionName" -> toSQLId("CSVOptions"),
         "parameter" -> toSQLId("charset"),
-        "charsets" -> CharsetProvider.VALID_CHARSETS.toSeq.sorted.mkString(", "))
+        "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", "))
     )
   }
 
