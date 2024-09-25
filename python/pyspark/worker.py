@@ -337,38 +337,47 @@ def wrap_cogrouped_map_arrow_udf(f, return_type, argspec, is_generator, runner_c
             (col.name, to_arrow_type(col.dataType)) for col in return_type.fields
         ]
 
-    def wrapped(left_key_batch, left_value_batches, right_key_batch, right_value_batches):
-        if is_generator:
-            if len(argspec.args) == 2:
-                result = f(left_value_batches, right_value_batches)
-            elif len(argspec.args) == 3:
-                key_batch = left_key_batch if left_key_batch.num_rows > 0 else right_key_batch
-                key = tuple(c[0] for c in key_batch.columns)
-                result = f(key, left_value_batches, right_value_batches)
+    if not is_generator:
+        # Wrap a Table -> Table function to work with iterators of RecordBatches
+        table_func = f
 
-            def verify_element(batch):
-                verify_arrow_batch(batch, _assign_cols_by_name, expected_cols_and_types)
-                return batch
-
-            yield from map(verify_element, result)
-            # Make sure both iterators are fully consumed
-            for _ in left_value_batches:
-                pass
-            for _ in right_value_batches:
-                pass
-
-        else:
-            left_value_table = pa.Table.from_batches(left_value_batches)
-            right_value_table = pa.Table.from_batches(right_value_batches)
-            if len(argspec.args) == 2:
-                result = f(left_value_table, right_value_table)
-            elif len(argspec.args) == 3:
-                key_batch = left_key_batch if left_key_batch.num_rows > 0 else right_key_batch
-                key = tuple(c[0] for c in key_batch.columns)
-                result = f(key, left_value_table, right_value_table)
-
+        def as_iterator(left, right):
+            left_value_table = pa.Table.from_batches(left)
+            right_value_table = pa.Table.from_batches(right)
+            result = table_func(left_value_table, right_value_table)
             verify_arrow_table(result, _assign_cols_by_name, expected_cols_and_types)
             yield from result.to_batches()
+
+        def as_iterator_with_key(key, left, right):
+            left_value_table = pa.Table.from_batches(left)
+            right_value_table = pa.Table.from_batches(right)
+            result = table_func(key, left_value_table, right_value_table)
+            verify_arrow_table(result, _assign_cols_by_name, expected_cols_and_types)
+            yield from result.to_batches()
+
+        if len(argspec.args) == 2:
+            f = as_iterator
+        elif len(argspec.args) == 3:
+            f = as_iterator_with_key
+
+    def wrapped(left_key_batch, left_value_batches, right_key_batch, right_value_batches):
+        if len(argspec.args) == 2:
+            result = f(left_value_batches, right_value_batches)
+        elif len(argspec.args) == 3:
+            key_batch = left_key_batch if left_key_batch.num_rows > 0 else right_key_batch
+            key = tuple(c[0] for c in key_batch.columns)
+            result = f(key, left_value_batches, right_value_batches)
+
+        def verify_element(batch):
+            verify_arrow_batch(batch, _assign_cols_by_name, expected_cols_and_types)
+            return batch
+
+        yield from map(verify_element, result)
+        # Make sure both iterators are fully consumed
+        for _ in left_value_batches:
+            pass
+        for _ in right_value_batches:
+            pass
 
     return lambda kl, vl, kr, vr: (wrapped(kl, vl, kr, vr), to_arrow_type(return_type))
 
@@ -502,36 +511,42 @@ def wrap_grouped_map_arrow_udf(f, return_type, argspec, is_generator, runner_con
             (col.name, to_arrow_type(col.dataType)) for col in return_type.fields
         ]
 
-    def wrapped(key_batch, value_batches):
-        if is_generator:
-            # Iterator[RecordBatch] -> Iterator[RecordBatch]
-            if len(argspec.args) == 1:
-                result = f(value_batches)
-            elif len(argspec.args) == 2:
-                key = tuple(c[0] for c in key_batch.columns)
-                result = f(key, value_batches)
+    if not is_generator:
+        # Wrap a Table -> Table function to work with iterators of RecordBatches
+        table_func = f
 
-            def verify_element(batch):
-                verify_arrow_batch(batch, _assign_cols_by_name, expected_cols_and_types)
-                return batch
-
-            yield from map(verify_element, result)
-            # Make sure value_batches was fully iterated
-            for _ in value_batches:
-                pass
-
-        else:
-            # Table -> Table
+        def as_iterator(value_batches):
             value_table = pa.Table.from_batches(value_batches)
-            if len(argspec.args) == 1:
-                result = f(value_table)
-            elif len(argspec.args) == 2:
-                key = tuple(c[0] for c in key_batch.columns)
-                result = f(key, value_table)
-
+            result = table_func(value_table)
             verify_arrow_table(result, _assign_cols_by_name, expected_cols_and_types)
-
             yield from result.to_batches()
+
+        def as_iterator_with_key(key, value_batches):
+            value_table = pa.Table.from_batches(value_batches)
+            result = table_func(key, value_table)
+            verify_arrow_table(result, _assign_cols_by_name, expected_cols_and_types)
+            yield from result.to_batches()
+
+        if len(argspec.args) == 1:
+            f = as_iterator
+        elif len(argspec.args) == 2:
+            f = as_iterator_with_key
+
+    def wrapped(key_batch, value_batches):
+        if len(argspec.args) == 1:
+            result = f(value_batches)
+        elif len(argspec.args) == 2:
+            key = tuple(c[0] for c in key_batch.columns)
+            result = f(key, value_batches)
+
+        def verify_element(batch):
+            verify_arrow_batch(batch, _assign_cols_by_name, expected_cols_and_types)
+            return batch
+
+        yield from map(verify_element, result)
+        # Make sure value_batches was fully iterated
+        for _ in value_batches:
+            pass
 
     return lambda k, v: (wrapped(k, v), to_arrow_type(return_type))
 
