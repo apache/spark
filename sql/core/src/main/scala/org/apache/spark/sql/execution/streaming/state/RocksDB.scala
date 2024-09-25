@@ -130,7 +130,6 @@ class RocksDB(
   }
 
   rocksDbOptions.setCompressionType(getCompressionType(conf.compression))
-  rocksDbOptions.setMergeOperator(new StringAppendOperator())
 
   rocksDbOptions.setTableFormatConfig(tableFormatConfig)
   rocksDbOptions.setMaxOpenFiles(conf.maxOpenFiles)
