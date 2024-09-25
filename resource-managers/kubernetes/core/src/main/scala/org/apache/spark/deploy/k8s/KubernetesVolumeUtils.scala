@@ -47,6 +47,7 @@ object KubernetesVolumeUtils {
       val subPathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_SUBPATH_KEY"
       val subPathExprKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_SUBPATHEXPR_KEY"
       val labelKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_LABEL_KEY"
+      verifyMutuallyExclusiveOptionKeys(properties, subPathKey, subPathExprKey)
 
       val volumeLabelsMap = properties
         .filter(_._1.startsWith(labelKey))
@@ -131,6 +132,16 @@ object KubernetesVolumeUtils {
   private def verifyOptionKey(options: Map[String, String], key: String, msg: String): Unit = {
     if (!options.isDefinedAt(key)) {
       throw new NoSuchElementException(key + s" is required for $msg")
+    }
+  }
+
+  private def verifyMutuallyExclusiveOptionKeys(
+      options: Map[String, String],
+      keys: String*): Unit = {
+    val givenKeys = keys.filter(options.contains)
+    if (givenKeys.length > 1) {
+      throw new IllegalArgumentException("These config options are mutually exclusive: " +
+        s"${givenKeys.mkString(", ")}")
     }
   }
 

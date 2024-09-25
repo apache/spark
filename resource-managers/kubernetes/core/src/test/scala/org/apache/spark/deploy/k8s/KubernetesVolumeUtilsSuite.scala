@@ -72,6 +72,19 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     assert(volumeSpec.mountSubPathExpr === "subPathExpr")
   }
 
+  test("Rejects mutually exclusive subPath and subPathExpr") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("test.emptyDir.volumeName.mount.path", "/path")
+    sparkConf.set("test.emptyDir.volumeName.mount.subPath", "subPath")
+    sparkConf.set("test.emptyDir.volumeName.mount.subPathExpr", "subPathExpr")
+
+    val msg = intercept[IllegalArgumentException] {
+      KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head
+    }.getMessage
+    assert(msg === "These config options are mutually exclusive: " +
+      "emptyDir.volumeName.mount.subPath, emptyDir.volumeName.mount.subPathExpr")
+  }
+
   test("Parses persistentVolumeClaim volumes correctly") {
     val sparkConf = new SparkConf(false)
     sparkConf.set("test.persistentVolumeClaim.volumeName.mount.path", "/path")
