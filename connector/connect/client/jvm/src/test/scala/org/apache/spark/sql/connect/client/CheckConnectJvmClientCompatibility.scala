@@ -296,6 +296,8 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.UDFRegistration.initializeLogIfNecessary"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.UDFRegistration.initializeLogIfNecessary$default$2"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.UDFRegistration.registerJava")
 
       // Protected DataFrameReader methods...
       ProblemFilters.exclude[DirectMissingMethodProblem](
