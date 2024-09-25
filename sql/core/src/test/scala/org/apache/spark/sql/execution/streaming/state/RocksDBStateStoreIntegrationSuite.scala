@@ -380,7 +380,6 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
       val checkpointDir = Utils.createTempDir().getCanonicalFile
       checkpointDir.delete()
 
-      val dirForPartition0 = new File(checkpointDir.getAbsolutePath, "/state/0/0")
       val inputData = MemoryStream[Int]
       val aggregated =
         inputData
@@ -429,7 +428,6 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
       val checkpointDir = Utils.createTempDir().getCanonicalFile
       checkpointDir.delete()
 
-      val dirForPartition0 = new File(checkpointDir.getAbsolutePath, "/state/0/0")
       val inputData = MemoryStream[Int]
       val aggregated =
         inputData
@@ -492,6 +490,93 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
   }
 
   testWithChangelogCheckpointingEnabled(
+    s"checkpointFormatVersion2 validate ID with dedup and groupBy") {
+    val providerClassName = classOf[TestStateStoreProviderWrapper].getCanonicalName
+    TestStateStoreWrapper.clear()
+    withSQLConf(
+      (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName),
+      (SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2"),
+      (SQLConf.SHUFFLE_PARTITIONS.key, "2")) {
+      val checkpointDir = Utils.createTempDir().getCanonicalFile
+      checkpointDir.delete()
+
+      val inputData = MemoryStream[Int]
+      val aggregated =
+        inputData
+          .toDF()
+          .dropDuplicates("value") // Deduplication operation
+          .groupBy($"value") // Group-by operation
+          .agg(count("*"))
+          .as[(Int, Long)]
+
+      testStream(aggregated, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 3),
+        CheckLastBatch((3, 1)),
+        AddData(inputData, 3, 2),
+        CheckLastBatch((2, 1)), // 3 is deduplicated
+        StopStream
+      )
+      // Test recovery
+      testStream(aggregated, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 3, 2, 1),
+        CheckLastBatch((1, 1)), // 2,3 is deduplicated
+        AddData(inputData, 4, 4, 4, 4),
+        CheckLastBatch((4, 1)),
+        AddData(inputData, 5, 5),
+        CheckLastBatch((5, 1)),
+        StopStream
+      )
+      // Crash recovery again
+      testStream(aggregated, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 4),
+        CheckLastBatch(), // 4 is deduplicated
+        StopStream
+      )
+    }
+    val checkpointInfoList = TestStateStoreWrapper.getCheckpointInfos
+    // 6 bathes, each has two stateful operators and two shuffle partitions
+    assert(checkpointInfoList.size == 6 * 2 * 2)
+    checkpointInfoList.foreach { l =>
+      assert(l.checkpointId.isDefined)
+    }
+    assert(checkpointInfoList.count(_.baseCheckpointId.isDefined) == 3 * 2 * 2)
+
+    assert(checkpointInfoList.count(_.partitionId == 0) == 6 * 2)
+    assert(checkpointInfoList.count(_.partitionId == 1) == 6 * 2)
+    for (i <- 1 to 6) {
+      assert(checkpointInfoList.count(_.batchVersion == i) == 2 * 2)
+    }
+
+    // Here we assume for every task, we fetch checkpointID from the 4 state stores in the same
+    // order. So we can separate checkpointId for different stores based on the order inside the
+    // same (batchId, partitionId) group.
+    val grouped = checkpointInfoList
+      .groupBy(info => (info.batchVersion, info.partitionId))
+      .values
+      .flatMap { infos =>
+        infos.zipWithIndex.map { case (info, index) => index -> info }
+      }
+      .groupBy(_._1)
+      .map { case (_, grouped) =>
+        grouped.map { case (_, info) => info }
+      }
+
+    grouped.foreach { l =>
+      for {
+        a <- l
+        b <- l
+        if a.partitionId == b.partitionId && a.batchVersion == b.batchVersion + 1
+      } {
+        // if batch version exists, it should be the same as the checkpoint ID of the previous batch
+        assert(!a.baseCheckpointId.isDefined || b.checkpointId == a.baseCheckpointId)
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled(
     s"checkpointFormatVersion2 validate ID for stream-stream join") {
     val providerClassName = classOf[TestStateStoreProviderWrapper].getCanonicalName
     TestStateStoreWrapper.clear()
@@ -502,7 +587,6 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
       val checkpointDir = Utils.createTempDir().getCanonicalFile
       checkpointDir.delete()
 
-      val dirForPartition0 = new File(checkpointDir.getAbsolutePath, "/state/0/0")
       val inputData1 = MemoryStream[Int]
       val inputData2 = MemoryStream[Int]
 
