@@ -52,12 +52,13 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       "unicode_ltrim_ci",
       "utf8_lcase_trim",
       "utf8_binary_rtrim"
-    ).foreach {
-      collationName =>
-        checkAnswer(sql(s"select 'aaa' collate $collationName"), Row("aaa"))
-        val collationId = CollationFactory.collationNameToId(collationName)
-        assert(sql(s"select 'aaa' collate $collationName").schema(0).dataType
-          == StringType(collationId))
+    ).foreach { collationName =>
+      checkAnswer(sql(s"select 'aaa' collate $collationName"), Row("aaa"))
+      val collationId = CollationFactory.collationNameToId(collationName)
+      assert(
+        sql(s"select 'aaa' collate $collationName").schema(0).dataType
+        == StringType(collationId)
+      )
     }
   }
 
@@ -70,12 +71,13 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       "uNiCoDE_ltRIm_cI",
       "UtF8_lCaSE_tRIM",
       "utf8_biNAry_RtRiM"
-    ).foreach {
-      collationName =>
-        checkAnswer(sql(s"select 'aaa' collate $collationName"), Row("aaa"))
-        val collationId = CollationFactory.collationNameToId(collationName)
-        assert(sql(s"select 'aaa' collate $collationName").schema(0).dataType
-          == StringType(collationId))
+    ).foreach { collationName =>
+      checkAnswer(sql(s"select 'aaa' collate $collationName"), Row("aaa"))
+      val collationId = CollationFactory.collationNameToId(collationName)
+      assert(
+        sql(s"select 'aaa' collate $collationName").schema(0).dataType
+        == StringType(collationId)
+      )
     }
   }
 
@@ -88,10 +90,11 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       "unicode_ci_ltrim",
       "utf8_lcase_trim",
       "utf8_binary_rtrim"
-    ).foreach {
-      collationName =>
-        checkAnswer(
-          sql(s"select collation('aaa' collate $collationName)"), Row(collationName.toUpperCase()))
+    ).foreach { collationName =>
+      checkAnswer(
+        sql(s"select collation('aaa' collate $collationName)"),
+        Row(collationName.toUpperCase())
+      )
     }
   }
 
@@ -104,11 +107,15 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("collate function syntax with default collation set") {
     withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_LCASE") {
-      assert(sql(s"select collate('aaa', 'utf8_lcase')").schema(0).dataType ==
-        StringType("UTF8_LCASE"))
+      assert(
+        sql(s"select collate('aaa', 'utf8_lcase')").schema(0).dataType ==
+        StringType("UTF8_LCASE")
+      )
       assert(sql(s"select collate('aaa', 'UNICODE')").schema(0).dataType == StringType("UNICODE"))
-      assert(sql(s"select collate('aaa', 'UNICODE_TRIM')").schema(0).dataType ==
-        StringType("UNICODE_TRIM"))
+      assert(
+        sql(s"select collate('aaa', 'UNICODE_TRIM')").schema(0).dataType ==
+        StringType("UNICODE_TRIM")
+      )
     }
   }
 

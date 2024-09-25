@@ -351,10 +351,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def trimCollationNotEnabledError() : Throwable = {
+  def trimCollationNotEnabledError(): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.TRIM_COLLATION",
-      messageParameters = Map.empty)
+      messageParameters = Map.empty
+    )
   }
 
   def unresolvedUsingColForJoinError(
