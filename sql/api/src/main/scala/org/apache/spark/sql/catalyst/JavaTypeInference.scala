@@ -236,7 +236,7 @@ object JavaTypeInference {
       baseClass: Option[Class[_]],
       serializableEncodersOnly: Boolean = false): Option[AgnosticEncoder[_]] =
     if (serializableEncodersOnly) {
-      val isClientConnect = clientConnectFlag.get()
+      val isClientConnect = clientConnectFlag.get
       assert(typesToCheck.size == 1)
       typesToCheck
         .flatMap(c => {
@@ -274,9 +274,9 @@ object JavaTypeInference {
               case Failure(_) => r
             }
         } match {
-        case (Some(encd), _) => Option(encd)
+        case (r @ Some(_), _) => r
 
-        case (None, Some(encd)) => Option(encd)
+        case (None, r @ Some(_)) => r
 
         case _ => None
       }
@@ -315,8 +315,7 @@ object JavaTypeInference {
             Option(Encoders.javaSerialization(_).asInstanceOf[AgnosticEncoder[_]])
 
           case Some(clzzName)
-              if !clientConnectFlag.get() &&
-                clzzName == classOf[KryoSerializable].getTypeName =>
+              if !clientConnectFlag.get && clzzName == classOf[KryoSerializable].getTypeName =>
             Option(Encoders.kryo(_).asInstanceOf[AgnosticEncoder[_]])
 
           case _ => None
@@ -326,6 +325,7 @@ object JavaTypeInference {
     }
   }
 
-  private[sql] def setSparkClientFlag = this.clientConnectFlag.set(true)
-  private[sql] def unsetSparkClientFlag = this.clientConnectFlag.set(false)
+  private[sql] def setSparkClientFlag: Unit = this.clientConnectFlag.set(true)
+
+  private[sql] def unsetSparkClientFlag: Unit = this.clientConnectFlag.set(false)
 }
