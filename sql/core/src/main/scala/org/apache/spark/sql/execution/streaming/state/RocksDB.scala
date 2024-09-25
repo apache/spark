@@ -174,6 +174,7 @@ class RocksDB(
   @volatile private var lastCommittedCheckpointId: Option[String] = None
   @volatile protected var loadedCheckpointId: Option[String] = None
   @volatile protected var sessionCheckpointId: Option[String] = None
+  // protected for test purpose
   @volatile protected[sql] var versionToUniqueIdLineage: Array[(Long, Option[String])] = Array.empty
 
   private def printLineage(lineage: Array[(Long, Option[String])]): String = lineage.map {
@@ -931,6 +932,7 @@ class RocksDB(
     lastCommittedCheckpointId = None
     loadedCheckpointId = None
     sessionCheckpointId = None
+    versionToUniqueIdLineage = Array.empty
     release(RollbackStore)
     logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
   }
