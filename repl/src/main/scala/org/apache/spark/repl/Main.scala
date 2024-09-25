@@ -97,7 +97,7 @@ object Main extends Logging {
       conf.set("spark.repl.class.outputDir", outputDir.getAbsolutePath())
       // In Spark Classic REPL we need to disable the isolated REPL URI because the artifacts
       // are stored only in the shared location "spark.repl.class.outputDir".
-      conf.set("spark.repl.class.isIsolated", "false")
+      conf.set("spark.repl.class.isolatedUri", "false")
       if (execUri != null) {
         conf.set("spark.executor.uri", execUri)
       }
