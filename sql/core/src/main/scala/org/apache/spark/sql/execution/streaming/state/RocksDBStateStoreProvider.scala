@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io._
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.util.control.Breaks._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -704,60 +703,48 @@ class RocksDBStateStoreChangeDataReader(
   private val colFamilyIdBytesOpt: Option[Array[Byte]] = getColFamilyIdBytes
 
   override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
+    var currRecord: (RecordType.Value, Array[Byte], Array[Byte]) = null
+    val currEncoder: (RocksDBKeyStateEncoder, RocksDBValueStateEncoder) =
+      keyValueEncoderMap.get(colFamilyNameOpt
+        .getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME))
+
     if (colFamilyIdBytesOpt.isDefined) {
       // If we are reading records for a particular column family, the corresponding vcf id
       // will be encoded in the key byte array. We need to extract that and compare for the
       // expected column family id. If it matches, we return the record. If not, we move to
       // the next record. Note that this has be handled across multiple changelog files and we
       // rely on the currentChangelogReader to move to the next changelog file when needed.
-      var currRecord: (RecordType.Value, Array[Byte], Array[Byte]) = null
-      var currEncoder: (RocksDBKeyStateEncoder, RocksDBValueStateEncoder) = null
-
-      breakable {
-        while (true) {
-          val reader = currentChangelogReader()
-          if (reader == null) {
-            return null
-          }
-
-          currRecord = reader.next()
-          currEncoder = keyValueEncoderMap.get(colFamilyNameOpt
-            .getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME))
-
-          val colFamilyIdBytes: Array[Byte] = colFamilyIdBytesOpt.get
-
-          val keyArrayWithColFamilyId = new Array[Byte](colFamilyIdBytes.size)
-          Array.copy(currRecord._2, 0, keyArrayWithColFamilyId, 0, colFamilyIdBytes.size)
-
-          if (java.util.Arrays.equals(keyArrayWithColFamilyId, colFamilyIdBytes)) {
-            break()
-          }
+      while (currRecord == null) {
+        val reader = currentChangelogReader()
+        if (reader == null) {
+          return null
         }
-      }
 
-      val keyRow = currEncoder._1.decodeKey(currRecord._2)
-      if (currRecord._3 == null) {
-        (currRecord._1, keyRow, null, currentChangelogVersion - 1)
-      } else {
-        val valueRow = currEncoder._2.decodeValue(currRecord._3)
-        (currRecord._1, keyRow, valueRow, currentChangelogVersion - 1)
+        val nextRecord = reader.next()
+
+        val colFamilyIdBytes: Array[Byte] = colFamilyIdBytesOpt.get
+
+        val keyArrayWithColFamilyId = new Array[Byte](colFamilyIdBytes.size)
+        Array.copy(nextRecord._2, 0, keyArrayWithColFamilyId, 0, colFamilyIdBytes.size)
+
+        if (java.util.Arrays.equals(keyArrayWithColFamilyId, colFamilyIdBytes)) {
+          currRecord = nextRecord
+        }
       }
     } else {
       val reader = currentChangelogReader()
       if (reader == null) {
         return null
       }
-      val (recordType, keyArray, valueArray) = reader.next()
-      val (rocksDBKeyStateEncoder, rocksDBValueStateEncoder) =
-        keyValueEncoderMap.get(StateStore.DEFAULT_COL_FAMILY_NAME)
+      currRecord = reader.next()
+    }
 
-      val keyRow = rocksDBKeyStateEncoder.decodeKey(keyArray)
-      if (valueArray == null) {
-        (recordType, keyRow, null, currentChangelogVersion - 1)
-      } else {
-        val valueRow = rocksDBValueStateEncoder.decodeValue(valueArray)
-        (recordType, keyRow, valueRow, currentChangelogVersion - 1)
-      }
+    val keyRow = currEncoder._1.decodeKey(currRecord._2)
+    if (currRecord._3 == null) {
+      (currRecord._1, keyRow, null, currentChangelogVersion - 1)
+    } else {
+      val valueRow = currEncoder._2.decodeValue(currRecord._3)
+      (currRecord._1, keyRow, valueRow, currentChangelogVersion - 1)
     }
   }
 }
