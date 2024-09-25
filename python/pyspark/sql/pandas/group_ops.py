@@ -534,7 +534,6 @@ class PandasGroupedOpsMixin:
                             key_obj, iter([]),
                             TimerValues(batch_timestamp, watermark_timestamp),
                             ExpiredTimerInfo(True, expiry_timestamp)))
-
             # TODO(SPARK-49603) set the handle state in the lazily initialized iterator
 
             result = itertools.chain(*result_iter_list)

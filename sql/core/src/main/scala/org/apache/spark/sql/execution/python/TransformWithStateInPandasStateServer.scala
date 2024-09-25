@@ -376,21 +376,24 @@ class TransformWithStateInPandasStateServer(
     def sendIteratorAsArrowBatches[T](
         iter: Iterator[T], outputSchema: StructType)(func: T => InternalRow): Unit = {
       outputStream.flush()
-      val arrowStreamWriter = {
-        val arrowSchema = ArrowUtils.toArrowSchema(outputSchema, timeZoneId,
-          errorOnDuplicatedFieldNames, largeVarTypes)
-        val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-          s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
-        val root = VectorSchemaRoot.create(arrowSchema, allocator)
-        new BaseStreamingArrowWriter(root, new ArrowStreamWriter(root, null, outputStream),
+      val arrowSchema = ArrowUtils.toArrowSchema(outputSchema, timeZoneId,
+        errorOnDuplicatedFieldNames, largeVarTypes)
+      val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+        s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
+      val root = VectorSchemaRoot.create(arrowSchema, allocator)
+      val writer = new ArrowStreamWriter(root, null, outputStream)
+
+      val arrowStreamWriter = new BaseStreamingArrowWriter(root, writer,
           arrowTransformWithStateInPandasMaxRecordsPerBatch)
-      }
       while (iter.hasNext) {
         val data = iter.next()
         val internalRow = func(data)
         arrowStreamWriter.writeRow(internalRow)
       }
       arrowStreamWriter.finalizeCurrentArrowBatch()
+      writer.end()
+      root.close()
+      allocator.close()
     }
   }
 }

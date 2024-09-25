@@ -174,12 +174,12 @@ class StatefulProcessorApiClient:
                 break
             elif status == 0:
                 iterator = self._read_arrow_state()
-                batch = next(iterator)
                 result_list = []
-                batch_df = batch.to_pandas()
-                for i in range(batch.num_rows):
-                    timestamp = batch_df.at[i, 'timestamp'].item()
-                    result_list.append(timestamp)
+                for batch in iterator:
+                    batch_df = batch.to_pandas()
+                    for i in range(batch.num_rows):
+                        timestamp = batch_df.at[i, 'timestamp'].item()
+                        result_list.append(timestamp)
                 yield result_list
             else:
                 # TODO(SPARK-49233): Classify user facing errors.
@@ -198,14 +198,15 @@ class StatefulProcessorApiClient:
             if status == 1:
                 break
             elif status == 0:
-                iterator = self._read_arrow_state()
-                batch = next(iterator)
                 result_list = []
-                batch_df = batch.to_pandas()
-                for i in range(batch.num_rows):
-                    deserialized_key = self.pickleSer.loads(batch_df.at[i, 'key'])
-                    timestamp = batch_df.at[i, 'timestamp'].item()
-                    result_list.append((tuple(deserialized_key), timestamp))
+                iterator = self._read_arrow_state()
+                # handles multiple batches from jvm
+                for batch in iterator:
+                    batch_df = batch.to_pandas()
+                    for i in range(batch.num_rows):
+                        deserialized_key = self.pickleSer.loads(batch_df.at[i, 'key'])
+                        timestamp = batch_df.at[i, 'timestamp'].item()
+                        result_list.append((tuple(deserialized_key), timestamp))
                 yield result_list
             else:
                 # TODO(SPARK-49233): Classify user facing errors.

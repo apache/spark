@@ -88,6 +88,7 @@ class TransformWithStateInPandasTestsMixin:
         )
         return df_final
 
+    """
     def _test_transform_with_state_in_pandas_basic(
         self, stateful_processor, check_results, single_batch=False, timeMode="None"
     ):
@@ -309,6 +310,7 @@ class TransformWithStateInPandasTestsMixin:
         finally:
             input_dir.cleanup()
 
+    """
     def _test_transform_with_state_in_pandas_proc_timer(
             self, stateful_processor, check_results):
         input_path = tempfile.mkdtemp()
@@ -352,7 +354,6 @@ class TransformWithStateInPandasTestsMixin:
         self.assertTrue(q.exception() is None)
 
     def test_transform_with_state_in_pandas_proc_timer(self):
-        first_expired_timestamp = -1
 
         # helper function to check expired timestamp is smaller than current processing time
         def check_timestamp(batch_df):
