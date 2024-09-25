@@ -24,7 +24,7 @@
 private[sql] object CharsetProvider {
 
   final lazy val VALID_CHARSETS =
-    Set("us-ascii", "iso-8859-1", "utf-8", "utf-16be", "utf-16le", "utf-16", "utf-32")
+    Array("us-ascii", "iso-8859-1", "utf-8", "utf-16be", "utf-16le", "utf-16", "utf-32").sorted
 
   def forName(
       charset: String,
