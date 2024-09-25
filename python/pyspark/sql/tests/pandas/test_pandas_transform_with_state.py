@@ -408,8 +408,12 @@ class TTLStatefulProcessor(StatefulProcessor):
         if not (ttl_count == 2 and id == "0"):
             self.ttl_count_state.update((ttl_count,))
             self.ttl_list_state.put([(ttl_list_state_count,), (ttl_list_state_count,)])
-        yield pd.DataFrame({"id": [f"ttl-count-{id}", f"count-{id}", f"ttl-list-state-count-{id}"],
-                            "count": [ttl_count, count, ttl_list_state_count]})
+        yield pd.DataFrame(
+            {
+                "id": [f"ttl-count-{id}", f"count-{id}", f"ttl-list-state-count-{id}"],
+                "count": [ttl_count, count, ttl_list_state_count],
+            }
+        )
 
     def close(self) -> None:
         pass
