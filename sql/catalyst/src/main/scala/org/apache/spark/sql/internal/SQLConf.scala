@@ -762,7 +762,8 @@ object SQLConf {
   lazy val TRIM_COLLATION_ENABLED =
     buildConf("spark.sql.collation.trim.enabled")
       .doc("Trim collation feature is under development and its use should be done under this" +
-        "feature flag.")
+        "feature flag. Trim collation trims leading, trailing or both spaces depending of" +
+        "specifier (LTRIM, RTRIM, TRIM).")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(Utils.isTesting)

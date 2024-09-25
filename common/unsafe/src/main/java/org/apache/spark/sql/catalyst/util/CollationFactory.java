@@ -507,13 +507,13 @@ public final class CollationFactory {
           CASE_SENSITIVITY_OFFSET, CASE_SENSITIVITY_MASK);
         // Extract space trimming from collation ID.
         int spaceTrimmingOrdinal = getSpaceTrimming(collationId).ordinal();
-        assert(checkCollationId(collationId));
+        assert(isValidCollationId(collationId));
         return new CollationSpecUTF8(
           CaseSensitivity.values()[caseConversionOrdinal],
           SpaceTrimming.values()[spaceTrimmingOrdinal]);
       }
 
-      private static boolean checkCollationId(int collationId) {
+      private static boolean isValidCollationId(int collationId) {
         collationId = SpecifierUtils.removeSpec(collationId, SPACE_TRIMMING_OFFSET, SPACE_TRIMMING_MASK);
         collationId = SpecifierUtils.removeSpec(collationId, CASE_SENSITIVITY_OFFSET, CASE_SENSITIVITY_MASK);
         return collationId == 0;
