@@ -661,6 +661,87 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
   }
 
   testWithChangelogCheckpointingEnabled(
+    s"checkpointFormatVersion2 validate FlatMapGroupsWithState") {
+    val providerClassName = classOf[TestStateStoreProviderWrapper].getCanonicalName
+    TestStateStoreWrapper.clear()
+    withSQLConf(
+      (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName),
+      (SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2"),
+      (SQLConf.SHUFFLE_PARTITIONS.key, "2")) {
+      val checkpointDir = Utils.createTempDir().getCanonicalFile
+      checkpointDir.delete()
+
+      val stateFunc = (key: Int, values: Iterator[Int], state: GroupState[Int]) => {
+        val count: Int = state.getOption.getOrElse(0) + values.size
+        state.update(count)
+        Iterator((key, count))
+      }
+
+      val inputData = MemoryStream[Int]
+      val aggregated = inputData
+        .toDF()
+        .toDF("key")
+        .selectExpr("key")
+        .as[Int]
+        .repartition($"key")
+        .groupByKey(x => x)
+        .flatMapGroupsWithState(OutputMode.Update, GroupStateTimeout.NoTimeout())(stateFunc)
+
+      testStream(aggregated, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 3),
+        CheckLastBatch((3, 1)),
+        AddData(inputData, 3, 2),
+        CheckLastBatch((3, 2), (2, 1)),
+        StopStream
+      )
+
+      // Test recovery
+      testStream(aggregated, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 4, 1, 3),
+        CheckLastBatch((4, 1), (1, 1), (3, 3)),
+        AddData(inputData, 5, 4, 4),
+        CheckLastBatch((5, 1), (4, 3)),
+        StopStream
+      )
+
+      // crash recovery again
+      testStream(aggregated, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 4, 7),
+        CheckLastBatch((4, 4), (7, 1)),
+        AddData (inputData, 5),
+        CheckLastBatch((5, 2)),
+        StopStream
+      )
+    }
+
+    val checkpointInfoList = TestStateStoreWrapper.getCheckpointInfos
+    // We expect batches and state stores as per previous tests, adapting for FlatMapGroupsWithState
+    assert(checkpointInfoList.size == 12) // 6 batches x 2 partitions
+    checkpointInfoList.foreach { l =>
+      assert(l.checkpointId.isDefined)
+      if (l.batchVersion == 2 || l.batchVersion == 4 || l.batchVersion == 6) {
+        assert(l.baseCheckpointId.isDefined)
+      }
+    }
+    assert(checkpointInfoList.count(_.partitionId == 0) == 6)
+    assert(checkpointInfoList.count(_.partitionId == 1) == 6)
+    for (i <- 1 to 6) {
+      assert(checkpointInfoList.count(_.batchVersion == i) == 2)
+    }
+    for {
+      a <- checkpointInfoList
+      b <- checkpointInfoList
+      if a.partitionId == b.partitionId && a.batchVersion == b.batchVersion + 1
+    } {
+      // Check that checkpoint IDs are correctly chained across batches
+      assert(!a.baseCheckpointId.isDefined || b.checkpointId == a.baseCheckpointId)
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled(
     "Streaming aggregation RocksDB State Store backward compatibility.") {
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     checkpointDir.delete()
