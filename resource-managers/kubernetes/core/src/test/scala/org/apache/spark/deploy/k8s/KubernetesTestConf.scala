@@ -146,6 +146,10 @@ object KubernetesTestConf {
         conf.set(key(vtype, spec.volumeName, KUBERNETES_VOLUMES_MOUNT_SUBPATH_KEY),
           spec.mountSubPath)
       }
+      if (spec.mountSubPathExpr.nonEmpty) {
+        conf.set(key(vtype, spec.volumeName, KUBERNETES_VOLUMES_MOUNT_SUBPATHEXPR_KEY),
+          spec.mountSubPathExpr)
+      }
       conf.set(key(vtype, spec.volumeName, KUBERNETES_VOLUMES_MOUNT_READONLY_KEY),
         spec.mountReadOnly.toString)
       configs.foreach { case (k, v) =>
