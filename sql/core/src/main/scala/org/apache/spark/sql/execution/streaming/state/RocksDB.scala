@@ -37,7 +37,7 @@ import org.rocksdb.CompressionType._
 import org.rocksdb.TickerType._
 
 import org.apache.spark.TaskContext
-import org.apache.spark.internal.{LogEntry, Logging, LogKeys, MDC}
+import org.apache.spark.internal.{LogEntry, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.{NextIterator, Utils}
@@ -72,7 +72,7 @@ class RocksDB(
     localRootDir: File = Utils.createTempDir(),
     hadoopConf: Configuration = new Configuration,
     loggingId: String = "",
-    useColumnFamilies: Boolean = false) extends Logging {
+    useColumnFamilies: Boolean = false) extends StateStoreThreadAwareLogging {
 
   case class RocksDBSnapshot(
       checkpointDir: File,
@@ -917,7 +917,8 @@ class RocksDB(
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] {
         _ => this.release(StoreTaskCompletionListener)
       })
-      logInfo(log"RocksDB instance was acquired by ${MDC(LogKeys.THREAD, acquiredThreadInfo)} " +
+      logInfo(log"RocksDB instance was acquired by " +
+        log"${MDC(LogKeys.THREAD_NAME, acquiredThreadInfo)} " +
         log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
     }
   }
@@ -930,7 +931,7 @@ class RocksDB(
    */
   private def release(opType: RocksDBOpType): Unit = acquireLock.synchronized {
     if (acquiredThreadInfo != null) {
-      logInfo(log"RocksDB instance was released by ${MDC(LogKeys.THREAD,
+      logInfo(log"RocksDB instance was released by ${MDC(LogKeys.THREAD_NAME,
         acquiredThreadInfo)} " + log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
       acquiredThreadInfo = null
       acquireLock.notifyAll()

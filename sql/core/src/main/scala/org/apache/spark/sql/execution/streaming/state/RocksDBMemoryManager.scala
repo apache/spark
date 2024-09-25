@@ -19,15 +19,15 @@ package org.apache.spark.sql.execution.streaming.state
 
 import org.rocksdb._
 
-import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.MDC
 
 /**
  * Singleton responsible for managing cache and write buffer manager associated with all RocksDB
  * state store instances running on a single executor if boundedMemoryUsage is enabled for RocksDB.
  * If boundedMemoryUsage is disabled, a new cache object is returned.
  */
-object RocksDBMemoryManager extends Logging {
+object RocksDBMemoryManager extends StateStoreThreadAwareLogging {
   private var writeBufferManager: WriteBufferManager = null
   private var cache: Cache = null
 

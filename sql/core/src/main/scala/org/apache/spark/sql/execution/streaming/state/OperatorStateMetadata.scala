@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.{FSDataInputStream, FSDataOutputStream, Path, PathFi
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceErrors
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CommitLog, MetadataVersionUtil, OffsetSeqLog, StateStoreWriter}
@@ -92,7 +92,7 @@ case class OperatorStateMetadataV2(
   override def version: Int = 2
 }
 
-object OperatorStateMetadataUtils extends Logging {
+object OperatorStateMetadataUtils extends StateStoreThreadAwareLogging {
 
   sealed trait OperatorStateMetadataReader {
     def version: Int
@@ -247,7 +247,7 @@ object OperatorStateMetadataV2 {
 class OperatorStateMetadataV1Writer(
     stateCheckpointPath: Path,
     hadoopConf: Configuration)
-  extends OperatorStateMetadataWriter with Logging {
+  extends OperatorStateMetadataWriter with StateStoreThreadAwareLogging {
 
   private val metadataFilePath = OperatorStateMetadataV1.metadataFilePath(stateCheckpointPath)
 
@@ -371,7 +371,7 @@ class OperatorStateMetadataV2Reader(
 class OperatorStateMetadataV2FileManager(
     checkpointLocation: Path,
     sparkSession: SparkSession,
-    stateStoreWriter: StateStoreWriter) extends Logging {
+    stateStoreWriter: StateStoreWriter) extends StateStoreThreadAwareLogging {
 
   private val hadoopConf = sparkSession.sessionState.newHadoopConf()
   private val stateCheckpointPath = new Path(checkpointLocation, "state")

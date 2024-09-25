@@ -32,7 +32,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
-import org.apache.spark.internal.{Logging, LogKeys, MDC, MessageWithContext}
+import org.apache.spark.internal.{LogKeys, MDC, MessageWithContext}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -71,7 +71,8 @@ import org.apache.spark.util.ArrayImplicits._
  * to ensure re-executed RDD operations re-apply updates on the correct past version of the
  * store.
  */
-private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with Logging
+private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider
+  with StateStoreThreadAwareLogging
   with SupportsFineGrainedReplay {
 
   private val providerName = "HDFSBackedStateStoreProvider"

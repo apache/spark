@@ -25,8 +25,8 @@ import com.google.common.io.ByteStreams
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs.{FSError, Path}
 
-import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.MDC
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -86,7 +86,7 @@ object RecordType extends Enumeration {
 abstract class StateStoreChangelogWriter(
     fm: CheckpointFileManager,
     file: Path,
-    compressionCodec: CompressionCodec) extends Logging {
+    compressionCodec: CompressionCodec) extends StateStoreThreadAwareLogging {
 
   private def compressStream(outputStream: DataOutputStream): DataOutputStream = {
     val compressed = compressionCodec.compressedOutputStream(outputStream)
@@ -264,7 +264,8 @@ abstract class StateStoreChangelogReader(
     fm: CheckpointFileManager,
     fileToRead: Path,
     compressionCodec: CompressionCodec)
-  extends NextIterator[(RecordType.Value, Array[Byte], Array[Byte])] with Logging {
+  extends NextIterator[(RecordType.Value, Array[Byte], Array[Byte])]
+  with StateStoreThreadAwareLogging {
 
   private def decompressStream(inputStream: DataInputStream): DataInputStream = {
     val compressed = compressionCodec.compressedInputStream(inputStream)
@@ -404,7 +405,8 @@ abstract class StateStoreChangeDataReader(
     startVersion: Long,
     endVersion: Long,
     compressionCodec: CompressionCodec)
-  extends NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)] with Logging {
+  extends NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)]
+  with StateStoreThreadAwareLogging {
 
   assert(startVersion >= 1)
   assert(endVersion >= startVersion)

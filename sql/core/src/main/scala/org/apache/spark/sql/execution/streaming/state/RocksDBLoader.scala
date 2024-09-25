@@ -19,14 +19,13 @@ package org.apache.spark.sql.execution.streaming.state
 
 import org.rocksdb.{RocksDB => NativeRocksDB}
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.util.UninterruptibleThread
 
 /**
  * A wrapper for RocksDB library loading using an uninterruptible thread, as the native RocksDB
  * code will throw an error when interrupted.
  */
-object RocksDBLoader extends Logging {
+object RocksDBLoader extends StateStoreThreadAwareLogging {
   /**
    * Keep tracks of the exception thrown from the loading thread, if any.
    */

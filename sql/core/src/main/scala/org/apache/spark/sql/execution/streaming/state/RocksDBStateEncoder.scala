@@ -21,7 +21,6 @@ import java.lang.Double.{doubleToRawLongBits, longBitsToDouble}
 import java.lang.Float.{floatToRawIntBits, intBitsToFloat}
 import java.nio.{ByteBuffer, ByteOrder}
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, JoinedRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider.{STATE_ENCODING_NUM_VERSION_BYTES, STATE_ENCODING_VERSION, VIRTUAL_COL_FAMILY_PREFIX_BYTES}
@@ -729,7 +728,7 @@ class NoPrefixKeyStateEncoder(
  * operation.
  */
 class MultiValuedStateEncoder(valueSchema: StructType)
-  extends RocksDBValueStateEncoder with Logging {
+  extends RocksDBValueStateEncoder with StateStoreThreadAwareLogging {
 
   import RocksDBStateEncoder._
 

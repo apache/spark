@@ -32,7 +32,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.{SparkContext, SparkEnv, SparkException}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -602,7 +602,7 @@ class UnsafeRowPair(var key: UnsafeRow = null, var value: UnsafeRow = null) {
  * the store is the active instance. Accordingly, it either keeps it loaded and performs
  * maintenance, or unloads the store.
  */
-object StateStore extends Logging {
+object StateStore extends StateStoreThreadAwareLogging {
 
   val PARTITION_ID_TO_CHECK_SCHEMA = 0
 

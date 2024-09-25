@@ -24,8 +24,8 @@ import scala.annotation.tailrec
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.TaskContext
-import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{END_INDEX, START_INDEX, STATE_STORE_ID}
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SafeProjection, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -88,7 +88,7 @@ class SymmetricHashJoinStateManager(
     stateFormatVersion: Int,
     skippedNullValueCount: Option[SQLMetric] = None,
     useStateStoreCoordinator: Boolean = true,
-    snapshotStartVersion: Option[Long] = None) extends Logging {
+    snapshotStartVersion: Option[Long] = None) extends StateStoreThreadAwareLogging {
   import SymmetricHashJoinStateManager._
 
   /*
@@ -451,7 +451,8 @@ class SymmetricHashJoinStateManager(
   Option(TaskContext.get()).foreach { _.addTaskCompletionListener[Unit] { _ => abortIfNeeded() } }
 
   /** Helper trait for invoking common functionalities of a state store. */
-  private abstract class StateStoreHandler(stateStoreType: StateStoreType) extends Logging {
+  private abstract class StateStoreHandler(stateStoreType: StateStoreType)
+    extends StateStoreThreadAwareLogging {
     private var stateStoreProvider: StateStoreProvider = _
 
     /** StateStore that the subclasses of this class is going to operate on */
