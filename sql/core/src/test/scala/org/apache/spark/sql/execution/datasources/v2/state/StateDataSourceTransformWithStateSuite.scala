@@ -599,7 +599,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           CheckNewAnswer(("a", "1")), // at batch 0, ts = 1, timer = "a" -> [6] (= 1 + 5)
           AddData(inputData, "a"),
           AdvanceManualClock(2 * 1000),
-          CheckNewAnswer(("a", "2")), // at batch 1, ts = 3, timer = "a" -> [9.5] (2 + 7.5)
+          CheckNewAnswer(("a", "2")), // at batch 1, ts = 3, timer = "a" -> [10.5] (3 + 7.5)
           StopStream)
 
         val stateReaderDf = spark.read
