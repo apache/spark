@@ -28,7 +28,6 @@ from dataclasses import dataclass, asdict
 from pyspark.sql import Row
 from pyspark.sql import functions as F
 from pyspark.errors import (
-    AnalysisException,
     ParseException,
     PySparkTypeError,
     PySparkValueError,
