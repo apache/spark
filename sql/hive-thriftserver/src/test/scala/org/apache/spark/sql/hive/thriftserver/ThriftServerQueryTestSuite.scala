@@ -103,7 +103,8 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     // SPARK-42921
     "timestampNTZ/datetime-special-ansi.sql",
     // SPARK-47264
-    "collations.sql"
+    "collations.sql",
+    "pipe-operators.sql"
   )
 
   override def runQueries(

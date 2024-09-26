@@ -20,6 +20,7 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateStoreColFamilySchema}
+import org.apache.spark.sql.types.StructType
 
 object StateStoreColumnFamilySchemaUtils {
 
@@ -60,5 +61,16 @@ object StateStoreColumnFamilySchemaUtils {
       getValueSchemaWithTTL(valEncoder.schema, hasTtl),
       Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
       Some(userKeyEnc.schema))
+  }
+
+  def getTimerStateSchema(
+      stateName: String,
+      keySchema: StructType,
+      valSchema: StructType): StateStoreColFamilySchema = {
+    StateStoreColFamilySchema(
+      stateName,
+      keySchema,
+      valSchema,
+      Some(PrefixKeyScanStateEncoderSpec(keySchema, 1)))
   }
 }

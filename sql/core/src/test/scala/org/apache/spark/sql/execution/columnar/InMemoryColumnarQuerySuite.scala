@@ -150,7 +150,7 @@ class InMemoryColumnarQuerySuite extends QueryTest
       spark.catalog.cacheTable("sizeTst")
       assert(
         spark.table("sizeTst").queryExecution.analyzed.stats.sizeInBytes >
-          spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
+          sqlConf.getConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
     }
   }
 

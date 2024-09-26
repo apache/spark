@@ -21,10 +21,10 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, UnaryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.catalyst.util.GeneratedColumn
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.validateDefaultValueExpr
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.{CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY}
-import org.apache.spark.sql.connector.catalog.{Column => V2Column, ColumnDefaultValue}
+import org.apache.spark.sql.connector.catalog.{Column => V2Column, ColumnDefaultValue, IdentityColumnSpec}
 import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.connector.ColumnImpl
@@ -41,7 +41,11 @@ case class ColumnDefinition(
     comment: Option[String] = None,
     defaultValue: Option[DefaultValueExpression] = None,
     generationExpression: Option[String] = None,
+    identityColumnSpec: Option[IdentityColumnSpec] = None,
     metadata: Metadata = Metadata.empty) extends Expression with Unevaluable {
+  assert(
+    generationExpression.isEmpty || identityColumnSpec.isEmpty,
+    "A ColumnDefinition cannot contain both a generation expression and an identity column spec.")
 
   override def children: Seq[Expression] = defaultValue.toSeq
 
@@ -58,6 +62,7 @@ case class ColumnDefinition(
       comment.orNull,
       defaultValue.map(_.toV2(statement, name)).orNull,
       generationExpression.orNull,
+      identityColumnSpec.orNull,
       if (metadata == Metadata.empty) null else metadata.json)
   }
 
@@ -75,7 +80,18 @@ case class ColumnDefinition(
     generationExpression.foreach { generationExpr =>
       metadataBuilder.putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, generationExpr)
     }
+    encodeIdentityColumnSpec(metadataBuilder)
     StructField(name, dataType, nullable, metadataBuilder.build())
+  }
+
+  private def encodeIdentityColumnSpec(metadataBuilder: MetadataBuilder): Unit = {
+    identityColumnSpec.foreach { spec: IdentityColumnSpec =>
+      metadataBuilder.putLong(IdentityColumn.IDENTITY_INFO_START, spec.getStart)
+      metadataBuilder.putLong(IdentityColumn.IDENTITY_INFO_STEP, spec.getStep)
+      metadataBuilder.putBoolean(
+        IdentityColumn.IDENTITY_INFO_ALLOW_EXPLICIT_INSERT,
+        spec.isAllowExplicitInsert)
+    }
   }
 }
 
@@ -87,6 +103,9 @@ object ColumnDefinition {
     metadataBuilder.remove(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
     metadataBuilder.remove(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
     metadataBuilder.remove(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY)
+    metadataBuilder.remove(IdentityColumn.IDENTITY_INFO_START)
+    metadataBuilder.remove(IdentityColumn.IDENTITY_INFO_STEP)
+    metadataBuilder.remove(IdentityColumn.IDENTITY_INFO_ALLOW_EXPLICIT_INSERT)
 
     val hasDefaultValue = col.getCurrentDefaultValue().isDefined &&
       col.getExistenceDefaultValue().isDefined
@@ -97,6 +116,15 @@ object ColumnDefinition {
       None
     }
     val generationExpr = GeneratedColumn.getGenerationExpression(col)
+    val identityColumnSpec = if (col.metadata.contains(IdentityColumn.IDENTITY_INFO_START)) {
+      Some(new IdentityColumnSpec(
+        col.metadata.getLong(IdentityColumn.IDENTITY_INFO_START),
+        col.metadata.getLong(IdentityColumn.IDENTITY_INFO_STEP),
+        col.metadata.getBoolean(IdentityColumn.IDENTITY_INFO_ALLOW_EXPLICIT_INSERT)
+      ))
+    } else {
+      None
+    }
     ColumnDefinition(
       col.name,
       col.dataType,
@@ -104,6 +132,7 @@ object ColumnDefinition {
       col.getComment(),
       defaultValue,
       generationExpr,
+      identityColumnSpec,
       metadataBuilder.build()
     )
   }
@@ -124,23 +153,36 @@ object ColumnDefinition {
               s"Command $cmd should not have column default value expression.")
         }
         cmd.columns.foreach { col =>
-          if (col.defaultValue.isDefined && col.generationExpression.isDefined) {
-            throw new AnalysisException(
-              errorClass = "GENERATED_COLUMN_WITH_DEFAULT_VALUE",
-              messageParameters = Map(
-                "colName" -> col.name,
-                "defaultValue" -> col.defaultValue.get.originalSQL,
-                "genExpr" -> col.generationExpression.get
-              )
-            )
-          }
-
           col.defaultValue.foreach { default =>
+            checkDefaultColumnConflicts(col)
             validateDefaultValueExpr(default, statement, col.name, col.dataType)
           }
         }
 
       case _ =>
+    }
+  }
+
+  private def checkDefaultColumnConflicts(col: ColumnDefinition): Unit = {
+    if (col.generationExpression.isDefined) {
+      throw new AnalysisException(
+        errorClass = "GENERATED_COLUMN_WITH_DEFAULT_VALUE",
+        messageParameters = Map(
+          "colName" -> col.name,
+          "defaultValue" -> col.defaultValue.get.originalSQL,
+          "genExpr" -> col.generationExpression.get
+        )
+      )
+    }
+    if (col.identityColumnSpec.isDefined) {
+      throw new AnalysisException(
+        errorClass = "IDENTITY_COLUMN_WITH_DEFAULT_VALUE",
+        messageParameters = Map(
+          "colName" -> col.name,
+          "defaultValue" -> col.defaultValue.get.originalSQL,
+          "identityColumnSpec" -> col.identityColumnSpec.get.toString
+        )
+      )
     }
   }
 }

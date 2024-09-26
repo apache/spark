@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.sql.Encoder
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.GroupStateImpl._
 import org.apache.spark.sql.streaming.StreamTest
@@ -201,7 +201,7 @@ class FlatMapGroupsWithStateExecHelperSuite extends StreamTest {
 
   private def newStateManager[T: Encoder](version: Int, withTimestamp: Boolean): StateManager = {
     FlatMapGroupsWithStateExecHelper.createStateManager(
-      implicitly[Encoder[T]].asInstanceOf[ExpressionEncoder[Any]],
+      encoderFor[T].asInstanceOf[ExpressionEncoder[Any]],
       withTimestamp,
       version)
   }

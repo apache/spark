@@ -1293,7 +1293,7 @@ sealed trait BitShiftOperation
  * @param right number of bits to left shift.
  */
 @ExpressionDescription(
-  usage = "base << exp - Bitwise left shift.",
+  usage = "base _FUNC_ exp - Bitwise left shift.",
   examples = """
     Examples:
       > SELECT shiftleft(2, 1);
@@ -1322,7 +1322,7 @@ case class ShiftLeft(left: Expression, right: Expression) extends BitShiftOperat
  * @param right number of bits to right shift.
  */
 @ExpressionDescription(
-  usage = "base >> expr - Bitwise (signed) right shift.",
+  usage = "base _FUNC_ expr - Bitwise (signed) right shift.",
   examples = """
     Examples:
       > SELECT shiftright(4, 1);
@@ -1350,7 +1350,7 @@ case class ShiftRight(left: Expression, right: Expression) extends BitShiftOpera
  * @param right the number of bits to right shift.
  */
 @ExpressionDescription(
-  usage = "base >>> expr - Bitwise unsigned right shift.",
+  usage = "base _FUNC_ expr - Bitwise unsigned right shift.",
   examples = """
     Examples:
       > SELECT shiftrightunsigned(4, 1);

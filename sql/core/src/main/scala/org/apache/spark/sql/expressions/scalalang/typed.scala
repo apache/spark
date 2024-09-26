@@ -39,11 +39,6 @@ object typed {
   // For example, avg in the Scala version returns Scala primitive Double, whose bytecode
   // signature is just a java.lang.Object; avg in the Java version returns java.lang.Double.
 
-  // TODO: This is pretty hacky. Maybe we should have an object for implicit encoders.
-  private val implicits = new SQLImplicits {
-    override protected def session: SparkSession = null
-  }
-
   /**
    * Average aggregate function.
    *

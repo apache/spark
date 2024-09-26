@@ -35,15 +35,13 @@ import org.apache.spark.sql.{functions, Column, Encoder, Row}
  * @since 2.0.0
  */
 @Stable
-abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
-  type RGD <: RelationalGroupedDataset[DS]
-
-  protected def df: DS[Row]
+abstract class RelationalGroupedDataset {
+  protected def df: Dataset[Row]
 
   /**
    * Create a aggregation based on the grouping column, the grouping type, and the aggregations.
    */
-  protected def toDF(aggCols: Seq[Column]): DS[Row]
+  protected def toDF(aggCols: Seq[Column]): Dataset[Row]
 
   protected def selectNumericColumns(colNames: Seq[String]): Seq[Column]
 
@@ -62,7 +60,7 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
 
   private def aggregateNumericColumns(
       colNames: Seq[String],
-      function: Column => Column): DS[Row] = {
+      function: Column => Column): Dataset[Row] = {
     toDF(selectNumericColumns(colNames).map(function))
   }
 
@@ -72,7 +70,7 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
    *
    * @since 3.0.0
    */
-  def as[K: Encoder, T: Encoder]: KeyValueGroupedDataset[K, T, DS]
+  def as[K: Encoder, T: Encoder]: KeyValueGroupedDataset[K, T]
 
   /**
    * (Scala-specific) Compute aggregates by specifying the column names and aggregate methods. The
@@ -89,7 +87,7 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
    *
    * @since 1.3.0
    */
-  def agg(aggExpr: (String, String), aggExprs: (String, String)*): DS[Row] =
+  def agg(aggExpr: (String, String), aggExprs: (String, String)*): Dataset[Row] =
     toDF((aggExpr +: aggExprs).map(toAggCol))
 
   /**
@@ -107,7 +105,7 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
    *
    * @since 1.3.0
    */
-  def agg(exprs: Map[String, String]): DS[Row] = toDF(exprs.map(toAggCol).toSeq)
+  def agg(exprs: Map[String, String]): Dataset[Row] = toDF(exprs.map(toAggCol).toSeq)
 
   /**
    * (Java-specific) Compute aggregates by specifying a map from column name to aggregate methods.
@@ -122,7 +120,7 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
    *
    * @since 1.3.0
    */
-  def agg(exprs: util.Map[String, String]): DS[Row] = {
+  def agg(exprs: util.Map[String, String]): Dataset[Row] = {
     agg(exprs.asScala.toMap)
   }
 
@@ -158,7 +156,7 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def agg(expr: Column, exprs: Column*): DS[Row] = toDF(expr +: exprs)
+  def agg(expr: Column, exprs: Column*): Dataset[Row] = toDF(expr +: exprs)
 
   /**
    * Count the number of rows for each group. The resulting `DataFrame` will also contain the
@@ -166,7 +164,7 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
    *
    * @since 1.3.0
    */
-  def count(): DS[Row] = toDF(functions.count(functions.lit(1)).as("count") :: Nil)
+  def count(): Dataset[Row] = toDF(functions.count(functions.lit(1)).as("count") :: Nil)
 
   /**
    * Compute the average value for each numeric columns for each group. This is an alias for
@@ -176,7 +174,7 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def mean(colNames: String*): DS[Row] = aggregateNumericColumns(colNames, functions.avg)
+  def mean(colNames: String*): Dataset[Row] = aggregateNumericColumns(colNames, functions.avg)
 
   /**
    * Compute the max value for each numeric columns for each group. The resulting `DataFrame` will
@@ -186,7 +184,7 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def max(colNames: String*): DS[Row] = aggregateNumericColumns(colNames, functions.max)
+  def max(colNames: String*): Dataset[Row] = aggregateNumericColumns(colNames, functions.max)
 
   /**
    * Compute the mean value for each numeric columns for each group. The resulting `DataFrame`
@@ -196,7 +194,7 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def avg(colNames: String*): DS[Row] = aggregateNumericColumns(colNames, functions.avg)
+  def avg(colNames: String*): Dataset[Row] = aggregateNumericColumns(colNames, functions.avg)
 
   /**
    * Compute the min value for each numeric column for each group. The resulting `DataFrame` will
@@ -206,7 +204,7 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def min(colNames: String*): DS[Row] = aggregateNumericColumns(colNames, functions.min)
+  def min(colNames: String*): Dataset[Row] = aggregateNumericColumns(colNames, functions.min)
 
   /**
    * Compute the sum for each numeric columns for each group. The resulting `DataFrame` will also
@@ -216,7 +214,7 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def sum(colNames: String*): DS[Row] = aggregateNumericColumns(colNames, functions.sum)
+  def sum(colNames: String*): Dataset[Row] = aggregateNumericColumns(colNames, functions.sum)
 
   /**
    * Pivots a column of the current `DataFrame` and performs the specified aggregation.
@@ -237,7 +235,7 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
    *   Name of the column to pivot.
    * @since 1.6.0
    */
-  def pivot(pivotColumn: String): RGD = pivot(df.col(pivotColumn))
+  def pivot(pivotColumn: String): RelationalGroupedDataset = pivot(df.col(pivotColumn))
 
   /**
    * Pivots a column of the current `DataFrame` and performs the specified aggregation. There are
@@ -271,7 +269,7 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
    *   List of values that will be translated to columns in the output DataFrame.
    * @since 1.6.0
    */
-  def pivot(pivotColumn: String, values: Seq[Any]): RGD =
+  def pivot(pivotColumn: String, values: Seq[Any]): RelationalGroupedDataset =
     pivot(df.col(pivotColumn), values)
 
   /**
@@ -299,7 +297,7 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
    *   List of values that will be translated to columns in the output DataFrame.
    * @since 1.6.0
    */
-  def pivot(pivotColumn: String, values: util.List[Any]): RGD =
+  def pivot(pivotColumn: String, values: util.List[Any]): RelationalGroupedDataset =
     pivot(df.col(pivotColumn), values)
 
   /**
@@ -316,7 +314,7 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
    *   List of values that will be translated to columns in the output DataFrame.
    * @since 2.4.0
    */
-  def pivot(pivotColumn: Column, values: util.List[Any]): RGD =
+  def pivot(pivotColumn: Column, values: util.List[Any]): RelationalGroupedDataset =
     pivot(pivotColumn, values.asScala.toSeq)
 
   /**
@@ -338,7 +336,7 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
    *   he column to pivot.
    * @since 2.4.0
    */
-  def pivot(pivotColumn: Column): RGD
+  def pivot(pivotColumn: Column): RelationalGroupedDataset
 
   /**
    * Pivots a column of the current `DataFrame` and performs the specified aggregation. This is an
@@ -358,5 +356,5 @@ abstract class RelationalGroupedDataset[DS[U] <: Dataset[U, DS]] {
    *   List of values that will be translated to columns in the output DataFrame.
    * @since 2.4.0
    */
-  def pivot(pivotColumn: Column, values: Seq[Any]): RGD
+  def pivot(pivotColumn: Column, values: Seq[Any]): RelationalGroupedDataset
 }

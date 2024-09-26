@@ -17,39 +17,12 @@
 
 package org.apache.spark
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.internal.ProtoColumnNode
 
 package object sql {
   type DataFrame = Dataset[Row]
 
   private[sql] def encoderFor[E: Encoder]: AgnosticEncoder[E] = {
     implicitly[Encoder[E]].asInstanceOf[AgnosticEncoder[E]]
-  }
-
-  /**
-   * Create a [[Column]] from a [[proto.Expression]]
-   *
-   * This method is meant to be used by Connect plugins. We do not guarantee any compatility
-   * between (minor) versions.
-   */
-  @DeveloperApi
-  def column(expr: proto.Expression): Column = {
-    Column(ProtoColumnNode(expr))
-  }
-
-  /**
-   * Creat a [[Column]] using a function that manipulates an [[proto.Expression.Builder]].
-   *
-   * This method is meant to be used by Connect plugins. We do not guarantee any compatility
-   * between (minor) versions.
-   */
-  @DeveloperApi
-  def column(f: proto.Expression.Builder => Unit): Column = {
-    val builder = proto.Expression.newBuilder()
-    f(builder)
-    column(builder.build())
   }
 }

@@ -22,7 +22,6 @@ import java.util.UUID
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.streaming.{TimeMode, TTLConfig}
 
@@ -32,9 +31,6 @@ import org.apache.spark.sql.streaming.{TimeMode, TTLConfig}
  * used primarily in queries based on the `transformWithState` operator.
  */
 class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
-
-  private def keyExprEncoder: ExpressionEncoder[Any] =
-    Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]]
 
   private def getTimeMode(timeMode: String): TimeMode = {
     timeMode match {
@@ -50,7 +46,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
       tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
         val store = provider.getStore(0)
         val handle = new StatefulProcessorHandleImpl(store,
-          UUID.randomUUID(), keyExprEncoder, getTimeMode(timeMode))
+          UUID.randomUUID(), stringEncoder, getTimeMode(timeMode))
         assert(handle.getHandleState === StatefulProcessorHandleState.CREATED)
         handle.getValueState[Long]("testState", Encoders.scalaLong)
       }
@@ -91,7 +87,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
       tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
         val store = provider.getStore(0)
         val handle = new StatefulProcessorHandleImpl(store,
-          UUID.randomUUID(), keyExprEncoder, getTimeMode(timeMode))
+          UUID.randomUUID(), stringEncoder, getTimeMode(timeMode))
 
         Seq(StatefulProcessorHandleState.INITIALIZED,
           StatefulProcessorHandleState.DATA_PROCESSED,
@@ -109,7 +105,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), keyExprEncoder, TimeMode.None())
+        UUID.randomUUID(), stringEncoder, TimeMode.None())
       val ex = intercept[SparkUnsupportedOperationException] {
         handle.registerTimer(10000L)
       }
@@ -145,7 +141,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
       tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
         val store = provider.getStore(0)
         val handle = new StatefulProcessorHandleImpl(store,
-          UUID.randomUUID(), keyExprEncoder, getTimeMode(timeMode))
+          UUID.randomUUID(), stringEncoder, getTimeMode(timeMode))
         handle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
         assert(handle.getHandleState === StatefulProcessorHandleState.INITIALIZED)
 
@@ -166,7 +162,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
       tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
         val store = provider.getStore(0)
         val handle = new StatefulProcessorHandleImpl(store,
-          UUID.randomUUID(), keyExprEncoder, getTimeMode(timeMode))
+          UUID.randomUUID(), stringEncoder, getTimeMode(timeMode))
         handle.setHandleState(StatefulProcessorHandleState.DATA_PROCESSED)
         assert(handle.getHandleState === StatefulProcessorHandleState.DATA_PROCESSED)
 
@@ -206,7 +202,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
       tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
         val store = provider.getStore(0)
         val handle = new StatefulProcessorHandleImpl(store,
-          UUID.randomUUID(), keyExprEncoder, getTimeMode(timeMode))
+          UUID.randomUUID(), stringEncoder, getTimeMode(timeMode))
 
         Seq(StatefulProcessorHandleState.CREATED,
           StatefulProcessorHandleState.TIMER_PROCESSED,
@@ -223,7 +219,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), keyExprEncoder, TimeMode.ProcessingTime(),
+        UUID.randomUUID(), stringEncoder, TimeMode.ProcessingTime(),
         batchTimestampMs = Some(10))
 
       val valueStateWithTTL = handle.getValueState("testState",
@@ -241,7 +237,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), keyExprEncoder, TimeMode.ProcessingTime(),
+        UUID.randomUUID(), stringEncoder, TimeMode.ProcessingTime(),
         batchTimestampMs = Some(10))
 
       val listStateWithTTL = handle.getListState("testState",
@@ -259,7 +255,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), keyExprEncoder, TimeMode.ProcessingTime(),
+        UUID.randomUUID(), stringEncoder, TimeMode.ProcessingTime(),
         batchTimestampMs = Some(10))
 
       val mapStateWithTTL = handle.getMapState("testState",
@@ -277,7 +273,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), keyExprEncoder, TimeMode.None())
+        UUID.randomUUID(), stringEncoder, TimeMode.None())
 
       handle.getValueState("testValueState", Encoders.STRING)
       handle.getListState("testListState", Encoders.STRING)

@@ -26,10 +26,10 @@ import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.StreamingQueryCommand
 import org.apache.spark.connect.proto.StreamingQueryCommandResult
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
-import org.apache.spark.sql.{api, Dataset, SparkSession}
+import org.apache.spark.sql.{api, SparkSession}
 
 /** @inheritdoc */
-trait StreamingQuery extends api.StreamingQuery[Dataset] {
+trait StreamingQuery extends api.StreamingQuery {
 
   /** @inheritdoc */
   override def sparkSession: SparkSession

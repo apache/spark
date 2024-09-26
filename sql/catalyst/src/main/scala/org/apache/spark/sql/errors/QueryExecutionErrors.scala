@@ -384,18 +384,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       s"The aggregate window function ${toSQLId(funcName)} does not support merging.")
   }
 
-  def dataTypeUnexpectedError(dataType: DataType): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2011",
-      messageParameters = Map("dataType" -> dataType.catalogString))
-  }
-
-  def typeUnsupportedError(dataType: DataType): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2011",
-      messageParameters = Map("dataType" -> dataType.toString()))
-  }
-
   def negativeValueUnexpectedError(
       frequencyExpression : Expression): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
@@ -1888,17 +1876,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
-  def notPublicClassError(name: String): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2229",
-      messageParameters = Map(
-        "name" -> name))
-  }
-
-  def primitiveTypesNotSupportedError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2230")
-  }
-
   def onlySupportDataSourcesProvidingFileFormatError(providingClass: String): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2233",
@@ -2498,6 +2475,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null,
       context = getQueryContext(context),
       summary = getSummary(context))
+  }
+
+  def scalarSubqueryReturnsMultipleRows(): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+      messageParameters = Map.empty)
   }
 
   def comparatorReturnsNull(firstValue: String, secondValue: String): Throwable = {

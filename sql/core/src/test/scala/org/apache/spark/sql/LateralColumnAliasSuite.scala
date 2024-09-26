@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, ExpressionSet}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
@@ -554,7 +555,15 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
        |  FROM (SELECT dept * 2.0 AS id, id + 1 AS id2 FROM $testTable)) > 5
        |ORDER BY id
        |""".stripMargin
-    withLCAOff { intercept[AnalysisException] { sql(query4) } }
+    withLCAOff {
+      val exception = intercept[SparkRuntimeException] {
+        sql(query4).collect()
+      }
+      checkError(
+        exception,
+        condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS"
+      )
+    }
     withLCAOn {
       val analyzedPlan = sql(query4).queryExecution.analyzed
       assert(!analyzedPlan.containsPattern(OUTER_REFERENCE))

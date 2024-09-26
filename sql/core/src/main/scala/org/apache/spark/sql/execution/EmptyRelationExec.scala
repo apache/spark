@@ -71,13 +71,15 @@ case class EmptyRelationExec(@transient logical: LogicalPlan) extends LeafExecNo
       maxFields,
       printNodeId,
       indent)
-    lastChildren.add(true)
-    logical.generateTreeString(
-      depth + 1, lastChildren, append, verbose, "", false, maxFields, printNodeId, indent)
-    lastChildren.remove(lastChildren.size() - 1)
+    Option(logical).foreach { _ =>
+      lastChildren.add(true)
+      logical.generateTreeString(
+        depth + 1, lastChildren, append, verbose, "", false, maxFields, printNodeId, indent)
+      lastChildren.remove(lastChildren.size() - 1)
+    }
   }
 
   override def doCanonicalize(): SparkPlan = {
-    this.copy(logical = LocalRelation(logical.output).canonicalized)
+    this.copy(logical = LocalRelation(output).canonicalized)
   }
 }

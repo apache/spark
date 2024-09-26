@@ -351,7 +351,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     Seq(
       (Period.ofMonths(2), Int.MaxValue) -> "overflow",
-      (Period.ofMonths(Int.MinValue), 10d) -> "not in range",
+      (Period.ofMonths(Int.MinValue), 10d) -> "out of range",
       (Period.ofMonths(-100), Float.NaN) -> "input is infinite or NaN",
       (Period.ofMonths(200), Double.PositiveInfinity) -> "input is infinite or NaN",
       (Period.ofMonths(-200), Float.NegativeInfinity) -> "input is infinite or NaN"

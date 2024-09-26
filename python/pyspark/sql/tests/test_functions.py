@@ -29,7 +29,7 @@ from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeExce
 from pyspark.sql import Row, Window, functions as F, types
 from pyspark.sql.avro.functions import from_avro, to_avro
 from pyspark.sql.column import Column
-from pyspark.sql.functions.builtin import nullifzero, zeroifnull
+from pyspark.sql.functions.builtin import nullifzero, randstr, uniform, zeroifnull
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.testing.utils import have_numpy
 
@@ -1609,6 +1609,25 @@ class FunctionsTestsMixin:
         df = self.spark.createDataFrame([(None,), (1,)], ["a"])
         result = df.select(zeroifnull(df.a).alias("r")).collect()
         self.assertEqual([Row(r=0), Row(r=1)], result)
+
+    def test_randstr_uniform(self):
+        df = self.spark.createDataFrame([(0,)], ["a"])
+        result = df.select(randstr(F.lit(5), F.lit(0)).alias("x")).selectExpr("length(x)").collect()
+        self.assertEqual([Row(5)], result)
+        # The random seed is optional.
+        result = df.select(randstr(F.lit(5)).alias("x")).selectExpr("length(x)").collect()
+        self.assertEqual([Row(5)], result)
+
+        df = self.spark.createDataFrame([(0,)], ["a"])
+        result = (
+            df.select(uniform(F.lit(10), F.lit(20), F.lit(0)).alias("x"))
+            .selectExpr("x > 5")
+            .collect()
+        )
+        self.assertEqual([Row(True)], result)
+        # The random seed is optional.
+        result = df.select(uniform(F.lit(10), F.lit(20)).alias("x")).selectExpr("x > 5").collect()
+        self.assertEqual([Row(True)], result)
 
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):

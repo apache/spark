@@ -737,7 +737,6 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"BIGINT\"",
     "targetType" : "\"INT\"",
     "value" : "4567890123456789L"
@@ -763,7 +762,6 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"BIGINT\"",
     "targetType" : "\"SMALLINT\"",
     "value" : "4567890123456789L"
@@ -809,7 +807,6 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"DOUBLE\"",
     "targetType" : "\"BIGINT\"",
     "value" : "9.223372036854776E20D"
@@ -898,7 +895,6 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"BIGINT\"",
     "targetType" : "\"INT\"",
     "value" : "-9223372036854775808L"

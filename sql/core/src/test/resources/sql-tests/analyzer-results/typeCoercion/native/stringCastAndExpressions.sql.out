@@ -370,7 +370,7 @@ Project [c0#x]
 -- !query
 select from_json(a, 'a INT') from t
 -- !query analysis
-Project [from_json(StructField(a,IntegerType,true), a#x, Some(America/Los_Angeles)) AS from_json(a)#x]
+Project [from_json(StructField(a,IntegerType,true), a#x, Some(America/Los_Angeles), false) AS from_json(a)#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
       +- Project [cast(a#x as string) AS a#x]

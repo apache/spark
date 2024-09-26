@@ -205,7 +205,9 @@ private[connect] object ErrorUtils extends Logging {
       case _ =>
     }
 
-    if (sessionHolderOpt.exists(_.session.conf.get(Connect.CONNECT_ENRICH_ERROR_ENABLED))) {
+    val enrichErrorEnabled = sessionHolderOpt.exists(
+      _.session.sessionState.conf.getConf(Connect.CONNECT_ENRICH_ERROR_ENABLED))
+    if (enrichErrorEnabled) {
       // Generate a new unique key for this exception.
       val errorId = UUID.randomUUID().toString
 
@@ -216,9 +218,10 @@ private[connect] object ErrorUtils extends Logging {
     }
 
     lazy val stackTrace = Option(ExceptionUtils.getStackTrace(st))
+    val stackTraceEnabled = sessionHolderOpt.exists(
+      _.session.sessionState.conf.getConf(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED))
     val withStackTrace =
-      if (sessionHolderOpt.exists(
-          _.session.conf.get(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED) && stackTrace.nonEmpty)) {
+      if (stackTraceEnabled && stackTrace.nonEmpty) {
         val maxSize = Math.min(
           SparkEnv.get.conf.get(Connect.CONNECT_JVM_STACK_TRACE_MAX_SIZE),
           maxMetadataSize)

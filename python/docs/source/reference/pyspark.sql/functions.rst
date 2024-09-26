@@ -148,6 +148,7 @@ Mathematical Functions
     try_multiply
     try_subtract
     unhex
+    uniform
     width_bucket
 
 
@@ -189,6 +190,7 @@ String Functions
     overlay
     position
     printf
+    randstr
     regexp_count
     regexp_extract
     regexp_extract_all

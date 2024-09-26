@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.connect.ConnectConversions._
 
 /**
  * A set of methods for aggregations on a `DataFrame`, created by [[Dataset#groupBy groupBy]],
@@ -39,8 +40,7 @@ class RelationalGroupedDataset private[sql] (
     groupType: proto.Aggregate.GroupType,
     pivot: Option[proto.Aggregate.Pivot] = None,
     groupingSets: Option[Seq[proto.Aggregate.GroupingSets]] = None)
-    extends api.RelationalGroupedDataset[Dataset] {
-  type RGD = RelationalGroupedDataset
+    extends api.RelationalGroupedDataset {
   import df.sparkSession.RichColumn
 
   protected def toDF(aggExprs: Seq[Column]): DataFrame = {

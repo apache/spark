@@ -142,7 +142,9 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
    * client, but rather enqueued to in the response observer.
    */
   private def enqueueProgressMessage(force: Boolean = false): Unit = {
-    if (executeHolder.sessionHolder.session.conf.get(CONNECT_PROGRESS_REPORT_INTERVAL) > 0) {
+    val progressReportInterval = executeHolder.sessionHolder.session.sessionState.conf
+      .getConf(CONNECT_PROGRESS_REPORT_INTERVAL)
+    if (progressReportInterval > 0) {
       SparkConnectService.executionListener.foreach { listener =>
         // It is possible, that the tracker is no longer available and in this
         // case we simply ignore it and do not send any progress message. This avoids
@@ -240,8 +242,8 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           // monitor, and will notify upon state change.
           if (response.isEmpty) {
             // Wake up more frequently to send the progress updates.
-            val progressTimeout =
-              executeHolder.sessionHolder.session.conf.get(CONNECT_PROGRESS_REPORT_INTERVAL)
+            val progressTimeout = executeHolder.sessionHolder.session.sessionState.conf
+              .getConf(CONNECT_PROGRESS_REPORT_INTERVAL)
             // If the progress feature is disabled, wait for the deadline.
             val timeout = if (progressTimeout > 0) {
               progressTimeout

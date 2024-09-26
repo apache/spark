@@ -1233,6 +1233,19 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.2.1</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.accurateBlockSkewedFactor</code></td>
+  <td>-1.0</td>
+  <td>
+    A shuffle block is considered as skewed and will be accurately recorded in
+    <code>HighlyCompressedMapStatus</code> if its size is larger than this factor multiplying
+    the median shuffle block size or <code>spark.shuffle.accurateBlockThreshold</code>. It is
+    recommended to set this parameter to be the same as
+    <code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code>. Set to -1.0 to disable this
+    feature by default.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.registration.timeout</code></td>
   <td>5000</td>
   <td>

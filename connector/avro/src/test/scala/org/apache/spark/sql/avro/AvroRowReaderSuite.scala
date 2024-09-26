@@ -77,7 +77,8 @@ class AvroRowReaderSuite
           RebaseSpec(CORRECTED),
           new NoopFilters,
           false,
-          "")
+          "",
+          -1)
         override val stopPosition = fileSize
 
         override def hasNext: Boolean = hasNextRow

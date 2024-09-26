@@ -1386,7 +1386,6 @@ package object config {
 
   private[spark] val SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR =
     ConfigBuilder("spark.shuffle.accurateBlockSkewedFactor")
-      .internal()
       .doc("A shuffle block is considered as skewed and will be accurately recorded in " +
         "HighlyCompressedMapStatus if its size is larger than this factor multiplying " +
         "the median shuffle block size or SHUFFLE_ACCURATE_BLOCK_THRESHOLD. It is " +

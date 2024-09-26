@@ -29,6 +29,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.mapreduce.MRJobConfig
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords.{GetNewApplicationResponse, SubmitApplicationRequest}
 import org.apache.hadoop.yarn.api.records._
@@ -738,6 +739,21 @@ class ClientSuite extends SparkFunSuite
         }
       }
     }
+
+  test("SPARK-49760: default app master SPARK_USER") {
+    val sparkConf = new SparkConf()
+    val client = createClient(sparkConf)
+    val env = client.setupLaunchEnv(new Path("/staging/dir/path"), Seq())
+    env("SPARK_USER") should be (UserGroupInformation.getCurrentUser().getShortUserName())
+  }
+
+  test("SPARK-49760: override app master SPARK_USER") {
+    val sparkConf = new SparkConf()
+        .set("spark.yarn.appMasterEnv.SPARK_USER", "overrideuser")
+    val client = createClient(sparkConf)
+    val env = client.setupLaunchEnv(new Path("/staging/dir/path"), Seq())
+    env("SPARK_USER") should be ("overrideuser")
+  }
 
   private val matching = Seq(
     ("files URI match test1", "file:///file1", "file:///file2"),

@@ -174,4 +174,38 @@ class PruneFiltersSuite extends PlanTest {
       testRelation.where(!$"a".attr.in(1, 3, 5) && $"a".attr === 7 && $"b".attr === 1)
         .where(Rand(10) > 0.1 && Rand(10) < 1.1).analyze)
   }
+
+  test("Streaming relation is not lost under true filter") {
+    Seq("true", "false").foreach(x => withSQLConf(
+        SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key -> x) {
+      val streamingRelation =
+        LocalRelation(Seq($"a".int, $"b".int, $"c".int), Nil, isStreaming = true)
+      val originalQuery = streamingRelation.where(10 > 5).select($"a").analyze
+      val optimized = Optimize.execute(originalQuery)
+      val correctAnswer = streamingRelation.select($"a").analyze
+      comparePlans(optimized, correctAnswer)
+    })
+  }
+
+  test("Streaming relation is not lost under false filter") {
+    withSQLConf(
+        SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key -> "true") {
+      val streamingRelation =
+        LocalRelation(Seq($"a".int, $"b".int, $"c".int), Nil, isStreaming = true)
+      val originalQuery = streamingRelation.where(10 < 5).select($"a").analyze
+      val optimized = Optimize.execute(originalQuery)
+      val correctAnswer = streamingRelation.select($"a").analyze
+      comparePlans(optimized, correctAnswer)
+    }
+
+    withSQLConf(
+        SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key -> "false") {
+      val streamingRelation =
+        LocalRelation(Seq($"a".int, $"b".int, $"c".int), Nil, isStreaming = true)
+      val originalQuery = streamingRelation.where(10 < 5).select($"a").analyze
+      val optimized = Optimize.execute(originalQuery)
+      val correctAnswer = streamingRelation.where(10 < 5).select($"a").analyze
+      comparePlans(optimized, correctAnswer)
+    }
+  }
 }

@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPOutputStream
 
 import scala.collection.mutable.ListBuffer
-import scala.util.Random
+import scala.util.{Random, Try}
 
 import com.google.common.io.Files
 import org.apache.commons.io.IOUtils
@@ -1522,6 +1522,116 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       conf, isDriver = false, checkSerializer = false) === true)
     conf.set(SERIALIZER, "org.apache.spark.serializer.JavaSerializer")
     assert(Utils.isPushBasedShuffleEnabled(conf, isDriver = true) === false)
+  }
+
+
+  private def throwException(): String = {
+    throw new Exception("test")
+  }
+
+  private def callDoTry(): Try[String] = {
+    Utils.doTryWithCallerStacktrace {
+      throwException()
+    }
+  }
+
+  private def callGetTry(t: Try[String]): String = {
+    Utils.getTryWithCallerStacktrace(t)
+  }
+
+  private def callGetTryAgain(t: Try[String]): String = {
+    Utils.getTryWithCallerStacktrace(t)
+  }
+
+  test("doTryWithCallerStacktrace and getTryWithCallerStacktrace") {
+    val t = callDoTry()
+
+    val e1 = intercept[Exception] {
+      callGetTry(t)
+    }
+    // Uncomment for manual inspection
+    // e1.printStackTrace()
+    // Example:
+    // java.lang.Exception: test
+    //   at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1640)
+    //   at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1645)
+    //   at scala.util.Try$.apply(Try.scala:213)
+    //   at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1586)
+    //   at org.apache.spark.util.Utils$.getTryWithCallerStacktrace(Utils.scala:1639)
+    //   at org.apache.spark.util.UtilsSuite.callGetTry(UtilsSuite.scala:1650)
+    //   at org.apache.spark.util.UtilsSuite.$anonfun$new$165(UtilsSuite.scala:1661)
+    // <- callGetTry is seen as calling getTryWithCallerStacktrace
+
+    val st1 = e1.getStackTrace
+    // throwException should be on the stack trace
+    assert(st1.exists(_.getMethodName == "throwException"))
+    // callDoTry shouldn't be on the stack trace, but callGetTry should be.
+    assert(!st1.exists(_.getMethodName == "callDoTry"))
+    assert(st1.exists(_.getMethodName == "callGetTry"))
+
+    // The original stack trace with callDoTry should be in the suppressed exceptions.
+    // Example:
+    // scalastyle:off line.size.limit
+    // Suppressed: java.lang.Exception: Full stacktrace of original doTryWithCallerStacktrace caller
+    //   at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1640)
+    //   at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1645)
+    //   at scala.util.Try$.apply(Try.scala:213)
+    //   at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1586)
+    //   at org.apache.spark.util.UtilsSuite.callDoTry(UtilsSuite.scala:1645)
+    //   at org.apache.spark.util.UtilsSuite.$anonfun$new$165(UtilsSuite.scala:1658)
+    //   ... 56 more
+    // scalastyle:on line.size.limit
+    val origSt = e1.getSuppressed.find(
+      _.getMessage == Utils.TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE)
+    assert(origSt.isDefined)
+    assert(origSt.get.getStackTrace.exists(_.getMethodName == "throwException"))
+    assert(origSt.get.getStackTrace.exists(_.getMethodName == "callDoTry"))
+
+    // The stack trace under Try should be in the suppressed exceptions.
+    // Example:
+    // Suppressed: java.lang.Exception: Stacktrace under doTryWithCallerStacktrace
+    //   at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala: 1640)
+    //   at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala: 1645)
+    //   at scala.util.Try$.apply(Try.scala: 213)
+    //   at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala: 1586)
+    val trySt = e1.getSuppressed.find(
+      _.getMessage == Utils.TRY_WITH_CALLER_STACKTRACE_TRY_STACKTRACE)
+    assert(trySt.isDefined)
+    // calls under callDoTry should be present.
+    assert(trySt.get.getStackTrace.exists(_.getMethodName == "throwException"))
+    // callDoTry should be removed.
+    assert(!trySt.get.getStackTrace.exists(_.getMethodName == "callDoTry"))
+
+    val e2 = intercept[Exception] {
+      callGetTryAgain(t)
+    }
+    // Uncomment for manual inspection
+    // e2.printStackTrace()
+    // Example:
+    // java.lang.Exception: test
+    //   at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1640)
+    //   at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1645)
+    //   at scala.util.Try$.apply(Try.scala:213)
+    //   at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1586)
+    //   at org.apache.spark.util.Utils$.getTryWithCallerStacktrace(Utils.scala:1639)
+    //   at org.apache.spark.util.UtilsSuite.callGetTryAgain(UtilsSuite.scala:1654)
+    //   at org.apache.spark.util.UtilsSuite.$anonfun$new$165(UtilsSuite.scala:1711)
+    // <- callGetTryAgain is seen as calling getTryWithCallerStacktrace
+
+    val st2 = e2.getStackTrace
+    // throwException should be on the stack trace
+    assert(st2.exists(_.getMethodName == "throwException"))
+    // callDoTry shouldn't be on the stack trace, but callGetTryAgain should be.
+    assert(!st2.exists(_.getMethodName == "callDoTry"))
+    assert(st2.exists(_.getMethodName == "callGetTryAgain"))
+    // callGetTry that we called before shouldn't be on the stack trace.
+    assert(!st2.exists(_.getMethodName == "callGetTry"))
+
+    // Unfortunately, this utility is not able to clone the exception, but modifies it in place,
+    // so now e1 is also pointing to "callGetTryAgain" instead of "callGetTry".
+    val st1Again = e1.getStackTrace
+    assert(st1Again.exists(_.getMethodName == "callGetTryAgain"))
+    assert(!st1Again.exists(_.getMethodName == "callGetTry"))
   }
 }
 

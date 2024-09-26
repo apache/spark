@@ -106,7 +106,7 @@ class TransformWithStateInPandasPythonRunner(
     executionContext.execute(
       new TransformWithStateInPandasStateServer(stateServerSocket, processorHandle,
         groupingKeySchema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes,
-        arrowMaxRecordsPerBatch,
+        sqlConf.arrowTransformWithStateInPandasMaxRecordsPerBatch,
         batchTimestampMs = batchTimestampMs,
         eventTimeWatermarkForEviction = eventTimeWatermarkForEviction))
 

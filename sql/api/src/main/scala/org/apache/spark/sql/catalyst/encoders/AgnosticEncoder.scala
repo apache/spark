@@ -46,7 +46,20 @@ trait AgnosticEncoder[T] extends Encoder[T] {
   def isStruct: Boolean = false
 }
 
+/**
+ * Extract an [[AgnosticEncoder]] from an [[Encoder]].
+ */
+trait ToAgnosticEncoder[T] {
+  def encoder: AgnosticEncoder[T]
+}
+
 object AgnosticEncoders {
+  def agnosticEncoderFor[T: Encoder]: AgnosticEncoder[T] = implicitly[Encoder[T]] match {
+    case a: AgnosticEncoder[T] => a
+    case e: ToAgnosticEncoder[T @unchecked] => e.encoder
+    case other => throw ExecutionErrors.invalidAgnosticEncoderError(other)
+  }
+
   case class OptionEncoder[E](elementEncoder: AgnosticEncoder[E])
       extends AgnosticEncoder[Option[E]] {
     override def isPrimitive: Boolean = false

@@ -632,7 +632,8 @@ case class JsonToStructs(
     schema: DataType,
     options: Map[String, String],
     child: Expression,
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String] = None,
+    variantAllowDuplicateKeys: Boolean = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS))
   extends UnaryExpression
   with TimeZoneAwareExpression
   with CodegenFallback
@@ -719,7 +720,8 @@ case class JsonToStructs(
 
   override def nullSafeEval(json: Any): Any = nullableSchema match {
     case _: VariantType =>
-      VariantExpressionEvalUtils.parseJson(json.asInstanceOf[UTF8String])
+      VariantExpressionEvalUtils.parseJson(json.asInstanceOf[UTF8String],
+        allowDuplicateKeys = variantAllowDuplicateKeys)
     case _ =>
       converter(parser.parse(json.asInstanceOf[UTF8String]))
   }
@@ -735,6 +737,12 @@ case class JsonToStructs(
 
   override protected def withNewChildInternal(newChild: Expression): JsonToStructs =
     copy(child = newChild)
+}
+
+object JsonToStructs {
+  def unapply(
+      j: JsonToStructs): Option[(DataType, Map[String, String], Expression, Option[String])] =
+    Some((j.schema, j.options, j.child, j.timeZoneId))
 }
 
 /**
@@ -1072,7 +1080,7 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
       // skip all the children of inner object or array
       parser.skipChildren()
     }
-    new GenericArrayData(arrayBufferOfKeys.toArray)
+    new GenericArrayData(arrayBufferOfKeys.toArray[Any])
   }
 
   override protected def withNewChildInternal(newChild: Expression): JsonObjectKeys =

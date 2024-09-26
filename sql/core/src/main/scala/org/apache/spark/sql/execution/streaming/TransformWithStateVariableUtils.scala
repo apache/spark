@@ -43,12 +43,16 @@ object TransformWithStateVariableUtils {
   def getMapState(stateName: String, ttlEnabled: Boolean): TransformWithStateVariableInfo = {
     TransformWithStateVariableInfo(stateName, StateVariableType.MapState, ttlEnabled)
   }
+
+  def getTimerState(stateName: String): TransformWithStateVariableInfo = {
+    TransformWithStateVariableInfo(stateName, StateVariableType.TimerState, ttlEnabled = false)
+  }
 }
 
 // Enum of possible State Variable types
 object StateVariableType extends Enumeration {
   type StateVariableType = Value
-  val ValueState, ListState, MapState = Value
+  val ValueState, ListState, MapState, TimerState = Value
 }
 
 case class TransformWithStateVariableInfo(

@@ -339,8 +339,8 @@ trait JoinSelectionHelper extends Logging {
     )
   }
 
-  def getBroadcastNestedLoopJoinBuildSide(hint: JoinHint): Option[BuildSide] = {
-    if (hintToNotBroadcastAndReplicateLeft(hint)) {
+  def getBroadcastNestedLoopJoinBuildSide(hint: JoinHint, joinType: JoinType): Option[BuildSide] = {
+    if (hintToNotBroadcastAndReplicateLeft(hint) || joinType == LeftSingle) {
       Some(BuildRight)
     } else if (hintToNotBroadcastAndReplicateRight(hint)) {
       Some(BuildLeft)
@@ -375,7 +375,7 @@ trait JoinSelectionHelper extends Logging {
 
   def canBuildBroadcastRight(joinType: JoinType): Boolean = {
     joinType match {
-      case _: InnerLike | LeftOuter | LeftSemi | LeftAnti | _: ExistenceJoin => true
+      case _: InnerLike | LeftOuter | LeftSingle | LeftSemi | LeftAnti | _: ExistenceJoin => true
       case _ => false
     }
   }
@@ -389,7 +389,7 @@ trait JoinSelectionHelper extends Logging {
 
   def canBuildShuffledHashJoinRight(joinType: JoinType): Boolean = {
     joinType match {
-      case _: InnerLike | LeftOuter | FullOuter | RightOuter |
+      case _: InnerLike | LeftOuter | LeftSingle | FullOuter | RightOuter |
            LeftSemi | LeftAnti | _: ExistenceJoin => true
       case _ => false
     }

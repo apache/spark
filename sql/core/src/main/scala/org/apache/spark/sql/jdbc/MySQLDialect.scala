@@ -46,12 +46,33 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   // See https://dev.mysql.com/doc/refman/8.0/en/aggregate-functions.html
   private val supportedAggregateFunctions =
     Set("MAX", "MIN", "SUM", "COUNT", "AVG") ++ distinctUnsupportedAggregateFunctions
-  private val supportedFunctions = supportedAggregateFunctions
+  private val supportedFunctions = supportedAggregateFunctions ++ Set("DATE_ADD", "DATE_DIFF")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
   class MySQLSQLBuilder extends JDBCSQLBuilder {
+    override def visitExtract(field: String, source: String): String = {
+      field match {
+        case "DAY_OF_YEAR" => s"DAYOFYEAR($source)"
+        case "YEAR_OF_WEEK" => s"EXTRACT(YEAR FROM $source)"
+        // WEEKDAY uses Monday = 0, Tuesday = 1, ... and ISO standard is Monday = 1, ...,
+        // so we use the formula (WEEKDAY + 1) to follow the ISO standard.
+        case "DAY_OF_WEEK" => s"(WEEKDAY($source) + 1)"
+        case _ => super.visitExtract(field, source)
+      }
+    }
+
+    override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
+      funcName match {
+        case "DATE_ADD" =>
+          s"DATE_ADD(${inputs(0)}, INTERVAL ${inputs(1)} DAY)"
+        case "DATE_DIFF" =>
+          s"DATEDIFF(${inputs(0)}, ${inputs(1)})"
+        case _ => super.visitSQLFunction(funcName, inputs)
+      }
+    }
+
     override def visitSortOrder(
         sortKey: String, sortDirection: SortDirection, nullOrdering: NullOrdering): String = {
       (sortDirection, nullOrdering) match {

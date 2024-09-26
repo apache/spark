@@ -802,7 +802,7 @@ Project [unix_timestamp(22 05 2020 Friday, dd MM yyyy EEEEE, Some(America/Los_An
 -- !query
 select from_json('{"t":"26/October/2015"}', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'))
 -- !query analysis
-Project [from_json(StructField(t,TimestampType,true), (timestampFormat,dd/MMMMM/yyyy), {"t":"26/October/2015"}, Some(America/Los_Angeles)) AS from_json({"t":"26/October/2015"})#x]
+Project [from_json(StructField(t,TimestampType,true), (timestampFormat,dd/MMMMM/yyyy), {"t":"26/October/2015"}, Some(America/Los_Angeles), false) AS from_json({"t":"26/October/2015"})#x]
 +- OneRowRelation
 
 

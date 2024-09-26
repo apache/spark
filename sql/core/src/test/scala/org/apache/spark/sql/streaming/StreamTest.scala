@@ -542,10 +542,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
           val metadataRoot = Option(checkpointLocation).getOrElse(defaultCheckpointLocation)
 
           additionalConfs.foreach(pair => {
-            val value =
-              if (sparkSession.conf.contains(pair._1)) {
-                Some(sparkSession.conf.get(pair._1))
-              } else None
+            val value = sparkSession.conf.getOption(pair._1)
             resetConfValues(pair._1) = value
             sparkSession.conf.set(pair._1, pair._2)
           })

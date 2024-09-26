@@ -178,7 +178,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
         MyColumnarRule(MyNewQueryStageRule(), MyNewQueryStageRule()))
     }
     withSession(extensions) { session =>
-      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED, true)
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
       assert(session.sessionState.adaptiveRulesHolder.queryStagePrepRules
         .contains(MyQueryStagePrepRule()))
       assert(session.sessionState.columnarRules.contains(
@@ -221,7 +221,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
         MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
     }
     withSession(extensions) { session =>
-      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED, true)
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
       session.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
@@ -280,7 +280,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
         MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
     }
     withSession(extensions) { session =>
-      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED, enableAQE)
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, enableAQE)
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
       import session.implicits._

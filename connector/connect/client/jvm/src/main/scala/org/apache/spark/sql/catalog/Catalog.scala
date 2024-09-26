@@ -20,10 +20,11 @@ package org.apache.spark.sql.catalog
 import java.util
 
 import org.apache.spark.sql.{api, DataFrame, Dataset}
+import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.types.StructType
 
 /** @inheritdoc */
-abstract class Catalog extends api.Catalog[Dataset] {
+abstract class Catalog extends api.Catalog {
 
   /** @inheritdoc */
   override def listDatabases(): Dataset[Database]

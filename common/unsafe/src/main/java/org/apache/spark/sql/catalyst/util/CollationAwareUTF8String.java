@@ -109,7 +109,7 @@ public class CollationAwareUTF8String {
     }
     // Compare the characters in the target and pattern strings.
     int matchLength = 0, codePointBuffer = -1, targetCodePoint, patternCodePoint;
-    while (targetIterator.hasNext() && patternIterator.hasNext()) {
+    while ((targetIterator.hasNext() || codePointBuffer != -1) && patternIterator.hasNext()) {
       if (codePointBuffer != -1) {
         targetCodePoint = codePointBuffer;
         codePointBuffer = -1;
@@ -211,7 +211,7 @@ public class CollationAwareUTF8String {
     }
     // Compare the characters in the target and pattern strings.
     int matchLength = 0, codePointBuffer = -1, targetCodePoint, patternCodePoint;
-    while (targetIterator.hasNext() && patternIterator.hasNext()) {
+    while ((targetIterator.hasNext() || codePointBuffer != -1) && patternIterator.hasNext()) {
       if (codePointBuffer != -1) {
         targetCodePoint = codePointBuffer;
         codePointBuffer = -1;

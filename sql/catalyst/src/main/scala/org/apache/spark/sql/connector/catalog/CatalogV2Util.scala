@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, Named
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
-import org.apache.spark.sql.catalyst.util.GeneratedColumn
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
@@ -579,18 +579,10 @@ private[sql] object CatalogV2Util {
     val isDefaultColumn = f.getCurrentDefaultValue().isDefined &&
       f.getExistenceDefaultValue().isDefined
     val isGeneratedColumn = GeneratedColumn.isGeneratedColumn(f)
-    if (isDefaultColumn && isGeneratedColumn) {
-      throw new AnalysisException(
-        errorClass = "GENERATED_COLUMN_WITH_DEFAULT_VALUE",
-        messageParameters = Map(
-          "colName" -> f.name,
-          "defaultValue" -> f.getCurrentDefaultValue().get,
-          "genExpr" -> GeneratedColumn.getGenerationExpression(f).get
-        )
-      )
-    }
-
+    val isIdentityColumn = IdentityColumn.isIdentityColumn(f)
     if (isDefaultColumn) {
+      checkDefaultColumnConflicts(f)
+
       val e = analyze(
         f,
         statementType = "Column analysis",
@@ -611,10 +603,41 @@ private[sql] object CatalogV2Util {
         Seq("comment", GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY))
       Column.create(f.name, f.dataType, f.nullable, f.getComment().orNull,
         GeneratedColumn.getGenerationExpression(f).get, metadataAsJson(cleanedMetadata))
+    } else if (isIdentityColumn) {
+      val cleanedMetadata = metadataWithKeysRemoved(
+        Seq("comment",
+          IdentityColumn.IDENTITY_INFO_START,
+          IdentityColumn.IDENTITY_INFO_STEP,
+          IdentityColumn.IDENTITY_INFO_ALLOW_EXPLICIT_INSERT))
+        Column.create(f.name, f.dataType, f.nullable, f.getComment().orNull,
+          IdentityColumn.getIdentityInfo(f).get, metadataAsJson(cleanedMetadata))
     } else {
       val cleanedMetadata = metadataWithKeysRemoved(Seq("comment"))
       Column.create(f.name, f.dataType, f.nullable, f.getComment().orNull,
         metadataAsJson(cleanedMetadata))
+    }
+  }
+
+  private def checkDefaultColumnConflicts(f: StructField): Unit = {
+    if (GeneratedColumn.isGeneratedColumn(f)) {
+      throw new AnalysisException(
+        errorClass = "GENERATED_COLUMN_WITH_DEFAULT_VALUE",
+        messageParameters = Map(
+          "colName" -> f.name,
+          "defaultValue" -> f.getCurrentDefaultValue().get,
+          "genExpr" -> GeneratedColumn.getGenerationExpression(f).get
+        )
+      )
+    }
+    if (IdentityColumn.isIdentityColumn(f)) {
+      throw new AnalysisException(
+        errorClass = "IDENTITY_COLUMN_WITH_DEFAULT_VALUE",
+        messageParameters = Map(
+          "colName" -> f.name,
+          "defaultValue" -> f.getCurrentDefaultValue().get,
+          "identityColumnSpec" -> IdentityColumn.getIdentityInfo(f).get.toString
+        )
+      )
     }
   }
 }

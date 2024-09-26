@@ -26,6 +26,7 @@ import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.ProductEncoder
+import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.common.UdfUtils
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.col
@@ -40,8 +41,7 @@ import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode
  *
  * @since 3.5.0
  */
-class KeyValueGroupedDataset[K, V] private[sql] ()
-    extends api.KeyValueGroupedDataset[K, V, Dataset] {
+class KeyValueGroupedDataset[K, V] private[sql] () extends api.KeyValueGroupedDataset[K, V] {
   type KVDS[KY, VL] = KeyValueGroupedDataset[KY, VL]
 
   private def unsupported(): Nothing = throw new UnsupportedOperationException()

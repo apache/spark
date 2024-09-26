@@ -68,19 +68,52 @@ class SampledPlotBase:
     def get_sampled(self, data):
         from pyspark.pandas import DataFrame, Series
 
-        fraction = get_option("plotting.sample_ratio")
-        if fraction is None:
-            fraction = 1 / (len(data) / get_option("plotting.max_rows"))
-            fraction = min(1.0, fraction)
-        self.fraction = fraction
+        if not isinstance(data, (DataFrame, Series)):
+            raise TypeError("Only DataFrame and Series are supported for plotting.")
+        if isinstance(data, Series):
+            data = data.to_frame()
 
-        if isinstance(data, (DataFrame, Series)):
-            if isinstance(data, Series):
-                data = data.to_frame()
+        fraction = get_option("plotting.sample_ratio")
+        if fraction is not None:
+            self.fraction = fraction
             sampled = data._internal.resolved_copy.spark_frame.sample(fraction=self.fraction)
             return DataFrame(data._internal.with_new_sdf(sampled))._to_pandas()
         else:
-            raise TypeError("Only DataFrame and Series are supported for plotting.")
+            from pyspark.sql import Observation
+
+            max_rows = get_option("plotting.max_rows")
+            observation = Observation("ps plotting")
+            sdf = data._internal.resolved_copy.spark_frame.observe(
+                observation, F.count(F.lit(1)).alias("count")
+            )
+
+            rand_col_name = "__ps_plotting_sampled_plot_base_rand__"
+            id_col_name = "__ps_plotting_sampled_plot_base_id__"
+
+            sampled = (
+                sdf.select(
+                    "*",
+                    F.rand().alias(rand_col_name),
+                    F.monotonically_increasing_id().alias(id_col_name),
+                )
+                .sort(rand_col_name)
+                .limit(max_rows + 1)
+                .coalesce(1)
+                .sortWithinPartitions(id_col_name)
+                .drop(rand_col_name, id_col_name)
+            )
+
+            pdf = DataFrame(data._internal.with_new_sdf(sampled))._to_pandas()
+
+            if len(pdf) > max_rows:
+                try:
+                    self.fraction = float(max_rows) / observation.get["count"]
+                except Exception:
+                    pass
+                return pdf[:max_rows]
+            else:
+                self.fraction = 1.0
+                return pdf
 
     def set_result_text(self, ax):
         assert hasattr(self, "fraction")
@@ -182,7 +215,7 @@ class HistogramPlotBase(NumericPlotBase):
 
         # refers to org.apache.spark.ml.feature.Bucketizer#binarySearchForBuckets
         def binary_search_for_buckets(value: Column):
-            index = SF.binary_search(F.lit(bins), value)
+            index = SF.array_binary_search(F.lit(bins), value)
             bucket = F.when(index >= 0, index).otherwise(-index - 2)
             unboundErrMsg = F.lit(f"value %s out of the bins bounds: [{bins[0]}, {bins[-1]}]")
             return (
@@ -446,7 +479,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
         "pie": TopNPlotBase().get_top_n,
         "bar": TopNPlotBase().get_top_n,
         "barh": TopNPlotBase().get_top_n,
-        "scatter": TopNPlotBase().get_top_n,
+        "scatter": SampledPlotBase().get_sampled,
         "area": SampledPlotBase().get_sampled,
         "line": SampledPlotBase().get_sampled,
     }
@@ -540,7 +573,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
         """
         Plot DataFrame/Series as lines.
 
-        This function is useful to plot lines using Series's values
+        This function is useful to plot lines using DataFrame’s values
         as coordinates.
 
         Parameters
@@ -605,6 +638,12 @@ class PandasOnSparkPlotAccessor(PandasObject):
     def bar(self, x=None, y=None, **kwds):
         """
         Vertical bar plot.
+
+        A bar plot is a plot that presents categorical data with rectangular
+        bars with lengths proportional to the values that they represent. A
+        bar plot shows comparisons among discrete categories. One axis of the
+        plot shows the specific categories being compared, and the other axis
+        represents a measured value.
 
         Parameters
         ----------
@@ -717,10 +756,10 @@ class PandasOnSparkPlotAccessor(PandasObject):
 
         Parameters
         ----------
-        x : label or position, default DataFrame.index
-            Column to be used for categories.
-        y : label or position, default All numeric columns in dataframe
+        x : label or position, default All numeric columns in dataframe
             Columns to be plotted from the DataFrame.
+        y : label or position, default DataFrame.index
+            Column to be used for categories.
         **kwds
             Keyword arguments to pass on to
             :meth:`pyspark.pandas.DataFrame.plot` or :meth:`pyspark.pandas.Series.plot`.
@@ -730,6 +769,13 @@ class PandasOnSparkPlotAccessor(PandasObject):
         :class:`plotly.graph_objs.Figure`
             Return an custom object when ``backend!=plotly``.
             Return an ndarray when ``subplots=True`` (matplotlib-only).
+
+        Notes
+        -----
+        In Plotly and Matplotlib, the interpretation of `x` and `y` for `barh` plots differs.
+        In Plotly, `x` refers to the values and `y` refers to the categories.
+        In Matplotlib, `x` refers to the categories and `y` refers to the values.
+        Ensure correct axis labeling based on the backend used.
 
         See Also
         --------
@@ -797,7 +843,17 @@ class PandasOnSparkPlotAccessor(PandasObject):
 
     def box(self, **kwds):
         """
-        Make a box plot of the Series columns.
+        Make a box plot of the DataFrame columns.
+
+        A box plot is a method for graphically depicting groups of numerical data through
+        their quartiles. The box extends from the Q1 to Q3 quartile values of the data,
+        with a line at the median (Q2). The whiskers extend from the edges of box to show
+        the range of the data. The position of the whiskers is set by default to
+        1.5*IQR (IQR = Q3 - Q1) from the edges of the box. Outlier points are those past
+        the end of the whiskers.
+
+        A consideration when using this chart is that the box and the whiskers can overlap,
+        which is very common when plotting small sets of data.
 
         Parameters
         ----------
@@ -851,9 +907,11 @@ class PandasOnSparkPlotAccessor(PandasObject):
     def hist(self, bins=10, **kwds):
         """
         Draw one histogram of the DataFrame’s columns.
+
         A `histogram`_ is a representation of the distribution of data.
         This function calls :meth:`plotting.backend.plot`,
         on each series in the DataFrame, resulting in one histogram per column.
+        This is useful when the DataFrame’s Series are in a similar scale.
 
         .. _histogram: https://en.wikipedia.org/wiki/Histogram
 
@@ -901,6 +959,10 @@ class PandasOnSparkPlotAccessor(PandasObject):
     def kde(self, bw_method=None, ind=None, **kwargs):
         """
         Generate Kernel Density Estimate plot using Gaussian kernels.
+
+        In statistics, kernel density estimation (KDE) is a non-parametric way to
+        estimate the probability density function (PDF) of a random variable. This
+        function uses Gaussian kernels and includes automatic bandwidth determination.
 
         Parameters
         ----------

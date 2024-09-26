@@ -2434,7 +2434,8 @@ class ExponentialMovingLike(Generic[FrameLike], metaclass=ABCMeta):
         if opt_count != 1:
             raise ValueError("com, span, halflife, and alpha are mutually exclusive")
 
-        return unified_alpha
+        # convert possible numpy.float64 to float for lit function
+        return float(unified_alpha)
 
     @abstractmethod
     def _apply_as_series_or_frame(self, func: Callable[[Column], Column]) -> FrameLike:

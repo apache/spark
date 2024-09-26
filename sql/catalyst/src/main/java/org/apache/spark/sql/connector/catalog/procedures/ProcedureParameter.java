@@ -33,6 +33,11 @@ import static org.apache.spark.sql.connector.catalog.procedures.ProcedureParamet
 @Evolving
 public interface ProcedureParameter {
   /**
+   * A field metadata key that indicates whether an argument is passed by name.
+   */
+  String BY_NAME_METADATA_KEY = "BY_NAME";
+
+  /**
    * Creates a builder for an IN procedure parameter.
    *
    * @param name the name of the parameter

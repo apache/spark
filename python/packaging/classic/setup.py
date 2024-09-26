@@ -288,6 +288,7 @@ try:
             "pyspark.sql.connect.streaming.worker",
             "pyspark.sql.functions",
             "pyspark.sql.pandas",
+            "pyspark.sql.plot",
             "pyspark.sql.protobuf",
             "pyspark.sql.streaming",
             "pyspark.sql.worker",

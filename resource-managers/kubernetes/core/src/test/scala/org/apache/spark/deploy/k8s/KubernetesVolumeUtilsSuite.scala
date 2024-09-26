@@ -30,7 +30,20 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     assert(volumeSpec.mountPath === "/path")
     assert(volumeSpec.mountReadOnly)
     assert(volumeSpec.volumeConf.asInstanceOf[KubernetesHostPathVolumeConf] ===
-      KubernetesHostPathVolumeConf("/hostPath"))
+      KubernetesHostPathVolumeConf("/hostPath", ""))
+  }
+
+  test("Parses hostPath volume type correctly") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("test.hostPath.volumeName.mount.path", "/path")
+    sparkConf.set("test.hostPath.volumeName.options.path", "/hostPath")
+    sparkConf.set("test.hostPath.volumeName.options.type", "Type")
+
+    val volumeSpec = KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head
+    assert(volumeSpec.volumeName === "volumeName")
+    assert(volumeSpec.mountPath === "/path")
+    assert(volumeSpec.volumeConf.asInstanceOf[KubernetesHostPathVolumeConf] ===
+      KubernetesHostPathVolumeConf("/hostPath", "Type"))
   }
 
   test("Parses subPath correctly") {
@@ -43,6 +56,33 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     assert(volumeSpec.volumeName === "volumeName")
     assert(volumeSpec.mountPath === "/path")
     assert(volumeSpec.mountSubPath === "subPath")
+    assert(volumeSpec.mountSubPathExpr === "")
+  }
+
+  test("Parses subPathExpr correctly") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("test.emptyDir.volumeName.mount.path", "/path")
+    sparkConf.set("test.emptyDir.volumeName.mount.readOnly", "true")
+    sparkConf.set("test.emptyDir.volumeName.mount.subPathExpr", "subPathExpr")
+
+    val volumeSpec = KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head
+    assert(volumeSpec.volumeName === "volumeName")
+    assert(volumeSpec.mountPath === "/path")
+    assert(volumeSpec.mountSubPath === "")
+    assert(volumeSpec.mountSubPathExpr === "subPathExpr")
+  }
+
+  test("Rejects mutually exclusive subPath and subPathExpr") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("test.emptyDir.volumeName.mount.path", "/path")
+    sparkConf.set("test.emptyDir.volumeName.mount.subPath", "subPath")
+    sparkConf.set("test.emptyDir.volumeName.mount.subPathExpr", "subPathExpr")
+
+    val msg = intercept[IllegalArgumentException] {
+      KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head
+    }.getMessage
+    assert(msg === "These config options are mutually exclusive: " +
+      "emptyDir.volumeName.mount.subPath, emptyDir.volumeName.mount.subPathExpr")
   }
 
   test("Parses persistentVolumeClaim volumes correctly") {
@@ -56,7 +96,39 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     assert(volumeSpec.mountPath === "/path")
     assert(volumeSpec.mountReadOnly)
     assert(volumeSpec.volumeConf.asInstanceOf[KubernetesPVCVolumeConf] ===
-      KubernetesPVCVolumeConf("claimName"))
+      KubernetesPVCVolumeConf("claimName", labels = Some(Map())))
+  }
+
+  test("SPARK-49598: Parses persistentVolumeClaim volumes correctly with labels") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("test.persistentVolumeClaim.volumeName.mount.path", "/path")
+    sparkConf.set("test.persistentVolumeClaim.volumeName.mount.readOnly", "true")
+    sparkConf.set("test.persistentVolumeClaim.volumeName.options.claimName", "claimName")
+    sparkConf.set("test.persistentVolumeClaim.volumeName.label.env", "test")
+    sparkConf.set("test.persistentVolumeClaim.volumeName.label.foo", "bar")
+
+    val volumeSpec = KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head
+    assert(volumeSpec.volumeName === "volumeName")
+    assert(volumeSpec.mountPath === "/path")
+    assert(volumeSpec.mountReadOnly)
+    assert(volumeSpec.volumeConf.asInstanceOf[KubernetesPVCVolumeConf] ===
+      KubernetesPVCVolumeConf(claimName = "claimName",
+        labels = Some(Map("env" -> "test", "foo" -> "bar"))))
+  }
+
+  test("SPARK-49598: Parses persistentVolumeClaim volumes & puts " +
+    "labels as empty Map if not provided") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("test.persistentVolumeClaim.volumeName.mount.path", "/path")
+    sparkConf.set("test.persistentVolumeClaim.volumeName.mount.readOnly", "true")
+    sparkConf.set("test.persistentVolumeClaim.volumeName.options.claimName", "claimName")
+
+    val volumeSpec = KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head
+    assert(volumeSpec.volumeName === "volumeName")
+    assert(volumeSpec.mountPath === "/path")
+    assert(volumeSpec.mountReadOnly)
+    assert(volumeSpec.volumeConf.asInstanceOf[KubernetesPVCVolumeConf] ===
+      KubernetesPVCVolumeConf(claimName = "claimName", labels = Some(Map())))
   }
 
   test("Parses emptyDir volumes correctly") {

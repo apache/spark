@@ -43,6 +43,7 @@ from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import StructType, Row
 from pyspark.sql.utils import dispatch_df_method
 
+
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
     import pyarrow as pa
@@ -65,6 +66,7 @@ if TYPE_CHECKING:
         ArrowMapIterFunction,
         DataFrameLike as PandasDataFrameLike,
     )
+    from pyspark.sql.plot import PySparkPlotAccessor
     from pyspark.sql.metrics import ExecutionInfo
 
 
@@ -3349,7 +3351,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def filter(self, condition: "ColumnOrName") -> "DataFrame":
+    def filter(self, condition: Union[Column, str]) -> "DataFrame":
         """Filters rows using the given condition.
 
         :func:`where` is an alias for :func:`filter`.
@@ -5900,7 +5902,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def where(self, condition: "ColumnOrName") -> "DataFrame":
+    def where(self, condition: Union[Column, str]) -> "DataFrame":
         """
         :func:`where` is an alias for :func:`filter`.
 
@@ -6391,6 +6393,32 @@ class DataFrame:
         -----
         This is an API dedicated to Spark Connect client only. With regular Spark Session, it throws
         an exception.
+        """
+        ...
+
+    @property
+    def plot(self) -> "PySparkPlotAccessor":
+        """
+        Returns a :class:`PySparkPlotAccessor` for plotting functions.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`PySparkPlotAccessor`
+
+        Notes
+        -----
+        This API is experimental.
+
+        Examples
+        --------
+        >>> data = [("A", 10, 1.5), ("B", 30, 2.5), ("C", 20, 3.5)]
+        >>> columns = ["category", "int_val", "float_val"]
+        >>> df = spark.createDataFrame(data, columns)
+        >>> type(df.plot)
+        <class 'pyspark.sql.plot.core.PySparkPlotAccessor'>
+        >>> df.plot.line(x="category", y=["int_val", "float_val"])  # doctest: +SKIP
         """
         ...
 

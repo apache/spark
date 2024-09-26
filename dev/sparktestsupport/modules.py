@@ -548,6 +548,9 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_udtf",
         "pyspark.sql.tests.test_utils",
         "pyspark.sql.tests.test_resources",
+        "pyspark.sql.tests.plot.test_frame_plot",
+        "pyspark.sql.tests.plot.test_frame_plot_plotly",
+        "pyspark.sql.tests.test_connect_compatibility",
     ],
 )
 
@@ -1051,6 +1054,8 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_arrow_cogrouped_map",
         "pyspark.sql.tests.connect.test_parity_python_datasource",
         "pyspark.sql.tests.connect.test_parity_python_streaming_datasource",
+        "pyspark.sql.tests.connect.test_parity_frame_plot",
+        "pyspark.sql.tests.connect.test_parity_frame_plot_plotly",
         "pyspark.sql.tests.connect.test_utils",
         "pyspark.sql.tests.connect.client.test_artifact",
         "pyspark.sql.tests.connect.client.test_artifact_localcluster",

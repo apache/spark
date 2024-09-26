@@ -98,7 +98,7 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
     val filterFuncs = filters.flatMap(filter => createFilterFunction(filter))
-    val maxLength = sparkSession.conf.get(SOURCES_BINARY_FILE_MAX_LENGTH)
+    val maxLength = sparkSession.sessionState.conf.getConf(SOURCES_BINARY_FILE_MAX_LENGTH)
 
     file: PartitionedFile => {
       val path = file.toPath

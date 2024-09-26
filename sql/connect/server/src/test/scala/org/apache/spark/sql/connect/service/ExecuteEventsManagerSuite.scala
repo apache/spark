@@ -374,7 +374,8 @@ class ExecuteEventsManagerSuite
       .setClientType(DEFAULT_CLIENT_TYPE)
       .build()
 
-    val executeHolder = new ExecuteHolder(executePlanRequest, sessionHolder)
+    val executeKey = ExecuteKey(executePlanRequest, sessionHolder)
+    val executeHolder = new ExecuteHolder(executeKey, executePlanRequest, sessionHolder)
 
     val eventsManager = ExecuteEventsManager(executeHolder, DEFAULT_CLOCK)
     eventsManager.status_(executeStatus)

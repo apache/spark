@@ -16,10 +16,10 @@
  */
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.{api, Dataset, SparkSession}
+import org.apache.spark.sql.{api, SparkSession}
 
 /** @inheritdoc */
-trait StreamingQuery extends api.StreamingQuery[Dataset] {
+trait StreamingQuery extends api.StreamingQuery {
   /** @inheritdoc */
   override def sparkSession: SparkSession
 }

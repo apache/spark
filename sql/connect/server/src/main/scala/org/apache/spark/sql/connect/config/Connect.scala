@@ -63,7 +63,7 @@ object Connect {
           "conservatively use 70% of it because the size is not accurate but estimated.")
       .version("3.4.0")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(4 * 1024 * 1024)
+      .createWithDefault(ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE)
 
   val CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE =
     buildStaticConf("spark.connect.grpc.maxInboundMessageSize")
