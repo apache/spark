@@ -1085,7 +1085,7 @@
   },
   "DATE_TIME_FIELD_OUT_OF_BOUNDS" : {
     "message" : [
-      "ANSI mode error: <message>. If necessary set <ansiConfig> to false to bypass this error."
+      "<message>. If necessary set <ansiConfig> to false to bypass this error."
     ],
     "sqlState" : "22008"
   },
