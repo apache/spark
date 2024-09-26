@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.execution.streaming.{StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state.StateMessage
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, Exists, Get, HandleState, ListStateCall, ListStateGet, ListStatePut, SetHandleState, StateCallCommand, StatefulProcessorCall, ValueStateCall, ValueStateUpdate}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, DeleteTimer, Exists, ExpiryTimerRequest, Get, GetProcessingTime, GetWatermark, HandleState, ListStateCall, ListStateGet, ListStatePut, ListTimers, RegisterTimer, SetHandleState, StateCallCommand, StatefulProcessorCall, TimerRequest, TimerStateCallCommand, TimerValueRequest, ValueStateCall, ValueStateUpdate}
 import org.apache.spark.sql.streaming.{ListState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -287,7 +287,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
       ).build()
     ).build()
     stateServer.handleTimerRequest(message)
-    verify(statefulProcessorHandle).getExpiredTimersWithKeyRow(any[Long])
+    verify(statefulProcessorHandle).getExpiredTimers(any[Long])
     verify(outputStream).writeInt(1)
   }
 

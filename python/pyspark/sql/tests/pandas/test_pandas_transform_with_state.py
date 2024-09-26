@@ -89,7 +89,6 @@ class TransformWithStateInPandasTestsMixin:
         )
         return df_final
 
-    """
     def _test_transform_with_state_in_pandas_basic(
         self, stateful_processor, check_results, single_batch=False, timeMode="None"
     ):
@@ -320,7 +319,6 @@ class TransformWithStateInPandasTestsMixin:
         finally:
             input_dir.cleanup()
 
-    """
     def _test_transform_with_state_in_pandas_proc_timer(
             self, stateful_processor, check_results):
         input_path = tempfile.mkdtemp()
@@ -679,7 +677,7 @@ class ListStateProcessor(StatefulProcessor):
         self.list_state1 = handle.getListState("listState1", state_schema)
         self.list_state2 = handle.getListState("listState2", state_schema)
 
-    def handleInputRows(self, key, rows) -> Iterator[pd.DataFrame]:
+    def handleInputRows(self, key, rows, timer_values, expired_timer_info) -> Iterator[pd.DataFrame]:
         count = 0
         for pdf in rows:
             list_state_rows = [(120,), (20,)]

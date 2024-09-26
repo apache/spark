@@ -508,10 +508,13 @@ class TransformWithStateInPandasStateServer(
 
       val arrowStreamWriter = new BaseStreamingArrowWriter(root, writer,
           arrowTransformWithStateInPandasMaxRecordsPerBatch)
-      while (iter.hasNext) {
+      var rowCount = 0
+      while (iter.hasNext &&
+        rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {
         val data = iter.next()
         val internalRow = func(data)
         arrowStreamWriter.writeRow(internalRow)
+        rowCount += 1
       }
       arrowStreamWriter.finalizeCurrentArrowBatch()
       writer.end()
