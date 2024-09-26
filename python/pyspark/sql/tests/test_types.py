@@ -1133,17 +1133,13 @@ class TypesTestsMixin:
         result = df.select(F.col("point").cast(PythonOnlyUDT())).collect()
         self.assertEqual(
             result,
-            [
-                Row(point=PythonOnlyPoint(1.0, 2.0))
-            ],
+            [Row(point=PythonOnlyPoint(1.0, 2.0))],
         )
 
         result = df.select(F.col("python_only_point").cast(ExamplePointUDT())).collect()
         self.assertEqual(
             result,
-            [
-                Row(python_only_point=ExamplePoint(1.0, 2.0))
-            ],
+            [Row(python_only_point=ExamplePoint(1.0, 2.0))],
         )
 
     def test_struct_type(self):
