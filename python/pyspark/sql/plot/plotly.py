@@ -34,6 +34,7 @@ def plot_pyspark(data: "DataFrame", kind: str, **kwargs: Any) -> "Figure":
 
 
 def plot_pie(data: "DataFrame", **kwargs: Any) -> "Figure":
+    # TODO(SPARK-49530): Support pie subplots with plotly backend
     from plotly import express
 
     pdf = PySparkPlotAccessor.plot_data_map["pie"](data)
