@@ -22,7 +22,6 @@ import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.concurrent.TimeoutException;
 
-import com.google.common.base.Throwables;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;

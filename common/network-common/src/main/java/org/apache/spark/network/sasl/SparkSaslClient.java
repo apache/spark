@@ -29,7 +29,6 @@ import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslClient;
 import javax.security.sasl.SaslException;
 
-import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
 
 import org.apache.spark.internal.SparkLogger;

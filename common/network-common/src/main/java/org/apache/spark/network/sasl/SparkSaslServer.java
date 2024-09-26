@@ -31,7 +31,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;

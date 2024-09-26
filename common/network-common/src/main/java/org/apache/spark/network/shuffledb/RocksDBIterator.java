@@ -22,7 +22,6 @@ import java.util.AbstractMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
-import com.google.common.base.Throwables;
 import org.rocksdb.RocksIterator;
 
 /**
