@@ -121,11 +121,7 @@ case class QualifiedTableName(catalog: String, database: String, name: String) {
 
 object QualifiedTableName {
   def apply(catalog: String, database: String, name: String): QualifiedTableName = {
-    if (catalog.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)) {
-      new QualifiedTableName(database, name)
-    } else {
-      new QualifiedTableName(catalog, database, name)
-    }
+    new QualifiedTableName(catalog, database, name)
   }
 
   def apply(database: String, name: String): QualifiedTableName =
