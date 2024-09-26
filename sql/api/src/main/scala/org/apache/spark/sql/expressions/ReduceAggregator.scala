@@ -24,13 +24,13 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveBoolean
 
 /**
  * An aggregator that uses a single associative and commutative reduce function. This reduce
- * function can be used to go through all input values and reduces them to a single value.
- * If there is no input, a null value is returned.
+ * function can be used to go through all input values and reduces them to a single value. If
+ * there is no input, a null value is returned.
  *
  * This class currently assumes there is at least one input row.
  */
 private[sql] class ReduceAggregator[T: Encoder](func: (T, T) => T)
-  extends Aggregator[T, (Boolean, T), T] {
+    extends Aggregator[T, (Boolean, T), T] {
 
   @transient private val encoder = implicitly[Encoder[T]]
 
@@ -48,7 +48,8 @@ private[sql] class ReduceAggregator[T: Encoder](func: (T, T) => T)
   override def zero: (Boolean, T) = (false, _zero.asInstanceOf[T])
 
   override def bufferEncoder: Encoder[(Boolean, T)] = {
-    ProductEncoder.tuple(Seq(PrimitiveBooleanEncoder, encoder.asInstanceOf[AgnosticEncoder[T]]))
+    ProductEncoder
+      .tuple(Seq(PrimitiveBooleanEncoder, encoder.asInstanceOf[AgnosticEncoder[T]]))
       .asInstanceOf[Encoder[(Boolean, T)]]
   }
 
