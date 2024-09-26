@@ -51,9 +51,7 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
   }
 
   @Override
-  public void initialize(String name, CaseInsensitiveStringMap options) {
-    delegate.initialize(name, options);
-  }
+  public void initialize(String name, CaseInsensitiveStringMap options) {}
 
   @Override
   public Set<TableCatalogCapability> capabilities() {
