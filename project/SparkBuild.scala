@@ -354,18 +354,12 @@ object SparkBuild extends PomBuild {
 
   // Note ordering of these settings matter.
   /* Enable shared settings on all projects */
-  val everyProject = (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
-  everyProject.foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
-      ExcludedDependencies.settings ++ Checkstyle.settings))
+  (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
+    .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
+      ExcludedDependencies.settings ++ Checkstyle.settings ++ ExcludeShims.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
-
-  /** Remove connect shims from every project except the ones used by the connect client. */
-  val projectsWithShims = Set(sqlApi, connectCommon, connectClient)
-  everyProject.filterNot(projectsWithShims).foreach {
-    enable(ExcludeShims.settings)
-  }
 
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
@@ -1090,14 +1084,22 @@ object ExcludedDependencies {
 }
 
 /**
- * This excludes the spark-connect-shims module from a module. This is needed because SBT (or the
- * POM reader) does not seem to respect module exclusions.
+ * This excludes the spark-connect-shims module from a module when it has a dependency on
+ * spark-core. This is needed because SBT (or the POM reader) does not seem to respect module
+ * exclusions.
  */
 object ExcludeShims {
-  lazy val settings = Seq(
-    Compile / internalDependencyClasspath ~= { cp =>
-      cp.filterNot(_.data.name.contains("spark-connect-shims"))
+  def excludeShims(classpath: Seq[Attributed[File]]): Seq[Attributed[File]] = {
+    if (classpath.exists(_.data.name.contains("spark-core"))) {
+      classpath.filterNot(_.data.name.contains("spark-connect-shims"))
+    } else {
+      classpath
     }
+  }
+
+  lazy val settings = Seq(
+    Compile / internalDependencyClasspath ~= excludeShims _,
+    Test / internalDependencyClasspath ~= excludeShims _,
   )
 }
 
