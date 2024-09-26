@@ -568,7 +568,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     val canUseV2 = lookupV2Provider().isDefined || (df.sparkSession.sessionState.conf.getConf(
         SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).isDefined &&
         !df.sparkSession.sessionState.catalogManager.catalog(CatalogManager.SESSION_CATALOG_NAME)
-          .isInstanceOf[DelegatingCatalogExtension])
+          .isInstanceOf[CatalogExtension])
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
       case nameParts @ NonSessionCatalogAndIdentifier(catalog, ident) =>
