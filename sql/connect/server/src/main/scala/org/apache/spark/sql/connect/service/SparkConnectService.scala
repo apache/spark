@@ -458,10 +458,7 @@ object SparkConnectService extends Logging {
    */
   private def postSparkConnectServiceStarted(): Unit = {
     postServiceEvent(isa =>
-      SparkListenerConnectServiceStarted(
-        hostAddress,
-        isa.getPort,
-        System.currentTimeMillis()))
+      SparkListenerConnectServiceStarted(hostAddress, isa.getPort, System.currentTimeMillis()))
   }
 
   /**
