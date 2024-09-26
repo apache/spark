@@ -131,7 +131,7 @@ class CollectionExpressionsSuite
     val m1 = Literal.create(null, MapType(StringType, StringType))
     checkEvaluation(ArrayContains(MapKeys(m0), Literal("a")), true)
     checkEvaluation(ArrayContains(MapKeys(m0), Literal("c")), false)
-    checkEvaluation(ArrayContains(MapKeys(m0), Literal(null, StringType)), null)
+    checkEvaluation(ArrayContains(MapKeys(m0), Literal(null, StringType)), false)
     checkEvaluation(ArrayContains(MapKeys(m1), Literal("a")), null)
   }
 
@@ -591,15 +591,15 @@ class CollectionExpressionsSuite
 
     checkEvaluation(ArrayContains(a0, Literal(1)), true)
     checkEvaluation(ArrayContains(a0, Literal(0)), false)
-    checkEvaluation(ArrayContains(a0, Literal.create(null, IntegerType)), null)
+    checkEvaluation(ArrayContains(a0, Literal.create(null, IntegerType)), false)
     checkEvaluation(ArrayContains(a5, Literal(1)), true)
 
     checkEvaluation(ArrayContains(a1, Literal("")), true)
-    checkEvaluation(ArrayContains(a1, Literal("a")), null)
-    checkEvaluation(ArrayContains(a1, Literal.create(null, StringType)), null)
+    checkEvaluation(ArrayContains(a1, Literal("a")), false)
+    checkEvaluation(ArrayContains(a1, Literal.create(null, StringType)), true)
 
-    checkEvaluation(ArrayContains(a2, Literal(1L)), null)
-    checkEvaluation(ArrayContains(a2, Literal.create(null, LongType)), null)
+    checkEvaluation(ArrayContains(a2, Literal(1L)), false)
+    checkEvaluation(ArrayContains(a2, Literal.create(null, LongType)), true)
 
     checkEvaluation(ArrayContains(a3, Literal("")), null)
     checkEvaluation(ArrayContains(a3, Literal.create(null, StringType)), null)
@@ -623,8 +623,8 @@ class CollectionExpressionsSuite
 
     checkEvaluation(ArrayContains(b0, be), true)
     checkEvaluation(ArrayContains(b1, be), false)
-    checkEvaluation(ArrayContains(b0, nullBinary), null)
-    checkEvaluation(ArrayContains(b2, be), null)
+    checkEvaluation(ArrayContains(b0, nullBinary), false)
+    checkEvaluation(ArrayContains(b2, be), false)
     checkEvaluation(ArrayContains(b3, be), true)
 
     // complex data types

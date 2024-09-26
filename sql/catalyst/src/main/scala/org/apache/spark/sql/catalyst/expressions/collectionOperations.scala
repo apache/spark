@@ -1477,9 +1477,15 @@ case class ArrayContains(left: Expression, right: Expression)
   override def eval(input: InternalRow): Any = {
     val array = left.eval(input)
     val value = right.eval(input)
-    array.asInstanceOf[ArrayData].foreach(right.dataType, (_, v) =>
-      if (ordering.equiv(v, value)) {
+    val arrayData = array.asInstanceOf[ArrayData]
+    if (arrayData == null) return null
+    arrayData.foreach(right.dataType, (_, v) =>
+      if (v == null && value == null) {
         return true
+      } else if (v != null && value != null) {
+        if (ordering.equiv(v, value)) {
+          return true
+        }
       }
     )
     false
@@ -1496,14 +1502,18 @@ case class ArrayContains(left: Expression, right: Expression)
          |${valueEval.code}
          |boolean ${ev.isNull} = false;
          |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-         |for (int $i = 0; $i < ${arrayEval.value}.numElements(); $i++) {
-         |  if (${arrayEval.value}.isNullAt($i) && ${valueEval.isNull}) {
-         |    ${ev.value} = true;
-         |    break;
-         |  } else if (!${arrayEval.value}.isNullAt($i) && !${valueEval.isNull}) {
-         |    if (${ctx.genEqual(right.dataType, valueEval.value, getValue)}) {
+         |if (${arrayEval.value} == null) {
+         |  ${ev.isNull} = true;
+         |} else {
+         |  for (int $i = 0; $i < ${arrayEval.value}.numElements(); $i++) {
+         |    if (${arrayEval.value}.isNullAt($i) && ${valueEval.isNull}) {
          |      ${ev.value} = true;
          |      break;
+         |    } else if (!${arrayEval.value}.isNullAt($i) && !${valueEval.isNull}) {
+         |      if (${ctx.genEqual(right.dataType, valueEval.value, getValue)}) {
+         |        ${ev.value} = true;
+         |        break;
+         |      }
          |    }
          |  }
          |}
