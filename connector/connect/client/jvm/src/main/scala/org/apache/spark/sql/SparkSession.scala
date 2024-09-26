@@ -41,7 +41,7 @@ import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, Spar
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.{CatalogImpl, SessionCleaner, SqlApiConf}
+import org.apache.spark.sql.internal.{CatalogImpl, ConnectRuntimeConfig, SessionCleaner, SqlApiConf}
 import org.apache.spark.sql.internal.ColumnNodeToProtoConverter.{toExpr, toTypedExpr}
 import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.streaming.StreamingQueryManager
@@ -69,7 +69,7 @@ import org.apache.spark.util.ArrayImplicits._
 class SparkSession private[sql] (
     private[sql] val client: SparkConnectClient,
     private val planIdGenerator: AtomicLong)
-    extends api.SparkSession[Dataset]
+    extends api.SparkSession
     with Logging {
 
   private[this] val allocator = new RootAllocator()
@@ -88,16 +88,8 @@ class SparkSession private[sql] (
     client.hijackServerSideSessionIdForTesting(suffix)
   }
 
-  /**
-   * Runtime configuration interface for Spark.
-   *
-   * This is the interface through which the user can get and set all Spark configurations that
-   * are relevant to Spark SQL. When getting the value of a config, his defaults to the value set
-   * in server, if any.
-   *
-   * @since 3.4.0
-   */
-  val conf: RuntimeConfig = new RuntimeConfig(client)
+  /** @inheritdoc */
+  val conf: RuntimeConfig = new ConnectRuntimeConfig(client)
 
   /** @inheritdoc */
   @transient
@@ -260,19 +252,8 @@ class SparkSession private[sql] (
   lazy val udf: UDFRegistration = new UDFRegistration(this)
 
   // scalastyle:off
-  // Disable style checker so "implicits" object can start with lowercase i
-  /**
-   * (Scala-specific) Implicit methods available in Scala for converting common names and Symbols
-   * into [[Column]]s, and for converting common Scala objects into DataFrame`s.
-   *
-   * {{{
-   *   val sparkSession = SparkSession.builder.getOrCreate()
-   *   import sparkSession.implicits._
-   * }}}
-   *
-   * @since 3.4.0
-   */
-  object implicits extends SQLImplicits(this) with Serializable
+  /** @inheritdoc */
+  object implicits extends SQLImplicits(this)
   // scalastyle:on
 
   /** @inheritdoc */
@@ -428,7 +409,7 @@ class SparkSession private[sql] (
    *
    * @since 3.5.0
    */
-  def interruptAll(): Seq[String] = {
+  override def interruptAll(): Seq[String] = {
     client.interruptAll().getInterruptedIdsList.asScala.toSeq
   }
 
@@ -441,7 +422,7 @@ class SparkSession private[sql] (
    *
    * @since 3.5.0
    */
-  def interruptTag(tag: String): Seq[String] = {
+  override def interruptTag(tag: String): Seq[String] = {
     client.interruptTag(tag).getInterruptedIdsList.asScala.toSeq
   }
 
@@ -454,7 +435,7 @@ class SparkSession private[sql] (
    *
    * @since 3.5.0
    */
-  def interruptOperation(operationId: String): Seq[String] = {
+  override def interruptOperation(operationId: String): Seq[String] = {
     client.interruptOperation(operationId).getInterruptedIdsList.asScala.toSeq
   }
 
@@ -485,65 +466,17 @@ class SparkSession private[sql] (
     SparkSession.onSessionClose(this)
   }
 
-  /**
-   * Add a tag to be assigned to all the operations started by this thread in this session.
-   *
-   * Often, a unit of execution in an application consists of multiple Spark executions.
-   * Application programmers can use this method to group all those jobs together and give a group
-   * tag. The application can use `org.apache.spark.sql.SparkSession.interruptTag` to cancel all
-   * running running executions with this tag. For example:
-   * {{{
-   * // In the main thread:
-   * spark.addTag("myjobs")
-   * spark.range(10).map(i => { Thread.sleep(10); i }).collect()
-   *
-   * // In a separate thread:
-   * spark.interruptTag("myjobs")
-   * }}}
-   *
-   * There may be multiple tags present at the same time, so different parts of application may
-   * use different tags to perform cancellation at different levels of granularity.
-   *
-   * @param tag
-   *   The tag to be added. Cannot contain ',' (comma) character or be an empty string.
-   *
-   * @since 3.5.0
-   */
-  def addTag(tag: String): Unit = {
-    client.addTag(tag)
-  }
+  /** @inheritdoc */
+  override def addTag(tag: String): Unit = client.addTag(tag)
 
-  /**
-   * Remove a tag previously added to be assigned to all the operations started by this thread in
-   * this session. Noop if such a tag was not added earlier.
-   *
-   * @param tag
-   *   The tag to be removed. Cannot contain ',' (comma) character or be an empty string.
-   *
-   * @since 3.5.0
-   */
-  def removeTag(tag: String): Unit = {
-    client.removeTag(tag)
-  }
+  /** @inheritdoc */
+  override def removeTag(tag: String): Unit = client.removeTag(tag)
 
-  /**
-   * Get the tags that are currently set to be assigned to all the operations started by this
-   * thread.
-   *
-   * @since 3.5.0
-   */
-  def getTags(): Set[String] = {
-    client.getTags()
-  }
+  /** @inheritdoc */
+  override def getTags(): Set[String] = client.getTags()
 
-  /**
-   * Clear the current thread's operation tags.
-   *
-   * @since 3.5.0
-   */
-  def clearTags(): Unit = {
-    client.clearTags()
-  }
+  /** @inheritdoc */
+  override def clearTags(): Unit = client.clearTags()
 
   /**
    * We cannot deserialize a connect [[SparkSession]] because of a class clash on the server side.
@@ -576,7 +509,7 @@ class SparkSession private[sql] (
 
 // The minimal builder needed to create a spark session.
 // TODO: implements all methods mentioned in the scaladoc of [[SparkSession]]
-object SparkSession extends Logging {
+object SparkSession extends api.SparkSessionCompanion with Logging {
   private val MAX_CACHED_SESSIONS = 100
   private val planIdGenerator = new AtomicLong
   private var server: Option[Process] = None
@@ -685,15 +618,15 @@ object SparkSession extends Logging {
    */
   def builder(): Builder = new Builder()
 
-  class Builder() extends Logging {
+  class Builder() extends api.SparkSessionBuilder {
     // Initialize the connection string of the Spark Connect client builder from SPARK_REMOTE
     // by default, if it exists. The connection string can be overridden using
     // the remote() function, as it takes precedence over the SPARK_REMOTE environment variable.
     private val builder = SparkConnectClient.builder().loadFromEnvironment()
     private var client: SparkConnectClient = _
-    private[this] val options = new scala.collection.mutable.HashMap[String, String]
 
-    def remote(connectionString: String): Builder = {
+    /** @inheritdoc */
+    def remote(connectionString: String): this.type = {
       builder.connectionString(connectionString)
       this
     }
@@ -705,93 +638,45 @@ object SparkSession extends Logging {
      *
      * @since 3.5.0
      */
-    def interceptor(interceptor: ClientInterceptor): Builder = {
+    def interceptor(interceptor: ClientInterceptor): this.type = {
       builder.interceptor(interceptor)
       this
     }
 
-    private[sql] def client(client: SparkConnectClient): Builder = {
+    private[sql] def client(client: SparkConnectClient): this.type = {
       this.client = client
       this
     }
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to the
-     * Spark Connect session. Only runtime options are supported.
-     *
-     * @since 3.5.0
-     */
-    def config(key: String, value: String): Builder = synchronized {
-      options += key -> value
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: String): this.type = super.config(key, value)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to the
-     * Spark Connect session. Only runtime options are supported.
-     *
-     * @since 3.5.0
-     */
-    def config(key: String, value: Long): Builder = synchronized {
-      options += key -> value.toString
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: Long): this.type = super.config(key, value)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to the
-     * Spark Connect session. Only runtime options are supported.
-     *
-     * @since 3.5.0
-     */
-    def config(key: String, value: Double): Builder = synchronized {
-      options += key -> value.toString
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: Double): this.type = super.config(key, value)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to the
-     * Spark Connect session. Only runtime options are supported.
-     *
-     * @since 3.5.0
-     */
-    def config(key: String, value: Boolean): Builder = synchronized {
-      options += key -> value.toString
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: Boolean): this.type = super.config(key, value)
 
-    /**
-     * Sets a config a map of options. Options set using this method are automatically propagated
-     * to the Spark Connect session. Only runtime options are supported.
-     *
-     * @since 3.5.0
-     */
-    def config(map: Map[String, Any]): Builder = synchronized {
-      map.foreach { kv: (String, Any) =>
-        {
-          options += kv._1 -> kv._2.toString
-        }
-      }
-      this
-    }
+    /** @inheritdoc */
+    override def config(map: Map[String, Any]): this.type = super.config(map)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to both
-     * `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 3.5.0
-     */
-    def config(map: java.util.Map[String, Any]): Builder = synchronized {
-      config(map.asScala.toMap)
-    }
+    /** @inheritdoc */
+    override def config(map: java.util.Map[String, Any]): this.type = super.config(map)
 
+    /** @inheritdoc */
     @deprecated("enableHiveSupport does not work in Spark Connect")
-    def enableHiveSupport(): Builder = this
+    override def enableHiveSupport(): this.type = this
 
+    /** @inheritdoc */
     @deprecated("master does not work in Spark Connect, please use remote instead")
-    def master(master: String): Builder = this
+    override def master(master: String): this.type = this
 
+    /** @inheritdoc */
     @deprecated("appName does not work in Spark Connect")
-    def appName(name: String): Builder = this
+    override def appName(name: String): this.type = this
 
     private def tryCreateSessionFromClient(): Option[SparkSession] = {
       if (client != null && client.isSessionValid) {

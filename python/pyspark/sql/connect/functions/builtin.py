@@ -65,7 +65,6 @@ from pyspark.sql import functions as pysparkfuncs
 from pyspark.sql.types import (
     _from_numpy_type,
     DataType,
-    LongType,
     StructType,
     ArrayType,
     StringType,
@@ -1008,6 +1007,22 @@ def unhex(col: "ColumnOrName") -> Column:
 unhex.__doc__ = pysparkfuncs.unhex.__doc__
 
 
+def uniform(
+    min: Union[Column, int, float],
+    max: Union[Column, int, float],
+    seed: Optional[Union[Column, int]] = None,
+) -> Column:
+    if seed is None:
+        return _invoke_function_over_columns(
+            "uniform", lit(min), lit(max), lit(random.randint(0, sys.maxsize))
+        )
+    else:
+        return _invoke_function_over_columns("uniform", lit(min), lit(max), lit(seed))
+
+
+uniform.__doc__ = pysparkfuncs.uniform.__doc__
+
+
 def approxCountDistinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
     warnings.warn("Deprecated in 3.4, use approx_count_distinct instead.", FutureWarning)
     return approx_count_distinct(col, rsd)
@@ -1126,11 +1141,12 @@ grouping_id.__doc__ = pysparkfuncs.grouping_id.__doc__
 
 def count_min_sketch(
     col: "ColumnOrName",
-    eps: "ColumnOrName",
-    confidence: "ColumnOrName",
-    seed: "ColumnOrName",
+    eps: Union[Column, float],
+    confidence: Union[Column, float],
+    seed: Optional[Union[Column, int]] = None,
 ) -> Column:
-    return _invoke_function_over_columns("count_min_sketch", col, eps, confidence, seed)
+    _seed = lit(random.randint(0, sys.maxsize)) if seed is None else lit(seed)
+    return _invoke_function_over_columns("count_min_sketch", col, lit(eps), lit(confidence), _seed)
 
 
 count_min_sketch.__doc__ = pysparkfuncs.count_min_sketch.__doc__
@@ -2071,6 +2087,13 @@ def try_parse_json(col: "ColumnOrName") -> Column:
 try_parse_json.__doc__ = pysparkfuncs.try_parse_json.__doc__
 
 
+def to_variant_object(col: "ColumnOrName") -> Column:
+    return _invoke_function("to_variant_object", _to_col(col))
+
+
+to_variant_object.__doc__ = pysparkfuncs.to_variant_object.__doc__
+
+
 def parse_json(col: "ColumnOrName") -> Column:
     return _invoke_function("parse_json", _to_col(col))
 
@@ -2197,12 +2220,9 @@ def schema_of_xml(xml: Union[str, Column], options: Optional[Mapping[str, str]] 
 schema_of_xml.__doc__ = pysparkfuncs.schema_of_xml.__doc__
 
 
-def shuffle(col: "ColumnOrName") -> Column:
-    return _invoke_function(
-        "shuffle",
-        _to_col(col),
-        LiteralExpression(random.randint(0, sys.maxsize), LongType()),
-    )
+def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> Column:
+    _seed = lit(random.randint(0, sys.maxsize)) if seed is None else lit(seed)
+    return _invoke_function("shuffle", _to_col(col), _seed)
 
 
 shuffle.__doc__ = pysparkfuncs.shuffle.__doc__
@@ -2481,8 +2501,14 @@ def sentences(
 sentences.__doc__ = pysparkfuncs.sentences.__doc__
 
 
-def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
-    return _invoke_function("substring", _to_col(str), lit(pos), lit(len))
+def substring(
+    str: "ColumnOrName",
+    pos: Union["ColumnOrName", int],
+    len: Union["ColumnOrName", int],
+) -> Column:
+    _pos = lit(pos) if isinstance(pos, int) else _to_col(pos)
+    _len = lit(len) if isinstance(len, int) else _to_col(len)
+    return _invoke_function("substring", _to_col(str), _pos, _len)
 
 
 substring.__doc__ = pysparkfuncs.substring.__doc__
@@ -2569,6 +2595,18 @@ def regexp_like(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 
 
 regexp_like.__doc__ = pysparkfuncs.regexp_like.__doc__
+
+
+def randstr(length: Union[Column, int], seed: Optional[Union[Column, int]] = None) -> Column:
+    if seed is None:
+        return _invoke_function_over_columns(
+            "randstr", lit(length), lit(random.randint(0, sys.maxsize))
+        )
+    else:
+        return _invoke_function_over_columns("randstr", lit(length), lit(seed))
+
+
+randstr.__doc__ = pysparkfuncs.randstr.__doc__
 
 
 def regexp_count(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:

@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Dict, Iterator, List, Union, cast, Tuple
+from typing import Dict, Iterator, List, Union, cast, Tuple
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
-from pyspark.sql.types import Row, StructType, TYPE_CHECKING, _parse_datatype_string
+from pyspark.sql.types import StructType, TYPE_CHECKING, _parse_datatype_string
 from pyspark.errors import PySparkRuntimeError
 import uuid
 
@@ -56,7 +56,7 @@ class ListStateClient:
                 f"Error checking value state exists: " f"{response_message[1]}"
             )
 
-    def get(self, state_name: str, iterator_id: str) -> Any:
+    def get(self, state_name: str, iterator_id: str) -> Tuple:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
         if iterator_id in self.pandas_df_dict:
@@ -92,7 +92,7 @@ class ListStateClient:
             # If the index is at the end of the DataFrame, remove the state from the dictionary.
             self.pandas_df_dict.pop(iterator_id, None)
         pandas_row = pandas_df.iloc[index]
-        return Row(**pandas_row.to_dict())
+        return tuple(pandas_row)
 
     def append_value(self, state_name: str, schema: Union[StructType, str], value: Tuple) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
@@ -180,8 +180,8 @@ class ListStateIterator:
         # list state do not interfere with each other.
         self.iterator_id = str(uuid.uuid4())
 
-    def __iter__(self) -> Iterator[Row]:
+    def __iter__(self) -> Iterator[Tuple]:
         return self
 
-    def __next__(self) -> Row:
+    def __next__(self) -> Tuple:
         return self.list_state_client.get(self.state_name, self.iterator_id)

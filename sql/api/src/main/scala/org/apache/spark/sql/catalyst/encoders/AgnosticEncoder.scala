@@ -19,11 +19,11 @@ package org.apache.spark.sql.catalyst.encoders
 import java.{sql => jsql}
 import java.math.{BigDecimal => JBigDecimal, BigInteger => JBigInt}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
-import java.util.concurrent.ConcurrentHashMap
 
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.sql.{Encoder, Row}
+import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, VariantVal}
 import org.apache.spark.util.SparkClassUtils
@@ -46,7 +46,20 @@ trait AgnosticEncoder[T] extends Encoder[T] {
   def isStruct: Boolean = false
 }
 
+/**
+ * Extract an [[AgnosticEncoder]] from an [[Encoder]].
+ */
+trait ToAgnosticEncoder[T] {
+  def encoder: AgnosticEncoder[T]
+}
+
 object AgnosticEncoders {
+  def agnosticEncoderFor[T: Encoder]: AgnosticEncoder[T] = implicitly[Encoder[T]] match {
+    case a: AgnosticEncoder[T] => a
+    case e: ToAgnosticEncoder[T @unchecked] => e.encoder
+    case other => throw ExecutionErrors.invalidAgnosticEncoderError(other)
+  }
+
   case class OptionEncoder[E](elementEncoder: AgnosticEncoder[E])
       extends AgnosticEncoder[Option[E]] {
     override def isPrimitive: Boolean = false
@@ -115,16 +128,24 @@ object AgnosticEncoders {
       extends StructEncoder[K]
 
   object ProductEncoder {
-    val cachedCls = new ConcurrentHashMap[Int, Class[_]]
-    private[sql] def tuple(encoders: Seq[AgnosticEncoder[_]]): AgnosticEncoder[_] = {
-      val fields = encoders.zipWithIndex.map { case (e, id) =>
-        EncoderField(s"_${id + 1}", e, e.nullable, Metadata.empty)
+    private val MAX_TUPLE_ELEMENTS = 22
+
+    private val tupleClassTags = Array.tabulate[ClassTag[Any]](MAX_TUPLE_ELEMENTS + 1) {
+      case 0 => null
+      case i => ClassTag(SparkClassUtils.classForName(s"scala.Tuple$i"))
+    }
+
+    private[sql] def tuple(
+        encoders: Seq[AgnosticEncoder[_]],
+        elementsCanBeNull: Boolean = false): AgnosticEncoder[_] = {
+      val numElements = encoders.size
+      if (numElements < 1 || numElements > MAX_TUPLE_ELEMENTS) {
+        throw ExecutionErrors.elementsOfTupleExceedLimitError()
       }
-      val cls = cachedCls.computeIfAbsent(
-        encoders.size,
-        _ =>
-          SparkClassUtils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}"))
-      ProductEncoder[Any](ClassTag(cls), fields, None)
+      val fields = encoders.zipWithIndex.map { case (e, id) =>
+        EncoderField(s"_${id + 1}", e, e.nullable || elementsCanBeNull, Metadata.empty)
+      }
+      ProductEncoder[Any](tupleClassTags(numElements), fields, None)
     }
 
     private[sql] def isTuple(tag: ClassTag[_]): Boolean = {

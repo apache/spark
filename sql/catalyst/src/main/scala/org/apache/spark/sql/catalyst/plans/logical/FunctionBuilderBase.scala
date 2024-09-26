@@ -17,6 +17,8 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, NamedArgumentExpression}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
+import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.util.ArrayImplicits._
 
@@ -122,12 +124,32 @@ object NamedParametersSupport {
       functionSignature: FunctionSignature,
       args: Seq[Expression],
       functionName: String): Seq[Expression] = {
-    val parameters: Seq[InputParameter] = functionSignature.parameters
+    defaultRearrange(functionName, functionSignature.parameters, args)
+  }
+
+  final def defaultRearrange(procedure: BoundProcedure, args: Seq[Expression]): Seq[Expression] = {
+    defaultRearrange(
+      procedure.name,
+      procedure.parameters.map(toInputParameter).toSeq,
+      args)
+  }
+
+  private def toInputParameter(param: ProcedureParameter): InputParameter = {
+    val defaultValue = Option(param.defaultValueExpression).map { expr =>
+      ResolveDefaultColumns.analyze(param.name, param.dataType, expr, "CALL")
+    }
+    InputParameter(param.name, defaultValue)
+  }
+
+  private def defaultRearrange(
+      routineName: String,
+      parameters: Seq[InputParameter],
+      args: Seq[Expression]): Seq[Expression] = {
     if (parameters.dropWhile(_.default.isEmpty).exists(_.default.isEmpty)) {
-      throw QueryCompilationErrors.unexpectedRequiredParameter(functionName, parameters)
+      throw QueryCompilationErrors.unexpectedRequiredParameter(routineName, parameters)
     }
 
-    val (positionalArgs, namedArgs) = splitAndCheckNamedArguments(args, functionName)
+    val (positionalArgs, namedArgs) = splitAndCheckNamedArguments(args, routineName)
     val namedParameters: Seq[InputParameter] = parameters.drop(positionalArgs.size)
 
     // The following loop checks for the following:
@@ -140,12 +162,12 @@ object NamedParametersSupport {
     namedArgs.foreach { namedArg =>
       val parameterName = namedArg.key
       if (!parameterNamesSet.contains(parameterName)) {
-        throw QueryCompilationErrors.unrecognizedParameterName(functionName, namedArg.key,
+        throw QueryCompilationErrors.unrecognizedParameterName(routineName, namedArg.key,
           parameterNamesSet.toSeq)
       }
       if (positionalParametersSet.contains(parameterName)) {
         throw QueryCompilationErrors.positionalAndNamedArgumentDoubleReference(
-          functionName, namedArg.key)
+          routineName, namedArg.key)
       }
     }
 
@@ -154,7 +176,7 @@ object NamedParametersSupport {
       val validParameterSizes =
         Array.range(parameters.count(_.default.isEmpty), parameters.size + 1).toImmutableArraySeq
       throw QueryCompilationErrors.wrongNumArgsError(
-        functionName, validParameterSizes, args.length)
+        routineName, validParameterSizes, args.length)
     }
 
     // This constructs a map from argument name to value for argument rearrangement.
@@ -168,7 +190,7 @@ object NamedParametersSupport {
         namedArgMap.getOrElse(
           param.name,
           if (param.default.isEmpty) {
-            throw QueryCompilationErrors.requiredParameterNotFound(functionName, param.name, index)
+            throw QueryCompilationErrors.requiredParameterNotFound(routineName, param.name, index)
           } else {
             param.default.get
           }

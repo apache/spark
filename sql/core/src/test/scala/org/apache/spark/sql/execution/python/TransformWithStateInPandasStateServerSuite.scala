@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.execution.streaming.{StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state.StateMessage
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, Exists, Get, HandleState, ListStateCall, ListStateGet, ListStatePut, SetHandleState, StateCallCommand, StatefulProcessorCall, ValueStateCall, ValueStateUpdate}
-import org.apache.spark.sql.streaming.{ListState, TTLConfig, ValueState}
+import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with BeforeAndAfterEach {
@@ -53,6 +53,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
   var outputStream: DataOutputStream = _
   var valueState: ValueState[Row] = _
   var listState: ListState[Row] = _
+  var mapState: MapState[Row, Row] = _
   var stateServer: TransformWithStateInPandasStateServer = _
   var stateDeserializer: ExpressionEncoder.Deserializer[Row] = _
   var stateSerializer: ExpressionEncoder.Serializer[Row] = _
@@ -60,26 +61,37 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
   var arrowStreamWriter: BaseStreamingArrowWriter = _
   var valueStateMap: mutable.HashMap[String, ValueStateInfo] = mutable.HashMap()
   var listStateMap: mutable.HashMap[String, ListStateInfo] = mutable.HashMap()
+  var mapStateMap: mutable.HashMap[String, MapStateInfo] = mutable.HashMap()
 
   override def beforeEach(): Unit = {
     statefulProcessorHandle = mock(classOf[StatefulProcessorHandleImpl])
     outputStream = mock(classOf[DataOutputStream])
     valueState = mock(classOf[ValueState[Row]])
     listState = mock(classOf[ListState[Row]])
+    mapState = mock(classOf[MapState[Row, Row]])
     stateDeserializer = ExpressionEncoder(stateSchema).resolveAndBind().createDeserializer()
     stateSerializer = ExpressionEncoder(stateSchema).resolveAndBind().createSerializer()
     valueStateMap = mutable.HashMap[String, ValueStateInfo](stateName ->
       ValueStateInfo(valueState, stateSchema, stateDeserializer))
     listStateMap = mutable.HashMap[String, ListStateInfo](stateName ->
       ListStateInfo(listState, stateSchema, stateDeserializer, stateSerializer))
-    val listStateIteratorMap = mutable.HashMap[String, Iterator[Row]](iteratorId ->
-      Iterator(new GenericRowWithSchema(Array(1), stateSchema)))
+    mapStateMap = mutable.HashMap[String, MapStateInfo](stateName ->
+      MapStateInfo(mapState, stateSchema, stateSchema, stateDeserializer,
+        stateSerializer, stateDeserializer, stateSerializer))
+
+    // Iterator map for list/map state. Please note that `handleImplicitGroupingKeyRequest` would
+    // reset the iterator map to empty so be careful to call it if you want to access the iterator
+    // map later.
+    val testRow = new GenericRowWithSchema(Array(1), stateSchema)
+    val iteratorMap = mutable.HashMap[String, Iterator[Row]](iteratorId -> Iterator(testRow))
+    val keyValueIteratorMap = mutable.HashMap[String, Iterator[(Row, Row)]](iteratorId ->
+      Iterator((testRow, testRow)))
     transformWithStateInPandasDeserializer = mock(classOf[TransformWithStateInPandasDeserializer])
     arrowStreamWriter = mock(classOf[BaseStreamingArrowWriter])
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
       statefulProcessorHandle, groupingKeySchema, "", false, false, 2,
       outputStream, valueStateMap, transformWithStateInPandasDeserializer, arrowStreamWriter,
-      listStateMap, listStateIteratorMap)
+      listStateMap, iteratorMap, mapStateMap, keyValueIteratorMap)
     when(transformWithStateInPandasDeserializer.readArrowBatches(any))
       .thenReturn(Seq(new GenericRowWithSchema(Array(1), stateSchema)))
   }
@@ -181,6 +193,33 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     verify(listState, times(0)).get()
     verify(arrowStreamWriter).writeRow(any)
     verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+  }
+
+  test("list state get - iterator in map with multiple batches") {
+    val maxRecordsPerBatch = 2
+    val message = ListStateCall.newBuilder().setStateName(stateName)
+      .setListStateGet(ListStateGet.newBuilder().setIteratorId(iteratorId).build()).build()
+    val iteratorMap = mutable.HashMap[String, Iterator[Row]](iteratorId ->
+      Iterator(new GenericRowWithSchema(Array(1), stateSchema),
+        new GenericRowWithSchema(Array(2), stateSchema),
+        new GenericRowWithSchema(Array(3), stateSchema),
+        new GenericRowWithSchema(Array(4), stateSchema)))
+    stateServer = new TransformWithStateInPandasStateServer(serverSocket,
+      statefulProcessorHandle, groupingKeySchema, "", false, false,
+      maxRecordsPerBatch, outputStream, valueStateMap,
+      transformWithStateInPandasDeserializer, arrowStreamWriter, listStateMap, iteratorMap)
+    // First call should send 2 records.
+    stateServer.handleListStateRequest(message)
+    verify(listState, times(0)).get()
+    verify(arrowStreamWriter, times(maxRecordsPerBatch)).writeRow(any)
+    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    // Second call should send the remaining 2 records.
+    stateServer.handleListStateRequest(message)
+    verify(listState, times(0)).get()
+    // Since Mockito's verify counts the total number of calls, the expected number of writeRow call
+    // should be 2 * maxRecordsPerBatch.
+    verify(arrowStreamWriter, times(2 * maxRecordsPerBatch)).writeRow(any)
+    verify(arrowStreamWriter, times(2)).finalizeCurrentArrowBatch()
   }
 
   test("list state get - iterator not in map") {

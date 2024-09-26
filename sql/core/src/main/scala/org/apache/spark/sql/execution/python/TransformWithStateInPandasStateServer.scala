@@ -32,7 +32,7 @@ import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
+import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState, StateVariableType}
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateVariableRequest, ValueStateCall}
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
@@ -205,16 +205,16 @@ class TransformWithStateInPandasStateServer(
         val ttlDurationMs = if (message.getGetValueState.hasTtl) {
           Some(message.getGetValueState.getTtl.getDurationMs)
         } else None
-        initializeStateVariable(stateName, schema, "valueState", ttlDurationMs)
+        initializeStateVariable(stateName, schema, StateVariableType.ValueState, ttlDurationMs)
       case StatefulProcessorCall.MethodCase.GETLISTSTATE =>
         val stateName = message.getGetListState.getStateName
         val schema = message.getGetListState.getSchema
-        initializeStateVariable(stateName, schema, "listState", None)
+        initializeStateVariable(stateName, schema, StateVariableType.ListState, None)
       case StatefulProcessorCall.MethodCase.GETMAPSTATE =>
         val stateName = message.getGetMapState.getStateName
         val keySchema = message.getGetMapState.getSchema
         val valueSchema = message.getGetMapState.getMapStateValueSchema
-        initializeStateVariable(stateName, keySchema, "mapState", None, valueSchema)
+        initializeStateVariable(stateName, keySchema, StateVariableType.MapState, None, valueSchema)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
     }
@@ -328,7 +328,7 @@ class TransformWithStateInPandasStateServer(
         }
         val listRowSerializer = listStateInfo.serializer
         // Only write a single batch in each GET request. Stops writing row if rowCount reaches
-        // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to avoid a case
+        // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to handle a case
         // when there are multiple state variables, user tries to access a different state variable
         // while the current state variable is not exhausted yet.
         var rowCount = 0
@@ -568,15 +568,15 @@ class TransformWithStateInPandasStateServer(
   }
 
   private def initializeStateVariable(
-    stateName: String,
-    schemaString: String,
-    stateVariable: String,
-    ttlDurationMs: Option[Int],
-    mapStateValueSchemaString: String = null): Unit = {
+      stateName: String,
+      schemaString: String,
+      stateType: StateVariableType.StateVariableType,
+      ttlDurationMs: Option[Int],
+      mapStateValueSchemaString: String = null): Unit = {
     val schema = StructType.fromString(schemaString)
     val expressionEncoder = ExpressionEncoder(schema).resolveAndBind()
-    stateVariable match {
-        case "valueState" => if (!valueStates.contains(stateName)) {
+    stateType match {
+        case StateVariableType.ValueState => if (!valueStates.contains(stateName)) {
           val state = if (ttlDurationMs.isEmpty) {
             statefulProcessorHandle.getValueState[Row](stateName, Encoders.row(schema))
           } else {
@@ -589,7 +589,7 @@ class TransformWithStateInPandasStateServer(
         } else {
           sendResponse(1, s"Value state $stateName already exists")
         }
-        case "listState" => if (!listStates.contains(stateName)) {
+        case StateVariableType.ListState => if (!listStates.contains(stateName)) {
           listStates.put(stateName,
             ListStateInfo(statefulProcessorHandle.getListState[Row](stateName,
               Encoders.row(schema)), schema, expressionEncoder.createDeserializer(),
@@ -598,7 +598,7 @@ class TransformWithStateInPandasStateServer(
         } else {
           sendResponse(1, s"List state $stateName already exists")
         }
-        case "mapState" => if (!mapStates.contains(stateName)) {
+        case StateVariableType.MapState => if (!mapStates.contains(stateName)) {
           val valueSchema = StructType.fromString(mapStateValueSchemaString)
           val valueExpressionEncoder = ExpressionEncoder(valueSchema).resolveAndBind()
           mapStates.put(stateName,

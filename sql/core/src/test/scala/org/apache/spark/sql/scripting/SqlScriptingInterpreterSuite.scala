@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkNumberFormatException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.exceptions.SqlScriptingException
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -190,7 +191,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = e,
-      errorClass = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
       sqlState = "42703",
       parameters = Map("objectName" -> s"`$varName`"),
       context = ExpectedContext(
@@ -368,6 +369,391 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("searched case") {
+    val commands =
+      """
+        |BEGIN
+        | CASE
+        |   WHEN 1 = 1 THEN
+        |     SELECT 42;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(42)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("searched case nested") {
+    val commands =
+      """
+        |BEGIN
+        | CASE
+        |   WHEN 1=1 THEN
+        |   CASE
+        |    WHEN 2=1 THEN
+        |     SELECT 41;
+        |   ELSE
+        |     SELECT 42;
+        |   END CASE;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(42)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("searched case second case") {
+    val commands =
+      """
+        |BEGIN
+        | CASE
+        |   WHEN 1 = (SELECT 2) THEN
+        |     SELECT 1;
+        |   WHEN 2 = 2 THEN
+        |     SELECT 42;
+        |   WHEN (SELECT * FROM t) THEN
+        |     SELECT * FROM b;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(42)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("searched case going in else") {
+    val commands =
+      """
+        |BEGIN
+        | CASE
+        |   WHEN 2 = 1 THEN
+        |     SELECT 1;
+        |   WHEN 3 IN (1,2) THEN
+        |     SELECT 2;
+        |   ELSE
+        |     SELECT 43;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(43)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("searched case with count") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+          |INSERT INTO t VALUES (1, 'a', 1.0);
+          |INSERT INTO t VALUES (1, 'a', 1.0);
+          |CASE
+          | WHEN (SELECT COUNT(*) > 2 FROM t) THEN
+          |   SELECT 42;
+          | ELSE
+          |   SELECT 43;
+          | END CASE;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(Seq.empty[Row], Seq.empty[Row], Seq.empty[Row], Seq(Row(43)))
+      verifySqlScriptResult(commands, expected)
+    }
+  }
+
+  test("searched case else with count") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |  CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+          |  INSERT INTO t VALUES (1, 'a', 1.0);
+          |  INSERT INTO t VALUES (1, 'a', 1.0);
+          |  CASE
+          |  WHEN (SELECT COUNT(*) > 2 FROM t) THEN
+          |   SELECT 42;
+          |  WHEN (SELECT COUNT(*) > 1 FROM t) THEN
+          |   SELECT 43;
+          |  ELSE
+          |    SELECT 44;
+          |  END CASE;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(Seq.empty[Row], Seq.empty[Row], Seq.empty[Row], Seq(Row(43)))
+      verifySqlScriptResult(commands, expected)
+    }
+  }
+
+  test("searched case no cases matched no else") {
+    val commands =
+      """
+        |BEGIN
+        | CASE
+        |   WHEN 1 = 2 THEN
+        |     SELECT 42;
+        |   WHEN 1 = 3 THEN
+        |     SELECT 43;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq()
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("searched case when evaluates to null") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |  CREATE TABLE t (a BOOLEAN) USING parquet;
+          |  CASE
+          |  WHEN (SELECT * FROM t) THEN
+          |   SELECT 42;
+          |  END CASE;
+          |END
+          |""".stripMargin
+
+      checkError(
+        exception = intercept[SqlScriptingException] (
+          runSqlScript(commands)
+        ),
+        condition = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
+        parameters = Map("invalidStatement" -> "(SELECT * FROM T)")
+      )
+    }
+  }
+
+  test("searched case with non boolean condition - constant") {
+    val commands =
+      """
+        |BEGIN
+        |  CASE
+        |  WHEN 1 THEN
+        |   SELECT 42;
+        |  END CASE;
+        |END
+        |""".stripMargin
+
+    checkError(
+      exception = intercept[SqlScriptingException] (
+        runSqlScript(commands)
+      ),
+      condition = "INVALID_BOOLEAN_STATEMENT",
+      parameters = Map("invalidStatement" -> "1")
+    )
+  }
+
+  test("searched case with too many rows in subquery condition") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          | CREATE TABLE t (a BOOLEAN) USING parquet;
+          | INSERT INTO t VALUES (true);
+          | INSERT INTO t VALUES (true);
+          | CASE
+          |   WHEN (SELECT * FROM t) THEN
+          |     SELECT 1;
+          | END CASE;
+          |END
+          |""".stripMargin
+
+      checkError(
+        exception = intercept[SparkException] (
+          runSqlScript(commands)
+        ),
+        condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+        parameters = Map.empty,
+        context = ExpectedContext(fragment = "(SELECT * FROM t)", start = 124, stop = 140)
+      )
+    }
+  }
+
+  test("simple case") {
+    val commands =
+      """
+        |BEGIN
+        | CASE 1
+        |   WHEN 1 THEN
+        |     SELECT 42;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(42)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("simple case nested") {
+    val commands =
+      """
+        |BEGIN
+        | CASE 1
+        |   WHEN 1 THEN
+        |   CASE 2
+        |    WHEN (SELECT 3) THEN
+        |     SELECT 41;
+        |   ELSE
+        |     SELECT 42;
+        |   END CASE;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(42)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("simple case second case") {
+    val commands =
+      """
+        |BEGIN
+        | CASE (SELECT 2)
+        |   WHEN 1 THEN
+        |     SELECT 1;
+        |   WHEN 2 THEN
+        |     SELECT 42;
+        |   WHEN (SELECT * FROM t) THEN
+        |     SELECT * FROM b;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(42)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("simple case going in else") {
+    val commands =
+      """
+        |BEGIN
+        | CASE 1
+        |   WHEN 2 THEN
+        |     SELECT 1;
+        |   WHEN 3 THEN
+        |     SELECT 2;
+        |   ELSE
+        |     SELECT 43;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(43)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("simple case with count") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+          |INSERT INTO t VALUES (1, 'a', 1.0);
+          |INSERT INTO t VALUES (1, 'a', 1.0);
+          |CASE (SELECT COUNT(*) FROM t)
+          | WHEN 1 THEN
+          |   SELECT 41;
+          | WHEN 2 THEN
+          |   SELECT 42;
+          | ELSE
+          |   SELECT 43;
+          | END CASE;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(Seq.empty[Row], Seq.empty[Row], Seq.empty[Row], Seq(Row(42)))
+      verifySqlScriptResult(commands, expected)
+    }
+  }
+
+  test("simple case else with count") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |  CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+          |  INSERT INTO t VALUES (1, 'a', 1.0);
+          |  INSERT INTO t VALUES (2, 'b', 2.0);
+          |  CASE (SELECT COUNT(*) FROM t)
+          |   WHEN 1 THEN
+          |     SELECT 42;
+          |   WHEN 3 THEN
+          |     SELECT 43;
+          |   ELSE
+          |     SELECT 44;
+          |  END CASE;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(Seq.empty[Row], Seq.empty[Row], Seq.empty[Row], Seq(Row(44)))
+      verifySqlScriptResult(commands, expected)
+    }
+  }
+
+  test("simple case no cases matched no else") {
+    val commands =
+      """
+        |BEGIN
+        | CASE 1
+        |   WHEN 2 THEN
+        |     SELECT 42;
+        |   WHEN 3 THEN
+        |     SELECT 43;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq()
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("simple case mismatched types") {
+    val commands =
+      """
+        |BEGIN
+        | CASE 1
+        |   WHEN "one" THEN
+        |     SELECT 42;
+        | END CASE;
+        |END
+        |""".stripMargin
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[SparkNumberFormatException](
+          runSqlScript(commands)
+        ),
+        condition = "CAST_INVALID_INPUT",
+        parameters = Map(
+          "expression" -> "'one'",
+          "sourceType" -> "\"STRING\"",
+          "targetType" -> "\"BIGINT\""),
+        context = ExpectedContext(fragment = "\"one\"", start = 23, stop = 27))
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[SqlScriptingException](
+          runSqlScript(commands)
+        ),
+        condition = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
+        parameters = Map("invalidStatement" -> "\"ONE\""))
+    }
+  }
+
+  test("simple case compare with null") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |  CREATE TABLE t (a INT) USING parquet;
+          |  CASE (SELECT COUNT(*) FROM t)
+          |   WHEN 1 THEN
+          |     SELECT 42;
+          |   ELSE
+          |     SELECT 43;
+          |  END CASE;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(Seq.empty[Row], Seq(Row(43)))
+      verifySqlScriptResult(commands, expected)
+    }
+  }
+
   test("if's condition must be a boolean statement") {
     withTable("t") {
       val commands =
@@ -378,13 +764,16 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |  END IF;
           |END
           |""".stripMargin
+      val exception = intercept[SqlScriptingException] {
+        runSqlScript(commands)
+      }
       checkError(
-        exception = intercept[SqlScriptingException] (
-          runSqlScript(commands)
-        ),
-        errorClass = "INVALID_BOOLEAN_STATEMENT",
+        exception = exception,
+        condition = "INVALID_BOOLEAN_STATEMENT",
         parameters = Map("invalidStatement" -> "1")
       )
+      assert(exception.origin.line.isDefined)
+      assert(exception.origin.line.get == 3)
     }
   }
 
@@ -400,13 +789,16 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |  END IF;
           |END
           |""".stripMargin
+      val exception = intercept[SqlScriptingException] {
+        runSqlScript(commands1)
+      }
       checkError(
-        exception = intercept[SqlScriptingException] (
-          runSqlScript(commands1)
-        ),
-        errorClass = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
+        exception = exception,
+        condition = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
         parameters = Map("invalidStatement" -> "(SELECT * FROM T1)")
       )
+      assert(exception.origin.line.isDefined)
+      assert(exception.origin.line.get == 4)
 
       // too many rows ( > 1 )
       val commands2 =
@@ -424,7 +816,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         exception = intercept[SparkException] (
           runSqlScript(commands2)
         ),
-        errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+        condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
         parameters = Map.empty,
         context = ExpectedContext(fragment = "(SELECT * FROM t2)", start = 121, stop = 138)
       )
@@ -537,6 +929,195 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("repeat") {
+    val commands =
+      """
+        |BEGIN
+        | DECLARE i = 0;
+        | REPEAT
+        |   SELECT i;
+        |   SET VAR i = i + 1;
+        | UNTIL
+        |   i = 3
+        | END REPEAT;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq.empty[Row], // declare i
+      Seq(Row(0)), // select i
+      Seq.empty[Row], // set i
+      Seq(Row(1)), // select i
+      Seq.empty[Row], // set i
+      Seq(Row(2)), // select i
+      Seq.empty[Row], // set i
+      Seq.empty[Row] // drop var
+    )
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("repeat: enters body only once") {
+    val commands =
+      """
+        |BEGIN
+        | DECLARE i = 3;
+        | REPEAT
+        |   SELECT i;
+        |   SET VAR i = i + 1;
+        | UNTIL
+        |   1 = 1
+        | END REPEAT;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq.empty[Row], // declare i
+      Seq(Row(3)), // select i
+      Seq.empty[Row], // set i
+      Seq.empty[Row] // drop i
+    )
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("nested repeat") {
+    val commands =
+      """
+        |BEGIN
+        | DECLARE i = 0;
+        | DECLARE j = 0;
+        | REPEAT
+        |   SET VAR j = 0;
+        |   REPEAT
+        |     SELECT i, j;
+        |     SET VAR j = j + 1;
+        |   UNTIL j >= 2
+        |   END REPEAT;
+        |   SET VAR i = i + 1;
+        | UNTIL i >= 2
+        | END REPEAT;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq.empty[Row], // declare i
+      Seq.empty[Row], // declare j
+      Seq.empty[Row], // set j to 0
+      Seq(Row(0, 0)), // select i, j
+      Seq.empty[Row], // increase j
+      Seq(Row(0, 1)), // select i, j
+      Seq.empty[Row], // increase j
+      Seq.empty[Row], // increase i
+      Seq.empty[Row], // set j to 0
+      Seq(Row(1, 0)), // select i, j
+      Seq.empty[Row], // increase j
+      Seq(Row(1, 1)), // select i, j
+      Seq.empty[Row], // increase j
+      Seq.empty[Row], // increase i
+      Seq.empty[Row], // drop j
+      Seq.empty[Row] // drop i
+    )
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("repeat with count") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+          |REPEAT
+          |  SELECT 42;
+          |  INSERT INTO t VALUES (1, 'a', 1.0);
+          |UNTIL (SELECT COUNT(*) >= 2 FROM t)
+          |END REPEAT;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq.empty[Row], // create table
+        Seq(Row(42)), // select
+        Seq.empty[Row], // insert
+        Seq(Row(42)), // select
+        Seq.empty[Row] // insert
+      )
+      verifySqlScriptResult(commands, expected)
+    }
+  }
+
+  test("repeat with non boolean condition - constant") {
+    val commands =
+      """
+        |BEGIN
+        | DECLARE i = 0;
+        | REPEAT
+        |   SELECT i;
+        |   SET VAR i = i + 1;
+        | UNTIL
+        |   1
+        | END REPEAT;
+        |END
+        |""".stripMargin
+
+    checkError(
+      exception = intercept[SqlScriptingException] (
+        runSqlScript(commands)
+      ),
+      condition = "INVALID_BOOLEAN_STATEMENT",
+      parameters = Map("invalidStatement" -> "1")
+    )
+  }
+
+  test("repeat with empty subquery condition") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          | CREATE TABLE t (a BOOLEAN) USING parquet;
+          | REPEAT
+          |   SELECT 1;
+          | UNTIL
+          |   (SELECT * FROM t)
+          | END REPEAT;
+          |END
+          |""".stripMargin
+
+      checkError(
+        exception = intercept[SqlScriptingException] (
+          runSqlScript(commands)
+        ),
+        condition = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
+        parameters = Map("invalidStatement" -> "(SELECT * FROM T)")
+      )
+    }
+  }
+
+  test("repeat with too many rows in subquery condition") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          | CREATE TABLE t (a BOOLEAN) USING parquet;
+          | INSERT INTO t VALUES (true);
+          | INSERT INTO t VALUES (true);
+          | REPEAT
+          |   SELECT 1;
+          | UNTIL
+          |   (SELECT * FROM t)
+          | END REPEAT;
+          |END
+          |""".stripMargin
+
+      checkError(
+        exception = intercept[SparkException] (
+          runSqlScript(commands)
+        ),
+        condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+        parameters = Map.empty,
+        context = ExpectedContext(fragment = "(SELECT * FROM t)", start = 141, stop = 157)
+      )
+    }
+  }
+
   test("leave compound block") {
     val sqlScriptText =
       """
@@ -565,6 +1146,22 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
+  test("leave repeat loop") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: REPEAT
+        |    SELECT 1;
+        |    LEAVE lbl;
+        |  UNTIL 1 = 2
+        |  END REPEAT;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq(Row(1)) // select 1
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
+  }
+
   test("iterate compound block - should fail") {
     val sqlScriptText =
       """
@@ -576,7 +1173,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SqlScriptingException] {
         runSqlScript(sqlScriptText)
       },
-      errorClass = "INVALID_LABEL_USAGE.ITERATE_IN_COMPOUND",
+      condition = "INVALID_LABEL_USAGE.ITERATE_IN_COMPOUND",
       parameters = Map("labelName" -> "LBL"))
   }
 
@@ -604,6 +1201,31 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
+  test("iterate repeat loop") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE x INT;
+        |  SET x = 0;
+        |  lbl: REPEAT
+        |    SET x = x + 1;
+        |    ITERATE lbl;
+        |    SET x = x + 2;
+        |  UNTIL x > 1
+        |  END REPEAT;
+        |  SELECT x;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq.empty[Row], // declare
+      Seq.empty[Row], // set x = 0
+      Seq.empty[Row], // set x = 1
+      Seq.empty[Row], // set x = 2
+      Seq(Row(2)), // select x
+      Seq.empty[Row] // drop
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
+  }
+
   test("leave with wrong label - should fail") {
     val sqlScriptText =
       """
@@ -615,7 +1237,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SqlScriptingException] {
         runSqlScript(sqlScriptText)
       },
-      errorClass = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
+      condition = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
       parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "LEAVE"))
   }
 
@@ -630,8 +1252,27 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SqlScriptingException] {
         runSqlScript(sqlScriptText)
       },
-      errorClass = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
+      condition = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
       parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "ITERATE"))
+  }
+
+  test("leave outer loop from nested repeat loop") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: REPEAT
+        |    lbl2: REPEAT
+        |      SELECT 1;
+        |      LEAVE lbl;
+        |    UNTIL 1 = 2
+        |    END REPEAT;
+        |  UNTIL 1 = 2
+        |  END REPEAT;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq(Row(1)) // select 1
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
   }
 
   test("leave outer loop from nested while loop") {
@@ -671,7 +1312,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq.empty[Row], // set x = 0
       Seq.empty[Row], // set x = 1
       Seq(Row(1)), // select 1
-      Seq.empty[Row], // set x= 2
+      Seq.empty[Row], // set x = 2
       Seq(Row(1)), // select 1
       Seq(Row(2)), // select x
       Seq.empty[Row] // drop
@@ -707,6 +1348,36 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq.empty[Row], // set x = 2
       Seq(Row(1)), // select 1
       Seq(Row(2)), // select 2
+      Seq(Row(2)), // select x
+      Seq.empty[Row] // drop
+    )
+    verifySqlScriptResult(sqlScriptText, expected)
+  }
+
+  test("iterate outer loop from nested repeat loop") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE x INT;
+        |  SET x = 0;
+        |  lbl: REPEAT
+        |    SET x = x + 1;
+        |    lbl2: REPEAT
+        |      SELECT 1;
+        |      ITERATE lbl;
+        |    UNTIL 1 = 2
+        |    END REPEAT;
+        |  UNTIL x > 1
+        |  END REPEAT;
+        |  SELECT x;
+        |END""".stripMargin
+    val expected = Seq(
+      Seq.empty[Row], // declare
+      Seq.empty[Row], // set x = 0
+      Seq.empty[Row], // set x = 1
+      Seq(Row(1)), // select 1
+      Seq.empty[Row], // set x = 2
+      Seq(Row(1)), // select 1
       Seq(Row(2)), // select x
       Seq.empty[Row] // drop
     )

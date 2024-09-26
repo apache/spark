@@ -16,14 +16,14 @@
 #
 
 from abc import ABC, abstractmethod
-from typing import Any, List, TYPE_CHECKING, Iterator, Optional, Union, cast, Tuple
+from typing import Any, List, TYPE_CHECKING, Iterator, Optional, Union, Tuple
 
 from pyspark.sql import Row
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.streaming.list_state_client import ListStateClient, ListStateIterator
 from pyspark.sql.streaming.map_state_client import MapStateClient, MapStateIterator, MapStateKeyValuePairIterator
 from pyspark.sql.streaming.value_state_client import ValueStateClient
-from pyspark.sql.types import StructType, _create_row, _parse_datatype_string
+from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
@@ -52,19 +52,11 @@ class ValueState:
         """
         return self._value_state_client.exists(self._state_name)
 
-    def get(self) -> Optional[Row]:
+    def get(self) -> Optional[Tuple]:
         """
         Get the state value if it exists. Returns None if the state variable does not have a value.
         """
-        value = self._value_state_client.get(self._state_name)
-        if value is None:
-            return None
-        schema = self.schema
-        if isinstance(schema, str):
-            schema = cast(StructType, _parse_datatype_string(schema))
-        # Create the Row using the values and schema fields
-        row = _create_row(schema.fieldNames(), value)
-        return row
+        return self._value_state_client.get(self._state_name)
 
     def update(self, new_value: Any) -> None:
         """
@@ -81,7 +73,7 @@ class ValueState:
 
 class ListState:
     """
-    Class used for arbitrary stateful operations with transformWithState to capture single value
+    Class used for arbitrary stateful operations with transformWithState to capture list value
     state.
 
     .. versionadded:: 4.0.0
@@ -100,25 +92,25 @@ class ListState:
         """
         return self._list_state_client.exists(self._state_name)
 
-    def get(self) -> Iterator[Row]:
+    def get(self) -> Iterator[Tuple]:
         """
         Get list state with an iterator.
         """
         return ListStateIterator(self._list_state_client, self._state_name)
 
-    def put(self, new_state: List[Any]) -> None:
+    def put(self, new_state: List[Tuple]) -> None:
         """
         Update the values of the list state.
         """
         self._list_state_client.put(self._state_name, self.schema, new_state)
 
-    def append_value(self, new_state: Any) -> None:
+    def append_value(self, new_state: Tuple) -> None:
         """
         Append a new value to the list state.
         """
         self._list_state_client.append_value(self._state_name, self.schema, new_state)
 
-    def append_list(self, new_state: List[Any]) -> None:
+    def append_list(self, new_state: List[Tuple]) -> None:
         """
         Append a list of new values to the list state.
         """

@@ -38,7 +38,7 @@ case class OrcTable(
   extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): OrcScanBuilder =
-    new OrcScanBuilder(sparkSession, fileIndex, schema, dataSchema, options)
+    OrcScanBuilder(sparkSession, fileIndex, schema, dataSchema, mergedOptions(options))
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
     OrcUtils.inferSchema(sparkSession, files, options.asScala.toMap)

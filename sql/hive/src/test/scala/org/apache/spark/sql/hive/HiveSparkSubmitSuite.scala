@@ -828,7 +828,7 @@ object SPARK_18360 {
       .enableHiveSupport().getOrCreate()
 
     val defaultDbLocation = spark.catalog.getDatabase("default").locationUri
-    assert(new Path(defaultDbLocation) == new Path(spark.conf.get(WAREHOUSE_PATH)))
+    assert(new Path(defaultDbLocation) == new Path(spark.conf.get(WAREHOUSE_PATH.key)))
 
     val hiveClient =
       spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client

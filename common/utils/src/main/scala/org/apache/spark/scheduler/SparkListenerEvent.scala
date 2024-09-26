@@ -14,28 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql
+package org.apache.spark.scheduler
 
-/**
- * A container for a [[Dataset]], used for implicit conversions in Scala.
- *
- * To use this, import implicit conversions in SQL:
- * {{{
- *   val spark: SparkSession = ...
- *   import spark.implicits._
- * }}}
- *
- * @since 3.4.0
- */
-case class DatasetHolder[T] private[sql] (private val ds: Dataset[T]) {
+import com.fasterxml.jackson.annotation.JsonTypeInfo
 
-  // This is declared with parentheses to prevent the Scala compiler from treating
-  // `rdd.toDS("1")` as invoking this toDS and then apply on the returned Dataset.
-  def toDS(): Dataset[T] = ds
+import org.apache.spark.annotation.DeveloperApi
 
-  // This is declared with parentheses to prevent the Scala compiler from treating
-  // `rdd.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DataFrame = ds.toDF()
-
-  def toDF(colNames: String*): DataFrame = ds.toDF(colNames: _*)
+@DeveloperApi
+@JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "Event")
+trait SparkListenerEvent {
+  /* Whether output this event to the event log */
+  protected[spark] def logEvent: Boolean = true
 }

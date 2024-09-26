@@ -228,7 +228,7 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
       spark.range(1).collect()
 
       spark.sparkContext.listenerBus.waitUntilEmpty()
-      assert(jobTags.contains(jobTag))
+      assert(jobTags.get.contains(jobTag))
       assert(sqlJobTags.contains(jobTag))
     } finally {
       spark.sparkContext.removeJobTag(jobTag)
