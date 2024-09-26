@@ -70,12 +70,6 @@
     ],
     "sqlState" : "42000"
   },
-  "ANSI_DATE_TIME_FIELD_OUT_OF_BOUNDS" : {
-    "message" : [
-      "ANSI mode error: <message>. If necessary set <ansiConfig> to false to bypass this error."
-    ],
-    "sqlState" : "22008"
-  },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
@@ -1086,6 +1080,12 @@
   "DATETIME_OVERFLOW" : {
     "message" : [
       "Datetime operation overflow: <operation>."
+    ],
+    "sqlState" : "22008"
+  },
+  "DATE_TIME_FIELD_OUT_OF_BOUNDS" : {
+    "message" : [
+      "ANSI mode error: <message>. If necessary set <ansiConfig> to false to bypass this error."
     ],
     "sqlState" : "22008"
   },

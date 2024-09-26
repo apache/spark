@@ -542,7 +542,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkError(
       exception = intercept[SparkIllegalArgumentException](
         dateAddInterval(input, new CalendarInterval(36, 47, 1))),
-      condition = "ANSI_DATE_TIME_FIELD_OUT_OF_BOUNDS",
+      condition = "DATE_TIME_FIELD_OUT_OF_BOUNDS",
       parameters = Map(
         "message" -> "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date",
         "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
