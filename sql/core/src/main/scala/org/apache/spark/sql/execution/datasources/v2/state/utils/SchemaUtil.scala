@@ -230,6 +230,7 @@ object SchemaUtil {
       "map_value" -> classOf[MapType],
       "user_map_key" -> classOf[StructType],
       "user_map_value" -> classOf[StructType],
+      "expiration_timestamp_ms" -> classOf[LongType],
       "partition_id" -> classOf[IntegerType])
 
     val expectedFieldNames = if (sourceOptions.readChangeFeed) {
@@ -255,6 +256,9 @@ object SchemaUtil {
           } else {
             Seq("key", "map_value", "partition_id")
           }
+
+        case TimerState =>
+          Seq("key", "expiration_timestamp_ms", "partition_id")
 
         case _ =>
           throw StateDataSourceErrors
@@ -321,6 +325,14 @@ object SchemaUtil {
             .add("map_value", valueMapSchema)
             .add("partition_id", IntegerType)
         }
+
+      case TimerState =>
+        val groupingKeySchema = SchemaUtil.getSchemaAsDataType(
+          stateStoreColFamilySchema.keySchema, "key")
+        new StructType()
+          .add("key", groupingKeySchema)
+          .add("expiration_timestamp_ms", LongType)
+          .add("partition_id", IntegerType)
 
       case _ =>
         throw StateDataSourceErrors.internalError(s"Unsupported state variable type $stateVarType")
@@ -407,9 +419,30 @@ object SchemaUtil {
         unifyMapStateRowPair(store.iterator(stateVarName),
           compositeKeySchema, partitionId, stateSourceOptions)
 
+      case StateVariableType.TimerState =>
+        store
+          .iterator(stateVarName)
+          .map { pair =>
+            unifyTimerRow(pair.key, compositeKeySchema, partitionId)
+          }
+
       case _ =>
         throw new IllegalStateException(
           s"Unsupported state variable type: $stateVarType")
     }
+  }
+
+  private def unifyTimerRow(
+      rowKey: UnsafeRow,
+      groupingKeySchema: StructType,
+      partitionId: Int): InternalRow = {
+    val groupingKey = rowKey.get(0, groupingKeySchema).asInstanceOf[UnsafeRow]
+    val expirationTimestamp = rowKey.getLong(1)
+
+    val row = new GenericInternalRow(3)
+    row.update(0, groupingKey)
+    row.update(1, expirationTimestamp)
+    row.update(2, partitionId)
+    row
   }
 }

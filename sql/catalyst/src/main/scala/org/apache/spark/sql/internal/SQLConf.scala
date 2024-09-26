@@ -3171,9 +3171,9 @@ object SQLConf {
 
   val PYSPARK_PLOT_MAX_ROWS =
     buildConf("spark.sql.pyspark.plotting.max_rows")
-      .doc(
-        "The visual limit on top-n-based plots. If set to 1000, the first 1000 data points " +
-        "will be used for plotting.")
+      .doc("The visual limit on plots. If set to 1000 for top-n-based plots (pie, bar, barh), " +
+        "the first 1000 data points will be used for plotting. For sampled-based plots " +
+        "(scatter, area, line), 1000 data points will be randomly sampled.")
       .version("4.0.0")
       .intConf
       .createWithDefault(1000)
@@ -3214,6 +3214,14 @@ object SQLConf {
         "grouping API such as DataFrame(.cogroup).groupby.applyInPandas because each group " +
         "becomes each ArrowRecordBatch. If set to zero or negative there is no limit.")
       .version("2.3.0")
+      .intConf
+      .createWithDefault(10000)
+
+  val ARROW_TRANSFORM_WITH_STATE_IN_PANDAS_MAX_RECORDS_PER_BATCH =
+    buildConf("spark.sql.execution.arrow.transformWithStateInPandas.maxRecordsPerBatch")
+      .doc("When using TransformWithStateInPandas, limit the maximum number of state records " +
+        "that can be written to a single ArrowRecordBatch in memory.")
+      .version("4.0.0")
       .intConf
       .createWithDefault(10000)
 
@@ -5898,6 +5906,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def arrowPySparkFallbackEnabled: Boolean = getConf(ARROW_PYSPARK_FALLBACK_ENABLED)
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
+
+  def arrowTransformWithStateInPandasMaxRecordsPerBatch: Int =
+    getConf(ARROW_TRANSFORM_WITH_STATE_IN_PANDAS_MAX_RECORDS_PER_BATCH)
 
   def arrowUseLargeVarTypes: Boolean = getConf(ARROW_EXECUTION_USE_LARGE_VAR_TYPES)
 

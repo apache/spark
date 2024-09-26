@@ -16,6 +16,8 @@
 #
 
 import unittest
+from datetime import datetime
+
 import pyspark.sql.plot  # noqa: F401
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_plotly, plotly_requirement_message
 
@@ -34,6 +36,17 @@ class DataFramePlotPlotlyTestsMixin:
         columns = ["length", "width", "species"]
         return self.spark.createDataFrame(data, columns)
 
+    @property
+    def sdf3(self):
+        data = [
+            (3, 5, 20, datetime(2018, 1, 31)),
+            (2, 5, 42, datetime(2018, 2, 28)),
+            (3, 6, 28, datetime(2018, 3, 31)),
+            (9, 12, 62, datetime(2018, 4, 30)),
+        ]
+        columns = ["sales", "signups", "visits", "date"]
+        return self.spark.createDataFrame(data, columns)
+
     def _check_fig_data(self, kind, fig_data, expected_x, expected_y, expected_name=""):
         if kind == "line":
             self.assertEqual(fig_data["mode"], "lines")
@@ -46,6 +59,11 @@ class DataFramePlotPlotlyTestsMixin:
         elif kind == "scatter":
             self.assertEqual(fig_data["type"], "scatter")
             self.assertEqual(fig_data["orientation"], "v")
+            self.assertEqual(fig_data["mode"], "markers")
+        elif kind == "area":
+            self.assertEqual(fig_data["type"], "scatter")
+            self.assertEqual(fig_data["orientation"], "v")
+            self.assertEqual(fig_data["mode"], "lines")
 
         self.assertEqual(fig_data["xaxis"], "x")
         self.assertEqual(list(fig_data["x"]), expected_x)
@@ -97,6 +115,23 @@ class DataFramePlotPlotlyTestsMixin:
         self._check_fig_data(
             "scatter", fig["data"][0], [3.5, 3.0, 3.2, 3.2, 3.0], [5.1, 4.9, 7.0, 6.4, 5.9]
         )
+
+    def test_area_plot(self):
+        # single column as vertical axis
+        fig = self.sdf3.plot(kind="area", x="date", y="sales")
+        expected_x = [
+            datetime(2018, 1, 31, 0, 0),
+            datetime(2018, 2, 28, 0, 0),
+            datetime(2018, 3, 31, 0, 0),
+            datetime(2018, 4, 30, 0, 0),
+        ]
+        self._check_fig_data("area", fig["data"][0], expected_x, [3, 2, 3, 9])
+
+        # multiple columns as vertical axis
+        fig = self.sdf3.plot.area(x="date", y=["sales", "signups", "visits"])
+        self._check_fig_data("area", fig["data"][0], expected_x, [3, 2, 3, 9], "sales")
+        self._check_fig_data("area", fig["data"][1], expected_x, [5, 5, 6, 12], "signups")
+        self._check_fig_data("area", fig["data"][2], expected_x, [20, 42, 28, 62], "visits")
 
 
 class DataFramePlotPlotlyTests(DataFramePlotPlotlyTestsMixin, ReusedSQLTestCase):
