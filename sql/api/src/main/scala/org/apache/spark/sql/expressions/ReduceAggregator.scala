@@ -18,9 +18,7 @@
 package org.apache.spark.sql.expressions
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.Encoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveBooleanEncoder, ProductEncoder}
+import org.apache.spark.sql.{Encoder, Encoders}
 
 /**
  * An aggregator that uses a single associative and commutative reduce function. This reduce
@@ -47,11 +45,8 @@ private[sql] class ReduceAggregator[T: Encoder](func: (T, T) => T)
 
   override def zero: (Boolean, T) = (false, _zero.asInstanceOf[T])
 
-  override def bufferEncoder: Encoder[(Boolean, T)] = {
-    ProductEncoder
-      .tuple(Seq(PrimitiveBooleanEncoder, encoder.asInstanceOf[AgnosticEncoder[T]]))
-      .asInstanceOf[Encoder[(Boolean, T)]]
-  }
+  override def bufferEncoder: Encoder[(Boolean, T)] =
+    Encoders.tuple(Encoders.scalaBoolean, encoder)
 
   override def outputEncoder: Encoder[T] = encoder
 
