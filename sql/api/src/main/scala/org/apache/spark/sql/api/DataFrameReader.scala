@@ -311,30 +311,33 @@ abstract class DataFrameReader {
    */
   def json(jsonDataset: DS[String]): Dataset[Row]
 
-   /**
-   * Loads a `JavaRDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON
-   * Lines text format or newline-delimited JSON</a>) and returns the result as
-   * a `DataFrame`.
+  /**
+   * Loads a `JavaRDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON Lines
+   * text format or newline-delimited JSON</a>) and returns the result as a `DataFrame`.
    *
-   * Unless the schema is specified using `schema` function, this function goes through the
-   * input once to determine the input schema.
+   * Unless the schema is specified using `schema` function, this function goes through the input
+   * once to determine the input schema.
    *
-   * @note this method is not supported in Spark Connect.
-   * @param jsonRDD input RDD with one JSON object per record
+   * @note
+   *   this method is not supported in Spark Connect.
+   * @param jsonRDD
+   *   input RDD with one JSON object per record
    * @since 1.4.0
    */
   @deprecated("Use json(Dataset[String]) instead.", "2.2.0")
   def json(jsonRDD: JavaRDD[String]): DS[Row]
 
   /**
-   * Loads an `RDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON Lines
-   * text format or newline-delimited JSON</a>) and returns the result as a `DataFrame`.
+   * Loads an `RDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON Lines text
+   * format or newline-delimited JSON</a>) and returns the result as a `DataFrame`.
    *
-   * Unless the schema is specified using `schema` function, this function goes through the
-   * input once to determine the input schema.
+   * Unless the schema is specified using `schema` function, this function goes through the input
+   * once to determine the input schema.
    *
-   * @note this method is not supported in Spark Connect.
-   * @param jsonRDD input RDD with one JSON object per record
+   * @note
+   *   this method is not supported in Spark Connect.
+   * @param jsonRDD
+   *   input RDD with one JSON object per record
    * @since 1.4.0
    */
   @deprecated("Use json(Dataset[String]) instead.", "2.2.0")

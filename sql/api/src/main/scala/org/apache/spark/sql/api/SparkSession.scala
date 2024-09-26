@@ -58,7 +58,8 @@ abstract class SparkSession extends Serializable with Closeable {
   /**
    * The Spark context associated with this Spark session.
    *
-   * @note this method is not supported in Spark Connect.
+   * @note
+   *   this method is not supported in Spark Connect.
    */
   def sparkContext: SparkContext
 
@@ -159,17 +160,16 @@ abstract class SparkSession extends Serializable with Closeable {
   /**
    * Creates a `DataFrame` from an RDD of Product (e.g. case classes, tuples).
    *
-   * @note this method is not supported in Spark Connect.
+   * @note
+   *   this method is not supported in Spark Connect.
    * @since 2.0.0
    */
-  def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): Dataset[Row]
+  def createDataFrame[A <: Product: TypeTag](rdd: RDD[A]): Dataset[Row]
 
   /**
-   * :: DeveloperApi ::
-   * Creates a `DataFrame` from an `RDD` containing [[Row]]s using the given schema.
-   * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
-   * the provided schema. Otherwise, there will be runtime exception.
-   * Example:
+   * :: DeveloperApi :: Creates a `DataFrame` from an `RDD` containing [[Row]]s using the given
+   * schema. It is important to make sure that the structure of every [[Row]] of the provided RDD
+   * matches the provided schema. Otherwise, there will be runtime exception. Example:
    * {{{
    *  import org.apache.spark.sql._
    *  import org.apache.spark.sql.types._
@@ -193,19 +193,20 @@ abstract class SparkSession extends Serializable with Closeable {
    *  sparkSession.sql("select name from people").collect.foreach(println)
    * }}}
    *
-   * @note this method is not supported in Spark Connect.
+   * @note
+   *   this method is not supported in Spark Connect.
    * @since 2.0.0
    */
   @DeveloperApi
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): Dataset[Row]
 
   /**
-   * :: DeveloperApi ::
-   * Creates a `DataFrame` from a `JavaRDD` containing [[Row]]s using the given schema.
-   * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
-   * the provided schema. Otherwise, there will be runtime exception.
+   * :: DeveloperApi :: Creates a `DataFrame` from a `JavaRDD` containing [[Row]]s using the given
+   * schema. It is important to make sure that the structure of every [[Row]] of the provided RDD
+   * matches the provided schema. Otherwise, there will be runtime exception.
    *
-   * @note this method is not supported in Spark Connect.
+   * @note
+   *   this method is not supported in Spark Connect.
    * @since 2.0.0
    */
   @DeveloperApi
@@ -214,8 +215,8 @@ abstract class SparkSession extends Serializable with Closeable {
   /**
    * Applies a schema to an RDD of Java Beans.
    *
-   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
-   * SELECT * queries will return the columns in an undefined order.
+   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean, SELECT * queries
+   * will return the columns in an undefined order.
    *
    * @since 2.0.0
    */
@@ -224,10 +225,11 @@ abstract class SparkSession extends Serializable with Closeable {
   /**
    * Applies a schema to an RDD of Java Beans.
    *
-   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
-   * SELECT * queries will return the columns in an undefined order.
+   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean, SELECT * queries
+   * will return the columns in an undefined order.
    *
-   * @note this method is not supported in Spark Connect.
+   * @note
+   *   this method is not supported in Spark Connect.
    * @since 2.0.0
    */
   def createDataFrame(rdd: JavaRDD[_], beanClass: Class[_]): Dataset[Row]
@@ -290,12 +292,13 @@ abstract class SparkSession extends Serializable with Closeable {
   def createDataset[T: Encoder](data: util.List[T]): Dataset[T]
 
   /**
-   * Creates a [[Dataset]] from an RDD of a given type. This method requires an
-   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
-   * that is generally created automatically through implicits from a `SparkSession`, or can be
-   * created explicitly by calling static methods on `Encoders`.
+   * Creates a [[Dataset]] from an RDD of a given type. This method requires an encoder (to
+   * convert a JVM object of type `T` to and from the internal Spark SQL representation) that is
+   * generally created automatically through implicits from a `SparkSession`, or can be created
+   * explicitly by calling static methods on `Encoders`.
    *
-   * @note this method is not supported in Spark Connect.
+   * @note
+   *   this method is not supported in Spark Connect.
    * @since 2.0.0
    */
   def createDataset[T: Encoder](data: RDD[T]): Dataset[T]

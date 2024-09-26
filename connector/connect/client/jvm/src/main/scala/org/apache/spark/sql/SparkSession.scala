@@ -152,7 +152,7 @@ class SparkSession private[sql] (
   }
 
   /** @inheritdoc */
-  override def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame =
+  override def createDataFrame[A <: Product: TypeTag](rdd: RDD[A]): DataFrame =
     throwRddNotSupportedException()
 
   /** @inheritdoc */

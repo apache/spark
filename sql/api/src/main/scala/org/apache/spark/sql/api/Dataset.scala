@@ -3104,7 +3104,8 @@ abstract class Dataset[T] extends Serializable {
   /**
    * Represents the content of the Dataset as an `RDD` of `T`.
    *
-   * @note this method is not supported in Spark Connect.
+   * @note
+   *   this method is not supported in Spark Connect.
    * @group basic
    * @since 1.6.0
    */
@@ -3113,7 +3114,8 @@ abstract class Dataset[T] extends Serializable {
   /**
    * Returns the content of the Dataset as a `JavaRDD` of `T`s.
    *
-   * @note this method is not supported in Spark Connect.
+   * @note
+   *   this method is not supported in Spark Connect.
    * @group basic
    * @since 1.6.0
    */
@@ -3122,7 +3124,8 @@ abstract class Dataset[T] extends Serializable {
   /**
    * Returns the content of the Dataset as a `JavaRDD` of `T`s.
    *
-   * @note this method is not supported in Spark Connect.
+   * @note
+   *   this method is not supported in Spark Connect.
    * @group basic
    * @since 1.6.0
    */
