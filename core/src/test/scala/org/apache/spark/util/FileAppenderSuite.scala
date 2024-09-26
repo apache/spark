@@ -54,7 +54,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter {
     val inputStream = new ByteArrayInputStream(testString.getBytes(StandardCharsets.UTF_8))
     // The `header` should not be covered
     val header = "Add header"
-    Files.write(header, testFile, StandardCharsets.UTF_8)
+    Files.asCharSink(testFile, StandardCharsets.UTF_8).write(header)
     val appender = new FileAppender(inputStream, testFile)
     inputStream.close()
     appender.awaitTermination()
