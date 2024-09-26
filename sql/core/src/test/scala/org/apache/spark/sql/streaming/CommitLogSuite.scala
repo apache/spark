@@ -71,7 +71,13 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
       val commitLog = new CommitLog(spark, path.toString)
       val inputStream = new FileInputStream(path.resolve("testCommitLog").toFile)
       val metadata = commitLog.deserialize(inputStream)
-      assert(metadata === commitMetadata)
+      // Array comparison are reference based, so we need to compare the elements
+      assert(metadata.nextBatchWatermarkMs == commitMetadata.nextBatchWatermarkMs)
+      assert(metadata.stateUniqueIds.size == commitMetadata.stateUniqueIds.size)
+      commitMetadata.stateUniqueIds.foreach { case (operatorId, uniqueIds) =>
+        assert(metadata.stateUniqueIds.contains(operatorId))
+        assert(metadata.stateUniqueIds(operatorId).sameElements(uniqueIds))
+      }
     }
   }
 

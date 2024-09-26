@@ -1,2 +1,2 @@
 v1
-{"nextBatchWatermarkMs":0,"stateUniqueIds":{"0":{"0":{"default":["unique_id1","unique_id2","unique_id3"]},"1":{"default":["unique_id4","unique_id5","unique_id6"]}},"1":{"0":{"default":["unique_id7","unique_id8","unique_id9"]},"1":{"default":["unique_id10","unique_id11","unique_id12"]}}}}
+{"nextBatchWatermarkMs":0,"stateUniqueIds":{"0":["unique_id1","unique_id2","unique_id3"],"1":["unique_id4","unique_id5","unique_id6"]}}
