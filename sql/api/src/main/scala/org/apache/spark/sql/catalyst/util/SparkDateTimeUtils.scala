@@ -46,7 +46,12 @@ trait SparkDateTimeUtils {
     // To support the (+|-)hh:m format because it was supported before Spark 3.0.
     formattedZoneId = singleMinuteTz.matcher(formattedZoneId).replaceFirst("$1$2:0$3")
 
-    ZoneId.of(formattedZoneId, ZoneId.SHORT_IDS)
+    try {
+      ZoneId.of(formattedZoneId, ZoneId.SHORT_IDS)
+    } catch {
+      case e: java.time.DateTimeException =>
+        throw ExecutionErrors.zoneOffsetError(e.getMessage)
+    }
   }
 
   def getTimeZone(timeZoneId: String): TimeZone = TimeZone.getTimeZone(getZoneId(timeZoneId))

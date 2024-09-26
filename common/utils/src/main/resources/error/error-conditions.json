@@ -3267,6 +3267,12 @@
     },
     "sqlState" : "42000"
   },
+  "INVALID_ZONE_OFFSET": {
+    "message": [
+      "<message>. ZoneOffset represents the time difference from UTC and must be in the range from -18:00 to +18:00."
+    ],
+    "sqlState" : "22009"
+  },
   "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE" : {
     "message" : [
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
