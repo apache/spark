@@ -147,11 +147,11 @@ class DataFramePlotPlotlyTestsMixin:
             datetime(2018, 3, 31, 0, 0),
             datetime(2018, 4, 30, 0, 0),
         ]
-        # y is not a numerical column
         self._check_fig_data("pie", fig["data"][0], expected_x, [3, 2, 3, 9])
+
+        # y is not a numerical column
         with self.assertRaises(PySparkTypeError) as pe:
             self.sdf.plot.pie(x="int_val", y="category")
-
         self.check_error(
             exception=pe.exception,
             errorClass="PLOT_NOT_NUMERIC_COLUMN",
