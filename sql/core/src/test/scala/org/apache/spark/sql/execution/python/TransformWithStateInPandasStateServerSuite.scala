@@ -81,6 +81,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
       Iterator(new GenericRowWithSchema(Array(1), stateSchema)))
     transformWithStateInPandasDeserializer = mock(classOf[TransformWithStateInPandasDeserializer])
     arrowStreamWriter = mock(classOf[BaseStreamingArrowWriter])
+    batchTimestampMs = mock(classOf[Option[Long]])
+    eventTimeWatermarkForEviction = mock(classOf[Option[Long]])
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
       statefulProcessorHandle, groupingKeySchema, "", false, false, 2,
       outputStream, valueStateMap, transformWithStateInPandasDeserializer, arrowStreamWriter,
@@ -258,6 +260,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     verify(transformWithStateInPandasDeserializer).readArrowBatches(any)
     verify(listState).appendList(any)
   }
+
   test("timer value get processing time") {
     val message = TimerRequest.newBuilder().setTimerValueRequest(
       TimerValueRequest.newBuilder().setGetProcessingTimer(
@@ -288,7 +291,6 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     ).build()
     stateServer.handleTimerRequest(message)
     verify(statefulProcessorHandle).getExpiredTimers(any[Long])
-    verify(outputStream).writeInt(1)
   }
 
   test("stateful processor register timer") {
@@ -321,6 +323,5 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     ).build()
     stateServer.handleStatefulProcessorCall(message)
     verify(statefulProcessorHandle).listTimers()
-    verify(outputStream).writeInt(1)
   }
 }

@@ -37,6 +37,7 @@ import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState,
 import org.apache.spark.sql.streaming.{ListState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{BinaryType, LongType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.util.Utils
 
 /**
  * This class is used to handle the state requests from the Python side. It runs on a separate
@@ -517,9 +518,15 @@ class TransformWithStateInPandasStateServer(
         rowCount += 1
       }
       arrowStreamWriter.finalizeCurrentArrowBatch()
-      writer.end()
-      root.close()
-      allocator.close()
+      Utils.tryWithSafeFinally {
+        // end writes footer to the output stream and doesn't clean any resources.
+        // It could throw exception if the output stream is closed, so it should be
+        // in the try block.
+        writer.end()
+      } {
+        root.close()
+        allocator.close()
+      }
     }
   }
 }
