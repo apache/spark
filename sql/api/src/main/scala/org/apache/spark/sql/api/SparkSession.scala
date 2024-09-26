@@ -167,9 +167,10 @@ abstract class SparkSession extends Serializable with Closeable {
   def createDataFrame[A <: Product: TypeTag](rdd: RDD[A]): Dataset[Row]
 
   /**
-   * :: DeveloperApi :: Creates a `DataFrame` from an `RDD` containing [[Row]]s using the given
-   * schema. It is important to make sure that the structure of every [[Row]] of the provided RDD
-   * matches the provided schema. Otherwise, there will be runtime exception. Example:
+   * :: DeveloperApi :: Creates a `DataFrame` from an `RDD` containing
+   * [[org.apache.spark.sql.Row]]s using the given schema. It is important to make sure that the
+   * structure of every [[org.apache.spark.sql.Row]] of the provided RDD matches the provided
+   * schema. Otherwise, there will be runtime exception. Example:
    * {{{
    *  import org.apache.spark.sql._
    *  import org.apache.spark.sql.types._
@@ -201,9 +202,10 @@ abstract class SparkSession extends Serializable with Closeable {
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): Dataset[Row]
 
   /**
-   * :: DeveloperApi :: Creates a `DataFrame` from a `JavaRDD` containing [[Row]]s using the given
-   * schema. It is important to make sure that the structure of every [[Row]] of the provided RDD
-   * matches the provided schema. Otherwise, there will be runtime exception.
+   * :: DeveloperApi :: Creates a `DataFrame` from a `JavaRDD` containing
+   * [[org.apache.spark.sql.Row]]s using the given schema. It is important to make sure that the
+   * structure of every [[org.apache.spark.sql.Row]] of the provided RDD matches the provided
+   * schema. Otherwise, there will be runtime exception.
    *
    * @note
    *   this method is not supported in Spark Connect.
