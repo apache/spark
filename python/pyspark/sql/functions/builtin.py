@@ -145,6 +145,37 @@ def _invoke_binary_math_function(name: str, col1: Any, col2: Any) -> Column:
     return _invoke_function(name, *cols)
 
 
+def _invoke_function_over_args(name: str, *args: Any) -> Column:
+    """
+    Invokes unary JVM function identified by name with
+    and wraps the result with :class:`~pyspark.sql.Column`.
+    Note:
+    1, This function accepts Enums;
+    2, String arguments are treated as column names, if you want to treat them as literals,
+    please use lit function to wrap them at the call sites.
+    3, To be more flexible, this function invokes JVM side PythonSQLUtils.fn (Column.fn)
+    instead of the corresponding function in org.apache.spark.sql.functions which requires
+    strict signatures;
+    """
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
+    from py4j.java_gateway import JVMView
+
+    cols = []
+    for arg in args:
+        v = _enum_to_value(arg)
+        if isinstance(v, Column):
+            cols.append(v)
+        elif isinstance(v, str):
+            cols.append(col(v))
+        else:
+            cols.append(lit(v))
+
+    sc = _get_active_spark_context()
+    return Column(
+        cast(JVMView, sc._jvm).PythonSQLUtils.fn(name, _to_seq(sc, cols, _to_java_column))
+    )
+
+
 def _options_to_str(options: Optional[Mapping[str, Any]] = None) -> Mapping[str, Optional[str]]:
     if options:
         return {key: _to_str(value) for (key, value) in options.items()}
@@ -12324,7 +12355,7 @@ def sentences(
 def substring(
     str: "ColumnOrName",
     pos: Union["ColumnOrName", int],
-    len: Union["ColumnOrName", int],
+    len: Optional[Union["ColumnOrName", int]] = None,
 ) -> Column:
     """
     Substring starts at `pos` and is of length `len` when str is String type or
@@ -12350,7 +12381,7 @@ def substring(
         .. versionchanged:: 4.0.0
             `pos` now accepts column and column name.
 
-    len : :class:`~pyspark.sql.Column` or str or int
+    len : :class:`~pyspark.sql.Column` or str or int, optional
         length of chars.
 
         .. versionchanged:: 4.0.0
@@ -12416,12 +12447,22 @@ def substring(
     +-----+---+---+------------------+
     |Spark|  2|  3|               par|
     +-----+---+---+------------------+
+
+    Example 4: Do not specify len
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('Spark', 2)], ['s', 'p'])
+    >>> df.select('*', sf.substring(df.s, 3)).show()
+    +-----+---+---------------------------+
+    |    s|  p|substring(s, 3, 2147483647)|
+    +-----+---+---------------------------+
+    |Spark|  2|                        ark|
+    +-----+---+---------------------------+
     """
-    pos = _enum_to_value(pos)
-    pos = lit(pos) if isinstance(pos, int) else pos
-    len = _enum_to_value(len)
-    len = lit(len) if isinstance(len, int) else len
-    return _invoke_function_over_columns("substring", str, pos, len)
+    if len is not None:
+        return _invoke_function_over_args("substring", str, pos, len)
+    else:
+        return _invoke_function_over_args("substring", str, pos)
 
 
 @_try_remote_functions
@@ -13806,7 +13847,9 @@ def split_part(src: "ColumnOrName", delimiter: "ColumnOrName", partNum: "ColumnO
 
 @_try_remote_functions
 def substr(
-    str: "ColumnOrName", pos: "ColumnOrName", len: Optional["ColumnOrName"] = None
+    str: "ColumnOrName",
+    pos: Union["ColumnOrName", int],
+    len: Optional[Union["ColumnOrName", int]] = None,
 ) -> Column:
     """
     Returns the substring of `str` that starts at `pos` and is of length `len`,
@@ -13820,11 +13863,20 @@ def substr(
         A column of string.
     pos : :class:`~pyspark.sql.Column` or str
         A column of string, the substring of `str` that starts at `pos`.
+
+        .. versionchanged:: 4.0.0
+            `pos` now accepts int value.
+
     len : :class:`~pyspark.sql.Column` or str, optional
         A column of string, the substring of `str` is of length `len`.
 
+        .. versionchanged:: 4.0.0
+            `len` now accepts int value.
+
     Examples
     --------
+    Example 1: Using columns as arguments
+
     >>> import pyspark.sql.functions as sf
     >>> spark.createDataFrame(
     ...     [("Spark SQL", 5, 1,)], ["a", "b", "c"]
@@ -13834,6 +13886,8 @@ def substr(
     +---------------+
     |              k|
     +---------------+
+
+    Example 2: Do not specify len
 
     >>> import pyspark.sql.functions as sf
     >>> spark.createDataFrame(
@@ -13846,9 +13900,9 @@ def substr(
     +------------------------+
     """
     if len is not None:
-        return _invoke_function_over_columns("substr", str, pos, len)
+        return _invoke_function_over_args("substr", str, pos, len)
     else:
-        return _invoke_function_over_columns("substr", str, pos)
+        return _invoke_function_over_args("substr", str, pos)
 
 
 @_try_remote_functions
