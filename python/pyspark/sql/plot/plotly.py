@@ -33,7 +33,7 @@ def plot_pyspark(data: "DataFrame", kind: str, **kwargs: Any) -> "Figure":
     return plotly.plot(PySparkPlotAccessor.plot_data_map[kind](data), kind, **kwargs)
 
 
-def plot_pie(data: "DataFrame", **kwargs: Any):
+def plot_pie(data: "DataFrame", **kwargs: Any) -> "Figure":
     from plotly import express
 
     pdf = PySparkPlotAccessor.plot_data_map["pie"](data)
