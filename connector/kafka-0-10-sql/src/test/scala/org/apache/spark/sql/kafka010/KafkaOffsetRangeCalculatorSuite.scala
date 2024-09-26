@@ -35,7 +35,7 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
   }
 
   def testWithMaxRecordsPerPartitions(name: String, maxRecordsPerPartition: Long)
-                           (f: KafkaOffsetRangeCalculator => Unit): Unit = {
+      (f: KafkaOffsetRangeCalculator => Unit): Unit = {
     val options = new CaseInsensitiveStringMap(
       Map("maxRecordsPerPartition" -> maxRecordsPerPartition.toString).asJava)
     test(s"with maxRecordsPerPartition = $maxRecordsPerPartition: $name") {

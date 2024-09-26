@@ -100,7 +100,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
   private val minPartitions =
     readerOptions.get(KafkaSourceProvider.MIN_PARTITIONS_OPTION_KEY).map(_.toInt)
   private val maxRecordsPerPartition =
-    readerOptions.get(KafkaSourceProvider.MAX_RECORDS_PER_PARTITIONS_OPTION_KEY).map(_.toLong)
+    readerOptions.get(KafkaSourceProvider.MAX_RECORDS_PER_PARTITION_OPTION_KEY).map(_.toLong)
 
   private val rangeCalculator =
     new KafkaOffsetRangeCalculator(minPartitions, maxRecordsPerPartition)
@@ -108,9 +108,9 @@ private[kafka010] class KafkaOffsetReaderAdmin(
   /**
    * Whether we should divide Kafka TopicPartitions with a lot of data into smaller Spark tasks.
    */
-  private def shouldDivvyUpLargePartitions(kafkaOffsetRange: Seq[KafkaOffsetRange]): Boolean = {
-    minPartitions.map(_ > kafkaOffsetRange.size).getOrElse(false) ||
-      kafkaOffsetRange.exists(_.size > maxRecordsPerPartition.getOrElse(Long.MaxValue))
+  private def shouldDivvyUpLargePartitions(offsetRanges: Seq[KafkaOffsetRange]): Boolean = {
+    minPartitions.map(_ > offsetRanges.size).getOrElse(false) ||
+      offsetRanges.exists(_.size > maxRecordsPerPartition.getOrElse(Long.MaxValue))
   }
 
   override def toString(): String = consumerStrategy.toString
