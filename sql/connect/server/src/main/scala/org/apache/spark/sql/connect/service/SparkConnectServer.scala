@@ -30,7 +30,7 @@ object SparkConnectServer extends Logging {
     logInfo("Starting Spark session.")
     val session = SparkSession
       .builder()
-      .config("spark.sql.session.isolateArtifacts", "true")
+      .config("spark.repl.isolate.artifacts", "true")
       .getOrCreate()
     try {
       try {

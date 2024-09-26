@@ -72,11 +72,11 @@ class ArtifactManager(session: SparkSession) extends Logging {
       s"$artifactURI${File.separator}classes${File.separator}")
 
   protected[sql] lazy val state: JobArtifactState = {
-    val isIsolated = session.sparkContext.conf.get("spark.sql.session.isolateArtifacts", "false")
+    val isIsolated = session.sparkContext.conf.get("spark.repl.isolate.artifacts", "false")
     if (isIsolated == "true") {
       JobArtifactState(session.sessionUUID, Some(replClassURI))
     } else {
-      null
+      JobArtifactState(session.sessionUUID, None)
     }
   }
 
@@ -192,10 +192,10 @@ class ArtifactManager(session: SparkSession) extends Logging {
           FilenameUtils.separatorsToUnix(normalizedRemoteRelativePath.toString))}"
 
       if (normalizedRemoteRelativePath.startsWith(s"jars${File.separator}")) {
-        session.sparkContext.addJar(uri)
+        session.sparkContext.addJarIsolated(uri)
         jarsList.add(target)
       } else if (normalizedRemoteRelativePath.startsWith(s"pyfiles${File.separator}")) {
-        session.sparkContext.addFile(uri)
+        session.sparkContext.addFileIsolated(uri)
         val stringRemotePath = normalizedRemoteRelativePath.toString
         if (stringRemotePath.endsWith(".zip") || stringRemotePath.endsWith(
             ".egg") || stringRemotePath.endsWith(".jar")) {
@@ -204,9 +204,9 @@ class ArtifactManager(session: SparkSession) extends Logging {
       } else if (normalizedRemoteRelativePath.startsWith(s"archives${File.separator}")) {
         val canonicalUri =
           fragment.map(Utils.getUriBuilder(new URI(uri)).fragment).getOrElse(new URI(uri))
-        session.sparkContext.addArchive(canonicalUri.toString)
+        session.sparkContext.addArchiveIsolated(canonicalUri.toString)
       } else if (normalizedRemoteRelativePath.startsWith(s"files${File.separator}")) {
-        session.sparkContext.addFile(uri)
+        session.sparkContext.addFileIsolated(uri)
       }
     }
   }
@@ -250,6 +250,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
     val urls = getAddedJars :+ classDir.toUri.toURL
     val prefixes = SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES)
     val userClasspathFirst = SparkEnv.get.conf.get(EXECUTOR_USER_CLASS_PATH_FIRST)
+    val currentClassLoader = session.sharedState.jarClassLoader
     val loader = if (prefixes.nonEmpty) {
       // Two things you need to know about classloader for all of this to make sense:
       // 1. A classloader needs to be able to fully define a class.
@@ -265,19 +266,19 @@ class ArtifactManager(session: SparkSession) extends Logging {
         // USER -> SYSTEM -> STUB
         new ChildFirstURLClassLoader(
           urls.toArray,
-          StubClassLoader(Utils.getContextOrSparkClassLoader, prefixes))
+          StubClassLoader(currentClassLoader, prefixes))
       } else {
         // SYSTEM -> USER -> STUB
         new ChildFirstURLClassLoader(
           urls.toArray,
           StubClassLoader(null, prefixes),
-          Utils.getContextOrSparkClassLoader)
+          currentClassLoader)
       }
     } else {
       if (userClasspathFirst) {
-        new ChildFirstURLClassLoader(urls.toArray, Utils.getContextOrSparkClassLoader)
+        new ChildFirstURLClassLoader(urls.toArray, currentClassLoader)
       } else {
-        new URLClassLoader(urls.toArray, Utils.getContextOrSparkClassLoader)
+        new URLClassLoader(urls.toArray, currentClassLoader)
       }
     }
 

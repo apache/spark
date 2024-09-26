@@ -531,21 +531,31 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // Add each JAR given through the constructor
     if (jars != null) {
-      jars.foreach(jar => addJar(jar, true))
+      jars.foreach(jar => addJar(jar, addedOnSubmit = true, isolated = false))
       if (allAddedJars.nonEmpty) {
         _conf.set("spark.app.initial.jar.urls", allAddedJars.keys.toSeq.mkString(","))
       }
     }
 
     if (files != null) {
-      files.foreach(file => addFile(file, false, true))
+      files.foreach(file => addFile(
+        file,
+        recursive = false,
+        addedOnSubmit = true,
+        isArchive = false,
+        isolated = false))
       if (allAddedFiles.nonEmpty) {
         _conf.set("spark.app.initial.file.urls", allAddedFiles.keys.toSeq.mkString(","))
       }
     }
 
     if (archives != null) {
-      archives.foreach(file => addFile(file, false, true, isArchive = true))
+      archives.foreach(file => addFile(
+        file,
+        recursive = false,
+        addedOnSubmit = true,
+        isArchive = true,
+        isolated = false))
       if (allAddedArchives.nonEmpty) {
         _conf.set("spark.app.initial.archive.urls", allAddedArchives.keys.toSeq.mkString(","))
       }
@@ -1741,7 +1751,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
   def addFile(path: String): Unit = {
-    addFile(path, false, false)
+    addFile(path, recursive = false, addedOnSubmit = false, isArchive = false, isolated = false)
   }
 
   /**
@@ -1767,7 +1777,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   @Experimental
   def addArchive(path: String): Unit = {
-    addFile(path, false, false, isArchive = true)
+    addFile(path, recursive = false, addedOnSubmit = false, isArchive = true, isolated = false)
   }
 
   /**
@@ -1793,14 +1803,28 @@ class SparkContext(config: SparkConf) extends Logging {
    * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
   def addFile(path: String, recursive: Boolean): Unit = {
-    addFile(path, recursive, false)
+    addFile(path, recursive, addedOnSubmit = false, isArchive = false, isolated = false)
+  }
+
+  private[spark] def addFileIsolated(path: String): Unit = {
+    addFile(path, recursive = false, addedOnSubmit = false, isArchive = false, isolated = true)
+  }
+
+  private[spark] def addArchiveIsolated(path: String): Unit = {
+    addFile(path, recursive = false, addedOnSubmit = false, isArchive = true, isolated = true)
   }
 
   private def addFile(
-      path: String, recursive: Boolean, addedOnSubmit: Boolean, isArchive: Boolean = false
-    ): Unit = {
-    val jobArtifactUUID = JobArtifactSet
-      .getCurrentJobArtifactState.map(_.uuid).getOrElse("default")
+      path: String,
+      recursive: Boolean,
+      addedOnSubmit: Boolean,
+      isArchive: Boolean,
+      isolated: Boolean): Unit = {
+    val jobArtifactUUID = if (isolated) {
+      JobArtifactSet.getCurrentJobArtifactState.map(_.uuid).getOrElse("default")
+    } else {
+      "default"
+    }
     val uri = Utils.resolveURI(path)
     val schemeCorrectedURI = uri.getScheme match {
       case null => new File(path).getCanonicalFile.toURI
@@ -2156,13 +2180,18 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
-  def addJar(path: String): Unit = {
-    addJar(path, false)
+  def addJar(path: String): Unit = addJar(path, addedOnSubmit = false, isolated = false)
+
+  private[spark] def addJarIsolated(path: String): Unit = {
+    addJar(path, addedOnSubmit = false, isolated = true)
   }
 
-  private def addJar(path: String, addedOnSubmit: Boolean): Unit = {
-    val jobArtifactUUID = JobArtifactSet
-      .getCurrentJobArtifactState.map(_.uuid).getOrElse("default")
+  private def addJar(path: String, addedOnSubmit: Boolean, isolated: Boolean): Unit = {
+    val jobArtifactUUID = if (isolated) {
+      JobArtifactSet.getCurrentJobArtifactState.map(_.uuid).getOrElse("default")
+    } else {
+      "default"
+    }
     def addLocalJarFile(file: File): Seq[String] = {
       try {
         if (!file.exists()) {
