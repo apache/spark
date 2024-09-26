@@ -280,6 +280,52 @@ table courseSales
      for `year` in (course, 2013)
    );
 
+-- The PIVOT and UNPIVOT clauses are mutually exclusive.
+table courseSales
+|> select course, earnings
+|> pivot (
+     sum(earnings)
+     for `year` in (2012, 2013)
+   )
+   unpivot (
+     earningsYear for `year` in (`2012`, `2013`, `2014`)
+   );
+
+table courseSales
+|> select course, earnings
+|> unpivot (
+     earningsYear for `year` in (`2012`, `2013`, `2014`)
+   )
+   pivot (
+     sum(earnings)
+     for `year` in (2012, 2013)
+   );
+
+-- Multiple PIVOT and/or UNPIVOT clauses are not supported in the same pipe operator.
+table courseSales
+|> select course, earnings
+|> pivot (
+     sum(earnings)
+     for `year` in (2012, 2013)
+   )
+   pivot (
+     sum(earnings)
+     for `year` in (2012, 2013)
+   );
+
+table courseSales
+|> select course, earnings
+|> unpivot (
+     earningsYear for `year` in (`2012`, `2013`, `2014`)
+   )
+   unpivot (
+     earningsYear for `year` in (`2012`, `2013`, `2014`)
+   )
+   pivot (
+     sum(earnings)
+     for `year` in (2012, 2013)
+   );
+
 -- Cleanup.
 -----------
 drop table t;

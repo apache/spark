@@ -756,6 +756,112 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+table courseSales
+|> select course, earnings
+|> pivot (
+     sum(earnings)
+     for `year` in (2012, 2013)
+   )
+   unpivot (
+     earningsYear for `year` in (`2012`, `2013`, `2014`)
+   )
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "NOT_ALLOWED_IN_FROM.UNPIVOT_WITH_PIVOT",
+  "sqlState" : "42601",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 186,
+    "fragment" : "table courseSales\n|> select course, earnings\n|> pivot (\n     sum(earnings)\n     for `year` in (2012, 2013)\n   )\n   unpivot (\n     earningsYear for `year` in (`2012`, `2013`, `2014`)\n   )"
+  } ]
+}
+
+
+-- !query
+table courseSales
+|> select course, earnings
+|> unpivot (
+     earningsYear for `year` in (`2012`, `2013`, `2014`)
+   )
+   pivot (
+     sum(earnings)
+     for `year` in (2012, 2013)
+   )
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "NOT_ALLOWED_IN_FROM.UNPIVOT_WITH_PIVOT",
+  "sqlState" : "42601",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 186,
+    "fragment" : "table courseSales\n|> select course, earnings\n|> unpivot (\n     earningsYear for `year` in (`2012`, `2013`, `2014`)\n   )\n   pivot (\n     sum(earnings)\n     for `year` in (2012, 2013)\n   )"
+  } ]
+}
+
+
+-- !query
+table courseSales
+|> select course, earnings
+|> pivot (
+     sum(earnings)
+     for `year` in (2012, 2013)
+   )
+   pivot (
+     sum(earnings)
+     for `year` in (2012, 2013)
+   )
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'pivot'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+table courseSales
+|> select course, earnings
+|> unpivot (
+     earningsYear for `year` in (`2012`, `2013`, `2014`)
+   )
+   unpivot (
+     earningsYear for `year` in (`2012`, `2013`, `2014`)
+   )
+   pivot (
+     sum(earnings)
+     for `year` in (2012, 2013)
+   )
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'unpivot'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
 drop table t
 -- !query schema
 struct<>
