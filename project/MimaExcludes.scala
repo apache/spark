@@ -179,6 +179,7 @@ object MimaExcludes {
     // SPARK-49282: Shared SparkSessionBuilder
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.SparkSession$Builder"),
   ) ++ loggingExcludes("org.apache.spark.sql.DataFrameReader") ++
+    loggingExcludes("org.apache.spark.sql.streaming.DataStreamReader") ++
     loggingExcludes("org.apache.spark.sql.SparkSession#Builder")
 
   // Default exclude rules
