@@ -1420,7 +1420,9 @@ case class Reverse(child: Expression)
   group = "array_funcs",
   since = "1.5.0")
 case class ArrayContains(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Predicate
+  extends BinaryExpression
+  with ImplicitCastInputTypes
+  with Predicate
   with QueryErrorsBase {
 
   @transient private lazy val ordering: Ordering[Any] =
@@ -1472,50 +1474,41 @@ case class ArrayContains(left: Expression, right: Expression)
     left.nullable || right.nullable || left.dataType.asInstanceOf[ArrayType].containsNull
   }
 
-  override def nullSafeEval(arr: Any, value: Any): Any = {
-    var hasNull = false
-    arr.asInstanceOf[ArrayData].foreach(right.dataType, (i, v) =>
-      if (v == null) {
-        hasNull = true
-      } else if (ordering.equiv(v, value)) {
+  override def eval(input: InternalRow): Any = {
+    val array = left.eval(input)
+    val value = right.eval(input)
+    array.asInstanceOf[ArrayData].foreach(right.dataType, (_, v) =>
+      if (ordering.equiv(v, value)) {
         return true
       }
     )
-    if (hasNull) {
-      null
-    } else {
-      false
-    }
+    false
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (arr, value) => {
-      val i = ctx.freshName("i")
-      val getValue = CodeGenerator.getValue(arr, right.dataType, i)
-      val loopBodyCode = if (nullable) {
-        s"""
-           |if ($arr.isNullAt($i)) {
-           |   ${ev.isNull} = true;
-           |} else if (${ctx.genEqual(right.dataType, value, getValue)}) {
-           |   ${ev.isNull} = false;
-           |   ${ev.value} = true;
-           |   break;
-           |}
-         """.stripMargin
-      } else {
-        s"""
-           |if (${ctx.genEqual(right.dataType, value, getValue)}) {
-           |  ${ev.value} = true;
-           |  break;
-           |}
-         """.stripMargin
-      }
-      s"""
-         |for (int $i = 0; $i < $arr.numElements(); $i ++) {
-         |  $loopBodyCode
+    val i = ctx.freshName("i")
+    val arrayEval = left.genCode(ctx)
+    val valueEval = right.genCode(ctx)
+    val getValue = CodeGenerator.getValue(arrayEval.value, right.dataType, i)
+    ev.copy(code =
+      code"""
+         |${arrayEval.code}
+         |${valueEval.code}
+         |boolean ${ev.isNull} = false;
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |for (int $i = 0; $i < ${arrayEval.value}.numElements(); $i++) {
+         |  if (${arrayEval.value}.isNullAt($i) && ${valueEval.isNull}) {
+         |    ${ev.value} = true;
+         |    break;
+         |  } else if (!${arrayEval.value}.isNullAt($i) && !${valueEval.isNull}) {
+         |    if (${ctx.genEqual(right.dataType, valueEval.value, getValue)}) {
+         |      ${ev.value} = true;
+         |      break;
+         |    }
+         |  }
          |}
        """.stripMargin
-    })
+    )
   }
 
   override def prettyName: String = "array_contains"

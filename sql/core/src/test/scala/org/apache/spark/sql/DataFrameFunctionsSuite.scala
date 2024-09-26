@@ -1785,6 +1785,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       ),
       queryContext = Array(ExpectedContext("", "", 0, 32, "array_contains('a string', 'foo')"))
     )
+
+    val schema = StructType(Seq(
+      StructField("a", ArrayType(IntegerType, containsNull = true)),
+      StructField("b", IntegerType)))
+    val data = Seq(Row(Seq[Integer](1, 2, 3, null), null))
+    val df1 = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    checkAnswer(df1.select(array_contains(col("a"), col("b"))), Seq(Row(true)))
   }
 
   test("SPARK-29600: ArrayContains function may return incorrect result for DecimalType") {
