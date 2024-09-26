@@ -57,7 +57,8 @@ public class RocksDB implements DB {
       try {
         db.delete(key);
       } catch (RocksDBException e) {
-        throw Throwables.propagate(e);
+        Throwables.throwIfUnchecked(e);
+        throw new RuntimeException(e);
       }
     }
 
