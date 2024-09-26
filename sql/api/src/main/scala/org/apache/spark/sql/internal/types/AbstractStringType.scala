@@ -21,7 +21,7 @@ import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
 
 /**
- * StringTypeCollated is an abstract class for StringType with collation support.
+ * AbstractStringType is an abstract class for StringType with collation support.
  */
 abstract class AbstractStringType extends AbstractDataType {
   override private[sql] def defaultConcreteType: DataType = SqlApiConf.get.defaultStringType
@@ -46,9 +46,9 @@ case object StringTypeBinaryLcase extends AbstractStringType {
 }
 
 /**
- * Use StringTypeAnyCollation for expressions supporting all possible collation types.
+ * Use StringTypeWithCaseAccentSensitivity for expressions supporting all possible collation types.
  */
-case object StringTypeAnyCollation extends AbstractStringType {
+case object StringTypeWithCaseAccentSensitivity extends AbstractStringType {
   override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[StringType]
 }
 

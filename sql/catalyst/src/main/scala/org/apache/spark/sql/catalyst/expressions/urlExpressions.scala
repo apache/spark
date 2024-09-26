@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeWithCaseAccentSensitivity
 import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -59,13 +59,13 @@ case class UrlEncode(child: Expression)
       SQLConf.get.defaultStringType,
       "encode",
       Seq(child),
-      Seq(StringTypeAnyCollation))
+      Seq(StringTypeWithCaseAccentSensitivity))
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(child = newChild)
   }
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCaseAccentSensitivity)
 
   override def prettyName: String = "url_encode"
 }
@@ -98,13 +98,13 @@ case class UrlDecode(child: Expression, failOnError: Boolean = true)
       SQLConf.get.defaultStringType,
       "decode",
       Seq(child, Literal(failOnError)),
-      Seq(StringTypeAnyCollation, BooleanType))
+      Seq(StringTypeWithCaseAccentSensitivity, BooleanType))
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(child = newChild)
   }
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCaseAccentSensitivity)
 
   override def prettyName: String = "url_decode"
 }
@@ -190,7 +190,7 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
   def this(children: Seq[Expression]) = this(children, SQLConf.get.ansiEnabled)
 
   override def nullable: Boolean = true
-  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringTypeAnyCollation)
+  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringTypeWithCaseAccentSensitivity)
   override def dataType: DataType = SQLConf.get.defaultStringType
   override def prettyName: String = "parse_url"
 
