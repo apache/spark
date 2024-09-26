@@ -118,7 +118,10 @@ case class Mode(
         CollationFactory.getCollationKey(data.asInstanceOf[UTF8String], st.collationId)
       case _ =>
         throw new SparkUnsupportedOperationException(
-          "DIVIDE_BY_ZERO"
+          errorClass = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.NO_INPUT",
+          messageParameters = Map(
+            "functionName" -> toSQLType(prettyName),
+            "dataType" -> toSQLType(child.dataType))
         )
     }
   }
