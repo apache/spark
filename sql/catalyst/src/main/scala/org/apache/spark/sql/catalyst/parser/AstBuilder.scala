@@ -5889,7 +5889,9 @@ class AstBuilder extends DataTypeAstBuilder
           SubqueryAlias(SubqueryAlias.generateSubqueryName(), left)
       }
       withWhereClause(c, withSubqueryAlias)
-    }.get)
+    }.getOrElse(Option(ctx.joinRelation()).map { c =>
+      withJoinRelation(c, left)
+    }.get))
   }
 
   /**
