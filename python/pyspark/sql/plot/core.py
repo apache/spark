@@ -17,7 +17,8 @@
 
 from typing import Any, TYPE_CHECKING, Optional, Union
 from types import ModuleType
-from pyspark.errors import PySparkRuntimeError, PySparkValueError
+from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
+from pyspark.sql.types import NumericType
 from pyspark.sql.utils import require_minimum_plotly_version
 
 
@@ -324,4 +325,13 @@ class PySparkPlotAccessor:
         Examples
         --------
         """
+        schema = self.data.schema
+
+        # Check if 'y' is a numerical column
+        y_field = schema[y] if y in schema.names else None
+        if y_field is None or not isinstance(y_field.dataType, NumericType):
+            raise PySparkTypeError(
+                errorClass="PLOT_NOT_NUMERIC_COLUMN",
+                messageParameters={"arg_name": "y", "arg_type": str(y_field.dataType)},
+            )
         return self(kind="pie", x=x, y=y, **kwargs)

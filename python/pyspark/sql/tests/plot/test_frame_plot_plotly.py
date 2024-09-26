@@ -19,6 +19,7 @@ import unittest
 from datetime import datetime
 
 import pyspark.sql.plot  # noqa: F401
+from pyspark.errors import PySparkTypeError
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_plotly, plotly_requirement_message
 
 
@@ -146,7 +147,16 @@ class DataFramePlotPlotlyTestsMixin:
             datetime(2018, 3, 31, 0, 0),
             datetime(2018, 4, 30, 0, 0),
         ]
+        # y is not a numerical column
         self._check_fig_data("pie", fig["data"][0], expected_x, [3, 2, 3, 9])
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.sdf.plot.pie(x="int_val", y="category")
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="PLOT_NOT_NUMERIC_COLUMN",
+            messageParameters={"arg_name": "y", "arg_type": "StringType()"},
+        )
 
 
 class DataFramePlotPlotlyTests(DataFramePlotPlotlyTestsMixin, ReusedSQLTestCase):
