@@ -356,7 +356,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
               execIDRequester -= rpcAddress
               // Expected, executors re-establish a connection with an ID
             case _ =>
-              logDebug(log"No executor found for ${MDC(HOST_PORT, rpcAddress)}")
+              logDebug(s"No executor found for ${rpcAddress}")
           }
       }
     }
