@@ -371,7 +371,10 @@ abstract class BaseSessionStateBuilder(
    * Resource manager that handles the storage of artifacts as well as preparing the artifacts for
    * use.
    */
-  protected def artifactManager: ArtifactManager = new ArtifactManager(session)
+  protected def artifactManager: ArtifactManager = {
+    // TODO(paddy): refactor ArtifactManager to separate child from parent session.
+    parentState.map(_.artifactManager).getOrElse(new ArtifactManager(session))
+  }
 
   /**
    * Function used to make clones of the session state.
