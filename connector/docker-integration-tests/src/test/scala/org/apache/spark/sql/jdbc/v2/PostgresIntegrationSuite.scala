@@ -145,6 +145,21 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       assert(df.collect().toSet === expectedResult)
     }
 
+    testFilterPushdown("millenium", "2001-01-01 00:00:00.0",
+      Set(
+        Row(1, Timestamp.valueOf("2024-01-01 01:01:01.0")),
+        Row(2, Timestamp.valueOf("2024-02-02 02:02:02.0"))
+      ))
+    testFilterPushdown("century", "2001-01-01 00:00:00.0",
+      Set(
+        Row(1, Timestamp.valueOf("2024-01-01 01:01:01.0")),
+        Row(2, Timestamp.valueOf("2024-02-02 02:02:02.0"))
+      ))
+    testFilterPushdown("decade", "2020-01-01 00:00:00.0",
+      Set(
+        Row(1, Timestamp.valueOf("2024-01-01 01:01:01.0")),
+        Row(2, Timestamp.valueOf("2024-02-02 02:02:02.0"))
+      ))
     testFilterPushdown("YEAR", "2024-01-01 00:00:00.0",
       Set(
         Row(1, Timestamp.valueOf("2024-01-01 01:01:01.0")),

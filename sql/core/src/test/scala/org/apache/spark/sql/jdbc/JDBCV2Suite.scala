@@ -1675,6 +1675,57 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       "PushedFilters: [(DATE_TRUNC('MicroseconD', TIME1)) = 1725560625000000]"
     checkPushedInfo(df9, expectedPlanFragment9)
     checkAnswer(df9, Seq(Row("adam")))
+
+    val df10 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "DATE_TRUNC('MicroSecondS', time1) = timestamp'2024-09-05 11:23:45.000000'")
+    checkFiltersRemoved(df10)
+    val expectedPlanFragment10 =
+      "PushedFilters: [(DATE_TRUNC('MicroSecondS', TIME1)) = 1725560625000000]"
+    checkPushedInfo(df10, expectedPlanFragment10)
+    checkAnswer(df10, Seq(Row("adam")))
+
+    val df11 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "DATE_TRUNC('MILLENNIUM', time1) = timestamp'2001-01-01 00:00:00.000000'")
+    checkFiltersRemoved(df11)
+    val expectedPlanFragment11 =
+      "PushedFilters: [(DATE_TRUNC('MILLENNIUM', TIME1)) = 978336000000000]"
+    checkPushedInfo(df11, expectedPlanFragment11)
+    checkAnswer(df11, Seq(Row("adam"), Row("alex"), Row("amy")))
+
+    val df12 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "DATE_TRUNC('Century', time1) = timestamp'2001-01-01 00:00:00.000000'")
+    checkFiltersRemoved(df12)
+    val expectedPlanFragment12 =
+      "PushedFilters: [(DATE_TRUNC('Century', TIME1)) = 978336000000000]"
+    checkPushedInfo(df12, expectedPlanFragment12)
+    checkAnswer(df12, Seq(Row("adam"), Row("alex"), Row("amy")))
+
+    val df13 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "DATE_TRUNC('DECADE', time1) = timestamp'2020-01-01 00:00:00.000000'")
+    checkFiltersRemoved(df13)
+    val expectedPlanFragment13 =
+      "PushedFilters: [(DATE_TRUNC('DECADE', TIME1)) = 1577865600000000]"
+    checkPushedInfo(df13, expectedPlanFragment13)
+    checkAnswer(df13, Seq(Row("adam"), Row("alex"), Row("amy")))
+
+    val df14 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "DATE_TRUNC('week', time1) = timestamp'2024-09-01 00:00:00.0'")
+    checkFiltersRemoved(df14)
+    val expectedPlanFragment14 =
+      "PushedFilters: [(DATE_TRUNC('week', TIME1)) = 1725174000000000]"
+    checkPushedInfo(df14, expectedPlanFragment14)
+    checkAnswer(df14, Seq(Row("adam")))
+
+    val e = intercept[SparkException] {
+      checkAnswer(
+        sql("SELECT name FROM h2.test.datetime WHERE " +
+        "DATE_TRUNC('invalid time unit', time1) = timestamp'2024-09-01 00:00:00.0'"),
+        Seq.empty
+      )
+    }
+    assert(e.getMessage.contains(
+      "Invalid value \"invalid time unit\" for parameter \"date-time field\"")
+    )
   }
 
   test("scan with filter push-down with misc functions") {
