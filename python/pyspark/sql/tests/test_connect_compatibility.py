@@ -18,6 +18,7 @@
 import unittest
 import inspect
 
+from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.sql.classic.dataframe import DataFrame as ClassicDataFrame
 from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
@@ -172,6 +173,7 @@ class ConnectCompatibilityTestsMixin:
         )
 
 
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ConnectCompatibilityTests(ConnectCompatibilityTestsMixin, ReusedSQLTestCase):
     pass
 

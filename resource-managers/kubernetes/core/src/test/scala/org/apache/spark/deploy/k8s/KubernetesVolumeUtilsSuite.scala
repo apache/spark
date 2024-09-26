@@ -30,7 +30,20 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     assert(volumeSpec.mountPath === "/path")
     assert(volumeSpec.mountReadOnly)
     assert(volumeSpec.volumeConf.asInstanceOf[KubernetesHostPathVolumeConf] ===
-      KubernetesHostPathVolumeConf("/hostPath"))
+      KubernetesHostPathVolumeConf("/hostPath", ""))
+  }
+
+  test("Parses hostPath volume type correctly") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("test.hostPath.volumeName.mount.path", "/path")
+    sparkConf.set("test.hostPath.volumeName.options.path", "/hostPath")
+    sparkConf.set("test.hostPath.volumeName.options.type", "Type")
+
+    val volumeSpec = KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head
+    assert(volumeSpec.volumeName === "volumeName")
+    assert(volumeSpec.mountPath === "/path")
+    assert(volumeSpec.volumeConf.asInstanceOf[KubernetesHostPathVolumeConf] ===
+      KubernetesHostPathVolumeConf("/hostPath", "Type"))
   }
 
   test("Parses subPath correctly") {
@@ -43,6 +56,33 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     assert(volumeSpec.volumeName === "volumeName")
     assert(volumeSpec.mountPath === "/path")
     assert(volumeSpec.mountSubPath === "subPath")
+    assert(volumeSpec.mountSubPathExpr === "")
+  }
+
+  test("Parses subPathExpr correctly") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("test.emptyDir.volumeName.mount.path", "/path")
+    sparkConf.set("test.emptyDir.volumeName.mount.readOnly", "true")
+    sparkConf.set("test.emptyDir.volumeName.mount.subPathExpr", "subPathExpr")
+
+    val volumeSpec = KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head
+    assert(volumeSpec.volumeName === "volumeName")
+    assert(volumeSpec.mountPath === "/path")
+    assert(volumeSpec.mountSubPath === "")
+    assert(volumeSpec.mountSubPathExpr === "subPathExpr")
+  }
+
+  test("Rejects mutually exclusive subPath and subPathExpr") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("test.emptyDir.volumeName.mount.path", "/path")
+    sparkConf.set("test.emptyDir.volumeName.mount.subPath", "subPath")
+    sparkConf.set("test.emptyDir.volumeName.mount.subPathExpr", "subPathExpr")
+
+    val msg = intercept[IllegalArgumentException] {
+      KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head
+    }.getMessage
+    assert(msg === "These config options are mutually exclusive: " +
+      "emptyDir.volumeName.mount.subPath, emptyDir.volumeName.mount.subPathExpr")
   }
 
   test("Parses persistentVolumeClaim volumes correctly") {

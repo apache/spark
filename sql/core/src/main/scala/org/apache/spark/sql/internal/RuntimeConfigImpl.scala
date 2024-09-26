@@ -84,7 +84,7 @@ class RuntimeConfigImpl private[sql](val sqlConf: SQLConf = new SQLConf) extends
     sqlConf.contains(key)
   }
 
-  private def requireNonStaticConf(key: String): Unit = {
+  private[sql] def requireNonStaticConf(key: String): Unit = {
     if (SQLConf.isStaticConfigKey(key)) {
       throw QueryCompilationErrors.cannotModifyValueOfStaticConfigError(key)
     }

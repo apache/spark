@@ -170,7 +170,7 @@
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
     <commons.collections4.version>4.4</commons.collections4.version>
-    <scala.version>2.13.14</scala.version>
+    <scala.version>2.13.15</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
     <scala-maven-plugin.version>4.9.1</scala-maven-plugin.version>
@@ -227,7 +227,7 @@
     and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>17.0.0</arrow.version>
-    <ammonite.version>3.0.0-M2</ammonite.version>
+    <ammonite.version>3.0.0</ammonite.version>
     <jjwt.version>0.12.6</jjwt.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
@@ -3052,7 +3052,8 @@
               <arg>-explaintypes</arg>
               <arg>-release</arg>
               <arg>17</arg>
-              <arg>-Wconf:cat=deprecation:wv,any:e</arg>
+              <arg>-Wconf:any:e</arg>
+              <arg>-Wconf:cat=deprecation:wv</arg>
               <arg>-Wunused:imports</arg>
               <arg>-Wconf:cat=scaladoc:wv</arg>
               <arg>-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:e</arg>

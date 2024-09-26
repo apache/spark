@@ -411,6 +411,110 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(nvl2(col("b"), col("a"), col("c"))), Seq(Row(null)))
   }
 
+  test("randstr function") {
+    withTable("t") {
+      sql("create table t(col int not null) using csv")
+      sql("insert into t values (0)")
+      val df = sql("select col from t")
+      checkAnswer(
+        df.select(randstr(lit(5), lit(0)).alias("x")).select(length(col("x"))),
+        Seq(Row(5)))
+      // The random seed is optional.
+      checkAnswer(
+        df.select(randstr(lit(5)).alias("x")).select(length(col("x"))),
+        Seq(Row(5)))
+    }
+    // Here we exercise some error cases.
+    val df = Seq((0)).toDF("a")
+    var expr = randstr(lit(10), lit("a"))
+    checkError(
+      intercept[AnalysisException](df.select(expr)),
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"randstr(10, a)\"",
+        "paramIndex" -> "second",
+        "inputSql" -> "\"a\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "INT or SMALLINT"),
+      context = ExpectedContext(
+        contextType = QueryContextType.DataFrame,
+        fragment = "randstr",
+        objectType = "",
+        objectName = "",
+        callSitePattern = "",
+        startIndex = 0,
+        stopIndex = 0))
+    expr = randstr(col("a"), lit(10))
+    checkError(
+      intercept[AnalysisException](df.select(expr)),
+      condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      parameters = Map(
+        "inputName" -> "length",
+        "inputType" -> "INT or SMALLINT",
+        "inputExpr" -> "\"a\"",
+        "sqlExpr" -> "\"randstr(a, 10)\""),
+      context = ExpectedContext(
+        contextType = QueryContextType.DataFrame,
+        fragment = "randstr",
+        objectType = "",
+        objectName = "",
+        callSitePattern = "",
+        startIndex = 0,
+        stopIndex = 0))
+  }
+
+  test("uniform function") {
+    withTable("t") {
+      sql("create table t(col int not null) using csv")
+      sql("insert into t values (0)")
+      val df = sql("select col from t")
+      checkAnswer(
+        df.select(uniform(lit(10), lit(20), lit(0)).alias("x")).selectExpr("x > 5"),
+        Seq(Row(true)))
+      // The random seed is optional.
+      checkAnswer(
+        df.select(uniform(lit(10), lit(20)).alias("x")).selectExpr("x > 5"),
+        Seq(Row(true)))
+    }
+    // Here we exercise some error cases.
+    val df = Seq((0)).toDF("a")
+    var expr = uniform(lit(10), lit("a"))
+    checkError(
+      intercept[AnalysisException](df.select(expr)),
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"uniform(10, a)\"",
+        "paramIndex" -> "second",
+        "inputSql" -> "\"a\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "integer or floating-point"),
+      context = ExpectedContext(
+        contextType = QueryContextType.DataFrame,
+        fragment = "uniform",
+        objectType = "",
+        objectName = "",
+        callSitePattern = "",
+        startIndex = 0,
+        stopIndex = 0))
+    expr = uniform(col("a"), lit(10))
+    checkError(
+      intercept[AnalysisException](df.select(expr)),
+      condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      parameters = Map(
+        "inputName" -> "min",
+        "inputType" -> "integer or floating-point",
+        "inputExpr" -> "\"a\"",
+        "sqlExpr" -> "\"uniform(a, 10)\""),
+      context = ExpectedContext(
+        contextType = QueryContextType.DataFrame,
+        fragment = "uniform",
+        objectType = "",
+        objectName = "",
+        callSitePattern = "",
+        startIndex = 0,
+        stopIndex = 0))
+  }
+
   test("zeroifnull function") {
     withTable("t") {
       // Here we exercise a non-nullable, non-foldable column.

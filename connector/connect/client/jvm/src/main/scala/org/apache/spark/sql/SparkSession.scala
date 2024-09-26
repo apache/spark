@@ -540,7 +540,7 @@ class SparkSession private[sql] (
 
 // The minimal builder needed to create a spark session.
 // TODO: implements all methods mentioned in the scaladoc of [[SparkSession]]
-object SparkSession extends Logging {
+object SparkSession extends api.SparkSessionCompanion with Logging {
   private val MAX_CACHED_SESSIONS = 100
   private val planIdGenerator = new AtomicLong
   private var server: Option[Process] = None
@@ -649,15 +649,15 @@ object SparkSession extends Logging {
    */
   def builder(): Builder = new Builder()
 
-  class Builder() extends Logging {
+  class Builder() extends api.SparkSessionBuilder {
     // Initialize the connection string of the Spark Connect client builder from SPARK_REMOTE
     // by default, if it exists. The connection string can be overridden using
     // the remote() function, as it takes precedence over the SPARK_REMOTE environment variable.
     private val builder = SparkConnectClient.builder().loadFromEnvironment()
     private var client: SparkConnectClient = _
-    private[this] val options = new scala.collection.mutable.HashMap[String, String]
 
-    def remote(connectionString: String): Builder = {
+    /** @inheritdoc */
+    def remote(connectionString: String): this.type = {
       builder.connectionString(connectionString)
       this
     }
@@ -669,93 +669,45 @@ object SparkSession extends Logging {
      *
      * @since 3.5.0
      */
-    def interceptor(interceptor: ClientInterceptor): Builder = {
+    def interceptor(interceptor: ClientInterceptor): this.type = {
       builder.interceptor(interceptor)
       this
     }
 
-    private[sql] def client(client: SparkConnectClient): Builder = {
+    private[sql] def client(client: SparkConnectClient): this.type = {
       this.client = client
       this
     }
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to the
-     * Spark Connect session. Only runtime options are supported.
-     *
-     * @since 3.5.0
-     */
-    def config(key: String, value: String): Builder = synchronized {
-      options += key -> value
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: String): this.type = super.config(key, value)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to the
-     * Spark Connect session. Only runtime options are supported.
-     *
-     * @since 3.5.0
-     */
-    def config(key: String, value: Long): Builder = synchronized {
-      options += key -> value.toString
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: Long): this.type = super.config(key, value)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to the
-     * Spark Connect session. Only runtime options are supported.
-     *
-     * @since 3.5.0
-     */
-    def config(key: String, value: Double): Builder = synchronized {
-      options += key -> value.toString
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: Double): this.type = super.config(key, value)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to the
-     * Spark Connect session. Only runtime options are supported.
-     *
-     * @since 3.5.0
-     */
-    def config(key: String, value: Boolean): Builder = synchronized {
-      options += key -> value.toString
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: Boolean): this.type = super.config(key, value)
 
-    /**
-     * Sets a config a map of options. Options set using this method are automatically propagated
-     * to the Spark Connect session. Only runtime options are supported.
-     *
-     * @since 3.5.0
-     */
-    def config(map: Map[String, Any]): Builder = synchronized {
-      map.foreach { kv: (String, Any) =>
-        {
-          options += kv._1 -> kv._2.toString
-        }
-      }
-      this
-    }
+    /** @inheritdoc */
+    override def config(map: Map[String, Any]): this.type = super.config(map)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to both
-     * `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 3.5.0
-     */
-    def config(map: java.util.Map[String, Any]): Builder = synchronized {
-      config(map.asScala.toMap)
-    }
+    /** @inheritdoc */
+    override def config(map: java.util.Map[String, Any]): this.type = super.config(map)
 
+    /** @inheritdoc */
     @deprecated("enableHiveSupport does not work in Spark Connect")
-    def enableHiveSupport(): Builder = this
+    override def enableHiveSupport(): this.type = this
 
+    /** @inheritdoc */
     @deprecated("master does not work in Spark Connect, please use remote instead")
-    def master(master: String): Builder = this
+    override def master(master: String): this.type = this
 
+    /** @inheritdoc */
     @deprecated("appName does not work in Spark Connect")
-    def appName(name: String): Builder = this
+    override def appName(name: String): this.type = this
 
     private def tryCreateSessionFromClient(): Option[SparkSession] = {
       if (client != null && client.isSessionValid) {
