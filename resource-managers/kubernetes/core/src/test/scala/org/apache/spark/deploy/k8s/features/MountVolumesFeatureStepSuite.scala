@@ -27,8 +27,9 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "testVolume",
       "/tmp",
       "",
+      "",
       false,
-      KubernetesHostPathVolumeConf("/hostPath/tmp")
+      KubernetesHostPathVolumeConf("/hostPath/tmp", "type")
     )
     val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
     val step = new MountVolumesFeatureStep(kubernetesConf)
@@ -36,6 +37,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
 
     assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
     assert(configuredPod.pod.getSpec.getVolumes.get(0).getHostPath.getPath === "/hostPath/tmp")
+    assert(configuredPod.pod.getSpec.getVolumes.get(0).getHostPath.getType === "type")
     assert(configuredPod.container.getVolumeMounts.size() === 1)
     assert(configuredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
     assert(configuredPod.container.getVolumeMounts.get(0).getName === "testVolume")
@@ -46,6 +48,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     val volumeConf = KubernetesVolumeSpec(
       "testVolume",
       "/tmp",
+      "",
       "",
       true,
       KubernetesPVCVolumeConf("pvcClaim")
@@ -68,6 +71,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     val volumeConf = KubernetesVolumeSpec(
       "testVolume",
       "/tmp",
+      "",
       "",
       true,
       KubernetesPVCVolumeConf("pvc-spark-SPARK_EXECUTOR_ID")
@@ -94,6 +98,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "testVolume",
       "/tmp",
       "",
+      "",
       true,
       KubernetesPVCVolumeConf("pvc-spark-SPARK_EXECUTOR_ID", Some("fast"), Some("512M"))
     )
@@ -119,6 +124,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "testVolume",
       "/tmp",
       "",
+      "",
       true,
       KubernetesPVCVolumeConf("OnDemand")
     )
@@ -135,6 +141,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     val volumeConf = KubernetesVolumeSpec(
       "testVolume",
       "/tmp",
+      "",
       "",
       true,
       KubernetesPVCVolumeConf(claimName = MountVolumesFeatureStep.PVC_ON_DEMAND,
@@ -155,6 +162,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     val volumeConf = KubernetesVolumeSpec(
       "testVolume",
       "/tmp",
+      "",
       "",
       true,
       KubernetesPVCVolumeConf(claimName = MountVolumesFeatureStep.PVC_ON_DEMAND,
@@ -177,6 +185,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "checkpointVolume1",
       "/checkpoints1",
       "",
+      "",
       true,
       KubernetesPVCVolumeConf(claimName = "pvcClaim1",
         storageClass = Some("gp3"),
@@ -187,6 +196,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     val pvcVolumeConf2 = KubernetesVolumeSpec(
       "checkpointVolume2",
       "/checkpoints2",
+      "",
       "",
       true,
       KubernetesPVCVolumeConf(claimName = "pvcClaim2",
@@ -209,6 +219,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "testVolume",
       "/tmp",
       "",
+      "",
       true,
       KubernetesPVCVolumeConf(MountVolumesFeatureStep.PVC_ON_DEMAND)
     )
@@ -225,6 +236,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     val volumeConf = KubernetesVolumeSpec(
       "testVolume",
       "/tmp",
+      "",
       "",
       false,
       KubernetesEmptyDirVolumeConf(Some("Memory"), Some("6G"))
@@ -249,6 +261,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "testVolume",
       "/tmp",
       "",
+      "",
       false,
       KubernetesEmptyDirVolumeConf(None, None)
     )
@@ -270,6 +283,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     val volumeConf = KubernetesVolumeSpec(
       "testVolume",
       "/tmp",
+      "",
       "",
       false,
       KubernetesNFSVolumeConf("/share/name", "nfs.example.com")
@@ -293,6 +307,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "testVolume",
       "/tmp",
       "",
+      "",
       true,
       KubernetesNFSVolumeConf("/share/name", "nfs.example.com")
     )
@@ -315,12 +330,14 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "hpVolume",
       "/tmp",
       "",
+      "",
       false,
-      KubernetesHostPathVolumeConf("/hostPath/tmp")
+      KubernetesHostPathVolumeConf("/hostPath/tmp", "")
     )
     val pvcVolumeConf = KubernetesVolumeSpec(
       "checkpointVolume",
       "/checkpoints",
+      "",
       "",
       true,
       KubernetesPVCVolumeConf("pvcClaim")
@@ -339,12 +356,14 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "hpVolume",
       "/data",
       "",
+      "",
       false,
-      KubernetesHostPathVolumeConf("/hostPath/tmp")
+      KubernetesHostPathVolumeConf("/hostPath/tmp", "")
     )
     val pvcVolumeConf = KubernetesVolumeSpec(
       "checkpointVolume",
       "/data",
+      "",
       "",
       true,
       KubernetesPVCVolumeConf("pvcClaim")
@@ -364,6 +383,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "testVolume",
       "/tmp",
       "foo",
+      "",
       false,
       KubernetesEmptyDirVolumeConf(None, None)
     )
@@ -378,11 +398,32 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(emptyDirMount.getSubPath === "foo")
   }
 
+  test("Mounts subpathexpr on emptyDir") {
+    val volumeConf = KubernetesVolumeSpec(
+      "testVolume",
+      "/tmp",
+      "",
+      "foo",
+      false,
+      KubernetesEmptyDirVolumeConf(None, None)
+    )
+    val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
+    val step = new MountVolumesFeatureStep(kubernetesConf)
+    val configuredPod = step.configurePod(SparkPod.initialPod())
+
+    assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
+    val emptyDirMount = configuredPod.container.getVolumeMounts.get(0)
+    assert(emptyDirMount.getMountPath === "/tmp")
+    assert(emptyDirMount.getName === "testVolume")
+    assert(emptyDirMount.getSubPathExpr === "foo")
+  }
+
   test("Mounts subpath on persistentVolumeClaims") {
     val volumeConf = KubernetesVolumeSpec(
       "testVolume",
       "/tmp",
       "bar",
+      "",
       true,
       KubernetesPVCVolumeConf("pvcClaim")
     )
@@ -400,12 +441,36 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(pvcMount.getSubPath === "bar")
   }
 
+  test("Mounts subpathexpr on persistentVolumeClaims") {
+    val volumeConf = KubernetesVolumeSpec(
+      "testVolume",
+      "/tmp",
+      "",
+      "bar",
+      true,
+      KubernetesPVCVolumeConf("pvcClaim")
+    )
+    val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
+    val step = new MountVolumesFeatureStep(kubernetesConf)
+    val configuredPod = step.configurePod(SparkPod.initialPod())
+
+    assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
+    val pvcClaim = configuredPod.pod.getSpec.getVolumes.get(0).getPersistentVolumeClaim
+    assert(pvcClaim.getClaimName === "pvcClaim")
+    assert(configuredPod.container.getVolumeMounts.size() === 1)
+    val pvcMount = configuredPod.container.getVolumeMounts.get(0)
+    assert(pvcMount.getMountPath === "/tmp")
+    assert(pvcMount.getName === "testVolume")
+    assert(pvcMount.getSubPathExpr === "bar")
+  }
+
   test("Mounts multiple subpaths") {
     val volumeConf = KubernetesEmptyDirVolumeConf(None, None)
     val emptyDirSpec = KubernetesVolumeSpec(
       "testEmptyDir",
       "/tmp/foo",
       "foo",
+      "",
       true,
       KubernetesEmptyDirVolumeConf(None, None)
     )
@@ -413,6 +478,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "testPVC",
       "/tmp/bar",
       "bar",
+      "",
       true,
       KubernetesEmptyDirVolumeConf(None, None)
     )

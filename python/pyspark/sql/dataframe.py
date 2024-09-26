@@ -3351,7 +3351,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def filter(self, condition: "ColumnOrName") -> "DataFrame":
+    def filter(self, condition: Union[Column, str]) -> "DataFrame":
         """Filters rows using the given condition.
 
         :func:`where` is an alias for :func:`filter`.
@@ -5902,7 +5902,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def where(self, condition: "ColumnOrName") -> "DataFrame":
+    def where(self, condition: Union[Column, str]) -> "DataFrame":
         """
         :func:`where` is an alias for :func:`filter`.
 
