@@ -26,6 +26,7 @@ import org.apache.arrow.memory.RootAllocator
 import org.apache.commons.lang3.SystemUtils
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.agnosticEncoderFor
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.arrow.{ArrowDeserializers, ArrowSerializer}
 import org.apache.spark.sql.test.ConnectFunSuite
@@ -55,7 +56,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     import org.apache.spark.util.ArrayImplicits._
     import spark.implicits._
     def testImplicit[T: Encoder](expected: T): Unit = {
-      val encoder = encoderFor[T]
+      val encoder = agnosticEncoderFor[T]
       val allocator = new RootAllocator()
       try {
         val batch = ArrowSerializer.serialize(
