@@ -26,8 +26,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
-import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.MDC
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 private[sql] class RocksDBStateStoreProvider
-  extends StateStoreProvider with Logging with Closeable
+  extends StateStoreProvider with StateStoreThreadAwareLogging with Closeable
   with SupportsFineGrainedReplay {
   import RocksDBStateStoreProvider._
 

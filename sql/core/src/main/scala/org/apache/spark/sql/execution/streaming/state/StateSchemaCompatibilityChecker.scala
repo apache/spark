@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StatefulOperatorStateInfo}
 import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaReader, SchemaWriter}
@@ -50,7 +50,7 @@ class StateSchemaCompatibilityChecker(
     providerId: StateStoreProviderId,
     hadoopConf: Configuration,
     oldSchemaFilePath: Option[Path] = None,
-    newSchemaFilePath: Option[Path] = None) extends Logging {
+    newSchemaFilePath: Option[Path] = None) extends StateStoreThreadAwareLogging {
 
   private val schemaFileLocation = if (oldSchemaFilePath.isEmpty) {
     val storeCpLocation = providerId.storeId.storeCheckpointLocation()

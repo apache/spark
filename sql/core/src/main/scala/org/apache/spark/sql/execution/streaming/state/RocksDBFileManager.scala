@@ -38,7 +38,7 @@ import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkConf, SparkEnv}
-import org.apache.spark.internal.{Logging, LogKeys, MDC, MessageWithContext}
+import org.apache.spark.internal.{LogKeys, MDC, MessageWithContext}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
@@ -129,7 +129,7 @@ class RocksDBFileManager(
     hadoopConf: Configuration,
     codecName: String = CompressionCodec.ZSTD,
     loggingId: String = "")
-  extends Logging {
+  extends StateStoreThreadAwareLogging {
 
   import RocksDBImmutableFile._
 

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GenerateUnsafeRowJoiner}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -62,7 +61,7 @@ sealed trait StreamingAggregationStateManager extends Serializable {
   def values(store: ReadStateStore): Iterator[UnsafeRow]
 }
 
-object StreamingAggregationStateManager extends Logging {
+object StreamingAggregationStateManager extends StateStoreThreadAwareLogging {
   val supportedVersions = Seq(1, 2)
   val legacyVersion = 1
 

@@ -22,7 +22,6 @@ import java.util.UUID
 import scala.collection.mutable
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.util.RpcUtils
@@ -59,7 +58,7 @@ private object StopCoordinator
   extends StateStoreCoordinatorMessage
 
 /** Helper object used to create reference to [[StateStoreCoordinator]]. */
-object StateStoreCoordinatorRef extends Logging {
+object StateStoreCoordinatorRef extends StateStoreThreadAwareLogging {
 
   private val endpointName = "StateStoreCoordinator"
 
@@ -130,7 +129,7 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
  * and get their locations for job scheduling.
  */
 private class StateStoreCoordinator(override val rpcEnv: RpcEnv)
-    extends ThreadSafeRpcEndpoint with Logging {
+    extends ThreadSafeRpcEndpoint with StateStoreThreadAwareLogging {
   private val instances = new mutable.HashMap[StateStoreProviderId, ExecutorCacheTaskLocation]
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {

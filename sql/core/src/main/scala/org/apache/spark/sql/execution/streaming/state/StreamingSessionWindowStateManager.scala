@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -128,7 +128,7 @@ class StreamingSessionWindowStateManagerImplV1(
     keyWithoutSessionExpressions: Seq[Attribute],
     sessionExpression: Attribute,
     valueAttributes: Seq[Attribute])
-  extends StreamingSessionWindowStateManager with Logging {
+  extends StreamingSessionWindowStateManager with StateStoreThreadAwareLogging {
 
   private val stateKeyStructType = keyWithoutSessionExpressions.toStructType
     .add("sessionStartTime", TimestampType, nullable = false)
