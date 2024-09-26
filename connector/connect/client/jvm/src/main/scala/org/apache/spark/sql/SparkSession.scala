@@ -209,15 +209,7 @@ class SparkSession private[sql] (
   /** @inheritdoc */
   def read: DataFrameReader = new DataFrameReader(this)
 
-  /**
-   * Returns a `DataStreamReader` that can be used to read streaming data in as a `DataFrame`.
-   * {{{
-   *   sparkSession.readStream.parquet("/path/to/directory/of/parquet/files")
-   *   sparkSession.readStream.schema(schema).json("/path/to/directory/of/json/files")
-   * }}}
-   *
-   * @since 3.5.0
-   */
+  /** @inheritdoc */
   def readStream: DataStreamReader = new DataStreamReader(this)
 
   /** @inheritdoc */
