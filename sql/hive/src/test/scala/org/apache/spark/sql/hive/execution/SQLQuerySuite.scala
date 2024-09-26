@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.{Locale, Set}
 
-import com.google.common.io.Files
+import com.google.common.io.{Files, FileWriteMode}
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkException, TestUtils}
@@ -2039,7 +2039,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     withTempDir { dir =>
       val path = dir.toURI.toString.stripSuffix("/")
       val dirPath = dir.getAbsoluteFile
-      Files.append("1", new File(dirPath, "part-r-000011"), StandardCharsets.UTF_8)
+      Files.asCharSink(
+        new File(dirPath, "part-r-000011"), StandardCharsets.UTF_8, FileWriteMode.APPEND).write("1")
       withTable("part_table") {
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
           sql(
