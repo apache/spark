@@ -17,7 +17,6 @@
 
 import unittest
 
-from mpmath.rational import mpq_3_2
 from pyspark.sql import Row
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
