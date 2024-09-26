@@ -1787,7 +1787,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def inputFiles(self) -> List[str]:
         return list(self._jdf.inputFiles())
 
-    def where(self, condition: "ColumnOrName") -> ParentDataFrame:
+    def where(self, condition: Union[Column, str]) -> ParentDataFrame:
         return self.filter(condition)
 
     # Two aliases below were added for pandas compatibility many years ago.
