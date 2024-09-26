@@ -66,7 +66,7 @@ abstract class StreamingQueryManager {
    * all of them after any of them terminates with exception, and then check the
    * `query.exception()` for each query.
    *
-   * @throws StreamingQueryException
+   * @throws org.apache.spark.sql.streaming.StreamingQueryException
    *   if any query has terminated with an exception
    * @since 2.0.0
    */
@@ -90,7 +90,7 @@ abstract class StreamingQueryManager {
    * all of them after any of them terminates with exception, and then check the
    * `query.exception()` for each query.
    *
-   * @throws StreamingQueryException
+   * @throws org.apache.spark.sql.streaming.StreamingQueryException
    *   if any query has terminated with an exception
    * @since 2.0.0
    */
