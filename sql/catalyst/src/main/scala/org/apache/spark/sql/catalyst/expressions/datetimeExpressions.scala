@@ -961,7 +961,8 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
 
   override def dataType: DataType = SQLConf.get.defaultStringType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringTypeWithCaseAccentSensitivity)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TimestampType, StringTypeWithCaseAccentSensitivity)
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
@@ -1270,8 +1271,8 @@ abstract class ToTimestamp
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(
-        StringTypeWithCaseAccentSensitivity, DateType, TimestampType, TimestampNTZType
-      ),
+      StringTypeWithCaseAccentSensitivity, DateType, TimestampType, TimestampNTZType
+    ),
       StringTypeWithCaseAccentSensitivity)
 
   override def dataType: DataType = LongType
@@ -2105,8 +2106,9 @@ case class ParseToDate(
   override def inputTypes: Seq[AbstractDataType] = {
     // Note: ideally this function should only take string input, but we allow more types here to
     // be backward compatible.
-    TypeCollection(StringTypeWithCaseAccentSensitivity, DateType, TimestampType, TimestampNTZType) +:
-    format.map(_ => StringTypeWithCaseAccentSensitivity).toSeq
+    TypeCollection(
+      StringTypeWithCaseAccentSensitivity, DateType, TimestampType, TimestampNTZType) +:
+      format.map(_ => StringTypeWithCaseAccentSensitivity).toSeq
   }
 
   override protected def withNewChildrenInternal(

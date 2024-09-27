@@ -1094,8 +1094,10 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
 
     // Invalid casts involving casting arrays of arrays into arrays of non-complex types.
     shouldNotCast(ArrayType(ArrayType(IntegerType)), AbstractArrayType(IntegerType))
-    shouldNotCast(ArrayType(ArrayType(StringType)), AbstractArrayType(StringTypeWithCaseAccentSensitivity))
+    shouldNotCast(ArrayType(ArrayType(StringType)),
+      AbstractArrayType(StringTypeWithCaseAccentSensitivity))
     shouldNotCast(ArrayType(ArrayType(StringType)), AbstractArrayType(IntegerType))
-    shouldNotCast(ArrayType(ArrayType(IntegerType)), AbstractArrayType(StringTypeWithCaseAccentSensitivity))
+    shouldNotCast(ArrayType(ArrayType(IntegerType)),
+      AbstractArrayType(StringTypeWithCaseAccentSensitivity))
   }
 }

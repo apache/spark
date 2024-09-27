@@ -1244,7 +1244,8 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = srcStr +: trimStr.toSeq
   override def dataType: DataType = srcStr.dataType
-  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringTypeWithCaseAccentSensitivity)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq.fill(children.size)(StringTypeWithCaseAccentSensitivity)
 
   final lazy val collationId: Int = srcStr.dataType.asInstanceOf[StringType].collationId
 
@@ -3113,7 +3114,8 @@ case class ToBinary(
 
   override def children: Seq[Expression] = expr +: format.toSeq
 
-  override def inputTypes: Seq[AbstractDataType] = children.map(_ => StringTypeWithCaseAccentSensitivity)
+  override def inputTypes: Seq[AbstractDataType] =
+    children.map(_ => StringTypeWithCaseAccentSensitivity)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     def isValidFormat: Boolean = {
@@ -3129,7 +3131,8 @@ case class ToBinary(
               errorSubClass = "INVALID_ARG_VALUE",
               messageParameters = Map(
                 "inputName" -> "fmt",
-                "requireType" -> s"case-insensitive ${toSQLType(StringTypeWithCaseAccentSensitivity)}",
+                "requireType" ->
+                  s"case-insensitive ${toSQLType(StringTypeWithCaseAccentSensitivity)}",
                 "validValues" -> "'hex', 'utf-8', 'utf8', or 'base64'",
                 "inputValue" -> toSQLValue(fmt, f.dataType)
               )
@@ -3149,7 +3152,8 @@ case class ToBinary(
             errorSubClass = "INVALID_ARG_VALUE",
             messageParameters = Map(
               "inputName" -> "fmt",
-              "requireType" -> s"case-insensitive ${toSQLType(StringTypeWithCaseAccentSensitivity)}",
+              "requireType" ->
+                s"case-insensitive ${toSQLType(StringTypeWithCaseAccentSensitivity)}",
               "validValues" -> "'hex', 'utf-8', 'utf8', or 'base64'",
               "inputValue" -> toSQLValue(f.eval(), f.dataType)
             )

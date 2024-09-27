@@ -159,7 +159,8 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
         CreateMap(Seq(key, value))
       case StructType =>
         CreateNamedStruct(
-          Seq(Literal("start"), generateLiterals(StringTypeWithCaseAccentSensitivity, collationType),
+          Seq(Literal("start"),
+            generateLiterals(StringTypeWithCaseAccentSensitivity, collationType),
           Literal("end"), generateLiterals(StringTypeWithCaseAccentSensitivity, collationType)))
     }
 
@@ -220,8 +221,9 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
         "map(" + generateInputAsString(keyType, collationType) + ", " +
           generateInputAsString(valueType, collationType) + ")"
       case StructType =>
-        "named_struct( 'start', " + generateInputAsString(StringTypeWithCaseAccentSensitivity, collationType) +
-          ", 'end', " + generateInputAsString(StringTypeWithCaseAccentSensitivity, collationType) + ")"
+        "named_struct( 'start', " +
+          generateInputAsString(StringTypeWithCaseAccentSensitivity, collationType) + ", 'end', " +
+          generateInputAsString(StringTypeWithCaseAccentSensitivity, collationType) + ")"
       case StructType(fields) =>
         "named_struct(" + fields.map(f => "'" + f.name + "', " +
           generateInputAsString(f.dataType, collationType)).mkString(", ") + ")"
@@ -267,9 +269,11 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       case ArrayType(elementType, _) =>
         "array<" + generateInputTypeAsStrings(elementType, collationType) + ">"
       case ArrayType =>
-        "array<" + generateInputTypeAsStrings(StringTypeWithCaseAccentSensitivity, collationType) + ">"
+        "array<" + generateInputTypeAsStrings(StringTypeWithCaseAccentSensitivity, collationType) +
+          ">"
       case MapType =>
-        "map<" + generateInputTypeAsStrings(StringTypeWithCaseAccentSensitivity, collationType) + ", " +
+        "map<" + generateInputTypeAsStrings(StringTypeWithCaseAccentSensitivity, collationType) +
+          ", " +
           generateInputTypeAsStrings(StringTypeWithCaseAccentSensitivity, collationType) + ">"
       case MapType(keyType, valueType, _) =>
         "map<" + generateInputTypeAsStrings(keyType, collationType) + ", " +
@@ -278,7 +282,8 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
         "map<" + generateInputTypeAsStrings(keyType, collationType) + ", " +
           generateInputTypeAsStrings(valueType, collationType) + ">"
       case StructType =>
-        "struct<start:" + generateInputTypeAsStrings(StringTypeWithCaseAccentSensitivity, collationType) +
+        "struct<start:" +
+          generateInputTypeAsStrings(StringTypeWithCaseAccentSensitivity, collationType) +
           ", end:" +
           generateInputTypeAsStrings(StringTypeWithCaseAccentSensitivity, collationType) + ">"
       case StructType(fields) =>
@@ -293,8 +298,8 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
    */
   def hasStringType(inputType: AbstractDataType): Boolean = {
     inputType match {
-      case _: StringType | StringTypeWithCaseAccentSensitivity | StringTypeBinaryLcase | AnyDataType =>
-        true
+      case _: StringType | StringTypeWithCaseAccentSensitivity | StringTypeBinaryLcase | AnyDataType
+      => true
       case ArrayType => true
       case MapType => true
       case MapType(keyType, valueType, _) => hasStringType(keyType) || hasStringType(valueType)

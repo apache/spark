@@ -190,7 +190,8 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
   def this(children: Seq[Expression]) = this(children, SQLConf.get.ansiEnabled)
 
   override def nullable: Boolean = true
-  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringTypeWithCaseAccentSensitivity)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq.fill(children.size)(StringTypeWithCaseAccentSensitivity)
   override def dataType: DataType = SQLConf.get.defaultStringType
   override def prettyName: String = "parse_url"
 

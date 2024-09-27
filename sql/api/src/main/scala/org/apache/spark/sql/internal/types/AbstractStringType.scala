@@ -37,7 +37,7 @@ case object StringTypeBinary extends AbstractStringType {
 }
 
 /**
- * Use StringTypeBinaryLcase for expressions supporting only binary and binary lowercase collation.
+ * Use StringTypeBinaryLcase for expressions supporting only binary and lowercase collation.
  */
 case object StringTypeBinaryLcase extends AbstractStringType {
   override private[sql] def acceptsType(other: DataType): Boolean =

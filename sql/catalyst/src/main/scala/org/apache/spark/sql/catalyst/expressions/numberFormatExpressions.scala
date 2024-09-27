@@ -284,7 +284,8 @@ case class ToCharacter(left: Expression, right: Expression)
   }
 
   override def dataType: DataType = SQLConf.get.defaultStringType
-  override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, StringTypeWithCaseAccentSensitivity)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(DecimalType, StringTypeWithCaseAccentSensitivity)
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {

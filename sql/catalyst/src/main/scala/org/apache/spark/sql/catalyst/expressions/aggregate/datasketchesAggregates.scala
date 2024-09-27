@@ -105,7 +105,9 @@ case class HllSketchAgg(
   override def prettyName: String = "hll_sketch_agg"
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(IntegerType, LongType, StringTypeWithCaseAccentSensitivity, BinaryType), IntegerType)
+    Seq(
+      TypeCollection(IntegerType, LongType, StringTypeWithCaseAccentSensitivity, BinaryType),
+      IntegerType)
 
   override def dataType: DataType = BinaryType
 

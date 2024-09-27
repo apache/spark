@@ -489,7 +489,9 @@ case class JsonTuple(children: Seq[Expression])
       throw QueryCompilationErrors.wrongNumArgsError(
         toSQLId(prettyName), Seq("> 1"), children.length
       )
-    } else if (children.forall(child => StringTypeWithCaseAccentSensitivity.acceptsType(child.dataType))) {
+    } else if (
+      children.forall(
+        child => StringTypeWithCaseAccentSensitivity.acceptsType(child.dataType))) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       DataTypeMismatch(

@@ -271,7 +271,8 @@ case class VariantGet(
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(VARIANT_GET)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(VariantType, StringTypeWithCaseAccentSensitivity)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(VariantType, StringTypeWithCaseAccentSensitivity)
 
   override def prettyName: String = if (failOnError) "variant_get" else "try_variant_get"
 
