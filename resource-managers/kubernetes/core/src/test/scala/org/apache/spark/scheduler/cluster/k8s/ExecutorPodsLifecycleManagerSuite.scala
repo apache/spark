@@ -32,6 +32,7 @@ import scala.collection.mutable
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config
+import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.deploy.k8s.KubernetesUtils._
@@ -59,6 +60,8 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
 
   before {
     MockitoAnnotations.openMocks(this).close()
+    val sparkConf = new SparkConf()
+      .set(KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME, TEST_SPARK_EXECUTOR_CONTAINER_NAME)
     snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
     namedExecutorPods = mutable.Map.empty[String, PodResource]
     when(schedulerBackend.getExecutorsWithRegistrationTs()).thenReturn(Map.empty[String, Long])
@@ -66,7 +69,7 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     when(podOperations.inNamespace(anyString())).thenReturn(podsWithNamespace)
     when(podsWithNamespace.withName(any(classOf[String]))).thenAnswer(namedPodsAnswer())
     eventHandlerUnderTest = new ExecutorPodsLifecycleManager(
-      new SparkConf(),
+      sparkConf,
       kubernetesClient,
       snapshotsStore)
     eventHandlerUnderTest.start(schedulerBackend)
@@ -133,6 +136,15 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     verify(namedExecutorPods(failedPod.getMetadata.getName), never()).delete()
     verify(namedExecutorPods(failedPod.getMetadata.getName))
       .edit(any[UnaryOperator[Pod]]())
+  }
+
+  test("SPARK-49804: Use the exit code of executor container always") {
+    val failedPod = failedExecutorWithSidecarStatusListedFirst(1)
+    snapshotsStore.updatePod(failedPod)
+    snapshotsStore.notifySubscribers()
+    val msg = exitReasonMessage(1, failedPod, 1)
+    val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)
+    verify(schedulerBackend).doRemoveExecutor("1", expectedLossReason)
   }
 
   private def exitReasonMessage(execId: Int, failedPod: Pod, exitCode: Int): String = {
