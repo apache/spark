@@ -2917,9 +2917,9 @@ class DataSourceV2SQLSuiteV1Filter
       exception = intercept[ParseException] {
         spark.sql(sqlText, Map("param" -> "testcat.ns1"))
       },
-      condition = "INVALID_SQL_SYNTAX.MULTI_PART_CATALOG_NAME",
+      condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
       parameters = Map(
-        "catalogName" -> "`testcat`.`ns1`",
+        "name" -> "`testcat`.`ns1`",
         "statement" -> "SET CATALOG"
       ),
       context = ExpectedContext(

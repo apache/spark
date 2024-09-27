@@ -623,7 +623,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
       messageParameters = Map(
         "statement" -> toSQLStmt("CREATE TEMPORARY FUNCTION"),
-        "funcName" -> toSQLId(funcName)),
+        "name" -> toSQLId(funcName)),
       ctx)
   }
 
@@ -665,15 +665,15 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
       messageParameters =
-        Map("statement" -> toSQLStmt("DROP TEMPORARY FUNCTION"), "funcName" -> toSQLId(name)),
+        Map("statement" -> toSQLStmt("DROP TEMPORARY FUNCTION"), "name" -> toSQLId(name)),
       ctx)
   }
 
   def invalidNameForSetCatalog(name: Seq[String], ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_CATALOG_NAME",
+      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
       messageParameters =
-        Map("statement" -> toSQLStmt("SET CATALOG"), "catalogName" -> toSQLId(name)),
+        Map("statement" -> toSQLStmt("SET CATALOG"), "name" -> toSQLId(name)),
       ctx)
   }
 
