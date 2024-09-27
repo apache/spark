@@ -1835,15 +1835,11 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-49782: ResolveDataFrameDropColumns rule resolves complex UnresolvedAttribute") {
     val function = UnresolvedFunction("trim", Seq(UnresolvedAttribute("i")), isDistinct = false)
-    val addF = Project(Seq(UnresolvedAttribute("i"), Alias(function, "f")()), testRelation5)
-    val dropF = DataFrameDropColumns(Seq(UnresolvedAttribute("f")), addF)
-    val dropRule = dropF.collectFirst {
-      case d: DataFrameDropColumns => d
-    }
-    assert(dropRule.isDefined)
-    val trim = UnresolvedFunction("trim", Seq(UnresolvedAttribute("i")), isDistinct = false)
-    val expected = Project(Seq(UnresolvedAttribute("i")),
-      Project(Seq(UnresolvedAttribute("i"), Alias(trim, "f")()), testRelation5))
-    checkAnalysis(dropF, expected.analyze)
+    val addColumnF = Project(Seq(UnresolvedAttribute("i"), Alias(function, "f")()), testRelation5)
+    // Drop column "f" via ResolveDataFrameDropColumns rule.
+    val inputPlan = DataFrameDropColumns(Seq(UnresolvedAttribute("f")), addColumnF)
+    // The expected Project (root node) should only have column "i".
+    val expectedPlan = Project(Seq(UnresolvedAttribute("i")), addColumnF).analyze
+    checkAnalysis(inputPlan, expectedPlan)
   }
 }
