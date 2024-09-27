@@ -65,9 +65,9 @@ abstract class RuntimeConfig {
   def get(key: String): String
 
   /**
-   * Returns the value of Spark runtime configuration property for the given key. If the key is not
-   * set yet, return the given `default`. This is useful when `defaultValue` of its [[ConfigEntry]]
-   * is not the desired one.
+   * Returns the value of Spark runtime configuration property for the given key. If the key is
+   * not set yet, return the given `default`. This is useful when `defaultValue` of its
+   * [[ConfigEntry]] is not the desired one.
    *
    * @since 2.0.0
    */
@@ -81,9 +81,9 @@ abstract class RuntimeConfig {
   def getAll: Map[String, String]
 
   /**
-   * Returns the value of Spark runtime configuration property for the given key. If the key is not
-   * set yet, return `defaultValue` of its [[ConfigEntry]]. If there is no `defaultValue`, return
-   * `None`.
+   * Returns the value of Spark runtime configuration property for the given key. If the key is
+   * not set yet, return `defaultValue` of its [[ConfigEntry]]. If there is no `defaultValue`,
+   * return `None`.
    *
    * @since 2.0.0
    */
