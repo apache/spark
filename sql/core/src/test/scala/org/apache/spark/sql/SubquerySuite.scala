@@ -2154,6 +2154,24 @@ class SubquerySuite extends QueryTest
     }
   }
 
+  test("SPARK-36656: Do not collapse projects with exist subqueries") {
+    withTempView("t1", "t2") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("v")
+      checkAnswer(
+        sql("""
+              |SELECT m, CASE WHEN EXISTS (SELECT SUM(c2) FROM v WHERE c1 = m) THEN 1 ELSE 0 END
+              |FROM (SELECT MIN(c2) AS m FROM v)
+              |""".stripMargin),
+        Row(1, 1) :: Nil)
+      checkAnswer(
+        sql("""
+              |SELECT c, CASE WHEN EXISTS (SELECT SUM(c2) FROM v WHERE c1 = c) THEN 1 ELSE 0 END
+              |FROM (SELECT c1 AS c FROM v GROUP BY c1)
+              |""".stripMargin),
+        Row(0, 1) :: Row(1, 1) :: Nil)
+    }
+  }
+
   test("SPARK-37199: deterministic in QueryPlan considers subquery") {
     val deterministicQueryPlan = sql("select (select 1 as b) as b")
       .queryExecution.executedPlan
