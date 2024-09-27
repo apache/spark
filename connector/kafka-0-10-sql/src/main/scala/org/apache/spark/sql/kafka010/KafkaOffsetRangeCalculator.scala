@@ -22,7 +22,6 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 
-
 /**
  * Class to calculate offset ranges to process based on the from and until offsets, and
  * the configured `minPartitions`.
@@ -88,7 +87,7 @@ private[kafka010] class KafkaOffsetRangeCalculator(
         val splitRangeMinPartitions = math.max(minPartitions.get - unsplitRanges.size, 1)
 
         // Now we can apply the main calculation logic
-        val newOffsetRange = dividedOffsetRange.flatMap { range =>
+        dividedOffsetRange.flatMap { range =>
           val tp = range.topicPartition
           val size = range.size
           // number of partitions to divvy up this topic partition to
@@ -99,7 +98,6 @@ private[kafka010] class KafkaOffsetRangeCalculator(
           }
           getDividedPartition(parts, range)
         }.filter(_.size > 0)
-        newOffsetRange
       } else {
         dividedOffsetRange
       }
