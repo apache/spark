@@ -58,7 +58,7 @@ private[kafka010] class KafkaOffsetRangeCalculator(
         range.copy(preferredLoc = getLocation(range.topicPartition, executorLocations))
       }
     } else {
-      val dividedOffsetRange = if (maxRecordsPerPartition.isDefined) {
+      val dividedOffsetRanges = if (maxRecordsPerPartition.isDefined) {
         val maxRecords = maxRecordsPerPartition.get
         offsetRanges.flatMap { range =>
           val size = range.size
@@ -72,12 +72,12 @@ private[kafka010] class KafkaOffsetRangeCalculator(
 
       if (minPartitions.isDefined) {
         // Splits offset ranges with relatively large amount of data to smaller ones.
-        val totalSize = dividedOffsetRange.map(_.size).sum
+        val totalSize = dividedOffsetRanges.map(_.size).sum
 
         // First distinguish between any small (i.e. unsplit) ranges and large (i.e. split) ranges,
         // in order to exclude the contents of unsplit ranges from the proportional math applied to
         // split ranges
-        val unsplitRanges = dividedOffsetRange.filter { range =>
+        val unsplitRanges = dividedOffsetRanges.filter { range =>
           getPartCount(range.size, totalSize, minPartitions.get) == 1
         }
 
@@ -87,7 +87,7 @@ private[kafka010] class KafkaOffsetRangeCalculator(
         val splitRangeMinPartitions = math.max(minPartitions.get - unsplitRanges.size, 1)
 
         // Now we can apply the main calculation logic
-        dividedOffsetRange.flatMap { range =>
+        dividedOffsetRanges.flatMap { range =>
           val tp = range.topicPartition
           val size = range.size
           // number of partitions to divvy up this topic partition to
@@ -99,7 +99,7 @@ private[kafka010] class KafkaOffsetRangeCalculator(
           getDividedPartition(parts, range)
         }.filter(_.size > 0)
       } else {
-        dividedOffsetRange
+        dividedOffsetRanges
       }
     }
   }
