@@ -161,7 +161,7 @@
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
     <!-- Do not use 3.0.0: https://github.com/GoogleCloudDataproc/hadoop-connectors/issues/1114 -->
-    <gcs-connector.version>hadoop3-2.2.21</gcs-connector.version>
+    <gcs-connector.version>hadoop3-2.2.25</gcs-connector.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
     <commons.httpcore.version>4.4.16</commons.httpcore.version>
@@ -231,7 +231,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.13.3</kubernetes-client.version>
+    <kubernetes-client.version>6.13.4</kubernetes-client.version>
     <okio.version>1.17.6</okio.version>
 
     <test.java.home>${java.home}</test.java.home>
