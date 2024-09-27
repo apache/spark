@@ -507,6 +507,17 @@ abstract class SparkSession extends Serializable with Closeable {
   def read: DataFrameReader
 
   /**
+   * Returns a `DataStreamReader` that can be used to read streaming data in as a `DataFrame`.
+   * {{{
+   *   sparkSession.readStream.parquet("/path/to/directory/of/parquet/files")
+   *   sparkSession.readStream.schema(schema).json("/path/to/directory/of/json/files")
+   * }}}
+   *
+   * @since 2.0.0
+   */
+  def readStream: DataStreamReader
+
+  /**
    * (Scala-specific) Implicit methods available in Scala for converting common Scala objects into
    * `DataFrame`s.
    *
