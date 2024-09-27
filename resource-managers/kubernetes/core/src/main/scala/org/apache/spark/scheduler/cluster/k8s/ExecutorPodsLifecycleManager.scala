@@ -61,6 +61,9 @@ private[spark] class ExecutorPodsLifecycleManager(
 
   private val namespace = conf.get(KUBERNETES_NAMESPACE)
 
+  private val sparkContainerName = conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME)
+    .getOrElse(DEFAULT_EXECUTOR_CONTAINER_NAME)
+
   def start(schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     val eventProcessingInterval = conf.get(KUBERNETES_EXECUTOR_EVENT_PROCESSING_INTERVAL)
     snapshotsStore.addSubscriber(eventProcessingInterval) {
@@ -240,7 +243,8 @@ private[spark] class ExecutorPodsLifecycleManager(
 
   private def findExitCode(podState: FinalPodState): Int = {
     podState.pod.getStatus.getContainerStatuses.asScala.find { containerStatus =>
-      containerStatus.getState.getTerminated != null
+      containerStatus.getName == sparkContainerName &&
+        containerStatus.getState.getTerminated != null
     }.map { terminatedContainer =>
       terminatedContainer.getState.getTerminated.getExitCode.toInt
     }.getOrElse(UNKNOWN_EXIT_CODE)
