@@ -24,21 +24,25 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Class to calculate offset ranges to process based on the from and until offsets, and
- * the configured `minPartitions`.
+ * the configured `minPartitions` and `maxRecordsPerPartition`.
  */
 private[kafka010] class KafkaOffsetRangeCalculator(
     val minPartitions: Option[Int],
     val maxRecordsPerPartition: Option[Long]) {
   require(minPartitions.isEmpty || minPartitions.get > 0)
+  require(maxRecordsPerPartition.isEmpty || maxRecordsPerPartition.get > 0)
 
   /**
    * Calculate the offset ranges that we are going to process this batch. If `minPartitions`
    * is not set or is set less than or equal the number of `topicPartitions` that we're going to
-   * consume, then we fall back to a 1-1 mapping of Spark tasks to Kafka partitions. If
+   * consume and, `maxRecordsPerPartition` is not set then we fall back to a 1-1 mapping of Spark
+   * tasks to Kafka partitions. If `maxRecordsPerPartition` is set, then we will split up read task
+   * to multiple tasks as per `maxRecordsPerPartition` value. If
    * `minPartitions` is set higher than the number of our `topicPartitions`, then we will split up
    * the read tasks of the skewed partitions to multiple Spark tasks.
-   * The number of Spark tasks will be *approximately* `minPartitions`. It can be less or more
-   * depending on rounding errors or Kafka partitions that didn't receive any new data.
+   * The number of Spark tasks will be *approximately* max of `maxRecordsPerPartition`
+   * and `minPartitions`. It can be less or more depending on rounding errors or Kafka partitions
+   * that didn't receive any new data.
    *
    * Empty (`KafkaOffsetRange.size == 0`) or invalid (`KafkaOffsetRange.size < 0`) ranges  will be
    * dropped.
@@ -70,7 +74,7 @@ private[kafka010] class KafkaOffsetRangeCalculator(
         offsetRanges
       }
 
-      if (minPartitions.isDefined) {
+      if (minPartitions.isDefined && minPartitions.get > dividedOffsetRanges.size) {
         // Splits offset ranges with relatively large amount of data to smaller ones.
         val totalSize = dividedOffsetRanges.map(_.size).sum
 
