@@ -19,7 +19,6 @@ package org.apache.spark.network.shuffledb;
 
 import java.io.IOException;
 
-import com.google.common.base.Throwables;
 import org.rocksdb.RocksDBException;
 
 /**
