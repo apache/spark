@@ -95,7 +95,9 @@ case class InlineCTE(
 
       case ref: CTERelationRef =>
         cteMap(ref.cteId) = cteMap(ref.cteId).withRefCountIncreased(1)
-        outerCTEId.foreach { cteId =>
+        // We should only increase the out-going-ref-count of the outer CTE relation if it's being
+        // referenced.
+        outerCTEId.filter(_ == ref.cteId).foreach { cteId =>
           cteMap(cteId).increaseOutgoingRefCount(ref.cteId, 1)
         }
 
