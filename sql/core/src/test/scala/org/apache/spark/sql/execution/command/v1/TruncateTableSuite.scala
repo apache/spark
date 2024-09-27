@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.permission.{AclEntry, AclEntryScope, AclEntryType, FsAction, FsPermission}
 
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.{FullQualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.execution.command.FakeLocalFsFileSystem
@@ -148,7 +148,7 @@ trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase {
 
           val catalog = spark.sessionState.catalog
           val qualifiedTableName =
-            FullQualifiedTableName(CatalogManager.SESSION_CATALOG_NAME, "ns", "tbl")
+            QualifiedTableName(CatalogManager.SESSION_CATALOG_NAME, "ns", "tbl")
           val cachedPlan = catalog.getCachedTable(qualifiedTableName)
           assert(cachedPlan.stats.sizeInBytes == 0)
         }

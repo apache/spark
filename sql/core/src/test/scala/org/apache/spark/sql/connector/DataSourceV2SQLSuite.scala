@@ -27,7 +27,7 @@ import scala.concurrent.duration.MICROSECONDS
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{FullQualifiedTableName, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.{InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -3404,7 +3404,7 @@ class DataSourceV2SQLSuiteV1Filter
 
     // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
     // configure a new implementation.
-    val table1 = FullQualifiedTableName(SESSION_CATALOG_NAME, "default", "t")
+    val table1 = QualifiedTableName(SESSION_CATALOG_NAME, "default", "t")
     spark.sessionState.catalogManager.reset()
     withSQLConf(
       V2_SESSION_CATALOG_IMPLEMENTATION.key ->
@@ -3413,7 +3413,7 @@ class DataSourceV2SQLSuiteV1Filter
         checkParquet(table1.toString, path.getAbsolutePath)
       }
     }
-    val table2 = FullQualifiedTableName("testcat3", "default", "t")
+    val table2 = QualifiedTableName("testcat3", "default", "t")
     withSQLConf(
       "spark.sql.catalog.testcat3" -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
       withTempPath { path =>
@@ -3432,7 +3432,7 @@ class DataSourceV2SQLSuiteV1Filter
     // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
     // configure a new implementation.
     spark.sessionState.catalogManager.reset()
-    val table1 = FullQualifiedTableName(SESSION_CATALOG_NAME, "default", "t")
+    val table1 = QualifiedTableName(SESSION_CATALOG_NAME, "default", "t")
     withSQLConf(
       V2_SESSION_CATALOG_IMPLEMENTATION.key ->
         classOf[V2CatalogSupportBuiltinDataSource].getName) {
@@ -3441,7 +3441,7 @@ class DataSourceV2SQLSuiteV1Filter
       }
     }
 
-    val table2 = FullQualifiedTableName("testcat3", "default", "t")
+    val table2 = QualifiedTableName("testcat3", "default", "t")
     withSQLConf(
       "spark.sql.catalog.testcat3" -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
       withTempPath { path =>

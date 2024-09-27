@@ -25,7 +25,7 @@ import java.time.LocalDateTime
 import scala.collection.mutable
 import scala.util.Random
 
-import org.apache.spark.sql.catalyst.{FullQualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, CatalogTable, HiveTableRelation}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.AttributeMap
@@ -270,7 +270,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
 
   def getTableFromCatalogCache(tableName: String): LogicalPlan = {
     val catalog = spark.sessionState.catalog
-    val qualifiedTableName = FullQualifiedTableName(
+    val qualifiedTableName = QualifiedTableName(
       CatalogManager.SESSION_CATALOG_NAME, catalog.getCurrentDatabase, tableName)
     catalog.getCachedTable(qualifiedTableName)
   }
