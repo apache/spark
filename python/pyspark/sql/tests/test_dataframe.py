@@ -697,8 +697,7 @@ class DataFrameTestsMixin:
                         |<tr><th>key</th><th>value</th></tr>
                         |<tr><td>1</td><td>1</td></tr>
                         |</table>
-                        |only showing top 1 row
-                        |"""
+                        |only showing top 1 row"""
                     self.assertEqual(re.sub(pattern, "", expected3), df._repr_html_())
 
         # test when eager evaluation is disabled and _repr_html_ will be called
