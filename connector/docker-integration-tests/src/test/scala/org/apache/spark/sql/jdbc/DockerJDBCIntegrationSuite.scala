@@ -97,7 +97,7 @@ abstract class DockerJDBCIntegrationSuite
 
   protected val dockerIp = DockerUtils.getDockerIp()
   val db: DatabaseOnDocker
-  val connectionTimeout = timeout(5.minutes)
+  val connectionTimeout = timeout(10.minutes)
   val keepContainer =
     sys.props.getOrElse("spark.test.docker.keepContainer", "false").toBoolean
   val removePulledImage =
