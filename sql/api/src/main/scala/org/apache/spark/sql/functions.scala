@@ -401,9 +401,6 @@ object functions {
   def count_min_sketch(e: Column, eps: Column, confidence: Column): Column =
     count_min_sketch(e, eps, confidence, lit(SparkClassUtils.random.nextLong))
 
-  private[spark] def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
-    Column.internalFn("collect_top_k", e, lit(num), lit(reverse))
-
   /**
    * Aggregate function: returns the Pearson Correlation Coefficient for two columns.
    *
