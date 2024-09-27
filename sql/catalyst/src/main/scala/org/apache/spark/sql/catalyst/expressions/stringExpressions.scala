@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayData, CharsetProvider, Collation
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.{AbstractArrayType,
-  StringTypeWithCaseAccentSensitivity, StringTypeNonCSAICollation}
+  StringTypeNonCSAICollation, StringTypeWithCaseAccentSensitivity}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -3030,7 +3030,10 @@ case class Encode(
       str, charset, Literal(legacyCharsets, BooleanType), Literal(legacyErrorAction, BooleanType)
     ),
     Seq(
-      StringTypeWithCaseAccentSensitivity, StringTypeWithCaseAccentSensitivity, BooleanType, BooleanType))
+      StringTypeWithCaseAccentSensitivity,
+      StringTypeWithCaseAccentSensitivity,
+      BooleanType,
+      BooleanType))
 
   override def toString: String = s"$prettyName($str, $charset)"
 

@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{LIKE_FAMLIY, REGEXP_EXTR
 import org.apache.spark.sql.catalyst.util.{CollationSupport, GenericArrayData, StringUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.{
-  StringTypeWithCaseAccentSensitivity, StringTypeBinaryLcase}
+  StringTypeBinaryLcase, StringTypeWithCaseAccentSensitivity}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
