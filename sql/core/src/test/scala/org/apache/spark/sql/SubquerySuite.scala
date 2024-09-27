@@ -2155,7 +2155,7 @@ class SubquerySuite extends QueryTest
   }
 
   test("SPARK-49819: Do not collapse projects with exist subqueries") {
-    withTempView("t1", "t2") {
+    withTempView("v") {
       Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("v")
       checkAnswer(
         sql("""
