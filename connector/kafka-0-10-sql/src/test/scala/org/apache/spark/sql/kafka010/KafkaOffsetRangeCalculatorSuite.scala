@@ -316,7 +316,7 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
   }
 
   testWithMinPartitionsAndMaxRecordsPerPartition("SPARK-49259: 1 TopicPartition " +
-    "with minPartitions lesser than maxRecordsPerPartition",
+    "with low minPartitions value",
     1, 20) { calc =>
     assert(
       calc.getRanges(
@@ -329,7 +329,7 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
   }
 
   testWithMinPartitionsAndMaxRecordsPerPartition("SPARK-49259: 1 TopicPartition" +
-    " with minPartitions greater than maxRecordsPerPartition",
+    " with high minPartitions value",
     4, 20) { calc =>
       assert(
         calc.getRanges(
