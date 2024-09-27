@@ -469,8 +469,7 @@ object SparkBuild extends PomBuild {
   /* Protobuf settings */
   enable(SparkProtobuf.settings)(protobuf)
 
-  // SPARK-14738 - Remove docker tests from main Spark build
-  // enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
+  enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
 
   if (!profiles.contains("volcano")) {
     enable(Volcano.settings)(kubernetes)
