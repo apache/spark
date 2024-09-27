@@ -176,9 +176,9 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           s"State variable $stateVarName is not defined for the transformWithState operator.")
       }
 
-      // TODO: add support for list and map type
+      // TODO: add support for list type
       if (sourceOptions.readChangeFeed &&
-        stateVarInfo.head.stateVariableType != StateVariableType.ValueState) {
+        stateVarInfo.head.stateVariableType == StateVariableType.ListState) {
         throw StateDataSourceErrors.conflictOptions(Seq(StateSourceOptions.READ_CHANGE_FEED,
           StateSourceOptions.STATE_VAR_NAME))
       }
