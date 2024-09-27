@@ -49,7 +49,7 @@ private[kafka010] class KafkaOffsetRangeCalculator(
     val offsetRanges = ranges.filter(_.size > 0)
 
     // If minPartitions not set or there are enough partitions to satisfy minPartitions
-    // and maxBytesPerPartition is empty
+    // and maxRecordsPerPartition is empty
     if ((minPartitions.isEmpty || offsetRanges.size >= minPartitions.get)
         && maxRecordsPerPartition.isEmpty) {
       // Assign preferred executor locations to each range such that the same topic-partition is
