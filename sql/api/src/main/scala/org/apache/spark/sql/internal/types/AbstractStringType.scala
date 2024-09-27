@@ -46,8 +46,8 @@ case object StringTypeBinaryLcase extends AbstractStringType {
 }
 
 /**
- * Use StringTypeWithCaseAccentSensitivity for expressions supporting all collation types
- * (binary and ICU) but limited to using case and accent sensitivity specifiers.
+ * Use StringTypeWithCaseAccentSensitivity for expressions supporting all collation types (binary
+ * and ICU) but limited to using case and accent sensitivity specifiers.
  */
 case object StringTypeWithCaseAccentSensitivity extends AbstractStringType {
   override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[StringType]
