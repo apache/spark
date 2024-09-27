@@ -165,7 +165,7 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
       .edit(any[UnaryOperator[Pod]]())
   }
 
-  test("Exit code is from executor container, not sidecar") {
+  test("SPARK-49804: Use the exit code of executor container always") {
     val failedPod = failedExecutorWithSidecarStatusListedFirst(1)
     snapshotsStore.updatePod(failedPod)
     snapshotsStore.notifySubscribers()
