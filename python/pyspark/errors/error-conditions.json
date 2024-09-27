@@ -812,6 +812,11 @@
       "Pipe function `<func_name>` exited with error code <error_code>."
     ]
   },
+  "PLOT_NOT_NUMERIC_COLUMN": {
+    "message": [
+      "Argument <arg_name> must be a numerical column for plotting, got <arg_type>."
+    ]
+  },
   "PYTHON_HASH_SEED_NOT_SET": {
     "message": [
       "Randomness of hash of string should be disabled via PYTHONHASHSEED."
