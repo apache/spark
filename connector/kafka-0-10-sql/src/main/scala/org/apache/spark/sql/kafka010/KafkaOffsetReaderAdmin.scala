@@ -110,7 +110,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
    */
   private def shouldDivvyUpLargePartitions(offsetRanges: Seq[KafkaOffsetRange]): Boolean = {
     minPartitions.map(_ > offsetRanges.size).getOrElse(false) ||
-      offsetRanges.exists(_.size > maxRecordsPerPartition.getOrElse(Long.MaxValue))
+    offsetRanges.exists(_.size > maxRecordsPerPartition.getOrElse(Long.MaxValue))
   }
 
   override def toString(): String = consumerStrategy.toString

@@ -565,7 +565,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   private[kafka010] val ENDING_TIMESTAMP_OPTION_KEY = "endingtimestamp"
   private val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
   private[kafka010] val MIN_PARTITIONS_OPTION_KEY = "minpartitions"
-  private[kafka010] val MAX_RECORDS_PER_PARTITION_OPTION_KEY = "maxRecordsPerPartition"
+  private[kafka010] val MAX_RECORDS_PER_PARTITION_OPTION_KEY = "maxrecordsperpartition"
   private[kafka010] val MAX_OFFSET_PER_TRIGGER = "maxoffsetspertrigger"
   private[kafka010] val MIN_OFFSET_PER_TRIGGER = "minoffsetspertrigger"
   private[kafka010] val MAX_TRIGGER_DELAY = "maxtriggerdelay"

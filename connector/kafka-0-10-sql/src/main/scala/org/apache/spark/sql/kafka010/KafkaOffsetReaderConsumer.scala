@@ -112,7 +112,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
    */
   private def shouldDivvyUpLargePartitions(offsetRanges: Seq[KafkaOffsetRange]): Boolean = {
     minPartitions.map(_ > offsetRanges.size).getOrElse(false) ||
-      offsetRanges.exists(_.size > maxRecordsPerPartition.getOrElse(Long.MaxValue))
+    offsetRanges.exists(_.size > maxRecordsPerPartition.getOrElse(Long.MaxValue))
   }
 
   private def nextGroupId(): String = {
