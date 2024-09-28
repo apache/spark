@@ -866,9 +866,11 @@ class PandasCogroupedOps:
 
         Notes
         -----
-        This function requires a full shuffle. All the data of a cogroup will be loaded
-        into memory, so the user should be aware of the potential OOM risk if data is skewed
-        and certain groups are too large to fit in memory.
+        This function requires a full shuffle. All the data on the left side of the cogroup
+        will be loaded into memory, so the user should be aware of the potential OOM risk if
+        data is skewed and certain groups are too large to fit in memory. The larger group
+        should be on the right side and can be iteratively processed. If using the pyarrow.Table
+        input and output, all data for both side will be eagerly loaded into memory.
 
         This API is unstable, and for developers.
 

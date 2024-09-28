@@ -17,6 +17,7 @@
 import inspect
 import os
 import time
+from typing import Iterator
 import unittest
 
 from pyspark.errors import PythonException
@@ -350,6 +351,53 @@ class CogroupedMapInArrowTestsMixin:
                 "|        2|           3|         1|            2|\n"
                 "+---------+------------+----------+-------------+\n",
             )
+
+    def test_apply_in_arrow_batching(self):
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 2}):
+
+            def func(left, right):
+                assert isinstance(left, Iterator)
+                assert isinstance(right, Iterator)
+                left_batches = list(left)
+                right_batches = list(right)
+                assert len(left_batches) == 2, len(left_batches)
+                assert len(right_batches) == 2, len(right_batches)
+                for batch in left_batches:
+                    assert isinstance(batch, pa.RecordBatch)
+                    assert batch.schema.names == ["id", "value"]
+                for batch in right_batches:
+                    assert isinstance(batch, pa.RecordBatch)
+                    assert batch.schema.names == ["id", "value"]
+                yield from left_batches
+
+            left = self.spark.range(12).withColumn("value", col("id") * 10)
+            right = self.spark.range(12).withColumn("value", col("id") * 10)
+            left_grouped = left.groupBy((col("id") / 4).cast("int"))
+            right_grouped = right.groupBy((col("id") / 4).cast("int"))
+            grouped_df = left_grouped.cogroup(right_grouped)
+
+            actual = grouped_df.applyInArrow(func, "id long, value long").collect()
+            self.assertEqual(actual, left.collect())
+            
+
+    def test_apply_in_arrow_partial_iteration(self):
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 2}):
+
+            def func(left, right):
+                first = next(right)
+                yield pa.RecordBatch.from_pylist(
+                    [{"value": r.as_py() % 4} for r in first.column(0)]
+                )
+
+            df = self.spark.range(20)
+            grouped_df = df.groupBy((col("id") % 4).cast("int"))
+            grouped_df = grouped_df.cogroup(grouped_df)
+
+            # Should get two records for each group
+            expected = [Row(value=x) for x in [0, 0, 1, 1, 2, 2, 3, 3]]
+
+            actual = grouped_df.applyInArrow(func, "value long").collect()
+            self.assertEqual(actual, expected)
 
 
 class CogroupedMapInArrowTests(CogroupedMapInArrowTestsMixin, ReusedSQLTestCase):
