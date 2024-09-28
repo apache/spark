@@ -78,8 +78,11 @@ class ListStateClient:
             status = response_message[0]
             if status == 0:
                 iterator = self._stateful_processor_api_client._read_arrow_state()
-                batch = next(iterator)
-                pandas_df = batch.to_pandas()
+                data_batch = None
+                for batch in iterator:
+                    if data_batch is None:
+                        data_batch = batch
+                pandas_df = data_batch.to_pandas()
                 index = 0
             else:
                 raise StopIteration()

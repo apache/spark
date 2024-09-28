@@ -221,6 +221,15 @@ class TransformWithStateInPandasTestsMixin:
 
         self._test_transform_with_state_in_pandas_basic(ListStateProcessor(), check_results, True)
 
+    def test_transform_with_state_in_pandas_map_state(self):
+        def check_results(batch_df, _):
+            assert set(batch_df.sort("id").collect()) == {
+                Row(id="0", countAsString="2"),
+                Row(id="1", countAsString="2"),
+            }
+
+        self._test_transform_with_state_in_pandas_basic(MapStateProcessor(), check_results, True)
+
     # test value state with ttl has the same behavior as value state when
     # state doesn't expire.
     def test_value_state_ttl_basic(self):
@@ -451,6 +460,45 @@ class ListStateProcessor(StatefulProcessor):
         assert next(iter1)[0] == self.dict[1]
         assert next(iter2)[0] == self.dict[1]
         assert next(iter3)[0] == self.dict[1]
+        yield pd.DataFrame({"id": key, "countAsString": str(count)})
+
+    def close(self) -> None:
+        pass
+
+
+class MapStateProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle):
+        key_schema = StructType([StructField("name", StringType(), True)])
+        value_schema = StructType([StructField("count", IntegerType(), True)])
+        self.map_state = handle.getMapState("mapState", key_schema, value_schema)
+
+    def handleInputRows(self, key, rows):
+        count = 0
+        key1 = ("key1",)
+        key2 = ("key2",)
+        for pdf in rows:
+            pdf_count = pdf.count()
+            count += pdf_count.get("temperature")
+        value1 = count
+        value2 = count
+        if self.map_state.exists():
+            if self.map_state.contains_key(key1):
+                value1 += self.map_state.get_value(key1)[0]
+            if self.map_state.contains_key(key2):
+                value2 += self.map_state.get_value(key2)[0]
+        self.map_state.update_value(key1, (value1,))
+        self.map_state.update_value(key2, (value2,))
+        key_iter = self.map_state.keys()
+        assert next(key_iter)[0] == "key1"
+        assert next(key_iter)[0] == "key2"
+        value_iter = self.map_state.values()
+        assert next(value_iter)[0] == value1
+        assert next(value_iter)[0] == value2
+        map_iter = self.map_state.iterator()
+        assert next(map_iter)[0] == key1
+        assert next(map_iter)[1] == (value2,)
+        self.map_state.remove_key(key1)
+        assert not self.map_state.contains_key(key1)
         yield pd.DataFrame({"id": key, "countAsString": str(count)})
 
     def close(self) -> None:

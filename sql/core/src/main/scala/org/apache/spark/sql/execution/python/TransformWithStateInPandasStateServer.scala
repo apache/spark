@@ -30,6 +30,7 @@ import org.apache.arrow.vector.ipc.ArrowStreamWriter
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.api.python.PythonSQLUtils
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState, StateVariableType}
@@ -37,6 +38,7 @@ import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState,
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.util.Utils
 
 /**
  * This class is used to handle the state requests from the Python side. It runs on a separate
@@ -314,32 +316,8 @@ class TransformWithStateInPandasStateServer(
         } else {
           sendResponse(0)
         }
-        outputStream.flush()
-        val arrowStreamWriter = if (arrowStreamWriterForTest != null) {
-          arrowStreamWriterForTest
-        } else {
-          val arrowSchema = ArrowUtils.toArrowSchema(listStateInfo.schema, timeZoneId,
-            errorOnDuplicatedFieldNames, largeVarTypes)
-          val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-          s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
-          val root = VectorSchemaRoot.create(arrowSchema, allocator)
-          new BaseStreamingArrowWriter(root, new ArrowStreamWriter(root, null, outputStream),
-            arrowTransformWithStateInPandasMaxRecordsPerBatch)
-        }
-        val listRowSerializer = listStateInfo.serializer
-        // Only write a single batch in each GET request. Stops writing row if rowCount reaches
-        // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to handle a case
-        // when there are multiple state variables, user tries to access a different state variable
-        // while the current state variable is not exhausted yet.
-        var rowCount = 0
-        while (iteratorOption.get.hasNext &&
-          rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {
-          val row = iteratorOption.get.next()
-          val internalRow = listRowSerializer(row)
-          arrowStreamWriter.writeRow(internalRow)
-          rowCount += 1
-        }
-        arrowStreamWriter.finalizeCurrentArrowBatch()
+        sendIteratorAsArrowBatches(iteratorOption.get, listStateInfo.schema,
+          arrowStreamWriterForTest) {data => listStateInfo.serializer(data)}
       case ListStateCall.MethodCase.APPENDVALUE =>
         val byteArray = message.getAppendValue.getValue.toByteArray
         val newRow = PythonSQLUtils.toJVMRow(byteArray, listStateInfo.schema,
@@ -420,46 +398,25 @@ class TransformWithStateInPandasStateServer(
         } else {
           sendResponse(0)
         }
-        outputStream.flush()
-        val arrowStreamWriter = if (arrowStreamWriterForTest != null) {
-          arrowStreamWriterForTest
-        } else {
-          val keyValueStateSchema: StructType = StructType(
-            Array(
-              // key row serialized as a byte array.
-              StructField("keyRow", BinaryType),
-              // value row serialized as a byte array.
-              StructField("valueRow", BinaryType)
-            )
+        val keyValueStateSchema: StructType = StructType(
+          Array(
+            // key row serialized as a byte array.
+            StructField("keyRow", BinaryType),
+            // value row serialized as a byte array.
+            StructField("valueRow", BinaryType)
           )
-          val arrowSchema = ArrowUtils.toArrowSchema(keyValueStateSchema, timeZoneId,
-            errorOnDuplicatedFieldNames, largeVarTypes)
-          val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-          s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
-          val root = VectorSchemaRoot.create(arrowSchema, allocator)
-          new BaseStreamingArrowWriter(root, new ArrowStreamWriter(root, null, outputStream),
-            arrowTransformWithStateInPandasMaxRecordsPerBatch)
-        }
-        // Only write a single batch in each GET request. Stops writing row if rowCount reaches
-        // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to avoid a case
-        // when there are multiple state variables, user tries to access a different state variable
-        // while the current state variable is not exhausted yet.
-        var rowCount = 0
-        while (iteratorOption.get.hasNext &&
-          rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {
-          val (keyRow, valueRow) = iteratorOption.get.next()
-          val keyBytes = PythonSQLUtils.toPyRow(keyRow)
-          val valueBytes = PythonSQLUtils.toPyRow(valueRow)
-          val internalRow = new GenericInternalRow(
+        )
+        sendIteratorAsArrowBatches(iteratorOption.get, keyValueStateSchema,
+          arrowStreamWriterForTest) {tuple =>
+          val keyBytes = PythonSQLUtils.toPyRow(tuple._1)
+          val valueBytes = PythonSQLUtils.toPyRow(tuple._2)
+          new GenericInternalRow(
             Array[Any](
               keyBytes,
               valueBytes
             )
           )
-          arrowStreamWriter.writeRow(internalRow)
-          rowCount += 1
         }
-        arrowStreamWriter.finalizeCurrentArrowBatch()
       case MapStateCall.MethodCase.KEYS =>
         val iteratorId = message.getKeys.getIteratorId
         var iteratorOption = iterators.get(iteratorId)
@@ -473,32 +430,8 @@ class TransformWithStateInPandasStateServer(
         } else {
           sendResponse(0)
         }
-        outputStream.flush()
-        val arrowStreamWriter = if (arrowStreamWriterForTest != null) {
-          arrowStreamWriterForTest
-        } else {
-          val arrowSchema = ArrowUtils.toArrowSchema(mapStateInfo.keySchema, timeZoneId,
-            errorOnDuplicatedFieldNames, largeVarTypes)
-          val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-          s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
-          val root = VectorSchemaRoot.create(arrowSchema, allocator)
-          new BaseStreamingArrowWriter(root, new ArrowStreamWriter(root, null, outputStream),
-            arrowTransformWithStateInPandasMaxRecordsPerBatch)
-        }
-        val keyRowSerializer = mapStateInfo.keySerializer
-        // Only write a single batch in each GET request. Stops writing row if rowCount reaches
-        // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to avoid a case
-        // when there are multiple state variables, user tries to access a different state variable
-        // while the current state variable is not exhausted yet.
-        var rowCount = 0
-        while (iteratorOption.get.hasNext &&
-          rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {
-          val row = iteratorOption.get.next()
-          val internalRow = keyRowSerializer(row)
-          arrowStreamWriter.writeRow(internalRow)
-          rowCount += 1
-        }
-        arrowStreamWriter.finalizeCurrentArrowBatch()
+        sendIteratorAsArrowBatches(iteratorOption.get, mapStateInfo.keySchema,
+          arrowStreamWriterForTest) {data => mapStateInfo.keySerializer(data)}
       case MapStateCall.MethodCase.VALUES =>
         val iteratorId = message.getValues.getIteratorId
         var iteratorOption = iterators.get(iteratorId)
@@ -512,32 +445,8 @@ class TransformWithStateInPandasStateServer(
         } else {
           sendResponse(0)
         }
-        outputStream.flush()
-        val arrowStreamWriter = if (arrowStreamWriterForTest != null) {
-          arrowStreamWriterForTest
-        } else {
-          val arrowSchema = ArrowUtils.toArrowSchema(mapStateInfo.valueSchema, timeZoneId,
-            errorOnDuplicatedFieldNames, largeVarTypes)
-          val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-          s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
-          val root = VectorSchemaRoot.create(arrowSchema, allocator)
-          new BaseStreamingArrowWriter(root, new ArrowStreamWriter(root, null, outputStream),
-            arrowTransformWithStateInPandasMaxRecordsPerBatch)
-        }
-        val valueRowSerializer = mapStateInfo.valueSerializer
-        // Only write a single batch in each GET request. Stops writing row if rowCount reaches
-        // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to avoid a case
-        // when there are multiple state variables, user tries to access a different state variable
-        // while the current state variable is not exhausted yet.
-        var rowCount = 0
-        while (iteratorOption.get.hasNext &&
-          rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {
-          val row = iteratorOption.get.next()
-          val internalRow = valueRowSerializer(row)
-          arrowStreamWriter.writeRow(internalRow)
-          rowCount += 1
-        }
-        arrowStreamWriter.finalizeCurrentArrowBatch()
+        sendIteratorAsArrowBatches(iteratorOption.get, mapStateInfo.valueSchema,
+          arrowStreamWriterForTest) {data => mapStateInfo.valueSerializer(data)}
       case MapStateCall.MethodCase.REMOVEKEY =>
         val keyBytes = message.getRemoveKey.getKey.toByteArray
         val keyRow = PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema,
@@ -611,6 +520,45 @@ class TransformWithStateInPandasStateServer(
         } else {
           sendResponse(1, s"Map state $stateName already exists")
         }
+    }
+  }
+
+  private def sendIteratorAsArrowBatches[T](
+      iter: Iterator[T],
+      outputSchema: StructType,
+      arrowStreamWriterForTest: BaseStreamingArrowWriter = null)(func: T => InternalRow): Unit = {
+    outputStream.flush()
+    val arrowSchema = ArrowUtils.toArrowSchema(outputSchema, timeZoneId,
+        errorOnDuplicatedFieldNames, largeVarTypes)
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+      s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
+    val root = VectorSchemaRoot.create(arrowSchema, allocator)
+    val writer = new ArrowStreamWriter(root, null, outputStream)
+    val arrowStreamWriter = if (arrowStreamWriterForTest != null) {
+      arrowStreamWriterForTest
+    } else {
+      new BaseStreamingArrowWriter(root, writer, arrowTransformWithStateInPandasMaxRecordsPerBatch)
+    }
+    // Only write a single batch in each GET request. Stops writing row if rowCount reaches
+    // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to handle a case
+    // when there are multiple state variables, user tries to access a different state variable
+    // while the current state variable is not exhausted yet.
+    var rowCount = 0
+    while (iter.hasNext && rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {
+      val data = iter.next()
+      val internalRow = func(data)
+      arrowStreamWriter.writeRow(internalRow)
+      rowCount += 1
+    }
+    arrowStreamWriter.finalizeCurrentArrowBatch()
+    Utils.tryWithSafeFinally {
+      // end writes footer to the output stream and doesn't clean any resources.
+      // It could throw exception if the output stream is closed, so it should be
+      // in the try block.
+      writer.end()
+    } {
+      root.close()
+      allocator.close()
     }
   }
 }

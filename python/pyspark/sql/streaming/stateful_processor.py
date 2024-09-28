@@ -18,7 +18,6 @@
 from abc import ABC, abstractmethod
 from typing import Any, List, TYPE_CHECKING, Iterator, Optional, Union, Tuple
 
-from pyspark.sql import Row
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.streaming.list_state_client import ListStateClient, ListStateIterator
 from pyspark.sql.streaming.map_state_client import MapStateClient, MapStateIterator, MapStateKeyValuePairIterator
@@ -149,44 +148,44 @@ class MapState:
         """
         return self._map_state_client.exists(self._state_name)
 
-    def get_value(self, key: Any) -> Optional[Row]:
+    def get_value(self, key: Tuple) -> Optional[Tuple]:
         """
         Get the state value if it exists.
         """
         return self._map_state_client.get_value(self._state_name, self.key_schema, key)
 
-    def contains_key(self, key: Any) -> bool:
+    def contains_key(self, key: Tuple) -> bool:
         """
         Check if the user key is contained in the map.
         """
         return self._map_state_client.contains_key(self._state_name, self.key_schema, key)
 
-    def update_value(self, key: Any, value: Any) -> None:
+    def update_value(self, key: Tuple, value: Tuple) -> None:
         """
         Update value for given user key.
         """
         return self._map_state_client.update_value(self._state_name, self.key_schema, key,
                                                    self.value_schema, value)
 
-    def iterator(self) -> Iterator[Tuple[Row, Row]]:
+    def iterator(self) -> Iterator[Tuple[Tuple, Tuple]]:
         """
         Get the map associated with grouping key.
         """
         return MapStateKeyValuePairIterator(self._map_state_client, self._state_name)
 
-    def keys(self) -> Iterator[Row]:
+    def keys(self) -> Iterator[Tuple]:
         """
         Get the list of keys present in map associated with grouping key.
         """
         return MapStateIterator(self._map_state_client, self._state_name, True)
 
-    def values(self) -> Iterator[Row]:
+    def values(self) -> Iterator[Tuple]:
         """
         Get the list of values present in map associated with grouping key.
         """
         return MapStateIterator(self._map_state_client, self._state_name, False)
 
-    def remove_key(self, key: Any) -> None:
+    def remove_key(self, key: Tuple) -> None:
         """
         Remove user key from map state.
         """
