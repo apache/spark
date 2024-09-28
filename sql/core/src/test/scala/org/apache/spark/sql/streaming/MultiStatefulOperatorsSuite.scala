@@ -878,6 +878,60 @@ class MultiStatefulOperatorsSuite
     testOutputWatermarkInJoin(join3, input1, -40L * 1000 - 1)
   }
 
+  // NOTE: This is the revise of the reproducer in SPARK-45637. CREDIT goes to @andrezjzera.
+  test("SPARK-49829 time window agg per each source followed by stream-stream join") {
+    val inputStream1 = MemoryStream[Long]
+    val inputStream2 = MemoryStream[Long]
+
+    val df1 = inputStream1.toDF()
+      .selectExpr("value", "timestamp_seconds(value) AS ts")
+      .withWatermark("ts", "5 seconds")
+
+    val df2 = inputStream2.toDF()
+      .selectExpr("value", "timestamp_seconds(value) AS ts")
+      .withWatermark("ts", "5 seconds")
+
+    val df1Window = df1.groupBy(
+      window($"ts", "10 seconds")
+    ).agg(sum("value").as("sum_df1"))
+
+    val df2Window = df2.groupBy(
+      window($"ts", "10 seconds")
+    ).agg(sum("value").as("sum_df2"))
+
+    val joined = df1Window.join(df2Window, "window", "inner")
+      .selectExpr("CAST(window.end AS long) AS window_end", "sum_df1", "sum_df2")
+
+    // The test verifies the case where both sides produce input as time window (append mode)
+    // for stream-stream join having join condition for equality of time window.
+    // Inputs are produced into stream-stream join when the time windows are completed, meaning
+    // they will be evicted in this batch for stream-stream join as well. (NOTE: join condition
+    // does not delay the state watermark in stream-stream join).
+    // Before SPARK-49829, left side does not add the input to state store if it's going to evict
+    // in this batch, which breaks the match between input from left side and input from right
+    // side "for this batch".
+    testStream(joined)(
+      MultiAddData(
+        (inputStream1, Seq(1L, 2L, 3L, 4L, 5L)),
+        (inputStream2, Seq(5L, 6L, 7L, 8L, 9L))
+      ),
+      // watermark: 5 - 5 = 0
+      CheckNewAnswer(),
+      MultiAddData(
+        (inputStream1, Seq(11L, 12L, 13L, 14L, 15L)),
+        (inputStream2, Seq(15L, 16L, 17L, 18L, 19L)),
+      ),
+      // watermark: 15 - 5 = 10 (windows for [0, 10) are completed)
+      CheckNewAnswer((10L, 15L, 35L)),
+      MultiAddData(
+        (inputStream1, Seq(100L)),
+        (inputStream2, Seq(101L)),
+      ),
+      // watermark: 100 - 5 = 95 (windows for [0, 20) are completed)
+      CheckNewAnswer((20L, 65L, 85L))
+    )
+  }
+
   private def assertNumStateRows(numTotalRows: Seq[Long]): AssertOnQuery = AssertOnQuery { q =>
     q.processAllAvailable()
     val progressWithData = q.recentProgress.lastOption.get

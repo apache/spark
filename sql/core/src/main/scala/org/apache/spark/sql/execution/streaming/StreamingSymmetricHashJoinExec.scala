@@ -668,13 +668,37 @@ case class StreamingSymmetricHashJoinExec(
       private val iteratorNotEmpty: Boolean = super.hasNext
 
       override def completion(): Unit = {
-        val isLeftSemiWithMatch =
-          joinType == LeftSemi && joinSide == LeftSide && iteratorNotEmpty
-        // Add to state store only if both removal predicates do not match,
-        // and the row is not matched for left side of left semi join.
-        val shouldAddToState =
-          !stateKeyWatermarkPredicateFunc(key) && !stateValueWatermarkPredicateFunc(thisRow) &&
-          !isLeftSemiWithMatch
+        // The criteria of whether the input has to be added into state store or not:
+        // - Left side: input can be skipped to be added to the state store if it's already matched
+        //   and the join type is left semi.
+        //   For other cases, the input should be added, including the case it's going to be evicted
+        //   in this batch. It hasn't yet evaluated with inputs from right side "for this batch".
+        //   Learn about how the each side figures out the matches from other side.
+        // - Right side: for this side, the evaluation with inputs from left side "for this batch"
+        //   is done at this point. That said, input can be skipped to be added to the state store
+        //   if input is going to be evicted in this batch. Though, input should be added to the
+        //   state store if it's right outer join or full outer join, as unmatched output is
+        //   handled during state eviction.
+        val isLeftSemiWithMatch = joinType == LeftSemi && joinSide == LeftSide && iteratorNotEmpty
+        val shouldAddToState = if (isLeftSemiWithMatch) {
+          false
+        } else if (joinSide == LeftSide) {
+          true
+        } else {
+          // joinSide == RightSide
+
+          // if the input is not evicted in this batch (hence need to be persisted)
+          val isNotEvictingInThisBatch =
+            !stateKeyWatermarkPredicateFunc(key) && !stateValueWatermarkPredicateFunc(thisRow)
+
+          isNotEvictingInThisBatch ||
+            // if the input is producing "unmatched row" in this batch
+            (
+              (joinType == RightOuter && !iteratorNotEmpty) ||
+                (joinType == FullOuter && !iteratorNotEmpty)
+            )
+        }
+
         if (shouldAddToState) {
           joinStateManager.append(key, thisRow, matched = iteratorNotEmpty)
           updatedStateRowsCount += 1
