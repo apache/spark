@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult, UnresolvedWithinGroup}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, ExpressionDescription, ImplicitCastInputTypes, SortOrder}
@@ -117,7 +117,7 @@ case class Mode(
       case st: StringType =>
         CollationFactory.getCollationKey(data.asInstanceOf[UTF8String], st.collationId)
       case _ =>
-        throw new SparkUnsupportedOperationException(
+        throw new SparkIllegalArgumentException(
           errorClass = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.NO_INPUT",
           messageParameters = Map(
             "functionName" -> toSQLType(prettyName),

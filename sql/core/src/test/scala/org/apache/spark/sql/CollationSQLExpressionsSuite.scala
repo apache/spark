@@ -1956,8 +1956,7 @@ class CollationSQLExpressionsSuite
       ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
       ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
     ).foreach { t1 =>
-        checkError( // org.apache.spark.SparkException: [INTERNAL_ERROR] Cannot
-          // find sub error class 'COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.NO_INPUT' SQLSTATE: XX000
+        checkError(
           exception = intercept[SparkException] {
           Mode(
               child = Literal.create(null,
