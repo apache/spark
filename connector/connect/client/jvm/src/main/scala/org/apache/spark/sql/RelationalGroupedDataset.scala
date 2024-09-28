@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.agnosticEncoderFor
 import org.apache.spark.sql.connect.ConnectConversions._
 
 /**
@@ -82,7 +83,11 @@ class RelationalGroupedDataset private[sql] (
 
   /** @inheritdoc */
   def as[K: Encoder, T: Encoder]: KeyValueGroupedDataset[K, T] = {
-    KeyValueGroupedDatasetImpl[K, T](df, encoderFor[K], encoderFor[T], groupingExprs)
+    KeyValueGroupedDatasetImpl[K, T](
+      df,
+      agnosticEncoderFor[K],
+      agnosticEncoderFor[T],
+      groupingExprs)
   }
 
   /** @inheritdoc */

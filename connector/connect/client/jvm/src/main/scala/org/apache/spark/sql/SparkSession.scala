@@ -36,7 +36,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, BoxedLongEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
@@ -136,7 +136,7 @@ class SparkSession private[sql] (
 
   /** @inheritdoc */
   def createDataset[T: Encoder](data: Seq[T]): Dataset[T] = {
-    createDataset(encoderFor[T], data.iterator)
+    createDataset(agnosticEncoderFor[T], data.iterator)
   }
 
   /** @inheritdoc */
