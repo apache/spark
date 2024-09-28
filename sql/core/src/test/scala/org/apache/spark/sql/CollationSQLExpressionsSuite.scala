@@ -1952,12 +1952,10 @@ class CollationSQLExpressionsSuite
   test("UDT with collation  - Mode (throw exception)") {
     case class ModeTestCase(collationId: String, bufferValues: Map[String, Long], result: String)
     Seq(
-      ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
       ModeTestCase("utf8_lcase", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
       ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
       ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
     ).foreach { t1 =>
-      if (t1.collationId != "utf8_binary") {
         checkError( // org.apache.spark.SparkException: [INTERNAL_ERROR] Cannot
           // find sub error class 'COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.NO_INPUT' SQLSTATE: XX000
           exception = intercept[SparkException] {
@@ -1969,13 +1967,12 @@ class CollationSQLExpressionsSuite
               dataType = MapType(StringType(t1.collationId), IntegerType)
             )
           },
-          condition = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT",
-          parameters = Map("message" -> "Cannot find sub" +
-            " error class 'COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.NO_INPUT'")
+          condition = "INTERNAL_ERROR",
+          parameters = Map("message" ->
+            "Cannot find sub error class 'COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.NO_INPUT'")
             // Map("function" -> "mode(i)", "dataType" -> "MAP<STRING, INT>")
          )
       }
-    }
   }
 
   test("SPARK-48430: Map value extraction with collations") {
