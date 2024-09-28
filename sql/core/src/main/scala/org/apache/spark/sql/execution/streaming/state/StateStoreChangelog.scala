@@ -104,7 +104,7 @@ abstract class StateStoreChangelogWriter(
 
   def writeLineage(lineage: Array[(Long, String)]): Unit = {
     assert(checkpointFormatVersion >= 2, "writeLineage should not be called upon " +
-      "StateStoreChangelogWriter with version < 2")
+      "StateStoreChangelogWriter with checkpointFormatVersion < 2")
     val lineageStr = lineage.map { case (version, uniqueId) =>
       s"$version:$uniqueId"
     }.mkString(" ")
