@@ -21,6 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.core.avro.AvroCompressionCodec
 import org.apache.spark.sql.execution.datasources.FileSourceCodecSuite
 import org.apache.spark.sql.internal.SQLConf
 

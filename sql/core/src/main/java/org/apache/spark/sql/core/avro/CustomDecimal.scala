@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.avro
+package org.apache.spark.sql.core.avro
 
-import org.apache.avro.LogicalType
-import org.apache.avro.Schema
+import org.apache.avro.{LogicalType, Schema}
 
 import org.apache.spark.sql.types.DecimalType
 

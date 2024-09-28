@@ -337,6 +337,31 @@ private[sql] class RocksDBStateStoreProvider
       keyValueEncoderMap.remove(colFamilyName)
       result
     }
+
+    override def put(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
+      rocksDB.put(key, value)
+    }
+
+    override def remove(key: Array[Byte], colFamilyName: String): Unit = {
+
+    }
+
+    override def get(key: Array[Byte], colFamilyName: String): Array[Byte] = {
+      throw new Exception
+    }
+
+    override def valuesIterator(key: Array[Byte], colFamilyName: String): Iterator[Array[Byte]] = {
+      throw new Exception
+    }
+
+    override def prefixScan(
+        prefixKey: Array[Byte], colFamilyName: String): Iterator[ByteArrayPair] = {
+      throw new Exception
+    }
+
+    override def byteArrayIter(colFamilyName: String): Iterator[ByteArrayPair] = {
+      throw new Exception
+    }
   }
 
   // Test-visible method to fetch the internal RocksDBStateStore class

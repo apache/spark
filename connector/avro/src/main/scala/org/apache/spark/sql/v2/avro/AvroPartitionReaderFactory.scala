@@ -25,9 +25,9 @@ import org.apache.avro.mapred.FsInput
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions, AvroUtils}
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
 import org.apache.spark.sql.connector.read.PartitionReader
+import org.apache.spark.sql.core.avro.{AvroDeserializer, AvroOptions, AvroUtils}
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.v2.{EmptyPartitionReader, FilePartitionReaderFactory, PartitionReaderWithPartitionValues}
 import org.apache.spark.sql.internal.SQLConf

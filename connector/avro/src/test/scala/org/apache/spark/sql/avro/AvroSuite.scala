@@ -37,11 +37,12 @@ import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkUp
 import org.apache.spark.TestUtils.assertExceptionMsg
 import org.apache.spark.sql._
 import org.apache.spark.sql.TestingUDT.IntervalData
-import org.apache.spark.sql.avro.AvroCompressionCodec._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.Filter
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA, UTC}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.core.avro.{AvroCompressionCodec, AvroFileFormat, AvroOptions, AvroSerializer, IncompatibleSchemaException, SchemaConverters}
+import org.apache.spark.sql.core.avro.AvroCompressionCodec._
 import org.apache.spark.sql.execution.{FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -160,9 +161,9 @@ abstract class AvroSuite
   test("resolve avro data source") {
     val databricksAvro = "com.databricks.spark.avro"
     // By default the backward compatibility for com.databricks.spark.avro is enabled.
-    Seq("org.apache.spark.sql.avro.AvroFileFormat", databricksAvro).foreach { provider =>
+    Seq("org.apache.spark.sql.core.avro.AvroFileFormat", databricksAvro).foreach { provider =>
       assert(DataSource.lookupDataSource(provider, spark.sessionState.conf) ===
-        classOf[org.apache.spark.sql.avro.AvroFileFormat])
+        classOf[AvroFileFormat])
     }
 
     withSQLConf(SQLConf.LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED.key -> "false") {
@@ -1716,7 +1717,7 @@ abstract class AvroSuite
       (DecimalType(4, 2), BYTES)
     )
     def assertException(f: () => AvroSerializer): Unit = {
-      val message = intercept[org.apache.spark.sql.avro.IncompatibleSchemaException] {
+      val message = intercept[IncompatibleSchemaException] {
         f()
       }.getMessage
       assert(message.contains("Cannot convert SQL type"))

@@ -30,6 +30,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
+import org.apache.spark.sql.core.avro.{AvroDeserializer, AvroUtils}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
 import org.apache.spark.sql.internal.SQLConf
