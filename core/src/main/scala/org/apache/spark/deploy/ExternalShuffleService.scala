@@ -170,6 +170,7 @@ object ExternalShuffleService extends Logging {
     val sparkConf = new SparkConf
     Utils.loadDefaultSparkProperties(sparkConf)
     // Initialize logging system again after `spark.log.structuredLogging.enabled` takes effect
+    Utils.resetStructuredLogging(sparkConf)
     Logging.uninitialize()
     val securityManager = new SecurityManager(sparkConf)
 
