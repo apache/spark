@@ -1140,6 +1140,44 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     partitions.asScala.toSeq
   }
 
+  private def getPartitionNamesWithCount(hive: Hive, table: Table): (Int, Seq[String]) = {
+    val partitionNames = hive.getPartitionNames(
+      table.getDbName, table.getTableName, -1).asScala.toSeq
+    (partitionNames.length, partitionNames)
+  }
+
+  private def getPartitionsInBatches(
+      hive: Hive,
+      table: Table,
+      size: Int,
+      partNames: Seq[String]): java.util.Collection[Partition] = {
+    logInfo(s"Starting the batch processing of partitions.")
+
+    val retryCount = SQLConf.get.metastorePartitionBatchRetryCount
+    val batches = partNames.grouped(size).toSeq
+    val processedPartitions = batches.flatMap { batch =>
+      var partitions: java.util.Collection[Partition] = null
+      var retry = 0
+      while (partitions == null && retry < retryCount) {
+        try {
+          partitions = hive.getPartitionsByNames(table, batch.asJava)
+        } catch {
+          case ex: Exception =>
+            logWarning(
+              s"Caught exception while fetching partition metadata for batch '$batch'.",
+              ex
+            )
+            retry += 1
+            if (retry > retryCount) {
+              logError(s"Failed to fetch all the partition metadata. Retries count exceeded.")
+            }
+        }
+      }
+      partitions.asScala
+    }
+    processedPartitions.asJava
+  }
+
   private def prunePartitionsFastFallback(
       hive: Hive,
       table: Table,
@@ -1157,11 +1195,19 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       }
     }
 
+    val batchSize = SQLConf.get.getHiveMetaStoreBatchSize
+
     if (!SQLConf.get.metastorePartitionPruningFastFallback ||
         predicates.isEmpty ||
         predicates.exists(hasTimeZoneAwareExpression)) {
+      val (count, partNames) = getPartitionNamesWithCount(hive, table)
       recordHiveCall()
-      getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
+      if(count < batchSize || batchSize == -1) {
+        getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
+      }
+      else {
+        getPartitionsInBatches(hive, table, batchSize, partNames)
+      }
     } else {
       try {
         val partitionSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
@@ -1193,8 +1239,14 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         case ex: HiveException if ex.getCause.isInstanceOf[MetaException] =>
           logWarning("Caught Hive MetaException attempting to get partition metadata by " +
             "filter from client side. Falling back to fetching all partition metadata", ex)
+          val (count, partNames) = getPartitionNamesWithCount(hive, table)
           recordHiveCall()
-          getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
+          if(count < batchSize || batchSize == -1) {
+            getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
+          }
+          else {
+            getPartitionsInBatches(hive, table, batchSize, partNames)
+          }
       }
     }
   }

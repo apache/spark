@@ -673,6 +673,40 @@ class HivePartitionFilteringSuite(version: String)
     }
   }
 
+  test("getPartitionsByFilter: getPartitionsInBatches") {
+    var filteredPartitions: Seq[CatalogTablePartition] = Seq()
+    var filteredPartitionsNoBatch: Seq[CatalogTablePartition] = Seq()
+    var filteredPartitionsHighBatch: Seq[CatalogTablePartition] = Seq()
+
+    withSQLConf(SQLConf.HMS_BATCH_SIZE.key -> "1") {
+      filteredPartitions = client.getPartitionsByFilter(
+        client.getRawHiveTable("default", "test"),
+        Seq(attr("ds") === 20170101)
+      )
+    }
+    withSQLConf(SQLConf.HMS_BATCH_SIZE.key -> "-1") {
+      filteredPartitionsNoBatch = client.getPartitionsByFilter(
+        client.getRawHiveTable("default", "test"),
+        Seq(attr("ds") === 20170101)
+      )
+    }
+    withSQLConf(SQLConf.HMS_BATCH_SIZE.key -> "5000") {
+      filteredPartitionsHighBatch = client.getPartitionsByFilter(
+        client.getRawHiveTable("default", "test"),
+        Seq(attr("ds") === 20170101)
+      )
+    }
+
+    assert(filteredPartitions.size == filteredPartitionsNoBatch.size)
+    assert(filteredPartitions.size == filteredPartitionsHighBatch.size)
+    assert(
+      filteredPartitions.map(_.spec.toSet).toSet ==
+        filteredPartitionsNoBatch.map(_.spec.toSet).toSet)
+    assert(
+      filteredPartitions.map(_.spec.toSet).toSet ==
+        filteredPartitionsHighBatch.map(_.spec.toSet).toSet)
+  }
+
   private def testMetastorePartitionFiltering(
       filterExpr: Expression,
       expectedDs: Seq[Int],
