@@ -634,6 +634,11 @@
         "message" : [
           "The collection of input data types must not be empty."
         ]
+      },
+      "BAD_INPUTS" : {
+        "message" : [
+          "The input data types to <functionName> must be valid, but found the input types <dataType>."
+        ]
       }
     },
     "sqlState" : "42K09"

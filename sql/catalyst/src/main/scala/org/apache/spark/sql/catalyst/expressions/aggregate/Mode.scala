@@ -21,6 +21,7 @@ import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult, UnresolvedWithinGroup}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, ExpressionDescription, ImplicitCastInputTypes, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.Cast.toSQLExpr
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, GenericArrayData, UnsafeRowUtils}
@@ -118,8 +119,9 @@ case class Mode(
         CollationFactory.getCollationKey(data.asInstanceOf[UTF8String], st.collationId)
       case _ =>
         throw new SparkIllegalArgumentException(
-          errorClass = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.NO_INPUT",
+          errorClass = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.BAD_INPUTS",
           messageParameters = Map(
+            "expression" -> toSQLExpr(this),
             "functionName" -> toSQLType(prettyName),
             "dataType" -> toSQLType(child.dataType))
         )

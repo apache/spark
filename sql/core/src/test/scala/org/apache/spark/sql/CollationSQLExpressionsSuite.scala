@@ -1957,7 +1957,7 @@ class CollationSQLExpressionsSuite
       ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
     ).foreach { t1 =>
         checkError(
-          exception = intercept[SparkException] {
+          exception = intercept[SparkIllegalArgumentException] {
           Mode(
               child = Literal.create(null,
                 MapType(StringType(t1.collationId), IntegerType))
@@ -1966,10 +1966,11 @@ class CollationSQLExpressionsSuite
               dataType = MapType(StringType(t1.collationId), IntegerType)
             )
           },
-          condition = "INTERNAL_ERROR",
-          parameters = Map("message" ->
-            "Cannot find sub error class 'COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.NO_INPUT'")
-            // Map("function" -> "mode(i)", "dataType" -> "MAP<STRING, INT>")
+          condition = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.BAD_INPUTS",
+          parameters = Map(
+            "expression" -> "\"mode(NULL)\"",
+            "functionName" -> "\"MODE\"",
+            "dataType" -> s"\"MAP<STRING COLLATE ${t1.collationId.toUpperCase()}, INT>\"")
          )
       }
   }
