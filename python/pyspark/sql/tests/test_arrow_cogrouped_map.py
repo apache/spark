@@ -378,7 +378,6 @@ class CogroupedMapInArrowTestsMixin:
 
             actual = grouped_df.applyInArrow(func, "id long, value long").collect()
             self.assertEqual(actual, left.collect())
-            
 
     def test_apply_in_arrow_partial_iteration(self):
         with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 2}):
