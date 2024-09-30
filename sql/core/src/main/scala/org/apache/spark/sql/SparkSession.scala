@@ -229,12 +229,7 @@ class SparkSession private(
   @Unstable
   def dataSource: DataSourceRegistration = sessionState.dataSourceRegistration
 
-  /**
-   * Returns a `StreamingQueryManager` that allows managing all the
-   * `StreamingQuery`s active on `this`.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @Unstable
   def streams: StreamingQueryManager = sessionState.streamingQueryManager
 
@@ -677,15 +672,7 @@ class SparkSession private(
   /** @inheritdoc */
   def read: DataFrameReader = new DataFrameReader(self)
 
-  /**
-   * Returns a `DataStreamReader` that can be used to read streaming data in as a `DataFrame`.
-   * {{{
-   *   sparkSession.readStream.parquet("/path/to/directory/of/parquet/files")
-   *   sparkSession.readStream.schema(schema).json("/path/to/directory/of/json/files")
-   * }}}
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def readStream: DataStreamReader = new DataStreamReader(self)
 
   // scalastyle:off

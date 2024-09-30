@@ -17,14 +17,8 @@
 
 package org.apache.spark
 
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-
 package object sql {
   type DataFrame = Dataset[Row]
-
-  private[sql] def encoderFor[E: Encoder]: AgnosticEncoder[E] = {
-    implicitly[Encoder[E]].asInstanceOf[AgnosticEncoder[E]]
-  }
 
   private[sql] def throwRddNotSupportedException(): Nothing =
     throw new UnsupportedOperationException("RDDs are not supported in Spark Connect.")

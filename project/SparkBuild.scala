@@ -1230,7 +1230,7 @@ object YARN {
     genConfigProperties := {
       val file = (Compile / classDirectory).value / s"org/apache/spark/deploy/yarn/$propFileName"
       val isHadoopProvided = SbtPomKeys.effectivePom.value.getProperties.get(hadoopProvidedProp)
-      IO.write(file, s"$hadoopProvidedProp = $isHadoopProvided")
+      sbt.IO.write(file, s"$hadoopProvidedProp = $isHadoopProvided")
     },
     Compile / copyResources := (Def.taskDyn {
       val c = (Compile / copyResources).value
