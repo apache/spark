@@ -28,7 +28,7 @@ import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.OutputMode.Update
 import org.apache.spark.sql.types.StructType
 
-object TestStateStoreWrapper {
+object CkptIdCollectingStateStoreWrapper {
   // Internal list to hold checkpoint IDs (strings)
   private var checkpointInfos: List[StateStoreCheckpointInfo] = List.empty
 
@@ -47,7 +47,7 @@ object TestStateStoreWrapper {
   }
 }
 
-case class TestStateStoreWrapper(innerStore: StateStore) extends StateStore {
+case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends StateStore {
 
   // Implement methods from ReadStateStore (parent trait)
 
@@ -126,14 +126,14 @@ case class TestStateStoreWrapper(innerStore: StateStore) extends StateStore {
   override def metrics: StateStoreMetrics = innerStore.metrics
   override def getStateStoreCheckpointInfo: StateStoreCheckpointInfo = {
     val ret = innerStore.getStateStoreCheckpointInfo
-    TestStateStoreWrapper.addCheckpointInfo(ret)
+    CkptIdCollectingStateStoreWrapper.addCheckpointInfo(ret)
     ret
   }
   override def hasCommitted: Boolean = innerStore.hasCommitted
 }
 
 // Wrapper class implementing StateStoreProvider
-class TestStateStoreProviderWrapper extends StateStoreProvider {
+class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
 
   val innerProvider = new RocksDBStateStoreProvider()
 
@@ -165,11 +165,12 @@ class TestStateStoreProviderWrapper extends StateStoreProvider {
 
   override def getStore(version: Long, stateStoreCkptId: Option[String] = None): StateStore = {
     val innerStateStore = innerProvider.getStore(version, stateStoreCkptId)
-    TestStateStoreWrapper(innerStateStore)
+    CkptIdCollectingStateStoreWrapper(innerStateStore)
   }
 
   override def getReadStore(version: Long, uniqueId: Option[String] = None): ReadStateStore = {
-    new WrappedReadStateStore(TestStateStoreWrapper(innerProvider.getReadStore(version, uniqueId)))
+    new WrappedReadStateStore(
+      CkptIdCollectingStateStoreWrapper(innerProvider.getReadStore(version, uniqueId)))
   }
 
   override def doMaintenance(): Unit = innerProvider.doMaintenance()
@@ -182,7 +183,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
   with AlsoTestWithChangelogCheckpointingEnabled {
   import testImplicits._
 
-  val providerClassName = classOf[TestStateStoreProviderWrapper].getCanonicalName
+  val providerClassName = classOf[CkptIdCollectingStateStoreProviderWrapper].getCanonicalName
 
 
   override protected def beforeAll(): Unit = {
@@ -190,7 +191,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
   }
 
   override def beforeEach(): Unit = {
-    TestStateStoreWrapper.clear()
+    CkptIdCollectingStateStoreWrapper.clear()
   }
 
   def testWithCheckpointInfoTracked(testName: String, testTags: Tag*)(
@@ -253,7 +254,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
   }
 
   def validateBaseCheckpointInfo(): Unit = {
-    val checkpointInfoList = TestStateStoreWrapper.getStateStoreCheckpointInfos
+    val checkpointInfoList = CkptIdCollectingStateStoreWrapper.getStateStoreCheckpointInfos
     // Here we assume for every task, we fetch checkpointID from the N state stores in the same
     // order. So we can separate stateStoreCkptId for different stores based on the order inside the
     // same (batchId, partitionId) group.
@@ -285,7 +286,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
       numBatches: Int,
       numStateStores: Int,
       batchVersionSet: Set[Long]): Unit = {
-    val checkpointInfoList = TestStateStoreWrapper.getStateStoreCheckpointInfos
+    val checkpointInfoList = CkptIdCollectingStateStoreWrapper.getStateStoreCheckpointInfos
     // We have 6 batches, 2 partitions, and 1 state store per batch
     assert(checkpointInfoList.size == numBatches * numStateStores * 2)
     checkpointInfoList.foreach { l =>
@@ -435,7 +436,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
         StopStream
       )
     }
-    val checkpointInfoList = TestStateStoreWrapper.getStateStoreCheckpointInfos
+    val checkpointInfoList = CkptIdCollectingStateStoreWrapper.getStateStoreCheckpointInfos
     // We sometimes add data to both data sources before CheckLastBatch(). They could be picked
     // up by one or two batches. There will be at least 6 batches, but less than 12.
     assert(checkpointInfoList.size % 8 == 0)
@@ -444,7 +445,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     // We don't pass batch versions that would need base checkpoint IDs because we don't know
     // batchIDs for that. We only know that there are 3 batches without it.
     validateCheckpointInfo(numBatches, 4, Set())
-    assert(TestStateStoreWrapper
+    assert(CkptIdCollectingStateStoreWrapper
       .getStateStoreCheckpointInfos
       .count(_.baseStateStoreCkptId.isDefined) == (numBatches - 3) * 8)
   }
