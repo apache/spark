@@ -436,10 +436,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     withSQLConf((SQLConf.ANSI_ENABLED.key, "true")) {
       checkErrorInExpression[SparkIllegalArgumentException](
         DateAddInterval(Literal(d), Literal(new CalendarInterval(1, 1, 25 * MICROS_PER_HOUR))),
-        "DATE_TIME_FIELD_OUT_OF_BOUNDS",
-        Map("message" ->
-          "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date",
-          "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
+        "UNSUPPORTED_DATETIME_UNIT_ADDITION",
+        Map("ansiConfig" -> "\"spark.sql.ansi.enabled\""))
     }
 
     withSQLConf((SQLConf.ANSI_ENABLED.key, "false")) {
@@ -1140,12 +1138,18 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // ansi test
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      checkExceptionInExpression[DateTimeException](MakeDate(Literal(Int.MaxValue), Literal(13),
-        Literal(19)), EmptyRow, "Invalid value for Year")
-      checkExceptionInExpression[DateTimeException](MakeDate(Literal(2019),
-        Literal(13), Literal(19)), EmptyRow, "Invalid value for Month")
-      checkExceptionInExpression[DateTimeException](MakeDate(Literal(2019), Literal(7),
-        Literal(32)), EmptyRow, "Invalid value for Day")
+      checkErrorInExpression[SparkDateTimeException](
+        MakeDate(Literal(Int.MaxValue), Literal(13), Literal(19)),
+        "DATE_TIME_FIELD_OUT_OF_BOUNDS",
+        Map("ansiConfig" -> "\"spark.sql.ansi.enabled\""))
+      checkErrorInExpression[SparkDateTimeException](
+        MakeDate(Literal(2019), Literal(13), Literal(19)),
+        "DATE_TIME_FIELD_OUT_OF_BOUNDS",
+        Map("ansiConfig" -> "\"spark.sql.ansi.enabled\""))
+      checkErrorInExpression[SparkDateTimeException](
+        MakeDate(Literal(2019), Literal(7), Literal(32)),
+        "DATE_TIME_FIELD_OUT_OF_BOUNDS",
+        Map("ansiConfig" -> "\"spark.sql.ansi.enabled\""))
     }
 
     // non-ansi test
@@ -1183,18 +1187,21 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             checkEvaluation(makeTimestampExpr.copy(timezone = None), expected)
 
             Seq(
-              (makeTimestampExpr.copy(year = Literal(Int.MaxValue)), "Invalid value for Year"),
-              (makeTimestampExpr.copy(month = Literal(13)), "Invalid value for Month"),
-              (makeTimestampExpr.copy(day = Literal(32)), "Invalid value for Day"),
-              (makeTimestampExpr.copy(hour = Literal(25)), "Invalid value for Hour"),
-              (makeTimestampExpr.copy(min = Literal(65)), "Invalid value for Min"),
-              (makeTimestampExpr.copy(sec = Literal(Decimal(
-                BigDecimal(70.0), 16, 6))), "Invalid value for Second")
+              makeTimestampExpr.copy(year = Literal(Int.MaxValue)),
+              makeTimestampExpr.copy(month = Literal(13)),
+              makeTimestampExpr.copy(day = Literal(32)),
+              makeTimestampExpr.copy(hour = Literal(25)),
+              makeTimestampExpr.copy(min = Literal(65)),
+              makeTimestampExpr.copy(sec = Literal(Decimal(
+                BigDecimal(70.0), 16, 6)))
             ).foreach { entry =>
               if (ansi) {
-                checkExceptionInExpression[DateTimeException](entry._1, EmptyRow, entry._2)
+                checkErrorInExpression[SparkDateTimeException](
+                  entry,
+                  "DATE_TIME_FIELD_OUT_OF_BOUNDS",
+                  Map("ansiConfig" -> "\"spark.sql.ansi.enabled\""))
               } else {
-                checkEvaluation(entry._1, null)
+                checkEvaluation(entry, null)
               }
             }
 
