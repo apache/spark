@@ -625,6 +625,11 @@
       "Cannot process input data types for the expression: <expression>."
     ],
     "subClass" : {
+      "BAD_INPUTS" : {
+        "message" : [
+          "The input data types to <functionName> must be valid, but found the input types <dataType>."
+        ]
+      },
       "MISMATCHED_TYPES" : {
         "message" : [
           "All input types must be the same except nullable, containsNull, valueContainsNull flags, but found the input types <inputTypes>."
@@ -633,11 +638,6 @@
       "NO_INPUTS" : {
         "message" : [
           "The collection of input data types must not be empty."
-        ]
-      },
-      "BAD_INPUTS" : {
-        "message" : [
-          "The input data types to <functionName> must be valid, but found the input types <dataType>."
         ]
       }
     },
