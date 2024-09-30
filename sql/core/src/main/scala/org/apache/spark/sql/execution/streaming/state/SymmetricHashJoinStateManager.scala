@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SafeProjection, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.streaming.StatefulOperatorCheckpointInfo
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.types.{BooleanType, LongType, StructField, StructType}
@@ -413,10 +414,15 @@ class SymmetricHashJoinStateManager(
     keyWithIndexToValue.abortIfNeeded()
   }
 
-  def getLatestCheckpointInfo(): StateStoreCheckpointInfo = {
-    SymmetricHashJoinStateManager.mergeStateStoreCheckpointInfo(
-      keyToNumValues.getLatestCheckpointInfo(),
-      keyWithIndexToValue.getLatestCheckpointInfo())
+  def getLatestCheckpointInfo(): (StateStoreCheckpointInfo, StateStoreCheckpointInfo) = {
+    val ci1 = keyToNumValues.getLatestCheckpointInfo()
+    val ci2 = keyWithIndexToValue.getLatestCheckpointInfo()
+
+    assert(ci1.partitionId == ci2.partitionId)
+    assert(ci1.batchVersion == ci2.batchVersion)
+    assert(ci1.checkpointId.isDefined == ci2.checkpointId.isDefined)
+
+    (ci1, ci2)
   }
 
   /** Get the combined metrics of all the state stores */
@@ -825,26 +831,31 @@ object SymmetricHashJoinStateManager {
   }
 
   def mergeStateStoreCheckpointInfo(
-      ci1: StateStoreCheckpointInfo,
-      ci2: StateStoreCheckpointInfo): StateStoreCheckpointInfo = {
+      ci1: (StateStoreCheckpointInfo, StateStoreCheckpointInfo),
+      ci2: (StateStoreCheckpointInfo, StateStoreCheckpointInfo)): StatefulOperatorCheckpointInfo = {
     // Stream-stream join has 4 state stores instead of one. So it will generate 4 different
     // checkpoint IDs. The approach we take here is to merge them into one ID in the
     // checkpointing path. The driver will process this single checkpointID. When it is passed
     // back to the executors, they will split it back into 4 IDs and use them to load the state.
     // This function is used to merge two checkpoint IDs into one.
-    assert(ci1.partitionId == ci2.partitionId)
-    assert(ci1.batchVersion == ci2.batchVersion)
-    assert(ci1.checkpointId.isDefined == ci2.checkpointId.isDefined)
-    if (ci1.checkpointId.isDefined && ci2.checkpointId.isDefined) {
-      StateStoreCheckpointInfo(
-        ci1.partitionId,
-        ci1.batchVersion,
-        Some(ci1.checkpointId.get + "," + ci2.checkpointId.get),
-        ci1.baseCheckpointId
-      )
-    } else {
-      ci1
-    }
+    assert(ci1._1.partitionId == ci2._1.partitionId)
+    assert(ci1._1.batchVersion == ci2._1.batchVersion)
+    assert(ci1._1.checkpointId.isDefined == ci2._1.checkpointId.isDefined)
+    StatefulOperatorCheckpointInfo(
+      ci1._1.partitionId,
+      ci1._1.batchVersion,
+      ci1._1.checkpointId.map(
+        Array(
+          _,
+          ci1._2.checkpointId.get,
+          ci2._1.checkpointId.get,
+          ci2._2.checkpointId.get)),
+      ci1._1.baseCheckpointId.map(
+        Array(
+          _,
+          ci1._2.baseCheckpointId.get,
+          ci2._1.baseCheckpointId.get,
+          ci2._2.baseCheckpointId.get)))
   }
 
   def splitStateStoreCheckpointInfo(

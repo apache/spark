@@ -73,9 +73,9 @@ case class StatefulOperatorStateInfo(
     operatorId: Long,
     storeVersion: Long,
     numPartitions: Int,
-    checkpointIds: Option[Array[String]] = None) {
+    checkpointIds: Option[Array[Array[String]]] = None) {
 
-  def getCheckpointId(partitionId: Int): Option[String] = {
+  def getCheckpointId(partitionId: Int): Option[Array[String]] = {
     checkpointIds.map(_(partitionId))
   }
 
@@ -144,6 +144,15 @@ trait StateStoreReader extends StatefulOperator with Logging {
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 }
+
+case class StatefulOperatorCheckpointInfo(
+    partitionId: Int,
+    batchVersion: Long,
+    // The checkpoint ID for a checkpoint at `batchVersion`. This is used to identify the checkpoint
+    checkpointId: Option[Array[String]],
+    // The checkpoint ID for `batchVersion` - 1, that is used to finish this batch. This is used
+    // to validate the batch is processed based on the correct checkpoint.
+    baseCheckpointId: Option[Array[String]])
 
 /** An operator that writes to a StateStore. */
 trait StateStoreWriter
@@ -220,8 +229,8 @@ trait StateStoreWriter
    * For the general checkpoint ID workflow, see comments of
    * class class [[StatefulOperatorStateInfo]]
    */
-  val checkpointInfoAccumulator: CollectionAccumulator[StateStoreCheckpointInfo] = {
-    SparkContext.getActive.map(_.collectionAccumulator[StateStoreCheckpointInfo]).get
+  val checkpointInfoAccumulator: CollectionAccumulator[StatefulOperatorCheckpointInfo] = {
+    SparkContext.getActive.map(_.collectionAccumulator[StatefulOperatorCheckpointInfo]).get
   }
 
   /**
@@ -229,7 +238,7 @@ trait StateStoreWriter
    * For the general checkpoint ID workflow, see comments of
    * class class [[StatefulOperatorStateInfo]]
    */
-  def getCheckpointInfo(): Array[StateStoreCheckpointInfo] = {
+  def getCheckpointInfo(): Array[StatefulOperatorCheckpointInfo] = {
     assert(StatefulOperatorStateInfo.ifEnableCheckpointId(conf))
     val ret = checkpointInfoAccumulator
       .value
@@ -253,7 +262,7 @@ trait StateStoreWriter
    * The executor reports its state store checkpoint ID, which would be sent back to the driver.
    * For the general checkpoint ID workflow, see comments of
    * class class [[StatefulOperatorStateInfo]]
-   */  protected def setCheckpointInfo(checkpointInfo: StateStoreCheckpointInfo): Unit = {
+   */  protected def setCheckpointInfo(checkpointInfo: StatefulOperatorCheckpointInfo): Unit = {
     if (StatefulOperatorStateInfo.ifEnableCheckpointId(conf)) {
       checkpointInfoAccumulator.add(checkpointInfo)
     }
@@ -320,7 +329,14 @@ trait StateStoreWriter
     storeMetrics.customMetrics.foreach { case (metric, value) =>
       longMetric(metric.name) += value
     }
-    setCheckpointInfo(store.getCheckpointInfo)
+
+    val ssInfo = store.getCheckpointInfo
+    setCheckpointInfo(
+      StatefulOperatorCheckpointInfo(
+        ssInfo.partitionId,
+        ssInfo.batchVersion,
+        ssInfo.checkpointId.map(Array( _)),
+        ssInfo.baseCheckpointId.map(Array(_))))
   }
 
   private def stateStoreCustomMetrics: Map[String, SQLMetric] = {

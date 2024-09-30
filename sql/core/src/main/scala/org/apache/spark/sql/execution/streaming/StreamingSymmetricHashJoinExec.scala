@@ -305,9 +305,12 @@ case class StreamingSymmetricHashJoinExec(
 
     // Parse checkpointID string and divide it into individual checkpointIds.
     assert(stateInfo.isDefined, "State info not defined")
-    val checkpointIds = SymmetricHashJoinStateManager.splitStateStoreCheckpointInfo(
-      partitionId,
-      stateInfo.get.checkpointIds)
+    val checkpointIds = stateInfo
+      .get
+      .checkpointIds
+      .map(_(partitionId))
+      .map(_.map(Option(_)))
+      .getOrElse(Array.fill[Option[String]](4)(None))
 
     val inputSchema = left.output ++ right.output
     val postJoinFilter =
@@ -511,6 +514,7 @@ case class StreamingSymmetricHashJoinExec(
         val leftSideMetrics = leftSideJoiner.commitStateAndGetMetrics()
         val rightSideMetrics = rightSideJoiner.commitStateAndGetMetrics()
         val combinedMetrics = StateStoreMetrics.combine(Seq(leftSideMetrics, rightSideMetrics))
+
         val checkpointInfo = SymmetricHashJoinStateManager.mergeStateStoreCheckpointInfo(
           leftSideJoiner.getLatestCheckpointInfo(),
           rightSideJoiner.getLatestCheckpointInfo())
@@ -730,7 +734,7 @@ case class StreamingSymmetricHashJoinExec(
       joinStateManager.metrics
     }
 
-    def getLatestCheckpointInfo(): StateStoreCheckpointInfo = {
+    def getLatestCheckpointInfo(): (StateStoreCheckpointInfo, StateStoreCheckpointInfo) = {
       joinStateManager.getLatestCheckpointInfo()
     }
 

@@ -548,7 +548,7 @@ case class TransformWithStateExec(
               DUMMY_VALUE_ROW_SCHEMA,
               NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
               version = stateInfo.get.storeVersion,
-              checkpointId = stateInfo.get.getCheckpointId(partitionId),
+              checkpointId = stateInfo.get.getCheckpointId(partitionId).map(_(0)),
               useColumnFamilies = true,
               storeConf = storeConf,
               hadoopConf = hadoopConfBroadcast.value.value

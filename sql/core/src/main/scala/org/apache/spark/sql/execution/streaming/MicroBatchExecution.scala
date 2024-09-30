@@ -35,7 +35,6 @@ import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.sources.{WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
-import org.apache.spark.sql.execution.streaming.state.StateStoreCheckpointInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.{Clock, Utils}
@@ -133,8 +132,8 @@ class MicroBatchExecution(
 
   // Store checkpointIDs for state store checkpoints to be committed or have been committed to
   // the commit log.
-  // operatorID -> (partitionID -> uniqueID)
-  private val currentCheckpointId = MutableMap[Long, Array[String]]()
+  // operatorID -> (partitionID -> array of uniqueID)
+  private val currentCheckpointId = MutableMap[Long, Array[Array[String]]]()
 
   override lazy val logicalPlan: LogicalPlan = {
     assert(queryExecutionThread eq Thread.currentThread,
@@ -910,7 +909,7 @@ class MicroBatchExecution(
   private def updateCheckpointIdForOperator(
       execCtx: MicroBatchExecutionContext,
       opId: Long,
-      checkpointInfo: Array[StateStoreCheckpointInfo]): Unit = {
+      checkpointInfo: Array[StatefulOperatorCheckpointInfo]): Unit = {
     // TODO validate baseCheckpointId
     checkpointInfo.map(_.batchVersion).foreach { v =>
       assert(

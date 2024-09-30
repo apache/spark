@@ -243,7 +243,7 @@ trait FlatMapGroupsWithStateExecBase
             stateManager.stateSchema,
             NoPrefixKeyStateEncoderSpec(groupingAttributes.toStructType),
             stateInfo.get.storeVersion,
-            stateInfo.get.getCheckpointId(partitionId),
+            stateInfo.get.getCheckpointId(partitionId).map(_(0)),
             useColumnFamilies = false,
             storeConf, hadoopConfBroadcast.value.value)
           val processor = createInputProcessor(store)
