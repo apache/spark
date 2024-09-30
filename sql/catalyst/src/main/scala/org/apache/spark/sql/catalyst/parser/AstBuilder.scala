@@ -5893,7 +5893,17 @@ class AstBuilder extends DataTypeAstBuilder
           SubqueryAlias(SubqueryAlias.generateSubqueryName(), left)
       }
       withWhereClause(c, withSubqueryAlias)
-    }.get)
+    }.getOrElse(Option(ctx.pivotClause()).map { c =>
+      if (ctx.unpivotClause() != null) {
+        throw QueryParsingErrors.unpivotWithPivotInFromClauseNotAllowedError(ctx)
+      }
+      withPivot(c, left)
+    }.getOrElse(Option(ctx.unpivotClause()).map { c =>
+      if (ctx.pivotClause() != null) {
+        throw QueryParsingErrors.unpivotWithPivotInFromClauseNotAllowedError(ctx)
+      }
+      withUnpivot(c, left)
+    }.get)))
   }
 
   /**
