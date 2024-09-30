@@ -3101,6 +3101,12 @@
     ],
     "sqlState" : "42K0F"
   },
+  "INVALID_TIMEZONE" : {
+    "message" : [
+      "The timezone: <timeZone> is invalid. The timezone must be either a region-based zone ID or a zone offset. Region IDs must have the form ‘area/city’, such as ‘America/Los_Angeles’. Zone offsets must be in the format ‘(+|-)HH’, ‘(+|-)HH:mm’ or ‘(+|-)HH:mm:ss’, e.g ‘-08’, ‘+01:00’ or ‘-13:33:33’., and must be in the range from -18:00 to +18:00. 'Z' and 'UTC' are accepted as synonyms for '+00:00'."
+    ],
+    "sqlState" : "22009"
+  },
   "INVALID_TIME_TRAVEL_SPEC" : {
     "message" : [
       "Cannot specify both version and timestamp when time travelling the table."
@@ -3134,12 +3140,6 @@
       }
     },
     "sqlState" : "42K0E"
-  },
-  "INVALID_TIMEZONE": {
-    "message": [
-      "The timezone: <timeZone> is invalid.  The timezone must be either a region-based zone ID or a zone offset. Region IDs must have the form ‘area/city’, such as ‘America/Los_Angeles’. Zone offsets must be in the format ‘(+|-)HH’, ‘(+|-)HH:mm’ or ‘(+|-)HH:mm:ss’, e.g ‘-08’, ‘+01:00’ or ‘-13:33:33’., and must be in the range from -18:00 to +18:00. 'Z' and 'UTC' are accepted as synonyms for '+00:00'."
-    ],
-    "sqlState" : "22009"
   },
   "INVALID_TYPED_LITERAL" : {
     "message" : [
