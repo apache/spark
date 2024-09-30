@@ -100,12 +100,12 @@ object MathUtils {
     }
   }
 
-  def withOverflowCode(evalCode: String, context: String): String = {
+  def withOverflowCode(evalCode: String, hint: String, context: String): String = {
     s"""
        |try {
        |  $evalCode
        |} catch (ArithmeticException e) {
-       |  throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage(), "", $context);
+       |  throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage(), "$hint", $context);
        |}
        |""".stripMargin
   }

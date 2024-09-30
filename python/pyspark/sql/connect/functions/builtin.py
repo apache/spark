@@ -573,6 +573,17 @@ def bin(col: "ColumnOrName") -> Column:
 
 bin.__doc__ = pysparkfuncs.bin.__doc__
 
+def try_bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    if scale is None:
+        return _invoke_function_over_columns("try_bround", col)
+    else:
+        scale = _enum_to_value(scale)
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("try_bround", col, scale)  # type: ignore[arg-type]
+
+
+try_bround.__doc__ = pysparkfuncs.try_bround.__doc__
+
 
 def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
     if scale is None:
@@ -827,6 +838,17 @@ def rint(col: "ColumnOrName") -> Column:
 
 
 rint.__doc__ = pysparkfuncs.rint.__doc__
+
+def try_round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    if scale is None:
+        return _invoke_function_over_columns("try_round", col)
+    else:
+        scale = _enum_to_value(scale)
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("try_round", col, scale)  # type: ignore[arg-type]
+
+
+try_round.__doc__ = pysparkfuncs.try_round.__doc__
 
 
 def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
@@ -3668,14 +3690,15 @@ def make_dt_interval(
 
 make_dt_interval.__doc__ = pysparkfuncs.make_dt_interval.__doc__
 
+
 def try_make_interval(
-        years: Optional["ColumnOrName"] = None,
-        months: Optional["ColumnOrName"] = None,
-        weeks: Optional["ColumnOrName"] = None,
-        days: Optional["ColumnOrName"] = None,
-        hours: Optional["ColumnOrName"] = None,
-        mins: Optional["ColumnOrName"] = None,
-        secs: Optional["ColumnOrName"] = None,
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    weeks: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
 ) -> Column:
     _years = lit(0) if years is None else _to_col(years)
     _months = lit(0) if months is None else _to_col(months)
@@ -3691,6 +3714,7 @@ def try_make_interval(
 
 
 try_make_interval.__doc__ = pysparkfuncs.try_make_interval.__doc__
+
 
 def make_interval(
     years: Optional["ColumnOrName"] = None,

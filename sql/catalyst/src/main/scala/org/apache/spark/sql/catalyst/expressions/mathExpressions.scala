@@ -326,6 +326,8 @@ case class RoundCeil(child: Expression, scale: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, IntegerType)
 
+  override def tryHint(): String = "try_ceil"
+
   override def nodeName: String = "ceil"
 
   override protected def withNewChildrenInternal(
@@ -621,6 +623,8 @@ case class RoundFloor(child: Expression, scale: Expression)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.FLOOR, "ROUND_FLOOR") {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, IntegerType)
+
+  override def tryHint(): String = "try_floor"
 
   override def nodeName: String = "floor"
 
@@ -1597,24 +1601,28 @@ abstract class RoundBase(child: Expression, scale: Expression,
       case ByteType if ansiEnabled =>
         MathUtils.withOverflow(
           f = BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByteExact,
+          hint = tryHint(),
           context = getContextOrNull())
       case ByteType =>
         BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByte
       case ShortType if ansiEnabled =>
         MathUtils.withOverflow(
           f = BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, mode).toShortExact,
+          hint = tryHint(),
           context = getContextOrNull())
       case ShortType =>
         BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, mode).toShort
       case IntegerType if ansiEnabled =>
         MathUtils.withOverflow(
           f = BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, mode).toIntExact,
+          hint = tryHint(),
           context = getContextOrNull())
       case IntegerType =>
         BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, mode).toInt
       case LongType if ansiEnabled =>
         MathUtils.withOverflow(
           f = BigDecimal(input1.asInstanceOf[Long]).setScale(_scale, mode).toLongExact,
+          hint = tryHint(),
           context = getContextOrNull())
       case LongType =>
         BigDecimal(input1.asInstanceOf[Long]).setScale(_scale, mode).toLong
@@ -1635,6 +1643,8 @@ abstract class RoundBase(child: Expression, scale: Expression,
     }
   }
 
+  protected def tryHint(): String = ""
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val ce = child.genCode(ctx)
 
@@ -1646,7 +1656,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
             |${ev.value} = new java.math.BigDecimal(${ce.value}).
             |setScale(${_scale}, java.math.BigDecimal.${modeStr}).${dt}ValueExact();
             |""".stripMargin
-          MathUtils.withOverflowCode(evalCode, errorContext)
+          MathUtils.withOverflowCode(evalCode, tryHint(), errorContext)
         } else {
           s"""
              |${ev.value} = new java.math.BigDecimal(${ce.value}).
@@ -1738,10 +1748,38 @@ case class Round(
 
   def this(child: Expression, scale: Expression) = this(child, scale, SQLConf.get.ansiEnabled)
 
+  override def tryHint(): String = "try_round"
+
   override def flatArguments: Iterator[Any] = Iterator(child, scale)
 
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Round =
     copy(child = newLeft, scale = newRight)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr, d) - Returns `expr` rounded to `d` decimal places using HALF_UP rounding mode.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(2.5, 0);
+       3
+  """,
+  since = "4.0.0",
+  group = "math_funcs")
+// scalastyle:on line.size.limit
+case class TryRound(override val child: Expression, scale: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+
+  def this(child: Expression) = this(child, Literal(0), Round(child, Literal(0), false))
+  def this(child: Expression, scale: Expression) = this(child, scale, Round(child, scale, false))
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(replacement = newChild)
+  }
+
+  override def parameters: Seq[Expression] = Seq(child, scale)
+
+  override def prettyName: String = "try_round"
 }
 
 /**
@@ -1771,10 +1809,38 @@ case class BRound(
 
   def this(child: Expression, scale: Expression) = this(child, scale, SQLConf.get.ansiEnabled)
 
+  override def tryHint(): String = "try_bround"
+
   override def flatArguments: Iterator[Any] = Iterator(child, scale)
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): BRound = copy(child = newLeft, scale = newRight)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr, d) - Returns `expr` rounded to `d` decimal places using HALF_UP rounding mode.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(2.5, 0);
+       3
+  """,
+  since = "4.0.0",
+  group = "math_funcs")
+// scalastyle:on line.size.limit
+case class TryBRound(override val child: Expression, scale: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+
+  def this(child: Expression) = this(child, Literal(0), BRound(child, Literal(0), false))
+  def this(child: Expression, scale: Expression) = this(child, scale, BRound(child, scale, false))
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(replacement = newChild)
+  }
+
+  override def parameters: Seq[Expression] = Seq(child, scale)
+
+  override def prettyName: String = "try_bround"
 }
 
 object WidthBucket {
