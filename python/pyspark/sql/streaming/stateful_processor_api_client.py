@@ -17,10 +17,16 @@
 from enum import Enum
 import os
 import socket
-from typing import Any, Union, Optional, cast, Tuple
+from typing import Any, List, Union, Optional, cast, Tuple
 
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
-from pyspark.sql.types import StructType, _parse_datatype_string, Row
+from pyspark.sql.pandas.serializers import ArrowStreamSerializer
+from pyspark.sql.types import (
+    StructType,
+    _parse_datatype_string,
+    Row,
+)
+from pyspark.sql.pandas.types import convert_pandas_using_numpy_type
 from pyspark.sql.utils import has_numpy
 from pyspark.serializers import CPickleSerializer
 from pyspark.errors import PySparkRuntimeError
@@ -46,6 +52,7 @@ class StatefulProcessorApiClient:
         self.handle_state = StatefulProcessorHandleState.CREATED
         self.utf8_deserializer = UTF8Deserializer()
         self.pickleSer = CPickleSerializer()
+        self.serializer = ArrowStreamSerializer()
 
     def set_handle_state(self, state: StatefulProcessorHandleState) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
@@ -124,6 +131,25 @@ class StatefulProcessorApiClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error initializing value state: " f"{response_message[1]}")
 
+    def get_list_state(self, state_name: str, schema: Union[StructType, str]) -> None:
+        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+
+        if isinstance(schema, str):
+            schema = cast(StructType, _parse_datatype_string(schema))
+
+        state_call_command = stateMessage.StateCallCommand()
+        state_call_command.stateName = state_name
+        state_call_command.schema = schema.json()
+        call = stateMessage.StatefulProcessorCall(getListState=state_call_command)
+        message = stateMessage.StateRequest(statefulProcessorCall=call)
+
+        self._send_proto_message(message.SerializeToString())
+        response_message = self._receive_proto_message()
+        status = response_message[0]
+        if status != 0:
+            # TODO(SPARK-49233): Classify user facing errors.
+            raise PySparkRuntimeError(f"Error initializing value state: " f"{response_message[1]}")
+
     def _send_proto_message(self, message: bytes) -> None:
         # Writing zero here to indicate message version. This allows us to evolve the message
         # format or even changing the message protocol in the future.
@@ -168,3 +194,18 @@ class StatefulProcessorApiClient:
 
     def _deserialize_from_bytes(self, value: bytes) -> Any:
         return self.pickleSer.loads(value)
+
+    def _send_arrow_state(self, schema: StructType, state: List[Tuple]) -> None:
+        import pyarrow as pa
+        import pandas as pd
+
+        column_names = [field.name for field in schema.fields]
+        pandas_df = convert_pandas_using_numpy_type(
+            pd.DataFrame(state, columns=column_names), schema
+        )
+        batch = pa.RecordBatch.from_pandas(pandas_df)
+        self.serializer.dump_stream(iter([batch]), self.sockfile)
+        self.sockfile.flush()
+
+    def _read_arrow_state(self) -> Any:
+        return self.serializer.load_stream(self.sockfile)

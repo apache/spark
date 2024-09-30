@@ -148,7 +148,7 @@ statement
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE identifierReference                                          #use
     | USE namespace identifierReference                                #useNamespace
-    | SET CATALOG (errorCapturingIdentifier | stringLit)                  #setCatalog
+    | SET CATALOG catalogIdentifierReference                           #setCatalog
     | CREATE namespace (IF errorCapturingNot EXISTS)? identifierReference
         (commentSpec |
          locationSpec |
@@ -592,6 +592,12 @@ dmlStatementNoWith
 identifierReference
     : IDENTIFIER_KW LEFT_PAREN expression RIGHT_PAREN
     | multipartIdentifier
+    ;
+
+catalogIdentifierReference
+    : IDENTIFIER_KW LEFT_PAREN expression RIGHT_PAREN
+    | errorCapturingIdentifier
+    | stringLit
     ;
 
 queryOrganization
@@ -1493,6 +1499,11 @@ version
 operatorPipeRightSide
     : selectClause
     | whereClause
+    // The following two cases match the PIVOT or UNPIVOT clause, respectively.
+    // For each one, we add the other clause as an option in order to return high-quality error
+    // messages in the event that both are present (this is not allowed).
+    | pivotClause unpivotClause?
+    | unpivotClause pivotClause?
     | sample
     ;
 

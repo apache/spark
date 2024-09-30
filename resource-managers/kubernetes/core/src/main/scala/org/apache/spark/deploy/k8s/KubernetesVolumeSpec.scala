@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s
 
 private[spark] sealed trait KubernetesVolumeSpecificConf
 
-private[spark] case class KubernetesHostPathVolumeConf(hostPath: String)
+private[spark] case class KubernetesHostPathVolumeConf(hostPath: String, volumeType: String)
   extends KubernetesVolumeSpecificConf
 
 private[spark] case class KubernetesPVCVolumeConf(
@@ -42,5 +42,6 @@ private[spark] case class KubernetesVolumeSpec(
     volumeName: String,
     mountPath: String,
     mountSubPath: String,
+    mountSubPathExpr: String,
     mountReadOnly: Boolean,
     volumeConf: KubernetesVolumeSpecificConf)

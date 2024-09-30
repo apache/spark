@@ -125,26 +125,6 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Observation"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Observation$"),
 
-    // SPARK-49414: Remove Logging from DataFrameReader.
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.DataFrameReader"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logName"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.log"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logInfo"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logDebug"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logTrace"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logWarning"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logError"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logInfo"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logDebug"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logTrace"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logWarning"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.logError"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.isTraceEnabled"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.initializeLogIfNecessary"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.initializeLogIfNecessary"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.initializeLogIfNecessary$default$2"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.initializeForcefully"),
-
     // SPARK-49425: Create a shared DataFrameWriter interface.
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrameWriter"),
 
@@ -195,7 +175,23 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLImplicits$StringToColumn"),
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.SparkSession$implicits$"),
     ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.sql.SQLImplicits.session"),
-  )
+
+    // SPARK-49282: Shared SparkSessionBuilder
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.SparkSession$Builder"),
+
+    // SPARK-49286: Avro/Protobuf functions in sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.functions"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.functions$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.protobuf.functions"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.protobuf.functions$"),
+
+    // SPARK-49434: Move aggregators to sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.javalang.typed"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.scalalang.typed"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.scalalang.typed$"),
+  ) ++ loggingExcludes("org.apache.spark.sql.DataFrameReader") ++
+    loggingExcludes("org.apache.spark.sql.streaming.DataStreamReader") ++
+    loggingExcludes("org.apache.spark.sql.SparkSession#Builder")
 
   // Default exclude rules
   lazy val defaultExcludes = Seq(
@@ -235,6 +231,26 @@ object MimaExcludes {
       case _ => true
     }
   )
+
+  private def loggingExcludes(fqn: String) = {
+    Seq(
+      ProblemFilters.exclude[MissingTypesProblem](fqn),
+      missingMethod(fqn, "logName"),
+      missingMethod(fqn, "log"),
+      missingMethod(fqn, "logInfo"),
+      missingMethod(fqn, "logDebug"),
+      missingMethod(fqn, "logTrace"),
+      missingMethod(fqn, "logWarning"),
+      missingMethod(fqn, "logError"),
+      missingMethod(fqn, "isTraceEnabled"),
+      missingMethod(fqn, "initializeLogIfNecessary"),
+      missingMethod(fqn, "initializeLogIfNecessary$default$2"),
+      missingMethod(fqn, "initializeForcefully"))
+  }
+
+  private def missingMethod(names: String*) = {
+    ProblemFilters.exclude[DirectMissingMethodProblem](names.mkString("."))
+  }
 
   def excludes(version: String): Seq[Problem => Boolean] = version match {
     case v if v.startsWith("4.0") => v40excludes

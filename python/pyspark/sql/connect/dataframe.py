@@ -739,62 +739,16 @@ class DataFrame(ParentDataFrame):
     def tail(self, num: int) -> List[Row]:
         return DataFrame(plan.Tail(child=self._plan, limit=num), session=self._session).collect()
 
-    def _sort_cols(
-        self,
-        cols: Sequence[Union[int, str, Column, List[Union[int, str, Column]]]],
-        kwargs: Dict[str, Any],
-    ) -> List[Column]:
-        """Return a JVM Seq of Columns that describes the sort order"""
-        if cols is None:
-            raise PySparkValueError(
-                errorClass="CANNOT_BE_EMPTY",
-                messageParameters={"item": "cols"},
-            )
-
-        if len(cols) == 1 and isinstance(cols[0], list):
-            cols = cols[0]
-
-        _cols: List[Column] = []
-        for c in cols:
-            if isinstance(c, int) and not isinstance(c, bool):
-                # ordinal is 1-based
-                if c > 0:
-                    _c = self[c - 1]
-                # negative ordinal means sort by desc
-                elif c < 0:
-                    _c = self[-c - 1].desc()
-                else:
-                    raise PySparkIndexError(
-                        errorClass="ZERO_INDEX",
-                        messageParameters={},
-                    )
-            else:
-                _c = c  # type: ignore[assignment]
-            _cols.append(F._to_col(cast("ColumnOrName", _c)))
-
-        ascending = kwargs.get("ascending", True)
-        if isinstance(ascending, (bool, int)):
-            if not ascending:
-                _cols = [c.desc() for c in _cols]
-        elif isinstance(ascending, list):
-            _cols = [c if asc else c.desc() for asc, c in zip(ascending, _cols)]
-        else:
-            raise PySparkTypeError(
-                errorClass="NOT_BOOL_OR_LIST",
-                messageParameters={"arg_name": "ascending", "arg_type": type(ascending).__name__},
-            )
-
-        return [F._sort_col(c) for c in _cols]
-
     def sort(
         self,
         *cols: Union[int, str, Column, List[Union[int, str, Column]]],
         **kwargs: Any,
     ) -> ParentDataFrame:
+        _cols = self._preapare_cols_for_sort(F.col, cols, kwargs)
         res = DataFrame(
             plan.Sort(
                 self._plan,
-                columns=self._sort_cols(cols, kwargs),
+                columns=[F._sort_col(c) for c in _cols],
                 is_global=True,
             ),
             session=self._session,
@@ -809,10 +763,11 @@ class DataFrame(ParentDataFrame):
         *cols: Union[int, str, Column, List[Union[int, str, Column]]],
         **kwargs: Any,
     ) -> ParentDataFrame:
+        _cols = self._preapare_cols_for_sort(F.col, cols, kwargs)
         res = DataFrame(
             plan.Sort(
                 self._plan,
-                columns=self._sort_cols(cols, kwargs),
+                columns=[F._sort_col(c) for c in _cols],
                 is_global=False,
             ),
             session=self._session,
@@ -1260,7 +1215,7 @@ class DataFrame(ParentDataFrame):
         res._cached_schema = self._merge_cached_schema(other)
         return res
 
-    def where(self, condition: "ColumnOrName") -> ParentDataFrame:
+    def where(self, condition: Union[Column, str]) -> ParentDataFrame:
         if not isinstance(condition, (str, Column)):
             raise PySparkTypeError(
                 errorClass="NOT_COLUMN_OR_STR",
