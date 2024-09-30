@@ -1624,7 +1624,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
           ),
           CheckNewAnswer(("b", 2)),
           assertLeftRows(Seq(Row("a", 1), Row("b", 2))),
-          assertRightRows(Seq(Row("b", 1), Row("c", 1))),
+          assertRightRows(Seq(Row("b", 2), Row("c", 1))),
           // batch 1
           // WM: late record = 0, eviction = 2
           // Before Spark introduces multiple stateful operator, WM for late record was same as
