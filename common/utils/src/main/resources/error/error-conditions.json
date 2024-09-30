@@ -3137,7 +3137,7 @@
   },
   "INVALID_TIMEZONE": {
     "message": [
-      "ZoneOffset represents the time difference from UTC and must be in the range from -18:00 to +18:00."
+      "The timezone: <timeZone> is invalid.  The timezone must be either a region-based zone ID or a zone offset. Region IDs must have the form ‘area/city’, such as ‘America/Los_Angeles’. Zone offsets must be in the format ‘(+|-)HH’, ‘(+|-)HH:mm’ or ‘(+|-)HH:mm:ss’, e.g ‘-08’, ‘+01:00’ or ‘-13:33:33’., and must be in the range from -18:00 to +18:00. 'Z' and 'UTC' are accepted as synonyms for '+00:00'."
     ],
     "sqlState" : "22009"
   },
