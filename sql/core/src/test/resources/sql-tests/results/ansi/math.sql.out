@@ -50,7 +50,7 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22003",
   "messageParameters" : {
     "message" : "Overflow",
-    "try_alternative" : ""
+    "try_alternative" : " Use 'try_round' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -73,7 +73,7 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22003",
   "messageParameters" : {
     "message" : "Overflow",
-    "try_alternative" : ""
+    "try_alternative" : " Use 'try_round' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -136,7 +136,7 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22003",
   "messageParameters" : {
     "message" : "Overflow",
-    "try_alternative" : ""
+    "try_alternative" : " Use 'try_round' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -159,7 +159,7 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22003",
   "messageParameters" : {
     "message" : "Overflow",
-    "try_alternative" : ""
+    "try_alternative" : " Use 'try_round' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -222,7 +222,7 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22003",
   "messageParameters" : {
     "message" : "Overflow",
-    "try_alternative" : ""
+    "try_alternative" : " Use 'try_round' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -245,7 +245,7 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22003",
   "messageParameters" : {
     "message" : "Overflow",
-    "try_alternative" : ""
+    "try_alternative" : " Use 'try_round' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -308,7 +308,7 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22003",
   "messageParameters" : {
     "message" : "Overflow",
-    "try_alternative" : ""
+    "try_alternative" : " Use 'try_round' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -331,7 +331,7 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22003",
   "messageParameters" : {
     "message" : "Overflow",
-    "try_alternative" : ""
+    "try_alternative" : " Use 'try_round' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -394,7 +394,7 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22003",
   "messageParameters" : {
     "message" : "Overflow",
-    "try_alternative" : ""
+    "try_alternative" : " Use 'try_bround' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -417,7 +417,7 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22003",
   "messageParameters" : {
     "message" : "Overflow",
-    "try_alternative" : ""
+    "try_alternative" : " Use 'try_bround' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -480,7 +480,7 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22003",
   "messageParameters" : {
     "message" : "Overflow",
-    "try_alternative" : ""
+    "try_alternative" : " Use 'try_bround' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -503,7 +503,7 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22003",
   "messageParameters" : {
     "message" : "Overflow",
-    "try_alternative" : ""
+    "try_alternative" : " Use 'try_bround' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -566,7 +566,7 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22003",
   "messageParameters" : {
     "message" : "Overflow",
-    "try_alternative" : ""
+    "try_alternative" : " Use 'try_bround' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -589,7 +589,7 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22003",
   "messageParameters" : {
     "message" : "Overflow",
-    "try_alternative" : ""
+    "try_alternative" : " Use 'try_bround' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -652,7 +652,7 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22003",
   "messageParameters" : {
     "message" : "Overflow",
-    "try_alternative" : ""
+    "try_alternative" : " Use 'try_bround' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -675,7 +675,7 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22003",
   "messageParameters" : {
     "message" : "Overflow",
-    "try_alternative" : ""
+    "try_alternative" : " Use 'try_bround' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",

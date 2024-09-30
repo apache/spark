@@ -950,9 +950,8 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "long overflow"
+    "message" : "long overflow",
+    "try_alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -990,9 +989,8 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "long overflow"
+    "message" : "long overflow",
+    "try_alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead."
   },
   "queryContext" : [ {
     "objectType" : "",

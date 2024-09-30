@@ -143,10 +143,12 @@ Mathematical Functions
     tan
     tanh
     try_add
+    try_bround
     try_conv
     try_divide
     try_mod
     try_multiply
+    try_round
     try_subtract
     unhex
     width_bucket
