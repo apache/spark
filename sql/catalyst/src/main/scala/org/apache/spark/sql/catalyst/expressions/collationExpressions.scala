@@ -52,6 +52,10 @@ object CollateExpressionBuilder extends ExpressionBuilder {
             if (evalCollation == null) {
               throw QueryCompilationErrors.unexpectedNullError("collation", collationExpr)
             } else {
+              if (!SQLConf.get.trimCollationEnabled &&
+                evalCollation.toString.toUpperCase().contains("TRIM")) {
+                throw QueryCompilationErrors.trimCollationNotEnabledError()
+              }
               Collate(e, evalCollation.toString)
             }
           case (_: StringType, false) => throw QueryCompilationErrors.nonFoldableArgumentError(
