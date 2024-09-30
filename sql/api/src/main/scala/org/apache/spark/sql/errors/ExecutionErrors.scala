@@ -239,10 +239,10 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
         "docroot" -> SparkBuildInfo.spark_doc_root))
   }
 
-  def zoneOffsetError(e: java.time.DateTimeException): SparkDateTimeException = {
+  def zoneOffsetError(timeZone: String, e: java.time.DateTimeException): SparkDateTimeException = {
     new SparkDateTimeException(
       errorClass = "INVALID_TIMEZONE",
-      messageParameters = Map.empty,
+      messageParameters = Map("timeZone" -> timeZone),
       context = Array.empty,
       summary = "",
       cause = Some(e))
