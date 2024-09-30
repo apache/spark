@@ -133,7 +133,7 @@ class MicroBatchExecution(
   // Store checkpointIDs for state store checkpoints to be committed or have been committed to
   // the commit log.
   // operatorID -> (partitionID -> array of uniqueID)
-  private val currentCheckpointId = MutableMap[Long, Array[Array[String]]]()
+  private val currentStateStoreCkptId = MutableMap[Long, Array[Array[String]]]()
 
   override lazy val logicalPlan: LogicalPlan = {
     assert(queryExecutionThread eq Thread.currentThread,
@@ -842,7 +842,7 @@ class MicroBatchExecution(
         execCtx.offsetSeqMetadata,
         watermarkPropagator,
         execCtx.previousContext.isEmpty,
-        currentCheckpointId)
+        currentStateStoreCkptId)
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
     }
 
@@ -906,29 +906,33 @@ class MicroBatchExecution(
    */
   protected def markMicroBatchExecutionStart(execCtx: MicroBatchExecutionContext): Unit = {}
 
-  private def updateCheckpointIdForOperator(
+  private def updateStateStoreCkptIdForOperator(
       execCtx: MicroBatchExecutionContext,
       opId: Long,
-      checkpointInfo: Array[StatefulOperatorCheckpointInfo]): Unit = {
-    // TODO validate baseCheckpointId
+      checkpointInfo: Array[StatefulOpStateStoreCheckpointInfo]): Unit = {
+    // TODO validate baseStateStoreCkptId
     checkpointInfo.map(_.batchVersion).foreach { v =>
       assert(
         execCtx.batchId == -1 || v == execCtx.batchId + 1,
-        s"version $v doesn't match current Batch ID ${execCtx.batchId}")
+        s"Batch version ${execCtx.batchId} should generate state store checkpoint " +
+          s"version ${execCtx.batchId + 1} but we see ${v}")
     }
-    currentCheckpointId.put(opId, checkpointInfo.map { c =>
-      assert(c.checkpointId.isDefined)
-      c.checkpointId.get
+    currentStateStoreCkptId.put(opId, checkpointInfo.map { c =>
+      assert(c.stateStoreCkptId.isDefined)
+      c.stateStoreCkptId.get
     })
   }
 
-  private def updateCheckpointId(
+  private def updateStateStoreCkptId(
       execCtx: MicroBatchExecutionContext,
       latestExecPlan: SparkPlan): Unit = {
     latestExecPlan.collect {
       case e: StateStoreWriter =>
         assert(e.stateInfo.isDefined)
-        updateCheckpointIdForOperator(execCtx, e.stateInfo.get.operatorId, e.getCheckpointInfo())
+        updateStateStoreCkptIdForOperator(
+          execCtx,
+          e.stateInfo.get.operatorId,
+          e.getStateStoreCheckpointInfo())
     }
   }
 
@@ -940,7 +944,7 @@ class MicroBatchExecution(
     val latestExecPlan = execCtx.executionPlan.executedPlan
     watermarkTracker.updateWatermark(latestExecPlan)
     if (sparkSession.sessionState.conf.stateStoreCheckpointFormatVersion >= 2) {
-      updateCheckpointId(execCtx, latestExecPlan)
+      updateStateStoreCkptId(execCtx, latestExecPlan)
     }
     execCtx.reportTimeTaken("commitOffsets") {
       if (!commitLog.add(execCtx.batchId, CommitMetadata(watermarkTracker.currentWatermark))) {

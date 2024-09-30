@@ -115,8 +115,8 @@ class StreamStreamJoinStatePartitionReader(
         hadoopConf = hadoopConf.value,
         partitionId = partition.partition,
         // TODO State store source doesn't support checkpoint ID yet.
-        keyToNumValuesCheckpointId = None,
-        keyWithIndexToValueCheckpointId = None,
+        keyToNumValuesStateStoreCkptId = None,
+        keyWithIndexToValueStateStoreCkptId = None,
         formatVersion,
         skippedNullValueCount = None,
         useStateStoreCoordinator = false,

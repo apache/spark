@@ -86,7 +86,8 @@ class StateStoreConf(
   /**
    * When creating new state store checkpoint, which format version to use.
    */
-  val ifEnableCheckpointId = StatefulOperatorStateInfo.ifEnableCheckpointId(sqlConf)
+  val enableStateStoreCheckpointIds =
+    StatefulOperatorStateInfo.enableStateStoreCheckpointIds(sqlConf)
 
   /**
    * Additional configurations related to state store. This will capture all configs in

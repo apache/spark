@@ -43,7 +43,7 @@ object TestStateStoreWrapper {
   }
 
   // Method to read the list of checkpoint IDs in a synchronized way
-  def getCheckpointInfos: List[StateStoreCheckpointInfo] = synchronized {
+  def getStateStoreCheckpointInfos: List[StateStoreCheckpointInfo] = synchronized {
     checkpointInfos
   }
 
@@ -129,8 +129,8 @@ case class TestStateStoreWrapper(innerStore: StateStore) extends StateStore {
 
   override def commit(): Long = innerStore.commit()
   override def metrics: StateStoreMetrics = innerStore.metrics
-  override def getCheckpointInfo: StateStoreCheckpointInfo = {
-    val ret = innerStore.getCheckpointInfo
+  override def getStateStoreCheckpointInfo: StateStoreCheckpointInfo = {
+    val ret = innerStore.getStateStoreCheckpointInfo
     TestStateStoreWrapper.addCheckpointInfo(ret)
     ret
   }
@@ -168,8 +168,8 @@ class TestStateStoreProviderWrapper extends StateStoreProvider {
 
   override def close(): Unit = innerProvider.close()
 
-  override def getStore(version: Long, checkpointId: Option[String] = None): StateStore = {
-    val innerStateStore = innerProvider.getStore(version, checkpointId)
+  override def getStore(version: Long, stateStoreCkptId: Option[String] = None): StateStore = {
+    val innerStateStore = innerProvider.getStore(version, stateStoreCkptId)
     TestStateStoreWrapper(innerStateStore)
   }
 
@@ -465,13 +465,13 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
         CheckLastBatch((4, 5))
       )
     }
-    val checkpointInfoList = TestStateStoreWrapper.getCheckpointInfos
+    val checkpointInfoList = TestStateStoreWrapper.getStateStoreCheckpointInfos
     // We have 6 batches, 2 partitions, and 1 state store per batch
     assert(checkpointInfoList.size == 12)
     checkpointInfoList.foreach { l =>
-      assert(l.checkpointId.isDefined)
+      assert(l.stateStoreCkptId.isDefined)
       if (l.batchVersion == 2 || l.batchVersion == 4 || l.batchVersion == 5) {
-        assert(l.baseCheckpointId.isDefined)
+        assert(l.baseStateStoreCkptId.isDefined)
       }
     }
     assert(checkpointInfoList.count(_.partitionId == 0) == 6)
@@ -485,7 +485,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
       if a.partitionId == b.partitionId && a.batchVersion == b.batchVersion + 1
     } {
       // if batch version exists, it should be the same as the checkpoint ID of the previous batch
-      assert(!a.baseCheckpointId.isDefined || b.checkpointId == a.baseCheckpointId)
+      assert(!a.baseStateStoreCkptId.isDefined || b.stateStoreCkptId == a.baseStateStoreCkptId)
     }
   }
 
@@ -536,13 +536,13 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
         StopStream
       )
     }
-    val checkpointInfoList = TestStateStoreWrapper.getCheckpointInfos
+    val checkpointInfoList = TestStateStoreWrapper.getStateStoreCheckpointInfos
     // 6 bathes, each has two stateful operators and two shuffle partitions
     assert(checkpointInfoList.size == 6 * 2 * 2)
     checkpointInfoList.foreach { l =>
-      assert(l.checkpointId.isDefined)
+      assert(l.stateStoreCkptId.isDefined)
     }
-    assert(checkpointInfoList.count(_.baseCheckpointId.isDefined) == 3 * 2 * 2)
+    assert(checkpointInfoList.count(_.baseStateStoreCkptId.isDefined) == 3 * 2 * 2)
 
     assert(checkpointInfoList.count(_.partitionId == 0) == 6 * 2)
     assert(checkpointInfoList.count(_.partitionId == 1) == 6 * 2)
@@ -551,7 +551,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
     }
 
     // Here we assume for every task, we fetch checkpointID from the 4 state stores in the same
-    // order. So we can separate checkpointId for different stores based on the order inside the
+    // order. So we can separate stateStoreCkptId for different stores based on the order inside the
     // same (batchId, partitionId) group.
     val grouped = checkpointInfoList
       .groupBy(info => (info.batchVersion, info.partitionId))
@@ -571,7 +571,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
         if a.partitionId == b.partitionId && a.batchVersion == b.batchVersion + 1
       } {
         // if batch version exists, it should be the same as the checkpoint ID of the previous batch
-        assert(!a.baseCheckpointId.isDefined || b.checkpointId == a.baseCheckpointId)
+        assert(!a.baseStateStoreCkptId.isDefined || b.stateStoreCkptId == a.baseStateStoreCkptId)
       }
     }
   }
@@ -631,7 +631,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
         StopStream
       )
     }
-    val checkpointInfoList = TestStateStoreWrapper.getCheckpointInfos
+    val checkpointInfoList = TestStateStoreWrapper.getStateStoreCheckpointInfos
     // We sometimes add data to both data sources before CheckLastBatch(). They could be picked
     // up by one or two batches. There will be at least 6 batches, but less than 12.
     assert(checkpointInfoList.size % 8 == 0)
@@ -639,9 +639,9 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
     assert(numBatches >= 6 && numBatches < 12)
 
     checkpointInfoList.foreach { l =>
-      assert(l.checkpointId.isDefined)
+      assert(l.stateStoreCkptId.isDefined)
     }
-    assert(checkpointInfoList.count(_.baseCheckpointId.isDefined) == (numBatches - 3) * 8)
+    assert(checkpointInfoList.count(_.baseStateStoreCkptId.isDefined) == (numBatches - 3) * 8)
 
     assert(checkpointInfoList.count(_.partitionId == 0) == numBatches * 4)
     assert(checkpointInfoList.count(_.partitionId == 1) == numBatches * 4)
@@ -650,7 +650,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
     }
 
     // Here we assume for every task, we fetch checkpointID from the 4 state stores in the same
-    // order. So we can separate checkpointId for different stores based on the order inside the
+    // order. So we can separate stateStoreCkptId for different stores based on the order inside the
     // same (batchId, partitionId) group.
     val grouped = checkpointInfoList
       .groupBy(info => (info.batchVersion, info.partitionId))
@@ -670,7 +670,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
         if a.partitionId == b.partitionId && a.batchVersion == b.batchVersion + 1
       } {
         // if batch version exists, it should be the same as the checkpoint ID of the previous batch
-        assert(!a.baseCheckpointId.isDefined || b.checkpointId == a.baseCheckpointId)
+        assert(!a.baseStateStoreCkptId.isDefined || b.stateStoreCkptId == a.baseStateStoreCkptId)
       }
     }
   }
@@ -720,13 +720,13 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
       )
     }
 
-    val checkpointInfoList = TestStateStoreWrapper.getCheckpointInfos
+    val checkpointInfoList = TestStateStoreWrapper.getStateStoreCheckpointInfos
     // We expect batches and state stores as per previous tests, adapting for DropDuplicates
     assert(checkpointInfoList.size == 12) // 6 batches x 2 partitions
     checkpointInfoList.foreach { l =>
-      assert(l.checkpointId.isDefined)
+      assert(l.stateStoreCkptId.isDefined)
       if (l.batchVersion == 2 || l.batchVersion == 3 || l.batchVersion == 5) {
-        assert(l.baseCheckpointId.isDefined)
+        assert(l.baseStateStoreCkptId.isDefined)
       }
     }
     assert(checkpointInfoList.count(_.partitionId == 0) == 6)
@@ -740,7 +740,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
       if a.partitionId == b.partitionId && a.batchVersion == b.batchVersion + 1
     } {
       // Check that checkpoint IDs are correctly chained across batches
-      assert(!a.baseCheckpointId.isDefined || b.checkpointId == a.baseCheckpointId)
+      assert(!a.baseStateStoreCkptId.isDefined || b.stateStoreCkptId == a.baseStateStoreCkptId)
     }
   }
 
@@ -801,13 +801,13 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
       )
     }
 
-    val checkpointInfoList = TestStateStoreWrapper.getCheckpointInfos
+    val checkpointInfoList = TestStateStoreWrapper.getStateStoreCheckpointInfos
     // We expect batches and state stores as per previous tests, adapting for FlatMapGroupsWithState
     assert(checkpointInfoList.size == 12) // 6 batches x 2 partitions
     checkpointInfoList.foreach { l =>
-      assert(l.checkpointId.isDefined)
+      assert(l.stateStoreCkptId.isDefined)
       if (l.batchVersion == 2 || l.batchVersion == 4 || l.batchVersion == 6) {
-        assert(l.baseCheckpointId.isDefined)
+        assert(l.baseStateStoreCkptId.isDefined)
       }
     }
     assert(checkpointInfoList.count(_.partitionId == 0) == 6)
@@ -821,7 +821,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
       if a.partitionId == b.partitionId && a.batchVersion == b.batchVersion + 1
     } {
       // Check that checkpoint IDs are correctly chained across batches
-      assert(!a.baseCheckpointId.isDefined || b.checkpointId == a.baseCheckpointId)
+      assert(!a.baseStateStoreCkptId.isDefined || b.stateStoreCkptId == a.baseStateStoreCkptId)
     }
   }
 

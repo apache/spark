@@ -191,7 +191,7 @@ trait StateStore extends ReadStateStore {
   def metrics: StateStoreMetrics
 
   /** Return information on recently generated checkpoints */
-  def getCheckpointInfo: StateStoreCheckpointInfo = {
+  def getStateStoreCheckpointInfo: StateStoreCheckpointInfo = {
     StateStoreCheckpointInfo(-1, -1, None, None)
   }
 
@@ -242,10 +242,10 @@ case class StateStoreCheckpointInfo(
     partitionId: Int,
     batchVersion: Long,
     // The checkpoint ID for a checkpoint at `batchVersion`. This is used to identify the checkpoint
-    checkpointId: Option[String],
+    stateStoreCkptId: Option[String],
     // The checkpoint ID for `batchVersion` - 1, that is used to finish this batch. This is used
     // to validate the batch is processed based on the correct checkpoint.
-    baseCheckpointId: Option[String])
+    baseStateStoreCkptId: Option[String])
 
 object StateStoreMetrics {
   def combine(allMetrics: Seq[StateStoreMetrics]): StateStoreMetrics = {
@@ -414,10 +414,10 @@ trait StateStoreProvider {
   def close(): Unit
 
   /** Return an instance of [[StateStore]] representing state data of the given version.
-   * If `checkpointId` is provided, the instance also needs to match the ID. */
+   * If `stateStoreCkptId` is provided, the instance also needs to match the ID. */
   def getStore(
       version: Long,
-      checkpointId: Option[String] = None): StateStore
+      stateStoreCkptId: Option[String] = None): StateStore
 
   /**
    * Return an instance of [[ReadStateStore]] representing state data of the given version
@@ -727,7 +727,7 @@ object StateStore extends Logging {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
-      checkpointId: Option[String],
+      stateStoreCkptId: Option[String],
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
@@ -737,7 +737,7 @@ object StateStore extends Logging {
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
       keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
-    storeProvider.getReadStore(version, checkpointId)
+    storeProvider.getReadStore(version, stateStoreCkptId)
   }
 
   /** Get or create a store associated with the id. */
@@ -747,7 +747,7 @@ object StateStore extends Logging {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
-      checkpointId: Option[String],
+      stateStoreCkptId: Option[String],
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
@@ -757,7 +757,7 @@ object StateStore extends Logging {
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
       keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
-    storeProvider.getStore(version, checkpointId)
+    storeProvider.getStore(version, stateStoreCkptId)
   }
 
   private def getStateStoreProvider(

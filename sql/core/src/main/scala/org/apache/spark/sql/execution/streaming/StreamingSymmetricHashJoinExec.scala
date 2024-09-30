@@ -303,11 +303,11 @@ case class StreamingSymmetricHashJoinExec(
     val updateStartTimeNs = System.nanoTime
     val joinedRow = new JoinedRow
 
-    // Parse checkpointID string and divide it into individual checkpointIds.
+    // Parse checkpointID string and divide it into individual stateStoreCkptIds.
     assert(stateInfo.isDefined, "State info not defined")
-    val checkpointIds = stateInfo
+    val stateStoreCkptIds = stateInfo
       .get
-      .checkpointIds
+      .stateStoreCkptIds
       .map(_(partitionId))
       .map(_.map(Option(_)))
       .getOrElse(Array.fill[Option[String]](4)(None))
@@ -318,11 +318,11 @@ case class StreamingSymmetricHashJoinExec(
     val leftSideJoiner = new OneSideHashJoiner(
       LeftSide, left.output, leftKeys, leftInputIter,
       condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId,
-      checkpointIds(0), checkpointIds(1), skippedNullValueCount)
+      stateStoreCkptIds(0), stateStoreCkptIds(1), skippedNullValueCount)
     val rightSideJoiner = new OneSideHashJoiner(
       RightSide, right.output, rightKeys, rightInputIter,
       condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId,
-      checkpointIds(2), checkpointIds(3), skippedNullValueCount)
+      stateStoreCkptIds(2), stateStoreCkptIds(3), skippedNullValueCount)
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
@@ -518,7 +518,7 @@ case class StreamingSymmetricHashJoinExec(
         val checkpointInfo = SymmetricHashJoinStateManager.mergeStateStoreCheckpointInfo(
           leftSideJoiner.getLatestCheckpointInfo(),
           rightSideJoiner.getLatestCheckpointInfo())
-        setCheckpointInfo(checkpointInfo)
+        setStateStoreCheckpointInfo(checkpointInfo)
 
         // Update SQL metrics
         numUpdatedStateRows +=
@@ -569,8 +569,8 @@ case class StreamingSymmetricHashJoinExec(
       postJoinFilter: (InternalRow) => Boolean,
       stateWatermarkPredicate: Option[JoinStateWatermarkPredicate],
       partitionId: Int,
-      keyToNumValuesCheckpointId: Option[String],
-      keyWithIndexToValueCheckpointId: Option[String],
+      keyToNumValuesStateStoreCkptId: Option[String],
+      keyWithIndexToValueStateStoreCkptId: Option[String],
       skippedNullValueCount: Option[SQLMetric]) {
 
     // Filter the joined rows based on the given condition.
@@ -578,8 +578,16 @@ case class StreamingSymmetricHashJoinExec(
       Predicate.create(preJoinFilterExpr.getOrElse(Literal(true)), inputAttributes).eval _
 
     private val joinStateManager = new SymmetricHashJoinStateManager(
-      joinSide, inputAttributes, joinKeys, stateInfo, storeConf, hadoopConfBcast.value.value,
-      partitionId, keyToNumValuesCheckpointId, keyWithIndexToValueCheckpointId, stateFormatVersion,
+      joinSide,
+      inputAttributes,
+      joinKeys,
+      stateInfo,
+      storeConf,
+      hadoopConfBcast.value.value,
+      partitionId,
+      keyToNumValuesStateStoreCkptId,
+      keyWithIndexToValueStateStoreCkptId,
+      stateFormatVersion,
       skippedNullValueCount)
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
