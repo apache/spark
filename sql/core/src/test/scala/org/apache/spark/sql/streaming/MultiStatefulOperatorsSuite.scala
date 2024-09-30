@@ -919,13 +919,13 @@ class MultiStatefulOperatorsSuite
       CheckNewAnswer(),
       MultiAddData(
         (inputStream1, Seq(11L, 12L, 13L, 14L, 15L)),
-        (inputStream2, Seq(15L, 16L, 17L, 18L, 19L)),
+        (inputStream2, Seq(15L, 16L, 17L, 18L, 19L))
       ),
       // watermark: 15 - 5 = 10 (windows for [0, 10) are completed)
       CheckNewAnswer((10L, 15L, 35L)),
       MultiAddData(
         (inputStream1, Seq(100L)),
-        (inputStream2, Seq(101L)),
+        (inputStream2, Seq(101L))
       ),
       // watermark: 100 - 5 = 95 (windows for [0, 20) are completed)
       CheckNewAnswer((20L, 65L, 85L))

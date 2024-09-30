@@ -1634,7 +1634,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
           AddData(memoryStream1, ("d", 1)),
           CheckNewAnswer(("a", 1), ("d", 1)),
           assertLeftRows(Seq()),
-          assertRightRows(Seq()),
+          assertRightRows(Seq())
         )
       }
     }
@@ -2125,7 +2125,7 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
         // WM: late event = 20, eviction = 20 (slowest: inputStream3)
         MultiAddData(
           (memoryStream1, Seq((22L, 3))),
-          (memoryStream3, Seq((22L, 3))),
+          (memoryStream3, Seq((22L, 3)))
         ),
         CheckNewAnswer(),
         assertLeftRowsFor1stJoin(Seq(Row(21, 2), Row(22, 3))),
