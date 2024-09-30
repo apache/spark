@@ -733,6 +733,7 @@ abstract class CTEInlineSuiteBase
           |SELECT * FROM r2
           |""".stripMargin)
       checkAnswer(df, Row(1))
+      df.explain(true)
     }
   }
 }
