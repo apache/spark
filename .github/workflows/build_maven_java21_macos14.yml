@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / Maven (master, Scala 2.13, Hadoop 3, JDK 21, macos-14)"
+name: "Build / Maven (master, Scala 2.13, Hadoop 3, JDK 21, MacOS-15)"
 
 on:
   schedule:
@@ -32,7 +32,7 @@ jobs:
     if: github.repository == 'apache/spark'
     with:
       java: 21
-      os: macos-14
+      os: macos-15
       envs: >-
         {
           "OBJC_DISABLE_INITIALIZE_FORK_SAFETY": "YES"
