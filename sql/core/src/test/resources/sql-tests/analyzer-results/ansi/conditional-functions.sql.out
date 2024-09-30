@@ -99,13 +99,91 @@ Project [CASE WHEN (1 > 2) THEN (cast(1 as double) / cast(0 as double)) ELSE cas
 
 
 -- !query
+SELECT NULLIF(1, 1)
+-- !query analysis
+Project [nullif(1, 1) AS nullif(1, 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT NULLIF(1, 2)
+-- !query analysis
+Project [nullif(1, 2) AS nullif(1, 2)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT NULLIF(NULL, 1)
+-- !query analysis
+Project [nullif(null, 1) AS nullif(NULL, 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT NULLIF(1, NULL)
+-- !query analysis
+Project [nullif(1, null) AS nullif(1, NULL)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT NULLIF(NULL, NULL)
+-- !query analysis
+Project [nullif(null, null) AS nullif(NULL, NULL)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT NULLIF('abc', 'abc')
+-- !query analysis
+Project [nullif(abc, abc) AS nullif(abc, abc)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT NULLIF('abc', 'xyz')
+-- !query analysis
+Project [nullif(abc, xyz) AS nullif(abc, xyz)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT NULLIF(id, 1) FROM range(10) GROUP BY NULLIF(id, 1)
+-- !query analysis
+Aggregate [nullif(id#xL, 1)], [nullif(id#xL, 1) AS nullif(id, 1)#xL]
++- Range (0, 10, step=1)
+
+
+-- !query
+SELECT NULLIF(id, 1), COUNT(*) FROM range(10) GROUP BY NULLIF(id, 2)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_AGGREGATION",
+  "sqlState" : "42803",
+  "messageParameters" : {
+    "expression" : "\"id\"",
+    "expressionAnyValue" : "\"any_value(id)\""
+  }
+}
+
+
+-- !query
+SELECT NULLIF(id, 1), COUNT(*) FROM range(10) GROUP BY NULLIF(id, 1) HAVING COUNT(*) > 1
+-- !query analysis
+Filter (count(1)#xL > cast(1 as bigint))
++- Aggregate [nullif(id#xL, 1)], [nullif(id#xL, 1) AS nullif(id, 1)#xL, count(1) AS count(1)#xL]
+   +- Range (0, 10, step=1)
+
+
+-- !query
 SELECT nullifzero(0),
-  nullifzero(cast(0 as tinyint)),
-  nullifzero(cast(0 as bigint)),
-  nullifzero('0'),
-  nullifzero(0.0),
-  nullifzero(1),
-  nullifzero(null)
+       nullifzero(cast(0 as tinyint)),
+       nullifzero(cast(0 as bigint)),
+       nullifzero('0'),
+       nullifzero(0.0),
+       nullifzero(1),
+       nullifzero(null)
 -- !query analysis
 Project [nullifzero(0) AS nullifzero(0)#x, nullifzero(cast(0 as tinyint)) AS nullifzero(CAST(0 AS TINYINT))#x, nullifzero(cast(0 as bigint)) AS nullifzero(CAST(0 AS BIGINT))#xL, nullifzero(0) AS nullifzero(0)#x, nullifzero(0.0) AS nullifzero(0.0)#x, nullifzero(1) AS nullifzero(1)#x, nullifzero(null) AS nullifzero(NULL)#x]
 +- OneRowRelation
@@ -120,9 +198,9 @@ Project [nullifzero(abc) AS nullifzero(abc)#x]
 
 -- !query
 SELECT zeroifnull(null),
-  zeroifnull(1),
-  zeroifnull(cast(1 as tinyint)),
-  zeroifnull(cast(1 as bigint))
+       zeroifnull(1),
+       zeroifnull(cast(1 as tinyint)),
+       zeroifnull(cast(1 as bigint))
 -- !query analysis
 Project [zeroifnull(null) AS zeroifnull(NULL)#x, zeroifnull(1) AS zeroifnull(1)#x, zeroifnull(cast(1 as tinyint)) AS zeroifnull(CAST(1 AS TINYINT))#x, zeroifnull(cast(1 as bigint)) AS zeroifnull(CAST(1 AS BIGINT))#xL]
 +- OneRowRelation

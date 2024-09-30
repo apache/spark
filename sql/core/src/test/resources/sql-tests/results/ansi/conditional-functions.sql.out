@@ -122,13 +122,110 @@ struct<CASE WHEN (1 > 2) THEN (1 / 0) ELSE 1 END:double>
 
 
 -- !query
+SELECT NULLIF(1, 1)
+-- !query schema
+struct<nullif(1, 1):int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT NULLIF(1, 2)
+-- !query schema
+struct<nullif(1, 2):int>
+-- !query output
+1
+
+
+-- !query
+SELECT NULLIF(NULL, 1)
+-- !query schema
+struct<nullif(NULL, 1):void>
+-- !query output
+NULL
+
+
+-- !query
+SELECT NULLIF(1, NULL)
+-- !query schema
+struct<nullif(1, NULL):int>
+-- !query output
+1
+
+
+-- !query
+SELECT NULLIF(NULL, NULL)
+-- !query schema
+struct<nullif(NULL, NULL):void>
+-- !query output
+NULL
+
+
+-- !query
+SELECT NULLIF('abc', 'abc')
+-- !query schema
+struct<nullif(abc, abc):string>
+-- !query output
+NULL
+
+
+-- !query
+SELECT NULLIF('abc', 'xyz')
+-- !query schema
+struct<nullif(abc, xyz):string>
+-- !query output
+abc
+
+
+-- !query
+SELECT NULLIF(id, 1) FROM range(10) GROUP BY NULLIF(id, 1)
+-- !query schema
+struct<nullif(id, 1):bigint>
+-- !query output
+0
+2
+3
+4
+5
+6
+7
+8
+9
+NULL
+
+
+-- !query
+SELECT NULLIF(id, 1), COUNT(*) FROM range(10) GROUP BY NULLIF(id, 2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_AGGREGATION",
+  "sqlState" : "42803",
+  "messageParameters" : {
+    "expression" : "\"id\"",
+    "expressionAnyValue" : "\"any_value(id)\""
+  }
+}
+
+
+-- !query
+SELECT NULLIF(id, 1), COUNT(*) FROM range(10) GROUP BY NULLIF(id, 1) HAVING COUNT(*) > 1
+-- !query schema
+struct<nullif(id, 1):bigint,count(1):bigint>
+-- !query output
+
+
+
+-- !query
 SELECT nullifzero(0),
-  nullifzero(cast(0 as tinyint)),
-  nullifzero(cast(0 as bigint)),
-  nullifzero('0'),
-  nullifzero(0.0),
-  nullifzero(1),
-  nullifzero(null)
+       nullifzero(cast(0 as tinyint)),
+       nullifzero(cast(0 as bigint)),
+       nullifzero('0'),
+       nullifzero(0.0),
+       nullifzero(1),
+       nullifzero(null)
 -- !query schema
 struct<nullifzero(0):int,nullifzero(CAST(0 AS TINYINT)):tinyint,nullifzero(CAST(0 AS BIGINT)):bigint,nullifzero(0):string,nullifzero(0.0):decimal(1,1),nullifzero(1):int,nullifzero(NULL):void>
 -- !query output
@@ -161,9 +258,9 @@ org.apache.spark.SparkNumberFormatException
 
 -- !query
 SELECT zeroifnull(null),
-  zeroifnull(1),
-  zeroifnull(cast(1 as tinyint)),
-  zeroifnull(cast(1 as bigint))
+       zeroifnull(1),
+       zeroifnull(cast(1 as tinyint)),
+       zeroifnull(cast(1 as bigint))
 -- !query schema
 struct<zeroifnull(NULL):int,zeroifnull(1):int,zeroifnull(CAST(1 AS TINYINT)):int,zeroifnull(CAST(1 AS BIGINT)):bigint>
 -- !query output
