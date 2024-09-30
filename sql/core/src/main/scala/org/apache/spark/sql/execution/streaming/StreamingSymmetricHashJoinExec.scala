@@ -673,7 +673,8 @@ case class StreamingSymmetricHashJoinExec(
         //   and the join type is left semi.
         //   For other cases, the input should be added, including the case it's going to be evicted
         //   in this batch. It hasn't yet evaluated with inputs from right side "for this batch".
-        //   Learn about how the each side figures out the matches from other side.
+        //   Refer to the classdoc of SteramingSymmetricHashJoinExec about how stream-stream join
+        //   works.
         // - Right side: for this side, the evaluation with inputs from left side "for this batch"
         //   is done at this point. That said, input can be skipped to be added to the state store
         //   if input is going to be evicted in this batch. Though, input should be added to the
