@@ -220,12 +220,12 @@ struct<nullif(id, 1):bigint,count(1):bigint>
 
 -- !query
 SELECT nullifzero(0),
-       nullifzero(cast(0 as tinyint)),
-       nullifzero(cast(0 as bigint)),
-       nullifzero('0'),
-       nullifzero(0.0),
-       nullifzero(1),
-       nullifzero(null)
+  nullifzero(cast(0 as tinyint)),
+  nullifzero(cast(0 as bigint)),
+  nullifzero('0'),
+  nullifzero(0.0),
+  nullifzero(1),
+  nullifzero(null)
 -- !query schema
 struct<nullifzero(0):int,nullifzero(CAST(0 AS TINYINT)):tinyint,nullifzero(CAST(0 AS BIGINT)):bigint,nullifzero(0):string,nullifzero(0.0):decimal(1,1),nullifzero(1):int,nullifzero(NULL):void>
 -- !query output
@@ -258,9 +258,9 @@ org.apache.spark.SparkNumberFormatException
 
 -- !query
 SELECT zeroifnull(null),
-       zeroifnull(1),
-       zeroifnull(cast(1 as tinyint)),
-       zeroifnull(cast(1 as bigint))
+  zeroifnull(1),
+  zeroifnull(cast(1 as tinyint)),
+  zeroifnull(cast(1 as bigint))
 -- !query schema
 struct<zeroifnull(NULL):int,zeroifnull(1):int,zeroifnull(CAST(1 AS TINYINT)):int,zeroifnull(CAST(1 AS BIGINT)):bigint>
 -- !query output

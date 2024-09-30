@@ -37,19 +37,19 @@ SELECT NULLIF(id, 1), COUNT(*) FROM range(10) GROUP BY NULLIF(id, 2);
 SELECT NULLIF(id, 1), COUNT(*) FROM range(10) GROUP BY NULLIF(id, 1) HAVING COUNT(*) > 1;
 
 SELECT nullifzero(0),
-       nullifzero(cast(0 as tinyint)),
-       nullifzero(cast(0 as bigint)),
-       nullifzero('0'),
-       nullifzero(0.0),
-       nullifzero(1),
-       nullifzero(null);
+  nullifzero(cast(0 as tinyint)),
+  nullifzero(cast(0 as bigint)),
+  nullifzero('0'),
+  nullifzero(0.0),
+  nullifzero(1),
+  nullifzero(null);
 
 SELECT nullifzero('abc');
 
 SELECT zeroifnull(null),
-       zeroifnull(1),
-       zeroifnull(cast(1 as tinyint)),
-       zeroifnull(cast(1 as bigint));
+  zeroifnull(1),
+  zeroifnull(cast(1 as tinyint)),
+  zeroifnull(cast(1 as bigint));
 
 SELECT zeroifnull('abc');
 
