@@ -517,6 +517,13 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
         "confName" -> "spark.sql.session.collation.default",
         "proposals" -> "UNICODE"
       ))
+
+    withSQLConf(SQLConf.TRIM_COLLATION_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException](sql(s"SET COLLATION UNICODE_CI_TRIM")),
+        condition = "UNSUPPORTED_FEATURE.TRIM_COLLATION"
+      )
+    }
   }
 
   test("SPARK-43028: config not found error") {
