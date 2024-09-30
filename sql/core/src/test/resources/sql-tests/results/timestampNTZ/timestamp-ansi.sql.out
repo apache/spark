@@ -155,9 +155,9 @@ struct<>
 org.apache.spark.SparkDateTimeException
 {
   "errorClass" : "DATE_TIME_FIELD_OUT_OF_BOUNDS",
+  "sqlState" : "22008",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 61"
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
   }
 }
 
@@ -186,9 +186,9 @@ struct<>
 org.apache.spark.SparkDateTimeException
 {
   "errorClass" : "DATE_TIME_FIELD_OUT_OF_BOUNDS",
+  "sqlState" : "22008",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 99"
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
   }
 }
 
@@ -201,9 +201,9 @@ struct<>
 org.apache.spark.SparkDateTimeException
 {
   "errorClass" : "DATE_TIME_FIELD_OUT_OF_BOUNDS",
+  "sqlState" : "22008",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 999"
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
   }
 }
 

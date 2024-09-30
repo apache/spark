@@ -688,9 +688,9 @@ struct<>
 org.apache.spark.SparkDateTimeException
 {
   "errorClass" : "DATE_TIME_FIELD_OUT_OF_BOUNDS",
+  "sqlState" : "22008",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Invalid date 'FEBRUARY 30'"
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
   }
 }
 
@@ -703,9 +703,9 @@ struct<>
 org.apache.spark.SparkDateTimeException
 {
   "errorClass" : "DATE_TIME_FIELD_OUT_OF_BOUNDS",
+  "sqlState" : "22008",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Invalid value for MonthOfYear (valid values 1 - 12): 13"
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
   }
 }
 
@@ -718,9 +718,9 @@ struct<>
 org.apache.spark.SparkDateTimeException
 {
   "errorClass" : "DATE_TIME_FIELD_OUT_OF_BOUNDS",
+  "sqlState" : "22008",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Invalid value for DayOfMonth (valid values 1 - 28/31): -1"
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
   }
 }
 

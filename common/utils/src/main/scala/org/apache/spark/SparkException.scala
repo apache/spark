@@ -320,7 +320,7 @@ private[spark] class SparkDateTimeException private(
       Option(errorClass),
       messageParameters,
       context,
-      cause = null
+      cause = None
     )
   }
 
@@ -335,7 +335,7 @@ private[spark] class SparkDateTimeException private(
       Option(errorClass),
       messageParameters,
       context,
-      cause
+      cause.orElse(None)
     )
   }
 
