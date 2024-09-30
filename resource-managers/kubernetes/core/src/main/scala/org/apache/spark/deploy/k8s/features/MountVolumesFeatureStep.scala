@@ -25,7 +25,6 @@ import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_USE_LEGACY_PVC_ACCESS_MODE
 import org.apache.spark.deploy.k8s.Constants.{ENV_EXECUTOR_ID, SPARK_APP_ID_LABEL}
 
-import java.util.Collections
 
 private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
@@ -95,7 +94,7 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
             }
             val volumeAnnotations = annotations match {
               case Some(value) => value.asJava
-              case None => Collections.emptyMap[String, String]()
+              case None => Map[String, String]().asJava
             }
             additionalResources.append(new PersistentVolumeClaimBuilder()
               .withKind(PVC)

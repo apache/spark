@@ -313,6 +313,7 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     assert(volumeSpec.mountPath === "/path")
     assert(volumeSpec.mountReadOnly)
     assert(volumeSpec.volumeConf.asInstanceOf[KubernetesPVCVolumeConf] ===
-      KubernetesPVCVolumeConf(claimName = "claimName", labels = Some(Map()), annotations = Some(Map())))
+      KubernetesPVCVolumeConf(claimName = "claimName", labels = Some(Map()),
+        annotations = Some(Map())))
   }
 }
