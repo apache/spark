@@ -1088,22 +1088,26 @@ object ExcludedDependencies {
 }
 
 /**
- * This excludes the spark-connect-shims module from a module when it has a dependency on
- * spark-core. This is needed because SBT (or the POM reader) does not seem to respect module
- * exclusions.
+ * This excludes the spark-connect-shims module from a module when it is not part of the connect
+ * client dependencies.
  */
 object ExcludeShims {
-  def excludeShims(classpath: Seq[Attributed[File]]): Seq[Attributed[File]] = {
-    if (classpath.exists(_.data.name.contains("spark-core"))) {
-      classpath.filterNot(_.data.name.contains("spark-connect-shims"))
-    } else {
-      classpath
-    }
-  }
-
+  val shimmedProjects = Set("spark-sql-api", "spark-connect-common", "spark-connect-client-jvm")
+  val classPathFilter = TaskKey[Classpath => Classpath]("filter for classpath")
   lazy val settings = Seq(
-    Compile / internalDependencyClasspath ~= excludeShims _,
-    Test / internalDependencyClasspath ~= excludeShims _,
+    classPathFilter := {
+      if (!shimmedProjects(moduleName.value)) {
+        cp => cp.filterNot(_.data.name.contains("spark-connect-shims"))
+      } else {
+        identity _
+      }
+    },
+    Compile / internalDependencyClasspath :=
+      classPathFilter.value((Compile / internalDependencyClasspath).value),
+    Runtime / internalDependencyClasspath :=
+      classPathFilter.value((Runtime / internalDependencyClasspath).value),
+    Test / internalDependencyClasspath :=
+      classPathFilter.value((Test / internalDependencyClasspath).value),
   )
 }
 
