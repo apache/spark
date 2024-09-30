@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeNonCSAICollation
+import org.apache.spark.sql.internal.types.StringTypeNonTrimCSAICollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -579,7 +579,8 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   override def third: Expression = keyValueDelim
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation, StringTypeNonCSAICollation)
+    Seq(StringTypeNonTrimCSAICollation, StringTypeNonTrimCSAICollation,
+      StringTypeNonTrimCSAICollation)
 
   override def dataType: DataType = MapType(first.dataType, first.dataType)
 

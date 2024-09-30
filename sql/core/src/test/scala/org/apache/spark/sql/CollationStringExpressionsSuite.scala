@@ -98,7 +98,11 @@ class CollationStringExpressionsSuite
       SplitPartTestCase("1a2", "A", 2, "UTF8_LCASE", "2"),
       SplitPartTestCase("1a2", "A", 2, "UNICODE_CI", "2")
     )
-    val unsupportedTestCase = SplitPartTestCase("1a2", "a", 2, "UNICODE_AI", "2")
+    val unsupportedTestCases = Seq(
+      SplitPartTestCase("1a2", "a", 2, "UNICODE_AI", "2"),
+      SplitPartTestCase("1a2", "a", 2, "UNICODE_TRIM", "2"),
+      SplitPartTestCase("1a2", "a", 2, "UTF8_BINARY_TRIM", "2"),
+      SplitPartTestCase("1a2", "a", 2, "UTF8_LCASE_TRIM", "2"))
     testCases.foreach(t => {
       // Unit test.
       val str = Literal.create(t.str, StringType(t.collation))
@@ -113,25 +117,27 @@ class CollationStringExpressionsSuite
       }
     })
     // Test unsupported collation.
-    withSQLConf(SQLConf.DEFAULT_COLLATION.key -> unsupportedTestCase.collation) {
-      val query =
-        s"select split_part('${unsupportedTestCase.str}', '${unsupportedTestCase.delimiter}', " +
-        s"${unsupportedTestCase.partNum})"
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(query).collect()
-        },
-        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-        sqlState = Some("42K09"),
-        parameters = Map(
-          "sqlExpr" -> "\"split_part('1a2' collate UNICODE_AI, 'a' collate UNICODE_AI, 2)\"",
-          "paramIndex" -> "first",
-          "inputSql" -> "\"'1a2' collate UNICODE_AI\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
-          "requiredType" -> "\"STRING\""),
-        context = ExpectedContext(fragment = "split_part('1a2', 'a', 2)", start = 7, stop = 31)
-      )
-    }
+    unsupportedTestCases.foreach(t => {
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.collation) {
+        val query =
+          s"select split_part('${t.str}', '${t.delimiter}', " +
+            s"${t.partNum})"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query).collect()
+          },
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          sqlState = Some("42K09"),
+          parameters = Map(
+            "sqlExpr" -> s"\"split_part('1a2' collate ${t.collation}, 'a' collate ${t.collation}, 2)\"",
+            "paramIndex" -> "first",
+            "inputSql" -> s"\"'1a2' collate ${t.collation}\"",
+            "inputType" -> s"\"STRING COLLATE ${t.collation}\"",
+            "requiredType" -> "\"STRING\""),
+          context = ExpectedContext(fragment = "split_part('1a2', 'a', 2)", start = 7, stop = 31)
+        )
+      }
+    })
   }
 
   test("Support `StringSplitSQL` string expression with collation") {
@@ -187,7 +193,11 @@ class CollationStringExpressionsSuite
       ContainsTestCase("abcde", "FGH", "UTF8_LCASE", false),
       ContainsTestCase("abcde", "BCD", "UNICODE_CI", true)
     )
-    val unsupportedTestCase = ContainsTestCase("abcde", "A", "UNICODE_AI", false)
+    val unsupportedTestCase = Seq(
+      ContainsTestCase("abcde", "A", "UNICODE_AI", false),
+      ContainsTestCase("abcde", "A", "UNICODE_TRIM", false),
+      ContainsTestCase("abcde", "A", "UTF8_BINARY_TRIM", false),
+      ContainsTestCase("abcde", "A", "UTF8_LCASE_TRIM", false))
     testCases.foreach(t => {
       // Unit test.
       val left = Literal.create(t.left, StringType(t.collation))
@@ -201,24 +211,26 @@ class CollationStringExpressionsSuite
       }
     })
     // Test unsupported collation.
-    withSQLConf(SQLConf.DEFAULT_COLLATION.key -> unsupportedTestCase.collation) {
-      val query =
-        s"select contains('${unsupportedTestCase.left}', '${unsupportedTestCase.right}')"
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(query).collect()
-        },
-        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-        sqlState = Some("42K09"),
-        parameters = Map(
-          "sqlExpr" -> "\"contains('abcde' collate UNICODE_AI, 'A' collate UNICODE_AI)\"",
-          "paramIndex" -> "first",
-          "inputSql" -> "\"'abcde' collate UNICODE_AI\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
-          "requiredType" -> "\"STRING\""),
-        context = ExpectedContext(fragment = "contains('abcde', 'A')", start = 7, stop = 28)
-      )
-    }
+    unsupportedTestCase.foreach(t =>{
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.collation) {
+        val query =
+          s"select contains('${t.left}', '${t.right}')"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query).collect()
+          },
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          sqlState = Some("42K09"),
+          parameters = Map(
+            "sqlExpr" -> s"\"contains('abcde' collate ${t.collation}, 'A' collate ${t.collation})\"",
+            "paramIndex" -> "first",
+            "inputSql" -> s"\"'abcde' collate ${t.collation}\"",
+            "inputType" -> s"\"STRING COLLATE ${t.collation}\"",
+            "requiredType" -> "\"STRING\""),
+          context = ExpectedContext(fragment = "contains('abcde', 'A')", start = 7, stop = 28)
+        )
+      }
+    })
   }
 
   test("Support `SubstringIndex` expression with collation") {
@@ -235,7 +247,11 @@ class CollationStringExpressionsSuite
       SubstringIndexTestCase("aaaaaaaaaa", "aa", 2, "UNICODE", "a"),
       SubstringIndexTestCase("wwwmapacheMorg", "M", -2, "UNICODE_CI", "apacheMorg")
     )
-    val unsupportedTestCase = SubstringIndexTestCase("abacde", "a", 2, "UNICODE_AI", "cde")
+    val unsupportedTestCase = Seq(
+      SubstringIndexTestCase("abacde", "a", 2, "UNICODE_AI", "cde"),
+      SubstringIndexTestCase("abacde", "a", 2, "UNICODE_TRIM", "cde"),
+      SubstringIndexTestCase("abacde", "a", 2, "UTF8_BINARY_TRIM", "cde"),
+      SubstringIndexTestCase("abacde", "a", 2, "UTF8_LCASE_TRIM", "cde"))
     testCases.foreach(t => {
       // Unit test.
       val strExpr = Literal.create(t.strExpr, StringType(t.collation))
@@ -250,28 +266,30 @@ class CollationStringExpressionsSuite
       }
     })
     // Test unsupported collation.
-    withSQLConf(SQLConf.DEFAULT_COLLATION.key -> unsupportedTestCase.collation) {
-      val query =
-        s"select substring_index('${unsupportedTestCase.strExpr}', " +
-        s"'${unsupportedTestCase.delimExpr}', ${unsupportedTestCase.countExpr})"
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(query).collect()
-        },
-        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-        sqlState = Some("42K09"),
-        parameters = Map(
-          "sqlExpr" -> ("\"substring_index('abacde' collate UNICODE_AI, " +
-            "'a' collate UNICODE_AI, 2)\""),
-          "paramIndex" -> "first",
-          "inputSql" -> "\"'abacde' collate UNICODE_AI\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
-          "requiredType" -> "\"STRING\""),
-        context = ExpectedContext(
-          fragment = "substring_index('abacde', 'a', 2)",
-          start = 7,
-          stop = 39))
-    }
+    unsupportedTestCase.foreach(t => {
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.collation) {
+        val query =
+          s"select substring_index('${t.strExpr}', " +
+            s"'${t.delimExpr}', ${t.countExpr})"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query).collect()
+          },
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          sqlState = Some("42K09"),
+          parameters = Map(
+            "sqlExpr" -> (s"\"substring_index('abacde' collate ${t.collation}, " +
+              s"'a' collate ${t.collation}, 2)\""),
+            "paramIndex" -> "first",
+            "inputSql" -> s"\"'abacde' collate ${t.collation}\"",
+            "inputType" -> s"\"STRING COLLATE ${t.collation}\"",
+            "requiredType" -> "\"STRING\""),
+          context = ExpectedContext(
+            fragment = "substring_index('abacde', 'a', 2)",
+            start = 7,
+            stop = 39))
+      }
+    })
   }
 
   test("Support `StringInStr` string expression with collation") {
@@ -284,7 +302,11 @@ class CollationStringExpressionsSuite
       StringInStrTestCase("test大千世界X大千世界", "界x", "UNICODE_CI", 8),
       StringInStrTestCase("abİo12", "i̇o", "UNICODE_CI", 3)
     )
-    val unsupportedTestCase = StringInStrTestCase("a", "abcde", "UNICODE_AI", 0)
+    val unsupportedTestCase = Seq(
+      StringInStrTestCase("a", "abcde", "UNICODE_AI", 0),
+      StringInStrTestCase("a", "abcde", "UNICODE_TRIM", 0),
+      StringInStrTestCase("a", "abcde", "UTF8_BINARY_TRIM", 0),
+      StringInStrTestCase("a", "abcde", "UTF8_LCASE_TRIM", 0))
     testCases.foreach(t => {
       // Unit test.
       val str = Literal.create(t.str, StringType(t.collation))
@@ -298,24 +320,26 @@ class CollationStringExpressionsSuite
       }
     })
     // Test unsupported collation.
-    withSQLConf(SQLConf.DEFAULT_COLLATION.key -> unsupportedTestCase.collation) {
-      val query =
-        s"select instr('${unsupportedTestCase.str}', '${unsupportedTestCase.substr}')"
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(query).collect()
-        },
-        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-        sqlState = Some("42K09"),
-        parameters = Map(
-          "sqlExpr" -> "\"instr('a' collate UNICODE_AI, 'abcde' collate UNICODE_AI)\"",
-          "paramIndex" -> "first",
-          "inputSql" -> "\"'a' collate UNICODE_AI\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
-          "requiredType" -> "\"STRING\""),
-        context = ExpectedContext(fragment = "instr('a', 'abcde')", start = 7, stop = 25)
-      )
-    }
+    unsupportedTestCase.foreach(t => {
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.collation) {
+        val query =
+          s"select instr('${t.str}', '${t.substr}')"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query).collect()
+          },
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          sqlState = Some("42K09"),
+          parameters = Map(
+            "sqlExpr" -> s"\"instr('a' collate ${t.collation}, 'abcde' collate ${t.collation})\"",
+            "paramIndex" -> "first",
+            "inputSql" -> s"\"'a' collate ${t.collation}\"",
+            "inputType" -> s"\"STRING COLLATE ${t.collation}\"",
+            "requiredType" -> "\"STRING\""),
+          context = ExpectedContext(fragment = "instr('a', 'abcde')", start = 7, stop = 25)
+        )
+      }
+    })
   }
 
   test("Support `FindInSet` string expression with collation") {
@@ -349,7 +373,11 @@ class CollationStringExpressionsSuite
       StartsWithTestCase("abcde", "FGH", "UTF8_LCASE", false),
       StartsWithTestCase("abcde", "ABC", "UNICODE_CI", true)
     )
-    val unsupportedTestCase = StartsWithTestCase("abcde", "A", "UNICODE_AI", false)
+    val unsupportedTestCase = Seq(
+      StartsWithTestCase("abcde", "A", "UNICODE_AI", false),
+      StartsWithTestCase("abcde", "A", "UNICODE_TRIM", false),
+      StartsWithTestCase("abcde", "A", "UTF8_BINARY_TRIM", false),
+      StartsWithTestCase("abcde", "A", "UTF8_LCASE_TRIM", false))
     testCases.foreach(t => {
       // Unit test.
       val left = Literal.create(t.left, StringType(t.collation))
@@ -362,25 +390,28 @@ class CollationStringExpressionsSuite
         assert(sql(query).schema.fields.head.dataType.sameType(BooleanType))
       }
     })
-    // Test unsupported collation.
-    withSQLConf(SQLConf.DEFAULT_COLLATION.key -> unsupportedTestCase.collation) {
-      val query =
-        s"select startswith('${unsupportedTestCase.left}', '${unsupportedTestCase.right}')"
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(query).collect()
-        },
-        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-        sqlState = Some("42K09"),
-        parameters = Map(
-          "sqlExpr" -> "\"startswith('abcde' collate UNICODE_AI, 'A' collate UNICODE_AI)\"",
-          "paramIndex" -> "first",
-          "inputSql" -> "\"'abcde' collate UNICODE_AI\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
-          "requiredType" -> "\"STRING\""),
-        context = ExpectedContext(fragment = "startswith('abcde', 'A')", start = 7, stop = 30)
-      )
-    }
+    unsupportedTestCase.foreach(t => {
+      // Test unsupported collation.
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.collation) {
+        val query =
+          s"select startswith('${t.left}', '${t.right}')"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query).collect()
+          },
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          sqlState = Some("42K09"),
+          parameters = Map(
+            "sqlExpr" ->
+              s"\"startswith('abcde' collate ${t.collation}, 'A' collate ${t.collation})\"",
+            "paramIndex" -> "first",
+            "inputSql" -> s"\"'abcde' collate ${t.collation}\"",
+            "inputType" -> s"\"STRING COLLATE ${t.collation}\"",
+            "requiredType" -> "\"STRING\""),
+          context = ExpectedContext(fragment = "startswith('abcde', 'A')", start = 7, stop = 30)
+        )
+      }
+    })
   }
 
   test("Support `StringTranslate` string expression with collation") {
@@ -396,7 +427,11 @@ class CollationStringExpressionsSuite
       StringTranslateTestCase("Translate", "Rn", "\u0000\u0000", "UNICODE", "Traslate"),
       StringTranslateTestCase("Translate", "Rn", "1234", "UNICODE_CI", "T1a2slate")
     )
-    val unsupportedTestCase = StringTranslateTestCase("ABC", "AB", "12", "UNICODE_AI", "12C")
+    val unsupportedTestCase = Seq(
+      StringTranslateTestCase("ABC", "AB", "12", "UNICODE_AI", "12C"),
+      StringTranslateTestCase("ABC", "AB", "12", "UNICODE_TRIM", "12C"),
+      StringTranslateTestCase("ABC", "AB", "12", "UTF8_BINARY_TRIM", "12C"),
+      StringTranslateTestCase("ABC", "AB", "12", "UTF8_LCASE_TRIM", "12C"))
     testCases.foreach(t => {
       // Unit test.
       val srcExpr = Literal.create(t.srcExpr, StringType(t.collation))
@@ -411,26 +446,28 @@ class CollationStringExpressionsSuite
       }
     })
     // Test unsupported collation.
-    withSQLConf(SQLConf.DEFAULT_COLLATION.key -> unsupportedTestCase.collation) {
-      val query =
-        s"select translate('${unsupportedTestCase.srcExpr}', " +
-        s"'${unsupportedTestCase.matchingExpr}', '${unsupportedTestCase.replaceExpr}')"
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(query).collect()
-        },
-        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-        sqlState = Some("42K09"),
-        parameters = Map(
-          "sqlExpr" -> ("\"translate('ABC' collate UNICODE_AI, 'AB' collate UNICODE_AI, " +
-            "'12' collate UNICODE_AI)\""),
-          "paramIndex" -> "first",
-          "inputSql" -> "\"'ABC' collate UNICODE_AI\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
-          "requiredType" -> "\"STRING\""),
-        context = ExpectedContext(fragment = "translate('ABC', 'AB', '12')", start = 7, stop = 34)
-      )
-    }
+    unsupportedTestCase.foreach(t => {
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.collation) {
+        val query =
+          s"select translate('${t.srcExpr}', " +
+            s"'${t.matchingExpr}', '${t.replaceExpr}')"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query).collect()
+          },
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          sqlState = Some("42K09"),
+          parameters = Map(
+            "sqlExpr" -> (s"\"translate('ABC' collate ${t.collation}, 'AB' collate ${t.collation}, " +
+              s"'12' collate ${t.collation})\""),
+            "paramIndex" -> "first",
+            "inputSql" -> s"\"'ABC' collate ${t.collation}\"",
+            "inputType" -> s"\"STRING COLLATE ${t.collation}\"",
+            "requiredType" -> "\"STRING\""),
+          context = ExpectedContext(fragment = "translate('ABC', 'AB', '12')", start = 7, stop = 34)
+        )
+      }
+    })
   }
 
   test("Support `StringReplace` string expression with collation") {
@@ -448,7 +485,11 @@ class CollationStringExpressionsSuite
       StringReplaceTestCase("abi̇o12i̇o", "İo", "yy", "UNICODE_CI", "abyy12yy"),
       StringReplaceTestCase("abİo12i̇o", "i̇o", "xx", "UNICODE_CI", "abxx12xx")
     )
-    val unsupportedTestCase = StringReplaceTestCase("abcde", "A", "B", "UNICODE_AI", "abcde")
+    val unsupportedTestCase = Seq(
+      StringReplaceTestCase("abcde", "A", "B", "UNICODE_AI", "abcde"),
+      StringReplaceTestCase("abcde", "A", "B", "UNICODE_TRIM", "abcde"),
+      StringReplaceTestCase("abcde", "A", "B", "UTF8_BINARY_TRIM", "abcde"),
+      StringReplaceTestCase("abcde", "A", "B", "UTF8_LCASE_TRIM", "abcde"))
     testCases.foreach(t => {
       // Unit test.
       val srcExpr = Literal.create(t.srcExpr, StringType(t.collation))
@@ -463,26 +504,28 @@ class CollationStringExpressionsSuite
       }
     })
     // Test unsupported collation.
-    withSQLConf(SQLConf.DEFAULT_COLLATION.key -> unsupportedTestCase.collation) {
-      val query =
-        s"select replace('${unsupportedTestCase.srcExpr}', '${unsupportedTestCase.searchExpr}', " +
-        s"'${unsupportedTestCase.replaceExpr}')"
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(query).collect()
-        },
-        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-        sqlState = Some("42K09"),
-        parameters = Map(
-          "sqlExpr" -> ("\"replace('abcde' collate UNICODE_AI, 'A' collate UNICODE_AI, " +
-            "'B' collate UNICODE_AI)\""),
-          "paramIndex" -> "first",
-          "inputSql" -> "\"'abcde' collate UNICODE_AI\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
-          "requiredType" -> "\"STRING\""),
-        context = ExpectedContext(fragment = "replace('abcde', 'A', 'B')", start = 7, stop = 32)
-      )
-    }
+    unsupportedTestCase.foreach(t => {
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.collation) {
+        val query =
+          s"select replace('${t.srcExpr}', '${t.searchExpr}', " +
+            s"'${t.replaceExpr}')"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query).collect()
+          },
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          sqlState = Some("42K09"),
+          parameters = Map(
+            "sqlExpr" -> (s"\"replace('abcde' collate ${t.collation}, 'A' collate ${t.collation}, " +
+              s"'B' collate ${t.collation})\""),
+            "paramIndex" -> "first",
+            "inputSql" -> s"\"'abcde' collate ${t.collation}\"",
+            "inputType" -> s"\"STRING COLLATE ${t.collation}\"",
+            "requiredType" -> "\"STRING\""),
+          context = ExpectedContext(fragment = "replace('abcde', 'A', 'B')", start = 7, stop = 32)
+        )
+      }
+    })
   }
 
   test("Support `EndsWith` string expression with collation") {
@@ -493,7 +536,11 @@ class CollationStringExpressionsSuite
       EndsWithTestCase("abcde", "FGH", "UTF8_LCASE", false),
       EndsWithTestCase("abcde", "CDE", "UNICODE_CI", true)
     )
-    val unsupportedTestCase = EndsWithTestCase("abcde", "A", "UNICODE_AI", false)
+    val unsupportedTestCase = Seq(
+      EndsWithTestCase("abcde", "A", "UNICODE_AI", false),
+      EndsWithTestCase("abcde", "A", "UNICODE_TRIM", false),
+      EndsWithTestCase("abcde", "A", "UTF8_BINARY_TRIM", false),
+      EndsWithTestCase("abcde", "A", "UTF8_LCASE_TRIM", false))
     testCases.foreach(t => {
       // Unit test.
       val left = Literal.create(t.left, StringType(t.collation))
@@ -506,24 +553,27 @@ class CollationStringExpressionsSuite
         assert(sql(query).schema.fields.head.dataType.sameType(BooleanType))
       }
       // Test unsupported collation.
-      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> unsupportedTestCase.collation) {
-        val query =
-          s"select endswith('${unsupportedTestCase.left}', '${unsupportedTestCase.right}')"
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql(query).collect()
-          },
-          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-          sqlState = Some("42K09"),
-          parameters = Map(
-            "sqlExpr" -> "\"endswith('abcde' collate UNICODE_AI, 'A' collate UNICODE_AI)\"",
-            "paramIndex" -> "first",
-            "inputSql" -> "\"'abcde' collate UNICODE_AI\"",
-            "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
-            "requiredType" -> "\"STRING\""),
-          context = ExpectedContext(fragment = "endswith('abcde', 'A')", start = 7, stop = 28)
-        )
-      }
+      unsupportedTestCase.foreach(t => {
+        withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.collation) {
+          val query =
+            s"select endswith('${t.left}', '${t.right}')"
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(query).collect()
+            },
+            condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+            sqlState = Some("42K09"),
+            parameters = Map(
+              "sqlExpr" ->
+                s"\"endswith('abcde' collate ${t.collation}, 'A' collate ${t.collation})\"",
+              "paramIndex" -> "first",
+              "inputSql" -> s"\"'abcde' collate ${t.collation}\"",
+              "inputType" -> s"\"STRING COLLATE ${t.collation}\"",
+              "requiredType" -> "\"STRING\""),
+            context = ExpectedContext(fragment = "endswith('abcde', 'A')", start = 7, stop = 28)
+          )
+        }
+      })
     })
   }
 
@@ -1266,7 +1316,12 @@ class CollationStringExpressionsSuite
       StringLocateTestCase("aa", "Aaads", 0, "UNICODE_CI", 0),
       StringLocateTestCase("界x", "test大千世界X大千世界", 1, "UNICODE_CI", 8)
     )
-    val unsupportedTestCase = StringLocateTestCase("aa", "Aaads", 0, "UNICODE_AI", 1)
+    val unsupportedTestCase = Seq(
+      StringLocateTestCase("aa", "Aaads", 0, "UNICODE_AI", 1),
+      StringLocateTestCase("aa", "Aaads", 0, "UNICODE_TRIM", 1),
+      StringLocateTestCase("aa", "Aaads", 0, "UTF8_BINARY_TRIM", 1),
+      StringLocateTestCase("aa", "Aaads", 0, "UTF8_LCASE_TRIM", 1))
+
     testCases.foreach(t => {
       // Unit test.
       val substr = Literal.create(t.substr, StringType(t.collation))
@@ -1281,25 +1336,27 @@ class CollationStringExpressionsSuite
       }
     })
     // Test unsupported collation.
-    withSQLConf(SQLConf.DEFAULT_COLLATION.key -> unsupportedTestCase.collation) {
-      val query =
-        s"select locate('${unsupportedTestCase.substr}', '${unsupportedTestCase.str}', " +
-        s"${unsupportedTestCase.start})"
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(query).collect()
-        },
-        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-        sqlState = Some("42K09"),
-        parameters = Map(
-          "sqlExpr" -> "\"locate('aa' collate UNICODE_AI, 'Aaads' collate UNICODE_AI, 0)\"",
-          "paramIndex" -> "first",
-          "inputSql" -> "\"'aa' collate UNICODE_AI\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
-          "requiredType" -> "\"STRING\""),
-        context = ExpectedContext(fragment = "locate('aa', 'Aaads', 0)", start = 7, stop = 30)
-      )
-    }
+    unsupportedTestCase.foreach(t => {
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.collation) {
+        val query =
+          s"select locate('${t.substr}', '${t.str}', " +
+            s"${t.start})"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query).collect()
+          },
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          sqlState = Some("42K09"),
+          parameters = Map(
+            "sqlExpr" -> s"\"locate('aa' collate ${t.collation}, 'Aaads' collate ${t.collation}, 0)\"",
+            "paramIndex" -> "first",
+            "inputSql" -> s"\"'aa' collate ${t.collation}\"",
+            "inputType" -> s"\"STRING COLLATE ${t.collation}\"",
+            "requiredType" -> "\"STRING\""),
+          context = ExpectedContext(fragment = "locate('aa', 'Aaads', 0)", start = 7, stop = 30)
+        )
+      }
+    })
   }
 
   test("Support `StringTrimLeft` string expression with collation") {
@@ -1314,7 +1371,11 @@ class CollationStringExpressionsSuite
       StringTrimLeftTestCase("xxasdxx", Some("y"), "UNICODE", "xxasdxx"),
       StringTrimLeftTestCase("  asd  ", None, "UNICODE_CI", "asd  ")
     )
-    val unsupportedTestCase = StringTrimLeftTestCase("xxasdxx", Some("x"), "UNICODE_AI", null)
+    val unsupportedTestCases = Seq(
+      StringTrimLeftTestCase("xxasdxx", Some("x"), "UNICODE_AI", null),
+      StringTrimLeftTestCase("xxasdxx", Some("x"), "UNICODE_TRIM", null),
+      StringTrimLeftTestCase("xxasdxx", Some("x"), "UTF8_BINARY_TRIM", null),
+      StringTrimLeftTestCase("xxasdxx", Some("x"), "UTF8_LCASE_TRIM", null))
     testCases.foreach(t => {
       // Unit test.
       val srcStr = Literal.create(t.srcStr, StringType(t.collation))
@@ -1329,24 +1390,26 @@ class CollationStringExpressionsSuite
       }
     })
     // Test unsupported collation.
-    withSQLConf(SQLConf.DEFAULT_COLLATION.key -> unsupportedTestCase.collation) {
-      val trimString = s"'${unsupportedTestCase.trimStr.get}', "
-      val query = s"select ltrim($trimString'${unsupportedTestCase.srcStr}')"
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(query).collect()
-        },
-        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-        sqlState = Some("42K09"),
-        parameters = Map(
-          "sqlExpr" -> "\"TRIM(LEADING 'x' collate UNICODE_AI FROM 'xxasdxx' collate UNICODE_AI)\"",
-          "paramIndex" -> "first",
-          "inputSql" -> "\"'xxasdxx' collate UNICODE_AI\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
-          "requiredType" -> "\"STRING\""),
-        context = ExpectedContext(fragment = "ltrim('x', 'xxasdxx')", start = 7, stop = 27)
-      )
-    }
+    unsupportedTestCases.foreach(t => {
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.collation) {
+        val trimString = s"'${t.trimStr.get}', "
+        val query = s"select ltrim($trimString'${t.srcStr}')"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query).collect()
+          },
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          sqlState = Some("42K09"),
+          parameters = Map(
+            "sqlExpr" -> s"\"TRIM(LEADING 'x' collate ${t.collation} FROM 'xxasdxx' collate ${t.collation})\"",
+            "paramIndex" -> "first",
+            "inputSql" -> s"\"'xxasdxx' collate ${t.collation}\"",
+            "inputType" -> s"\"STRING COLLATE ${t.collation}\"",
+            "requiredType" -> "\"STRING\""),
+          context = ExpectedContext(fragment = "ltrim('x', 'xxasdxx')", start = 7, stop = 27)
+        )
+      }
+    })
   }
 
   test("Support `StringTrimRight` string expression with collation") {
@@ -1361,7 +1424,11 @@ class CollationStringExpressionsSuite
       StringTrimRightTestCase("xxasdxx", Some("y"), "UNICODE", "xxasdxx"),
       StringTrimRightTestCase("  asd  ", None, "UNICODE_CI", "  asd")
     )
-    val unsupportedTestCase = StringTrimRightTestCase("xxasdxx", Some("x"), "UNICODE_AI", "xxasd")
+    val unsupportedTestCase = Seq(
+      StringTrimRightTestCase("xxasdxx", Some("x"), "UNICODE_AI", "xxasd"),
+      StringTrimRightTestCase("xxasdxx", Some("x"), "UNICODE_TRIM", "xxasd"),
+      StringTrimRightTestCase("xxasdxx", Some("x"), "UTF8_BINARY_TRIM", "xxasd"),
+      StringTrimRightTestCase("xxasdxx", Some("x"), "UTF8_LCASE_TRIM", "xxasd"))
     testCases.foreach(t => {
       // Unit test.
       val srcStr = Literal.create(t.srcStr, StringType(t.collation))
@@ -1376,25 +1443,27 @@ class CollationStringExpressionsSuite
       }
     })
     // Test unsupported collation.
-    withSQLConf(SQLConf.DEFAULT_COLLATION.key -> unsupportedTestCase.collation) {
-      val trimString = s"'${unsupportedTestCase.trimStr.get}', "
-      val query = s"select rtrim($trimString'${unsupportedTestCase.srcStr}')"
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(query).collect()
-        },
-        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-        sqlState = Some("42K09"),
-        parameters = Map(
-          "sqlExpr" -> ("\"TRIM(TRAILING 'x' collate UNICODE_AI FROM 'xxasdxx'" +
-            " collate UNICODE_AI)\""),
-          "paramIndex" -> "first",
-          "inputSql" -> "\"'xxasdxx' collate UNICODE_AI\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
-          "requiredType" -> "\"STRING\""),
-        context = ExpectedContext(fragment = "rtrim('x', 'xxasdxx')", start = 7, stop = 27)
-      )
-    }
+    unsupportedTestCase.foreach(t => {
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.collation) {
+        val trimString = s"'${t.trimStr.get}', "
+        val query = s"select rtrim($trimString'${t.srcStr}')"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query).collect()
+          },
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          sqlState = Some("42K09"),
+          parameters = Map(
+            "sqlExpr" -> (s"\"TRIM(TRAILING 'x' collate ${t.collation} FROM 'xxasdxx'" +
+              s" collate ${t.collation})\""),
+            "paramIndex" -> "first",
+            "inputSql" -> s"\"'xxasdxx' collate ${t.collation}\"",
+            "inputType" -> s"\"STRING COLLATE ${t.collation}\"",
+            "requiredType" -> "\"STRING\""),
+          context = ExpectedContext(fragment = "rtrim('x', 'xxasdxx')", start = 7, stop = 27)
+        )
+      }
+    })
   }
 
   test("Support `StringTrim` string expression with collation") {
@@ -1409,7 +1478,11 @@ class CollationStringExpressionsSuite
       StringTrimTestCase("xxasdxx", Some("y"), "UNICODE", "xxasdxx"),
       StringTrimTestCase("  asd  ", None, "UNICODE_CI", "asd")
     )
-    val unsupportedTestCase = StringTrimTestCase("xxasdxx", Some("x"), "UNICODE_AI", "asd")
+    val unsupportedTestCase = Seq(
+      StringTrimTestCase("xxasdxx", Some("x"), "UNICODE_AI", "asd"),
+      StringTrimTestCase("xxasdxx", Some("x"), "UNICODE_TRIM", "asd"),
+      StringTrimTestCase("xxasdxx", Some("x"), "UTF8_BINARY_TRIM", "asd"),
+      StringTrimTestCase("xxasdxx", Some("x"), "UTF8_LCASE_TRIM", "asd"))
     testCases.foreach(t => {
       // Unit test.
       val srcStr = Literal.create(t.srcStr, StringType(t.collation))
@@ -1424,24 +1497,26 @@ class CollationStringExpressionsSuite
       }
     })
     // Test unsupported collation.
-    withSQLConf(SQLConf.DEFAULT_COLLATION.key -> unsupportedTestCase.collation) {
-      val trimString = s"'${unsupportedTestCase.trimStr.get}', "
-      val query = s"select trim($trimString'${unsupportedTestCase.srcStr}')"
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(query).collect()
-        },
-        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-        sqlState = Some("42K09"),
-        parameters = Map(
-          "sqlExpr" -> "\"TRIM(BOTH 'x' collate UNICODE_AI FROM 'xxasdxx' collate UNICODE_AI)\"",
-          "paramIndex" -> "first",
-          "inputSql" -> "\"'xxasdxx' collate UNICODE_AI\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
-          "requiredType" -> "\"STRING\""),
-        context = ExpectedContext(fragment = "trim('x', 'xxasdxx')", start = 7, stop = 26)
-      )
-    }
+    unsupportedTestCase.foreach(t => {
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.collation) {
+        val trimString = s"'${t.trimStr.get}', "
+        val query = s"select trim($trimString'${t.srcStr}')"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query).collect()
+          },
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          sqlState = Some("42K09"),
+          parameters = Map(
+            "sqlExpr" -> s"\"TRIM(BOTH 'x' collate ${t.collation} FROM 'xxasdxx' collate ${t.collation})\"",
+            "paramIndex" -> "first",
+            "inputSql" -> s"\"'xxasdxx' collate ${t.collation}\"",
+            "inputType" -> s"\"STRING COLLATE ${t.collation}\"",
+            "requiredType" -> "\"STRING\""),
+          context = ExpectedContext(fragment = "trim('x', 'xxasdxx')", start = 7, stop = 26)
+        )
+      }}
+    )
   }
 
   test("Support `StringTrimBoth` string expression with collation") {

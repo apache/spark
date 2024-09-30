@@ -33,7 +33,8 @@ abstract class AbstractStringType extends AbstractDataType {
  */
 case object StringTypeBinary extends AbstractStringType {
   override private[sql] def acceptsType(other: DataType): Boolean =
-    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].supportsBinaryEquality
+    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].supportsBinaryEquality &&
+      !other.asInstanceOf[StringType].usesTrimCollation
 }
 
 /**
@@ -42,7 +43,8 @@ case object StringTypeBinary extends AbstractStringType {
 case object StringTypeBinaryLcase extends AbstractStringType {
   override private[sql] def acceptsType(other: DataType): Boolean =
     other.isInstanceOf[StringType] && (other.asInstanceOf[StringType].supportsBinaryEquality ||
-      other.asInstanceOf[StringType].isUTF8LcaseCollation)
+      other.asInstanceOf[StringType].isUTF8LcaseCollation) &&
+      !other.asInstanceOf[StringType].usesTrimCollation
 }
 
 /**
@@ -50,14 +52,16 @@ case object StringTypeBinaryLcase extends AbstractStringType {
  * and ICU) but limited to using case and accent sensitivity specifiers.
  */
 case object StringTypeWithCaseAccentSensitivity extends AbstractStringType {
-  override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[StringType]
+  override private[sql] def acceptsType(other: DataType): Boolean =
+    other.isInstanceOf[StringType] && !other.asInstanceOf[StringType].usesTrimCollation
 }
 
 /**
- * Use StringTypeNonCSAICollation for expressions supporting all possible collation types except
+ * Use StringTypeNonTrimCSAICollation for expressions supporting all possible collation types except
  * CS_AI collation types.
  */
-case object StringTypeNonCSAICollation extends AbstractStringType {
+case object StringTypeNonTrimCSAICollation extends AbstractStringType {
   override private[sql] def acceptsType(other: DataType): Boolean =
-    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].isNonCSAI
+    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].isNonCSAI &&
+      !other.asInstanceOf[StringType].usesTrimCollation
 }
