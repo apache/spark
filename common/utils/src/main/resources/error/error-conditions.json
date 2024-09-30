@@ -1085,7 +1085,7 @@
   },
   "DATE_TIME_FIELD_OUT_OF_BOUNDS" : {
     "message" : [
-      "<message>. If necessary set <ansiConfig> to false to bypass this error."
+      "Invalid value for datetime field. If necessary set <ansiConfig> to false to bypass this error."
     ],
     "sqlState" : "22008"
   },
@@ -4787,6 +4787,12 @@
       "Cannot create encoder for <dataType>. Please use a different output data type for your UDF or DataFrame."
     ],
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_DATETIME_UNIT_ADDITION" : {
+    "message" : [
+      "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date. If necessary set <ansiConfig> to false to bypass this error."
+    ],
+    "sqlState" : "22008"
   },
   "UNSUPPORTED_DEFAULT_VALUE" : {
     "message" : [

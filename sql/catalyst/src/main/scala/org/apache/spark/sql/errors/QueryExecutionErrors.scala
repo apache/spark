@@ -281,17 +281,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkDateTimeException(
       errorClass = "DATE_TIME_FIELD_OUT_OF_BOUNDS",
       messageParameters = Map(
-        "message" -> e.getMessage,
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
       context = Array.empty,
-      summary = "")
+      summary = "",
+      cause = Some(e))
   }
 
-  def ansiIllegalArgumentError(message: String): SparkIllegalArgumentException = {
+  def ansiIllegalArgumentError(): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "DATE_TIME_FIELD_OUT_OF_BOUNDS",
+      errorClass = "UNSUPPORTED_DATETIME_UNIT_ADDITION",
       messageParameters = Map(
-        "message" -> message,
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
