@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeWithCaseAccentSensitivity
 import org.apache.spark.sql.types._
 
 // scalastyle:off line.contains.tab
@@ -73,7 +73,7 @@ case class Collate(child: Expression, collationName: String)
   extends UnaryExpression with ExpectsInputTypes {
   private val collationId = CollationFactory.collationNameToId(collationName)
   override def dataType: DataType = StringType(collationId)
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCaseAccentSensitivity)
 
   override protected def withNewChildInternal(
     newChild: Expression): Expression = copy(newChild)
@@ -111,5 +111,5 @@ case class Collation(child: Expression)
     val collationName = CollationFactory.fetchCollation(collationId).collationName
     Literal.create(collationName, SQLConf.get.defaultStringType)
   }
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCaseAccentSensitivity)
 }
