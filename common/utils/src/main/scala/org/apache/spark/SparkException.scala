@@ -306,8 +306,9 @@ private[spark] class SparkDateTimeException private(
     message: String,
     errorClass: Option[String],
     messageParameters: Map[String, String],
-    context: Array[QueryContext])
-  extends DateTimeException(message) with SparkThrowable {
+    context: Array[QueryContext],
+    cause: Option[Throwable])
+  extends DateTimeException(message, cause.orNull) with SparkThrowable {
 
   def this(
     errorClass: String,
@@ -318,7 +319,23 @@ private[spark] class SparkDateTimeException private(
       SparkThrowableHelper.getMessage(errorClass, messageParameters, summary),
       Option(errorClass),
       messageParameters,
-      context
+      context,
+      cause = null
+    )
+  }
+
+  def this(
+    errorClass: String,
+    messageParameters: Map[String, String],
+    context: Array[QueryContext],
+    summary: String,
+    cause: Option[Throwable]) = {
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters, summary),
+      Option(errorClass),
+      messageParameters,
+      context,
+      cause
     )
   }
 

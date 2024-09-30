@@ -3135,6 +3135,12 @@
     },
     "sqlState" : "42K0E"
   },
+  "INVALID_TIMEZONE": {
+    "message": [
+      "ZoneOffset represents the time difference from UTC and must be in the range from -18:00 to +18:00."
+    ],
+    "sqlState" : "22009"
+  },
   "INVALID_TYPED_LITERAL" : {
     "message" : [
       "The value of the typed literal <valueType> is invalid: <value>."
@@ -3266,12 +3272,6 @@
       }
     },
     "sqlState" : "42000"
-  },
-  "INVALID_ZONE_OFFSET": {
-    "message": [
-      "<message>. ZoneOffset represents the time difference from UTC and must be in the range from -18:00 to +18:00."
-    ],
-    "sqlState" : "22009"
   },
   "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE" : {
     "message" : [

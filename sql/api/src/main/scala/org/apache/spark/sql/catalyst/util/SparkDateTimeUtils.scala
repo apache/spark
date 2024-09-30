@@ -50,7 +50,7 @@ trait SparkDateTimeUtils {
       ZoneId.of(formattedZoneId, ZoneId.SHORT_IDS)
     } catch {
       case e: java.time.DateTimeException =>
-        throw ExecutionErrors.zoneOffsetError(e.getMessage)
+        throw ExecutionErrors.zoneOffsetError(e)
     }
   }
 
