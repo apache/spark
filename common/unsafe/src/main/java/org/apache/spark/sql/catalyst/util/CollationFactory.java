@@ -344,7 +344,7 @@ public final class CollationFactory {
       /**
        * Utility function to trim spaces when collation uses space trimming.
        */
-      protected static UTF8String trimSpaces(UTF8String s, SpaceTrimming spaceTrimming) {
+      protected static UTF8String applyTrimmingPolicy(UTF8String s, SpaceTrimming spaceTrimming) {
         switch (spaceTrimming) {
           case LTRIM:
             return s.trimLeft();
@@ -1146,7 +1146,7 @@ public final class CollationFactory {
 
   public static UTF8String getCollationKey(UTF8String input, int collationId) {
     Collation collation = fetchCollation(collationId);
-    UTF8String appliedSpaceTrimInput = Collation.CollationSpec.trimSpaces(
+    UTF8String appliedSpaceTrimInput = Collation.CollationSpec.applyTrimmingPolicy(
             input, Collation.CollationSpec.getSpaceTrimming(collationId));
     if (collation.supportsBinaryEquality) {
       return appliedSpaceTrimInput;
@@ -1161,7 +1161,7 @@ public final class CollationFactory {
 
   public static byte[] getCollationKeyBytes(UTF8String input, int collationId) {
     Collation collation = fetchCollation(collationId);
-    UTF8String appliedSpaceTrimInput = Collation.CollationSpec.trimSpaces(
+    UTF8String appliedSpaceTrimInput = Collation.CollationSpec.applyTrimmingPolicy(
             input, Collation.CollationSpec.getSpaceTrimming(collationId));
     if (collation.supportsBinaryEquality) {
       return appliedSpaceTrimInput.getBytes();
