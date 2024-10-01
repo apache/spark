@@ -3120,7 +3120,8 @@ abstract class CSVSuite
         .add("id", IntegerType)
         .add("date", DateType)
         .add("ts", TimestampType)
-      val output = spark.read
+
+      def output: DataFrame = spark.read
         .schema(schema)
         .option("dateFormat", "yyyyMMdd")
         .option("timestampFormat", "yyyyMMdd")

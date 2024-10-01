@@ -186,6 +186,21 @@ object SQLConf {
   // load SqlConf to make sure both classes are in sync from the get go.
   SqlApiConfHelper.setConfGetter(() => SQLConf.get)
 
+  def set(confOpt: Option[SQLConf]): Option[SQLConf] = {
+    val old = existingConf.get()
+    if (confOpt.isEmpty) {
+      existingConf.remove()
+    } else {
+      existingConf.set(confOpt.get)
+    }
+
+    if (old == null) {
+      None
+    } else {
+      Some(old)
+    }
+  }
+
   /**
    * Returns the active config object within the current scope. If there is an active SparkSession,
    * the proper SQLConf associated with the thread's active session is used. If it's called from

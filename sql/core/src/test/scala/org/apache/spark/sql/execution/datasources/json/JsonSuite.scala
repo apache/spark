@@ -3457,7 +3457,8 @@ abstract class JsonSuite
       val schema = new StructType()
         .add("date", DateType)
         .add("ts", TimestampType)
-      val output = spark.read
+
+      def output: DataFrame = spark.read
         .schema(schema)
         .option("dateFormat", "yyyyMMdd")
         .option("timestampFormat", "yyyyMMdd")

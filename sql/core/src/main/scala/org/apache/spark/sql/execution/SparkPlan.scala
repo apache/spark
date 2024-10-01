@@ -477,7 +477,17 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * @note Triggers multiple jobs (one for each partition).
    */
   def executeToIterator(): Iterator[InternalRow] = {
-    getByteArrayRdd().map(_._2).toLocalIterator.flatMap(decodeUnsafeRows)
+    val rdd = getByteArrayRdd().map(_._2)
+
+    def collectPartition(p: Int): Array[ChunkedByteBuffer] = {
+      SQLExecution.withSQLConfPropagated(session) {
+        sparkContext.runJob(
+          rdd, (iter: Iterator[ChunkedByteBuffer]) => iter.toArray, Seq(p)).head
+      }
+    }
+
+    val it = rdd.partitions.indices.iterator.flatMap(i => collectPartition(i))
+    it.flatMap(decodeUnsafeRows)
   }
 
   /**
