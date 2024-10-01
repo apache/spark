@@ -383,7 +383,6 @@ class TransformWithStateInPandasStateServer(
         val valueRow = PythonSQLUtils.toJVMRow(valueBytes, mapStateInfo.valueSchema,
           mapStateInfo.valueDeserializer)
         mapStateInfo.mapState.updateValue(keyRow, valueRow)
-        val value = mapStateInfo.mapState.getValue(keyRow)
         sendResponse(0)
       case MapStateCall.MethodCase.ITERATOR =>
         val iteratorId = message.getIterator.getIteratorId

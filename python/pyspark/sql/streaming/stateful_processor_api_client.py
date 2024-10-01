@@ -154,7 +154,7 @@ class StatefulProcessorApiClient:
         self,
         state_name: str,
         key_schema: Union[StructType, str],
-        value_schema: Union[StructType, str]
+        value_schema: Union[StructType, str],
     ) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 

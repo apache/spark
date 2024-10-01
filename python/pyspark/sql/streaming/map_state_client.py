@@ -53,9 +53,7 @@ class MapStateClient:
             return False
         else:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(
-                f"Error checking map state exists: {response_message[1]}"
-            )
+            raise PySparkRuntimeError(f"Error checking map state exists: {response_message[1]}")
 
     def get_value(self, state_name: str, key_schema: Union[StructType, str], key: Tuple) -> Tuple:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
@@ -64,9 +62,7 @@ class MapStateClient:
             key_schema = cast(StructType, _parse_datatype_string(key_schema))
         bytes = self._stateful_processor_api_client._serialize_to_bytes(key_schema, key)
         get_value_call = stateMessage.GetValue(key=bytes)
-        map_state_call = stateMessage.MapStateCall(
-            stateName=state_name, getValue=get_value_call
-        )
+        map_state_call = stateMessage.MapStateCall(stateName=state_name, getValue=get_value_call)
         state_variable_request = stateMessage.StateVariableRequest(mapStateCall=map_state_call)
         message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
 
@@ -110,11 +106,12 @@ class MapStateClient:
             )
 
     def update_value(
-            self, state_name: str,
-            key_schema: Union[StructType, str],
-            key: Tuple,
-            value_schema: Union[StructType, str],
-            value: Tuple
+        self,
+        state_name: str,
+        key_schema: Union[StructType, str],
+        key: Tuple,
+        value_schema: Union[StructType, str],
+        value: Tuple,
     ) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
@@ -192,9 +189,7 @@ class MapStateClient:
             else:
                 values_call = stateMessage.Values(iteratorId=iterator_id)
                 map_state_call = stateMessage.MapStateCall(stateName=state_name, values=values_call)
-            state_variable_request = stateMessage.StateVariableRequest(
-                mapStateCall=map_state_call
-            )
+            state_variable_request = stateMessage.StateVariableRequest(mapStateCall=map_state_call)
             message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
 
             self._stateful_processor_api_client._send_proto_message(message.SerializeToString())
@@ -228,9 +223,7 @@ class MapStateClient:
             key_schema = cast(StructType, _parse_datatype_string(key_schema))
         bytes = self._stateful_processor_api_client._serialize_to_bytes(key_schema, key)
         remove_key_call = stateMessage.RemoveKey(key=bytes)
-        map_state_call = stateMessage.MapStateCall(
-            stateName=state_name, removeKey=remove_key_call
-        )
+        map_state_call = stateMessage.MapStateCall(stateName=state_name, removeKey=remove_key_call)
         state_variable_request = stateMessage.StateVariableRequest(mapStateCall=map_state_call)
         message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
 

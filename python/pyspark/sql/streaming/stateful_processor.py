@@ -20,7 +20,11 @@ from typing import Any, List, TYPE_CHECKING, Iterator, Optional, Union, Tuple
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.streaming.list_state_client import ListStateClient, ListStateIterator
-from pyspark.sql.streaming.map_state_client import MapStateClient, MapStateIterator, MapStateKeyValuePairIterator
+from pyspark.sql.streaming.map_state_client import (
+    MapStateClient,
+    MapStateIterator,
+    MapStateKeyValuePairIterator,
+)
 from pyspark.sql.streaming.value_state_client import ValueStateClient
 from pyspark.sql.types import StructType
 
@@ -135,7 +139,7 @@ class MapState:
         map_state_client: MapStateClient,
         state_name: str,
         key_schema: Union[StructType, str],
-        value_schema: Union[StructType, str]
+        value_schema: Union[StructType, str],
     ) -> None:
         self._map_state_client = map_state_client
         self._state_name = state_name
@@ -164,8 +168,9 @@ class MapState:
         """
         Update value for given user key.
         """
-        return self._map_state_client.update_value(self._state_name, self.key_schema, key,
-                                                   self.value_schema, value)
+        return self._map_state_client.update_value(
+            self._state_name, self.key_schema, key, self.value_schema, value
+        )
 
     def iterator(self) -> Iterator[Tuple[Tuple, Tuple]]:
         """
@@ -254,7 +259,7 @@ class StatefulProcessorHandle:
         self,
         state_name: str,
         key_schema: Union[StructType, str],
-        value_schema: Union[StructType, str]
+        value_schema: Union[StructType, str],
     ) -> MapState:
         """
         Function to create new or return existing single map state variable of given type.
@@ -273,8 +278,9 @@ class StatefulProcessorHandle:
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
         """
         self.stateful_processor_api_client.get_map_state(state_name, key_schema, value_schema)
-        return MapState(MapStateClient(self.stateful_processor_api_client), state_name,
-                        key_schema, value_schema)
+        return MapState(
+            MapStateClient(self.stateful_processor_api_client), state_name, key_schema, value_schema
+        )
 
 
 class StatefulProcessor(ABC):
