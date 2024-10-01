@@ -225,7 +225,7 @@ class StatefulProcessorHandleImpl(
 
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
     verifyStateVarOperations("get_list_state", CREATED)
-    val resultState = new ListStateImpl[T](store, stateName, keyEncoder, valEncoder)
+    val resultState = new ListStateImpl[T](store, stateName, keyEncoder, valEncoder, metrics)
     TWSMetricsUtils.incrementMetric(metrics, "numListStateVars")
     resultState
   }
@@ -255,7 +255,7 @@ class StatefulProcessorHandleImpl(
 
     assert(batchTimestampMs.isDefined)
     val listStateWithTTL = new ListStateImplWithTTL[T](store, stateName,
-      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get)
+      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get, metrics)
     TWSMetricsUtils.incrementMetric(metrics, "numListStateWithTTLVars")
     ttlStates.add(listStateWithTTL)
 

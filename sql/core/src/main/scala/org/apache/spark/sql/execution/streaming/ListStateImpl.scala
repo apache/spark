@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.ListState
 
@@ -30,13 +31,15 @@ import org.apache.spark.sql.streaming.ListState
  * @param stateName - name of logical state partition
  * @param keyExprEnc - Spark SQL encoder for key
  * @param valEncoder - Spark SQL encoder for value
+ * @param metrics - metrics to be updated as part of stateful processing
  * @tparam S - data type of object that will be stored in the list
  */
 class ListStateImpl[S](
      store: StateStore,
      stateName: String,
      keyExprEnc: ExpressionEncoder[Any],
-     valEncoder: Encoder[S])
+     valEncoder: Encoder[S],
+     metrics: Map[String, SQLMetric] = Map.empty)
   extends ListState[S] with Logging {
 
   private val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder, stateName)
@@ -85,6 +88,7 @@ class ListStateImpl[S](
        } else {
           store.merge(encodedKey, encodedValue, stateName)
        }
+       TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
      }
    }
 
@@ -93,6 +97,7 @@ class ListStateImpl[S](
      StateStoreErrors.requireNonNullStateValue(newState, stateName)
      store.merge(stateTypesEncoder.encodeGroupingKey(),
          stateTypesEncoder.encodeValue(newState), stateName)
+     TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
    }
 
    /** Append an entire list to the existing value. */
@@ -103,12 +108,14 @@ class ListStateImpl[S](
      newState.foreach { v =>
        val encodedValue = stateTypesEncoder.encodeValue(v)
        store.merge(encodedKey, encodedValue, stateName)
+       TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
      }
    }
 
    /** Remove this state. */
    override def clear(): Unit = {
      store.remove(stateTypesEncoder.encodeGroupingKey(), stateName)
+     TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
    }
 
    private def validateNewState(newState: Array[S]): Unit = {

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.{ListState, TTLConfig}
@@ -34,6 +35,7 @@ import org.apache.spark.util.NextIterator
  * @param valEncoder - Spark SQL encoder for value
  * @param ttlConfig  - TTL configuration for values  stored in this state
  * @param batchTimestampMs - current batch processing timestamp.
+ * @param metrics - metrics to be updated as part of stateful processing
  * @tparam S - data type of object that will be stored
  */
 class ListStateImplWithTTL[S](
@@ -42,7 +44,8 @@ class ListStateImplWithTTL[S](
     keyExprEnc: ExpressionEncoder[Any],
     valEncoder: Encoder[S],
     ttlConfig: TTLConfig,
-    batchTimestampMs: Long)
+    batchTimestampMs: Long,
+    metrics: Map[String, SQLMetric] = Map.empty)
   extends SingleKeyTTLStateImpl(
     stateName, store, keyExprEnc, batchTimestampMs) with ListState[S] {
 
@@ -108,6 +111,7 @@ class ListStateImplWithTTL[S](
       } else {
         store.merge(encodedKey, encodedValue, stateName)
       }
+      TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
     }
     upsertTTLForStateKey(encodedKey)
   }
@@ -118,6 +122,7 @@ class ListStateImplWithTTL[S](
     val encodedKey = stateTypesEncoder.encodeGroupingKey()
     store.merge(encodedKey,
       stateTypesEncoder.encodeValue(newState, ttlExpirationMs), stateName)
+    TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
     upsertTTLForStateKey(encodedKey)
   }
 
@@ -129,6 +134,7 @@ class ListStateImplWithTTL[S](
     newState.foreach { v =>
       val encodedValue = stateTypesEncoder.encodeValue(v, ttlExpirationMs)
       store.merge(encodedKey, encodedValue, stateName)
+      TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
     }
     upsertTTLForStateKey(encodedKey)
   }
@@ -136,6 +142,7 @@ class ListStateImplWithTTL[S](
   /** Remove this state. */
   override def clear(): Unit = {
     store.remove(stateTypesEncoder.encodeGroupingKey(), stateName)
+    TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
     clearTTLState()
   }
 
