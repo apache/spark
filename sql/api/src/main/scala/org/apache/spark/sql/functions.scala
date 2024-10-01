@@ -2912,8 +2912,8 @@ object functions {
   def rint(columnName: String): Column = rint(Column(columnName))
 
   /**
-   * This is a special version of `round` that performs the same operation, but returns a
-   * NULL value instead of raising an error if the decoding cannot be performed.
+   * This is a special version of `round` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the decoding cannot be performed.
    *
    * @group math_funcs
    * @since 4.0.0
@@ -2929,8 +2929,8 @@ object functions {
   def round(e: Column): Column = round(e, 0)
 
   /**
-   * This is a special version of `round` that performs the same operation, but returns a
-   * NULL value instead of raising an error if the decoding cannot be performed.
+   * This is a special version of `round` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the decoding cannot be performed.
    *
    * @group math_funcs
    * @since 4.0.0
@@ -2947,8 +2947,8 @@ object functions {
   def round(e: Column, scale: Int): Column = Column.fn("round", e, lit(scale))
 
   /**
-   * This is a special version of `round` that performs the same operation, but returns a
-   * NULL value instead of raising an error if the decoding cannot be performed.
+   * This is a special version of `round` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the decoding cannot be performed.
    *
    * @group math_funcs
    * @since 4.0.0
@@ -2965,8 +2965,8 @@ object functions {
   def round(e: Column, scale: Column): Column = Column.fn("round", e, scale)
 
   /**
-   * This is a special version of `bround` that performs the same operation, but returns a
-   * NULL value instead of raising an error if the decoding cannot be performed.
+   * This is a special version of `bround` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the decoding cannot be performed.
    *
    * @group math_funcs
    * @since 4.0.0
@@ -2982,8 +2982,8 @@ object functions {
   def bround(e: Column): Column = bround(e, 0)
 
   /**
-   * This is a special version of `bround` that performs the same operation, but returns a
-   * NULL value instead of raising an error if the decoding cannot be performed.
+   * This is a special version of `bround` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the decoding cannot be performed.
    *
    * @group math_funcs
    * @since 4.0.0
@@ -3000,8 +3000,8 @@ object functions {
   def bround(e: Column, scale: Int): Column = Column.fn("bround", e, lit(scale))
 
   /**
-   * This is a special version of `bround` that performs the same operation, but returns a
-   * NULL value instead of raising an error if the decoding cannot be performed.
+   * This is a special version of `bround` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the decoding cannot be performed.
    *
    * @group math_funcs
    * @since 4.0.0
