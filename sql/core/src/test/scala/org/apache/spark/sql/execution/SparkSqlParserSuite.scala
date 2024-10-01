@@ -934,9 +934,9 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
         assert(plan.collectFirst(_.isInstanceOf[Sample]).nonEmpty)
         assert(plan.containsAnyPattern(UNRESOLVED_RELATION, LOCAL_RELATION))
       }
-      checkSample("SELECT 1 AS X |> TABLESAMPLE (50 PERCENT)")
-      checkSample("SELECT 1 AS X |> TABLESAMPLE (5 ROWS)")
-      checkSample("SELECT 1 AS X |> TABLESAMPLE (BUCKET 4 OUT OF 10)")
+      checkSample("TABLE t |> TABLESAMPLE (50 PERCENT)")
+      checkSample("TABLE t |> TABLESAMPLE (5 ROWS)")
+      checkSample("TABLE t |> TABLESAMPLE (BUCKET 4 OUT OF 10)")
     }
   }
 }
