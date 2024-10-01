@@ -98,7 +98,7 @@ case class InlineCTE(alwaysInline: Boolean = false) extends Rule[LogicalPlan] {
             // referenced at all and can be optimized out, and we need to decrease the ref counts
             // for CTE relations that are referenced by it.
             if (cteDefs.exists(_.id == ref.cteId)) {
-              val (_, _, outerRefMap) = cteMap(ref.cteId)
+              val (_, _, outerRefMap) = cteMap(cteDef.id)
               outerRefMap(ref.cteId) += 1
             }
             // Similarly, a CTE relation can reference CTE relations defined in the outer `WithCTE`.
