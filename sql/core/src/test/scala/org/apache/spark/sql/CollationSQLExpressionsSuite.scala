@@ -987,7 +987,6 @@ class CollationSQLExpressionsSuite
       StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UNICODE_TRIM", null),
       StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UTF8_BINARY_TRIM", null),
       StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UTF8_LCASE_TRIM", null))
-
     testCases.foreach(t => {
       // Unit test.
       val text = Literal.create(t.text, StringType(t.collation))

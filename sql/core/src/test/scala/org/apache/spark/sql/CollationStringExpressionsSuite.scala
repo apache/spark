@@ -129,7 +129,8 @@ class CollationStringExpressionsSuite
           condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
           sqlState = Some("42K09"),
           parameters = Map(
-            "sqlExpr" -> s"\"split_part('1a2' collate ${t.collation}, 'a' collate ${t.collation}, 2)\"",
+            "sqlExpr" ->
+              s"\"split_part('1a2' collate ${t.collation}, 'a' collate ${t.collation}, 2)\"",
             "paramIndex" -> "first",
             "inputSql" -> s"\"'1a2' collate ${t.collation}\"",
             "inputType" -> s"\"STRING COLLATE ${t.collation}\"",
@@ -222,7 +223,8 @@ class CollationStringExpressionsSuite
           condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
           sqlState = Some("42K09"),
           parameters = Map(
-            "sqlExpr" -> s"\"contains('abcde' collate ${t.collation}, 'A' collate ${t.collation})\"",
+            "sqlExpr" ->
+              s"\"contains('abcde' collate ${t.collation}, 'A' collate ${t.collation})\"",
             "paramIndex" -> "first",
             "inputSql" -> s"\"'abcde' collate ${t.collation}\"",
             "inputType" -> s"\"STRING COLLATE ${t.collation}\"",
@@ -1348,7 +1350,8 @@ class CollationStringExpressionsSuite
           condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
           sqlState = Some("42K09"),
           parameters = Map(
-            "sqlExpr" -> s"\"locate('aa' collate ${t.collation}, 'Aaads' collate ${t.collation}, 0)\"",
+            "sqlExpr" ->
+              s"\"locate('aa' collate ${t.collation}, 'Aaads' collate ${t.collation}, 0)\"",
             "paramIndex" -> "first",
             "inputSql" -> s"\"'aa' collate ${t.collation}\"",
             "inputType" -> s"\"STRING COLLATE ${t.collation}\"",
@@ -1401,7 +1404,8 @@ class CollationStringExpressionsSuite
           condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
           sqlState = Some("42K09"),
           parameters = Map(
-            "sqlExpr" -> s"\"TRIM(LEADING 'x' collate ${t.collation} FROM 'xxasdxx' collate ${t.collation})\"",
+            "sqlExpr" ->
+              s"\"TRIM(LEADING 'x' collate ${t.collation} FROM 'xxasdxx' collate ${t.collation})\"",
             "paramIndex" -> "first",
             "inputSql" -> s"\"'xxasdxx' collate ${t.collation}\"",
             "inputType" -> s"\"STRING COLLATE ${t.collation}\"",
@@ -1508,7 +1512,8 @@ class CollationStringExpressionsSuite
           condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
           sqlState = Some("42K09"),
           parameters = Map(
-            "sqlExpr" -> s"\"TRIM(BOTH 'x' collate ${t.collation} FROM 'xxasdxx' collate ${t.collation})\"",
+            "sqlExpr" ->
+              s"\"TRIM(BOTH 'x' collate ${t.collation} FROM 'xxasdxx' collate ${t.collation})\"",
             "paramIndex" -> "first",
             "inputSql" -> s"\"'xxasdxx' collate ${t.collation}\"",
             "inputType" -> s"\"STRING COLLATE ${t.collation}\"",
