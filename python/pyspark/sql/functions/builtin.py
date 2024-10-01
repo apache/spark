@@ -6612,6 +6612,7 @@ def randn(seed: Optional[int] = None) -> Column:
     else:
         return _invoke_function("randn")
 
+
 @_try_remote_functions
 def try_round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
     """
@@ -6719,6 +6720,7 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
         return _invoke_function_over_columns("round", col, scale)  # type: ignore[arg-type]
+
 
 @_try_remote_functions
 def try_bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
