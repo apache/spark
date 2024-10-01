@@ -47,9 +47,9 @@ case class InlineCTE(
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!plan.isInstanceOf[Subquery] && plan.containsPattern(CTE)) {
       val cteMap = mutable.SortedMap.empty[Long, CTEReferenceInfo]
-      buildCTEMap(plan, cteMap)
+      val planWithoutIdCollision = buildCTEMap(plan, cteMap, mutable.Map.empty)
       cleanCTEMap(cteMap)
-      inlineCTE(plan, cteMap)
+      inlineCTE(planWithoutIdCollision, cteMap)
     } else {
       plan
     }
@@ -71,48 +71,62 @@ case class InlineCTE(
    * @param plan The plan to collect the CTEs from
    * @param cteMap A mutable map that accumulates the CTEs and their reference information by CTE
    *               ids.
+   * @param collisionMap The map that contains id remapping in case of collisions.
    * @param outerCTEId While collecting the map we use this optional CTE id to identify the
    *                   current outer CTE.
    */
   private def buildCTEMap(
       plan: LogicalPlan,
-      cteMap: mutable.Map[Long, CTEReferenceInfo],
-      outerCTEId: Option[Long] = None): Unit = {
+      cteMap: mutable.SortedMap[Long, CTEReferenceInfo],
+      collisionMap: mutable.Map[Long, Long],
+      outerCTEId: Option[Long] = None): LogicalPlan = {
     plan match {
-      case WithCTE(child, cteDefs) =>
-        cteDefs.foreach { cteDef =>
-          cteMap(cteDef.id) = CTEReferenceInfo(
-            cteDef = cteDef,
+      case w @ WithCTE(child, cteDefs) =>
+        // Generate new CTE ids in reverse order as `cleanCTEMap()` requires that a CTE can refer to
+        // other CTEs with lower ids only
+        val newCTEDefs = cteDefs.reverse.map { cteDef =>
+          val newCTEDef = if (cteMap.contains(cteDef.id)) {
+            val newId = InlineCTE.newDecreasingId
+            collisionMap(cteDef.id) = newId
+            val newCTEDef = cteDef.copy(id = newId)
+            newCTEDef
+          } else {
+            cteDef
+          }
+          cteMap(newCTEDef.id) = CTEReferenceInfo(
+            cteDef = newCTEDef,
             refCount = 0,
             outgoingRefs = mutable.Map.empty.withDefaultValue(0),
             shouldInline = true
           )
+          newCTEDef
+        }.reverse.map { cteDef =>
+          val newCTEDef =
+            cteDef.copy(child = buildCTEMap(cteDef.child, cteMap, collisionMap, Some(cteDef.id)))
+          cteMap(newCTEDef.id) = cteMap(newCTEDef.id).copy(cteDef = newCTEDef)
+          newCTEDef
         }
-        cteDefs.foreach { cteDef =>
-          buildCTEMap(cteDef, cteMap, Some(cteDef.id))
-        }
-        buildCTEMap(child, cteMap, outerCTEId)
+        val newChild = buildCTEMap(child, cteMap, collisionMap, outerCTEId)
+        w.withNewChildren(newCTEDefs :+ newChild)
 
       case ref: CTERelationRef =>
-        cteMap(ref.cteId) = cteMap(ref.cteId).withRefCountIncreased(1)
+        val newRef =
+          collisionMap.get(ref.cteId).map(newId => ref.copy(cteId = newId)).getOrElse(ref)
+        cteMap(newRef.cteId) = cteMap(newRef.cteId).withRefCountIncreased(1)
         outerCTEId.foreach { cteId =>
-          cteMap(cteId).increaseOutgoingRefCount(ref.cteId, 1)
+          cteMap(cteId).increaseOutgoingRefCount(newRef.cteId, 1)
         }
+        newRef
 
       case _ =>
-        if (plan.containsPattern(CTE)) {
-          plan.children.foreach { child =>
-            buildCTEMap(child, cteMap, outerCTEId)
-          }
-
-          plan.expressions.foreach { expr =>
-            if (expr.containsAllPatterns(PLAN_EXPRESSION, CTE)) {
-              expr.foreach {
-                case e: SubqueryExpression => buildCTEMap(e.plan, cteMap, outerCTEId)
-                case _ =>
-              }
-            }
-          }
+        (if (plan.containsPattern(CTE)) {
+          plan.mapChildren(buildCTEMap(_, cteMap, collisionMap, outerCTEId))
+        } else {
+          plan
+        }).transformExpressionsWithPruning(_.containsAllPatterns(PLAN_EXPRESSION, CTE)) {
+          case e: SubqueryExpression =>
+            e.withNewPlan(buildCTEMap(e.plan, cteMap, collisionMap, outerCTEId))
+          case o => o
         }
     }
   }
@@ -206,6 +220,15 @@ case class InlineCTE(
       case _ => plan
     }
   }
+}
+
+object InlineCTE {
+  // Id collision can happen due to self-contained `WithCTE` nodes appear at multiple places in the
+  // plan. As outer CTEs can include (refer to) these self-contained nodes, the new unique id of the
+  // colliding CTE definitions must be smaller than the outers' ids. So we generate decreasing ids
+  // from -1.
+  private[sql] val curId = new java.util.concurrent.atomic.AtomicLong(-1)
+  def newDecreasingId: Long = curId.getAndDecrement()
 }
 
 /**

@@ -715,7 +715,7 @@ abstract class CTEInlineSuiteBase
     checkAnswer(df, Row(1))
   }
 
-  test("SPARK-49816: should only update out-going-ref-count for referenced outer CTE relation") {
+  test("SPARK-49816: Conflicting CTE ids") {
     withView("v") {
       sql(
         """
@@ -733,7 +733,27 @@ abstract class CTEInlineSuiteBase
           |SELECT * FROM r2
           |""".stripMargin)
       checkAnswer(df, Row(1))
-      df.explain(true)
+    }
+  }
+
+  test("SPARK-49816: Conflicting CTE ids 2") {
+    withView("v") {
+      sql(
+        """
+          |WITH
+          |t1 AS (SELECT random() col),
+          |t2 AS (SELECT * FROM t1)
+          |SELECT * FROM t2
+          |""".stripMargin).createTempView("v")
+      val df = sql(
+        """
+          |WITH
+          |r1 AS (SELECT * FROM v),
+          |r2 AS (SELECT * FROM v)
+          |SELECT count(*) FROM (SELECT * FROM r1 UNION SELECT * FROM r2)
+          |""".stripMargin)
+      // TODO: fix this as the above query should generate 2 distinct randoms
+      checkAnswer(df, Row(1))
     }
   }
 }
