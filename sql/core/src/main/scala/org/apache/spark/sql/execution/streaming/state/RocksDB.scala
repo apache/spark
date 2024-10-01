@@ -358,6 +358,9 @@ class RocksDB(
           }
         }
 
+        println("wei=== latest snapshots")
+        latestSnapshotVersionsAndUniqueIds.foreach(x => println(x._1, x._2))
+
         val (latestSnapshotVersion, latestSnapshotUniqueId) = {
           // When loading from version 0
           if (latestSnapshotVersionsAndUniqueIds.length == 0) {
@@ -369,6 +372,10 @@ class RocksDB(
             logInfo(log"Multiple snapshots found for the version. Found: ${MDC(LogKeys.LINEAGE,
               printLineage(latestSnapshotVersionsAndUniqueIds))}. " +
               log"Loading the latest snapshot from lineage.")
+            // scalastyle:off
+            println("wei=== multiple snapshots found")
+            latestSnapshotVersionsAndUniqueIds.foreach(x => println(x._1, x._2))
+            // scalastyle:on
             assert(enableChangelogCheckpointing, s"When loading version $version, multiple " +
               s"previous snapshots found for version ${latestSnapshotVersionsAndUniqueIds(0)._1}" +
               "This should happen only when changelog checkpointing is enabled, but it is not.")
@@ -888,7 +895,7 @@ class RocksDB(
           maxColumnFamilyId,
           uniqueId)) =>
         try {
-          versionToUniqueIdLineage = versionToUniqueIdLineage.filter(_._1 > version)
+          versionToUniqueIdLineage = versionToUniqueIdLineage.filter(_._1 >= version)
           val uploadTime = timeTakenMs {
             fileManager.saveCheckpointToDfs(
               localDir,
