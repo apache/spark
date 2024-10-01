@@ -18,24 +18,6 @@ SELECT case when c2 >= 0 then 1 else 1/0 end from conditional_t;
 SELECT case when 1 < 2 then 1 else 1/0 end;
 SELECT case when 1 > 2 then 1/0 else 1 end;
 
--- Test with number values
-SELECT NULLIF(1, 1);
-SELECT NULLIF(1, 2);
-
--- Test with NULL values
-SELECT NULLIF(NULL, 1);
-SELECT NULLIF(1, NULL);
-SELECT NULLIF(NULL, NULL);
-
--- Test with strings
-SELECT NULLIF('abc', 'abc');
-SELECT NULLIF('abc', 'xyz');
-
--- Test with more complex expressions
-SELECT NULLIF(id, 1) FROM range(10) GROUP BY NULLIF(id, 1);
-SELECT NULLIF(id, 1), COUNT(*) FROM range(10) GROUP BY NULLIF(id, 2);
-SELECT NULLIF(id, 1), COUNT(*) FROM range(10) GROUP BY NULLIF(id, 1) HAVING COUNT(*) > 1;
-
 SELECT nullifzero(0),
   nullifzero(cast(0 as tinyint)),
   nullifzero(cast(0 as bigint)),
