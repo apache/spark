@@ -132,7 +132,6 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
   override def hasCommitted: Boolean = innerStore.hasCommitted
 }
 
-// Wrapper class implementing StateStoreProvider
 class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
 
   val innerProvider = new RocksDBStateStoreProvider()
@@ -179,6 +178,9 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
     innerProvider.supportedCustomMetrics
 }
 
+// TODO add a test case for two of the tasks for the same shuffle partitions to finish and
+// return their own state store checkpointID. This can happen because of task retry or
+// speculative execution.
 class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
   with AlsoTestWithChangelogCheckpointingEnabled {
   import testImplicits._
