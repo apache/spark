@@ -139,12 +139,15 @@ object JavaTypeInference {
 
     case pt: ParameterizedType =>
       val newTvs = JavaTypeUtils.getTypeArguments(pt).asScala.toMap
-      val updatedTvs = newTvs.map {
-        case (k, v: TypeVariable[_]) if typeVariables.contains(v) =>
-          k -> typeVariables(v)
-        case (k, v) =>
-          k -> v
-      }.asInstanceOf[Iterable[(TypeVariable[_], Type)]].toMap
+      val updatedTvs = newTvs
+        .map {
+          case (k, v: TypeVariable[_]) if typeVariables.contains(v) =>
+            k -> typeVariables(v)
+
+          case pair => pair
+        }
+        .asInstanceOf[Iterable[(TypeVariable[_], Type)]]
+        .toMap
       encoderFor(pt.getRawType, seenTypeSet, updatedTvs)
 
     case c: Class[_] =>
