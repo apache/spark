@@ -212,7 +212,7 @@ class CollationStringExpressionsSuite
       }
     })
     // Test unsupported collation.
-    unsupportedTestCase.foreach(t =>{
+    unsupportedTestCase.foreach(t => {
       withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.collation) {
         val query =
           s"select contains('${t.left}', '${t.right}')"
