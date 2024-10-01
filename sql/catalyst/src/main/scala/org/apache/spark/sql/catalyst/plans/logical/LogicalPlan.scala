@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import scala.collection.mutable
+import com.google.common.base.Throwables
 
-import org.apache.spark.SparkUnsupportedOperationException
+import scala.collection.mutable
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
@@ -420,10 +421,14 @@ object LogicalPlanIntegrity extends Logging {
     val isValid = if (SqlApiConf.get.caseSensitiveAnalysis) {
       DataTypeUtils.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)
     } else {
-      if (DataTypeUtils.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
+      if (!DataTypeUtils.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
         logInfo("The plan output schema has changed from ${previousPlan.schema.sql} to " +
           currentPlan.schema.sql + s". The previous plan: ${previousPlan.treeString}\nThe new " +
           "plan:\n" + currentPlan.treeString)
+        val CaseNotPreservingProblem = new SparkException("CaseNotPreservingRule")
+        val stackTraceString = Option(CaseNotPreservingProblem)
+          .map(Throwables.getStackTraceAsString).getOrElse("")
+        logInfo(stackTraceString)
       }
       DataTypeUtils.equalsIgnoreCaseAndNullability(previousPlan.schema, currentPlan.schema)
     }
