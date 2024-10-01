@@ -23,6 +23,7 @@ desc formatted char_tbl1;
 
 alter table char_tbl1 change column c type char(6);
 alter table char_tbl1 change column c type char(5);
+alter table char_tbl1 change column c comment 'text';
 desc formatted char_tbl1;
 
 alter table char_tbl1 add columns (d char(5));

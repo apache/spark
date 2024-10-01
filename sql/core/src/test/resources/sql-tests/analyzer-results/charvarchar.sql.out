@@ -151,6 +151,12 @@ AlterTableChangeColumnCommand `spark_catalog`.`default`.`char_tbl1`, c, StructFi
 
 
 -- !query
+alter table char_tbl1 change column c comment 'text'
+-- !query analysis
+AlterTableChangeColumnCommand `spark_catalog`.`default`.`char_tbl1`, c, StructField(c,CharType(5),true)
+
+
+-- !query
 desc formatted char_tbl1
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_tbl1`, true, [col_name#x, data_type#x, comment#x]
