@@ -58,7 +58,7 @@ case object StringTypeWithCaseAccentSensitivity extends AbstractStringType {
 
 /**
  * Use StringTypeNonTrimCSAICollation for expressions supporting all possible collation types except
- * CS_AI collation types.
+ * CS_AI and Trim collation types.
  */
 case object StringTypeNonTrimCSAICollation extends AbstractStringType {
   override private[sql] def acceptsType(other: DataType): Boolean =
