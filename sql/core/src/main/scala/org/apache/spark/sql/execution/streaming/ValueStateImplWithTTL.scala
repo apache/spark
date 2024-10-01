@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
 import org.apache.spark.sql.streaming.{TTLConfig, ValueState}
@@ -33,6 +34,7 @@ import org.apache.spark.sql.streaming.{TTLConfig, ValueState}
  * @param valEncoder - Spark SQL encoder for value
  * @param ttlConfig  - TTL configuration for values  stored in this state
  * @param batchTimestampMs - current batch processing timestamp.
+ * @param metrics - metrics to be updated as part of stateful processing
  * @tparam S - data type of object that will be stored
  */
 class ValueStateImplWithTTL[S](
@@ -41,7 +43,8 @@ class ValueStateImplWithTTL[S](
     keyExprEnc: ExpressionEncoder[Any],
     valEncoder: Encoder[S],
     ttlConfig: TTLConfig,
-    batchTimestampMs: Long)
+    batchTimestampMs: Long,
+    metrics: Map[String, SQLMetric] = Map.empty)
   extends SingleKeyTTLStateImpl(
     stateName, store, keyExprEnc, batchTimestampMs) with ValueState[S] {
 
@@ -92,12 +95,14 @@ class ValueStateImplWithTTL[S](
     val serializedGroupingKey = stateTypesEncoder.encodeGroupingKey()
     store.put(serializedGroupingKey,
       encodedValue, stateName)
+    TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
     upsertTTLForStateKey(ttlExpirationMs, serializedGroupingKey)
   }
 
   /** Function to remove state for given key */
   override def clear(): Unit = {
     store.remove(stateTypesEncoder.encodeGroupingKey(), stateName)
+    TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
     clearTTLState()
   }
 
