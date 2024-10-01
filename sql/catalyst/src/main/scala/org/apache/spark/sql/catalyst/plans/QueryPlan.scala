@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.util.LazyTry
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -94,9 +95,11 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * All Attributes that appear in expressions from this operator.  Note that this set does not
    * include attributes that are implicitly referenced by being passed through to the output tuple.
    */
+  def references: AttributeSet = lazyReferences.get
+
   @transient
-  lazy val references: AttributeSet = {
-    AttributeSet.fromAttributeSets(expressions.map(_.references)) -- producedAttributes
+  private val lazyReferences = LazyTry {
+    AttributeSet(expressions) -- producedAttributes
   }
 
   /**

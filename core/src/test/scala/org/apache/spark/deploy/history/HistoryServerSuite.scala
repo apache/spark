@@ -283,7 +283,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
         val expectedFile = {
           new File(logDir, entry.getName)
         }
-        val expected = Files.toString(expectedFile, StandardCharsets.UTF_8)
+        val expected = Files.asCharSource(expectedFile, StandardCharsets.UTF_8).read()
         val actual = new String(ByteStreams.toByteArray(zipStream), StandardCharsets.UTF_8)
         actual should be (expected)
         filesCompared += 1

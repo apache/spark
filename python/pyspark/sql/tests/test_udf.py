@@ -237,11 +237,12 @@ class BaseUDFTestsMixin(object):
         f = udf(lambda a, b: a == b, BooleanType())
         # The udf uses attributes from both sides of join, so it is pulled out as Filter +
         # Cross join.
-        df = left.join(right, f("a", "b"))
         with self.sql_conf({"spark.sql.crossJoin.enabled": False}):
+            df = left.join(right, f("a", "b"))
             with self.assertRaisesRegex(AnalysisException, "Detected implicit cartesian product"):
                 df.collect()
         with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
+            df = left.join(right, f("a", "b"))
             self.assertEqual(df.collect(), [Row(a=1, b=1)])
 
     def test_udf_in_left_outer_join_condition(self):
