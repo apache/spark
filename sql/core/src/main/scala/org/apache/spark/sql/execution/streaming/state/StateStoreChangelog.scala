@@ -86,8 +86,7 @@ object RecordType extends Enumeration {
 abstract class StateStoreChangelogWriter(
     fm: CheckpointFileManager,
     file: Path,
-    compressionCodec: CompressionCodec,
-    checkpointFormatVersion: Int = 1) extends Logging {
+    compressionCodec: CompressionCodec) extends Logging {
 
   private def compressStream(outputStream: DataOutputStream): DataOutputStream = {
     val compressed = compressionCodec.compressedOutputStream(outputStream)
@@ -103,8 +102,6 @@ abstract class StateStoreChangelogWriter(
   protected var compressedStream: DataOutputStream = compressStream(backingFileStream)
 
   def writeLineage(lineage: Array[(Long, String)]): Unit = {
-    assert(checkpointFormatVersion >= 2, "writeLineage should not be called upon " +
-      "StateStoreChangelogWriter with checkpointFormatVersion < 2")
     val lineageStr = lineage.map { case (version, uniqueId) =>
       s"$version:$uniqueId"
     }.mkString(" ")
@@ -153,9 +150,8 @@ abstract class StateStoreChangelogWriter(
 class StateStoreChangelogWriterV1(
     fm: CheckpointFileManager,
     file: Path,
-    compressionCodec: CompressionCodec,
-    checkpointFormatVersion: Int = 1)
-  extends StateStoreChangelogWriter(fm, file, compressionCodec, checkpointFormatVersion) {
+    compressionCodec: CompressionCodec)
+  extends StateStoreChangelogWriter(fm, file, compressionCodec) {
 
   // Note that v1 does not record this value in the changelog file
   override def version: Short = 1
@@ -211,9 +207,8 @@ class StateStoreChangelogWriterV1(
 class StateStoreChangelogWriterV2(
     fm: CheckpointFileManager,
     file: Path,
-    compressionCodec: CompressionCodec,
-    checkpointFormatVersion: Int = 1)
-  extends StateStoreChangelogWriter(fm, file, compressionCodec, checkpointFormatVersion) {
+    compressionCodec: CompressionCodec)
+  extends StateStoreChangelogWriter(fm, file, compressionCodec) {
 
   override def version: Short = 2
 
@@ -275,8 +270,7 @@ class StateStoreChangelogWriterV2(
 abstract class StateStoreChangelogReader(
     fm: CheckpointFileManager,
     fileToRead: Path,
-    compressionCodec: CompressionCodec,
-    checkpointFormatVersion: Int = 1)
+    compressionCodec: CompressionCodec)
   extends NextIterator[(RecordType.Value, Array[Byte], Array[Byte])] with Logging {
 
   private def decompressStream(inputStream: DataInputStream): DataInputStream = {
@@ -300,7 +294,7 @@ abstract class StateStoreChangelogReader(
     }
   }
 
-  val lineage: Option[Array[(Long, String)]]
+  lazy val lineage: Array[(Long, String)] = readLineage()
 
   def version: Short
 
@@ -319,17 +313,11 @@ abstract class StateStoreChangelogReader(
 class StateStoreChangelogReaderV1(
     fm: CheckpointFileManager,
     fileToRead: Path,
-    compressionCodec: CompressionCodec,
-    checkpointFormatVersion: Int = 1)
-  extends StateStoreChangelogReader(fm, fileToRead, compressionCodec, checkpointFormatVersion) {
+    compressionCodec: CompressionCodec)
+  extends StateStoreChangelogReader(fm, fileToRead, compressionCodec) {
 
   // Note that v1 does not record this value in the changelog file
   override def version: Short = 1
-
-  override val lineage: Option[Array[(Long, String)]] = checkpointFormatVersion match {
-    case 1 => None
-    case _ => Some(readLineage())
-  }
 
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte]) = {
     val keySize = input.readInt()
@@ -368,9 +356,8 @@ class StateStoreChangelogReaderV1(
 class StateStoreChangelogReaderV2(
     fm: CheckpointFileManager,
     fileToRead: Path,
-    compressionCodec: CompressionCodec,
-    checkpointFormatVersion: Int = 1)
-  extends StateStoreChangelogReader(fm, fileToRead, compressionCodec, checkpointFormatVersion) {
+    compressionCodec: CompressionCodec)
+  extends StateStoreChangelogReader(fm, fileToRead, compressionCodec) {
 
   private def parseBuffer(input: DataInputStream): Array[Byte] = {
     val blockSize = input.readInt()
@@ -385,11 +372,6 @@ class StateStoreChangelogReaderV2(
   val changelogVersionStr = input.readUTF()
   assert(changelogVersionStr == "v2",
     s"Changelog version mismatch: $changelogVersionStr != v2")
-
-  override val lineage: Option[Array[(Long, String)]] = checkpointFormatVersion match {
-    case 1 => None
-    case _ => Some(readLineage())
-  }
 
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte]) = {
     val recordType = RecordType.getRecordTypeFromByte(input.readByte())

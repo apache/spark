@@ -199,9 +199,9 @@ class RocksDBFileManager(
     val changelogVersion = getChangelogVersion(useColumnFamilies)
     val changelogWriter = changelogVersion match {
       case 1 =>
-        new StateStoreChangelogWriterV1(fm, changelogFile, codec, checkpointFormatVersion)
+        new StateStoreChangelogWriterV1(fm, changelogFile, codec)
       case 2 =>
-        new StateStoreChangelogWriterV2(fm, changelogFile, codec, checkpointFormatVersion)
+        new StateStoreChangelogWriterV2(fm, changelogFile, codec)
       case _ =>
         throw QueryExecutionErrors.invalidChangeLogWriterVersion(changelogVersion)
     }
@@ -223,11 +223,14 @@ class RocksDBFileManager(
     val changelogVersion = getChangelogVersion(useColumnFamilies)
     val changelogReader = changelogVersion match {
       case 1 =>
-        new StateStoreChangelogReaderV1(fm, changelogFile, codec, checkpointFormatVersion)
+        new StateStoreChangelogReaderV1(fm, changelogFile, codec)
       case 2 =>
-        new StateStoreChangelogReaderV2(fm, changelogFile, codec, checkpointFormatVersion)
+        new StateStoreChangelogReaderV2(fm, changelogFile, codec)
       case _ =>
         throw QueryExecutionErrors.invalidChangeLogReaderVersion(changelogVersion)
+    }
+    if (checkpointUniqueId.isDefined) {
+      changelogReader.lineage
     }
     changelogReader
   }

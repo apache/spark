@@ -330,8 +330,10 @@ class RocksDB(
           fileManager.getLatestSnapshotVersionAndUniqueId(version, checkpointUniqueId)
         }
 
+        println(s"wei== loading version $version, checkpointUniqueId: $checkpointUniqueId")
+
         // Update the lineage from changelog
-        if (version != 0 && checkpointFormatVersion >= 2) {
+        if (version != 0 && checkpointFormatVersion >= 2 && checkpointUniqueId.isDefined) {
           // It is possible that change log checkpointing is first enabled and then disabled.
           // In this case, loading changelog reader will fail because there are only zip files.
           // It is also possible that state store was previously ran under format version 1
@@ -344,7 +346,7 @@ class RocksDB(
               version, useColumnFamilies, checkpointUniqueId)
             // currLineage contains the version -> uniqueId mapping from the previous snapshot file
             // to current version's changelog file
-            versionToUniqueIdLineage = changelogReader.lineage.get.map {
+            versionToUniqueIdLineage = changelogReader.lineage.map {
               case (version, uniqueId) => (version, Option(uniqueId))
             }
             logInfo(log"Loading versionToUniqueIdLineage: ${MDC(LogKeys.LINEAGE,
@@ -377,7 +379,6 @@ class RocksDB(
           } else if (latestSnapshotVersionsAndUniqueIds.length == 1) {
             latestSnapshotVersionsAndUniqueIds.head
           } else {
-            // TODO: need test this scenario
             logInfo(log"Multiple snapshots found for the version. Found: ${MDC(LogKeys.LINEAGE,
               printLineage(latestSnapshotVersionsAndUniqueIds))}. " +
               log"Loading the latest snapshot from lineage.")
