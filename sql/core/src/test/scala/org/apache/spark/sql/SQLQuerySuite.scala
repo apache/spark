@@ -4711,6 +4711,19 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     val df6 = df3.join(df2, col("df3.zaak_id") === col("df2.customer_id"), "outer")
     df5.crossJoin(df6)
   }
+
+  test("SPARK-49743: OptimizeCsvJsonExpr does not change schema when pruning struct") {
+    val df = sql("""
+        | SELECT
+        |    from_json('[{"a": '||id||', "b": '|| (2*id) ||'}]', 'array<struct<a: INT, b: INT>>').a,
+        |    from_json('[{"a": '||id||', "b": '|| (2*id) ||'}]', 'array<struct<a: INT, b: INT>>').A
+        | FROM
+        |    range(3) as t
+        |""".stripMargin)
+    val expectedAnswer = Seq(
+      Row(Array(0), Array(0)), Row(Array(1), Array(1)), Row(Array(2), Array(2)))
+    checkAnswer(df, expectedAnswer)
+  }
 }
 
 case class Foo(bar: Option[String])
