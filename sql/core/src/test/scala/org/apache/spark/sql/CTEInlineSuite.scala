@@ -678,6 +678,27 @@ abstract class CTEInlineSuiteBase
       }.isDefined, "CTE columns should not be pruned.")
     }
   }
+
+  test("SPARK-49816: should only update out-going-ref-count for referenced outer CTE relation") {
+    withView("v") {
+      sql(
+        """
+          |WITH
+          |t1 AS (SELECT 1 col),
+          |t2 AS (SELECT * FROM t1)
+          |SELECT * FROM t2
+          |""".stripMargin).createTempView("v")
+      // r1 is un-referenced, but it should not decrease the ref count of t2 inside view v.
+      val df = sql(
+        """
+          |WITH
+          |r1 AS (SELECT * FROM v),
+          |r2 AS (SELECT * FROM v)
+          |SELECT * FROM r2
+          |""".stripMargin)
+      checkAnswer(df, Row(1))
+    }
+  }
 }
 
 class CTEInlineSuiteAEOff extends CTEInlineSuiteBase with DisableAdaptiveExecutionSuite
