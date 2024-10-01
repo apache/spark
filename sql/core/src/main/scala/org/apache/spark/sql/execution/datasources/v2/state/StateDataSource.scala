@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.{J
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues.JoinSideValues
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.{StateMetadataPartitionReader, StateMetadataTableEntry}
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
-import org.apache.spark.sql.execution.streaming.{CommitLog, OffsetSeqLog, OffsetSeqMetadata, StateVariableType, TimerStateUtils, TransformWithStateOperatorProperties, TransformWithStateVariableInfo}
+import org.apache.spark.sql.execution.streaming.{CommitLog, OffsetSeqLog, OffsetSeqMetadata, TimerStateUtils, TransformWithStateOperatorProperties, TransformWithStateVariableInfo}
 import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateSchemaCompatibilityChecker, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreProviderId}
@@ -174,13 +174,6 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       if (stateVarInfo.size != 1) {
         throw StateDataSourceErrors.invalidOptionValue(STATE_VAR_NAME,
           s"State variable $stateVarName is not defined for the transformWithState operator.")
-      }
-
-      // TODO: add support for list type
-      if (sourceOptions.readChangeFeed &&
-        stateVarInfo.head.stateVariableType == StateVariableType.ListState) {
-        throw StateDataSourceErrors.conflictOptions(Seq(StateSourceOptions.READ_CHANGE_FEED,
-          StateSourceOptions.STATE_VAR_NAME))
       }
     } else {
       // if the operator is transformWithState, then a state variable argument is mandatory

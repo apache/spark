@@ -410,6 +410,53 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
+  testWithChangelogCheckpointingEnabled("state data source cdf integration - list state") {
+    withTempDir { tempDir =>
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName) {
+
+        val inputData = MemoryStream[(String, String)]
+        val result = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new SessionGroupsStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+          AddData(inputData, ("session1", "group2")),
+          AddData(inputData, ("session1", "group1")),
+          AddData(inputData, ("session2", "group1")),
+          CheckNewAnswer(),
+          AddData(inputData, ("session3", "group7")),
+          AddData(inputData, ("session1", "group4")),
+          CheckNewAnswer(),
+          StopStream
+        )
+
+        val flattenedReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "groupsList")
+          .option(StateSourceOptions.READ_CHANGE_FEED, true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+          .load()
+
+        val resultDf = flattenedReaderDf.selectExpr(
+          "change_type",
+          "key.value AS groupingKey",
+          "list_element.value AS valueList",
+          "partition_id")
+        checkAnswer(resultDf,
+          Seq(Row("append", "session1", "group1", 0),
+            Row("append", "session1", "group2", 0),
+            Row("append", "session1", "group4", 0),
+            Row("append", "session2", "group1", 0),
+            Row("append", "session3", "group7", 3)))
+      }
+    }
+  }
+
   test("state data source integration - list state and TTL") {
     withTempDir { tempDir =>
       withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
@@ -494,6 +541,69 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         checkAnswer(outputDf,
           Seq(Row("session1", "group1"), Row("session1", "group2"), Row("session1", "group4"),
           Row("session2", "group1"), Row("session3", "group7")))
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("state data source cdf integration - list state and TTL") {
+    withTempDir { tempDir =>
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key ->
+          TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+        val inputData = MemoryStream[(String, String)]
+        val result = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new SessionGroupsStatefulProcessorWithTTL(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+          AddData(inputData, ("session1", "group2")),
+          AddData(inputData, ("session1", "group1")),
+          AddData(inputData, ("session2", "group1")),
+          AddData(inputData, ("session3", "group7")),
+          AddData(inputData, ("session1", "group4")),
+          Execute { _ =>
+            // wait for the batch to run since we are using processing time
+            Thread.sleep(5000)
+          },
+          StopStream
+        )
+
+        val flattenedStateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "groupsListWithTTL")
+          .option(StateSourceOptions.READ_CHANGE_FEED, true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+          .load()
+
+        val flattenedResultDf = flattenedStateReaderDf
+          .selectExpr("list_element.ttlExpirationMs AS ttlExpirationMs")
+        var flattenedCount = 0L
+        flattenedResultDf.collect().foreach { row =>
+          flattenedCount = flattenedCount + 1
+          assert(row.getLong(0) > 0)
+        }
+
+        // verify that 5 state rows are present
+        assert(flattenedCount === 5)
+
+        val outputDf = flattenedStateReaderDf
+          .selectExpr(
+            "change_type",
+            "key.value AS groupingKey",
+            "list_element.value.value AS groupId",
+            "partition_id")
+
+        checkAnswer(outputDf,
+          Seq(Row("append", "session1", "group1", 0),
+            Row("append", "session1", "group2", 0),
+            Row("append", "session1", "group4", 0),
+            Row("append", "session2", "group1", 0),
+            Row("append", "session3", "group7", 3)))
       }
     }
   }
