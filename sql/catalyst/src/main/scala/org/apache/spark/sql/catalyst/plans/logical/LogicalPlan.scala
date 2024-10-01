@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import scala.collection.mutable
+
 import com.google.common.base.Throwables
 
-import scala.collection.mutable
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -418,13 +419,14 @@ object LogicalPlanIntegrity extends Logging {
   }
 
   def validateSchemaOutput(previousPlan: LogicalPlan, currentPlan: LogicalPlan): Option[String] = {
+    val msg = "The plan output schema has changed from ${previousPlan.schema.sql} to " +
+      currentPlan.schema.sql + s". The previous plan: ${previousPlan.treeString}\nThe new " +
+      "plan:\n" + currentPlan.treeString
     val isValid = if (SqlApiConf.get.caseSensitiveAnalysis) {
       DataTypeUtils.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)
     } else {
       if (!DataTypeUtils.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
-        logInfo("The plan output schema has changed from ${previousPlan.schema.sql} to " +
-          currentPlan.schema.sql + s". The previous plan: ${previousPlan.treeString}\nThe new " +
-          "plan:\n" + currentPlan.treeString)
+        logInfo(msg)
         val CaseNotPreservingProblem = new SparkException("CaseNotPreservingRule")
         val stackTraceString = Option(CaseNotPreservingProblem)
           .map(Throwables.getStackTraceAsString).getOrElse("")
@@ -436,9 +438,7 @@ object LogicalPlanIntegrity extends Logging {
     if (isValid) {
       None
     } else {
-      Some(s"The plan output schema has changed from ${previousPlan.schema.sql} to " +
-          currentPlan.schema.sql + s". The previous plan: ${previousPlan.treeString}\nThe new " +
-          "plan:\n" + currentPlan.treeString)
+      Some(msg)
     }
   }
 
