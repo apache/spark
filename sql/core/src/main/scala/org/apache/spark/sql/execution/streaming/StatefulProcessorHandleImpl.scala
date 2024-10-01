@@ -267,7 +267,8 @@ class StatefulProcessorHandleImpl(
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V]): MapState[K, V] = {
     verifyStateVarOperations("get_map_state", CREATED)
-    val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder, userKeyEnc, valEncoder)
+    val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder,
+      userKeyEnc, valEncoder, metrics)
     TWSMetricsUtils.incrementMetric(metrics, "numMapStateVars")
     resultState
   }
@@ -282,7 +283,7 @@ class StatefulProcessorHandleImpl(
 
     assert(batchTimestampMs.isDefined)
     val mapStateWithTTL = new MapStateImplWithTTL[K, V](store, stateName, keyEncoder, userKeyEnc,
-      valEncoder, ttlConfig, batchTimestampMs.get)
+      valEncoder, ttlConfig, batchTimestampMs.get, metrics)
     TWSMetricsUtils.incrementMetric(metrics, "numMapStateWithTTLVars")
     ttlStates.add(mapStateWithTTL)
 

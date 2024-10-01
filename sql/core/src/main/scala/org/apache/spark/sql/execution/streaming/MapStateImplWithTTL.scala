@@ -20,6 +20,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.{PrefixKeyScanStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.{MapState, TTLConfig}
@@ -35,6 +36,7 @@ import org.apache.spark.util.NextIterator
  * @param valEncoder - SQL encoder for state variable
  * @param ttlConfig  - the ttl configuration (time to live duration etc.)
  * @param batchTimestampMs - current batch processing timestamp.
+ * @param metrics - metrics to be updated as part of stateful processing
  * @tparam K - type of key for map state variable
  * @tparam V - type of value for map state variable
  * @return - instance of MapState of type [K,V] that can be used to store state persistently
@@ -46,7 +48,8 @@ class MapStateImplWithTTL[K, V](
     userKeyEnc: Encoder[K],
     valEncoder: Encoder[V],
     ttlConfig: TTLConfig,
-    batchTimestampMs: Long)
+    batchTimestampMs: Long,
+    metrics: Map[String, SQLMetric] = Map.empty)
   extends CompositeKeyTTLStateImpl[K](stateName, store,
     keyExprEnc, userKeyEnc, batchTimestampMs)
   with MapState[K, V] with Logging {
@@ -106,6 +109,7 @@ class MapStateImplWithTTL[K, V](
     val encodedValue = stateTypesEncoder.encodeValue(value, ttlExpirationMs)
     val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(key)
     store.put(encodedCompositeKey, encodedValue, stateName)
+    TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
 
     upsertTTLForStateKey(ttlExpirationMs, encodedGroupingKey, encodedUserKey)
   }
@@ -149,6 +153,7 @@ class MapStateImplWithTTL[K, V](
     StateStoreErrors.requireNonNullStateValue(key, stateName)
     val compositeKey = stateTypesEncoder.encodeCompositeKey(key)
     store.remove(compositeKey, stateName)
+    TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
   }
 
   /** Remove this state. */
