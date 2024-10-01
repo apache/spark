@@ -311,7 +311,8 @@ class RocksDB(
     assert(version >= 0)
     acquire(LoadStore)
     recordedMetrics = None
-    logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)}")
+    logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)} with checkpointUniqueId: ${
+      MDC(LogKeys.UUID, checkpointUniqueId.getOrElse(""))}")
     var currLineage: Option[Array[(Long, Option[String])]] = None
     try {
       // TODO[MUST] when loaded version = version, still need to get currentLineage
@@ -329,9 +330,14 @@ class RocksDB(
           fileManager.getLatestSnapshotVersionAndUniqueId(version, checkpointUniqueId)
         }
 
+        // Update the lineage from changelog
         if (version != 0 && checkpointFormatVersion >= 2) {
           // It is possible that change log checkpointing is first enabled and then disabled.
-          // In that case, loading changelog reader will fail
+          // In this case, loading changelog reader will fail because there are only zip files.
+          // It is also possible that state store was previously ran under format version 1
+          // In that case, loading changelog reader with file format version_uniqueId.changelog
+          // will also fail.
+          // But either way, there is no lineage in both cases.
           var changelogReader: StateStoreChangelogReader = null
           try {
             changelogReader = fileManager.getChangelogReader(
@@ -343,10 +349,13 @@ class RocksDB(
             }
             logInfo(log"Loading versionToUniqueIdLineage: ${MDC(LogKeys.LINEAGE,
               printLineage(versionToUniqueIdLineage))} from changelog version: ${MDC(
-              LogKeys.VERSION_NUM, version)}. This would be an noop if changelog is not enabled")
+              LogKeys.VERSION_NUM, version)} uniqueId: ${MDC(LogKeys.UUID,
+              checkpointUniqueId.getOrElse(""))}. " +
+              log"This would be an noop if changelog is not enabled")
             currLineage = Some(versionToUniqueIdLineage)
           } catch {
-            // This can happen when you first load with changelog enabled and then disable it
+            // This can happen when you first load with changelog enabled and then disable it,
+            // or the state store was previously ran under format version 1.
             case e: SparkException
               if e.getErrorClass == "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE" =>
             // do nothing

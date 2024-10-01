@@ -335,26 +335,26 @@ class RocksDBFileManager(
       // If the latest version snapshot exists, we avoid listing.
       if (fm.exists(dfsBatchZipFile(version, checkpointUniqueId))) {
         return Array((version, checkpointUniqueId))
+      } else if (fm.exists(dfsBatchZipFile(version))) {
+        // This is possible when the state was previously ran under checkpoint format v1
+        // and restarted with v2. Then even if there is checkpointUniqueId passed in, the file
+        // does not have that uniqueId in the filename.
+        return Array((version, None))
       }
-      checkpointUniqueId match {
-        case Some(uniqueId) =>
-          val versionAndUniqueIds = fm.list(path, onlyZipFiles)
-            .map(_.getPath.getName.stripSuffix(".zip").split("_"))
-            .filter { case Array(ver, _) =>
-              ver.toLong <= version
-            }
-            .map { case Array(version, uniqueId) => (version.toLong, Option(uniqueId)) }
-          val maxVersion = versionAndUniqueIds.map(_._1).foldLeft(0L)(math.max)
-          versionAndUniqueIds.filter(_._1 == maxVersion)
-          // If there is only one previous version file, skip the check for uniqueId
-          // TODO decision?
-        case None =>
-          Array((fm.list(path, onlyZipFiles)
-            .map(_.getPath.getName.stripSuffix(".zip"))
-            .map(_.toLong)
-            .filter(_ <= version)
-            .foldLeft(0L)(math.max), None))
-      }
+      val versionAndUniqueIds = fm.list(path, onlyZipFiles)
+        .map(_.getPath.getName.stripSuffix(".zip").split("_"))
+        .filter {
+          case Array(ver, _) => ver.toLong <= version
+          case Array(ver) => ver.toLong <= version
+        }
+        .map {
+          case Array(version, uniqueId) => (version.toLong, Option(uniqueId))
+          case Array(version) => (version.toLong, None)
+        }
+      val maxVersion = versionAndUniqueIds.map(_._1).foldLeft(0L)(math.max)
+      versionAndUniqueIds.filter(_._1 == maxVersion)
+      // If there is only one previous version file, skip the check for uniqueId
+      // TODO decision?
     } else {
       Array((0, None))
     }
