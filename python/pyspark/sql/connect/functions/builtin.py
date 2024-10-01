@@ -574,6 +574,7 @@ def bin(col: "ColumnOrName") -> Column:
 
 bin.__doc__ = pysparkfuncs.bin.__doc__
 
+
 def try_bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
     if scale is None:
         return _invoke_function_over_columns("try_bround", col)
@@ -839,6 +840,7 @@ def rint(col: "ColumnOrName") -> Column:
 
 
 rint.__doc__ = pysparkfuncs.rint.__doc__
+
 
 def try_round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
     if scale is None:
