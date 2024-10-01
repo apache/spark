@@ -298,7 +298,7 @@ trait OrderPreservingUnaryNode extends UnaryNode
   override protected def orderingExpressions: Seq[SortOrder] = child.outputOrdering
 }
 
-object LogicalPlanIntegrity {
+object LogicalPlanIntegrity extends Logging {
 
   def canGetOutputAttrs(p: LogicalPlan): Boolean = {
     p.resolved && !p.expressions.exists { e =>
@@ -420,6 +420,11 @@ object LogicalPlanIntegrity {
     val isValid = if (SqlApiConf.get.caseSensitiveAnalysis) {
       DataTypeUtils.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)
     } else {
+      if (DataTypeUtils.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
+        logInfo("The plan output schema has changed from ${previousPlan.schema.sql} to " +
+          currentPlan.schema.sql + s". The previous plan: ${previousPlan.treeString}\nThe new " +
+          "plan:\n" + currentPlan.treeString)
+      }
       DataTypeUtils.equalsIgnoreCaseAndNullability(previousPlan.schema, currentPlan.schema)
     }
 
