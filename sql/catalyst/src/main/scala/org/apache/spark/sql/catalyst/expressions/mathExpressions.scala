@@ -326,7 +326,9 @@ case class RoundCeil(child: Expression, scale: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, IntegerType)
 
-  override def tryHint(): String = "try_ceil"
+  // No need to add an expression, ansiEnabled is set to false in the base. If ansiEnabled is
+  // switched to true, this hint should be updated.
+  override def tryHint(): String = ""
 
   override def nodeName: String = "ceil"
 
@@ -624,7 +626,9 @@ case class RoundFloor(child: Expression, scale: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, IntegerType)
 
-  override def tryHint(): String = "try_floor"
+  // No need to add an expression, ansiEnabled is set to false in the base. If ansiEnabled is
+  // switched to true, this hint should be updated.
+  override def tryHint(): String = ""
 
   override def nodeName: String = "floor"
 
@@ -1770,8 +1774,8 @@ case class Round(
 case class TryRound(override val child: Expression, scale: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
 
-  def this(child: Expression) = this(child, Literal(0), Round(child, Literal(0), false))
   def this(child: Expression, scale: Expression) = this(child, scale, Round(child, scale, false))
+  def this(child: Expression) = this(child, Literal(0))
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(replacement = newChild)
@@ -1819,11 +1823,11 @@ case class BRound(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr, d) - Returns `expr` rounded to `d` decimal places using HALF_UP rounding mode.",
+  usage = "_FUNC_(expr, d) - Returns `expr` rounded to `d` decimal places using HALF_EVEN rounding mode.",
   examples = """
     Examples:
       > SELECT _FUNC_(2.5, 0);
-       3
+       2
   """,
   since = "4.0.0",
   group = "math_funcs")
@@ -1831,8 +1835,8 @@ case class BRound(
 case class TryBRound(override val child: Expression, scale: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
 
-  def this(child: Expression) = this(child, Literal(0), BRound(child, Literal(0), false))
   def this(child: Expression, scale: Expression) = this(child, scale, BRound(child, scale, false))
+  def this(child: Expression) = this(child, Literal(0))
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(replacement = newChild)
