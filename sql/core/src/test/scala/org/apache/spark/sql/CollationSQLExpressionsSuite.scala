@@ -32,7 +32,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
 
-// scalastyle:off nonascii
+// scalastyle:off
 class CollationSQLExpressionsSuite
     extends QueryTest
     with SharedSparkSession
@@ -3221,7 +3221,7 @@ class CollationSQLExpressionsSuite
   // TODO: Add more tests for other SQL expressions
 
 }
-// scalastyle:on nonascii
+// scalastyle:on
 
 class CollationSQLExpressionsANSIOffSuite extends CollationSQLExpressionsSuite {
   override protected def sparkConf: SparkConf =

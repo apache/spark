@@ -24,7 +24,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-// scalastyle:off nonascii
+// scalastyle:off
 class CollationStringExpressionsSuite
   extends QueryTest
   with SharedSparkSession
@@ -1553,7 +1553,7 @@ class CollationStringExpressionsSuite
   }
 
 }
-// scalastyle:on nonascii
+// scalastyle:on
 
 class CollationStringExpressionsANSISuite extends CollationStringExpressionsSuite {
   override protected def sparkConf: SparkConf =
