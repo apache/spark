@@ -1149,8 +1149,7 @@ public final class CollationFactory {
     Collation.CollationSpec.SpaceTrimming spaceTrimming =
       Collation.CollationSpec.getSpaceTrimming(collationId);
     if(spaceTrimming != Collation.CollationSpec.SpaceTrimming.NONE)
-      input = Collation.CollationSpec.applyTrimmingPolicy(
-        input, Collation.CollationSpec.getSpaceTrimming(collationId));
+      input = Collation.CollationSpec.applyTrimmingPolicy(input, spaceTrimming);
 
     if (collation.supportsBinaryEquality) {
       return input;
@@ -1168,8 +1167,7 @@ public final class CollationFactory {
     Collation.CollationSpec.SpaceTrimming spaceTrimming =
       Collation.CollationSpec.getSpaceTrimming(collationId);
     if(spaceTrimming != Collation.CollationSpec.SpaceTrimming.NONE)
-      input = Collation.CollationSpec.applyTrimmingPolicy(
-        input, Collation.CollationSpec.getSpaceTrimming(collationId));
+      input = Collation.CollationSpec.applyTrimmingPolicy(input, spaceTrimming);
 
     if (collation.supportsBinaryEquality) {
       return input.getBytes();
