@@ -151,12 +151,6 @@ AlterTableChangeColumnCommand `spark_catalog`.`default`.`char_tbl1`, c, StructFi
 
 
 -- !query
-alter table char_tbl1 change column c comment 'text'
--- !query analysis
-AlterTableChangeColumnCommand `spark_catalog`.`default`.`char_tbl1`, c, StructField(c,CharType(5),true)
-
-
--- !query
 desc formatted char_tbl1
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_tbl1`, true, [col_name#x, data_type#x, comment#x]
@@ -267,6 +261,18 @@ org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 desc formatted char_part
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_part`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+alter table char_part change column c1 comment 'char comment'
+-- !query analysis
+AlterTableChangeColumnCommand `spark_catalog`.`default`.`char_part`, c1, StructField(c1,CharType(5),true)
+
+
+-- !query
+alter table char_part change column v1 comment 'varchar comment'
+-- !query analysis
+AlterTableChangeColumnCommand `spark_catalog`.`default`.`char_part`, v1, StructField(v1,VarcharType(6),true)
 
 
 -- !query

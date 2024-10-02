@@ -23,7 +23,6 @@ desc formatted char_tbl1;
 
 alter table char_tbl1 change column c type char(6);
 alter table char_tbl1 change column c type char(5);
-alter table char_tbl1 change column c comment 'text';
 desc formatted char_tbl1;
 
 alter table char_tbl1 add columns (d char(5));
@@ -50,6 +49,8 @@ desc formatted char_tbl1;
 create table char_part(c1 char(5), c2 char(2), v1 varchar(6), v2 varchar(2)) using parquet partitioned by (v2, c2);
 desc formatted char_part;
 
+alter table char_part change column c1 comment 'char comment';
+alter table char_part change column v1 comment 'varchar comment';
 alter table char_part add partition (v2='ke', c2='nt') location 'loc1';
 desc formatted char_part;
 
