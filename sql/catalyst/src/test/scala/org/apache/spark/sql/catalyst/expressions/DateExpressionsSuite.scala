@@ -1214,14 +1214,64 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               makeTimestampExpr.copy(sec = Literal(Decimal(
                 BigDecimal(70.0), 16, 6)))
             ).foreach { entry =>
-              if (ansi) {
-                checkErrorInExpression[SparkDateTimeException](
-                  entry,
-                  "DATE_TIME_FIELD_OUT_OF_BOUNDS",
-                  Map("ansiConfig" -> "\"spark.sql.ansi.enabled\""))
-              } else {
-                checkEvaluation(entry, null)
-              }
+              if (!ansi) checkEvaluation(entry, null)
+            }
+
+            if (ansi) {
+              checkErrorInExpression[SparkDateTimeException](
+                makeTimestampExpr.copy(year = Literal(Int.MaxValue)),
+                "DATE_TIME_FIELD_OUT_OF_BOUNDS",
+                Map(
+                  "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
+                  "unit" -> "YEAR",
+                  "range" -> "-999999999 - 999999999",
+                  "badValue" -> "2147483647")
+              )
+              checkErrorInExpression[SparkDateTimeException](
+                makeTimestampExpr.copy(month = Literal(13)),
+                "DATE_TIME_FIELD_OUT_OF_BOUNDS",
+                Map(
+                  "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
+                  "unit" -> "MONTH",
+                  "range" -> "1 - 12",
+                  "badValue" -> "13")
+              )
+              checkErrorInExpression[SparkDateTimeException](
+                makeTimestampExpr.copy(day = Literal(32)),
+                "DATE_TIME_FIELD_OUT_OF_BOUNDS",
+                Map(
+                  "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
+                  "unit" -> "DAY",
+                  "range" -> "1 - 28/31",
+                  "badValue" -> "32")
+              )
+              checkErrorInExpression[SparkDateTimeException](
+                makeTimestampExpr.copy(hour = Literal(25)),
+                "DATE_TIME_FIELD_OUT_OF_BOUNDS",
+                Map(
+                  "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
+                  "unit" -> "HourOfDay",
+                  "range" -> "0 - 23",
+                  "badValue" -> "25")
+              )
+              checkErrorInExpression[SparkDateTimeException](
+                makeTimestampExpr.copy(min = Literal(65)),
+                "DATE_TIME_FIELD_OUT_OF_BOUNDS",
+                Map(
+                  "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
+                  "unit" -> "MinuteOfHour",
+                  "range" -> "0 - 59",
+                  "badValue" -> "65")
+              )
+              checkErrorInExpression[SparkDateTimeException](
+                makeTimestampExpr.copy(sec = Literal(Decimal(BigDecimal(70.0), 16, 6))),
+                "DATE_TIME_FIELD_OUT_OF_BOUNDS",
+                Map(
+                  "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
+                  "unit" -> "SecondOfMinute",
+                  "range" -> "0 - 59",
+                  "badValue" -> "70")
+              )
             }
 
             makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(6), Literal(30),
