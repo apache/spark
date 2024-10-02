@@ -285,7 +285,9 @@ class ArtifactManager(session: SparkSession) extends Logging {
 
   private[sql] def clone(newSession: SparkSession): ArtifactManager = {
     val newArtifactManager = new ArtifactManager(newSession)
-    FileUtils.copyDirectory(artifactPath.toFile, newArtifactManager.artifactPath.toFile)
+    if (artifactPath.toFile.exists()) {
+      FileUtils.copyDirectory(artifactPath.toFile, newArtifactManager.artifactPath.toFile)
+    }
     newArtifactManager.jarsList.addAll(jarsList)
     newArtifactManager.pythonIncludeList.addAll(pythonIncludeList)
     newArtifactManager

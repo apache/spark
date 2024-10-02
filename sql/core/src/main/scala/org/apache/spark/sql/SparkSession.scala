@@ -266,17 +266,20 @@ class SparkSession private(
    * and child sessions are set up with the same shared state. If the underlying catalog
    * implementation is Hive, this will initialize the metastore, which may take some time.
    */
-  private[sql] def cloneSession(
-      extraSessionOptions: Map[String, String] = Map.empty): SparkSession = {
+  private[sql] def cloneSession(reuseArtifactManager: Boolean = false): SparkSession = {
     val result = new SparkSession(
       sparkContext,
       Some(sharedState),
       Some(sessionState),
       extensions,
-      extraSessionOptions,
+      Map.empty,
       managedJobTags.asScala.toMap)
     result.sessionState // force copy of SessionState
-    result.sessionState.artifactManager // force copy of ArtifactManager resources
+    if (reuseArtifactManager) {
+      result.sessionState._artifactManager = Some(sessionState.artifactManager)
+    } else {
+      result.sessionState.artifactManager // force copy of ArtifactManager
+    }
     result.managedJobTags // force copy of userDefinedToRealTagsMap
     result
   }

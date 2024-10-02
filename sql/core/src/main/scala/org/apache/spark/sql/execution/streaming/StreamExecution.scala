@@ -211,7 +211,7 @@ abstract class StreamExecution(
 
   /** Isolated spark session to run the batches with. */
   private val sparkSessionForStream = {
-    sparkSession.cloneSession(Map("spark.sql.session.reuse.artifactManager" -> "true"))
+    sparkSession.cloneSession(reuseArtifactManager = true)
   }
 
   /**

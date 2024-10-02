@@ -372,12 +372,7 @@ abstract class BaseSessionStateBuilder(
    * use.
    */
   protected def artifactManager: ArtifactManager = {
-    parentState.map { ps =>
-      conf.getConfString("spark.sql.session.reuse.artifactManager", "false") match {
-        case "true" => ps.artifactManager
-        case "false" => ps.artifactManager.clone(session)
-      }
-    }.getOrElse(new ArtifactManager(session))
+    parentState.map(_.artifactManager.clone(session)).getOrElse(new ArtifactManager(session))
   }
 
   /**
