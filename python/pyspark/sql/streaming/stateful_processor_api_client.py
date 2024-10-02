@@ -155,6 +155,7 @@ class StatefulProcessorApiClient:
         state_name: str,
         key_schema: Union[StructType, str],
         value_schema: Union[StructType, str],
+        ttl_duration_ms: Optional[int],
     ) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
@@ -167,6 +168,8 @@ class StatefulProcessorApiClient:
         state_call_command.stateName = state_name
         state_call_command.schema = key_schema.json()
         state_call_command.mapStateValueSchema = value_schema.json()
+        if ttl_duration_ms is not None:
+            state_call_command.ttl.durationMs = ttl_duration_ms
         call = stateMessage.StatefulProcessorCall(getMapState=state_call_command)
         message = stateMessage.StateRequest(statefulProcessorCall=call)
 

@@ -216,7 +216,11 @@ class TransformWithStateInPandasStateServer(
         val stateName = message.getGetMapState.getStateName
         val keySchema = message.getGetMapState.getSchema
         val valueSchema = message.getGetMapState.getMapStateValueSchema
-        initializeStateVariable(stateName, keySchema, StateVariableType.MapState, None, valueSchema)
+        val ttlDurationMs = if (message.getGetMapState.hasTtl) {
+          Some(message.getGetMapState.getTtl.getDurationMs)
+        } else None
+        initializeStateVariable(stateName, keySchema, StateVariableType.MapState, ttlDurationMs,
+          valueSchema)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
     }
@@ -509,11 +513,16 @@ class TransformWithStateInPandasStateServer(
         case StateVariableType.MapState => if (!mapStates.contains(stateName)) {
           val valueSchema = StructType.fromString(mapStateValueSchemaString)
           val valueExpressionEncoder = ExpressionEncoder(valueSchema).resolveAndBind()
+          val state = if (ttlDurationMs.isEmpty) {
+            statefulProcessorHandle.getMapState[Row, Row](stateName,
+              Encoders.row(schema), Encoders.row(valueSchema))
+          } else {
+            statefulProcessorHandle.getMapState[Row, Row](stateName, Encoders.row(schema),
+              Encoders.row(valueSchema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
+          }
           mapStates.put(stateName,
-            MapStateInfo(statefulProcessorHandle.getMapState[Row, Row](stateName,
-              Encoders.row(schema), Encoders.row(valueSchema)), schema, valueSchema,
-              expressionEncoder.createDeserializer(), expressionEncoder.createSerializer(),
-              valueExpressionEncoder.createDeserializer(),
+            MapStateInfo(state, schema, valueSchema, expressionEncoder.createDeserializer(),
+              expressionEncoder.createSerializer(), valueExpressionEncoder.createDeserializer(),
               valueExpressionEncoder.createSerializer()))
           sendResponse(0)
         } else {
