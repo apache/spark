@@ -20,13 +20,10 @@ package org.apache.spark.sql.jdbc
 import java.sql.{SQLException, Types}
 import java.util.Locale
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.types._
@@ -71,16 +68,7 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
     }
   }
 
-  override def compileExpression(expr: Expression): Option[String] = {
-    val db2SQLBuilder = new DB2SQLBuilder()
-    try {
-      Some(db2SQLBuilder.build(expr))
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Error occurs while compiling V2 expression", e)
-        None
-    }
-  }
+  override def jdbcSQLBuilder(): JDBCSQLBuilder = new DB2SQLBuilder()
 
   override def getCatalystType(
       sqlType: Int,

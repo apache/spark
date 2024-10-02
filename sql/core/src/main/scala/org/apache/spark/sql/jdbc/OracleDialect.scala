@@ -20,11 +20,8 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Date, SQLException, Timestamp, Types}
 import java.util.Locale
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.jdbc.OracleDialect._
@@ -63,16 +60,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
       }
   }
 
-  override def compileExpression(expr: Expression): Option[String] = {
-    val oracleSQLBuilder = new OracleSQLBuilder()
-    try {
-      Some(oracleSQLBuilder.build(expr))
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Error occurs while compiling V2 expression", e)
-        None
-    }
-  }
+  override def jdbcSQLBuilder(): JDBCSQLBuilder = new OracleSQLBuilder()
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {

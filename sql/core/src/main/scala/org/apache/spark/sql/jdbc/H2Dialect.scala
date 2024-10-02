@@ -23,7 +23,6 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.jdk.CollectionConverters._
-import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
@@ -32,7 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSu
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, MetadataBuilder, ShortType, StringType, TimestampType}
 
@@ -247,17 +246,6 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
     super.classifyException(e, errorClass, messageParameters, description, isRuntime)
   }
 
-  override def compileExpression(expr: Expression): Option[String] = {
-    val h2SQLBuilder = new H2SQLBuilder()
-    try {
-      Some(h2SQLBuilder.build(expr))
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Error occurs while compiling V2 expression", e)
-        None
-    }
-  }
-
   class H2SQLBuilder extends JDBCSQLBuilder {
 
     override def visitAggregateFunction(
@@ -302,6 +290,8 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
       }
     }
   }
+
+  override def jdbcSQLBuilder(): JDBCSQLBuilder = new H2SQLBuilder()
 
   override def supportsLimit: Boolean = true
 

@@ -20,8 +20,6 @@ package org.apache.spark.sql.jdbc
 import java.sql.SQLException
 import java.util.Locale
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -100,16 +98,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
     }
   }
 
-  override def compileExpression(expr: Expression): Option[String] = {
-    val msSqlServerSQLBuilder = new MsSqlServerSQLBuilder()
-    try {
-      Some(msSqlServerSQLBuilder.build(expr))
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Error occurs while compiling V2 expression", e)
-        None
-    }
-  }
+  override def jdbcSQLBuilder(): JDBCSQLBuilder = new MsSqlServerSQLBuilder()
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {

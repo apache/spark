@@ -22,14 +22,13 @@ import java.util
 import java.util.Locale
 
 import scala.collection.mutable.ArrayBuilder
-import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference, NullOrdering, SortDirection}
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference, NullOrdering, SortDirection}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types._
@@ -114,16 +113,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       }
   }
 
-  override def compileExpression(expr: Expression): Option[String] = {
-    val mysqlSQLBuilder = new MySQLSQLBuilder()
-    try {
-      Some(mysqlSQLBuilder.build(expr))
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Error occurs while compiling V2 expression", e)
-        None
-    }
-  }
+  override def jdbcSQLBuilder(): JDBCSQLBuilder = new MySQLSQLBuilder()
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {

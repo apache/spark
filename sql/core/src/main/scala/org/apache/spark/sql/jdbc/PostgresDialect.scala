@@ -23,7 +23,6 @@ import java.util
 import java.util.Locale
 
 import scala.util.Using
-import scala.util.control.NonFatal
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.LogKeys.COLUMN_NAME
@@ -31,7 +30,7 @@ import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.{Expression, NamedReference}
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -312,16 +311,7 @@ private case class PostgresDialect()
     }
   }
 
-  override def compileExpression(expr: Expression): Option[String] = {
-    val postgresSQLBuilder = new PostgresSQLBuilder()
-    try {
-      Some(postgresSQLBuilder.build(expr))
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Error occurs while compiling V2 expression", e)
-        None
-    }
-  }
+  override def jdbcSQLBuilder(): JDBCSQLBuilder = new PostgresSQLBuilder()
 
   override def supportsLimit: Boolean = true
 
