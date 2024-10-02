@@ -24,6 +24,7 @@ import io
 from contextlib import redirect_stdout
 import datetime
 
+from pyspark import StorageLevel
 from pyspark.util import is_remote_only
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql import SparkSession as PySparkSession, Row

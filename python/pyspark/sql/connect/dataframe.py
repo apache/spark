@@ -71,7 +71,10 @@ from pyspark.errors import (
 from pyspark.util import PythonEvalType
 from pyspark.storagelevel import StorageLevel
 import pyspark.sql.connect.plan as plan
-from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
+from pyspark.sql.connect.conversion import (
+    ArrowTableToRowsConversion,
+    storage_level_to_proto,
+)
 from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.merge import MergeIntoWriter
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
@@ -2173,8 +2176,12 @@ class DataFrame(ParentDataFrame):
         assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
         return checkpointed
 
-    def localCheckpoint(self, eager: bool = True) -> ParentDataFrame:
+    def localCheckpoint(
+        self, eager: bool = True, storageLevel: Optional[StorageLevel] = None
+    ) -> ParentDataFrame:
         cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager)
+        if storageLevel is not None:
+            cmd.storage_level.CopyFrom(storage_level_to_proto(storage_level))
         _, properties, self._execution_info = self._session.client.execute_command(
             cmd.command(self._session.client)
         )

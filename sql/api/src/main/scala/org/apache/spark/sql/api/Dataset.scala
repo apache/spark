@@ -312,7 +312,8 @@ abstract class Dataset[T] extends Serializable {
    * @group basic
    * @since 2.1.0
    */
-  def checkpoint(): Dataset[T] = checkpoint(eager = true, reliableCheckpoint = true)
+  def checkpoint(): Dataset[T] =
+    checkpoint(eager = true, reliableCheckpoint = true, storageLevel = None)
 
   /**
    * Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
@@ -332,7 +333,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.1.0
    */
   def checkpoint(eager: Boolean): Dataset[T] =
-    checkpoint(eager = eager, reliableCheckpoint = true)
+    checkpoint(eager = eager, reliableCheckpoint = true, storageLevel = None)
 
   /**
    * Eagerly locally checkpoints a Dataset and return the new Dataset. Checkpointing can be used
@@ -343,7 +344,8 @@ abstract class Dataset[T] extends Serializable {
    * @group basic
    * @since 2.3.0
    */
-  def localCheckpoint(): Dataset[T] = checkpoint(eager = true, reliableCheckpoint = false)
+  def localCheckpoint(): Dataset[T] =
+    checkpoint(eager = true, reliableCheckpoint = false, storageLevel = None)
 
   /**
    * Locally checkpoints a Dataset and return the new Dataset. Checkpointing can be used to
@@ -363,7 +365,29 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.3.0
    */
   def localCheckpoint(eager: Boolean): Dataset[T] =
-    checkpoint(eager = eager, reliableCheckpoint = false)
+    checkpoint(eager = eager, reliableCheckpoint = false, storageLevel = None)
+
+  /**
+   * Locally checkpoints a Dataset and return the new Dataset. Checkpointing can be used to
+   * truncate the logical plan of this Dataset, which is especially useful in iterative algorithms
+   * where the plan may grow exponentially. Local checkpoints are written to executor storage and
+   * despite potentially faster they are unreliable and may compromise job completion.
+   *
+   * @param eager
+   *   Whether to checkpoint this dataframe immediately
+   * @param storageLevel
+   *   Option. If defined, StorageLevel with which to checkpoint the data.
+   * @note
+   *   When checkpoint is used with eager = false, the final data that is checkpointed after the
+   *   first action may be different from the data that was used during the job due to
+   *   non-determinism of the underlying operation and retries. If checkpoint is used to achieve
+   *   saving a deterministic snapshot of the data, eager = true should be used. Otherwise, it is
+   *   only deterministic after the first execution, after the checkpoint was finalized.
+   * @group basic
+   * @since 2.3.0
+   */
+  def localCheckpoint(eager: Boolean, storageLevel: Option[StorageLevel]): Dataset[T] =
+    checkpoint(eager = eager, reliableCheckpoint = false, storageLevel = storageLevel)
 
   /**
    * Returns a checkpointed version of this Dataset.
@@ -373,8 +397,14 @@ abstract class Dataset[T] extends Serializable {
    * @param reliableCheckpoint
    *   Whether to create a reliable checkpoint saved to files inside the checkpoint directory. If
    *   false creates a local checkpoint using the caching subsystem
+   * @param storageLevel
+   *   Option. If defined, StorageLevel with which to checkpoint the data.
+   *   Only with reliableCheckpoint = false.
    */
-  protected def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T]
+  protected def checkpoint(
+      eager: Boolean,
+      reliableCheckpoint: Boolean,
+      storageLevel: Option[StorageLevel]): Dataset[T]
 
   /**
    * Defines an event time watermark for this [[Dataset]]. A watermark tracks a point in time

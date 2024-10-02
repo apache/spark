@@ -1115,13 +1115,20 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
-  protected def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T] = {
+  protected def checkpoint(
+      eager: Boolean,
+      reliableCheckpoint: Boolean,
+      storageLevel: Option[StorageLevel]): Dataset[T] = {
     sparkSession.newDataset(agnosticEncoder) { builder =>
       val command = sparkSession.newCommand { builder =>
-        builder.getCheckpointCommandBuilder
+        val checkpointBuilder = builder.getCheckpointCommandBuilder
           .setLocal(!reliableCheckpoint)
           .setEager(eager)
           .setRelation(this.plan.getRoot)
+        storageLevel.foreach { storageLevel =>
+          checkpointBuilder.setStorageLevel(
+            StorageLevelProtoConverter.toConnectProtoType(storageLevel))
+        }
       }
       val responseIter = sparkSession.execute(command)
       try {
@@ -1303,6 +1310,10 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   override def localCheckpoint(eager: Boolean): Dataset[T] = super.localCheckpoint(eager)
+
+  /** @inheritdoc */
+  override def localCheckpoint(eager: Boolean, storageLevel: Option[StorageLevel]): Dataset[T] =
+    super.localCheckpoint(eager, storageLevel)
 
   /** @inheritdoc */
   override def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] =
