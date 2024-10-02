@@ -1028,6 +1028,7 @@ class DataFrame:
 
         .. versionchanged:: 4.0.0
             Supports Spark Connect.
+            Added storageLevel parameter.
 
         Parameters
         ----------

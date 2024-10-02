@@ -384,7 +384,7 @@ abstract class Dataset[T] extends Serializable {
    *   saving a deterministic snapshot of the data, eager = true should be used. Otherwise, it is
    *   only deterministic after the first execution, after the checkpoint was finalized.
    * @group basic
-   * @since 2.3.0
+   * @since 4.0.0
    */
   def localCheckpoint(eager: Boolean, storageLevel: Option[StorageLevel]): Dataset[T] =
     checkpoint(eager = eager, reliableCheckpoint = false, storageLevel = storageLevel)
