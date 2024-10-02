@@ -151,7 +151,34 @@ class ResolveReferencesInAggregate(val catalogManager: CatalogManager) extends S
         }
       }
     } else {
-      groupExprs
+      // Check if grouping expressions contain the integer literal
+      if (groupExprs.exists(expr =>
+        trimAliases(expr) match {
+          case IntegerLiteral(_) => true
+          case _ => false
+        })) {
+        val expandedGroupExprs = expandGroupByAll(selectList)
+        if (expandedGroupExprs.isEmpty) {
+          groupExprs
+        } else {
+          val map = expandedGroupExprs.get.zipWithIndex.map { case (expr, index) =>
+            (expr, index + 1)}.toMap
+          groupExprs.map { expr =>
+            trimAliases(expr) match {
+              // When expression is an integer literal, use an integer literal of the index instead.
+              case IntegerLiteral(_) =>
+                if (map.contains(expr)) {
+                  Literal(map.getOrElse(expr, 0))
+                } else {
+                  expr
+                }
+              case _ => expr
+            }
+          }
+        }
+      } else {
+        groupExprs
+      }
     }
   }
 

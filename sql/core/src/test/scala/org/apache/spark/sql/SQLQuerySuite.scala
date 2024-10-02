@@ -4631,6 +4631,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("SPARK-49604: GROUP_BY_POS_OUT_OF_RANGE should not appear if group by Literal") {
+    withTable("t1", "t2", "t3") {
+      sql("CREATE TABLE t1(c1 int) USING PARQUET")
+      sql("CREATE TABLE t2 USING PARQUET AS SELECT c1, -1 AS x from t1 group by c1, x")
+      sql("CREATE TABLE t3 USING PARQUET AS SELECT c1, -1 AS x, 3 AS y from t1 group by c1, x, y")
+    }
+  }
+
   test("SPARK-39548: CreateView will make queries go into inline CTE code path thus" +
     "trigger a mis-clarified `window definition not found` issue") {
     sql(
