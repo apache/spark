@@ -287,11 +287,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = Some(e))
   }
 
-  def ansiIllegalArgumentError(): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "UNSUPPORTED_DATETIME_UNIT_ADDITION",
-      messageParameters = Map(
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
+  def ansiIllegalArgumentError(): SparkException = {
+    SparkException.internalError(
+      "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date. " +
+        s"If necessary set ${toSQLConf(SQLConf.ANSI_ENABLED.key)} to false to bypass this error"
+    )
   }
 
   def overflowInSumOfDecimalError(context: QueryContext): ArithmeticException = {

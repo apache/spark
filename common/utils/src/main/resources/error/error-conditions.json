@@ -4788,12 +4788,6 @@
     ],
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_DATETIME_UNIT_ADDITION" : {
-    "message" : [
-      "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date. If necessary set <ansiConfig> to false to bypass this error."
-    ],
-    "sqlState" : "22008"
-  },
   "UNSUPPORTED_DEFAULT_VALUE" : {
     "message" : [
       "DEFAULT column values is not supported."

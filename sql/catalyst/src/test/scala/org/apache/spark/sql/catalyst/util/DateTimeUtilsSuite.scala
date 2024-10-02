@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
@@ -540,11 +540,14 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(dateAddInterval(input, new CalendarInterval(36, 47, 0)) === days(2000, 4, 15))
     assert(dateAddInterval(input, new CalendarInterval(-13, 0, 0)) === days(1996, 1, 28))
     checkError(
-      exception = intercept[SparkIllegalArgumentException](
+      exception = intercept[SparkException](
         dateAddInterval(input, new CalendarInterval(36, 47, 1))),
-      condition = "UNSUPPORTED_DATETIME_UNIT_ADDITION",
+      condition = "INTERNAL_ERROR",
       parameters = Map(
-        "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
+        "message" ->
+          ("Cannot add hours, minutes or seconds, milliseconds, microseconds to a date. " +
+          "If necessary set \"spark.sql.ansi.enabled\" to false to bypass this error"))
+    )
   }
 
   test("timestamp add interval") {
