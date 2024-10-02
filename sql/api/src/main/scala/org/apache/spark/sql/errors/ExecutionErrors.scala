@@ -120,7 +120,8 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
       context: QueryContext = null): ArithmeticException = {
     val alternative = if (hint.nonEmpty) {
       s" Use '$hint' to tolerate overflow and return NULL instead."
-    } else ""
+    }
+    else s""" If necessary set ${SqlApiConf.ANSI_ENABLED_KEY} to "false" to bypass this error."""
     new SparkArithmeticException(
       errorClass = "ARITHMETIC_OVERFLOW",
       messageParameters = Map("message" -> message, "try_alternative" -> alternative),
