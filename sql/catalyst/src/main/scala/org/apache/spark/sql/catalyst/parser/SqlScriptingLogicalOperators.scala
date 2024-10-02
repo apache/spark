@@ -148,5 +148,5 @@ case class CaseStatement(
  *              The label can be used to LEAVE or ITERATE the loop.
  */
 case class LoopStatement(
-  body: CompoundBody,
-  label: Option[String]) extends CompoundPlanStatement
+    body: CompoundBody,
+    label: Option[String]) extends CompoundPlanStatement
