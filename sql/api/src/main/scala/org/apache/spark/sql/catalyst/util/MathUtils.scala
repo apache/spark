@@ -25,37 +25,41 @@ import org.apache.spark.sql.errors.ExecutionErrors
  */
 object MathUtils {
 
-  def addExact(a: Int, b: Int): Int = withOverflow(Math.addExact(a, b))
+  def addExact(a: Int, b: Int): Int = withOverflow(Math.addExact(a, b), hint = "try_add")
 
   def addExact(a: Int, b: Int, context: QueryContext): Int = {
     withOverflow(Math.addExact(a, b), hint = "try_add", context)
   }
 
-  def addExact(a: Long, b: Long): Long = withOverflow(Math.addExact(a, b))
+  def addExact(a: Long, b: Long): Long = withOverflow(Math.addExact(a, b), hint = "try_add")
 
   def addExact(a: Long, b: Long, context: QueryContext): Long = {
     withOverflow(Math.addExact(a, b), hint = "try_add", context)
   }
 
-  def subtractExact(a: Int, b: Int): Int = withOverflow(Math.subtractExact(a, b))
+  def subtractExact(a: Int, b: Int): Int =
+    withOverflow(Math.subtractExact(a, b), hint = "try_subtract")
 
   def subtractExact(a: Int, b: Int, context: QueryContext): Int = {
     withOverflow(Math.subtractExact(a, b), hint = "try_subtract", context)
   }
 
-  def subtractExact(a: Long, b: Long): Long = withOverflow(Math.subtractExact(a, b))
+  def subtractExact(a: Long, b: Long): Long =
+    withOverflow(Math.subtractExact(a, b), hint = "try_subtract")
 
   def subtractExact(a: Long, b: Long, context: QueryContext): Long = {
     withOverflow(Math.subtractExact(a, b), hint = "try_subtract", context)
   }
 
-  def multiplyExact(a: Int, b: Int): Int = withOverflow(Math.multiplyExact(a, b))
+  def multiplyExact(a: Int, b: Int): Int =
+    withOverflow(Math.multiplyExact(a, b), hint = "try_multiply")
 
   def multiplyExact(a: Int, b: Int, context: QueryContext): Int = {
     withOverflow(Math.multiplyExact(a, b), hint = "try_multiply", context)
   }
 
-  def multiplyExact(a: Long, b: Long): Long = withOverflow(Math.multiplyExact(a, b))
+  def multiplyExact(a: Long, b: Long): Long =
+    withOverflow(Math.multiplyExact(a, b), hint = "try_multiply")
 
   def multiplyExact(a: Long, b: Long, context: QueryContext): Long = {
     withOverflow(Math.multiplyExact(a, b), hint = "try_multiply", context)
@@ -81,12 +85,16 @@ object MathUtils {
 
   def toIntExact(a: Long): Int = withOverflow(Math.toIntExact(a))
 
+  // TODO(SPARK-49631): Fix suggestion when used.
   def floorDiv(a: Int, b: Int): Int = withOverflow(Math.floorDiv(a, b), hint = "try_divide")
 
+  // TODO(SPARK-49631): Fix suggestion when used.
   def floorDiv(a: Long, b: Long): Long = withOverflow(Math.floorDiv(a, b), hint = "try_divide")
 
+  // TODO(SPARK-49631): Fix suggestion when used.
   def floorMod(a: Int, b: Int): Int = withOverflow(Math.floorMod(a, b))
 
+  // TODO(SPARK-49631): Fix suggestion when used.
   def floorMod(a: Long, b: Long): Long = withOverflow(Math.floorMod(a, b))
 
   def withOverflow[A](f: => A, hint: String = "", context: QueryContext = null): A = {

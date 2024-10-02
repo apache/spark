@@ -708,7 +708,7 @@ class QueryExecutionErrorsSuite
       parameters = Map(
         "message" -> "integer overflow",
         "try_alternative" ->
-          s"""If necessary set ${SQLConf.ANSI_ENABLED.key} to \"false\" to bypass this error."""))
+          s""" If necessary set ${SQLConf.ANSI_ENABLED.key} to \"false\" to bypass this error."""))
   }
 
   test("FAILED_PARSE_STRUCT_TYPE: parsing invalid struct type") {
