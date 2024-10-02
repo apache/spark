@@ -111,7 +111,6 @@ loopStatement
     : beginLabel? LOOP compoundBody END LOOP endLabel?
     ;
 
-
 singleStatement
     : (statement|setResetStatement) SEMICOLON* EOF
     ;
