@@ -333,6 +333,8 @@ class RocksDB(
         println(s"wei== loading version $version, checkpointUniqueId: $checkpointUniqueId")
 
         // Update the lineage from changelog
+        // When loading from the first version, checkpointUniqueId is not defined even if
+        // changelogFormatVersion is 2
         if (version != 0 && checkpointFormatVersion >= 2 && checkpointUniqueId.isDefined) {
           // It is possible that change log checkpointing is first enabled and then disabled.
           // In this case, loading changelog reader will fail because there are only zip files.
