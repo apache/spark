@@ -19,10 +19,10 @@ package org.apache.spark.ml.recommendation.logistic.pair.generator.w2v
 import org.apache.spark.Partitioner
 import org.apache.spark.ml.recommendation.logistic.pair.LongPair
 
-private[logistic] abstract class PairGenerator(private val sent: Iterator[Array[Long]],
-                                               protected val partitioner1: Partitioner,
-                                               protected val partitioner2: Partitioner
-                                              ) extends Iterator[LongPair] with Serializable {
+private[ml] abstract class PairGenerator(private val sent: Iterator[Array[Long]],
+                                         protected val partitioner1: Partitioner,
+                                         protected val partitioner2: Partitioner
+                                        ) extends Iterator[LongPair] with Serializable {
   assert(partitioner1.numPartitions == partitioner2.numPartitions)
   private var it: Iterator[LongPair] = Iterator.empty
 

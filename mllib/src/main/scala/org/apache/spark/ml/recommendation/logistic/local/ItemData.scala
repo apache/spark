@@ -17,12 +17,12 @@
 
 package org.apache.spark.ml.recommendation.logistic.local
 
-private[logistic] object ItemData {
+private[ml] object ItemData {
   val TYPE_LEFT = false
   val TYPE_RIGHT = true
 }
 
-private[logistic] case class ItemData(t: Boolean,
-                                      id: Long,
-                                      cn: Long,
-                                      f: Array[Float]) extends Serializable
+private[ml] case class ItemData(t: Boolean,
+                                id: Long,
+                                cn: Long,
+                                f: Array[Float]) extends Serializable

@@ -18,8 +18,8 @@ package org.apache.spark.ml.recommendation.logistic.pair
 
 import javax.annotation.Nullable
 
-private[logistic] case class LongPairMulti(part: Int,
-                                           left: Array[Long],
-                                           right: Array[Long],
-                                           @Nullable rating: Array[Float] = null
-                                          ) extends Serializable
+private[ml] case class LongPairMulti(part: Int,
+                                     left: Array[Long],
+                                     right: Array[Long],
+                                     @Nullable rating: Array[Float] = null
+                                    ) extends Serializable

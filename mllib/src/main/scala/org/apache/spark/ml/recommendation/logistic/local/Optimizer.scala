@@ -31,7 +31,7 @@ import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.ml.recommendation.logistic.pair.LongPairMulti
 import org.apache.spark.util.collection.OpenHashMap
 
-private[logistic] object Optimizer {
+private[ml] object Optimizer {
   private val UNIGRAM_TABLE_SIZE = 100000000
 
   private object ExpTable {
@@ -207,15 +207,15 @@ private[logistic] object Optimizer {
   }
 }
 
-private[logistic] class Optimizer(private val opts: Opts,
-                                  private var vocabL: OpenHashMap[Long, Int],
-                                  private var vocabR: OpenHashMap[Long, Int],
-                                  private var i2R: Array[Long],
-                                  private var cnL: Array[Long],
-                                  private var cnR: Array[Long],
-                                  private var syn0: Array[Float],
-                                  private var syn1neg: Array[Float],
-                                  private var unigramTable: Array[Int]) {
+private[ml] class Optimizer(private val opts: Opts,
+                            private var vocabL: OpenHashMap[Long, Int],
+                            private var vocabR: OpenHashMap[Long, Int],
+                            private var i2R: Array[Long],
+                            private var cnL: Array[Long],
+                            private var cnR: Array[Long],
+                            private var syn0: Array[Float],
+                            private var syn1neg: Array[Float],
+                            private var unigramTable: Array[Int]) {
 
   private val blas: NetlibBLAS = BLAS.nativeBLAS
   private val random: ThreadLocalRandom = ThreadLocalRandom.current()

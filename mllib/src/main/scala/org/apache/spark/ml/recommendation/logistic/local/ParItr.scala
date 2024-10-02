@@ -24,7 +24,7 @@ import java.util.function.Consumer
 /**
  * @author ezamyatin
  * */
-private[logistic] object ParItr {
+private[ml] object ParItr {
   def foreach[A](iterator: Iterator[A], cpus: Int, fn: A => Unit): Unit = {
     val inQueue = new LinkedBlockingQueue[A](cpus * 5)
     val totalCounter = new AtomicLong(0)

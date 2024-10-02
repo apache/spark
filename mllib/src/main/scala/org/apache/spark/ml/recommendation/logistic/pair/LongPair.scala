@@ -16,11 +16,11 @@
  */
 package org.apache.spark.ml.recommendation.logistic.pair
 
-private[logistic] object LongPair {
+private[ml] object LongPair {
   val EMPTY_RATING: Float = Float.NaN
 }
 
-private[logistic] case class LongPair(part: Int,
-                                      left: Long,
-                                      right: Long,
-                                      rating: Float = LongPair.EMPTY_RATING) extends Serializable
+private[ml] case class LongPair(part: Int,
+                                left: Long,
+                                right: Long,
+                                rating: Float = LongPair.EMPTY_RATING) extends Serializable

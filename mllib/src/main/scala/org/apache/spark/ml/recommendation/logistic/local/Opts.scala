@@ -17,13 +17,13 @@
 
 package org.apache.spark.ml.recommendation.logistic.local
 
-private[logistic] class Opts(val dim: Int,
-                             val useBias: Boolean,
-                             val negative: Int,
-                             val pow: Double,
-                             val lr: Double,
-                             val lambda: Double,
-                             val gamma: Float,
-                             val implicitPref: Boolean) extends Serializable {
+private[ml] class Opts(val dim: Int,
+                       val useBias: Boolean,
+                       val negative: Int,
+                       val pow: Double,
+                       val lr: Double,
+                       val lambda: Double,
+                       val gamma: Float,
+                       val implicitPref: Boolean) extends Serializable {
   def vectorSize: Int = if (useBias) dim + 1 else dim
 }
