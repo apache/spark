@@ -227,7 +227,6 @@ private[ml] abstract class LogisticFactorizationBase extends Serializable with L
     val latest = if (checkpointPath != null) {
       listFiles(checkpointPath)
         .filter(file => listFiles(checkpointPath + "/" + file).contains("_SUCCESS"))
-        .filter(!_.contains("run_params")).filter(_.contains("_"))
         .map(_.split("_").map(_.toInt)).map{case Array(a, b) => (a, b)}
         .sorted.lastOption
     } else {
