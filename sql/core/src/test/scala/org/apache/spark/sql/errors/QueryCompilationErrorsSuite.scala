@@ -24,6 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.catalyst.expressions.{Coalesce, Literal, UnsafeRow}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
 import org.apache.spark.sql.execution.datasources.parquet.SparkToParquetSchemaConverter
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions._
@@ -867,6 +868,39 @@ class QueryCompilationErrorsSuite
         "inputTypes" -> "[\"INT\", \"STRING\", \"STRING\"]"))
   }
 
+  test("SPARK-49666: the trim collation feature is off without collate builder call") {
+    withSQLConf(SQLConf.TRIM_COLLATION_ENABLED.key -> "false") {
+      Seq(
+        "CREATE TABLE t(col STRING COLLATE EN_TRIM_CI) USING parquet",
+        "CREATE TABLE t(col STRING COLLATE UTF8_LCASE_TRIM) USING parquet",
+        "SELECT 'aaa' COLLATE UNICODE_LTRIM_CI"
+      ).foreach { sqlText =>
+        checkError(
+          exception = intercept[AnalysisException](sql(sqlText)),
+          condition = "UNSUPPORTED_FEATURE.TRIM_COLLATION"
+        )
+      }
+    }
+  }
+
+  test("SPARK-49666: the trim collation feature is off with collate builder call") {
+    withSQLConf(SQLConf.TRIM_COLLATION_ENABLED.key -> "false") {
+      Seq(
+        "SELECT collate('aaa', 'UNICODE_TRIM')",
+        "SELECT collate('aaa', 'UTF8_BINARY_TRIM')",
+        "SELECT collate('aaa', 'EN_AI_RTRIM')"
+      ).foreach { sqlText =>
+        checkError(
+          exception = intercept[AnalysisException](sql(sqlText)),
+          condition = "UNSUPPORTED_FEATURE.TRIM_COLLATION",
+          parameters = Map.empty,
+          context =
+            ExpectedContext(fragment = sqlText.substring(7), start = 7, stop = sqlText.length - 1)
+        )
+      }
+    }
+  }
+
   test("UNSUPPORTED_CALL: call the unsupported method update()") {
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
@@ -926,6 +960,25 @@ class QueryCompilationErrorsSuite
       })
     }
   }
+
+  test("Catch and log errors when failing to write to external data source") {
+    val password = "MyPassWord"
+    val token = "MyToken"
+    val value = "value"
+    val options = Map("password" -> password, "token" -> token, "key" -> value)
+    val query = spark.range(10).logicalPlan
+    val cmd = SaveIntoDataSourceCommand(query, null, options, SaveMode.Overwrite)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        cmd.run(spark)
+      },
+      condition = "DATA_SOURCE_EXTERNAL_ERROR",
+      sqlState = "KD010",
+      parameters = Map.empty
+    )
+  }
+
 }
 
 class MyCastToString extends SparkUserDefinedFunction(

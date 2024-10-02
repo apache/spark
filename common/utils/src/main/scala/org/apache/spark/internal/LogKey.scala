@@ -266,6 +266,7 @@ private[spark] object LogKeys {
   case object FEATURE_NAME extends LogKey
   case object FETCH_SIZE extends LogKey
   case object FIELD_NAME extends LogKey
+  case object FIELD_TYPE extends LogKey
   case object FILES extends LogKey
   case object FILE_ABSOLUTE_PATH extends LogKey
   case object FILE_END_OFFSET extends LogKey
@@ -656,6 +657,7 @@ private[spark] object LogKeys {
   case object RECEIVER_IDS extends LogKey
   case object RECORDS extends LogKey
   case object RECOVERY_STATE extends LogKey
+  case object RECURSIVE_DEPTH extends LogKey
   case object REDACTED_STATEMENT extends LogKey
   case object REDUCE_ID extends LogKey
   case object REGEX extends LogKey

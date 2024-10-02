@@ -141,3 +141,4 @@ ui-test/package-lock.json
 core/src/main/resources/org/apache/spark/ui/static/package.json
 testCommitLog
 .*\.har
+.nojekyll

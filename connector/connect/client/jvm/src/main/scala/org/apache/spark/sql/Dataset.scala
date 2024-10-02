@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.OrderUtils
+import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
@@ -134,15 +135,15 @@ class Dataset[T] private[sql] (
     val sparkSession: SparkSession,
     @DeveloperApi val plan: proto.Plan,
     val encoder: Encoder[T])
-    extends api.Dataset[T, Dataset] {
-  type RGD = RelationalGroupedDataset
+    extends api.Dataset[T] {
+  type DS[U] = Dataset[U]
 
   import sparkSession.RichColumn
 
   // Make sure we don't forget to set plan id.
   assert(plan.getRoot.getCommon.hasPlanId)
 
-  private[sql] val agnosticEncoder: AgnosticEncoder[T] = encoderFor(encoder)
+  private[sql] val agnosticEncoder: AgnosticEncoder[T] = agnosticEncoderFor(encoder)
 
   override def toString: String = {
     try {
@@ -436,7 +437,7 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def select[U1](c1: TypedColumn[T, U1]): Dataset[U1] = {
-    val encoder = encoderFor(c1.encoder)
+    val encoder = agnosticEncoderFor(c1.encoder)
     val col = if (encoder.schema == encoder.dataType) {
       functions.inline(functions.array(c1))
     } else {
@@ -451,7 +452,7 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
-    val encoder = ProductEncoder.tuple(columns.map(c => encoderFor(c.encoder)))
+    val encoder = ProductEncoder.tuple(columns.map(c => agnosticEncoderFor(c.encoder)))
     selectUntyped(encoder, columns)
   }
 
@@ -523,26 +524,10 @@ class Dataset[T] private[sql] (
     result(0)
   }
 
-  /**
-   * (Scala-specific) Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given
-   * key `func`.
-   *
-   * @group typedrel
-   * @since 3.5.0
-   */
+  /** @inheritdoc */
   def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T] = {
-    KeyValueGroupedDatasetImpl[K, T](this, encoderFor[K], func)
+    KeyValueGroupedDatasetImpl[K, T](this, agnosticEncoderFor[K], func)
   }
-
-  /**
-   * (Java-specific) Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given
-   * key `func`.
-   *
-   * @group typedrel
-   * @since 3.5.0
-   */
-  def groupByKey[K](func: MapFunction[T, K], encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
-    groupByKey(ToScalaUDF(func))(encoder)
 
   /** @inheritdoc */
   @scala.annotation.varargs
@@ -896,7 +881,7 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def mapPartitions[U: Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
-    val outputEncoder = encoderFor[U]
+    val outputEncoder = agnosticEncoderFor[U]
     val udf = SparkUserDefinedFunction(
       function = func,
       inputEncoders = agnosticEncoder :: Nil,
@@ -1050,12 +1035,7 @@ class Dataset[T] private[sql] (
     new MergeIntoWriterImpl[T](table, this, condition)
   }
 
-  /**
-   * Interface for saving the content of the streaming Dataset out into external storage.
-   *
-   * @group basic
-   * @since 3.5.0
-   */
+  /** @inheritdoc */
   def writeStream: DataStreamWriter[T] = {
     new DataStreamWriter[T](this)
   }
@@ -1479,4 +1459,10 @@ class Dataset[T] private[sql] (
   /** @inheritdoc */
   @scala.annotation.varargs
   override def agg(expr: Column, exprs: Column*): DataFrame = super.agg(expr, exprs: _*)
+
+  /** @inheritdoc */
+  override def groupByKey[K](
+      func: MapFunction[T, K],
+      encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
+    super.groupByKey(func, encoder).asInstanceOf[KeyValueGroupedDataset[K, T]]
 }

@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import platform
 from decimal import Decimal
 import os
 import time
@@ -111,11 +110,7 @@ class DataFrameCreationTestsMixin:
                 os.environ["TZ"] = orig_env_tz
             time.tzset()
 
-    # TODO(SPARK-43354): Re-enable test_create_dataframe_from_pandas_with_day_time_interval
-    @unittest.skipIf(
-        "pypy" in platform.python_implementation().lower() or not have_pandas,
-        "Fails in PyPy Python 3.8, should enable.",
-    )
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_create_dataframe_from_pandas_with_day_time_interval(self):
         # SPARK-37277: Test DayTimeIntervalType in createDataFrame without Arrow.
         import pandas as pd

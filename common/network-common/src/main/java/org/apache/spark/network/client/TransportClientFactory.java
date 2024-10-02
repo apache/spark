@@ -342,7 +342,8 @@ public class TransportClientFactory implements Closeable {
       logger.error("Exception while bootstrapping client after {} ms", e,
         MDC.of(LogKeys.BOOTSTRAP_TIME$.MODULE$, bootstrapTimeMs));
       client.close();
-      throw Throwables.propagate(e);
+      Throwables.throwIfUnchecked(e);
+      throw new RuntimeException(e);
     }
     long postBootstrap = System.nanoTime();
 

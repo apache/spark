@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, TreePatt
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeWithCaseAccentSensitivity
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.Utils
@@ -134,7 +134,7 @@ case class GetJsonObject(json: Expression, path: Expression)
   override def left: Expression = json
   override def right: Expression = path
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
+    Seq(StringTypeWithCaseAccentSensitivity, StringTypeWithCaseAccentSensitivity)
   override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = true
   override def prettyName: String = "get_json_object"
@@ -489,7 +489,9 @@ case class JsonTuple(children: Seq[Expression])
       throw QueryCompilationErrors.wrongNumArgsError(
         toSQLId(prettyName), Seq("> 1"), children.length
       )
-    } else if (children.forall(child => StringTypeAnyCollation.acceptsType(child.dataType))) {
+    } else if (
+      children.forall(
+        child => StringTypeWithCaseAccentSensitivity.acceptsType(child.dataType))) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       DataTypeMismatch(
@@ -632,7 +634,8 @@ case class JsonToStructs(
     schema: DataType,
     options: Map[String, String],
     child: Expression,
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String] = None,
+    variantAllowDuplicateKeys: Boolean = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS))
   extends UnaryExpression
   with TimeZoneAwareExpression
   with CodegenFallback
@@ -719,12 +722,13 @@ case class JsonToStructs(
 
   override def nullSafeEval(json: Any): Any = nullableSchema match {
     case _: VariantType =>
-      VariantExpressionEvalUtils.parseJson(json.asInstanceOf[UTF8String])
+      VariantExpressionEvalUtils.parseJson(json.asInstanceOf[UTF8String],
+        allowDuplicateKeys = variantAllowDuplicateKeys)
     case _ =>
       converter(parser.parse(json.asInstanceOf[UTF8String]))
   }
 
-  override def inputTypes: Seq[AbstractDataType] = StringTypeAnyCollation :: Nil
+  override def inputTypes: Seq[AbstractDataType] = StringTypeWithCaseAccentSensitivity :: Nil
 
   override def sql: String = schema match {
     case _: MapType => "entries"
@@ -735,6 +739,12 @@ case class JsonToStructs(
 
   override protected def withNewChildInternal(newChild: Expression): JsonToStructs =
     copy(child = newChild)
+}
+
+object JsonToStructs {
+  def unapply(
+      j: JsonToStructs): Option[(DataType, Map[String, String], Expression, Option[String])] =
+    Some((j.schema, j.options, j.child, j.timeZoneId))
 }
 
 /**
@@ -960,7 +970,7 @@ case class SchemaOfJson(
 case class LengthOfJsonArray(child: Expression) extends UnaryExpression
   with CodegenFallback with ExpectsInputTypes {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCaseAccentSensitivity)
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
   override def prettyName: String = "json_array_length"
@@ -1033,7 +1043,7 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
 case class JsonObjectKeys(child: Expression) extends UnaryExpression with CodegenFallback
   with ExpectsInputTypes {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCaseAccentSensitivity)
   override def dataType: DataType = ArrayType(SQLConf.get.defaultStringType)
   override def nullable: Boolean = true
   override def prettyName: String = "json_object_keys"
