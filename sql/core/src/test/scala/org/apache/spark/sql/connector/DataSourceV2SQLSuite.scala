@@ -27,7 +27,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{FullQualifiedTableName, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.{InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
@@ -2481,7 +2481,7 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("global temp view should not be masked by v2 catalog") {
-    val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE.key)
     registerCatalog(globalTempDB, classOf[InMemoryTableCatalog])
 
     try {
@@ -2495,7 +2495,7 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("SPARK-30104: global temp db is used as a table name under v2 catalog") {
-    val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE.key)
     val t = s"testcat.$globalTempDB"
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
@@ -2506,7 +2506,7 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("SPARK-30104: v2 catalog named global_temp will be masked") {
-    val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE.key)
     registerCatalog(globalTempDB, classOf[InMemoryTableCatalog])
     checkError(
       exception = intercept[AnalysisException] {
@@ -2712,7 +2712,7 @@ class DataSourceV2SQLSuiteV1Filter
       parameters = Map("relationName" -> "`testcat`.`abc`"),
       context = ExpectedContext(fragment = "testcat.abc", start = 17, stop = 27))
 
-    val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE.key)
     registerCatalog(globalTempDB, classOf[InMemoryTableCatalog])
     withTempView("v") {
       sql("create global temp view v as select 1")
@@ -2885,6 +2885,48 @@ class DataSourceV2SQLSuiteV1Filter
       parameters = Map(
         "catalogName" -> "`not_exist_catalog`",
         "config" -> "\"spark.sql.catalog.not_exist_catalog\""))
+  }
+
+  test("SPARK-49757: SET CATALOG statement with IDENTIFIER should work") {
+    val catalogManager = spark.sessionState.catalogManager
+    assert(catalogManager.currentCatalog.name() == SESSION_CATALOG_NAME)
+
+    sql("SET CATALOG IDENTIFIER('testcat')")
+    assert(catalogManager.currentCatalog.name() == "testcat")
+
+    spark.sql("SET CATALOG IDENTIFIER(:param)", Map("param" -> "testcat2"))
+    assert(catalogManager.currentCatalog.name() == "testcat2")
+
+    checkError(
+      exception = intercept[CatalogNotFoundException] {
+        sql("SET CATALOG IDENTIFIER('not_exist_catalog')")
+      },
+      condition = "CATALOG_NOT_FOUND",
+      parameters = Map(
+        "catalogName" -> "`not_exist_catalog`",
+        "config" -> "\"spark.sql.catalog.not_exist_catalog\"")
+    )
+  }
+
+  test("SPARK-49757: SET CATALOG statement with IDENTIFIER with multipart name should fail") {
+    val catalogManager = spark.sessionState.catalogManager
+    assert(catalogManager.currentCatalog.name() == SESSION_CATALOG_NAME)
+
+    val sqlText = "SET CATALOG IDENTIFIER(:param)"
+    checkError(
+      exception = intercept[ParseException] {
+        spark.sql(sqlText, Map("param" -> "testcat.ns1"))
+      },
+      condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
+      parameters = Map(
+        "name" -> "`testcat`.`ns1`",
+        "statement" -> "SET CATALOG"
+      ),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = 29)
+    )
   }
 
   test("SPARK-35973: ShowCatalogs") {
@@ -3713,7 +3755,7 @@ class DataSourceV2SQLSuiteV1Filter
 
     // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
     // configure a new implementation.
-    val table1 = FullQualifiedTableName(SESSION_CATALOG_NAME, "default", "t")
+    val table1 = QualifiedTableName(SESSION_CATALOG_NAME, "default", "t")
     spark.sessionState.catalogManager.reset()
     withSQLConf(
       V2_SESSION_CATALOG_IMPLEMENTATION.key ->
@@ -3722,7 +3764,7 @@ class DataSourceV2SQLSuiteV1Filter
         checkParquet(table1.toString, path.getAbsolutePath)
       }
     }
-    val table2 = FullQualifiedTableName("testcat3", "default", "t")
+    val table2 = QualifiedTableName("testcat3", "default", "t")
     withSQLConf(
       "spark.sql.catalog.testcat3" -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
       withTempPath { path =>
@@ -3741,7 +3783,7 @@ class DataSourceV2SQLSuiteV1Filter
     // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
     // configure a new implementation.
     spark.sessionState.catalogManager.reset()
-    val table1 = FullQualifiedTableName(SESSION_CATALOG_NAME, "default", "t")
+    val table1 = QualifiedTableName(SESSION_CATALOG_NAME, "default", "t")
     withSQLConf(
       V2_SESSION_CATALOG_IMPLEMENTATION.key ->
         classOf[V2CatalogSupportBuiltinDataSource].getName) {
@@ -3750,7 +3792,7 @@ class DataSourceV2SQLSuiteV1Filter
       }
     }
 
-    val table2 = FullQualifiedTableName("testcat3", "default", "t")
+    val table2 = QualifiedTableName("testcat3", "default", "t")
     withSQLConf(
       "spark.sql.catalog.testcat3" -> classOf[V2CatalogSupportBuiltinDataSource].getName) {
       withTempPath { path =>

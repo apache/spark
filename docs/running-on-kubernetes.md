@@ -1192,6 +1192,15 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>4.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].annotation.[AnnotationName]</code></td>
+  <td>(none)</td>
+  <td>
+   Configure <a href="https://kubernetes.io/docs/concepts/storage/volumes/">Kubernetes Volume</a> annotations passed to the Kubernetes with <code>AnnotationName</code> as key having specified value, must conform with Kubernetes annotations format. For example,
+   <code>spark.kubernetes.driver.volumes.persistentVolumeClaim.checkpointpvc.annotation.foo=bar</code>.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.executor.volumes.[VolumeType].[VolumeName].mount.path</code></td>
   <td>(none)</td>
   <td>
@@ -1233,6 +1242,15 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
    Configure <a href="https://kubernetes.io/docs/concepts/storage/volumes/">Kubernetes Volume</a> labels passed to the Kubernetes with <code>LabelName</code> as key having specified value, must conform with Kubernetes label format. For example,
    <code>spark.kubernetes.executor.volumes.persistentVolumeClaim.checkpointpvc.label.foo=bar</code>.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.volumes.[VolumeType].[VolumeName].annotation.[AnnotationName]</code></td>
+  <td>(none)</td>
+  <td>
+   Configure <a href="https://kubernetes.io/docs/concepts/storage/volumes/">Kubernetes Volume</a> annotations passed to the Kubernetes with <code>AnnotationName</code> as key having specified value, must conform with Kubernetes annotations format. For example,
+   <code>spark.kubernetes.executor.volumes.persistentVolumeClaim.checkpointpvc.annotation.foo=bar</code>.
   </td>
   <td>4.0.0</td>
 </tr>

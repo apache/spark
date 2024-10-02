@@ -1,4 +1,10 @@
 {
+  "ADD_DEFAULT_UNSUPPORTED" : {
+    "message" : [
+      "Failed to execute <statementType> command because DEFAULT values are not supported when adding new columns to previously existing target data source with table provider: \"<dataSource>\"."
+    ],
+    "sqlState" : "42623"
+  },
   "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION" : {
     "message" : [
       "Non-deterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
@@ -625,6 +631,11 @@
       "Cannot process input data types for the expression: <expression>."
     ],
     "subClass" : {
+      "BAD_INPUTS" : {
+        "message" : [
+          "The input data types to <functionName> must be valid, but found the input types <dataType>."
+        ]
+      },
       "MISMATCHED_TYPES" : {
         "message" : [
           "All input types must be the same except nullable, containsNull, valueContainsNull flags, but found the input types <inputTypes>."
@@ -1005,6 +1016,11 @@
           "The input of <functionName> can't be <dataType> type data."
         ]
       },
+      "UNSUPPORTED_MODE_DATA_TYPE" : {
+        "message" : [
+          "The <mode> does not support the <child> data type, because there is a \"MAP\" type with keys and/or values that have collated sub-fields."
+        ]
+      },
       "UNSUPPORTED_UDF_INPUT_TYPE" : {
         "message" : [
           "UDFs do not support '<dataType>' as an input data type."
@@ -1049,7 +1065,7 @@
     "message" : [
       "Encountered error when saving to external data source."
     ],
-    "sqlState" : "KD00F"
+    "sqlState" : "KD010"
   },
   "DATA_SOURCE_NOT_EXIST" : {
     "message" : [
@@ -1095,6 +1111,12 @@
       "For example: `UPDATE SET c1 = DEFAULT` is allowed, but `UPDATE T SET c1 = DEFAULT + 1` is not allowed."
     ],
     "sqlState" : "42608"
+  },
+  "DEFAULT_UNSUPPORTED" : {
+    "message" : [
+      "Failed to execute <statementType> command because DEFAULT values are not supported for target data source with table provider: \"<dataSource>\"."
+    ],
+    "sqlState" : "42623"
   },
   "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED" : {
     "message" : [
@@ -1458,6 +1480,12 @@
       "Failed to convert the row value <value> of the class <class> to the target SQL type <sqlType> in the JSON format."
     ],
     "sqlState" : "2203G"
+  },
+  "FAILED_TO_LOAD_ROUTINE" : {
+    "message" : [
+      "Failed to load routine <routineName>."
+    ],
+    "sqlState" : "38000"
   },
   "FAILED_TO_PARSE_TOO_COMPLEX" : {
     "message" : [
@@ -2010,6 +2038,12 @@
       }
     },
     "sqlState" : "42903"
+  },
+  "INVALID_AGNOSTIC_ENCODER" : {
+    "message" : [
+      "Found an invalid agnostic encoder. Expects an instance of AgnosticEncoder but got <encoderType>. For more information consult '<docroot>/api/java/index.html?org/apache/spark/sql/Encoder.html'."
+    ],
+    "sqlState" : "42001"
   },
   "INVALID_ARRAY_INDEX" : {
     "message" : [
@@ -3014,7 +3048,7 @@
       },
       "MULTI_PART_NAME" : {
         "message" : [
-          "<statement> with multiple part function name(<funcName>) is not allowed."
+          "<statement> with multiple part name(<name>) is not allowed."
         ]
       },
       "OPTION_IS_INVALID" : {
@@ -4877,11 +4911,6 @@
           "Catalog <catalogName> does not support <operation>."
         ]
       },
-      "COLLATION" : {
-        "message" : [
-          "Collation is not yet supported."
-        ]
-      },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
         "message" : [
           "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY."
@@ -5107,6 +5136,11 @@
       "TRANSFORM_NON_HIVE" : {
         "message" : [
           "TRANSFORM with SERDE is only supported in hive mode."
+        ]
+      },
+      "TRIM_COLLATION" : {
+        "message" : [
+          "TRIM specifier in the collation."
         ]
       }
     },
@@ -6680,21 +6714,6 @@
   "_LEGACY_ERROR_TEMP_1338" : {
     "message" : [
       "Sinks cannot request distribution and ordering in continuous execution mode."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1344" : {
-    "message" : [
-      "Invalid DEFAULT value for column <fieldName>: <defaultValue> fails to parse as a valid literal value."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1345" : {
-    "message" : [
-      "Failed to execute <statementType> command because DEFAULT values are not supported for target data source with table provider: \"<dataSource>\"."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1346" : {
-    "message" : [
-      "Failed to execute <statementType> command because DEFAULT values are not supported when adding new columns to previously existing target data source with table provider: \"<dataSource>\"."
     ]
   },
   "_LEGACY_ERROR_TEMP_2000" : {

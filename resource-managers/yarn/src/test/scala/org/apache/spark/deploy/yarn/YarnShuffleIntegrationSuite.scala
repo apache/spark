@@ -181,7 +181,7 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
       if (execStateCopy != null) {
         FileUtils.deleteDirectory(execStateCopy)
       }
-      Files.write(result, status, StandardCharsets.UTF_8)
+      Files.asCharSink(status, StandardCharsets.UTF_8).write(result)
     }
   }
 

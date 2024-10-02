@@ -89,7 +89,7 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "3.25.4"
+  val protoVersion = "3.25.5"
   // GRPC version used for Spark Connect.
   val grpcVersion = "1.62.2"
 }
@@ -234,7 +234,11 @@ object SparkBuild extends PomBuild {
         // replace -Xfatal-warnings with fine-grained configuration, since 2.13.2
         // verbose warning on deprecation, error on all others
         // see `scalac -Wconf:help` for details
-        "-Wconf:cat=deprecation:wv,any:e",
+        // since 2.13.15, "-Wconf:cat=deprecation:wv,any:e" no longer takes effect and needs to
+        // be changed to "-Wconf:any:e", "-Wconf:cat=deprecation:wv",
+        // please refer to the details: https://github.com/scala/scala/pull/10708
+        "-Wconf:any:e",
+        "-Wconf:cat=deprecation:wv",
         // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
         "-Wunused:imports",
         "-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:e",
@@ -1202,7 +1206,7 @@ object YARN {
     genConfigProperties := {
       val file = (Compile / classDirectory).value / s"org/apache/spark/deploy/yarn/$propFileName"
       val isHadoopProvided = SbtPomKeys.effectivePom.value.getProperties.get(hadoopProvidedProp)
-      IO.write(file, s"$hadoopProvidedProp = $isHadoopProvided")
+      sbt.IO.write(file, s"$hadoopProvidedProp = $isHadoopProvided")
     },
     Compile / copyResources := (Def.taskDyn {
       val c = (Compile / copyResources).value
@@ -1352,6 +1356,7 @@ trait SharedUnidocSettings {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/kvstore")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalyst")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/connect/")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/classic/")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalog/v2/utils")))
