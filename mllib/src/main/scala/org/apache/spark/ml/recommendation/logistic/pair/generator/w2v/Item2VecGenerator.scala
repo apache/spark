@@ -24,11 +24,12 @@ import org.apache.spark.Partitioner
 import org.apache.spark.ml.recommendation.logistic.pair.LongPair
 
 
-class Item2VecGenerator(sent: Iterator[Array[Long]],
-                        private val window: Int,
-                        partitioner1: Partitioner,
-                        partitioner2: Partitioner,
-                        seed: Long) extends PairGenerator(sent, partitioner1, partitioner2) {
+private[logistic] class Item2VecGenerator(sent: Iterator[Array[Long]],
+                                          private val window: Int,
+                                          partitioner1: Partitioner,
+                                          partitioner2: Partitioner,
+                                          seed: Long
+                                         ) extends PairGenerator(sent, partitioner1, partitioner2) {
   final private val p1 = ArrayBuffer.empty[Int]
   final private val p2 = ArrayBuffer.empty[Int]
   final private val random = new Random(seed)

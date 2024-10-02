@@ -22,7 +22,7 @@ import org.apache.spark.ml.recommendation.logistic.pair.{LongPair, LongPairMulti
 
 
 
-object BatchedGenerator {
+private[logistic] object BatchedGenerator {
   final private val TOTAL_BATCH_SIZE = 10000000
 
   def apply(pairGenerator: Iterator[LongPair],
@@ -40,12 +40,12 @@ object BatchedGenerator {
   }
 }
 
-class BatchedGenerator(private val pairGenerator: Iterator[LongPair],
-                       private val l: Array[ArrayBuffer[Long]],
-                       private val r: Array[ArrayBuffer[Long]],
-                       private val w: Array[ArrayBuffer[Float]],
-                       private val batchSize: Int
-                      ) extends Iterator[LongPairMulti] with Serializable {
+private[logistic] class BatchedGenerator(private val pairGenerator: Iterator[LongPair],
+                                         private val l: Array[ArrayBuffer[Long]],
+                                         private val r: Array[ArrayBuffer[Long]],
+                                         private val w: Array[ArrayBuffer[Float]],
+                                         private val batchSize: Int
+                                        ) extends Iterator[LongPairMulti] with Serializable {
 
   private var nonEmptyCounter = 0
   private var ptr = 0
