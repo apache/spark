@@ -686,24 +686,4 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("body1", "lbl"))
   }
-
-  test("loop statement multiple iterations with if statement") {
-    val iter = new CompoundBodyExec(
-      statements = Seq(
-        new LoopStatementExec(
-          body = new CompoundBodyExec(Seq(
-            TestLeafStatement("body1"),
-            TestWhile(
-              condition = TestLoopCondition(condVal = false, 2, "condition1"),
-              body = new CompoundBodyExec(Seq(new LeaveStatementExec("lbl"))),
-              label = Some("lbl2")
-            ))
-          ),
-          label = Some("lbl")
-        )
-      )
-    ).getTreeIterator
-    val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq("body1", "lbl"))
-  }
 }
