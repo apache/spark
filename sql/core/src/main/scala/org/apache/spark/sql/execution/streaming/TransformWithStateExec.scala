@@ -548,7 +548,7 @@ case class TransformWithStateExec(
               DUMMY_VALUE_ROW_SCHEMA,
               NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
               version = stateInfo.get.storeVersion,
-              checkpointUniqueId = stateInfo.get.getCheckpointUniqueId(partitionId),
+              stateStoreCkptId = stateInfo.get.getStateStoreCkptId(partitionId).map(_(0)),
               useColumnFamilies = true,
               storeConf = storeConf,
               hadoopConf = hadoopConfBroadcast.value.value
@@ -721,7 +721,7 @@ object TransformWithStateExec {
       operatorId = 0,
       storeVersion = 0,
       numPartitions = shufflePartitions,
-      checkpointUniqueIds = None
+      stateStoreCkptIds = None
     )
 
     new TransformWithStateExec(

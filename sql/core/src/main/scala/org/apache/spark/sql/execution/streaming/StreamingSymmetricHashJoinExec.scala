@@ -303,6 +303,14 @@ case class StreamingSymmetricHashJoinExec(
     val updateStartTimeNs = System.nanoTime
     val joinedRow = new JoinedRow
 
+    // Parse checkpointID string and divide it into individual stateStoreCkptIds.
+    assert(stateInfo.isDefined, "State info not defined")
+    val stateStoreCkptIds = stateInfo
+      .get
+      .stateStoreCkptIds
+      .map(_(partitionId))
+      .map(_.map(Option(_)))
+      .getOrElse(Array.fill[Option[String]](4)(None))
 
     val inputSchema = left.output ++ right.output
     val postJoinFilter =
@@ -310,11 +318,11 @@ case class StreamingSymmetricHashJoinExec(
     val leftSideJoiner = new OneSideHashJoiner(
       LeftSide, left.output, leftKeys, leftInputIter,
       condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId,
-      skippedNullValueCount)
+      stateStoreCkptIds(0), stateStoreCkptIds(1), skippedNullValueCount)
     val rightSideJoiner = new OneSideHashJoiner(
       RightSide, right.output, rightKeys, rightInputIter,
       condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId,
-      skippedNullValueCount)
+      stateStoreCkptIds(2), stateStoreCkptIds(3), skippedNullValueCount)
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
@@ -507,6 +515,11 @@ case class StreamingSymmetricHashJoinExec(
         val rightSideMetrics = rightSideJoiner.commitStateAndGetMetrics()
         val combinedMetrics = StateStoreMetrics.combine(Seq(leftSideMetrics, rightSideMetrics))
 
+        val checkpointInfo = SymmetricHashJoinStateManager.mergeStateStoreCheckpointInfo(
+          leftSideJoiner.getLatestCheckpointInfo(),
+          rightSideJoiner.getLatestCheckpointInfo())
+        setStateStoreCheckpointInfo(checkpointInfo)
+
         // Update SQL metrics
         numUpdatedStateRows +=
           (leftSideJoiner.numUpdatedStateRows + rightSideJoiner.numUpdatedStateRows)
@@ -544,6 +557,7 @@ case class StreamingSymmetricHashJoinExec(
    * @param stateWatermarkPredicate The state watermark predicate. See
    *                                [[StreamingSymmetricHashJoinExec]] for further description of
    *                                state watermarks.
+   * @param oneSideStateInfo  Reconstructed state info for this side
    * @param partitionId A partition ID of source RDD.
    */
   private class OneSideHashJoiner(
@@ -555,6 +569,8 @@ case class StreamingSymmetricHashJoinExec(
       postJoinFilter: (InternalRow) => Boolean,
       stateWatermarkPredicate: Option[JoinStateWatermarkPredicate],
       partitionId: Int,
+      keyToNumValuesStateStoreCkptId: Option[String],
+      keyWithIndexToValueStateStoreCkptId: Option[String],
       skippedNullValueCount: Option[SQLMetric]) {
 
     // Filter the joined rows based on the given condition.
@@ -562,8 +578,17 @@ case class StreamingSymmetricHashJoinExec(
       Predicate.create(preJoinFilterExpr.getOrElse(Literal(true)), inputAttributes).eval _
 
     private val joinStateManager = new SymmetricHashJoinStateManager(
-      joinSide, inputAttributes, joinKeys, stateInfo, storeConf, hadoopConfBcast.value.value,
-      partitionId, stateFormatVersion, skippedNullValueCount)
+      joinSide,
+      inputAttributes,
+      joinKeys,
+      stateInfo,
+      storeConf,
+      hadoopConfBcast.value.value,
+      partitionId,
+      keyToNumValuesStateStoreCkptId,
+      keyWithIndexToValueStateStoreCkptId,
+      stateFormatVersion,
+      skippedNullValueCount)
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
     private[this] val stateKeyWatermarkPredicateFunc = stateWatermarkPredicate match {
@@ -715,6 +740,10 @@ case class StreamingSymmetricHashJoinExec(
     def commitStateAndGetMetrics(): StateStoreMetrics = {
       joinStateManager.commit()
       joinStateManager.metrics
+    }
+
+    def getLatestCheckpointInfo(): (StateStoreCheckpointInfo, StateStoreCheckpointInfo) = {
+      joinStateManager.getLatestCheckpointInfo()
     }
 
     def numUpdatedStateRows: Long = updatedStateRowsCount

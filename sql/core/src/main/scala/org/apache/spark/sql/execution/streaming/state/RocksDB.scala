@@ -73,7 +73,7 @@ class RocksDB(
     hadoopConf: Configuration = new Configuration,
     loggingId: String = "",
     useColumnFamilies: Boolean = false,
-    checkpointFormatVersion: Int = 1) extends Logging {
+    enableStateStoreCheckpointIds: Boolean = false) extends Logging {
 
   case class RocksDBSnapshot(
       checkpointDir: File,
@@ -149,8 +149,7 @@ class RocksDB(
 
   private val workingDir = createTempDir("workingDir")
   private val fileManager = new RocksDBFileManager(dfsRootDir, createTempDir("fileManager"),
-    hadoopConf, conf.compressionCodec, loggingId = loggingId,
-    checkpointFormatVersion = checkpointFormatVersion)
+    hadoopConf, conf.compressionCodec, loggingId = loggingId)
   private val byteArrayPair = new ByteArrayPair()
   private val commitLatencyMs = new mutable.HashMap[String, Long]()
   private val acquireLock = new Object
@@ -160,18 +159,20 @@ class RocksDB(
   private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
   @volatile protected var loadedVersion: Long = -1L   // -1 = nothing valid is loaded
 
-  // variables to manage checkpoint ID. Once a checkpoint finishes, it needs to return
-  // the `lastCommittedCheckpointId` as the committed checkpointID, as well as
-  // `LastCommitBasedCheckpointId` as the checkpoint id of the previous version that is based on.
-  // `loadedCheckpointId` is the checkpointID for the current live DB. After the batch finishes
-  // and checkpoint finishes, it will turn into `LastCommitBasedCheckpointId`.
-  // `sessionCheckpointId` store an ID to be used for future checkpoints. It is kept being used
-  // until we have to use a new one. We don't need to reuse any uniqueID, but reusing when possible
-  // can help debug problems.
-  @volatile private var LastCommitBasedCheckpointId: Option[String] = None
-  @volatile private var lastCommittedCheckpointId: Option[String] = None
-  @volatile protected var loadedCheckpointId: Option[String] = None
-  @volatile protected var sessionCheckpointId: Option[String] = None
+  // variables to manage checkpoint ID. Once a checkpoingting finishes, it nees to return
+  // the `lastCommittedStateStoreCkptId` as the committed checkpointID, as well as
+  // `LastCommitBasedStateStoreCkptId` as the checkpontID of the previous version that is based on.
+  // `loadedStateStoreCkptId` is the checkpointID for the current live DB. After the batch finishes
+  // and checkpoint finishes, it will turn into `LastCommitBasedStateStoreCkptId`.
+  // `sessionStateStoreCkptId` store an ID to be used for future checkpoints. It will be used as
+  // `lastCommittedStateStoreCkptId` after the checkpoint is committed. It will be reused until
+  // we have to use a new one. We have to update `sessionStateStoreCkptId` if we reload a previous
+  // batch version, because we have to use a new checkpointID for re-committing a version.
+  // The reusing is to help debugging but is not required for the algorithm to work.
+  protected var LastCommitBasedStateStoreCkptId: Option[String] = None
+  protected var lastCommittedStateStoreCkptId: Option[String] = None
+  protected var loadedStateStoreCkptId: Option[String] = None
+  protected var sessionStateStoreCkptId: Option[String] = None
   // protected for test purpose
   @volatile protected[sql] var versionToUniqueIdLineage: Array[(Long, Option[String])] = Array.empty
 
@@ -278,7 +279,7 @@ class RocksDB(
  * the lineage we have.
  *
  * When this happens, the stored file on the DFS must be a changelog file, because if not, the
- * latest snapshot is uniquely identified as the (version, checkpointUniqueId) pair.
+ * latest snapshot is uniquely identified as the (version, stateStoreCkptId) pair.
  *
  * This method achieves traversing back the lineage and find the correct latest snapshot file
  * by creating a changelog reader and compare with the lineages stored there.
@@ -304,36 +305,36 @@ class RocksDB(
    */
   def load(
       version: Long,
-      checkpointUniqueId: Option[String] = None,
+      stateStoreCkptId: Option[String] = None,
       readOnly: Boolean = false): RocksDB = {
     assert(version >= 0)
     acquire(LoadStore)
     recordedMetrics = None
-    logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)} with checkpointUniqueId: ${
-      MDC(LogKeys.UUID, checkpointUniqueId.getOrElse(""))}")
+    logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)} with stateStoreCkptId: ${
+      MDC(LogKeys.UUID, stateStoreCkptId.getOrElse(""))}")
     var currLineage: Option[Array[(Long, Option[String])]] = None
     try {
       // TODO[MUST] when loaded version = version, still need to get currentLineage
       //  from previous version
       if (loadedVersion != version ||
-        (checkpointFormatVersion >= 2 && checkpointUniqueId.isDefined &&
-        (!loadedCheckpointId.isDefined || checkpointUniqueId.get != loadedCheckpointId.get))) {
+        (enableStateStoreCheckpointIds && stateStoreCkptId.isDefined &&
+          (loadedStateStoreCkptId.isEmpty || stateStoreCkptId.get != loadedStateStoreCkptId.get))) {
         closeDB(ignoreException = false)
         // deep copy is needed to avoid race condition
         // between maintenance and task threads
         fileManager.copyFileMapping()
         val latestSnapshotVersionsAndUniqueIds = {
-          // checkpointUniqueId is wrong? It should be the uniqueId of the previous version
+          // stateStoreCkptId is wrong? It should be the uniqueId of the previous version
           // so you use the lineage to get version-1_uniqueId.zip
-          fileManager.getLatestSnapshotVersionAndUniqueId(version, checkpointUniqueId)
+          fileManager.getLatestSnapshotVersionAndUniqueId(version, stateStoreCkptId)
         }
 
-        println(s"wei== loading version $version, checkpointUniqueId: $checkpointUniqueId")
+        println(s"wei== loading version $version, stateStoreCkptId: $stateStoreCkptId")
 
         // Update the lineage from changelog
-        // When loading from the first version, checkpointUniqueId is not defined even if
-        // changelogFormatVersion is 2
-        if (version != 0 && checkpointFormatVersion >= 2 && checkpointUniqueId.isDefined) {
+        // When loading from the first version, stateStoreCkptId is not defined even if
+        // enableStateStoreCheckpointIds is true
+        if (version != 0 && enableStateStoreCheckpointIds && stateStoreCkptId.isDefined) {
           // It is possible that change log checkpointing is first enabled and then disabled.
           // In this case, loading changelog reader will fail because there are only zip files.
           // It is also possible that state store was previously ran under format version 1
@@ -343,7 +344,7 @@ class RocksDB(
           var changelogReader: StateStoreChangelogReader = null
           try {
             changelogReader = fileManager.getChangelogReader(
-              version, useColumnFamilies, checkpointUniqueId)
+              version, useColumnFamilies, stateStoreCkptId)
             // currLineage contains the version -> uniqueId mapping from the previous snapshot file
             // to current version's changelog file
             versionToUniqueIdLineage = changelogReader.lineage.map {
@@ -352,7 +353,7 @@ class RocksDB(
             logInfo(log"Loading versionToUniqueIdLineage: ${MDC(LogKeys.LINEAGE,
               printLineage(versionToUniqueIdLineage))} from changelog version: ${MDC(
               LogKeys.VERSION_NUM, version)} uniqueId: ${MDC(LogKeys.UUID,
-              checkpointUniqueId.getOrElse(""))}. " +
+              stateStoreCkptId.getOrElse(""))}. " +
               log"This would be an noop if changelog is not enabled")
             currLineage = Some(versionToUniqueIdLineage)
           } catch {
@@ -365,7 +366,7 @@ class RocksDB(
               throw e
           } finally {
             if (changelogReader != null) changelogReader.closeIfNeeded()
-            if (currLineage.isEmpty) currLineage = Some(Array((version, checkpointUniqueId)))
+            if (currLineage.isEmpty) currLineage = Some(Array((version, stateStoreCkptId)))
           }
         }
 
@@ -444,26 +445,26 @@ class RocksDB(
         numKeysOnLoadedVersion = numKeysOnWritingVersion
         fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
       }
-      if (checkpointFormatVersion >= 2) {
-        LastCommitBasedCheckpointId = None
-        lastCommittedCheckpointId = None
-        loadedCheckpointId = checkpointUniqueId
-        sessionCheckpointId = Some(java.util.UUID.randomUUID.toString)
+      if (enableStateStoreCheckpointIds) {
+        LastCommitBasedStateStoreCkptId = None
+        lastCommittedStateStoreCkptId = None
+        loadedStateStoreCkptId = stateStoreCkptId
+        sessionStateStoreCkptId = Some(java.util.UUID.randomUUID.toString)
       }
-      lastCommittedCheckpointId = None
+      lastCommittedStateStoreCkptId = None
       if (conf.resetStatsOnLoad) {
         nativeStats.reset
       }
 
       logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)} " +
-        log"with uniqueId ${MDC(LogKeys.UUID, checkpointUniqueId)}")
+        log"with uniqueId ${MDC(LogKeys.UUID, stateStoreCkptId)}")
     } catch {
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded data
-        LastCommitBasedCheckpointId = None
-        lastCommittedCheckpointId = None
-        loadedCheckpointId = None
-        sessionCheckpointId = None
+        LastCommitBasedStateStoreCkptId = None
+        lastCommittedStateStoreCkptId = None
+        loadedStateStoreCkptId = None
+        sessionStateStoreCkptId = None
         throw t
     }
     if (enableChangelogCheckpointing && !readOnly) {
@@ -471,15 +472,15 @@ class RocksDB(
       changelogWriter.foreach(_.abort())
       // loadedVersion set to version in replayChangelog
       changelogWriter = Some(fileManager.getChangeLogWriter(
-        version + 1, useColumnFamilies, sessionCheckpointId))
+        version + 1, useColumnFamilies, sessionStateStoreCkptId))
 
       // currLineage is only constructed when version is a change log version.
       // When loading from snapshot, currLineage is None because snapshot files
       // (version_uniqueId.zip) are source of truth.
       // They don't need to store lineage up to the previous version.
-      if (checkpointFormatVersion >= 2) {
+      if (enableStateStoreCheckpointIds) {
         val lineage: Array[(Long, String)] = versionToUniqueIdLineage.map(x => (x._1, x._2.get)) ++
-          Array((version + 1, sessionCheckpointId.get))
+          Array((version + 1, sessionStateStoreCkptId.get))
         changelogWriter.get.writeLineage(lineage)
       }
     }
@@ -566,9 +567,9 @@ class RocksDB(
    */
   private def replayChangelog(
       endVersion: Long,
-      checkpointUniqueIdLineage: Option[Array[(Long, Option[String])]] = None): Unit = {
+      stateStoreCkptIdLineage: Option[Array[(Long, Option[String])]] = None): Unit = {
 
-    val versionsAndUniqueIds = checkpointUniqueIdLineage match {
+    val versionsAndUniqueIds = stateStoreCkptIdLineage match {
       // First entry of lineage corresponds to loadedVersion
       case Some(lineage) => lineage // TODO: assert lineage.head == loadedVersion
       case None => (loadedVersion + 1 to endVersion).map((_, None)).toArray
@@ -803,21 +804,21 @@ class RocksDB(
                 fileManager.captureFileMapReference(),
                 colFamilyNameToIdMap.asScala.toMap,
                 maxColumnFamilyId.get().toShort,
-                sessionCheckpointId))
+                sessionStateStoreCkptId))
             lastSnapshotVersion = newVersion
           }
         }
       }
 
-      if (checkpointFormatVersion >= 2) {
-        LastCommitBasedCheckpointId = loadedCheckpointId
-        lastCommittedCheckpointId = sessionCheckpointId
-        loadedCheckpointId = sessionCheckpointId
-        versionToUniqueIdLineage = versionToUniqueIdLineage :+ (newVersion, sessionCheckpointId)
+      if (enableStateStoreCheckpointIds) {
+        LastCommitBasedStateStoreCkptId = loadedStateStoreCkptId
+        lastCommittedStateStoreCkptId = sessionStateStoreCkptId
+        loadedStateStoreCkptId = sessionStateStoreCkptId
+        versionToUniqueIdLineage = versionToUniqueIdLineage :+ (newVersion, sessionStateStoreCkptId)
         logInfo(log"Update checkpoint IDs and lineage: ${MDC(
-          LogKeys.LOADED_CHECKPOINT_ID, loadedCheckpointId)}," +
-          log" ${MDC(LogKeys.LAST_COMMITTED_CHECKPOINT_ID, lastCommittedCheckpointId)}," +
-          log" ${MDC(LogKeys.LAST_COMMIT_BASED_CHECKPOINT_ID, LastCommitBasedCheckpointId)}," +
+          LogKeys.LOADED_CHECKPOINT_ID, loadedStateStoreCkptId)}," +
+          log" ${MDC(LogKeys.LAST_COMMITTED_CHECKPOINT_ID, lastCommittedStateStoreCkptId)}," +
+          log" ${MDC(LogKeys.LAST_COMMIT_BASED_CHECKPOINT_ID, LastCommitBasedStateStoreCkptId)}," +
           log" ${MDC(LogKeys.LINEAGE, printLineage(versionToUniqueIdLineage))}")
       }
 
@@ -945,10 +946,10 @@ class RocksDB(
     changelogWriter.foreach(_.abort())
     // Make sure changelogWriter gets recreated next time.
     changelogWriter = None
-    LastCommitBasedCheckpointId = None
-    lastCommittedCheckpointId = None
-    loadedCheckpointId = None
-    sessionCheckpointId = None
+    LastCommitBasedStateStoreCkptId = None
+    lastCommittedStateStoreCkptId = None
+    loadedStateStoreCkptId = None
+    sessionStateStoreCkptId = None
     versionToUniqueIdLineage = Array.empty
     release(RollbackStore)
     logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
@@ -1000,8 +1001,8 @@ class RocksDB(
     StateStoreCheckpointInfo(
       partitionId,
       loadedVersion,
-      lastCommittedCheckpointId,
-      LastCommitBasedCheckpointId)
+      lastCommittedStateStoreCkptId,
+      LastCommitBasedStateStoreCkptId)
   }
 
   /** Get current instantaneous statistics */

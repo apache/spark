@@ -48,23 +48,48 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.{CollectionAccumulator, CompletionIterator, NextIterator, Utils}
 
 
-/** Used to identify the state store for a given operator. */
+/** Used to identify the state store for a given operator.
+ *
+ * stateStoreCkptIds is used to identify the checkpoint used for a specific stateful operator
+ * The basic workflow works as following:
+ * 1. When a stateful operator is created, it passes in the checkpoint IDs for each stateful
+ *    operator through the StatefulOperatorStateInfo.
+ * 2. When a stateful task starts to execute, it will find the checkpointID for its shuffle
+ *    partition and use it to recover the state store. The ID is eventually passed into
+ *    the StateStore layer and eventually  RocksDB State Store, where it is used to make sure
+ *    the it loads the correct checkpoint
+ * 3. When the stateful task is finishing, after the state store is committed, the checkpoint ID
+ *    is fetched from the state store by calling StateStore.getStateStoreCheckpointInfo() and added
+ *    to the stateStoreCkptIds accumulator by calling
+ *    StateStoreWriter.setStateStoreCheckpointInfo().
+ * 4. When ending the batch, MicroBatchExecution calls each stateful operator's
+ *    getStateStoreCheckpointInfo() which aggregates checkpointIDs from different partitions. The
+ *    driver will persistent it into commit logs (not implemented yet).
+ * 5. When forming the next batch, the driver constructs the StatefulOperatorStateInfo with the
+ *    checkpoint IDs for the previous batch.
+ * */
 case class StatefulOperatorStateInfo(
     checkpointLocation: String,
     queryRunId: UUID,
     operatorId: Long,
     storeVersion: Long,
     numPartitions: Int,
-    checkpointUniqueIds: Option[Array[String]] = None) {
+    stateStoreCkptIds: Option[Array[Array[String]]] = None) {
 
-  def getCheckpointUniqueId(partitionId: Int): Option[String] = {
-    checkpointUniqueIds.map(_(partitionId))
+  def getStateStoreCkptId(partitionId: Int): Option[Array[String]] = {
+    stateStoreCkptIds.map(_(partitionId))
   }
 
   override def toString(): String = {
     s"state info [ checkpoint = $checkpointLocation, runId = $queryRunId, " +
       s"opId = $operatorId, ver = $storeVersion, numPartitions = $numPartitions] " +
-      s"checkpointUniqueIds = $checkpointUniqueIds"
+      s"stateStoreCkptIds = $stateStoreCkptIds"
+  }
+}
+
+object StatefulOperatorStateInfo {
+  def enableStateStoreCheckpointIds(conf: SQLConf): Boolean = {
+    conf.stateStoreCheckpointFormatVersion >= 2
   }
 }
 
@@ -120,6 +145,15 @@ trait StateStoreReader extends StatefulOperator with Logging {
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 }
+
+case class StatefulOpStateStoreCheckpointInfo(
+    partitionId: Int,
+    batchVersion: Long,
+    // The checkpoint ID for a checkpoint at `batchVersion`. This is used to identify the checkpoint
+    stateStoreCkptId: Option[Array[String]],
+    // The checkpoint ID for `batchVersion` - 1, that is used to finish this batch. This is used
+    // to validate the batch is processed based on the correct checkpoint.
+    baseStateStoreCkptId: Option[Array[String]])
 
 /** An operator that writes to a StateStore. */
 trait StateStoreWriter
@@ -181,7 +215,8 @@ trait StateStoreWriter
   def stateSchemaDirPath(
       storeName: Option[String] = None): Path = {
     val stateCheckpointPath =
-      new Path(getStateInfo.checkpointLocation, s"${getStateInfo.operatorId.toString}")
+      new Path(getStateInfo.checkpointLocation,
+        s"${getStateInfo.operatorId.toString}")
     storeName match {
       case Some(storeName) =>
         new Path(new Path(stateCheckpointPath, "_stateSchema"), storeName)
@@ -190,12 +225,22 @@ trait StateStoreWriter
     }
   }
 
-  val checkpointInfoAccumulator: CollectionAccumulator[StateStoreCheckpointInfo] = {
-    SparkContext.getActive.map(_.collectionAccumulator[StateStoreCheckpointInfo]).get
+  /**
+   * Aggregator used for the executors to pass new state store checkpoints' IDs to driver.
+   * For the general checkpoint ID workflow, see comments of
+   * class class [[StatefulOperatorStateInfo]]
+   */
+  val checkpointInfoAccumulator: CollectionAccumulator[StatefulOpStateStoreCheckpointInfo] = {
+    SparkContext.getActive.map(_.collectionAccumulator[StatefulOpStateStoreCheckpointInfo]).get
   }
 
-  def getCheckpointInfo(): Array[StateStoreCheckpointInfo] = {
-    assert(conf.stateStoreCheckpointFormatVersion >= 2)
+  /**
+   * Get aggregated checkpoint ID info for all shuffle partitions
+   * For the general checkpoint ID workflow, see comments of
+   * class class [[StatefulOperatorStateInfo]]
+   */
+  def getStateStoreCheckpointInfo(): Array[StatefulOpStateStoreCheckpointInfo] = {
+    assert(StatefulOperatorStateInfo.enableStateStoreCheckpointIds(conf))
     val ret = checkpointInfoAccumulator
       .value
       .asScala
@@ -208,7 +253,22 @@ trait StateStoreWriter
       .sortBy(_._1)
       .map(_._2)
       .toArray
+    assert(
+      ret.length == getStateInfo.numPartitions,
+      s"ChekpointInfo length: ${ret.length}, numPartitions: ${getStateInfo.numPartitions}")
     ret
+  }
+
+  /**
+   * The executor reports its state store checkpoint ID, which would be sent back to the driver.
+   * For the general checkpoint ID workflow, see comments of
+   * class class [[StatefulOperatorStateInfo]]
+   */
+  protected def setStateStoreCheckpointInfo(
+      checkpointInfo: StatefulOpStateStoreCheckpointInfo): Unit = {
+    if (StatefulOperatorStateInfo.enableStateStoreCheckpointIds(conf)) {
+      checkpointInfoAccumulator.add(checkpointInfo)
+    }
   }
 
   /**
@@ -272,10 +332,14 @@ trait StateStoreWriter
     storeMetrics.customMetrics.foreach { case (metric, value) =>
       longMetric(metric.name) += value
     }
-    if (conf.stateStoreCheckpointFormatVersion >= 2) {
-      val checkpointInfo = store.getCheckpointInfo
-      checkpointInfoAccumulator.add(checkpointInfo)
-    }
+
+    val ssInfo = store.getStateStoreCheckpointInfo
+    setStateStoreCheckpointInfo(
+      StatefulOpStateStoreCheckpointInfo(
+        ssInfo.partitionId,
+        ssInfo.batchVersion,
+        ssInfo.stateStoreCkptId.map(Array( _)),
+        ssInfo.baseStateStoreCkptId.map(Array(_))))
   }
 
   private def stateStoreCustomMetrics: Map[String, SQLMetric] = {

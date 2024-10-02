@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.StatefulOpStateStoreCheckpointInfo
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.types.{BooleanType, LongType, StructField, StructType}
 import org.apache.spark.util.NextIterator
@@ -85,6 +86,8 @@ class SymmetricHashJoinStateManager(
     storeConf: StateStoreConf,
     hadoopConf: Configuration,
     partitionId: Int,
+    keyToNumValuesStateStoreCkptId: Option[String],
+    keyWithIndexToValueStateStoreCkptId: Option[String],
     stateFormatVersion: Int,
     skippedNullValueCount: Option[SQLMetric] = None,
     useStateStoreCoordinator: Boolean = true,
@@ -411,6 +414,17 @@ class SymmetricHashJoinStateManager(
     keyWithIndexToValue.abortIfNeeded()
   }
 
+  def getLatestCheckpointInfo(): (StateStoreCheckpointInfo, StateStoreCheckpointInfo) = {
+    val ci1 = keyToNumValues.getLatestCheckpointInfo()
+    val ci2 = keyWithIndexToValue.getLatestCheckpointInfo()
+
+    assert(ci1.partitionId == ci2.partitionId)
+    assert(ci1.batchVersion == ci2.batchVersion)
+    assert(ci1.stateStoreCkptId.isDefined == ci2.stateStoreCkptId.isDefined)
+
+    (ci1, ci2)
+  }
+
   /** Get the combined metrics of all the state stores */
   def metrics: StateStoreMetrics = {
     val keyToNumValuesMetrics = keyToNumValues.metrics
@@ -451,7 +465,9 @@ class SymmetricHashJoinStateManager(
   Option(TaskContext.get()).foreach { _.addTaskCompletionListener[Unit] { _ => abortIfNeeded() } }
 
   /** Helper trait for invoking common functionalities of a state store. */
-  private abstract class StateStoreHandler(stateStoreType: StateStoreType) extends Logging {
+  private abstract class StateStoreHandler(
+      stateStoreType: StateStoreType,
+      stateStoreCkptId: Option[String]) extends Logging {
     private var stateStoreProvider: StateStoreProvider = _
 
     /** StateStore that the subclasses of this class is going to operate on */
@@ -476,6 +492,10 @@ class SymmetricHashJoinStateManager(
 
     def metrics: StateStoreMetrics = stateStore.metrics
 
+    def getLatestCheckpointInfo(): StateStoreCheckpointInfo = {
+      stateStore.getStateStoreCheckpointInfo
+    }
+
     /** Get the StateStore with the given schema */
     protected def getStateStore(keySchema: StructType, valueSchema: StructType): StateStore = {
       val storeProviderId = StateStoreProviderId(
@@ -485,8 +505,8 @@ class SymmetricHashJoinStateManager(
           "when reading state as data source.")
         StateStore.get(
           storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-          stateInfo.get.storeVersion, stateInfo.get.getCheckpointUniqueId(partitionId),
-          useColumnFamilies = false, storeConf, hadoopConf)
+          stateInfo.get.storeVersion, stateStoreCkptId, useColumnFamilies = false,
+          storeConf, hadoopConf)
       } else {
         // This class will manage the state store provider by itself.
         stateStoreProvider = StateStoreProvider.createAndInit(
@@ -501,9 +521,7 @@ class SymmetricHashJoinStateManager(
           stateStoreProvider.asInstanceOf[SupportsFineGrainedReplay]
             .replayStateFromSnapshot(snapshotStartVersion.get, stateInfo.get.storeVersion)
         } else {
-          stateStoreProvider.getStore(
-            stateInfo.get.storeVersion,
-            stateInfo.get.getCheckpointUniqueId(partitionId))
+          stateStoreProvider.getStore(stateInfo.get.storeVersion, stateStoreCkptId)
         }
       }
       logInfo(log"Loaded store ${MDC(STATE_STORE_ID, store.id)}")
@@ -525,7 +543,8 @@ class SymmetricHashJoinStateManager(
 
 
   /** A wrapper around a [[StateStore]] that stores [key -> number of values]. */
-  private class KeyToNumValuesStore extends StateStoreHandler(KeyToNumValuesType) {
+  private class KeyToNumValuesStore
+    extends StateStoreHandler(KeyToNumValuesType, keyToNumValuesStateStoreCkptId) {
     private val longValueSchema = new StructType().add("value", "long")
     private val longToUnsafeRow = UnsafeProjection.create(longValueSchema)
     private val valueRow = longToUnsafeRow(new SpecificInternalRow(longValueSchema))
@@ -672,7 +691,7 @@ class SymmetricHashJoinStateManager(
    * state format version - please refer implementations of [[KeyWithIndexToValueRowConverter]].
    */
   private class KeyWithIndexToValueStore(stateFormatVersion: Int)
-    extends StateStoreHandler(KeyWithIndexToValueType) {
+    extends StateStoreHandler(KeyWithIndexToValueType, keyWithIndexToValueStateStoreCkptId) {
 
     private val keyWithIndexExprs = keyAttributes :+ Literal(1L)
     private val keyWithIndexSchema = keySchema.add("index", LongType)
@@ -809,6 +828,51 @@ object SymmetricHashJoinStateManager {
       (keyWithIndexSchema, valueSchema.toStructType))
 
     result
+  }
+
+  def mergeStateStoreCheckpointInfo(
+      ci1: (StateStoreCheckpointInfo, StateStoreCheckpointInfo),
+      ci2: (StateStoreCheckpointInfo, StateStoreCheckpointInfo)):
+      StatefulOpStateStoreCheckpointInfo = {
+    // Stream-stream join has 4 state stores instead of one. So it will generate 4 different
+    // checkpoint IDs. The approach we take here is to merge them into one ID in the
+    // checkpointing path. The driver will process this single checkpointID. When it is passed
+    // back to the executors, they will split it back into 4 IDs and use them to load the state.
+    // This function is used to merge two checkpoint IDs into one.
+    assert(ci1._1.partitionId == ci2._1.partitionId)
+    assert(ci1._1.batchVersion == ci2._1.batchVersion)
+    assert(ci1._1.stateStoreCkptId.isDefined == ci2._1.stateStoreCkptId.isDefined)
+    StatefulOpStateStoreCheckpointInfo(
+      ci1._1.partitionId,
+      ci1._1.batchVersion,
+      ci1._1.stateStoreCkptId.map(
+        Array(
+          _,
+          ci1._2.stateStoreCkptId.get,
+          ci2._1.stateStoreCkptId.get,
+          ci2._2.stateStoreCkptId.get)),
+      ci1._1.baseStateStoreCkptId.map(
+        Array(
+          _,
+          ci1._2.baseStateStoreCkptId.get,
+          ci2._1.baseStateStoreCkptId.get,
+          ci2._2.baseStateStoreCkptId.get)))
+  }
+
+  def splitStateStoreCheckpointInfo(
+      partitionId: Int,
+      stateStoreCkptIds: Option[Array[String]]): Array[Option[String]] = {
+    // Stream-stream join has 4 state stores instead of one. So it will generate 4 different
+    // checkpoint IDs. Since we take the approach of merging them into one ID in the
+    // checkpointing path, we need to split them back into 4 IDs when loading the state.
+    // The split logic mirrors the merge logic in `mergeStateStoreCheckpointInfo()`.
+    stateStoreCkptIds.map { ids =>
+        assert(ids.size > partitionId, s"Checkpoint IDs $ids does not have enough partitions")
+        val split = ids(partitionId).split(",")
+        assert(split.size == 4, s"Invalid checkpoint IDs $ids")
+        split.map(Option(_))
+      }
+      .getOrElse(Array.fill[Option[String]](4)(None))
   }
 
   private sealed trait StateStoreType

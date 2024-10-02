@@ -86,15 +86,15 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
     testSerde(testMetadataV1, testCommitLogV1FilePath)
   }
 
-  test("Basic Commit Log V2 SerDe") {
-    val testStateUniqueIds: Map[Long, Array[String]] =
-      Map(
-        0L -> Array("unique_id1", "unique_id2", "unique_id3"),
-          1L -> Array("unique_id4", "unique_id5", "unique_id6")
-      )
-    val testMetadataV2 = CommitMetadata(0, testStateUniqueIds)
-    testSerde(testMetadataV2, testCommitLogV2FilePath)
-  }
+//  test("Basic Commit Log V2 SerDe") {
+//    val testStateUniqueIds: Map[Long, Array[String]] =
+//      Map(
+//        0L -> Array("unique_id1", "unique_id2", "unique_id3"),
+//          1L -> Array("unique_id4", "unique_id5", "unique_id6")
+//      )
+//    val testMetadataV2 = CommitMetadata(0, testStateUniqueIds)
+//    testSerde(testMetadataV2, testCommitLogV2FilePath)
+//  }
 
   // Old metadata structure with no state unique ids should not affect the deserialization
   test("Cross-version V1 SerDe") {

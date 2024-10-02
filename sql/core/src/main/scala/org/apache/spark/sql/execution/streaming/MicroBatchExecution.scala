@@ -35,7 +35,6 @@ import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.sources.{WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
-import org.apache.spark.sql.execution.streaming.state.StateStoreCheckpointInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.{Clock, Utils}
@@ -133,8 +132,8 @@ class MicroBatchExecution(
 
   // Store checkpointIDs for state store checkpoints to be committed or have been committed to
   // the commit log.
-  // operatorID -> (partitionID -> uniqueID)
-  private val currentCheckpointUniqueId = MutableMap[Long, Array[String]]()
+  // operatorID -> (partitionID -> array of uniqueID)
+  private val currentStateStoreCkptId = MutableMap[Long, Array[Array[String]]]()
 
   override lazy val logicalPlan: LogicalPlan = {
     assert(queryExecutionThread eq Thread.currentThread,
@@ -514,9 +513,7 @@ class MicroBatchExecution(
               execCtx.startOffsets ++= execCtx.endOffsets
               watermarkTracker.setWatermark(
                 math.max(watermarkTracker.currentWatermark, commitMetadata.nextBatchWatermarkMs))
-              commitMetadata.stateUniqueIds.foreach { case (operatorId, uniqueIds) =>
-                currentCheckpointUniqueId(operatorId) = uniqueIds
-              }
+              currentStateStoreCkptId ++= commitMetadata.stateUniqueIds
             } else if (latestCommittedBatchId == latestBatchId - 1) {
               execCtx.endOffsets.foreach {
                 case (source: Source, end: Offset) =>
@@ -528,6 +525,8 @@ class MicroBatchExecution(
                   // The V2 API does not have the same edge case requiring getBatch to be called
                   // here, so we do nothing here.
               }
+              // TODO: add a test case for this
+              currentStateStoreCkptId ++= commitMetadata.stateUniqueIds
             } else if (latestCommittedBatchId < latestBatchId - 1) {
               logWarning(log"Batch completion log latest batch id is " +
                 log"${MDC(LogKeys.LATEST_COMMITTED_BATCH_ID, latestCommittedBatchId)}, which is " +
@@ -846,7 +845,7 @@ class MicroBatchExecution(
         execCtx.offsetSeqMetadata,
         watermarkPropagator,
         execCtx.previousContext.isEmpty,
-        currentCheckpointUniqueId)
+        currentStateStoreCkptId)
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
     }
 
@@ -910,42 +909,33 @@ class MicroBatchExecution(
    */
   protected def markMicroBatchExecutionStart(execCtx: MicroBatchExecutionContext): Unit = {}
 
-  private def updateCheckpointIdForOperator(
+  private def updateStateStoreCkptIdForOperator(
       execCtx: MicroBatchExecutionContext,
       opId: Long,
-      checkpointInfo: Array[StateStoreCheckpointInfo]): Unit = {
-    // TODO validate baseCheckpointId
+      checkpointInfo: Array[StatefulOpStateStoreCheckpointInfo]): Unit = {
+    // TODO validate baseStateStoreCkptId
     checkpointInfo.map(_.batchVersion).foreach { v =>
       assert(
         execCtx.batchId == -1 || v == execCtx.batchId + 1,
-        s"version $v doesn't match current Batch ID ${execCtx.batchId}")
+        s"Batch version ${execCtx.batchId} should generate state store checkpoint " +
+          s"version ${execCtx.batchId + 1} but we see ${v}")
     }
-    currentCheckpointUniqueId.put(opId, checkpointInfo.map { c =>
-      assert(c.checkpointId.isDefined)
-      c.checkpointId.get
+    currentStateStoreCkptId.put(opId, checkpointInfo.map { c =>
+      assert(c.stateStoreCkptId.isDefined)
+      c.stateStoreCkptId.get
     })
   }
 
-  private def updateCheckpointId(
+  private def updateStateStoreCkptId(
       execCtx: MicroBatchExecutionContext,
       latestExecPlan: SparkPlan): Unit = {
-    // This function cannot handle MBP now.
     latestExecPlan.collect {
-      case e: StateStoreSaveExec =>
+      case e: StateStoreWriter =>
         assert(e.stateInfo.isDefined)
-        updateCheckpointIdForOperator(execCtx, e.stateInfo.get.operatorId, e.getCheckpointInfo())
-      case e: SessionWindowStateStoreSaveExec =>
-        assert(e.stateInfo.isDefined)
-        updateCheckpointIdForOperator(execCtx, e.stateInfo.get.operatorId, e.getCheckpointInfo())
-      case e: StreamingDeduplicateExec =>
-        assert(e.stateInfo.isDefined)
-        updateCheckpointIdForOperator(execCtx, e.stateInfo.get.operatorId, e.getCheckpointInfo())
-      case e: StreamingDeduplicateWithinWatermarkExec =>
-        assert(e.stateInfo.isDefined)
-        updateCheckpointIdForOperator(execCtx, e.stateInfo.get.operatorId, e.getCheckpointInfo())
-      // TODO Need to deal with FlatMapGroupsWithStateExec, TransformWithStateExec,
-      // FlatMapGroupsInPandasWithStateExec, StreamingSymmetricHashJoinExec,
-      // StreamingGlobalLimitExec later
+        updateStateStoreCkptIdForOperator(
+          execCtx,
+          e.stateInfo.get.operatorId,
+          e.getStateStoreCheckpointInfo())
     }
   }
 
@@ -957,12 +947,11 @@ class MicroBatchExecution(
     val latestExecPlan = execCtx.executionPlan.executedPlan
     watermarkTracker.updateWatermark(latestExecPlan)
     if (sparkSession.sessionState.conf.stateStoreCheckpointFormatVersion >= 2) {
-      updateCheckpointId(execCtx, latestExecPlan)
+      updateStateStoreCkptId(execCtx, latestExecPlan)
     }
     execCtx.reportTimeTaken("commitOffsets") {
       if (!commitLog.add(execCtx.batchId,
-        // TODO: verify compatibility
-        CommitMetadata(watermarkTracker.currentWatermark, currentCheckpointUniqueId.toMap))) {
+        CommitMetadata(watermarkTracker.currentWatermark, currentStateStoreCkptId.toMap))) {
         throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)
       }
     }

@@ -305,7 +305,7 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
-    override def getCheckpointInfo: StateStoreCheckpointInfo = {
+    override def getStateStoreCheckpointInfo: StateStoreCheckpointInfo = {
       val checkpointInfo = rocksDB.getLatestCheckpointInfo(id.partitionId)
       checkpointInfo
     }
@@ -392,7 +392,7 @@ private[sql] class RocksDBStateStoreProvider
       }
       rocksDB.load(
         version,
-        if (storeConf.stateStoreCheckpointFormatVersion >= 2) uniqueId else None)
+        if (storeConf.enableStateStoreCheckpointIds) uniqueId else None)
       new RocksDBStateStore(version)
     }
     catch {
@@ -412,7 +412,10 @@ private[sql] class RocksDBStateStoreProvider
       if (version < 0) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
       }
-      rocksDB.load(version, uniqueId, true)
+      rocksDB.load(
+        version,
+        if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
+        true)
       new RocksDBStateStore(version)
     }
     catch {
@@ -463,7 +466,7 @@ private[sql] class RocksDBStateStoreProvider
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
     val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
     new RocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
-      useColumnFamilies, storeConf.stateStoreCheckpointFormatVersion)
+      useColumnFamilies, storeConf.enableStateStoreCheckpointIds)
   }
 
   private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,

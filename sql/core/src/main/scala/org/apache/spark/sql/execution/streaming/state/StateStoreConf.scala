@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.internal.SQLConf
 
 /** A class that contains configuration parameters for [[StateStore]]s. */
@@ -85,7 +86,8 @@ class StateStoreConf(
   /**
    * When creating new state store checkpoint, which format version to use.
    */
-  val stateStoreCheckpointFormatVersion = sqlConf.stateStoreCheckpointFormatVersion
+  val enableStateStoreCheckpointIds =
+    StatefulOperatorStateInfo.enableStateStoreCheckpointIds(sqlConf)
 
   /**
    * Additional configurations related to state store. This will capture all configs in
