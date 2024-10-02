@@ -3354,6 +3354,38 @@ abstract class JsonSuite
     }
   }
 
+  test("SPARK-: Read multi line JSON with default mode and provided schema") {
+    withSQLConf(SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION.key -> "true") {
+      val schema = StructType(Seq(
+        StructField("f1", LongType, nullable = true),
+        StructField("f2", StringType, nullable = false)
+      ))
+
+      withTempPath(file => {
+        val fileRawValue =
+          """
+            |{
+            | "f1": 1200
+            |}
+            |""".stripMargin
+
+        Seq(fileRawValue).toDF()
+          .repartition(1)
+          .write
+          .text(file.getAbsolutePath)
+
+        val df = spark.read
+          .schema(schema)
+          .option("multiline", "true")
+          .json(file.getAbsolutePath)
+
+        val schemaStr = df.schema.treeString
+
+        assert(schemaStr.contains("f2: string (nullable = false)"))
+      })
+    }
+  }
+
   test("SPARK-36379: proceed parsing with root nulls in permissive mode") {
     val exception = intercept[SparkException] {
       spark.read.option("mode", "failfast")

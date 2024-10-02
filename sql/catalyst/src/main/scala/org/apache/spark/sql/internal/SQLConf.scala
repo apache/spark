@@ -3902,6 +3902,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val RESPECT_USER_SCHEMA_NULLABILITY_FOR_FILE_DATA_SOURCES =
+    buildConf("spark.sql.respectUserSchemaNullabilityForFileDataSources")
+      .internal()
+      .doc("When true, the nullability in the user-specified schema for " +
+        "`DataFrameReader.schema(schema).json(path)` and .csv(path) and .xml(path) is respected" +
+        "Otherwise, they are turned to a nullable schema forcibly.")
+      .version("4.0.0")
+      .fallbackConf(LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION)
+
   val REPL_EAGER_EVAL_ENABLED = buildConf("spark.sql.repl.eagerEval.enabled")
     .doc("Enables eager evaluation or not. When true, the top K rows of Dataset will be " +
       "displayed if and only if the REPL supports the eager evaluation. Currently, the " +
@@ -6021,6 +6030,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyNullInEmptyBehavior: Boolean = {
     getConf(SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR).getOrElse(!ansiEnabled)
   }
+
+  def respectUserSchemaNullabilityForFileDataSources: Boolean =
+    getConf(SQLConf.RESPECT_USER_SCHEMA_NULLABILITY_FOR_FILE_DATA_SOURCES)
 
   def isReplEagerEvalEnabled: Boolean = getConf(SQLConf.REPL_EAGER_EVAL_ENABLED)
 
