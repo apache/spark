@@ -229,12 +229,7 @@ class SparkSession private(
   @Unstable
   def dataSource: DataSourceRegistration = sessionState.dataSourceRegistration
 
-  /**
-   * Returns a `StreamingQueryManager` that allows managing all the
-   * `StreamingQuery`s active on `this`.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @Unstable
   def streams: StreamingQueryManager = sessionState.streamingQueryManager
 
@@ -271,7 +266,7 @@ class SparkSession private(
    * and child sessions are set up with the same shared state. If the underlying catalog
    * implementation is Hive, this will initialize the metastore, which may take some time.
    */
-  private[sql] def cloneSession(): SparkSession = {
+  private[sql] def cloneSession(reuseArtifactManager: Boolean = false): SparkSession = {
     val result = new SparkSession(
       sparkContext,
       Some(sharedState),
@@ -280,6 +275,11 @@ class SparkSession private(
       Map.empty,
       managedJobTags.asScala.toMap)
     result.sessionState // force copy of SessionState
+    if (reuseArtifactManager) {
+      result.sessionState._artifactManager = Some(sessionState.artifactManager)
+    } else {
+      result.sessionState.artifactManager // force copy of ArtifactManager
+    }
     result.managedJobTags // force copy of userDefinedToRealTagsMap
     result
   }
@@ -739,15 +739,7 @@ class SparkSession private(
   /** @inheritdoc */
   def read: DataFrameReader = new DataFrameReader(self)
 
-  /**
-   * Returns a `DataStreamReader` that can be used to read streaming data in as a `DataFrame`.
-   * {{{
-   *   sparkSession.readStream.parquet("/path/to/directory/of/parquet/files")
-   *   sparkSession.readStream.schema(schema).json("/path/to/directory/of/json/files")
-   * }}}
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def readStream: DataStreamReader = new DataStreamReader(self)
 
   // scalastyle:off

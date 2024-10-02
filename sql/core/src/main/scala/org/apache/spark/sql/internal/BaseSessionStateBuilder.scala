@@ -372,8 +372,7 @@ abstract class BaseSessionStateBuilder(
    * use.
    */
   protected def artifactManager: ArtifactManager = {
-    // TODO(paddy): refactor ArtifactManager to separate child from parent session.
-    parentState.map(_.artifactManager).getOrElse(new ArtifactManager(session))
+    parentState.map(_.artifactManager.clone(session)).getOrElse(new ArtifactManager(session))
   }
 
   /**

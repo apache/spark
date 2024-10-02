@@ -306,7 +306,13 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.DataFrameReader.validateJsonSchema"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.DataFrameReader.validateXmlSchema"))
+        "org.apache.spark.sql.DataFrameReader.validateXmlSchema"),
+
+      // Protected DataStreamReader methods...
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.streaming.DataStreamReader.validateJsonSchema"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.streaming.DataStreamReader.validateXmlSchema"))
 
     checkMiMaCompatibility(clientJar, sqlJar, includedRules, excludeRules)
   }

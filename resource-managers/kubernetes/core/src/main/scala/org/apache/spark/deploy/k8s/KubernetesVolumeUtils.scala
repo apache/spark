@@ -47,12 +47,18 @@ object KubernetesVolumeUtils {
       val subPathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_SUBPATH_KEY"
       val subPathExprKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_SUBPATHEXPR_KEY"
       val labelKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_LABEL_KEY"
+      val annotationKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_ANNOTATION_KEY"
       verifyMutuallyExclusiveOptionKeys(properties, subPathKey, subPathExprKey)
 
       val volumeLabelsMap = properties
         .filter(_._1.startsWith(labelKey))
         .map {
           case (k, v) => k.replaceAll(labelKey, "") -> v
+        }
+      val volumeAnnotationsMap = properties
+        .filter(_._1.startsWith(annotationKey))
+        .map {
+          case (k, v) => k.replaceAll(annotationKey, "") -> v
         }
 
       KubernetesVolumeSpec(
@@ -62,7 +68,7 @@ object KubernetesVolumeUtils {
         mountSubPathExpr = properties.getOrElse(subPathExprKey, ""),
         mountReadOnly = properties.get(readOnlyKey).exists(_.toBoolean),
         volumeConf = parseVolumeSpecificConf(properties,
-          volumeType, volumeName, Option(volumeLabelsMap)))
+          volumeType, volumeName, Option(volumeLabelsMap), Option(volumeAnnotationsMap)))
     }.toSeq
   }
 
@@ -86,7 +92,8 @@ object KubernetesVolumeUtils {
       options: Map[String, String],
       volumeType: String,
       volumeName: String,
-      labels: Option[Map[String, String]]): KubernetesVolumeSpecificConf = {
+      labels: Option[Map[String, String]],
+      annotations: Option[Map[String, String]]): KubernetesVolumeSpecificConf = {
     volumeType match {
       case KUBERNETES_VOLUMES_HOSTPATH_TYPE =>
         val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_PATH_KEY"
@@ -107,7 +114,8 @@ object KubernetesVolumeUtils {
           options(claimNameKey),
           options.get(storageClassKey),
           options.get(sizeLimitKey),
-          labels)
+          labels,
+          annotations)
 
       case KUBERNETES_VOLUMES_EMPTYDIR_TYPE =>
         val mediumKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY"
