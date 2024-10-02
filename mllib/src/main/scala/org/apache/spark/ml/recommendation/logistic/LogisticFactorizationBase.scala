@@ -33,7 +33,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
 import org.apache.spark.storage.StorageLevel
 
-private[ml] object BaseLogisticFactorization {
+private[ml] object LogisticFactorizationBase {
   private val PART_TABLE_TOTAL_SIZE = 10000000
 
   private def shuffle(arr: Array[Int], rnd: Random) = {
@@ -68,7 +68,7 @@ private[ml] object BaseLogisticFactorization {
   }
 }
 
-private[ml] abstract class BaseLogisticFactorization extends Serializable with Logging {
+private[ml] abstract class LogisticFactorizationBase extends Serializable with Logging {
 
   protected var dotVectorSize: Int = 100
   protected var negative: Int = 5
@@ -243,14 +243,14 @@ private[ml] abstract class BaseLogisticFactorization extends Serializable with L
     var checkpointIter = 0
     val (startEpoch, startIter) = latest.getOrElse((0, 0))
     val cached = ArrayBuffer.empty[RDD[ItemData]]
-    val partitionTable = sparkContext.broadcast(BaseLogisticFactorization
+    val partitionTable = sparkContext.broadcast(LogisticFactorizationBase
       .createPartitionTable(numPartitions, new Random(0)))
 
     (startEpoch until numIterations).foreach {curEpoch =>
 
       val partitioner1 = new HashPartitioner(numPartitions) {
         override def getPartition(item: Any): Int = {
-          BaseLogisticFactorization.hash(item.asInstanceOf[Long], curEpoch, numPartitions)
+          LogisticFactorizationBase.hash(item.asInstanceOf[Long], curEpoch, numPartitions)
         }
       }
 
@@ -264,7 +264,7 @@ private[ml] abstract class BaseLogisticFactorization extends Serializable with L
 
         val partitioner2 = new HashPartitioner(numPartitions) {
           override def getPartition(item: Any): Int = {
-            val bucket = BaseLogisticFactorization.hash(
+            val bucket = LogisticFactorizationBase.hash(
               item.asInstanceOf[Long],
               curEpoch,
               partitionTable.value.length)
