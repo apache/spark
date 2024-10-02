@@ -685,12 +685,12 @@ select make_date(2013, 2, 30)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkDateTimeException
+org.apache.spark.SparkException
 {
-  "errorClass" : "DATE_TIME_FIELD_OUT_OF_BOUNDS",
-  "sqlState" : "22008",
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "message" : "The Spark SQL phase optimization failed with an internal error. You hit a bug in Spark or the Spark plugins you use. Please, report this bug to the corresponding communities or vendors, and provide the full stack trace."
   }
 }
 
@@ -705,7 +705,10 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "DATE_TIME_FIELD_OUT_OF_BOUNDS",
   "sqlState" : "22008",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "badValue" : "13",
+    "range" : "1 - 12",
+    "unit" : "MONTH"
   }
 }
 
@@ -720,7 +723,10 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "DATE_TIME_FIELD_OUT_OF_BOUNDS",
   "sqlState" : "22008",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "badValue" : "-1",
+    "range" : "1 - 28/31",
+    "unit" : "DAY"
   }
 }
 

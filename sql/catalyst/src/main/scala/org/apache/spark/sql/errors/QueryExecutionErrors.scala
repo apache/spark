@@ -278,13 +278,38 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def ansiDateTimeError(e: Exception): SparkDateTimeException = {
+    def extractDateTimeErrorInfo(e: Exception): (String, String, String) = {
+      val errorMessage = e.getMessage
+
+      val pattern = "Invalid value for ([A-Za-z]+) \\(valid values (.+)\\): (.+)".r
+
+      errorMessage match {
+        case pattern(field, range, badValue) =>
+          val unit = field match {
+            case "Year" => "YEAR"
+            case "MonthOfYear" => "MONTH"
+            case "DayOfMonth" => "DAY"
+            case "Hour" => "HOUR"
+            case "Minute" => "MINUTE"
+            case "Second" => "SECOND"
+            case _ => field
+          }
+          (unit, range, badValue)
+      }
+    }
+    val (unit, range, badValue) = extractDateTimeErrorInfo(e)
     new SparkDateTimeException(
       errorClass = "DATE_TIME_FIELD_OUT_OF_BOUNDS",
       messageParameters = Map(
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key),
+        "unit" -> unit,
+        "range" -> range,
+        "badValue" -> badValue
+      ),
       context = Array.empty,
       summary = "",
-      cause = Some(e))
+      cause = Some(e)
+    )
   }
 
   def ansiIllegalArgumentError(): SparkException = {

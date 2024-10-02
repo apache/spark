@@ -1085,7 +1085,7 @@
   },
   "DATE_TIME_FIELD_OUT_OF_BOUNDS" : {
     "message" : [
-      "Invalid value for datetime field. If necessary set <ansiConfig> to false to bypass this error."
+      "The value '<badValue>' you entered for <unit> is not valid. Please provide a value between <range>. To disable strict validation, you can turn off ANSI mode by setting <ansiConfig> to false."
     ],
     "sqlState" : "22008"
   },
