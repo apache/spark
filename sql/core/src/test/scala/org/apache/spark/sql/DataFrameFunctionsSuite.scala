@@ -315,11 +315,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(isnotnull(col("a"))), Seq(Row(false)))
   }
 
-  test("Test nullif function") {
-
-    def testNullIfFunction(alwaysInlineCommonExpr: String): Unit = {
-      withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> alwaysInlineCommonExpr) {
-
+  test("nullif function") {
+    Seq(true, false).foreach { alwaysInlineCommonExpr =>
+      withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> alwaysInlineCommonExpr.toString) {
         Seq(
           "SELECT NULLIF(1, 1)" -> Seq(Row(null)),
           "SELECT NULLIF(1, 2)" -> Seq(Row(1)),
@@ -353,9 +351,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         )
       }
     }
-
-    testNullIfFunction("true")
-    testNullIfFunction("false")
   }
 
   test("equal_null function") {
