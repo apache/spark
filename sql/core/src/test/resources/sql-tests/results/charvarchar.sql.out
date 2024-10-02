@@ -544,6 +544,22 @@ Partition Provider  	Catalog
 
 
 -- !query
+alter table char_part change column c1 comment 'char comment'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+alter table char_part change column v1 comment 'varchar comment'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 alter table char_part add partition (v2='ke', c2='nt') location 'loc1'
 -- !query schema
 struct<>
@@ -556,8 +572,8 @@ desc formatted char_part
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query output
-c1                  	char(5)             	                    
-v1                  	varchar(6)          	                    
+c1                  	char(5)             	char comment        
+v1                  	varchar(6)          	varchar comment     
 v2                  	varchar(2)          	                    
 c2                  	char(2)             	                    
 # Partition Information	                    	                    
@@ -599,8 +615,8 @@ desc formatted char_part
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query output
-c1                  	char(5)             	                    
-v1                  	varchar(6)          	                    
+c1                  	char(5)             	char comment        
+v1                  	varchar(6)          	varchar comment     
 v2                  	varchar(2)          	                    
 c2                  	char(2)             	                    
 # Partition Information	                    	                    
@@ -634,8 +650,8 @@ desc formatted char_part
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query output
-c1                  	char(5)             	                    
-v1                  	varchar(6)          	                    
+c1                  	char(5)             	char comment        
+v1                  	varchar(6)          	varchar comment     
 v2                  	varchar(2)          	                    
 c2                  	char(2)             	                    
 # Partition Information	                    	                    
@@ -669,8 +685,8 @@ desc formatted char_part
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query output
-c1                  	char(5)             	                    
-v1                  	varchar(6)          	                    
+c1                  	char(5)             	char comment        
+v1                  	varchar(6)          	varchar comment     
 v2                  	varchar(2)          	                    
 c2                  	char(2)             	                    
 # Partition Information	                    	                    
