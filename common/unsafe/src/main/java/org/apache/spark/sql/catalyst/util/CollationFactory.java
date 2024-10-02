@@ -353,7 +353,7 @@ public final class CollationFactory {
           case TRIM:
             return s.trim();
           default:
-            return s;
+            return s; // NOTRIM
         }
       }
 
@@ -1146,30 +1146,38 @@ public final class CollationFactory {
 
   public static UTF8String getCollationKey(UTF8String input, int collationId) {
     Collation collation = fetchCollation(collationId);
-    UTF8String appliedSpaceTrimInput = Collation.CollationSpec.applyTrimmingPolicy(
-            input, Collation.CollationSpec.getSpaceTrimming(collationId));
+    Collation.CollationSpec.SpaceTrimming spaceTrimming =
+      Collation.CollationSpec.getSpaceTrimming(collationId);
+    if(spaceTrimming != Collation.CollationSpec.SpaceTrimming.NONE)
+      input = Collation.CollationSpec.applyTrimmingPolicy(
+        input, Collation.CollationSpec.getSpaceTrimming(collationId));
+
     if (collation.supportsBinaryEquality) {
-      return appliedSpaceTrimInput;
+      return input;
     } else if (collation.supportsLowercaseEquality) {
-      return CollationAwareUTF8String.lowerCaseCodePoints(appliedSpaceTrimInput);
+      return CollationAwareUTF8String.lowerCaseCodePoints(input);
     } else {
       CollationKey collationKey = collation.collator.getCollationKey(
-              appliedSpaceTrimInput.toValidString());
+        input.toValidString());
       return UTF8String.fromBytes(collationKey.toByteArray());
     }
   }
 
   public static byte[] getCollationKeyBytes(UTF8String input, int collationId) {
     Collation collation = fetchCollation(collationId);
-    UTF8String appliedSpaceTrimInput = Collation.CollationSpec.applyTrimmingPolicy(
-            input, Collation.CollationSpec.getSpaceTrimming(collationId));
+    Collation.CollationSpec.SpaceTrimming spaceTrimming =
+      Collation.CollationSpec.getSpaceTrimming(collationId);
+    if(spaceTrimming != Collation.CollationSpec.SpaceTrimming.NONE)
+      input = Collation.CollationSpec.applyTrimmingPolicy(
+        input, Collation.CollationSpec.getSpaceTrimming(collationId));
+
     if (collation.supportsBinaryEquality) {
-      return appliedSpaceTrimInput.getBytes();
+      return input.getBytes();
     } else if (collation.supportsLowercaseEquality) {
-      return CollationAwareUTF8String.lowerCaseCodePoints(appliedSpaceTrimInput).getBytes();
+      return CollationAwareUTF8String.lowerCaseCodePoints(input).getBytes();
     } else {
       return collation.collator.getCollationKey(
-              appliedSpaceTrimInput.toValidString()).toByteArray();
+        input.toValidString()).toByteArray();
     }
   }
 
