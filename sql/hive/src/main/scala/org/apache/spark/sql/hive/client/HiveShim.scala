@@ -24,6 +24,7 @@ import java.util.{ArrayList => JArrayList, List => JList, Locale, Map => JMap, S
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
@@ -1149,32 +1150,56 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
   private def getPartitionsInBatches(
       hive: Hive,
       table: Table,
-      size: Int,
+      initialBatchSize: Int,
       partNames: Seq[String]): java.util.Collection[Partition] = {
-    logInfo(s"Starting the batch processing of partitions.")
+    val maxRetries = SQLConf.get.metastorePartitionBatchRetryCount
+    val decayingFactor = 2
 
-    val retryCount = SQLConf.get.metastorePartitionBatchRetryCount
-    val batches = partNames.grouped(size).toSeq
-    val processedPartitions = batches.flatMap { batch =>
-      var partitions: java.util.Collection[Partition] = null
-      var retry = 0
-      while (partitions == null && retry < retryCount) {
-        try {
-          partitions = hive.getPartitionsByNames(table, batch.asJava)
-        } catch {
-          case ex: Exception =>
-            logWarning(
-              s"Caught exception while fetching partition metadata for batch '$batch'.",
-              ex
-            )
-            retry += 1
-            if (retry > retryCount) {
-              logError(s"Failed to fetch all the partition metadata. Retries count exceeded.")
-            }
-        }
-      }
-      partitions.asScala
+    if (initialBatchSize <= 0) {
+      throw new IllegalArgumentException(s"Invalid batch size $initialBatchSize provided " +
+        s"for fetching partitions.Batch size must be greater than 0")
     }
+
+    if (maxRetries < 0) {
+      throw new IllegalArgumentException(s"Invalid number of maximum retries $maxRetries " +
+        s"provided for fetching partitions.It must be a non-negative integer value")
+    }
+
+    logInfo(s"Breaking your request into small batches of '$initialBatchSize'.")
+
+    var batchSize = initialBatchSize
+    val processedPartitions = mutable.ListBuffer[Partition]()
+    var retryCount = 0
+    var index = 0
+
+    def getNextBatchSize(): Int = {
+      val currentBatchSize = batchSize
+      batchSize = (batchSize / decayingFactor) max 1
+      currentBatchSize
+    }
+
+    var currentBatchSize = getNextBatchSize()
+    var partitions: java.util.Collection[Partition] = null
+
+    while (index < partNames.size && retryCount <= maxRetries) {
+      val batch = partNames.slice(index, index + currentBatchSize)
+
+      try {
+        partitions = hive.getPartitionsByNames(table, batch.asJava)
+        processedPartitions ++= partitions.asScala
+        index += batch.size
+      } catch {
+        case ex: Exception =>
+          logWarning(s"Caught exception while fetching partitions for batch '$batch'.", ex)
+          retryCount += 1
+          currentBatchSize = getNextBatchSize()
+          logInfo(s"Further reducing batch size to '$currentBatchSize'.")
+          if (retryCount > maxRetries) {
+            logError(s"Failed to fetch partitions for the request. Retries count exceeded.")
+          }
+      }
+    }
+
     processedPartitions.asJava
   }
 
