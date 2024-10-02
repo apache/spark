@@ -388,4 +388,51 @@ class ArtifactManagerSuite extends SharedSparkSession {
       assert(file.exists())
     }
   }
+
+  test("Cloning artifact manager will clone all artifacts") {
+    withTempPath { dir =>
+      val path = dir.toPath
+      // Setup artifact dir
+      FileUtils.copyDirectory(artifactPath.toFile, dir)
+      val randomFilePath = path.resolve("random_file")
+      Files.write(randomFilePath, "test".getBytes(StandardCharsets.UTF_8))
+
+      // Register multiple kinds of artifacts
+      artifactManager.addArtifact(
+        Paths.get("classes/Hello.class"), path.resolve("Hello.class"), None)
+      artifactManager.addArtifact(Paths.get("pyfiles/abc.zip"), randomFilePath, None)
+      artifactManager.addArtifact(
+        Paths.get("jars/udf_noA.jar"), path.resolve("udf_noA.jar"), None)
+      assert(FileUtils.listFiles(artifactManager.artifactPath.toFile, null, true).size() === 3)
+
+      // Clone the artifact manager
+      val newSession = spark.cloneSession()
+      val newArtifactManager = newSession.artifactManager
+
+      val allFiles = FileUtils.listFiles(newArtifactManager.artifactPath.toFile, null, true)
+      assert(allFiles.size() === 3)
+      allFiles.forEach { file =>
+        assert(!file.getCanonicalPath.contains(spark.sessionUUID))
+        assert(file.getCanonicalPath.contains(newSession.sessionUUID))
+        val originalFile = Paths.get(file.getCanonicalPath.replace(
+          newSession.sessionUUID, spark.sessionUUID))
+        assert(Files.exists(originalFile))
+        assert(Files.readAllBytes(originalFile) === Files.readAllBytes(file.toPath))
+      }
+      assert(artifactManager.getPythonIncludes === newArtifactManager.getPythonIncludes)
+      assert(
+        artifactManager.getAddedJars.map(_.toString.replace(spark.sessionUUID, "")) ===
+          newArtifactManager.getAddedJars.map(_.toString.replace(newSession.sessionUUID, "")))
+
+      // Try load class from the cloned artifact manager
+      val instance = newArtifactManager
+        .classloader
+        .loadClass("Hello")
+        .getDeclaredConstructor(classOf[String])
+        .newInstance("Talon")
+
+      val msg = instance.getClass.getMethod("msg").invoke(instance)
+      assert(msg == "Hello Talon! Nice to meet you!")
+    }
+  }
 }

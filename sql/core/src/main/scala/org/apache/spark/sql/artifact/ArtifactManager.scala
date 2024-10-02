@@ -88,7 +88,11 @@ class ArtifactManager(session: SparkSession) extends Logging {
   /**
    * Get the URLs of all jar artifacts.
    */
-  def getAddedJars: Seq[URL] = jarsList.asScala.map(_.toUri.toURL).toSeq
+  def getAddedJars: Seq[URL] = jarsList
+    .asScala
+    .map(ArtifactUtils.concatenatePaths(artifactPath, _))
+    .map(_.toUri.toURL)
+    .toSeq
 
   /**
    * Get the py-file names added to this SparkSession.
@@ -187,7 +191,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
 
       if (normalizedRemoteRelativePath.startsWith(s"jars${File.separator}")) {
         session.sparkContext.addJar(uri)
-        jarsList.add(target)
+        jarsList.add(normalizedRemoteRelativePath)
       } else if (normalizedRemoteRelativePath.startsWith(s"pyfiles${File.separator}")) {
         session.sparkContext.addFile(uri)
         val stringRemotePath = normalizedRemoteRelativePath.toString
@@ -277,6 +281,14 @@ class ArtifactManager(session: SparkSession) extends Logging {
 
     logDebug(s"Using class loader: $loader, containing urls: $urls")
     loader
+  }
+
+  private[sql] def clone(newSession: SparkSession): ArtifactManager = {
+    val newArtifactManager = new ArtifactManager(newSession)
+    FileUtils.copyDirectory(artifactPath.toFile, newArtifactManager.artifactPath.toFile)
+    newArtifactManager.jarsList.addAll(jarsList)
+    newArtifactManager.pythonIncludeList.addAll(pythonIncludeList)
+    newArtifactManager
   }
 
   /**
