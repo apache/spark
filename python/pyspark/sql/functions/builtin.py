@@ -6015,9 +6015,9 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
 @_try_remote_functions
 def count_min_sketch(
     col: "ColumnOrName",
-    eps: "ColumnOrName",
-    confidence: "ColumnOrName",
-    seed: "ColumnOrName",
+    eps: Union[Column, float],
+    confidence: Union[Column, float],
+    seed: Optional[Union[Column, int]] = None,
 ) -> Column:
     """
     Returns a count-min sketch of a column with the given esp, confidence and seed.
@@ -6031,12 +6031,23 @@ def count_min_sketch(
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to compute on.
-    eps : :class:`~pyspark.sql.Column` or str
+    eps : :class:`~pyspark.sql.Column` or float
         relative error, must be positive
-    confidence : :class:`~pyspark.sql.Column` or str
+
+        .. versionchanged:: 4.0.0
+            `eps` now accepts float value.
+
+    confidence : :class:`~pyspark.sql.Column` or float
         confidence, must be positive and less than 1.0
-    seed : :class:`~pyspark.sql.Column` or str
+
+        .. versionchanged:: 4.0.0
+            `confidence` now accepts float value.
+
+    seed : :class:`~pyspark.sql.Column` or int, optional
         random seed
+
+        .. versionchanged:: 4.0.0
+            `seed` now accepts int value.
 
     Returns
     -------
@@ -6045,12 +6056,60 @@ def count_min_sketch(
 
     Examples
     --------
-    >>> df = spark.createDataFrame([[1], [2], [1]], ['data'])
-    >>> df = df.agg(count_min_sketch(df.data, lit(0.5), lit(0.5), lit(1)).alias('sketch'))
-    >>> df.select(hex(df.sketch).alias('r')).collect()
-    [Row(r='0000000100000000000000030000000100000004000000005D8D6AB90000000000000000000000000000000200000000000000010000000000000000')]
-    """
-    return _invoke_function_over_columns("count_min_sketch", col, eps, confidence, seed)
+    Example 1: Using columns as arguments
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(100).select(
+    ...     sf.hex(sf.count_min_sketch(sf.col("id"), sf.lit(3.0), sf.lit(0.1), sf.lit(1)))
+    ... ).show(truncate=False)
+    +------------------------------------------------------------------------+
+    |hex(count_min_sketch(id, 3.0, 0.1, 1))                                  |
+    +------------------------------------------------------------------------+
+    |0000000100000000000000640000000100000001000000005D8D6AB90000000000000064|
+    +------------------------------------------------------------------------+
+
+    Example 2: Using numbers as arguments
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(100).select(
+    ...     sf.hex(sf.count_min_sketch("id", 1.0, 0.3, 2))
+    ... ).show(truncate=False)
+    +----------------------------------------------------------------------------------------+
+    |hex(count_min_sketch(id, 1.0, 0.3, 2))                                                  |
+    +----------------------------------------------------------------------------------------+
+    |0000000100000000000000640000000100000002000000005D96391C00000000000000320000000000000032|
+    +----------------------------------------------------------------------------------------+
+
+    Example 3: Using a long seed
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(100).select(
+    ...     sf.hex(sf.count_min_sketch("id", sf.lit(1.5), 0.2, 1111111111111111111))
+    ... ).show(truncate=False)
+    +----------------------------------------------------------------------------------------+
+    |hex(count_min_sketch(id, 1.5, 0.2, 1111111111111111111))                                |
+    +----------------------------------------------------------------------------------------+
+    |00000001000000000000006400000001000000020000000044078BA100000000000000320000000000000032|
+    +----------------------------------------------------------------------------------------+
+
+    Example 4: Using a random seed
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(100).select(
+    ...     sf.hex(sf.count_min_sketch("id", sf.lit(1.5), 0.6))
+    ... ).show(truncate=False) # doctest: +SKIP
+    +----------------------------------------------------------------------------------------------------------------------------------------+
+    |hex(count_min_sketch(id, 1.5, 0.6, 2120704260))                                                                                         |
+    +----------------------------------------------------------------------------------------------------------------------------------------+
+    |0000000100000000000000640000000200000002000000005ADECCEE00000000153EBE090000000000000033000000000000003100000000000000320000000000000032|
+    +----------------------------------------------------------------------------------------------------------------------------------------+
+    """  # noqa: E501
+    _eps = lit(eps)
+    _conf = lit(confidence)
+    if seed is None:
+        return _invoke_function_over_columns("count_min_sketch", col, _eps, _conf)
+    else:
+        return _invoke_function_over_columns("count_min_sketch", col, _eps, _conf, lit(seed))
 
 
 @_try_remote_functions
@@ -7305,36 +7364,36 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     |  b|  2|
     +---+---+
     >>> w = Window.partitionBy("c1").orderBy("c2")
-    >>> df.withColumn("previos_value", lag("c2").over(w)).show()
-    +---+---+-------------+
-    | c1| c2|previos_value|
-    +---+---+-------------+
-    |  a|  1|         NULL|
-    |  a|  2|            1|
-    |  a|  3|            2|
-    |  b|  2|         NULL|
-    |  b|  8|            2|
-    +---+---+-------------+
-    >>> df.withColumn("previos_value", lag("c2", 1, 0).over(w)).show()
-    +---+---+-------------+
-    | c1| c2|previos_value|
-    +---+---+-------------+
-    |  a|  1|            0|
-    |  a|  2|            1|
-    |  a|  3|            2|
-    |  b|  2|            0|
-    |  b|  8|            2|
-    +---+---+-------------+
-    >>> df.withColumn("previos_value", lag("c2", 2, -1).over(w)).show()
-    +---+---+-------------+
-    | c1| c2|previos_value|
-    +---+---+-------------+
-    |  a|  1|           -1|
-    |  a|  2|           -1|
-    |  a|  3|            1|
-    |  b|  2|           -1|
-    |  b|  8|           -1|
-    +---+---+-------------+
+    >>> df.withColumn("previous_value", lag("c2").over(w)).show()
+    +---+---+--------------+
+    | c1| c2|previous_value|
+    +---+---+--------------+
+    |  a|  1|          NULL|
+    |  a|  2|             1|
+    |  a|  3|             2|
+    |  b|  2|          NULL|
+    |  b|  8|             2|
+    +---+---+--------------+
+    >>> df.withColumn("previous_value", lag("c2", 1, 0).over(w)).show()
+    +---+---+--------------+
+    | c1| c2|previous_value|
+    +---+---+--------------+
+    |  a|  1|             0|
+    |  a|  2|             1|
+    |  a|  3|             2|
+    |  b|  2|             0|
+    |  b|  8|             2|
+    +---+---+--------------+
+    >>> df.withColumn("previous_value", lag("c2", 2, -1).over(w)).show()
+    +---+---+--------------+
+    | c1| c2|previous_value|
+    +---+---+--------------+
+    |  a|  1|            -1|
+    |  a|  2|            -1|
+    |  a|  3|             1|
+    |  b|  2|            -1|
+    |  b|  8|            -1|
+    +---+---+--------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -9044,15 +9103,19 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     :class:`~pyspark.sql.Column`
         timestamp value as :class:`pyspark.sql.types.TimestampType` type.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.try_to_timestamp`
+
     Examples
     --------
     Example 1: Convert string to a timestamp
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(sf.try_to_timestamp(df.t).alias('dt')).show()
+    >>> df.select(sf.to_timestamp(df.t)).show()
     +-------------------+
-    |                 dt|
+    |    to_timestamp(t)|
     +-------------------+
     |1997-02-28 10:30:00|
     +-------------------+
@@ -9061,12 +9124,12 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(sf.try_to_timestamp(df.t, sf.lit('yyyy-MM-dd HH:mm:ss')).alias('dt')).show()
-    +-------------------+
-    |                 dt|
-    +-------------------+
-    |1997-02-28 10:30:00|
-    +-------------------+
+    >>> df.select(sf.to_timestamp(df.t, 'yyyy-MM-dd HH:mm:ss')).show()
+    +------------------------------------+
+    |to_timestamp(t, yyyy-MM-dd HH:mm:ss)|
+    +------------------------------------+
+    |                 1997-02-28 10:30:00|
+    +------------------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -9091,6 +9154,10 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
         column values to convert.
     format: str, optional
         format to use to convert timestamp values.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_timestamp`
 
     Examples
     --------
@@ -11241,12 +11308,26 @@ def sentences(
 ) -> Column:
     """
     Splits a string into arrays of sentences, where each sentence is an array of words.
-    The 'language' and 'country' arguments are optional, and if omitted, the default locale is used.
+    The `language` and `country` arguments are optional,
+    When they are omitted:
+    1.If they are both omitted, the `Locale.ROOT - locale(language='', country='')` is used.
+    The `Locale.ROOT` is regarded as the base locale of all locales, and is used as the
+    language/country neutral locale for the locale sensitive operations.
+    2.If the `country` is omitted, the `locale(language, country='')` is used.
+    When they are null:
+    1.If they are both `null`, the `Locale.US - locale(language='en', country='US')` is used.
+    2.If the `language` is null and the `country` is not null,
+    the `Locale.US - locale(language='en', country='US')` is used.
+    3.If the `language` is not null and the `country` is null, the `locale(language)` is used.
+    4.If neither is `null`, the `locale(language, country)` is used.
 
     .. versionadded:: 3.2.0
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    .. versionchanged:: 4.0.0
+        Supports `sentences(string, language)`.
 
     Parameters
     ----------
@@ -11271,6 +11352,12 @@ def sentences(
     +-----------------------------------+
     |[[This, is, an, example, sentence]]|
     +-----------------------------------+
+    >>> df.select(sentences(df.string, lit("en"))).show(truncate=False)
+    +-----------------------------------+
+    |sentences(string, en, )            |
+    +-----------------------------------+
+    |[[This, is, an, example, sentence]]|
+    +-----------------------------------+
     >>> df = spark.createDataFrame([["Hello world. How are you?"]], ["s"])
     >>> df.select(sentences("s")).show(truncate=False)
     +---------------------------------+
@@ -11289,7 +11376,9 @@ def sentences(
 
 @_try_remote_functions
 def substring(
-    str: "ColumnOrName", pos: Union["ColumnOrName", int], len: Union["ColumnOrName", int]
+    str: "ColumnOrName",
+    pos: Union["ColumnOrName", int],
+    len: Union["ColumnOrName", int],
 ) -> Column:
     """
     Substring starts at `pos` and is of length `len` when str is String type or
@@ -11328,16 +11417,59 @@ def substring(
 
     Examples
     --------
+    Example 1: Using literal integers as arguments
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('abcd',)], ['s',])
-    >>> df.select(substring(df.s, 1, 2).alias('s')).collect()
-    [Row(s='ab')]
+    >>> df.select('*', sf.substring(df.s, 1, 2)).show()
+    +----+------------------+
+    |   s|substring(s, 1, 2)|
+    +----+------------------+
+    |abcd|                ab|
+    +----+------------------+
+
+    Example 2: Using columns as arguments
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('Spark', 2, 3)], ['s', 'p', 'l'])
-    >>> df.select(substring(df.s, 2, df.l).alias('s')).collect()
-    [Row(s='par')]
-    >>> df.select(substring(df.s, df.p, 3).alias('s')).collect()
-    [Row(s='par')]
-    >>> df.select(substring(df.s, df.p, df.l).alias('s')).collect()
-    [Row(s='par')]
+    >>> df.select('*', sf.substring(df.s, 2, df.l)).show()
+    +-----+---+---+------------------+
+    |    s|  p|  l|substring(s, 2, l)|
+    +-----+---+---+------------------+
+    |Spark|  2|  3|               par|
+    +-----+---+---+------------------+
+
+    >>> df.select('*', sf.substring(df.s, df.p, 3)).show()
+    +-----+---+---+------------------+
+    |    s|  p|  l|substring(s, p, 3)|
+    +-----+---+---+------------------+
+    |Spark|  2|  3|               par|
+    +-----+---+---+------------------+
+
+    >>> df.select('*', sf.substring(df.s, df.p, df.l)).show()
+    +-----+---+---+------------------+
+    |    s|  p|  l|substring(s, p, l)|
+    +-----+---+---+------------------+
+    |Spark|  2|  3|               par|
+    +-----+---+---+------------------+
+
+    Example 3: Using column names as arguments
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('Spark', 2, 3)], ['s', 'p', 'l'])
+    >>> df.select('*', sf.substring(df.s, 2, 'l')).show()
+    +-----+---+---+------------------+
+    |    s|  p|  l|substring(s, 2, l)|
+    +-----+---+---+------------------+
+    |Spark|  2|  3|               par|
+    +-----+---+---+------------------+
+
+    >>> df.select('*', sf.substring('s', 'p', 'l')).show()
+    +-----+---+---+------------------+
+    |    s|  p|  l|substring(s, p, l)|
+    +-----+---+---+------------------+
+    |Spark|  2|  3|               par|
+    +-----+---+---+------------------+
     """
     pos = _enum_to_value(pos)
     pos = lit(pos) if isinstance(pos, int) else pos
@@ -11842,6 +11974,47 @@ def regexp_like(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def randstr(length: Union[Column, int], seed: Optional[Union[Column, int]] = None) -> Column:
+    """Returns a string of the specified length whose characters are chosen uniformly at random from
+    the following pool of characters: 0-9, a-z, A-Z. The random seed is optional. The string length
+    must be a constant two-byte or four-byte integer (SMALLINT or INT, respectively).
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    length : :class:`~pyspark.sql.Column` or int
+        Number of characters in the string to generate.
+    seed : :class:`~pyspark.sql.Column` or int
+        Optional random number seed to use.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The generated random string with the specified length.
+
+    Examples
+    --------
+    >>> spark.createDataFrame([('3',)], ['a']) \\
+    ...   .select(randstr(lit(5), lit(0)).alias('result')) \\
+    ...   .selectExpr("length(result) > 0").show()
+    +--------------------+
+    |(length(result) > 0)|
+    +--------------------+
+    |                true|
+    +--------------------+
+    """
+    length = _enum_to_value(length)
+    length = lit(length)
+    if seed is None:
+        return _invoke_function_over_columns("randstr", length)
+    else:
+        seed = _enum_to_value(seed)
+        seed = lit(seed)
+        return _invoke_function_over_columns("randstr", length, seed)
+
+
+@_try_remote_functions
 def regexp_count(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
     r"""Returns a count of the number of times that the Java regex pattern `regexp` is matched
     in the string `str`.
@@ -12205,6 +12378,57 @@ def unhex(col: "ColumnOrName") -> Column:
     [Row(unhex(a)=bytearray(b'ABC'))]
     """
     return _invoke_function_over_columns("unhex", col)
+
+
+@_try_remote_functions
+def uniform(
+    min: Union[Column, int, float],
+    max: Union[Column, int, float],
+    seed: Optional[Union[Column, int]] = None,
+) -> Column:
+    """Returns a random value with independent and identically distributed (i.i.d.) values with the
+    specified range of numbers. The random seed is optional. The provided numbers specifying the
+    minimum and maximum values of the range must be constant. If both of these numbers are integers,
+    then the result will also be an integer. Otherwise if one or both of these are floating-point
+    numbers, then the result will also be a floating-point number.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    min : :class:`~pyspark.sql.Column`, int, or float
+        Minimum value in the range.
+    max : :class:`~pyspark.sql.Column`, int, or float
+        Maximum value in the range.
+    seed : :class:`~pyspark.sql.Column` or int
+        Optional random number seed to use.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The generated random number within the specified range.
+
+    Examples
+    --------
+    >>> spark.createDataFrame([('3',)], ['a']) \\
+    ...    .select(uniform(lit(0), lit(10), lit(0)).alias('result')) \\
+    ...    .selectExpr("result < 15").show()
+    +-------------+
+    |(result < 15)|
+    +-------------+
+    |         true|
+    +-------------+
+    """
+    min = _enum_to_value(min)
+    min = lit(min)
+    max = _enum_to_value(max)
+    max = lit(max)
+    if seed is None:
+        return _invoke_function_over_columns("uniform", min, max)
+    else:
+        seed = _enum_to_value(seed)
+        seed = lit(seed)
+        return _invoke_function_over_columns("uniform", min, max, seed)
 
 
 @_try_remote_functions
@@ -16309,6 +16533,55 @@ def try_parse_json(
 
 
 @_try_remote_functions
+def to_variant_object(
+    col: "ColumnOrName",
+) -> Column:
+    """
+    Converts a column containing nested inputs (array/map/struct) into a variants where maps and
+    structs are converted to variant objects which are unordered unlike SQL structs. Input maps can
+    only have string keys.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        a column with a nested schema or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of VariantType.
+
+    Examples
+    --------
+    Example 1: Converting an array containing a nested struct into a variant
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, StructType, StructField, StringType, MapType
+    >>> schema = StructType([
+    ...     StructField("i", StringType(), True),
+    ...     StructField("v", ArrayType(StructType([
+    ...         StructField("a", MapType(StringType(), StringType()), True)
+    ...     ]), True))
+    ... ])
+    >>> data = [("1", [{"a": {"b": 2}}])]
+    >>> df = spark.createDataFrame(data, schema)
+    >>> df.select(sf.to_variant_object(df.v))
+    DataFrame[to_variant_object(v): variant]
+    >>> df.select(sf.to_variant_object(df.v)).show(truncate=False)
+    +--------------------+
+    |to_variant_object(v)|
+    +--------------------+
+    |[{"a":{"b":"2"}}]   |
+    +--------------------+
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function("to_variant_object", _to_java_column(col))
+
+
+@_try_remote_functions
 def parse_json(
     col: "ColumnOrName",
 ) -> Column:
@@ -16467,7 +16740,7 @@ def schema_of_variant(v: "ColumnOrName") -> Column:
     --------
     >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
     >>> df.select(schema_of_variant(parse_json(df.json)).alias("r")).collect()
-    [Row(r='STRUCT<a: BIGINT>')]
+    [Row(r='OBJECT<a: BIGINT>')]
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -16495,7 +16768,7 @@ def schema_of_variant_agg(v: "ColumnOrName") -> Column:
     --------
     >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
     >>> df.select(schema_of_variant_agg(parse_json(df.json)).alias("r")).collect()
-    [Row(r='STRUCT<a: BIGINT>')]
+    [Row(r='OBJECT<a: BIGINT>')]
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -17562,7 +17835,7 @@ def array_sort(
 
 
 @_try_remote_functions
-def shuffle(col: "ColumnOrName") -> Column:
+def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> Column:
     """
     Array function: Generates a random permutation of the given array.
 
@@ -17575,6 +17848,10 @@ def shuffle(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         The name of the column or expression to be shuffled.
+    seed : :class:`~pyspark.sql.Column` or int, optional
+        Seed value for the random generator.
+
+        .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -17591,48 +17868,51 @@ def shuffle(col: "ColumnOrName") -> Column:
     Example 1: Shuffling a simple array
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([([1, 20, 3, 5],)], ['data'])
-    >>> df.select(sf.shuffle(df.data)).show() # doctest: +SKIP
-    +-------------+
-    |shuffle(data)|
-    +-------------+
-    |[1, 3, 20, 5]|
-    +-------------+
+    >>> df = spark.sql("SELECT ARRAY(1, 20, 3, 5) AS data")
+    >>> df.select("*", sf.shuffle(df.data, sf.lit(123))).show()
+    +-------------+-------------+
+    |         data|shuffle(data)|
+    +-------------+-------------+
+    |[1, 20, 3, 5]|[5, 1, 20, 3]|
+    +-------------+-------------+
 
     Example 2: Shuffling an array with null values
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([([1, 20, None, 3],)], ['data'])
-    >>> df.select(sf.shuffle(df.data)).show() # doctest: +SKIP
-    +----------------+
-    |   shuffle(data)|
-    +----------------+
-    |[20, 3, NULL, 1]|
-    +----------------+
+    >>> df = spark.sql("SELECT ARRAY(1, 20, NULL, 5) AS data")
+    >>> df.select("*", sf.shuffle(sf.col("data"), 234)).show()
+    +----------------+----------------+
+    |            data|   shuffle(data)|
+    +----------------+----------------+
+    |[1, 20, NULL, 5]|[NULL, 5, 20, 1]|
+    +----------------+----------------+
 
     Example 3: Shuffling an array with duplicate values
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([([1, 2, 2, 3, 3, 3],)], ['data'])
-    >>> df.select(sf.shuffle(df.data)).show() # doctest: +SKIP
-    +------------------+
-    |     shuffle(data)|
-    +------------------+
-    |[3, 2, 1, 3, 2, 3]|
-    +------------------+
+    >>> df = spark.sql("SELECT ARRAY(1, 2, 2, 3, 3, 3) AS data")
+    >>> df.select("*", sf.shuffle("data", 345)).show()
+    +------------------+------------------+
+    |              data|     shuffle(data)|
+    +------------------+------------------+
+    |[1, 2, 2, 3, 3, 3]|[2, 3, 3, 1, 2, 3]|
+    +------------------+------------------+
 
-    Example 4: Shuffling an array with different types of elements
+    Example 4: Shuffling an array with random seed
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([(['a', 'b', 'c', 1, 2, 3],)], ['data'])
-    >>> df.select(sf.shuffle(df.data)).show() # doctest: +SKIP
-    +------------------+
-    |     shuffle(data)|
-    +------------------+
-    |[1, c, 2, a, b, 3]|
-    +------------------+
+    >>> df = spark.sql("SELECT ARRAY(1, 2, 2, 3, 3, 3) AS data")
+    >>> df.select("*", sf.shuffle("data")).show() # doctest: +SKIP
+    +------------------+------------------+
+    |              data|     shuffle(data)|
+    +------------------+------------------+
+    |[1, 2, 2, 3, 3, 3]|[3, 3, 2, 3, 2, 1]|
+    +------------------+------------------+
     """
-    return _invoke_function_over_columns("shuffle", col)
+    if seed is not None:
+        return _invoke_function_over_columns("shuffle", col, lit(seed))
+    else:
+        return _invoke_function_over_columns("shuffle", col)
 
 
 @_try_remote_functions

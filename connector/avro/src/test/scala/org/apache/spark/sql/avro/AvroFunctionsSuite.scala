@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.functions.{col, lit, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BinaryType, StructType}
+import org.apache.spark.sql.types.{BinaryType, IntegerType, StructField, StructType}
 
 class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -329,7 +329,7 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
           s"""
              |select to_avro(s, 42) as result from t
              |""".stripMargin)),
-        errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
         parameters = Map("sqlExpr" -> "\"to_avro(s, 42)\"",
           "msg" -> ("The second argument of the TO_AVRO SQL function must be a constant string " +
             "containing the JSON representation of the schema to use for converting the value to " +
@@ -344,7 +344,7 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
           s"""
              |select from_avro(s, 42, '') as result from t
              |""".stripMargin)),
-        errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
         parameters = Map("sqlExpr" -> "\"from_avro(s, 42, )\"",
           "msg" -> ("The second argument of the FROM_AVRO SQL function must be a constant string " +
             "containing the JSON representation of the schema to use for converting the value " +
@@ -359,7 +359,7 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
           s"""
              |select from_avro(s, '$jsonFormatSchema', 42) as result from t
              |""".stripMargin)),
-        errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
         parameters = Map(
           "sqlExpr" ->
             s"\"from_avro(s, $jsonFormatSchema, 42)\"".stripMargin,
@@ -372,6 +372,37 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
           start = 8,
           stop = 138)))
     }
+  }
+
+
+  test("roundtrip in to_avro and from_avro - recursive schema") {
+    val catalystSchema =
+      StructType(Seq(
+        StructField("Id", IntegerType),
+        StructField("Name", StructType(Seq(
+          StructField("Id", IntegerType),
+          StructField("Name", StructType(Seq(
+            StructField("Id", IntegerType)))))))))
+
+    val avroSchema = s"""
+                        |{
+                        |  "type" : "record",
+                        |  "name" : "test_schema",
+                        |  "fields" : [
+                        |    {"name": "Id", "type": "int"},
+                        |    {"name": "Name", "type": ["null", "test_schema"]}
+                        |  ]
+                        |}
+    """.stripMargin
+
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(2, Row(3, Row(4))), Row(1, null))),
+      catalystSchema).select(struct("Id", "Name").as("struct"))
+
+    val avroStructDF = df.select(functions.to_avro($"struct", avroSchema).as("avro"))
+    checkAnswer(avroStructDF.select(
+      functions.from_avro($"avro", avroSchema, Map(
+        "recursiveFieldMaxDepth" -> "3").asJava)), df)
   }
 
   private def serialize(record: GenericRecord, avroSchema: String): Array[Byte] = {

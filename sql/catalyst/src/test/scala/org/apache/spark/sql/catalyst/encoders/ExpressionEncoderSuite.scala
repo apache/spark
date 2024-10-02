@@ -321,29 +321,29 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(
     1 -> 10L,
     "tuple with 2 flat encoders")(
-    ExpressionEncoder.tuple(ExpressionEncoder[Int](), ExpressionEncoder[Long]()))
+    encoderFor(Encoders.tuple(Encoders.scalaInt, Encoders.scalaLong)))
 
   encodeDecodeTest(
     (PrimitiveData(1, 1, 1, 1, 1, 1, true), (3, 30L)),
     "tuple with 2 product encoders")(
-    ExpressionEncoder.tuple(ExpressionEncoder[PrimitiveData](), ExpressionEncoder[(Int, Long)]()))
+    encoderFor(Encoders.tuple(Encoders.product[PrimitiveData], Encoders.product[(Int, Long)])))
 
   encodeDecodeTest(
     (PrimitiveData(1, 1, 1, 1, 1, 1, true), 3),
     "tuple with flat encoder and product encoder")(
-    ExpressionEncoder.tuple(ExpressionEncoder[PrimitiveData](), ExpressionEncoder[Int]()))
+    encoderFor(Encoders.tuple(Encoders.product[PrimitiveData], Encoders.scalaInt)))
 
   encodeDecodeTest(
     (3, PrimitiveData(1, 1, 1, 1, 1, 1, true)),
     "tuple with product encoder and flat encoder")(
-    ExpressionEncoder.tuple(ExpressionEncoder[Int](), ExpressionEncoder[PrimitiveData]()))
+    encoderFor(Encoders.tuple(Encoders.scalaInt, Encoders.product[PrimitiveData])))
 
   encodeDecodeTest(
     (1, (10, 100L)),
     "nested tuple encoder") {
-    val intEnc = ExpressionEncoder[Int]()
-    val longEnc = ExpressionEncoder[Long]()
-    ExpressionEncoder.tuple(intEnc, ExpressionEncoder.tuple(intEnc, longEnc))
+    val intEnc = Encoders.scalaInt
+    val longEnc = Encoders.scalaLong
+    encoderFor(Encoders.tuple(intEnc, Encoders.tuple(intEnc, longEnc)))
   }
 
   // test for value classes
@@ -435,7 +435,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       implicitly[ExpressionEncoder[Foo]])
     checkError(
       exception = exception,
-      errorClass = "ENCODER_NOT_FOUND",
+      condition = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "Any",
         "docroot" -> SPARK_DOC_ROOT)
@@ -468,9 +468,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
     // test for tupled encoders
     {
-      val schema = ExpressionEncoder.tuple(
-        ExpressionEncoder[Int](),
-        ExpressionEncoder[(String, Int)]()).schema
+      val encoder = encoderFor(Encoders.tuple(Encoders.scalaInt, Encoders.product[(String, Int)]))
+      val schema = encoder.schema
       assert(schema(0).nullable === false)
       assert(schema(1).nullable)
       assert(schema(1).dataType.asInstanceOf[StructType](0).nullable)
@@ -496,7 +495,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     assert(e.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
       exception = e.getCause.asInstanceOf[SparkRuntimeException],
-      errorClass = "NULL_MAP_KEY",
+      condition = "NULL_MAP_KEY",
       parameters = Map.empty
     )
   }
@@ -507,19 +506,19 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     assert(e.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
       exception = e.getCause.asInstanceOf[SparkRuntimeException],
-      errorClass = "NULL_MAP_KEY",
+      condition = "NULL_MAP_KEY",
       parameters = Map.empty
     )
   }
 
   test("throw exception for tuples with more than 22 elements") {
-    val encoders = (0 to 22).map(_ => Encoders.scalaInt.asInstanceOf[ExpressionEncoder[_]])
+    val encoders = (0 to 22).map(_ => Encoders.scalaInt)
 
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
-        ExpressionEncoder.tuple(encoders)
+        Encoders.tupleEncoder(encoders: _*)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2150",
+      condition = "_LEGACY_ERROR_TEMP_2150",
       parameters = Map.empty)
   }
 
@@ -531,11 +530,11 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     val encoder = ExpressionEncoder(schema, lenient = true)
     val unexpectedSerializer = NaNvl(encoder.objSerializer, encoder.objSerializer)
     val exception = intercept[org.apache.spark.SparkRuntimeException] {
-      new ExpressionEncoder[Row](unexpectedSerializer, encoder.objDeserializer, encoder.clsTag)
+      new ExpressionEncoder[Row](encoder.encoder, unexpectedSerializer, encoder.objDeserializer)
     }
     checkError(
       exception = exception,
-      errorClass = "UNEXPECTED_SERIALIZER_FOR_CLASS",
+      condition = "UNEXPECTED_SERIALIZER_FOR_CLASS",
       parameters = Map(
         "className" -> Utils.getSimpleName(encoder.clsTag.runtimeClass),
         "expr" -> toSQLExpr(unexpectedSerializer))

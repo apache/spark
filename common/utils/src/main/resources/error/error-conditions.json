@@ -1,4 +1,10 @@
 {
+  "ADD_DEFAULT_UNSUPPORTED" : {
+    "message" : [
+      "Failed to execute <statementType> command because DEFAULT values are not supported when adding new columns to previously existing target data source with table provider: \"<dataSource>\"."
+    ],
+    "sqlState" : "42623"
+  },
   "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION" : {
     "message" : [
       "Non-deterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
@@ -455,13 +461,13 @@
   },
   "CAST_INVALID_INPUT" : {
     "message" : [
-      "The value <expression> of the type <sourceType> cannot be cast to <targetType> because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "The value <expression> of the type <sourceType> cannot be cast to <targetType> because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead."
     ],
     "sqlState" : "22018"
   },
   "CAST_OVERFLOW" : {
     "message" : [
-      "The value <value> of the type <sourceType> cannot be cast to <targetType> due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "The value <value> of the type <sourceType> cannot be cast to <targetType> due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead."
     ],
     "sqlState" : "22003"
   },
@@ -625,6 +631,11 @@
       "Cannot process input data types for the expression: <expression>."
     ],
     "subClass" : {
+      "BAD_INPUTS" : {
+        "message" : [
+          "The input data types to <functionName> must be valid, but found the input types <dataType>."
+        ]
+      },
       "MISMATCHED_TYPES" : {
         "message" : [
           "All input types must be the same except nullable, containsNull, valueContainsNull flags, but found the input types <inputTypes>."
@@ -904,7 +915,7 @@
       },
       "NON_STRING_TYPE" : {
         "message" : [
-          "all arguments must be strings."
+          "all arguments of the function <funcName> must be strings."
         ]
       },
       "NULL_TYPE" : {
@@ -1005,6 +1016,11 @@
           "The input of <functionName> can't be <dataType> type data."
         ]
       },
+      "UNSUPPORTED_MODE_DATA_TYPE" : {
+        "message" : [
+          "The <mode> does not support the <child> data type, because there is a \"MAP\" type with keys and/or values that have collated sub-fields."
+        ]
+      },
       "UNSUPPORTED_UDF_INPUT_TYPE" : {
         "message" : [
           "UDFs do not support '<dataType>' as an input data type."
@@ -1044,6 +1060,12 @@
       "Data source '<provider>' already exists. Please choose a different name for the new data source."
     ],
     "sqlState" : "42710"
+  },
+  "DATA_SOURCE_EXTERNAL_ERROR" : {
+    "message" : [
+      "Encountered error when saving to external data source."
+    ],
+    "sqlState" : "KD010"
   },
   "DATA_SOURCE_NOT_EXIST" : {
     "message" : [
@@ -1089,6 +1111,12 @@
       "For example: `UPDATE SET c1 = DEFAULT` is allowed, but `UPDATE T SET c1 = DEFAULT + 1` is not allowed."
     ],
     "sqlState" : "42608"
+  },
+  "DEFAULT_UNSUPPORTED" : {
+    "message" : [
+      "Failed to execute <statementType> command because DEFAULT values are not supported for target data source with table provider: \"<dataSource>\"."
+    ],
+    "sqlState" : "42623"
   },
   "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED" : {
     "message" : [
@@ -1438,6 +1466,12 @@
     ],
     "sqlState" : "2203G"
   },
+  "FAILED_TO_LOAD_ROUTINE" : {
+    "message" : [
+      "Failed to load routine <routineName>."
+    ],
+    "sqlState" : "38000"
+  },
   "FAILED_TO_PARSE_TOO_COMPLEX" : {
     "message" : [
       "The statement, including potential SQL functions and referenced views, was too complex to parse.",
@@ -1582,6 +1616,36 @@
       "<identifier> is not a valid identifier as it has more than 2 name parts."
     ],
     "sqlState" : "42601"
+  },
+  "IDENTITY_COLUMNS_DUPLICATED_SEQUENCE_GENERATOR_OPTION" : {
+    "message" : [
+      "Duplicated IDENTITY column sequence generator option: <sequenceGeneratorOption>."
+    ],
+    "sqlState" : "42601"
+  },
+  "IDENTITY_COLUMNS_ILLEGAL_STEP" : {
+    "message" : [
+      "IDENTITY column step cannot be 0."
+    ],
+    "sqlState" : "42611"
+  },
+  "IDENTITY_COLUMNS_UNSUPPORTED_DATA_TYPE" : {
+    "message" : [
+      "DataType <dataType> is not supported for IDENTITY columns."
+    ],
+    "sqlState" : "428H2"
+  },
+  "IDENTITY_COLUMN_WITH_DEFAULT_VALUE" : {
+    "message" : [
+      "A column cannot have both a default value and an identity column specification but column <colName> has default value: (<defaultValue>) and identity column specification: (<identityColumnSpec>)."
+    ],
+    "sqlState" : "42623"
+  },
+  "ILLEGAL_DAY_OF_WEEK" : {
+    "message" : [
+      "Illegal input for day of week: <string>."
+    ],
+    "sqlState" : "22009"
   },
   "ILLEGAL_STATE_STORE_VALUE" : {
     "message" : [
@@ -1960,6 +2024,12 @@
     },
     "sqlState" : "42903"
   },
+  "INVALID_AGNOSTIC_ENCODER" : {
+    "message" : [
+      "Found an invalid agnostic encoder. Expects an instance of AgnosticEncoder but got <encoderType>. For more information consult '<docroot>/api/java/index.html?org/apache/spark/sql/Encoder.html'."
+    ],
+    "sqlState" : "42001"
+  },
   "INVALID_ARRAY_INDEX" : {
     "message" : [
       "The index <indexValue> is out of bounds. The array has <arraySize> elements. Use the SQL function `get()` to tolerate accessing element at invalid index and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
@@ -2091,6 +2161,11 @@
       "LENGTH" : {
         "message" : [
           "Too many letters in datetime pattern: <pattern>. Please reduce pattern length."
+        ]
+      },
+      "SECONDS_FRACTION" : {
+        "message" : [
+          "Cannot detect a seconds fraction pattern of variable length. Please make sure the pattern contains 'S', and does not contain illegal characters."
         ]
       }
     },
@@ -2390,6 +2465,11 @@
           "Uncaught arithmetic exception while parsing '<input>'."
         ]
       },
+      "DAY_TIME_PARSING" : {
+        "message" : [
+          "Error parsing interval day-time string: <msg>."
+        ]
+      },
       "INPUT_IS_EMPTY" : {
         "message" : [
           "Interval string cannot be empty."
@@ -2398,6 +2478,11 @@
       "INPUT_IS_NULL" : {
         "message" : [
           "Interval string cannot be null."
+        ]
+      },
+      "INTERVAL_PARSING" : {
+        "message" : [
+          "Error parsing interval <interval> string."
         ]
       },
       "INVALID_FRACTION" : {
@@ -2435,14 +2520,34 @@
           "Expect a unit name after <word> but hit EOL."
         ]
       },
+      "SECOND_NANO_FORMAT" : {
+        "message" : [
+          "Interval string does not match second-nano format of ss.nnnnnnnnn."
+        ]
+      },
       "UNKNOWN_PARSING_ERROR" : {
         "message" : [
           "Unknown error when parsing <word>."
         ]
       },
+      "UNMATCHED_FORMAT_STRING" : {
+        "message" : [
+          "Interval string does not match <intervalStr> format of <supportedFormat> when cast to <typeName>: <input>."
+        ]
+      },
+      "UNMATCHED_FORMAT_STRING_WITH_NOTICE" : {
+        "message" : [
+          "Interval string does not match <intervalStr> format of <supportedFormat> when cast to <typeName>: <input>. Set \"spark.sql.legacy.fromDayTimeString.enabled\" to \"true\" to restore the behavior before Spark 3.0."
+        ]
+      },
       "UNRECOGNIZED_NUMBER" : {
         "message" : [
           "Unrecognized number <number>."
+        ]
+      },
+      "UNSUPPORTED_FROM_TO_EXPRESSION" : {
+        "message" : [
+          "Cannot support (interval '<input>' <from> to <to>) expression."
         ]
       }
     },
@@ -2928,7 +3033,7 @@
       },
       "MULTI_PART_NAME" : {
         "message" : [
-          "<statement> with multiple part function name(<funcName>) is not allowed."
+          "<statement> with multiple part name(<name>) is not allowed."
         ]
       },
       "OPTION_IS_INVALID" : {
@@ -3077,12 +3182,12 @@
     "subClass" : {
       "NOT_ALLOWED_IN_SCOPE" : {
         "message" : [
-          "Variable <varName> was declared on line <lineNumber>, which is not allowed in this scope."
+          "Declaration of the variable <varName> is not allowed in this scope."
         ]
       },
       "ONLY_AT_BEGINNING" : {
         "message" : [
-          "Variable <varName> can only be declared at the beginning of the compound, but it was declared on line <lineNumber>."
+          "Variable <varName> can only be declared at the beginning of the compound."
         ]
       }
     },
@@ -3706,6 +3811,12 @@
       "Path does not exist: <path>."
     ],
     "sqlState" : "42K03"
+  },
+  "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION" : {
+    "message" : [
+      "Aggregate function <expr> is not allowed when using the pipe operator |> SELECT clause; please use the pipe operator |> AGGREGATE clause instead"
+    ],
+    "sqlState" : "0A000"
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [
@@ -4785,11 +4896,6 @@
           "Catalog <catalogName> does not support <operation>."
         ]
       },
-      "COLLATION" : {
-        "message" : [
-          "Collation is not yet supported."
-        ]
-      },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
         "message" : [
           "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY."
@@ -5015,6 +5121,11 @@
       "TRANSFORM_NON_HIVE" : {
         "message" : [
           "TRANSFORM with SERDE is only supported in hive mode."
+        ]
+      },
+      "TRIM_COLLATION" : {
+        "message" : [
+          "TRIM specifier in the collation."
         ]
       }
     },
@@ -5251,6 +5362,11 @@
         "message" : [
           "Non-deterministic lateral subqueries are not supported when joining with outer relations that produce more than one row:",
           "<treeNode>"
+        ]
+      },
+      "SCALAR_SUBQUERY_IN_VALUES" : {
+        "message" : [
+          "Scalar subqueries in the VALUES clause."
         ]
       },
       "UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION" : {
@@ -6222,7 +6338,7 @@
       "Detected implicit cartesian product for <joinType> join between logical plans",
       "<leftPlan>",
       "and",
-      "rightPlan",
+      "<rightPlan>",
       "Join condition is missing or trivial.",
       "Either: use the CROSS JOIN syntax to allow cartesian products between these relations, or: enable implicit cartesian products by setting the configuration variable spark.sql.crossJoin.enabled=true."
     ]
@@ -6585,21 +6701,6 @@
       "Sinks cannot request distribution and ordering in continuous execution mode."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1344" : {
-    "message" : [
-      "Invalid DEFAULT value for column <fieldName>: <defaultValue> fails to parse as a valid literal value."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1345" : {
-    "message" : [
-      "Failed to execute <statementType> command because DEFAULT values are not supported for target data source with table provider: \"<dataSource>\"."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1346" : {
-    "message" : [
-      "Failed to execute <statementType> command because DEFAULT values are not supported when adding new columns to previously existing target data source with table provider: \"<dataSource>\"."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2000" : {
     "message" : [
       "<message>. If necessary set <ansiConfig> to false to bypass this error."
@@ -6613,11 +6714,6 @@
   "_LEGACY_ERROR_TEMP_2005" : {
     "message" : [
       "Type <dataType> does not support ordered operations."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2011" : {
-    "message" : [
-      "Unexpected data type <dataType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2013" : {
@@ -7827,7 +7923,7 @@
   },
   "_LEGACY_ERROR_TEMP_3055" : {
     "message" : [
-      "ScalarFunction '<scalarFunc.name>' neither implement magic method nor override 'produceResult'"
+      "ScalarFunction <scalarFunc> neither implement magic method nor override 'produceResult'"
     ]
   },
   "_LEGACY_ERROR_TEMP_3056" : {
@@ -8431,36 +8527,6 @@
   "_LEGACY_ERROR_TEMP_3208" : {
     "message" : [
       "The number of fields (<numFields>) in the partition identifier is not equal to the partition schema length (<schemaLen>). The identifier might not refer to one partition."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3209" : {
-    "message" : [
-      "Illegal input for day of week: <string>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3210" : {
-    "message" : [
-      "Interval string does not match second-nano format of ss.nnnnnnnnn"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3211" : {
-    "message" : [
-      "Error parsing interval day-time string: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3212" : {
-    "message" : [
-      "Cannot support (interval '<input>' <from> to <to>) expression"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3213" : {
-    "message" : [
-      "Error parsing interval <interval> string: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3214" : {
-    "message" : [
-      "Interval string does not match <intervalStr> format of <supportedFormat> when cast to <typeName>: <input><fallBackNotice>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3215" : {

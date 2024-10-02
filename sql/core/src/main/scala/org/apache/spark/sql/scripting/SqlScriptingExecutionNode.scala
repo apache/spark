@@ -406,6 +406,154 @@ class WhileStatementExec(
 }
 
 /**
+ * Executable node for CaseStatement.
+ * @param conditions Collection of executable conditions which correspond to WHEN clauses.
+ * @param conditionalBodies Collection of executable bodies that have a corresponding condition,
+ *                 in WHEN branches.
+ * @param elseBody Body that is executed if none of the conditions are met, i.e. ELSE branch.
+ * @param session Spark session that SQL script is executed within.
+ */
+class CaseStatementExec(
+    conditions: Seq[SingleStatementExec],
+    conditionalBodies: Seq[CompoundBodyExec],
+    elseBody: Option[CompoundBodyExec],
+    session: SparkSession) extends NonLeafStatementExec {
+  private object CaseState extends Enumeration {
+    val Condition, Body = Value
+  }
+
+  private var state = CaseState.Condition
+  private var curr: Option[CompoundStatementExec] = Some(conditions.head)
+
+  private var clauseIdx: Int = 0
+  private val conditionsCount = conditions.length
+
+  private lazy val treeIterator: Iterator[CompoundStatementExec] =
+    new Iterator[CompoundStatementExec] {
+      override def hasNext: Boolean = curr.nonEmpty
+
+      override def next(): CompoundStatementExec = state match {
+        case CaseState.Condition =>
+          val condition = curr.get.asInstanceOf[SingleStatementExec]
+          if (evaluateBooleanCondition(session, condition)) {
+            state = CaseState.Body
+            curr = Some(conditionalBodies(clauseIdx))
+          } else {
+            clauseIdx += 1
+            if (clauseIdx < conditionsCount) {
+              // There are WHEN clauses remaining.
+              state = CaseState.Condition
+              curr = Some(conditions(clauseIdx))
+            } else if (elseBody.isDefined) {
+              // ELSE clause exists.
+              state = CaseState.Body
+              curr = Some(elseBody.get)
+            } else {
+              // No remaining clauses.
+              curr = None
+            }
+          }
+          condition
+        case CaseState.Body =>
+          assert(curr.get.isInstanceOf[CompoundBodyExec])
+          val currBody = curr.get.asInstanceOf[CompoundBodyExec]
+          val retStmt = currBody.getTreeIterator.next()
+          if (!currBody.getTreeIterator.hasNext) {
+            curr = None
+          }
+          retStmt
+      }
+    }
+
+  override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
+
+  override def reset(): Unit = {
+    state = CaseState.Condition
+    curr = Some(conditions.head)
+    clauseIdx = 0
+    conditions.foreach(c => c.reset())
+    conditionalBodies.foreach(b => b.reset())
+    elseBody.foreach(b => b.reset())
+  }
+}
+
+/**
+ * Executable node for RepeatStatement.
+ * @param condition Executable node for the condition - evaluates to a row with a single boolean
+ *                  expression, otherwise throws an exception
+ * @param body Executable node for the body.
+ * @param label Label set to RepeatStatement by user, None if not set
+ * @param session Spark session that SQL script is executed within.
+ */
+class RepeatStatementExec(
+    condition: SingleStatementExec,
+    body: CompoundBodyExec,
+    label: Option[String],
+    session: SparkSession) extends NonLeafStatementExec {
+
+  private object RepeatState extends Enumeration {
+    val Condition, Body = Value
+  }
+
+  private var state = RepeatState.Body
+  private var curr: Option[CompoundStatementExec] = Some(body)
+
+  private lazy val treeIterator: Iterator[CompoundStatementExec] =
+    new Iterator[CompoundStatementExec] {
+      override def hasNext: Boolean = curr.nonEmpty
+
+      override def next(): CompoundStatementExec = state match {
+        case RepeatState.Condition =>
+          val condition = curr.get.asInstanceOf[SingleStatementExec]
+          if (!evaluateBooleanCondition(session, condition)) {
+            state = RepeatState.Body
+            curr = Some(body)
+            body.reset()
+          } else {
+            curr = None
+          }
+          condition
+        case RepeatState.Body =>
+          val retStmt = body.getTreeIterator.next()
+
+          retStmt match {
+            case leaveStatementExec: LeaveStatementExec if !leaveStatementExec.hasBeenMatched =>
+              if (label.contains(leaveStatementExec.label)) {
+                leaveStatementExec.hasBeenMatched = true
+              }
+              curr = None
+              return retStmt
+            case iterStatementExec: IterateStatementExec if !iterStatementExec.hasBeenMatched =>
+              if (label.contains(iterStatementExec.label)) {
+                iterStatementExec.hasBeenMatched = true
+              }
+              state = RepeatState.Condition
+              curr = Some(condition)
+              condition.reset()
+              return retStmt
+            case _ =>
+          }
+
+          if (!body.getTreeIterator.hasNext) {
+            state = RepeatState.Condition
+            curr = Some(condition)
+            condition.reset()
+          }
+          retStmt
+      }
+    }
+
+  override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
+
+  override def reset(): Unit = {
+    state = RepeatState.Body
+    curr = Some(body)
+    body.reset()
+    condition.reset()
+  }
+}
+
+/**
  * Executable node for LeaveStatement.
  * @param label Label of the compound or loop to leave.
  */

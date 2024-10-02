@@ -57,7 +57,6 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'test'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BOOLEAN\""
@@ -90,7 +89,6 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'foo'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BOOLEAN\""
@@ -131,7 +129,6 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'yeah'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BOOLEAN\""
@@ -172,7 +169,6 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'nay'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BOOLEAN\""
@@ -197,7 +193,6 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'on'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BOOLEAN\""
@@ -222,7 +217,6 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'off'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BOOLEAN\""
@@ -247,7 +241,6 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'of'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BOOLEAN\""
@@ -272,7 +265,6 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'o'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BOOLEAN\""
@@ -297,7 +289,6 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'on_'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BOOLEAN\""
@@ -322,7 +313,6 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'off_'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BOOLEAN\""
@@ -355,7 +345,6 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'11'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BOOLEAN\""
@@ -388,7 +377,6 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'000'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BOOLEAN\""
@@ -413,7 +401,6 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "''",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BOOLEAN\""
@@ -535,7 +522,6 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'  tru e '",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BOOLEAN\""
@@ -560,7 +546,6 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "''",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BOOLEAN\""

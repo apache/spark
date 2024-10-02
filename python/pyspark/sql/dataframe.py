@@ -43,6 +43,7 @@ from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import StructType, Row
 from pyspark.sql.utils import dispatch_df_method
 
+
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
     import pyarrow as pa
@@ -65,6 +66,7 @@ if TYPE_CHECKING:
         ArrowMapIterFunction,
         DataFrameLike as PandasDataFrameLike,
     )
+    from pyspark.sql.plot import PySparkPlotAccessor
     from pyspark.sql.metrics import ExecutionInfo
 
 
@@ -1332,7 +1334,7 @@ class DataFrame:
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.5.0
-            Supports vanilla PySpark.
+            Supports classic PySpark.
 
         Parameters
         ----------
@@ -2889,6 +2891,62 @@ class DataFrame:
         """
         ...
 
+    def _preapare_cols_for_sort(
+        self,
+        _to_col: Callable[[str], Column],
+        cols: Sequence[Union[int, str, Column, List[Union[int, str, Column]]]],
+        kwargs: Dict[str, Any],
+    ) -> Sequence[Column]:
+        from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkIndexError
+
+        if not cols:
+            raise PySparkValueError(
+                errorClass="CANNOT_BE_EMPTY", messageParameters={"item": "cols"}
+            )
+
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
+
+        _cols: List[Column] = []
+        for c in cols:
+            if isinstance(c, int) and not isinstance(c, bool):
+                # ordinal is 1-based
+                if c > 0:
+                    _cols.append(self[c - 1])
+                # negative ordinal means sort by desc
+                elif c < 0:
+                    _cols.append(self[-c - 1].desc())
+                else:
+                    raise PySparkIndexError(
+                        errorClass="ZERO_INDEX",
+                        messageParameters={},
+                    )
+            elif isinstance(c, Column):
+                _cols.append(c)
+            elif isinstance(c, str):
+                _cols.append(_to_col(c))
+            else:
+                raise PySparkTypeError(
+                    errorClass="NOT_COLUMN_OR_INT_OR_STR",
+                    messageParameters={
+                        "arg_name": "col",
+                        "arg_type": type(c).__name__,
+                    },
+                )
+
+        ascending = kwargs.get("ascending", True)
+        if isinstance(ascending, (bool, int)):
+            if not ascending:
+                _cols = [c.desc() for c in _cols]
+        elif isinstance(ascending, list):
+            _cols = [c if asc else c.desc() for asc, c in zip(ascending, _cols)]
+        else:
+            raise PySparkTypeError(
+                errorClass="NOT_COLUMN_OR_INT_OR_STR",
+                messageParameters={"arg_name": "ascending", "arg_type": type(ascending).__name__},
+            )
+        return _cols
+
     orderBy = sort
 
     @dispatch_df_method
@@ -3349,7 +3407,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def filter(self, condition: "ColumnOrName") -> "DataFrame":
+    def filter(self, condition: Union[Column, str]) -> "DataFrame":
         """Filters rows using the given condition.
 
         :func:`where` is an alias for :func:`filter`.
@@ -5900,7 +5958,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def where(self, condition: "ColumnOrName") -> "DataFrame":
+    def where(self, condition: Union[Column, str]) -> "DataFrame":
         """
         :func:`where` is an alias for :func:`filter`.
 
@@ -6168,10 +6226,6 @@ class DataFrame:
         |  1| 21|
         +---+---+
 
-        Notes
-        -----
-        This API is experimental
-
         See Also
         --------
         pyspark.sql.functions.pandas_udf
@@ -6244,10 +6298,6 @@ class DataFrame:
         +---+---+
         |  1| 21|
         +---+---+
-
-        Notes
-        -----
-        This API is unstable, and for developers.
 
         See Also
         --------
@@ -6399,6 +6449,32 @@ class DataFrame:
         -----
         This is an API dedicated to Spark Connect client only. With regular Spark Session, it throws
         an exception.
+        """
+        ...
+
+    @property
+    def plot(self) -> "PySparkPlotAccessor":
+        """
+        Returns a :class:`PySparkPlotAccessor` for plotting functions.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`PySparkPlotAccessor`
+
+        Notes
+        -----
+        This API is experimental.
+
+        Examples
+        --------
+        >>> data = [("A", 10, 1.5), ("B", 30, 2.5), ("C", 20, 3.5)]
+        >>> columns = ["category", "int_val", "float_val"]
+        >>> df = spark.createDataFrame(data, columns)
+        >>> type(df.plot)
+        <class 'pyspark.sql.plot.core.PySparkPlotAccessor'>
+        >>> df.plot.line(x="category", y=["int_val", "float_val"])  # doctest: +SKIP
         """
         ...
 

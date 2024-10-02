@@ -148,6 +148,7 @@ Mathematical Functions
     try_multiply
     try_subtract
     unhex
+    uniform
     width_bucket
 
 
@@ -189,6 +190,7 @@ String Functions
     overlay
     position
     printf
+    randstr
     regexp_count
     regexp_extract
     regexp_extract_all
@@ -553,6 +555,7 @@ VARIANT Functions
     try_variant_get
     variant_get
     try_parse_json
+    to_variant_object
 
 
 XML Functions

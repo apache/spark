@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.SerializerSupport
 /**
  * A codec that uses Kryo to (de)serialize arbitrary objects to and from a byte array.
  */
-class KryoSerializationCodecImpl extends Codec [Any, Array[Byte]] {
+class KryoSerializationCodecImpl extends Codec[Any, Array[Byte]] {
   private val serializer = SerializerSupport.newSerializer(useKryo = true)
   override def encode(in: Any): Array[Byte] =
     serializer.serialize(in).array()

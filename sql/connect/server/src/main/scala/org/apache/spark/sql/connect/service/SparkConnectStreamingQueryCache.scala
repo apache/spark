@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.service
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -185,10 +186,10 @@ private[connect] class SparkConnectStreamingQueryCache(
 
   // Visible for testing.
   private[service] def shutdown(): Unit = queryCacheLock.synchronized {
-    scheduledExecutor.foreach { executor =>
+    val executor = scheduledExecutor.getAndSet(null)
+    if (executor != null) {
       ThreadUtils.shutdown(executor, FiniteDuration(1, TimeUnit.MINUTES))
     }
-    scheduledExecutor = None
   }
 
   @GuardedBy("queryCacheLock")
@@ -199,19 +200,19 @@ private[connect] class SparkConnectStreamingQueryCache(
   private val taggedQueries = new mutable.HashMap[String, mutable.ArrayBuffer[QueryCacheKey]]
   private val taggedQueriesLock = new Object
 
-  @GuardedBy("queryCacheLock")
-  private var scheduledExecutor: Option[ScheduledExecutorService] = None
+  private var scheduledExecutor: AtomicReference[ScheduledExecutorService] =
+    new AtomicReference[ScheduledExecutorService]()
 
   /** Schedules periodic checks if it is not already scheduled */
-  private def schedulePeriodicChecks(): Unit = queryCacheLock.synchronized {
-    scheduledExecutor match {
-      case Some(_) => // Already running.
-      case None =>
+  private def schedulePeriodicChecks(): Unit = {
+    var executor = scheduledExecutor.getAcquire()
+    if (executor == null) {
+      executor = Executors.newSingleThreadScheduledExecutor()
+      if (scheduledExecutor.compareAndExchangeRelease(null, executor) == null) {
         logInfo(
           log"Starting thread for polling streaming sessions " +
             log"every ${MDC(DURATION, sessionPollingPeriod.toMillis)}")
-        scheduledExecutor = Some(Executors.newSingleThreadScheduledExecutor())
-        scheduledExecutor.get.scheduleAtFixedRate(
+        executor.scheduleAtFixedRate(
           () => {
             try periodicMaintenance()
             catch {
@@ -221,6 +222,7 @@ private[connect] class SparkConnectStreamingQueryCache(
           sessionPollingPeriod.toMillis,
           sessionPollingPeriod.toMillis,
           TimeUnit.MILLISECONDS)
+      }
     }
   }
 

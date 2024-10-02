@@ -27,6 +27,7 @@ import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StatefulOperatorStateInfo}
 import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaReader, SchemaWriter}
+import org.apache.spark.sql.execution.streaming.state.StateSchemaCompatibilityChecker.SCHEMA_FORMAT_V3
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -95,7 +96,7 @@ class StateSchemaCompatibilityChecker(
       stateStoreColFamilySchema: List[StateStoreColFamilySchema],
       stateSchemaVersion: Int): Unit = {
     // Ensure that schema file path is passed explicitly for schema version 3
-    if (stateSchemaVersion == 3 && newSchemaFilePath.isEmpty) {
+    if (stateSchemaVersion == SCHEMA_FORMAT_V3 && newSchemaFilePath.isEmpty) {
       throw new IllegalStateException("Schema file path is required for schema version 3")
     }
 
@@ -167,12 +168,12 @@ class StateSchemaCompatibilityChecker(
       newStateSchema: List[StateStoreColFamilySchema],
       ignoreValueSchema: Boolean,
       stateSchemaVersion: Int): Boolean = {
-    val existingStateSchemaList = getExistingKeyAndValueSchema().sortBy(_.colFamilyName)
-    val newStateSchemaList = newStateSchema.sortBy(_.colFamilyName)
+    val existingStateSchemaList = getExistingKeyAndValueSchema()
+    val newStateSchemaList = newStateSchema
 
     if (existingStateSchemaList.isEmpty) {
       // write the schema file if it doesn't exist
-      createSchemaFile(newStateSchemaList, stateSchemaVersion)
+      createSchemaFile(newStateSchemaList.sortBy(_.colFamilyName), stateSchemaVersion)
       true
     } else {
       // validate if the new schema is compatible with the existing schema
@@ -186,7 +187,13 @@ class StateSchemaCompatibilityChecker(
           check(existingStateSchema, newSchema, ignoreValueSchema)
         }
       }
-      false
+      val colFamiliesAddedOrRemoved =
+        (newStateSchemaList.map(_.colFamilyName).toSet != existingSchemaMap.keySet)
+      if (stateSchemaVersion == SCHEMA_FORMAT_V3 && colFamiliesAddedOrRemoved) {
+        createSchemaFile(newStateSchemaList.sortBy(_.colFamilyName), stateSchemaVersion)
+      }
+      // TODO: [SPARK-49535] Write Schema files after schema has changed for StateSchemaV3
+      colFamiliesAddedOrRemoved
     }
   }
 
@@ -195,6 +202,9 @@ class StateSchemaCompatibilityChecker(
 }
 
 object StateSchemaCompatibilityChecker {
+
+  val SCHEMA_FORMAT_V3: Int = 3
+
   private def disallowBinaryInequalityColumn(schema: StructType): Unit = {
     if (!UnsafeRowUtils.isBinaryStable(schema)) {
       throw new SparkUnsupportedOperationException(
@@ -274,10 +284,31 @@ object StateSchemaCompatibilityChecker {
     if (storeConf.stateSchemaCheckEnabled && result.isDefined) {
       throw result.get
     }
-    val schemaFileLocation = newSchemaFilePath match {
-      case Some(path) => path.toString
-      case None => checker.schemaFileLocation.toString
+    val schemaFileLocation = if (evolvedSchema) {
+      // if we are using the state schema v3, and we have
+      // evolved schema, this newSchemaFilePath should be defined
+      // and we want to populate the metadata with this file
+      if (stateSchemaVersion == SCHEMA_FORMAT_V3) {
+        newSchemaFilePath.get.toString
+      } else {
+        // if we are using any version less than v3, we have written
+        // the schema to this static location, which we will return
+        checker.schemaFileLocation.toString
+      }
+    } else {
+      // if we have not evolved schema (there has been a previous schema)
+      // and we are using state schema v3, this file path would be defined
+      // so we would just populate the next run's metadata file with this
+      // file path
+      if (stateSchemaVersion == SCHEMA_FORMAT_V3) {
+        oldSchemaFilePath.get.toString
+      } else {
+        // if we are using any version less than v3, we have written
+        // the schema to this static location, which we will return
+        checker.schemaFileLocation.toString
+      }
     }
+
     StateSchemaValidationResult(evolvedSchema, schemaFileLocation)
   }
 }

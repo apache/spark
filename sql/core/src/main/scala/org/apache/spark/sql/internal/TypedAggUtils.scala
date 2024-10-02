@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.internal
 
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.agnosticEncoderFor
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
@@ -25,10 +27,10 @@ import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 private[sql] object TypedAggUtils {
 
   def aggKeyColumn[A](
-      encoder: ExpressionEncoder[A],
+      encoder: Encoder[A],
       groupingAttributes: Seq[Attribute]): NamedExpression = {
-    if (!encoder.isSerializedAsStructForTopLevel) {
-      assert(groupingAttributes.length == 1)
+    val agnosticEncoder = agnosticEncoderFor(encoder)
+    if (!agnosticEncoder.isStruct) {
       if (SQLConf.get.nameNonStructGroupingKeyAsValue) {
         groupingAttributes.head
       } else {

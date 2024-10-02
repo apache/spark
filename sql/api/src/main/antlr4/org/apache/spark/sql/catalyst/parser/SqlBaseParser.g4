@@ -64,7 +64,9 @@ compoundStatement
     | setStatementWithOptionalVarKeyword
     | beginEndCompoundBlock
     | ifElseStatement
+    | caseStatement
     | whileStatement
+    | repeatStatement
     | leaveStatement
     | iterateStatement
     ;
@@ -85,12 +87,23 @@ ifElseStatement
         (ELSE elseBody=compoundBody)? END IF
     ;
 
+repeatStatement
+    : beginLabel? REPEAT compoundBody UNTIL booleanExpression END REPEAT endLabel?
+    ;
+
 leaveStatement
     : LEAVE multipartIdentifier
     ;
 
 iterateStatement
     : ITERATE multipartIdentifier
+    ;
+
+caseStatement
+    : CASE (WHEN conditions+=booleanExpression THEN conditionalBodies+=compoundBody)+
+        (ELSE elseBody=compoundBody)? END CASE                #searchedCaseStatement
+    | CASE caseVariable=expression (WHEN conditionExpressions+=expression THEN conditionalBodies+=compoundBody)+
+        (ELSE elseBody=compoundBody)? END CASE                #simpleCaseStatement
     ;
 
 singleStatement
@@ -135,7 +148,7 @@ statement
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE identifierReference                                          #use
     | USE namespace identifierReference                                #useNamespace
-    | SET CATALOG (errorCapturingIdentifier | stringLit)                  #setCatalog
+    | SET CATALOG catalogIdentifierReference                           #setCatalog
     | CREATE namespace (IF errorCapturingNot EXISTS)? identifierReference
         (commentSpec |
          locationSpec |
@@ -285,6 +298,10 @@ statement
         LEFT_PAREN columns=multipartIdentifierPropertyList RIGHT_PAREN
         (OPTIONS options=propertyList)?                                #createIndex
     | DROP INDEX (IF EXISTS)? identifier ON TABLE? identifierReference #dropIndex
+    | CALL identifierReference
+        LEFT_PAREN
+        (functionArgument (COMMA functionArgument)*)?
+        RIGHT_PAREN                                                    #call
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
@@ -577,6 +594,12 @@ identifierReference
     | multipartIdentifier
     ;
 
+catalogIdentifierReference
+    : IDENTIFIER_KW LEFT_PAREN expression RIGHT_PAREN
+    | errorCapturingIdentifier
+    | stringLit
+    ;
+
 queryOrganization
     : (ORDER BY order+=sortItem (COMMA order+=sortItem)*)?
       (CLUSTER BY clusterBy+=expression (COMMA clusterBy+=expression)*)?
@@ -599,6 +622,7 @@ queryTerm
         operator=INTERSECT setQuantifier? right=queryTerm                                #setOperation
     | left=queryTerm {!legacy_setops_precedence_enabled}?
         operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
+    | left=queryTerm OPERATOR_PIPE operatorPipeRightSide                                 #operatorPipeStatement
     ;
 
 queryPrimary
@@ -1282,7 +1306,22 @@ colDefinitionOption
     ;
 
 generationExpression
-    : GENERATED ALWAYS AS LEFT_PAREN expression RIGHT_PAREN
+    : GENERATED ALWAYS AS LEFT_PAREN expression RIGHT_PAREN     #generatedColumn
+    | GENERATED (ALWAYS | BY DEFAULT) AS IDENTITY identityColSpec? #identityColumn
+    ;
+
+identityColSpec
+    : LEFT_PAREN sequenceGeneratorOption* RIGHT_PAREN
+    ;
+
+sequenceGeneratorOption
+    : START WITH start=sequenceGeneratorStartOrStep
+    | INCREMENT BY step=sequenceGeneratorStartOrStep
+    ;
+
+sequenceGeneratorStartOrStep
+    : MINUS? INTEGER_VALUE
+    | MINUS? BIGINT_LITERAL
     ;
 
 complexColTypeList
@@ -1457,6 +1496,16 @@ version
     | stringLit
     ;
 
+operatorPipeRightSide
+    : selectClause
+    | whereClause
+    // The following two cases match the PIVOT or UNPIVOT clause, respectively.
+    // For each one, we add the other clause as an option in order to return high-quality error
+    // messages in the event that both are present (this is not allowed).
+    | pivotClause unpivotClause?
+    | unpivotClause pivotClause?
+    ;
+
 // When `SQL_standard_keyword_behavior=true`, there are 2 kinds of keywords in Spark SQL.
 // - Reserved keywords:
 //     Keywords that are reserved and can't be used as identifiers for table, view, column,
@@ -1572,11 +1621,13 @@ ansiNonReserved
     | HOUR
     | HOURS
     | IDENTIFIER_KW
+    | IDENTITY
     | IF
     | IGNORE
     | IMMEDIATE
     | IMPORT
     | INCLUDE
+    | INCREMENT
     | INDEX
     | INDEXES
     | INPATH
@@ -1660,6 +1711,7 @@ ansiNonReserved
     | REFRESH
     | RENAME
     | REPAIR
+    | REPEAT
     | REPEATABLE
     | REPLACE
     | RESET
@@ -1735,6 +1787,7 @@ ansiNonReserved
     | UNLOCK
     | UNPIVOT
     | UNSET
+    | UNTIL
     | UPDATE
     | USE
     | VALUES
@@ -1814,6 +1867,7 @@ nonReserved
     | BY
     | BYTE
     | CACHE
+    | CALL
     | CALLED
     | CASCADE
     | CASE
@@ -1920,12 +1974,14 @@ nonReserved
     | HOUR
     | HOURS
     | IDENTIFIER_KW
+    | IDENTITY
     | IF
     | IGNORE
     | IMMEDIATE
     | IMPORT
     | IN
     | INCLUDE
+    | INCREMENT
     | INDEX
     | INDEXES
     | INPATH
@@ -2023,6 +2079,7 @@ nonReserved
     | REFRESH
     | RENAME
     | REPAIR
+    | REPEAT
     | REPEATABLE
     | REPLACE
     | RESET
@@ -2107,6 +2164,7 @@ nonReserved
     | UNLOCK
     | UNPIVOT
     | UNSET
+    | UNTIL
     | UPDATE
     | USE
     | USER

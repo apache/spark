@@ -28,9 +28,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., postgres:16.4-alpine)
+ * To run this test suite for a specific version (e.g., postgres:17.0-alpine)
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:16.4-alpine
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:17.0-alpine
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.PostgresIntegrationSuite"
  * }}}
  */
@@ -38,7 +38,7 @@ import org.apache.spark.tags.DockerTest
 class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   override val catalogName: String = "postgresql"
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:16.4-alpine")
+    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:17.0-alpine")
     override val env = Map(
       "POSTGRES_PASSWORD" -> "rootpass"
     )
@@ -84,7 +84,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       exception = intercept[AnalysisException] {
         sql(sql1)
       },
-      errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
+      condition = "NOT_SUPPORTED_CHANGE_COLUMN",
       parameters = Map(
         "originType" -> "\"STRING\"",
         "newType" -> "\"INT\"",
@@ -118,7 +118,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       sql(s"CREATE TABLE $t2(c int)")
       checkError(
         exception = intercept[TableAlreadyExistsException](sql(s"ALTER TABLE $t1 RENAME TO t2")),
-        errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+        condition = "TABLE_OR_VIEW_ALREADY_EXISTS",
         parameters = Map("relationName" -> "`t2`")
       )
     }
