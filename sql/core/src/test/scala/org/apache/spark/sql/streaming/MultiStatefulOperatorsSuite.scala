@@ -878,7 +878,6 @@ class MultiStatefulOperatorsSuite
     testOutputWatermarkInJoin(join3, input1, -40L * 1000 - 1)
   }
 
-  // NOTE: This is the revise of the reproducer in SPARK-45637. CREDIT goes to @andrezjzera.
   test("SPARK-49829 time window agg per each source followed by stream-stream join") {
     val inputStream1 = MemoryStream[Long]
     val inputStream2 = MemoryStream[Long]

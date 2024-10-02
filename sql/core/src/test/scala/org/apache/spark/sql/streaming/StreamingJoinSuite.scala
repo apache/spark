@@ -2047,11 +2047,6 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
     )
   }
 
-  // scalastyle:off line.size.limit
-  // DISCLAIM: This is a revision of below test, which was a part of report in the dev mailing
-  // list. CREDIT goes to @andrezjzera.
-  // https://github.com/andrzejzera/spark-bugs/blob/abae7a3839326a8eafc7516a51aca5e0c79282a6/spark-3.5/src/test/scala/OuterJoinTest.scala#L86C3-L167C4
-  // scalastyle:on
   test("SPARK-49829 two chained stream-stream left outer joins among three input streams") {
     withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
       val memoryStream1 = MemoryStream[(Long, Int)]
