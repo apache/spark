@@ -315,50 +315,42 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(isnotnull(col("a"))), Seq(Row(false)))
   }
 
-  test("Test NULLIF function") {
+  test("Test nullif function") {
 
     def testNullIfFunction(alwaysInlineCommonExpr: String): Unit = {
       withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> alwaysInlineCommonExpr) {
-        val spark = SparkSession.builder().getOrCreate()
 
-        val result1 = spark.sql("SELECT NULLIF(1, 1)").collect().head.get(0)
-        assert(result1 == null)
-
-        val result2 = spark.sql("SELECT NULLIF(1, 2)").collect().head.get(0)
-        assert(result2 == 1)
-
-        val result3 = spark.sql("SELECT NULLIF(NULL, 1)").collect().head.get(0)
-        assert(result3 == null)
-
-        val result4 = spark.sql("SELECT NULLIF(1, NULL)").collect().head.get(0)
-        assert(result4 == 1)
-
-        val result5 = spark.sql("SELECT NULLIF(NULL, NULL)").collect().head.get(0)
-        assert(result5 == null)
-
-        val result6 = spark.sql("SELECT NULLIF('abc', 'abc')").collect().head.get(0)
-        assert(result6 == null)
-
-        val result7 = spark.sql("SELECT NULLIF('abc', 'xyz')").collect().head.get(0)
-        assert(result7 == "abc")
-
-        val result8 = spark.sql("SELECT NULLIF(id, 1) FROM range(10) GROUP BY NULLIF(id, 1)")
-          .collect().map(_.get(0))
-        val expectedResult = Set[java.lang.Integer](0, 2, 3, 4, 5, 6, 7, 8, 9, null)
-        assert(result8.toSet == expectedResult)
-
-        val ex = intercept[AnalysisException] {
-          spark.sql("SELECT NULLIF(id, 1), COUNT(*) " +
+        Seq(
+          "SELECT NULLIF(1, 1)" -> Seq(Row(null)),
+          "SELECT NULLIF(1, 2)" -> Seq(Row(1)),
+          "SELECT NULLIF(NULL, 1)" -> Seq(Row(null)),
+          "SELECT NULLIF(1, NULL)" -> Seq(Row(1)),
+          "SELECT NULLIF(NULL, NULL)" -> Seq(Row(null)),
+          "SELECT NULLIF('abc', 'abc')" -> Seq(Row(null)),
+          "SELECT NULLIF('abc', 'xyz')" -> Seq(Row("abc")),
+          "SELECT NULLIF(id, 1) " +
             "FROM range(10) " +
-            "GROUP BY NULLIF(id, 2)").collect()
+            "GROUP BY NULLIF(id, 1)" -> Seq(Row(null), Row(2), Row(3), Row(4), Row(5), Row(6),
+            Row(7), Row(8), Row(9), Row(0)),
+          "SELECT NULLIF(id, 1), COUNT(*)" +
+            "FROM range(10) " +
+            "GROUP BY NULLIF(id, 1) " +
+            "HAVING COUNT(*) > 1" -> Seq.empty[Row]
+        ).foreach {
+          case (sqlText, expected) => checkAnswer(sql(sqlText), expected)
         }
-        assert(ex.getMessage.contains("MISSING_AGGREGATION"))
 
-        val result10 = spark.sql("SELECT NULLIF(id, 1), COUNT(*) " +
-          "FROM range(10) " +
-          "GROUP BY NULLIF(id, 1) " +
-          "HAVING COUNT(*) > 1").collect()
-        assert(result10.isEmpty)
+        checkError(
+         exception = intercept[AnalysisException] {
+           sql("SELECT NULLIF(id, 1), COUNT(*) " +
+             "FROM range(10) " +
+             "GROUP BY NULLIF(id, 2)")
+         },
+         condition = "MISSING_AGGREGATION",
+         parameters = Map(
+           "expression" -> "\"id\"",
+           "expressionAnyValue" -> "\"any_value(id)\"")
+        )
       }
     }
 
@@ -373,15 +365,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(df.selectExpr("equal_null(a, a)"), Seq(Row(true)))
     checkAnswer(df.select(equal_null(col("a"), col("a"))), Seq(Row(true)))
-  }
-
-  test("nullif function") {
-    val df = Seq((5, 8)).toDF("a", "b")
-    checkAnswer(df.selectExpr("nullif(5, 8)"), Seq(Row(5)))
-    checkAnswer(df.select(nullif(lit(5), lit(8))), Seq(Row(5)))
-
-    checkAnswer(df.selectExpr("nullif(a, a)"), Seq(Row(null)))
-    checkAnswer(df.select(nullif(lit(5), lit(5))), Seq(Row(null)))
   }
 
   test("nullifzero function") {
