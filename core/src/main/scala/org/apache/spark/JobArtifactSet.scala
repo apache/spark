@@ -110,16 +110,13 @@ private[spark] object JobArtifactSet {
     new JobArtifactSet(
       state = maybeState,
       jars = maybeState
-        .map(state => sc.addedJars.getOrElse(state.uuid, Map.empty[String, Long]))
-        .map(_ ++ sc.addedJars.getOrElse("default", Map.empty[String, Long]))
+        .map(s => sc.addedJars.getOrElse(s.uuid, Map.empty[String, Long]))
         .getOrElse(sc.allAddedJars).toMap,
       files = maybeState
         .map(s => sc.addedFiles.getOrElse(s.uuid, Map.empty[String, Long]))
-        .map(_ ++ sc.addedFiles.getOrElse("default", Map.empty[String, Long]))
         .getOrElse(sc.allAddedFiles).toMap,
       archives = maybeState
         .map(s => sc.addedArchives.getOrElse(s.uuid, Map.empty[String, Long]))
-        .map(_ ++ sc.addedArchives.getOrElse("default", Map.empty[String, Long]))
         .getOrElse(sc.allAddedArchives).toMap)
   }
 }
