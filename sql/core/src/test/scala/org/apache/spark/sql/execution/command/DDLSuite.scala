@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.permission.{AclEntry, AclStatus}
 import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkFiles, SparkRuntimeException}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.{FullQualifiedTableName, FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -219,7 +219,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
   test("SPARK-25403 refresh the table after inserting data") {
     withTable("t") {
       val catalog = spark.sessionState.catalog
-      val table = FullQualifiedTableName(
+      val table = QualifiedTableName(
         CatalogManager.SESSION_CATALOG_NAME, catalog.getCurrentDatabase, "t")
       sql("CREATE TABLE t (a INT) USING parquet")
       sql("INSERT INTO TABLE t VALUES (1)")
@@ -233,7 +233,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
     withTable("t") {
       withTempDir { dir =>
         val catalog = spark.sessionState.catalog
-        val table = FullQualifiedTableName(
+        val table = QualifiedTableName(
           CatalogManager.SESSION_CATALOG_NAME, catalog.getCurrentDatabase, "t")
         val p1 = s"${dir.getCanonicalPath}/p1"
         val p2 = s"${dir.getCanonicalPath}/p2"
@@ -2285,6 +2285,17 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
       parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
         "operation" -> "generated columns")
+    )
+  }
+
+  test("SPARK-48824: No identity columns with V1") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"create table t(a int, b bigint generated always as identity()) using parquet")
+      },
+      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
+        "operation" -> "identity columns")
     )
   }
 

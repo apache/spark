@@ -59,6 +59,7 @@ class TransformWithStateInPandasTestsMixin:
             "spark.sql.streaming.stateStore.providerClass",
             "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider",
         )
+        cfg.set("spark.sql.execution.arrow.transformWithStateInPandas.maxRecordsPerBatch", "2")
         return cfg
 
     def _prepare_input_data(self, input_path, col1, col2):
@@ -215,6 +216,15 @@ class TransformWithStateInPandasTestsMixin:
             Row(id="1", countAsString="2"),
             Row(id="1", countAsString="2"),
         }
+
+    def test_transform_with_state_in_pandas_list_state(self):
+        def check_results(batch_df, _):
+            assert set(batch_df.sort("id").collect()) == {
+                Row(id="0", countAsString="2"),
+                Row(id="1", countAsString="2"),
+            }
+
+        self._test_transform_with_state_in_pandas_basic(ListStateProcessor(), check_results, True)
 
     # test value state with ttl has the same behavior as value state when
     # state doesn't expire.
@@ -495,6 +505,59 @@ class InvalidSimpleStatefulProcessor(StatefulProcessor):
         # try to get a state variable with no value
         assert self.num_violations_state.get() is None
         self.num_violations_state.clear()
+        yield pd.DataFrame({"id": key, "countAsString": str(count)})
+
+    def close(self) -> None:
+        pass
+
+
+class ListStateProcessor(StatefulProcessor):
+    # Dict to store the expected results. The key represents the grouping key string, and the value
+    # is a dictionary of pandas dataframe index -> expected temperature value. Since we set
+    # maxRecordsPerBatch to 2, we expect the pandas dataframe dictionary to have 2 entries.
+    dict = {0: 120, 1: 20}
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("temperature", IntegerType(), True)])
+        self.list_state1 = handle.getListState("listState1", state_schema)
+        self.list_state2 = handle.getListState("listState2", state_schema)
+
+    def handleInputRows(self, key, rows) -> Iterator[pd.DataFrame]:
+        count = 0
+        for pdf in rows:
+            list_state_rows = [(120,), (20,)]
+            self.list_state1.put(list_state_rows)
+            self.list_state2.put(list_state_rows)
+            self.list_state1.append_value((111,))
+            self.list_state2.append_value((222,))
+            self.list_state1.append_list(list_state_rows)
+            self.list_state2.append_list(list_state_rows)
+            pdf_count = pdf.count()
+            count += pdf_count.get("temperature")
+        iter1 = self.list_state1.get()
+        iter2 = self.list_state2.get()
+        # Mixing the iterator to test it we can resume from the correct point
+        assert next(iter1)[0] == self.dict[0]
+        assert next(iter2)[0] == self.dict[0]
+        assert next(iter1)[0] == self.dict[1]
+        assert next(iter2)[0] == self.dict[1]
+        # Get another iterator for list_state1 to test if the 2 iterators (iter1 and iter3) don't
+        # interfere with each other.
+        iter3 = self.list_state1.get()
+        assert next(iter3)[0] == self.dict[0]
+        assert next(iter3)[0] == self.dict[1]
+        # the second arrow batch should contain the appended value 111 for list_state1 and
+        # 222 for list_state2
+        assert next(iter1)[0] == 111
+        assert next(iter2)[0] == 222
+        assert next(iter3)[0] == 111
+        # since we put another 2 rows after 111/222, check them here
+        assert next(iter1)[0] == self.dict[0]
+        assert next(iter2)[0] == self.dict[0]
+        assert next(iter3)[0] == self.dict[0]
+        assert next(iter1)[0] == self.dict[1]
+        assert next(iter2)[0] == self.dict[1]
+        assert next(iter3)[0] == self.dict[1]
         yield pd.DataFrame({"id": key, "countAsString": str(count)})
 
     def close(self) -> None:

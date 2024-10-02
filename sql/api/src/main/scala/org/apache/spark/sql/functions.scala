@@ -389,8 +389,17 @@ object functions {
   def count_min_sketch(e: Column, eps: Column, confidence: Column, seed: Column): Column =
     Column.fn("count_min_sketch", e, eps, confidence, seed)
 
-  private[spark] def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
-    Column.internalFn("collect_top_k", e, lit(num), lit(reverse))
+  /**
+   * Returns a count-min sketch of a column with the given esp, confidence and seed. The result is
+   * an array of bytes, which can be deserialized to a `CountMinSketch` before usage. Count-min
+   * sketch is a probabilistic data structure used for cardinality estimation using sub-linear
+   * space.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def count_min_sketch(e: Column, eps: Column, confidence: Column): Column =
+    count_min_sketch(e, eps, confidence, lit(SparkClassUtils.random.nextLong))
 
   /**
    * Aggregate function: returns the Pearson Correlation Coefficient for two columns.
@@ -1714,7 +1723,7 @@ object functions {
    * @group normal_funcs
    * @since 1.5.0
    */
-  def broadcast[DS[U] <: api.Dataset[U, DS]](df: DS[_]): df.type = {
+  def broadcast[DS[U] <: api.Dataset[U]](df: DS[_]): df.type = {
     df.hint("broadcast").asInstanceOf[df.type]
   }
 
@@ -1883,6 +1892,26 @@ object functions {
    * @since 1.4.0
    */
   def randn(): Column = randn(SparkClassUtils.random.nextLong)
+
+  /**
+   * Returns a string of the specified length whose characters are chosen uniformly at random from
+   * the following pool of characters: 0-9, a-z, A-Z. The string length must be a constant
+   * two-byte or four-byte integer (SMALLINT or INT, respectively).
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def randstr(length: Column): Column = Column.fn("randstr", length)
+
+  /**
+   * Returns a string of the specified length whose characters are chosen uniformly at random from
+   * the following pool of characters: 0-9, a-z, A-Z, with the chosen random seed. The string
+   * length must be a constant two-byte or four-byte integer (SMALLINT or INT, respectively).
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def randstr(length: Column, seed: Column): Column = Column.fn("randstr", length, seed)
 
   /**
    * Partition ID.
@@ -3727,6 +3756,31 @@ object functions {
    * @since 3.5.0
    */
   def stack(cols: Column*): Column = Column.fn("stack", cols: _*)
+
+  /**
+   * Returns a random value with independent and identically distributed (i.i.d.) values with the
+   * specified range of numbers. The provided numbers specifying the minimum and maximum values of
+   * the range must be constant. If both of these numbers are integers, then the result will also
+   * be an integer. Otherwise if one or both of these are floating-point numbers, then the result
+   * will also be a floating-point number.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def uniform(min: Column, max: Column): Column = Column.fn("uniform", min, max)
+
+  /**
+   * Returns a random value with independent and identically distributed (i.i.d.) values with the
+   * specified range of numbers, with the chosen random seed. The provided numbers specifying the
+   * minimum and maximum values of the range must be constant. If both of these numbers are
+   * integers, then the result will also be an integer. Otherwise if one or both of these are
+   * floating-point numbers, then the result will also be a floating-point number.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def uniform(min: Column, max: Column, seed: Column): Column =
+    Column.fn("uniform", min, max, seed)
 
   /**
    * Returns a random value with independent and identically distributed (i.i.d.) uniformly
@@ -7240,7 +7294,18 @@ object functions {
    * @group array_funcs
    * @since 2.4.0
    */
-  def shuffle(e: Column): Column = Column.fn("shuffle", e, lit(SparkClassUtils.random.nextLong))
+  def shuffle(e: Column): Column = shuffle(e, lit(SparkClassUtils.random.nextLong))
+
+  /**
+   * Returns a random permutation of the given array.
+   *
+   * @note
+   *   The function is non-deterministic.
+   *
+   * @group array_funcs
+   * @since 4.0.0
+   */
+  def shuffle(e: Column, seed: Column): Column = Column.fn("shuffle", e, seed)
 
   /**
    * Returns a reversed string or an array with reverse order of elements.

@@ -22,6 +22,7 @@ import java.{lang => jl, util => ju}
 import org.apache.spark.connect.proto.{Relation, StatSampleBy}
 import org.apache.spark.sql.DataFrameStatFunctions.approxQuantileResultEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, PrimitiveDoubleEncoder}
+import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.functions.lit
 
 /**
@@ -30,7 +31,7 @@ import org.apache.spark.sql.functions.lit
  * @since 3.4.0
  */
 final class DataFrameStatFunctions private[sql] (protected val df: DataFrame)
-    extends api.DataFrameStatFunctions[Dataset] {
+    extends api.DataFrameStatFunctions {
   private def root: Relation = df.plan.getRoot
   private val sparkSession: SparkSession = df.sparkSession
 

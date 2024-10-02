@@ -19,6 +19,8 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
+import scala.concurrent.Promise
+
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{AccumulatorV2, CallSite}
@@ -71,7 +73,8 @@ private[scheduler] case class JobGroupCancelled(
 
 private[scheduler] case class JobTagCancelled(
     tagName: String,
-    reason: Option[String]) extends DAGSchedulerEvent
+    reason: Option[String],
+    cancelledJobs: Option[Promise[Seq[ActiveJob]]]) extends DAGSchedulerEvent
 
 private[scheduler] case object AllJobsCancelled extends DAGSchedulerEvent
 

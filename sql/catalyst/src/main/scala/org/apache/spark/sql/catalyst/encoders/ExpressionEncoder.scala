@@ -70,54 +70,6 @@ object ExpressionEncoder {
      apply(JavaTypeInference.encoderFor(beanClass))
   }
 
-  /**
-   * Given a set of N encoders, constructs a new encoder that produce objects as items in an
-   * N-tuple.  Note that these encoders should be unresolved so that information about
-   * name/positional binding is preserved.
-   * When `useNullSafeDeserializer` is true, the deserialization result for a child will be null if
-   * the input is null. It is false by default as most deserializers handle null input properly and
-   * don't require an extra null check. Some of them are null-tolerant, such as the deserializer for
-   * `Option[T]`, and we must not set it to true in this case.
-   */
-  def tuple(
-      encoders: Seq[ExpressionEncoder[_]],
-      useNullSafeDeserializer: Boolean = false): ExpressionEncoder[_] = {
-    val tupleEncoder = AgnosticEncoders.ProductEncoder.tuple(
-      encoders.map(_.encoder),
-      useNullSafeDeserializer)
-    ExpressionEncoder(tupleEncoder)
-  }
-
-  // Tuple1
-  def tuple[T](e: ExpressionEncoder[T]): ExpressionEncoder[Tuple1[T]] =
-    tuple(Seq(e)).asInstanceOf[ExpressionEncoder[Tuple1[T]]]
-
-  def tuple[T1, T2](
-      e1: ExpressionEncoder[T1],
-      e2: ExpressionEncoder[T2]): ExpressionEncoder[(T1, T2)] =
-    tuple(Seq(e1, e2)).asInstanceOf[ExpressionEncoder[(T1, T2)]]
-
-  def tuple[T1, T2, T3](
-      e1: ExpressionEncoder[T1],
-      e2: ExpressionEncoder[T2],
-      e3: ExpressionEncoder[T3]): ExpressionEncoder[(T1, T2, T3)] =
-    tuple(Seq(e1, e2, e3)).asInstanceOf[ExpressionEncoder[(T1, T2, T3)]]
-
-  def tuple[T1, T2, T3, T4](
-      e1: ExpressionEncoder[T1],
-      e2: ExpressionEncoder[T2],
-      e3: ExpressionEncoder[T3],
-      e4: ExpressionEncoder[T4]): ExpressionEncoder[(T1, T2, T3, T4)] =
-    tuple(Seq(e1, e2, e3, e4)).asInstanceOf[ExpressionEncoder[(T1, T2, T3, T4)]]
-
-  def tuple[T1, T2, T3, T4, T5](
-      e1: ExpressionEncoder[T1],
-      e2: ExpressionEncoder[T2],
-      e3: ExpressionEncoder[T3],
-      e4: ExpressionEncoder[T4],
-      e5: ExpressionEncoder[T5]): ExpressionEncoder[(T1, T2, T3, T4, T5)] =
-    tuple(Seq(e1, e2, e3, e4, e5)).asInstanceOf[ExpressionEncoder[(T1, T2, T3, T4, T5)]]
-
   private val anyObjectType = ObjectType(classOf[Any])
 
   /**
@@ -189,7 +141,8 @@ case class ExpressionEncoder[T](
     encoder: AgnosticEncoder[T],
     objSerializer: Expression,
     objDeserializer: Expression)
-  extends Encoder[T] {
+  extends Encoder[T]
+  with ToAgnosticEncoder[T] {
 
   override def clsTag: ClassTag[T] = encoder.clsTag
 

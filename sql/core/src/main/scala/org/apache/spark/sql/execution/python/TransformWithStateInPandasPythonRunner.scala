@@ -107,7 +107,7 @@ class TransformWithStateInPandasPythonRunner(
     executionContext.execute(
       new TransformWithStateInPandasStateServer(stateServerSocket, processorHandle,
         groupingKeySchema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes,
-        arrowMaxRecordsPerBatch,
+        sqlConf.arrowTransformWithStateInPandasMaxRecordsPerBatch,
         hasInitialState = hasInitialState,
         initialStateSchema = initialStateSchema,
         initialStateDataIterator = initialStateDataIterator))

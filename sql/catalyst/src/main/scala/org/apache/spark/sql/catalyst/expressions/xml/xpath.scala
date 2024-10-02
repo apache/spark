@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeWithCaseAccentSensitivity
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -42,7 +42,7 @@ abstract class XPathExtract
   override def nullable: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
+    Seq(StringTypeWithCaseAccentSensitivity, StringTypeWithCaseAccentSensitivity)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!path.foldable) {
@@ -50,7 +50,7 @@ abstract class XPathExtract
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> toSQLId("path"),
-          "inputType" -> toSQLType(StringTypeAnyCollation),
+          "inputType" -> toSQLType(StringTypeWithCaseAccentSensitivity),
           "inputExpr" -> toSQLExpr(path)
         )
       )
@@ -255,7 +255,7 @@ case class XPathList(xml: Expression, path: Expression) extends XPathExtract {
   override def nullSafeEval(xml: Any, path: Any): Any = {
     val nodeList = xpathUtil.evalNodeList(xml.asInstanceOf[UTF8String].toString, pathString)
     if (nodeList ne null) {
-      val ret = new Array[UTF8String](nodeList.getLength)
+      val ret = new Array[AnyRef](nodeList.getLength)
       var i = 0
       while (i < nodeList.getLength) {
         ret(i) = UTF8String.fromString(nodeList.item(i).getNodeValue)

@@ -55,6 +55,7 @@ from pyspark.serializers import BatchedSerializer, CPickleSerializer, UTF8Deseri
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.column import Column
+from pyspark.sql.functions import builtin as F
 from pyspark.sql.classic.column import _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.merge import MergeIntoWriter
@@ -72,6 +73,11 @@ from pyspark.sql.dataframe import (
 from pyspark.sql.utils import get_active_spark_context, to_java_array, to_scala_map
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
+
+try:
+    from pyspark.sql.plot import PySparkPlotAccessor
+except ImportError:
+    PySparkPlotAccessor = None  # type: ignore
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -868,7 +874,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         *cols: Union[int, str, Column, List[Union[int, str, Column]]],
         **kwargs: Any,
     ) -> ParentDataFrame:
-        jdf = self._jdf.sortWithinPartitions(self._sort_cols(cols, kwargs))
+        _cols = self._preapare_cols_for_sort(F.col, cols, kwargs)
+        jdf = self._jdf.sortWithinPartitions(self._jseq(_cols, _to_java_column))
         return DataFrame(jdf, self.sparkSession)
 
     def sort(
@@ -876,7 +883,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         *cols: Union[int, str, Column, List[Union[int, str, Column]]],
         **kwargs: Any,
     ) -> ParentDataFrame:
-        jdf = self._jdf.sort(self._sort_cols(cols, kwargs))
+        _cols = self._preapare_cols_for_sort(F.col, cols, kwargs)
+        jdf = self._jdf.sort(self._jseq(_cols, _to_java_column))
         return DataFrame(jdf, self.sparkSession)
 
     orderBy = sort
@@ -922,51 +930,6 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             else:
                 _cols.append(c)  # type: ignore[arg-type]
         return self._jseq(_cols, _to_java_column)
-
-    def _sort_cols(
-        self,
-        cols: Sequence[Union[int, str, Column, List[Union[int, str, Column]]]],
-        kwargs: Dict[str, Any],
-    ) -> "JavaObject":
-        """Return a JVM Seq of Columns that describes the sort order"""
-        if not cols:
-            raise PySparkValueError(
-                errorClass="CANNOT_BE_EMPTY",
-                messageParameters={"item": "column"},
-            )
-        if len(cols) == 1 and isinstance(cols[0], list):
-            cols = cols[0]
-
-        jcols = []
-        for c in cols:
-            if isinstance(c, int) and not isinstance(c, bool):
-                # ordinal is 1-based
-                if c > 0:
-                    _c = self[c - 1]
-                # negative ordinal means sort by desc
-                elif c < 0:
-                    _c = self[-c - 1].desc()
-                else:
-                    raise PySparkIndexError(
-                        errorClass="ZERO_INDEX",
-                        messageParameters={},
-                    )
-            else:
-                _c = c  # type: ignore[assignment]
-            jcols.append(_to_java_column(cast("ColumnOrName", _c)))
-
-        ascending = kwargs.get("ascending", True)
-        if isinstance(ascending, (bool, int)):
-            if not ascending:
-                jcols = [jc.desc() for jc in jcols]
-        elif isinstance(ascending, list):
-            jcols = [jc if asc else jc.desc() for asc, jc in zip(ascending, jcols)]
-        else:
-            raise PySparkTypeError(
-                errorClass="NOT_BOOL_OR_LIST",
-                messageParameters={"arg_name": "ascending", "arg_type": type(ascending).__name__},
-            )
-        return self._jseq(jcols)
 
     def describe(self, *cols: Union[str, List[str]]) -> ParentDataFrame:
         if len(cols) == 1 and isinstance(cols[0], list):
@@ -1063,7 +1026,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         jdf = self._jdf.selectExpr(self._jseq(expr))
         return DataFrame(jdf, self.sparkSession)
 
-    def filter(self, condition: "ColumnOrName") -> ParentDataFrame:
+    def filter(self, condition: Union[Column, str]) -> ParentDataFrame:
         if isinstance(condition, str):
             jdf = self._jdf.filter(condition)
         elif isinstance(condition, Column):
@@ -1782,7 +1745,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def inputFiles(self) -> List[str]:
         return list(self._jdf.inputFiles())
 
-    def where(self, condition: "ColumnOrName") -> ParentDataFrame:
+    def where(self, condition: Union[Column, str]) -> ParentDataFrame:
         return self.filter(condition)
 
     # Two aliases below were added for pandas compatibility many years ago.
@@ -1804,10 +1767,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def drop_duplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
         return self.dropDuplicates(subset)
 
-    def writeTo(self, table: str) -> DataFrameWriterV2:
+    def writeTo(self, table: str) -> "DataFrameWriterV2":
         return DataFrameWriterV2(self, table)
 
-    def mergeInto(self, table: str, condition: Column) -> MergeIntoWriter:
+    def mergeInto(self, table: str, condition: Column) -> "MergeIntoWriter":
         return MergeIntoWriter(self, table, condition)
 
     def pandas_api(
@@ -1861,6 +1824,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             errorClass="CLASSIC_OPERATION_NOT_SUPPORTED_ON_DF",
             messageParameters={"member": "queryExecution"},
         )
+
+    @property
+    def plot(self) -> PySparkPlotAccessor:
+        return PySparkPlotAccessor(self)
 
 
 class DataFrameNaFunctions(ParentDataFrameNaFunctions):
