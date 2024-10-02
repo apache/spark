@@ -57,15 +57,15 @@ class TransformWithStateInPandasStateServer(
     errorOnDuplicatedFieldNames: Boolean,
     largeVarTypes: Boolean,
     arrowTransformWithStateInPandasMaxRecordsPerBatch: Int,
+    hasInitialState: Boolean,
+    initialStateSchema: StructType,
+    initialStateDataIterator: Iterator[(InternalRow, Iterator[InternalRow])],
     outputStreamForTest: DataOutputStream = null,
     valueStateMapForTest: mutable.HashMap[String, ValueStateInfo] = null,
     deserializerForTest: TransformWithStateInPandasDeserializer = null,
     arrowStreamWriterForTest: BaseStreamingArrowWriter = null,
     listStatesMapForTest : mutable.HashMap[String, ListStateInfo] = null,
-    listStateIteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null,
-    hasInitialState: Boolean,
-    initialStateSchema: StructType,
-    initialStateDataIterator: Iterator[(InternalRow, Iterator[InternalRow])])
+    listStateIteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null)
   extends Runnable with Logging {
   private val keyRowDeserializer: ExpressionEncoder.Deserializer[Row] =
     ExpressionEncoder(groupingKeySchema).resolveAndBind().createDeserializer()
@@ -237,7 +237,7 @@ class TransformWithStateInPandasStateServer(
               arrowTransformWithStateInPandasMaxRecordsPerBatch)
           }
 
-          val keyBytes = message.getGetInitialState.getValue.toByteArray
+          val keyBytes = message.getGetInitialState.getGroupingKey.toByteArray
           // The key row is serialized as a byte array, we need to convert it back to a Row
           val keyRow = PythonSQLUtils.toJVMRow(keyBytes, groupingKeySchema, keyRowDeserializer)
           val groupingKeyToInternalRow =
