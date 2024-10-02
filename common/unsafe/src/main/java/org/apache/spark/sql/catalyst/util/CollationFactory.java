@@ -1148,9 +1148,9 @@ public final class CollationFactory {
     Collation collation = fetchCollation(collationId);
     Collation.CollationSpec.SpaceTrimming spaceTrimming =
       Collation.CollationSpec.getSpaceTrimming(collationId);
-    if(spaceTrimming != Collation.CollationSpec.SpaceTrimming.NONE)
+    if(spaceTrimming != Collation.CollationSpec.SpaceTrimming.NONE) {
       input = Collation.CollationSpec.applyTrimmingPolicy(input, spaceTrimming);
-
+    }
     if (collation.supportsBinaryEquality) {
       return input;
     } else if (collation.supportsLowercaseEquality) {
@@ -1166,9 +1166,9 @@ public final class CollationFactory {
     Collation collation = fetchCollation(collationId);
     Collation.CollationSpec.SpaceTrimming spaceTrimming =
       Collation.CollationSpec.getSpaceTrimming(collationId);
-    if(spaceTrimming != Collation.CollationSpec.SpaceTrimming.NONE)
+    if(spaceTrimming != Collation.CollationSpec.SpaceTrimming.NONE) {
       input = Collation.CollationSpec.applyTrimmingPolicy(input, spaceTrimming);
-
+    }
     if (collation.supportsBinaryEquality) {
       return input.getBytes();
     } else if (collation.supportsLowercaseEquality) {
