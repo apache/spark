@@ -288,6 +288,25 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
     }
   }
 
+  test("ERROR: trying to specify state variable name along with " +
+    "readRegisteredTimers should fail") {
+    withTempDir { tempDir =>
+      val exc = intercept[StateDataSourceConflictOptions] {
+        spark.read.format("statestore")
+          // trick to bypass getting the last committed batch before validating operator ID
+          .option(StateSourceOptions.BATCH_ID, 0)
+          .option(StateSourceOptions.STATE_VAR_NAME, "test")
+          .option(StateSourceOptions.READ_REGISTERED_TIMERS, true)
+          .load(tempDir.getAbsolutePath)
+      }
+      checkError(exc, "STDS_CONFLICT_OPTIONS", "42613",
+        Map("options" ->
+          s"['${
+            StateSourceOptions.READ_REGISTERED_TIMERS
+          }', '${StateSourceOptions.STATE_VAR_NAME}']"))
+    }
+  }
+
   test("ERROR: trying to specify non boolean value for " +
     "flattenCollectionTypes") {
     withTempDir { tempDir =>

@@ -17,7 +17,8 @@
 
 from typing import Any, TYPE_CHECKING, Optional, Union
 from types import ModuleType
-from pyspark.errors import PySparkRuntimeError, PySparkValueError
+from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
+from pyspark.sql.types import NumericType
 from pyspark.sql.utils import require_minimum_plotly_version
 
 
@@ -93,9 +94,11 @@ class PySparkSampledPlotBase:
 
 class PySparkPlotAccessor:
     plot_data_map = {
+        "area": PySparkSampledPlotBase().get_sampled,
         "bar": PySparkTopNPlotBase().get_top_n,
         "barh": PySparkTopNPlotBase().get_top_n,
         "line": PySparkSampledPlotBase().get_sampled,
+        "pie": PySparkTopNPlotBase().get_top_n,
         "scatter": PySparkSampledPlotBase().get_sampled,
     }
     _backends = {}  # type: ignore[var-annotated]
@@ -264,3 +267,74 @@ class PySparkPlotAccessor:
         >>> df.plot.scatter(x='length', y='width')  # doctest: +SKIP
         """
         return self(kind="scatter", x=x, y=y, **kwargs)
+
+    def area(self, x: str, y: str, **kwargs: Any) -> "Figure":
+        """
+        Draw a stacked area plot.
+
+        An area plot displays quantitative data visually.
+
+        Parameters
+        ----------
+        x : str
+            Name of column to use for the horizontal axis.
+        y : str or list of str
+            Name(s) of the column(s) to plot.
+        **kwargs: Optional
+            Additional keyword arguments.
+
+        Returns
+        -------
+        :class:`plotly.graph_objs.Figure`
+
+        Examples
+        --------
+        >>> from datetime import datetime
+        >>> data = [
+        ...     (3, 5, 20, datetime(2018, 1, 31)),
+        ...     (2, 5, 42, datetime(2018, 2, 28)),
+        ...     (3, 6, 28, datetime(2018, 3, 31)),
+        ...     (9, 12, 62, datetime(2018, 4, 30))
+        ... ]
+        >>> columns = ["sales", "signups", "visits", "date"]
+        >>> df = spark.createDataFrame(data, columns)
+        >>> df.plot.area(x='date', y=['sales', 'signups', 'visits'])  # doctest: +SKIP
+        """
+        return self(kind="area", x=x, y=y, **kwargs)
+
+    def pie(self, x: str, y: str, **kwargs: Any) -> "Figure":
+        """
+        Generate a pie plot.
+
+        A pie plot is a proportional representation of the numerical data in a
+        column.
+
+        Parameters
+        ----------
+        x : str
+            Name of column to be used as the category labels for the pie plot.
+        y : str
+            Name of the column to plot.
+        **kwargs
+            Additional keyword arguments.
+
+        Returns
+        -------
+        :class:`plotly.graph_objs.Figure`
+
+        Examples
+        --------
+        """
+        schema = self.data.schema
+
+        # Check if 'y' is a numerical column
+        y_field = schema[y] if y in schema.names else None
+        if y_field is None or not isinstance(y_field.dataType, NumericType):
+            raise PySparkTypeError(
+                errorClass="PLOT_NOT_NUMERIC_COLUMN",
+                messageParameters={
+                    "arg_name": "y",
+                    "arg_type": str(y_field.dataType) if y_field else "None",
+                },
+            )
+        return self(kind="pie", x=x, y=y, **kwargs)
