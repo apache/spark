@@ -548,11 +548,6 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  // scalastyle:off line.size.limit
-  // DISCLAIM: This is a revision of below test, which was a part of report in the dev mailing
-  // list. CREDIT goes to @andrezjzera.
-  // https://github.com/andrzejzera/spark-bugs/blob/abae7a3839326a8eafc7516a51aca5e0c79282a6/spark-3.5/src/test/scala/SqlSyntaxTest.scala#L122-L165
-  // scalastyle:on
   test("SPARK-49836 using window fn with window as parameter should preserve parent operator") {
     withTempView("clicks") {
       val df = Seq(
