@@ -5903,7 +5903,9 @@ class AstBuilder extends DataTypeAstBuilder
         throw QueryParsingErrors.unpivotWithPivotInFromClauseNotAllowedError(ctx)
       }
       withUnpivot(c, left)
-    }.get)))
+    }.getOrElse(Option(ctx.sample).map { c =>
+      withSample(c, left)
+    }.get))))
   }
 
   /**

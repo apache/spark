@@ -326,6 +326,55 @@ table courseSales
      for `year` in (2012, 2013)
    );
 
+-- Sampling operators: positive tests.
+--------------------------------------
+
+-- We will use the REPEATABLE clause and/or adjust the sampling options to either remove no rows or
+-- all rows to help keep the tests deterministic.
+table t
+|> tablesample (100 percent) repeatable (0);
+
+table t
+|> tablesample (2 rows) repeatable (0);
+
+table t
+|> tablesample (bucket 1 out of 1) repeatable (0);
+
+table t
+|> tablesample (100 percent) repeatable (0)
+|> tablesample (5 rows) repeatable (0)
+|> tablesample (bucket 1 out of 1) repeatable (0);
+
+-- Sampling operators: negative tests.
+--------------------------------------
+
+-- The sampling method is required.
+table t
+|> tablesample ();
+
+-- Negative sampling options are not supported.
+table t
+|> tablesample (-100 percent);
+
+table t
+|> tablesample (-5 rows);
+
+-- The sampling method may not refer to attribute names from the input relation.
+table t
+|> tablesample (x rows);
+
+-- The bucket number is invalid.
+table t
+|> tablesample (bucket 2 out of 1);
+
+-- Byte literals are not supported.
+table t
+|> tablesample (200b) repeatable (0);
+
+-- Invalid byte literal syntax.
+table t
+|> tablesample (200) repeatable (0);
+
 -- Cleanup.
 -----------
 drop table t;
