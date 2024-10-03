@@ -160,7 +160,7 @@ case class DescribeTableExec(
             val nestedField = table.schema.findNestedField(fieldNames.toImmutableArraySeq)
             if (nestedField.isEmpty) {
               throw QueryExecutionErrors.partitionColumnNotFoundInTheTableSchemaError(
-                toSQLId(fieldNames),
+                toSQLId(fieldNames.toSeq),
                 toSQLType(table.schema().catalogString)
               )
             }
