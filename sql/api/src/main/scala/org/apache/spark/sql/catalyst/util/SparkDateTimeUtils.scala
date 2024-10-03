@@ -50,8 +50,6 @@ trait SparkDateTimeUtils {
     } catch {
       case e: java.time.DateTimeException =>
         throw ExecutionErrors.zoneOffsetError(timeZoneId, e)
-      case e: java.time.zone.ZoneRulesException =>
-        throw ExecutionErrors.zoneOffsetError(timeZoneId, e)
     }
   }
 
