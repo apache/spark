@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, SupportsRead, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, IdentityTransform}
 import org.apache.spark.sql.connector.read.SupportsReportStatistics
+import org.apache.spark.sql.errors.DataTypeErrors.{toSQLId, toSQLType}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -159,8 +160,8 @@ case class DescribeTableExec(
             val nestedField = table.schema.findNestedField(fieldNames.toImmutableArraySeq)
             if (nestedField.isEmpty) {
               throw QueryExecutionErrors.partitionColumnNotFoundInTheTableSchemaError(
-                fieldNames.map(quoteIfNeeded).mkString("."),
-                table.schema().catalogString
+                toSQLId(fieldNames),
+                toSQLType(table.schema().catalogString)
               )
             }
             nestedField.get
