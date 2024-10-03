@@ -398,8 +398,8 @@ abstract class Dataset[T] extends Serializable {
    *   Whether to create a reliable checkpoint saved to files inside the checkpoint directory. If
    *   false creates a local checkpoint using the caching subsystem
    * @param storageLevel
-   *   Option. If defined, StorageLevel with which to checkpoint the data.
-   *   Only with reliableCheckpoint = false.
+   *   Option. If defined, StorageLevel with which to checkpoint the data. Only with
+   *   reliableCheckpoint = false.
    */
   protected def checkpoint(
       eager: Boolean,

@@ -3360,10 +3360,7 @@ class SparkConnectPlanner(
       } else {
         None
       }
-      target.localCheckpoint(
-        eager = checkpointCommand.getEager,
-        storageLevel = storageLevelOpt
-      )
+      target.localCheckpoint(eager = checkpointCommand.getEager, storageLevel = storageLevelOpt)
     } else {
       target.checkpoint(eager = checkpointCommand.getEager)
     }
