@@ -159,8 +159,8 @@ org.apache.spark.SparkDateTimeException
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "badValue" : "61",
-    "range" : "0 - 59",
-    "unit" : "SecondOfMinute"
+    "range" : "0 ... 59",
+    "unit" : "SECOND"
   }
 }
 
@@ -193,8 +193,8 @@ org.apache.spark.SparkDateTimeException
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "badValue" : "99",
-    "range" : "0 - 59",
-    "unit" : "SecondOfMinute"
+    "range" : "0 ... 59",
+    "unit" : "SECOND"
   }
 }
 
@@ -211,8 +211,8 @@ org.apache.spark.SparkDateTimeException
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "badValue" : "999",
-    "range" : "0 - 59",
-    "unit" : "SecondOfMinute"
+    "range" : "0 ... 59",
+    "unit" : "SECOND"
   }
 }
 

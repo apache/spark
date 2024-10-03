@@ -1148,7 +1148,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         Map(
           "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
           "unit" -> "YEAR",
-          "range" -> "-999999999 - 999999999",
+          "range" -> "-999999999 ... 999999999",
           "badValue" -> "2147483647")
       )
       checkErrorInExpression[SparkDateTimeException](
@@ -1157,7 +1157,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         Map(
           "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
           "unit" -> "MONTH",
-          "range" -> "1 - 12",
+          "range" -> "1 ... 12",
           "badValue" -> "13")
       )
       checkErrorInExpression[SparkDateTimeException](
@@ -1166,7 +1166,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         Map(
           "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
           "unit" -> "DAY",
-          "range" -> "1 - 28/31",
+          "range" -> "1 ... 28/31",
           "badValue" -> "32")
       )
     }
@@ -1224,7 +1224,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
                 Map(
                   "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
                   "unit" -> "YEAR",
-                  "range" -> "-999999999 - 999999999",
+                  "range" -> "-999999999 ... 999999999",
                   "badValue" -> "2147483647")
               )
               checkErrorInExpression[SparkDateTimeException](
@@ -1233,7 +1233,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
                 Map(
                   "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
                   "unit" -> "MONTH",
-                  "range" -> "1 - 12",
+                  "range" -> "1 ... 12",
                   "badValue" -> "13")
               )
               checkErrorInExpression[SparkDateTimeException](
@@ -1242,7 +1242,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
                 Map(
                   "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
                   "unit" -> "DAY",
-                  "range" -> "1 - 28/31",
+                  "range" -> "1 ... 28/31",
                   "badValue" -> "32")
               )
               checkErrorInExpression[SparkDateTimeException](
@@ -1250,8 +1250,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
                 "DATE_TIME_FIELD_OUT_OF_BOUNDS",
                 Map(
                   "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
-                  "unit" -> "HourOfDay",
-                  "range" -> "0 - 23",
+                  "unit" -> "HOUR",
+                  "range" -> "0 ... 23",
                   "badValue" -> "25")
               )
               checkErrorInExpression[SparkDateTimeException](
@@ -1259,8 +1259,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
                 "DATE_TIME_FIELD_OUT_OF_BOUNDS",
                 Map(
                   "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
-                  "unit" -> "MinuteOfHour",
-                  "range" -> "0 - 59",
+                  "unit" -> "MINUTE",
+                  "range" -> "0 ... 59",
                   "badValue" -> "65")
               )
               checkErrorInExpression[SparkDateTimeException](
@@ -1268,8 +1268,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
                 "DATE_TIME_FIELD_OUT_OF_BOUNDS",
                 Map(
                   "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
-                  "unit" -> "SecondOfMinute",
-                  "range" -> "0 - 59",
+                  "unit" -> "SECOND",
+                  "range" -> "0 ... 59",
                   "badValue" -> "70")
               )
             }

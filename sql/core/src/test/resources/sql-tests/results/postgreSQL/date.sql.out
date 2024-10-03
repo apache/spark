@@ -707,7 +707,7 @@ org.apache.spark.SparkDateTimeException
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "badValue" : "13",
-    "range" : "1 - 12",
+    "range" : "1 ... 12",
     "unit" : "MONTH"
   }
 }
@@ -725,7 +725,7 @@ org.apache.spark.SparkDateTimeException
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "badValue" : "-1",
-    "range" : "1 - 28/31",
+    "range" : "1 ... 28/31",
     "unit" : "DAY"
   }
 }

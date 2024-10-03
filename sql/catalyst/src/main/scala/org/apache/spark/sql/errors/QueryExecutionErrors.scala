@@ -289,12 +289,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
             case "Year" => "YEAR"
             case "MonthOfYear" => "MONTH"
             case "DayOfMonth" => "DAY"
-            case "Hour" => "HOUR"
-            case "Minute" => "MINUTE"
-            case "Second" => "SECOND"
-            case _ => field
+            case "HourOfDay" => "HOUR"
+            case "MinuteOfHour" => "MINUTE"
+            case "SecondOfMinute" => "SECOND"
           }
-          (unit, range, badValue)
+          val formattedRange = range.replace(" - ", " ... ")
+          (unit, formattedRange, badValue)
       }
     }
     val (unit, range, badValue) = extractDateTimeErrorInfo(e)
