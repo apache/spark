@@ -294,9 +294,55 @@ class RocksDB(
           return (version, uniqueId)
         }
     }
-    // TODO: This error is not precise
-    throw QueryExecutionErrors.cannotReadCheckpoint(1.toString, "v2")
+    throw QueryExecutionErrors.cannotGetLatestSnapshotVersionAndUniqueIdFromLineage(
+      printLineage(currLineage), printLineage(latestSnapshotVersionsAndUniqueIds)
+    )
   }
+
+  private def getLineageFromChangelogFile(
+      version: Long,
+      useColumnFamilies: Boolean,
+      stateStoreCkptId: Option[String]): Option[Array[(Long, Option[String])]] = {
+
+    // It is possible that change log checkpointing is first enabled and then disabled.
+    // In this case, loading changelog reader will fail because there are only zip files.
+    // It is also possible that state store was previously ran under format version 1
+    // In that case, loading changelog reader with file format version_uniqueId.changelog
+    // will also fail.
+    // But either way, there is no lineage in either case so we can swallow the failure
+    // CANNOT_READ_STREAMING_STATE_FILE.
+    var changelogReader: StateStoreChangelogReader = null
+    var currLineage: Option[Array[(Long, Option[String])]] = None
+    try {
+      changelogReader = fileManager.getChangelogReader(
+        version, useColumnFamilies, stateStoreCkptId)
+      // currLineage contains the version -> uniqueId mapping from the previous snapshot file
+      // to current version's changelog file
+      versionToUniqueIdLineage = changelogReader.lineage.map {
+        case (version, uniqueId) => (version, Option(uniqueId))
+      }
+      logInfo(log"Loading versionToUniqueIdLineage: ${MDC(LogKeys.LINEAGE,
+        printLineage(versionToUniqueIdLineage))} from changelog version: ${MDC(
+        LogKeys.VERSION_NUM, version)} uniqueId: ${MDC(LogKeys.UUID,
+        stateStoreCkptId.getOrElse(""))}. " +
+        log"This would be an noop if changelog is not enabled, or the query was previously" +
+        log"ran under checkpoint format v1")
+      currLineage = Some(versionToUniqueIdLineage)
+    } catch {
+      // This can happen when you first load with changelog enabled and then disable it,
+      // or the state store was previously ran under format version 1.
+      case e: SparkException
+        if e.getErrorClass == "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE" =>
+      // do nothing
+      case e: Throwable =>
+        throw e
+    } finally {
+      if (changelogReader != null) changelogReader.closeIfNeeded()
+      if (currLineage.isEmpty) currLineage = Some(Array((version, stateStoreCkptId)))
+    }
+    currLineage
+  }
+
 
   /**
    * Load the given version of data in a native RocksDB instance.
@@ -321,51 +367,15 @@ class RocksDB(
         // deep copy is needed to avoid race condition
         // between maintenance and task threads
         fileManager.copyFileMapping()
-        val latestSnapshotVersionsAndUniqueIds = {
-          // stateStoreCkptId is wrong? It should be the uniqueId of the previous version
-          // so you use the lineage to get version-1_uniqueId.zip
-          fileManager.getLatestSnapshotVersionAndUniqueId(version, stateStoreCkptId)
-        }
 
-        println(s"wei== loading version $version, stateStoreCkptId: $stateStoreCkptId")
+        val latestSnapshotVersionsAndUniqueIds =
+          fileManager.getLatestSnapshotVersionAndUniqueId(version, stateStoreCkptId)
 
         // Update the lineage from changelog
-        // When loading from the first version (query restart, not necessarily verion=0,
+        // When loading from the first version (query restart, not necessarily version = 0,
         // stateStoreCkptId is not defined even if enableStateStoreCheckpointIds is true
         if (enableStateStoreCheckpointIds && stateStoreCkptId.isDefined) {
-          // It is possible that change log checkpointing is first enabled and then disabled.
-          // In this case, loading changelog reader will fail because there are only zip files.
-          // It is also possible that state store was previously ran under format version 1
-          // In that case, loading changelog reader with file format version_uniqueId.changelog
-          // will also fail.
-          // But either way, there is no lineage in both cases.
-          var changelogReader: StateStoreChangelogReader = null
-          try {
-            changelogReader = fileManager.getChangelogReader(
-              version, useColumnFamilies, stateStoreCkptId)
-            // currLineage contains the version -> uniqueId mapping from the previous snapshot file
-            // to current version's changelog file
-            versionToUniqueIdLineage = changelogReader.lineage.map {
-              case (version, uniqueId) => (version, Option(uniqueId))
-            }
-            logInfo(log"Loading versionToUniqueIdLineage: ${MDC(LogKeys.LINEAGE,
-              printLineage(versionToUniqueIdLineage))} from changelog version: ${MDC(
-              LogKeys.VERSION_NUM, version)} uniqueId: ${MDC(LogKeys.UUID,
-              stateStoreCkptId.getOrElse(""))}. " +
-              log"This would be an noop if changelog is not enabled")
-            currLineage = Some(versionToUniqueIdLineage)
-          } catch {
-            // This can happen when you first load with changelog enabled and then disable it,
-            // or the state store was previously ran under format version 1.
-            case e: SparkException
-              if e.getErrorClass == "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE" =>
-            // do nothing
-            case e: Throwable =>
-              throw e
-          } finally {
-            if (changelogReader != null) changelogReader.closeIfNeeded()
-            if (currLineage.isEmpty) currLineage = Some(Array((version, stateStoreCkptId)))
-          }
+          currLineage = getLineageFromChangelogFile(version, useColumnFamilies, stateStoreCkptId)
         }
 
         println("wei=== latest snapshots")
@@ -381,13 +391,6 @@ class RocksDB(
             logInfo(log"Multiple snapshots found for the version. Found: ${MDC(LogKeys.LINEAGE,
               printLineage(latestSnapshotVersionsAndUniqueIds))}. " +
               log"Loading the latest snapshot from lineage.")
-            // scalastyle:off
-            println("wei=== multiple snapshots found")
-            latestSnapshotVersionsAndUniqueIds.foreach(x => println(x._1, x._2))
-            // scalastyle:on
-            assert(enableChangelogCheckpointing, s"When loading version $version, multiple " +
-              s"previous snapshots found for version ${latestSnapshotVersionsAndUniqueIds(0)._1}" +
-              "This should happen only when changelog checkpointing is enabled, but it is not.")
             getLatestSnapshotVersionAndUniqueIdFromLineage(
               currLineage.get, latestSnapshotVersionsAndUniqueIds)
           }

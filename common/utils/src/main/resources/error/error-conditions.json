@@ -238,6 +238,11 @@
           "Cannot read RocksDB checkpoint metadata. Expected <expectedVersion>, but found <actualVersion>."
         ]
       },
+      "CANNOT_GET_LATEST_SNAPSHOT_VERSION_AND_UNIQUE_ID_FROM_LINEAGE" : {
+        "message" : [
+          "Cannot get latest snapshot version and unique ids from lineage. lineage: <lineage>, latest snapshot versions and unique ids: <snapshotVersionAndUniqueIds>."
+        ]
+      },
       "CANNOT_READ_DELTA_FILE_KEY_SIZE" : {
         "message" : [
           "Error reading delta file <fileToRead> of <clazz>: key size cannot be <keySize>."
