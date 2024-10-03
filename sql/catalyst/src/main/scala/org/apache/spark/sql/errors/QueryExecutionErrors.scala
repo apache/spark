@@ -611,18 +611,26 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def binaryArithmeticCauseOverflowError(
       eval1: Short, symbol: String, eval2: Short, hint: String): SparkArithmeticException = {
-    val alternative = if (hint != "") {
-      s" Use `$hint` to ignore overflow problem and return NULL."
-    } else ""
-    new SparkArithmeticException(
-      errorClass = "BINARY_ARITHMETIC_OVERFLOW",
-      messageParameters = Map(
-        "value1" -> toSQLValue(eval1, ShortType),
-        "symbol" -> symbol,
-        "value2" -> toSQLValue(eval2, ShortType),
-        "alternative" -> alternative),
-      context = Array.empty,
-      summary = "")
+    if (hint == "") {
+      new SparkArithmeticException(
+        errorClass = "BINARY_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+        messageParameters = Map(
+          "value1" -> toSQLValue(eval1, ShortType),
+          "symbol" -> symbol,
+          "value2" -> toSQLValue(eval2, ShortType)),
+        context = Array.empty,
+        summary = "")
+    } else {
+      new SparkArithmeticException(
+        errorClass = "BINARY_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+        messageParameters = Map(
+          "value1" -> toSQLValue(eval1, ShortType),
+          "symbol" -> symbol,
+          "value2" -> toSQLValue(eval2, ShortType),
+          "hint" -> hint),
+        context = Array.empty,
+        summary = "")
+    }
   }
 
   def intervalArithmeticOverflowError(

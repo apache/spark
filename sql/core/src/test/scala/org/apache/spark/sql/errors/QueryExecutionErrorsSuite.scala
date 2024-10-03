@@ -763,12 +763,12 @@ class QueryExecutionErrorsSuite
         exception = intercept[SparkArithmeticException] {
           sql(s"select 127Y + 5Y").collect()
         },
-        condition = "BINARY_ARITHMETIC_OVERFLOW",
+        condition = "BINARY_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
         parameters = Map(
           "value1" -> "127S",
           "symbol" -> "+",
           "value2" -> "5S",
-          "alternative" -> " Use `try_add` to ignore overflow problem and return NULL."),
+          "hint" -> "try_add"),
         sqlState = "22003")
     }
   }
@@ -779,12 +779,12 @@ class QueryExecutionErrorsSuite
         exception = intercept[SparkArithmeticException] {
           sql(s"select -2Y - 127Y").collect()
         },
-        condition = "BINARY_ARITHMETIC_OVERFLOW",
+        condition = "BINARY_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
         parameters = Map(
           "value1" -> "-2S",
           "symbol" -> "-",
           "value2" -> "127S",
-          "alternative" -> " Use `try_subtract` to ignore overflow problem and return NULL."),
+          "hint" -> "try_subtract"),
         sqlState = "22003")
     }
   }
@@ -795,12 +795,12 @@ class QueryExecutionErrorsSuite
         exception = intercept[SparkArithmeticException] {
           sql(s"select 127Y * 5Y").collect()
         },
-        condition = "BINARY_ARITHMETIC_OVERFLOW",
+        condition = "BINARY_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
         parameters = Map(
           "value1" -> "127S",
           "symbol" -> "*",
           "value2" -> "5S",
-          "alternative" -> " Use `try_multiply` to ignore overflow problem and return NULL."),
+          "hint" -> "try_multiply"),
         sqlState = "22003")
     }
   }
