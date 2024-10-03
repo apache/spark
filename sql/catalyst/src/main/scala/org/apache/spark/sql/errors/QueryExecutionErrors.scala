@@ -625,14 +625,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       eval1: Short,
       symbol: String,
       eval2: Short,
-      functionName: String): SparkArithmeticException = {
+      suggestedFunc: String): SparkArithmeticException = {
     new SparkArithmeticException(
       errorClass = "BINARY_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
       messageParameters = Map(
         "value1" -> toSQLValue(eval1, ShortType),
         "symbol" -> symbol,
         "value2" -> toSQLValue(eval2, ShortType),
-        "functionName" -> toSQLId(functionName)),
+        "functionName" -> toSQLId(suggestedFunc)),
       context = Array.empty,
       summary = "")
   }
