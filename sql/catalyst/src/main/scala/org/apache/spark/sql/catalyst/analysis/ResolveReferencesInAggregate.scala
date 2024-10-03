@@ -152,11 +152,12 @@ class ResolveReferencesInAggregate(val catalogManager: CatalogManager) extends S
       }
     } else {
       // Check if grouping expressions contain the integer literal
-      if (groupExprs.exists(expr =>
+      val containsIntegerLiteral = groupExprs.exists(expr =>
         trimAliases(expr) match {
           case IntegerLiteral(_) => true
           case _ => false
-        })) {
+        })
+      if (containsIntegerLiteral) {
         val expandedGroupExprs = expandGroupByAll(selectList)
         if (expandedGroupExprs.isEmpty) {
           groupExprs

@@ -4635,7 +4635,11 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withTable("t1", "t2", "t3") {
       sql("CREATE TABLE t1(c1 int) USING PARQUET")
       sql("CREATE TABLE t2 USING PARQUET AS SELECT c1, -1 AS x from t1 group by c1, x")
-      sql("CREATE TABLE t3 USING PARQUET AS SELECT c1, -1 AS x, 3 AS y from t1 group by c1, x, y")
+      sql("CREATE TABLE t3 USING PARQUET AS SELECT c1, 5 AS x, 5 AS y from t1 group by c1, x, y")
+      val error = intercept[AnalysisException] {
+        sql("CREATE TABLE t4 USING PARQUET AS SELECT c1, -1 AS x, 5 AS y from t1 group by c1, x, 5")
+      }
+      assert(error.message contains "GROUP_BY_POS_OUT_OF_RANGE")
     }
   }
 
