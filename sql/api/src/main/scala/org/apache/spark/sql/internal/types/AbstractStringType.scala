@@ -23,8 +23,8 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
 /**
  * AbstractStringType is an abstract class for StringType with collation support.
  */
-abstract class AbstractStringType(
-    private[sql] val supportsTrimCollation: Boolean = false) extends AbstractDataType {
+abstract class AbstractStringType(private[sql] val supportsTrimCollation: Boolean = false)
+    extends AbstractDataType {
   override private[sql] def defaultConcreteType: DataType = SqlApiConf.get.defaultStringType
   override private[sql] def simpleString: String = "string"
   private[sql] def canUseTrimCollation(other: DataType): Boolean =
