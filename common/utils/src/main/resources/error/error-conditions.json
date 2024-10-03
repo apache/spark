@@ -6707,6 +6707,11 @@
       "Sinks cannot request distribution and ordering in continuous execution mode."
     ]
   },
+  "_LEGACY_ERROR_TEMP_2000" : {
+    "message" : [
+      "<message>. If necessary set <ansiConfig> to false to bypass this error."
+    ]
+  },
   "_LEGACY_ERROR_TEMP_2003" : {
     "message" : [
       "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
