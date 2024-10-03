@@ -37,6 +37,7 @@ import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
@@ -118,6 +119,7 @@ class PlanGenerationTestSuite
 
   override protected def beforeEach(): Unit = {
     session.resetPlanIdGenerator()
+    internal.UnresolvedNamedLambdaVariable.resetIdGenerator()
   }
 
   override protected def afterAll(): Unit = {
@@ -549,6 +551,14 @@ class PlanGenerationTestSuite
       ids = Array(fn.col("id"), fn.col("a")),
       variableColumnName = "name",
       valueColumnName = "value")
+  }
+
+  test("transpose index_column") {
+    simple.transpose(indexColumn = fn.col("id"))
+  }
+
+  test("transpose no_index_column") {
+    simple.transpose()
   }
 
   test("offset") {
@@ -1800,7 +1810,11 @@ class PlanGenerationTestSuite
     fn.sentences(fn.col("g"))
   }
 
-  functionTest("sentences with locale") {
+  functionTest("sentences with language") {
+    fn.sentences(fn.col("g"), lit("en"))
+  }
+
+  functionTest("sentences with language and country") {
     fn.sentences(fn.col("g"), lit("en"), lit("US"))
   }
 
@@ -2433,6 +2447,10 @@ class PlanGenerationTestSuite
     fn.aggregate(fn.col("e"), lit(0), (x, y) => x + y)
   }
 
+  functionTest("aggregate with finish lambda") {
+    fn.aggregate(fn.col("e"), lit(0), (x, y) => x + y, x => x + lit(2))
+  }
+
   functionTest("reduce") {
     fn.reduce(fn.col("e"), lit(0), (x, y) => x + y)
   }
@@ -2491,6 +2509,10 @@ class PlanGenerationTestSuite
 
   functionTest("from_json") {
     fn.from_json(fn.col("g"), simpleSchema)
+  }
+
+  functionTest("from_json with json schema") {
+    fn.from_json(fn.col("g"), fn.lit(simpleSchema.json))
   }
 
   functionTest("schema_of_json") {
@@ -2968,6 +2990,14 @@ class PlanGenerationTestSuite
     fn.call_function("lower", fn.col("g"))
   }
 
+  functionTest("from_xml") {
+    fn.from_xml(fn.col("g"), simpleSchema)
+  }
+
+  functionTest("from_xml with json schema") {
+    fn.from_xml(fn.col("g"), fn.lit(simpleSchema.json))
+  }
+
   test("hll_sketch_agg with column lgConfigK") {
     binary.select(fn.hll_sketch_agg(fn.col("bytes"), lit(0)))
   }
@@ -3264,7 +3294,7 @@ class PlanGenerationTestSuite
             .setUnparsedIdentifier("id")))
       .setCustomField("abc")
       .build()
-    simple.select(Column(_.setExtension(com.google.protobuf.Any.pack(extension))))
+    simple.select(column(_.setExtension(com.google.protobuf.Any.pack(extension))))
   }
 
   test("crosstab") {

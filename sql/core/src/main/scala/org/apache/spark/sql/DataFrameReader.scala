@@ -24,14 +24,14 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.Partition
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, FailureSafeParser}
+import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlOptions}
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -54,136 +54,44 @@ import org.apache.spark.unsafe.types.UTF8String
  * @since 1.4.0
  */
 @Stable
-class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
+class DataFrameReader private[sql](sparkSession: SparkSession)
+  extends api.DataFrameReader {
+  override type DS[U] = Dataset[U]
 
-  /**
-   * Specifies the input data source format.
-   *
-   * @since 1.4.0
-   */
-  def format(source: String): DataFrameReader = {
-    this.source = source
-    this
-  }
+  format(sparkSession.sessionState.conf.defaultDataSourceName)
 
-  /**
-   * Specifies the input schema. Some data sources (e.g. JSON) can infer the input schema
-   * automatically from data. By specifying the schema here, the underlying data source can
-   * skip the schema inference step, and thus speed up data loading.
-   *
-   * @since 1.4.0
-   */
-  def schema(schema: StructType): DataFrameReader = {
-    if (schema != null) {
-      val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
-      this.userSpecifiedSchema = Option(replaced)
-      validateSingleVariantColumn()
-    }
-    this
-  }
+  /** @inheritdoc */
+  override def format(source: String): this.type = super.format(source)
 
-  /**
-   * Specifies the schema by using the input DDL-formatted string. Some data sources (e.g. JSON) can
-   * infer the input schema automatically from data. By specifying the schema here, the underlying
-   * data source can skip the schema inference step, and thus speed up data loading.
-   *
-   * {{{
-   *   spark.read.schema("a INT, b STRING, c DOUBLE").csv("test.csv")
-   * }}}
-   *
-   * @since 2.3.0
-   */
-  def schema(schemaString: String): DataFrameReader = {
-    schema(StructType.fromDDL(schemaString))
-  }
+  /** @inheritdoc */
+  override def schema(schema: StructType): this.type = super.schema(schema)
 
-  /**
-   * Adds an input option for the underlying data source.
-   *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
-   *
-   * @since 1.4.0
-   */
-  def option(key: String, value: String): DataFrameReader = {
-    this.extraOptions = this.extraOptions + (key -> value)
-    validateSingleVariantColumn()
-    this
-  }
+  /** @inheritdoc */
+  override def schema(schemaString: String): this.type = super.schema(schemaString)
 
-  /**
-   * Adds an input option for the underlying data source.
-   *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
-   *
-   * @since 2.0.0
-   */
-  def option(key: String, value: Boolean): DataFrameReader = option(key, value.toString)
+  /** @inheritdoc */
+  override def option(key: String, value: String): this.type = super.option(key, value)
 
-  /**
-   * Adds an input option for the underlying data source.
-   *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
-   *
-   * @since 2.0.0
-   */
-  def option(key: String, value: Long): DataFrameReader = option(key, value.toString)
+  /** @inheritdoc */
+  override def option(key: String, value: Boolean): this.type = super.option(key, value)
 
-  /**
-   * Adds an input option for the underlying data source.
-   *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
-   *
-   * @since 2.0.0
-   */
-  def option(key: String, value: Double): DataFrameReader = option(key, value.toString)
+  /** @inheritdoc */
+  override def option(key: String, value: Long): this.type = super.option(key, value)
 
-  /**
-   * (Scala-specific) Adds input options for the underlying data source.
-   *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
-   *
-   * @since 1.4.0
-   */
-  def options(options: scala.collection.Map[String, String]): DataFrameReader = {
-    this.extraOptions ++= options
-    validateSingleVariantColumn()
-    this
-  }
+  /** @inheritdoc */
+  override def option(key: String, value: Double): this.type = super.option(key, value)
 
-  /**
-   * Adds input options for the underlying data source.
-   *
-   * All options are maintained in a case-insensitive way in terms of key names.
-   * If a new option has the same key case-insensitively, it will override the existing option.
-   *
-   * @since 1.4.0
-   */
-  def options(options: java.util.Map[String, String]): DataFrameReader = {
-    this.options(options.asScala)
-    this
-  }
+  /** @inheritdoc */
+  override def options(options: scala.collection.Map[String, String]): this.type =
+    super.options(options)
 
-  /**
-   * Loads input in as a `DataFrame`, for data sources that don't require a path (e.g. external
-   * key-value stores).
-   *
-   * @since 1.4.0
-   */
-  def load(): DataFrame = {
-    load(Seq.empty: _*) // force invocation of `load(...varargs...)`
-  }
+  /** @inheritdoc */
+  override def options(options: java.util.Map[String, String]): this.type = super.options(options)
 
-  /**
-   * Loads input in as a `DataFrame`, for data sources that require a path (e.g. data backed by
-   * a local or distributed file system).
-   *
-   * @since 1.4.0
-   */
+  /** @inheritdoc */
+  override def load(): DataFrame = load(Nil: _*)
+
+  /** @inheritdoc */
   def load(path: String): DataFrame = {
     // force invocation of `load(...varargs...)`
     if (sparkSession.sessionState.conf.legacyPathOptionBehavior) {
@@ -193,12 +101,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
   }
 
-  /**
-   * Loads input in as a `DataFrame`, for data sources that support multiple paths.
-   * Only works if the source is a HadoopFsRelationProvider.
-   *
-   * @since 1.6.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
   def load(paths: String*): DataFrame = {
     if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
@@ -235,90 +138,22 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         options = finalOptions.originalMap).resolveRelation())
   }
 
-  /**
-   * Construct a `DataFrame` representing the database table accessible via JDBC URL
-   * url named table and connection properties.
-   *
-   * You can find the JDBC-specific option and parameter documentation for reading tables
-   * via JDBC in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
-   *
-   * @since 1.4.0
-   */
-  def jdbc(url: String, table: String, properties: Properties): DataFrame = {
-    assertNoSpecifiedSchema("jdbc")
-    // properties should override settings in extraOptions.
-    this.extraOptions ++= properties.asScala
-    // explicit url and dbtable should override all
-    this.extraOptions ++= Seq(JDBCOptions.JDBC_URL -> url, JDBCOptions.JDBC_TABLE_NAME -> table)
-    format("jdbc").load()
-  }
+  /** @inheritdoc */
+  override def jdbc(url: String, table: String, properties: Properties): DataFrame =
+    super.jdbc(url, table, properties)
 
-  // scalastyle:off line.size.limit
-  /**
-   * Construct a `DataFrame` representing the database table accessible via JDBC URL
-   * url named table. Partitions of the table will be retrieved in parallel based on the parameters
-   * passed to this function.
-   *
-   * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
-   * your external database systems.
-   *
-   * You can find the JDBC-specific option and parameter documentation for reading tables via JDBC in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
-   *
-   * @param table Name of the table in the external database.
-   * @param columnName Alias of `partitionColumn` option. Refer to `partitionColumn` in
-   *                   <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
-   *                     Data Source Option</a> in the version you use.
-   * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
-   *                             tag/value. Normally at least a "user" and "password" property
-   *                             should be included. "fetchsize" can be used to control the
-   *                             number of rows per fetch and "queryTimeout" can be used to wait
-   *                             for a Statement object to execute to the given number of seconds.
-   * @since 1.4.0
-   */
-  // scalastyle:on line.size.limit
-  def jdbc(
+  /** @inheritdoc */
+  override def jdbc(
       url: String,
       table: String,
       columnName: String,
       lowerBound: Long,
       upperBound: Long,
       numPartitions: Int,
-      connectionProperties: Properties): DataFrame = {
-    // columnName, lowerBound, upperBound and numPartitions override settings in extraOptions.
-    this.extraOptions ++= Map(
-      JDBCOptions.JDBC_PARTITION_COLUMN -> columnName,
-      JDBCOptions.JDBC_LOWER_BOUND -> lowerBound.toString,
-      JDBCOptions.JDBC_UPPER_BOUND -> upperBound.toString,
-      JDBCOptions.JDBC_NUM_PARTITIONS -> numPartitions.toString)
-    jdbc(url, table, connectionProperties)
-  }
+      connectionProperties: Properties): DataFrame =
+    super.jdbc(url, table, columnName, lowerBound, upperBound, numPartitions, connectionProperties)
 
-  /**
-   * Construct a `DataFrame` representing the database table accessible via JDBC URL
-   * url named table using connection properties. The `predicates` parameter gives a list
-   * expressions suitable for inclusion in WHERE clauses; each one defines one partition
-   * of the `DataFrame`.
-   *
-   * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
-   * your external database systems.
-   *
-   * You can find the JDBC-specific option and parameter documentation for reading tables
-   * via JDBC in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
-   *
-   * @param table Name of the table in the external database.
-   * @param predicates Condition in the where clause for each partition.
-   * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
-   *                             tag/value. Normally at least a "user" and "password" property
-   *                             should be included. "fetchsize" can be used to control the
-   *                             number of rows per fetch.
-   * @since 1.4.0
-   */
+  /** @inheritdoc */
   def jdbc(
       url: String,
       table: String,
@@ -335,38 +170,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     sparkSession.baseRelationToDataFrame(relation)
   }
 
-  /**
-   * Loads a JSON file and returns the results as a `DataFrame`.
-   *
-   * See the documentation on the overloaded `json()` method with varargs for more details.
-   *
-   * @since 1.4.0
-   */
-  def json(path: String): DataFrame = {
-    // This method ensures that calls that explicit need single argument works, see SPARK-16009
-    json(Seq(path): _*)
-  }
+  /** @inheritdoc */
+  override def json(path: String): DataFrame = super.json(path)
 
-  /**
-   * Loads JSON files and returns the results as a `DataFrame`.
-   *
-   * <a href="http://jsonlines.org/">JSON Lines</a> (newline-delimited JSON) is supported by
-   * default. For JSON (one record per file), set the `multiLine` option to true.
-   *
-   * This function goes through the input once to determine the input schema. If you know the
-   * schema in advance, use the version that specifies the schema to avoid the extra scan.
-   *
-   * You can find the JSON-specific options for reading JSON files in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
-  def json(paths: String*): DataFrame = {
-    userSpecifiedSchema.foreach(checkJsonSchema)
-    format("json").load(paths : _*)
-  }
+  override def json(paths: String*): DataFrame = super.json(paths: _*)
 
   /**
    * Loads a `JavaRDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON
@@ -397,16 +206,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     json(sparkSession.createDataset(jsonRDD)(Encoders.STRING))
   }
 
-  /**
-   * Loads a `Dataset[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON Lines
-   * text format or newline-delimited JSON</a>) and returns the result as a `DataFrame`.
-   *
-   * Unless the schema is specified using `schema` function, this function goes through the
-   * input once to determine the input schema.
-   *
-   * @param jsonDataset input Dataset with one JSON object per record
-   * @since 2.2.0
-   */
+  /** @inheritdoc */
   def json(jsonDataset: Dataset[String]): DataFrame = {
     val parsedOptions = new JSONOptions(
       extraOptions.toMap,
@@ -439,36 +239,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = jsonDataset.isStreaming)
   }
 
-  /**
-   * Loads a CSV file and returns the result as a `DataFrame`. See the documentation on the
-   * other overloaded `csv()` method for more details.
-   *
-   * @since 2.0.0
-   */
-  def csv(path: String): DataFrame = {
-    // This method ensures that calls that explicit need single argument works, see SPARK-16009
-    csv(Seq(path): _*)
-  }
+  /** @inheritdoc */
+  override def csv(path: String): DataFrame = super.csv(path)
 
-  /**
-   * Loads an `Dataset[String]` storing CSV rows and returns the result as a `DataFrame`.
-   *
-   * If the schema is not specified using `schema` function and `inferSchema` option is enabled,
-   * this function goes through the input once to determine the input schema.
-   *
-   * If the schema is not specified using `schema` function and `inferSchema` option is disabled,
-   * it determines the columns as string types and it reads only the first line to determine the
-   * names and the number of fields.
-   *
-   * If the enforceSchema is set to `false`, only the CSV header in the first line is checked
-   * to conform specified or inferred schema.
-   *
-   * @note if `header` option is set to `true` when calling this API, all lines same with
-   * the header will be removed if exists.
-   *
-   * @param csvDataset input Dataset with one CSV row per record
-   * @since 2.2.0
-   */
+  /** @inheritdoc */
   def csv(csvDataset: Dataset[String]): DataFrame = {
     val parsedOptions: CSVOptions = new CSVOptions(
       extraOptions.toMap,
@@ -527,61 +301,18 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = csvDataset.isStreaming)
   }
 
-  /**
-   * Loads CSV files and returns the result as a `DataFrame`.
-   *
-   * This function will go through the input once to determine the input schema if `inferSchema`
-   * is enabled. To avoid going through the entire data once, disable `inferSchema` option or
-   * specify the schema explicitly using `schema`.
-   *
-   * You can find the CSV-specific options for reading CSV files in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
-  def csv(paths: String*): DataFrame = format("csv").load(paths : _*)
+  override def csv(paths: String*): DataFrame = super.csv(paths: _*)
 
-  /**
-   * Loads a XML file and returns the result as a `DataFrame`. See the documentation on the
-   * other overloaded `xml()` method for more details.
-   *
-   * @since 4.0.0
-   */
-  def xml(path: String): DataFrame = {
-    // This method ensures that calls that explicit need single argument works, see SPARK-16009
-    xml(Seq(path): _*)
-  }
+  /** @inheritdoc */
+  override def xml(path: String): DataFrame = super.xml(path)
 
-  /**
-   * Loads XML files and returns the result as a `DataFrame`.
-   *
-   * This function will go through the input once to determine the input schema if `inferSchema`
-   * is enabled. To avoid going through the entire data once, disable `inferSchema` option or
-   * specify the schema explicitly using `schema`.
-   *
-   * You can find the XML-specific options for reading XML files in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
-   * Data Source Option</a> in the version you use.
-   *
-   * @since 4.0.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
-  def xml(paths: String*): DataFrame = {
-    userSpecifiedSchema.foreach(checkXmlSchema)
-    format("xml").load(paths: _*)
-  }
+  override def xml(paths: String*): DataFrame = super.xml(paths: _*)
 
-  /**
-   * Loads an `Dataset[String]` storing XML object and returns the result as a `DataFrame`.
-   *
-   * If the schema is not specified using `schema` function and `inferSchema` option is enabled,
-   * this function goes through the input once to determine the input schema.
-   *
-   * @param xmlDataset input Dataset with one XML object per record
-   * @since 4.0.0
-   */
+  /** @inheritdoc */
   def xml(xmlDataset: Dataset[String]): DataFrame = {
     val parsedOptions: XmlOptions = new XmlOptions(
       extraOptions.toMap,
@@ -614,70 +345,21 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = xmlDataset.isStreaming)
   }
 
-  /**
-   * Loads a Parquet file, returning the result as a `DataFrame`. See the documentation
-   * on the other overloaded `parquet()` method for more details.
-   *
-   * @since 2.0.0
-   */
-  def parquet(path: String): DataFrame = {
-    // This method ensures that calls that explicit need single argument works, see SPARK-16009
-    parquet(Seq(path): _*)
-  }
+  /** @inheritdoc */
+  override def parquet(path: String): DataFrame = super.parquet(path)
 
-  /**
-   * Loads a Parquet file, returning the result as a `DataFrame`.
-   *
-   * Parquet-specific option(s) for reading Parquet files can be found in
-   * <a href=
-   *   "https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
-   *
-   * @since 1.4.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
-  def parquet(paths: String*): DataFrame = {
-    format("parquet").load(paths: _*)
-  }
+  override def parquet(paths: String*): DataFrame = super.parquet(paths: _*)
 
-  /**
-   * Loads an ORC file and returns the result as a `DataFrame`.
-   *
-   * @param path input path
-   * @since 1.5.0
-   */
-  def orc(path: String): DataFrame = {
-    // This method ensures that calls that explicit need single argument works, see SPARK-16009
-    orc(Seq(path): _*)
-  }
+  /** @inheritdoc */
+  override def orc(path: String): DataFrame = super.orc(path)
 
-  /**
-   * Loads ORC files and returns the result as a `DataFrame`.
-   *
-   * ORC-specific option(s) for reading ORC files can be found in
-   * <a href=
-   *   "https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
-   *
-   * @param paths input paths
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
-  def orc(paths: String*): DataFrame = format("orc").load(paths: _*)
+  override def orc(paths: String*): DataFrame = super.orc(paths: _*)
 
-  /**
-   * Returns the specified table/view as a `DataFrame`. If it's a table, it must support batch
-   * reading and the returned DataFrame is the batch scan query plan of this table. If it's a view,
-   * the returned DataFrame is simply the query plan of the view, which can either be a batch or
-   * streaming query plan.
-   *
-   * @param tableName is either a qualified or unqualified name that designates a table or view.
-   *                  If a database is specified, it identifies the table/view from the database.
-   *                  Otherwise, it first attempts to find a temporary view with the given name
-   *                  and then match the table/view from the current database.
-   *                  Note that, the global temporary view database is also valid here.
-   * @since 1.4.0
-   */
+  /** @inheritdoc */
   def table(tableName: String): DataFrame = {
     assertNoSpecifiedSchema("table")
     val multipartIdentifier =
@@ -686,108 +368,31 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       new CaseInsensitiveStringMap(extraOptions.toMap.asJava)))
   }
 
-  /**
-   * Loads text files and returns a `DataFrame` whose schema starts with a string column named
-   * "value", and followed by partitioned columns if there are any. See the documentation on
-   * the other overloaded `text()` method for more details.
-   *
-   * @since 2.0.0
-   */
-  def text(path: String): DataFrame = {
-    // This method ensures that calls that explicit need single argument works, see SPARK-16009
-    text(Seq(path): _*)
-  }
+  /** @inheritdoc */
+  override def text(path: String): DataFrame = super.text(path)
 
-  /**
-   * Loads text files and returns a `DataFrame` whose schema starts with a string column named
-   * "value", and followed by partitioned columns if there are any.
-   * The text files must be encoded as UTF-8.
-   *
-   * By default, each line in the text files is a new row in the resulting DataFrame. For example:
-   * {{{
-   *   // Scala:
-   *   spark.read.text("/path/to/spark/README.md")
-   *
-   *   // Java:
-   *   spark.read().text("/path/to/spark/README.md")
-   * }}}
-   *
-   * You can find the text-specific options for reading text files in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
-   *
-   * @param paths input paths
-   * @since 1.6.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
-  def text(paths: String*): DataFrame = format("text").load(paths : _*)
+  override def text(paths: String*): DataFrame = super.text(paths: _*)
 
-  /**
-   * Loads text files and returns a [[Dataset]] of String. See the documentation on the
-   * other overloaded `textFile()` method for more details.
-   * @since 2.0.0
-   */
-  def textFile(path: String): Dataset[String] = {
-    // This method ensures that calls that explicit need single argument works, see SPARK-16009
-    textFile(Seq(path): _*)
-  }
+  /** @inheritdoc */
+  override def textFile(path: String): Dataset[String] = super.textFile(path)
 
-  /**
-   * Loads text files and returns a [[Dataset]] of String. The underlying schema of the Dataset
-   * contains a single string column named "value".
-   * The text files must be encoded as UTF-8.
-   *
-   * If the directory structure of the text files contains partitioning information, those are
-   * ignored in the resulting Dataset. To include partitioning information as columns, use `text`.
-   *
-   * By default, each line in the text files is a new row in the resulting DataFrame. For example:
-   * {{{
-   *   // Scala:
-   *   spark.read.textFile("/path/to/spark/README.md")
-   *
-   *   // Java:
-   *   spark.read().textFile("/path/to/spark/README.md")
-   * }}}
-   *
-   * You can set the text-specific options as specified in `DataFrameReader.text`.
-   *
-   * @param paths input path
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
-  def textFile(paths: String*): Dataset[String] = {
-    assertNoSpecifiedSchema("textFile")
-    text(paths : _*).select("value").as[String](sparkSession.implicits.newStringEncoder)
-  }
+  override def textFile(paths: String*): Dataset[String] = super.textFile(paths: _*)
 
-  /**
-   * A convenient function for schema validation in APIs.
-   */
-  private def assertNoSpecifiedSchema(operation: String): Unit = {
-    if (userSpecifiedSchema.nonEmpty) {
-      throw QueryCompilationErrors.userSpecifiedSchemaUnsupportedError(operation)
-    }
-  }
-
-  /**
-   * Ensure that the `singleVariantColumn` option cannot be used if there is also a user specified
-   * schema.
-   */
-  private def validateSingleVariantColumn(): Unit = {
+  /** @inheritdoc */
+  override protected def validateSingleVariantColumn(): Unit = {
     if (extraOptions.get(JSONOptions.SINGLE_VARIANT_COLUMN).isDefined &&
       userSpecifiedSchema.isDefined) {
       throw QueryCompilationErrors.invalidSingleVariantColumn()
     }
   }
 
-  ///////////////////////////////////////////////////////////////////////////////////////
-  // Builder pattern config options
-  ///////////////////////////////////////////////////////////////////////////////////////
+  override protected def validateJsonSchema(): Unit =
+    userSpecifiedSchema.foreach(checkJsonSchema)
 
-  private var source: String = sparkSession.sessionState.conf.defaultDataSourceName
-
-  private var userSpecifiedSchema: Option[StructType] = None
-
-  private var extraOptions = CaseInsensitiveMap[String](Map.empty)
-
+  override protected def validateXmlSchema(): Unit =
+    userSpecifiedSchema.foreach(checkXmlSchema)
 }

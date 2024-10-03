@@ -95,7 +95,7 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
   test("star") {
     testConversion(UnresolvedStar(None), analysis.UnresolvedStar(None))
     testConversion(
-      UnresolvedStar(Option("x.y.z")),
+      UnresolvedStar(Option("x.y.z.*")),
       analysis.UnresolvedStar(Option(Seq("x", "y", "z"))))
     testConversion(
       UnresolvedStar(None, Option(10L)),
@@ -282,6 +282,11 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
         Seq(catX)))
   }
 
+  test("sql") {
+    // Direct comparison because Origin is a bit messed up.
+    assert(Converter(SqlExpression("1 + 1")) == Converter.parser.parseExpression("1 + 1"))
+  }
+
   test("caseWhen") {
     testConversion(
       CaseWhenOtherwise(
@@ -319,7 +324,7 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
     a.asInstanceOf[AgnosticEncoder[Any]]
 
   test("udf") {
-    val int2LongSum = new aggregate.TypedSumLong[Int]((i: Int) => i.toLong)
+    val int2LongSum = new TypedSumLong[Int]((i: Int) => i.toLong)
     val bufferEncoder = encoderFor(int2LongSum.bufferEncoder)
     val outputEncoder = encoderFor(int2LongSum.outputEncoder)
     val bufferAttrs = bufferEncoder.namedExpressions.map {

@@ -4625,6 +4625,12 @@
         "standard": "N",
         "usedBy": ["Spark"]
     },
+    "42K0N": {
+        "description": "Invalid external type.",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
     "42KD0": {
         "description": "Ambiguous name reference.",
         "origin": "Databricks",
@@ -7407,6 +7413,12 @@
     },
     "KD00E": {
         "description": "table feature validation failure",
+        "origin": "Databricks",
+        "standard": "N",
+        "usedBy": ["Databricks"]
+    },
+    "KD010": {
+        "description": "external data source failure",
         "origin": "Databricks",
         "standard": "N",
         "usedBy": ["Databricks"]

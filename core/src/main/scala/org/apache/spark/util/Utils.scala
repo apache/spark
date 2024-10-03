@@ -1351,6 +1351,86 @@ private[spark] object Utils
     }
   }
 
+  val TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE =
+    "Full stacktrace of original doTryWithCallerStacktrace caller"
+
+  val TRY_WITH_CALLER_STACKTRACE_TRY_STACKTRACE =
+    "Stacktrace under doTryWithCallerStacktrace"
+
+  /**
+   * Use Try with stacktrace substitution for the caller retrieving the error.
+   *
+   * Normally in case of failure, the exception would have the stacktrace of the caller that
+   * originally called doTryWithCallerStacktrace. However, we want to replace the part above
+   * this function with the stacktrace of the caller who calls getTryWithCallerStacktrace.
+   * So here we save the part of the stacktrace below doTryWithCallerStacktrace, and
+   * getTryWithCallerStacktrace will stitch it with the new stack trace of the caller.
+   * The full original stack trace is kept in ex.getSuppressed.
+   *
+   * @param f Code block to be wrapped in Try
+   * @return Try with Success or Failure of the code block. Use with getTryWithCallerStacktrace.
+   */
+  def doTryWithCallerStacktrace[T](f: => T): Try[T] = {
+    val t = Try {
+      f
+    }
+    t match {
+      case Failure(ex) =>
+        // Note: we remove the common suffix instead of e.g. finding the call to this function, to
+        // account for recursive calls with multiple doTryWithCallerStacktrace on the stack trace.
+        val origStackTrace = ex.getStackTrace
+        val currentStackTrace = Thread.currentThread().getStackTrace
+        val commonSuffixLen = origStackTrace.reverse.zip(currentStackTrace.reverse).takeWhile {
+          case (exElem, currentElem) => exElem == currentElem
+        }.length
+        val belowEx = new Exception(TRY_WITH_CALLER_STACKTRACE_TRY_STACKTRACE)
+        belowEx.setStackTrace(origStackTrace.dropRight(commonSuffixLen))
+        ex.addSuppressed(belowEx)
+
+        // keep the full original stack trace in a suppressed exception.
+        val fullEx = new Exception(TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE)
+        fullEx.setStackTrace(origStackTrace)
+        ex.addSuppressed(fullEx)
+      case Success(_) => // nothing
+    }
+    t
+  }
+
+  /**
+   * Retrieve the result of Try that was created by doTryWithCallerStacktrace.
+   *
+   * In case of failure, the resulting exception has a stack trace that combines the stack trace
+   * below the original doTryWithCallerStacktrace which triggered it, with the caller stack trace
+   * of the current caller of getTryWithCallerStacktrace.
+   *
+   * Full stack trace of the original doTryWithCallerStacktrace caller can be retrieved with
+   * ```
+   * ex.getSuppressed.find { e =>
+   * e.getMessage == Utils.TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE
+   * }
+   * ```
+   *
+   *
+   * @param t Try from doTryWithCallerStacktrace
+   * @return Result of the Try or rethrows the failure exception with modified stacktrace.
+   */
+  def getTryWithCallerStacktrace[T](t: Try[T]): T = t match {
+    case Failure(ex) =>
+      val belowStacktrace = ex.getSuppressed.find { e =>
+        // added in doTryWithCallerStacktrace
+        e.getMessage == TRY_WITH_CALLER_STACKTRACE_TRY_STACKTRACE
+      }.getOrElse {
+        // If we don't have the expected stacktrace information, just rethrow
+        throw ex
+      }.getStackTrace
+      // We are modifying and throwing the original exception. It would be better if we could
+      // return a copy, but we can't easily clone it and preserve. If this is accessed from
+      // multiple threads that then look at the stack trace, this could break.
+      ex.setStackTrace(belowStacktrace ++ Thread.currentThread().getStackTrace.drop(1))
+      throw ex
+    case Success(s) => s
+  }
+
   // A regular expression to match classes of the internal Spark API's
   // that we want to skip when finding the call site of a method.
   private val SPARK_CORE_CLASS_REGEX =
@@ -2578,6 +2658,32 @@ private[spark] object Utils
   def initDaemon(log: Logger): Unit = {
     log.info(s"Started daemon with process name: ${Utils.getProcessName()}")
     SignalUtils.registerLogger(log)
+  }
+
+  /**
+   * Utility function to enable or disable structured logging based on system properties.
+   * This is designed for a code path which we cannot use SparkConf yet, and should be used before
+   * the first invocation of `Logging.log()`. For example, this should be used before `initDaemon`.
+   */
+  def resetStructuredLogging(): Unit = {
+    if (System.getProperty(STRUCTURED_LOGGING_ENABLED.key, "false").equals("false")) {
+      Logging.disableStructuredLogging()
+    } else {
+      Logging.enableStructuredLogging()
+    }
+  }
+
+  /**
+   * Utility function to enable or disable structured logging based on SparkConf.
+   * This is designed for a code path which logging system may be initilized before
+   * loading SparkConf.
+   */
+  def resetStructuredLogging(sparkConf: SparkConf): Unit = {
+    if (sparkConf.getBoolean(STRUCTURED_LOGGING_ENABLED.key, defaultValue = true)) {
+      Logging.enableStructuredLogging()
+    } else {
+      Logging.disableStructuredLogging()
+    }
   }
 
   /**

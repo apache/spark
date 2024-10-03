@@ -26,10 +26,11 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, Un
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, GreaterThan, Literal, NullsFirst, SortOrder, UnresolvedWindowExpression, UnspecifiedFrame, WindowSpecDefinition, WindowSpecReference}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, RefreshResource}
-import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.ArrayImplicits._
@@ -83,12 +84,12 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
 
     checkError(
       exception = parseException("SET k=`v` /*"),
-      errorClass = "UNCLOSED_BRACKETED_COMMENT",
+      condition = "UNCLOSED_BRACKETED_COMMENT",
       parameters = Map.empty)
 
     checkError(
       exception = parseException("SET `k`=`v` /*"),
-      errorClass = "UNCLOSED_BRACKETED_COMMENT",
+      condition = "UNCLOSED_BRACKETED_COMMENT",
       parameters = Map.empty)
   }
 
@@ -120,7 +121,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "SET spark.sql.key value"
     checkError(
       exception = parseException(sql1),
-      errorClass = "INVALID_SET_SYNTAX",
+      condition = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql1,
@@ -130,7 +131,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "SET spark.sql.key   'value'"
     checkError(
       exception = parseException(sql2),
-      errorClass = "INVALID_SET_SYNTAX",
+      condition = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql2,
@@ -140,7 +141,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql3 = "SET    spark.sql.key \"value\" "
     checkError(
       exception = parseException(sql3),
-      errorClass = "INVALID_SET_SYNTAX",
+      condition = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "SET    spark.sql.key \"value\"",
@@ -150,7 +151,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql4 = "SET spark.sql.key value1 value2"
     checkError(
       exception = parseException(sql4),
-      errorClass = "INVALID_SET_SYNTAX",
+      condition = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql4,
@@ -160,7 +161,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql5 = "SET spark.   sql.key=value"
     checkError(
       exception = parseException(sql5),
-      errorClass = "INVALID_SET_SYNTAX",
+      condition = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql5,
@@ -170,7 +171,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql6 = "SET spark   :sql:key=value"
     checkError(
       exception = parseException(sql6),
-      errorClass = "INVALID_SET_SYNTAX",
+      condition = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql6,
@@ -180,7 +181,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql7 = "SET spark .  sql.key=value"
     checkError(
       exception = parseException(sql7),
-      errorClass = "INVALID_SET_SYNTAX",
+      condition = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql7,
@@ -190,7 +191,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql8 = "SET spark.sql.   key=value"
     checkError(
       exception = parseException(sql8),
-      errorClass = "INVALID_SET_SYNTAX",
+      condition = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql8,
@@ -200,7 +201,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql9 = "SET spark.sql   :key=value"
     checkError(
       exception = parseException(sql9),
-      errorClass = "INVALID_SET_SYNTAX",
+      condition = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql9,
@@ -210,7 +211,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql10 = "SET spark.sql .  key=value"
     checkError(
       exception = parseException(sql10),
-      errorClass = "INVALID_SET_SYNTAX",
+      condition = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql10,
@@ -220,7 +221,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql11 = "SET ="
     checkError(
       exception = parseException(sql11),
-      errorClass = "INVALID_SET_SYNTAX",
+      condition = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql11,
@@ -230,7 +231,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql12 = "SET =value"
     checkError(
       exception = parseException(sql12),
-      errorClass = "INVALID_SET_SYNTAX",
+      condition = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql12,
@@ -251,7 +252,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "RESET spark.sql.key1 key2"
     checkError(
       exception = parseException(sql1),
-      errorClass = "_LEGACY_ERROR_TEMP_0043",
+      condition = "_LEGACY_ERROR_TEMP_0043",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql1,
@@ -261,7 +262,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "RESET spark.  sql.key1 key2"
     checkError(
       exception = parseException(sql2),
-      errorClass = "_LEGACY_ERROR_TEMP_0043",
+      condition = "_LEGACY_ERROR_TEMP_0043",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql2,
@@ -271,7 +272,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql3 = "RESET spark.sql.key1 key2 key3"
     checkError(
       exception = parseException(sql3),
-      errorClass = "_LEGACY_ERROR_TEMP_0043",
+      condition = "_LEGACY_ERROR_TEMP_0043",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql3,
@@ -281,7 +282,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql4 = "RESET spark:   sql:key"
     checkError(
       exception = parseException(sql4),
-      errorClass = "_LEGACY_ERROR_TEMP_0043",
+      condition = "_LEGACY_ERROR_TEMP_0043",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql4,
@@ -291,7 +292,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql5 = "RESET spark   .sql.key"
     checkError(
       exception = parseException(sql5),
-      errorClass = "_LEGACY_ERROR_TEMP_0043",
+      condition = "_LEGACY_ERROR_TEMP_0043",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql5,
@@ -301,7 +302,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql6 = "RESET spark :  sql:key"
     checkError(
       exception = parseException(sql6),
-      errorClass = "_LEGACY_ERROR_TEMP_0043",
+      condition = "_LEGACY_ERROR_TEMP_0043",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql6,
@@ -311,7 +312,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql7 = "RESET spark.sql:   key"
     checkError(
       exception = parseException(sql7),
-      errorClass = "_LEGACY_ERROR_TEMP_0043",
+      condition = "_LEGACY_ERROR_TEMP_0043",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql7,
@@ -321,7 +322,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql8 = "RESET spark.sql   .key"
     checkError(
       exception = parseException(sql8),
-      errorClass = "_LEGACY_ERROR_TEMP_0043",
+      condition = "_LEGACY_ERROR_TEMP_0043",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql8,
@@ -331,7 +332,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql9 = "RESET spark.sql :  key"
     checkError(
       exception = parseException(sql9),
-      errorClass = "_LEGACY_ERROR_TEMP_0043",
+      condition = "_LEGACY_ERROR_TEMP_0043",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql9,
@@ -354,7 +355,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "SET a=1; SELECT 1"
     checkError(
       exception = parseException(sql1),
-      errorClass = "INVALID_SET_SYNTAX",
+      condition = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql1,
@@ -364,7 +365,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "SET a=1;2;;"
     checkError(
       exception = parseException(sql2),
-      errorClass = "INVALID_SET_SYNTAX",
+      condition = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "SET a=1;2",
@@ -374,7 +375,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql3 = "SET a b=`1;;`"
     checkError(
       exception = parseException(sql3),
-      errorClass = "INVALID_PROPERTY_KEY",
+      condition = "INVALID_PROPERTY_KEY",
       parameters = Map("key" -> "\"a b\"", "value" -> "\"1;;\""),
       context = ExpectedContext(
         fragment = sql3,
@@ -384,7 +385,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql4 = "SET `a`=1;2;;"
     checkError(
       exception = parseException(sql4),
-      errorClass = "INVALID_PROPERTY_VALUE",
+      condition = "INVALID_PROPERTY_VALUE",
       parameters = Map("value" -> "\"1;2;;\"", "key" -> "\"a\""),
       context = ExpectedContext(
         fragment = "SET `a`=1;2",
@@ -407,7 +408,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "REFRESH a b"
     checkError(
       exception = parseException(sql1),
-      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      condition = "_LEGACY_ERROR_TEMP_0064",
       parameters = Map("msg" -> errMsg1),
       context = ExpectedContext(
         fragment = sql1,
@@ -417,7 +418,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "REFRESH a\tb"
     checkError(
       exception = parseException(sql2),
-      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      condition = "_LEGACY_ERROR_TEMP_0064",
       parameters = Map("msg" -> errMsg1),
       context = ExpectedContext(
         fragment = sql2,
@@ -427,7 +428,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql3 = "REFRESH a\nb"
     checkError(
       exception = parseException(sql3),
-      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      condition = "_LEGACY_ERROR_TEMP_0064",
       parameters = Map("msg" -> errMsg1),
       context = ExpectedContext(
         fragment = sql3,
@@ -437,7 +438,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql4 = "REFRESH a\rb"
     checkError(
       exception = parseException(sql4),
-      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      condition = "_LEGACY_ERROR_TEMP_0064",
       parameters = Map("msg" -> errMsg1),
       context = ExpectedContext(
         fragment = sql4,
@@ -447,7 +448,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql5 = "REFRESH a\r\nb"
     checkError(
       exception = parseException(sql5),
-      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      condition = "_LEGACY_ERROR_TEMP_0064",
       parameters = Map("msg" -> errMsg1),
       context = ExpectedContext(
         fragment = sql5,
@@ -457,7 +458,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql6 = "REFRESH @ $a$"
     checkError(
       exception = parseException(sql6),
-      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      condition = "_LEGACY_ERROR_TEMP_0064",
       parameters = Map("msg" -> errMsg1),
       context = ExpectedContext(
         fragment = sql6,
@@ -468,7 +469,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql7 = "REFRESH  "
     checkError(
       exception = parseException(sql7),
-      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      condition = "_LEGACY_ERROR_TEMP_0064",
       parameters = Map("msg" -> errMsg2),
       context = ExpectedContext(
         fragment = "REFRESH",
@@ -478,7 +479,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql8 = "REFRESH"
     checkError(
       exception = parseException(sql8),
-      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      condition = "_LEGACY_ERROR_TEMP_0064",
       parameters = Map("msg" -> errMsg2),
       context = ExpectedContext(
         fragment = sql8,
@@ -741,7 +742,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
          |FROM v""".stripMargin
     checkError(
       exception = parseException(sql1),
-      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      condition = "_LEGACY_ERROR_TEMP_0064",
       parameters = Map("msg" -> errMsg),
       context = ExpectedContext(
         fragment = sql1,
@@ -763,7 +764,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
          |FROM v""".stripMargin
     checkError(
       exception = parseException(sql2),
-      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      condition = "_LEGACY_ERROR_TEMP_0064",
       parameters = Map("msg" -> errMsg),
       context = ExpectedContext(
         fragment = sql2,
@@ -780,7 +781,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       s"CREATE TABLE target LIKE source TBLPROPERTIES (${TableCatalog.PROP_OWNER}='howdy')"
     checkError(
       exception = parseException(sql1),
-      errorClass = "UNSUPPORTED_FEATURE.SET_TABLE_PROPERTY",
+      condition = "UNSUPPORTED_FEATURE.SET_TABLE_PROPERTY",
       parameters = Map("property" -> TableCatalog.PROP_OWNER,
         "msg" -> "it will be set to the current user"),
       context = ExpectedContext(
@@ -792,7 +793,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       s"CREATE TABLE target LIKE source TBLPROPERTIES (${TableCatalog.PROP_PROVIDER}='howdy')"
     checkError(
       exception = parseException(sql2),
-      errorClass = "UNSUPPORTED_FEATURE.SET_TABLE_PROPERTY",
+      condition = "UNSUPPORTED_FEATURE.SET_TABLE_PROPERTY",
       parameters = Map("property" -> TableCatalog.PROP_PROVIDER,
         "msg" -> "please use the USING clause to specify it"),
       context = ExpectedContext(
@@ -880,4 +881,62 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     parser.parsePlan("SELECT\u30001") // Unicode ideographic space
   }
   // scalastyle:on
+
+  test("Operator pipe SQL syntax") {
+    withSQLConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED.key -> "true") {
+      // Basic selection.
+      // Here we check that every parsed plan contains a projection and a source relation or
+      // inline table.
+      def check(query: String, patterns: Seq[TreePattern]): Unit = {
+        val plan: LogicalPlan = parser.parsePlan(query)
+        assert(patterns.exists(plan.containsPattern))
+        assert(plan.containsAnyPattern(UNRESOLVED_RELATION, LOCAL_RELATION))
+      }
+      def checkPipeSelect(query: String): Unit = check(query, Seq(PROJECT))
+      checkPipeSelect("TABLE t |> SELECT 1 AS X")
+      checkPipeSelect("TABLE t |> SELECT 1 AS X, 2 AS Y |> SELECT X + Y AS Z")
+      checkPipeSelect("VALUES (0), (1) tab(col) |> SELECT col * 2 AS result")
+      // Basic WHERE operators.
+      def checkPipeWhere(query: String): Unit = check(query, Seq(FILTER))
+      checkPipeWhere("TABLE t |> WHERE X = 1")
+      checkPipeWhere("TABLE t |> SELECT X, LENGTH(Y) AS Z |> WHERE X + LENGTH(Y) < 4")
+      checkPipeWhere("TABLE t |> WHERE X = 1 AND Y = 2 |> WHERE X + Y = 3")
+      checkPipeWhere("VALUES (0), (1) tab(col) |> WHERE col < 1")
+      // PIVOT and UNPIVOT operations
+      def checkPivotUnpivot(query: String): Unit = check(query, Seq(PIVOT, UNPIVOT))
+      checkPivotUnpivot(
+        """
+          |SELECT * FROM VALUES
+          |  ("dotNET", 2012, 10000),
+          |  ("Java", 2012, 20000),
+          |  ("dotNET", 2012, 5000),
+          |  ("dotNET", 2013, 48000),
+          |  ("Java", 2013, 30000)
+          |  AS courseSales(course, year, earnings)
+          ||> PIVOT (
+          |  SUM(earnings)
+          |  FOR course IN ('dotNET', 'Java')
+          |)
+          |""".stripMargin)
+      checkPivotUnpivot(
+        """
+          |SELECT * FROM VALUES
+          |  ("dotNET", 15000, 48000, 22500),
+          |  ("Java", 20000, 30000, NULL)
+          |  AS courseEarnings(course, `2012`, `2013`, `2014`)
+          ||> UNPIVOT (
+          |  earningsYear FOR year IN (`2012`, `2013`, `2014`)
+          |)
+          |""".stripMargin)
+      // Sampling operations
+      def checkSample(query: String): Unit = {
+        val plan: LogicalPlan = parser.parsePlan(query)
+        assert(plan.collectFirst(_.isInstanceOf[Sample]).nonEmpty)
+        assert(plan.containsAnyPattern(UNRESOLVED_RELATION, LOCAL_RELATION))
+      }
+      checkSample("TABLE t |> TABLESAMPLE (50 PERCENT)")
+      checkSample("TABLE t |> TABLESAMPLE (5 ROWS)")
+      checkSample("TABLE t |> TABLESAMPLE (BUCKET 4 OUT OF 10)")
+    }
+  }
 }

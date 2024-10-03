@@ -161,7 +161,7 @@ class DataTypeSuite extends SparkFunSuite {
       exception = intercept[SparkException] {
         left.merge(right)
       },
-      errorClass = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
+      condition = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
       parameters = Map("left" -> "\"FLOAT\"", "right" -> "\"BIGINT\""
       )
     )
@@ -299,21 +299,21 @@ class DataTypeSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         DataType.fromJson(""""abcd"""")
       },
-      errorClass = "INVALID_JSON_DATA_TYPE",
+      condition = "INVALID_JSON_DATA_TYPE",
       parameters = Map("invalidType" -> "abcd"))
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         DataType.fromJson("""{"abcd":"a"}""")
       },
-      errorClass = "INVALID_JSON_DATA_TYPE",
+      condition = "INVALID_JSON_DATA_TYPE",
       parameters = Map("invalidType" -> """{"abcd":"a"}"""))
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         DataType.fromJson("""{"fields": [{"a":123}], "type": "struct"}""")
       },
-      errorClass = "INVALID_JSON_DATA_TYPE",
+      condition = "INVALID_JSON_DATA_TYPE",
       parameters = Map("invalidType" -> """{"a":123}"""))
 
     // Malformed JSON string
@@ -900,7 +900,7 @@ class DataTypeSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         DataType.fromJson(json)
       },
-      errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+      condition = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
       parameters = Map("jsonType" -> "integer")
     )
   }
@@ -934,7 +934,7 @@ class DataTypeSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         DataType.fromJson(json)
       },
-      errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+      condition = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
       parameters = Map("jsonType" -> "integer")
     )
   }
@@ -968,7 +968,7 @@ class DataTypeSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         DataType.fromJson(json)
       },
-      errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+      condition = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
       parameters = Map("jsonType" -> "map")
     )
   }
@@ -997,7 +997,7 @@ class DataTypeSuite extends SparkFunSuite {
       exception = intercept[SparkException] {
         DataType.fromJson(json)
       },
-      errorClass = "COLLATION_INVALID_PROVIDER",
+      condition = "COLLATION_INVALID_PROVIDER",
       parameters = Map("provider" -> "badProvider", "supportedProviders" -> "spark, icu")
     )
   }

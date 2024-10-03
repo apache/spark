@@ -90,6 +90,21 @@ object CollationTypeCasts extends TypeCoercionRule {
       val newValues = collateToSingleType(mapCreate.values)
       mapCreate.withNewChildren(newKeys.zip(newValues).flatMap(pair => Seq(pair._1, pair._2)))
 
+    case splitPart: SplitPart =>
+      val Seq(str, delimiter, partNum) = splitPart.children
+      val Seq(newStr, newDelimiter) = collateToSingleType(Seq(str, delimiter))
+      splitPart.withNewChildren(Seq(newStr, newDelimiter, partNum))
+
+    case stringSplitSQL: StringSplitSQL =>
+      val Seq(str, delimiter) = stringSplitSQL.children
+      val Seq(newStr, newDelimiter) = collateToSingleType(Seq(str, delimiter))
+      stringSplitSQL.withNewChildren(Seq(newStr, newDelimiter))
+
+    case levenshtein: Levenshtein =>
+      val Seq(left, right, threshold @ _*) = levenshtein.children
+      val Seq(newLeft, newRight) = collateToSingleType(Seq(left, right))
+      levenshtein.withNewChildren(Seq(newLeft, newRight) ++ threshold)
+
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
       _: Coalesce | _: ArrayContains | _: ArrayExcept | _: ConcatWs | _: Mask | _: StringReplace |
@@ -97,7 +112,7 @@ object CollationTypeCasts extends TypeCoercionRule {
       _: ArrayIntersect | _: ArrayPosition | _: ArrayRemove | _: ArrayUnion | _: ArraysOverlap |
       _: Contains | _: EndsWith | _: EqualNullSafe | _: EqualTo | _: FindInSet | _: GreaterThan |
       _: GreaterThanOrEqual | _: LessThan | _: LessThanOrEqual | _: StartsWith | _: StringInstr |
-      _: ToNumber | _: TryToNumber) =>
+      _: ToNumber | _: TryToNumber | _: StringToMap) =>
       val newChildren = collateToSingleType(otherExpr.children)
       otherExpr.withNewChildren(newChildren)
   }

@@ -706,6 +706,8 @@ private[spark] class Executor(
         task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
         task.metrics.setResultSerializationTime(TimeUnit.NANOSECONDS.toMillis(
           afterSerializationNs - beforeSerializationNs))
+        task.metrics.setPeakOnHeapExecutionMemory(taskMemoryManager.getPeakOnHeapExecutionMemory)
+        task.metrics.setPeakOffHeapExecutionMemory(taskMemoryManager.getPeakOffHeapExecutionMemory)
         // Expose task metrics using the Dropwizard metrics system.
         // Update task metrics counters
         executorSource.METRIC_CPU_TIME.inc(task.metrics.executorCpuTime)

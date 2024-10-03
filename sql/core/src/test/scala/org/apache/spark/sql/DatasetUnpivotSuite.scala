@@ -149,7 +149,7 @@ class DatasetUnpivotSuite extends QueryTest
     }
     checkError(
       exception = e,
-      errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
+      condition = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
       parameters = Map())
 
     // ids expressions are not allowed when no values are given
@@ -162,7 +162,7 @@ class DatasetUnpivotSuite extends QueryTest
     }
     checkError(
       exception = e2,
-      errorClass = "UNPIVOT_REQUIRES_ATTRIBUTES",
+      condition = "UNPIVOT_REQUIRES_ATTRIBUTES",
       parameters = Map(
         "given" -> "id",
         "empty" -> "value",
@@ -178,7 +178,7 @@ class DatasetUnpivotSuite extends QueryTest
     }
     checkError(
       exception = e3,
-      errorClass = "UNPIVOT_REQUIRES_ATTRIBUTES",
+      condition = "UNPIVOT_REQUIRES_ATTRIBUTES",
       parameters = Map(
         "given" -> "id",
         "empty" -> "value",
@@ -207,7 +207,7 @@ class DatasetUnpivotSuite extends QueryTest
     }
     checkError(
       exception = e,
-      errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
+      condition = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
       parameters = Map())
   }
 
@@ -315,7 +315,7 @@ class DatasetUnpivotSuite extends QueryTest
     }
     checkError(
       exception = e,
-      errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
+      condition = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
       parameters = Map(
         "types" -> (
           """"BIGINT" (`long1`, `long2`), """ +
@@ -371,7 +371,7 @@ class DatasetUnpivotSuite extends QueryTest
     }
     checkError(
       exception = e1,
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`1`",
         "proposal" -> "`id`, `int1`, `str1`, `long1`, `str2`"),
@@ -388,7 +388,7 @@ class DatasetUnpivotSuite extends QueryTest
     }
     checkError(
       exception = e2,
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`does`",
         "proposal" -> "`id`, `int1`, `long1`, `str1`, `str2`"),
@@ -404,7 +404,7 @@ class DatasetUnpivotSuite extends QueryTest
     }
     checkError(
       exception = e3,
-      errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
+      condition = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
       parameters = Map(
         "types" -> """"BIGINT" (`long1`), "INT" (`id`, `int1`), "STRING" (`str1`, `str2`)"""
       )
@@ -420,7 +420,7 @@ class DatasetUnpivotSuite extends QueryTest
     }
     checkError(
       exception = e4,
-      errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
+      condition = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
       parameters = Map()
     )
 
@@ -436,7 +436,7 @@ class DatasetUnpivotSuite extends QueryTest
     }
     checkError(
       exception = e5,
-      errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
+      condition = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
       parameters = Map(
         "types" -> """"BIGINT" (`long1`), "INT" (`id`, `int1`), "STRING" (`str1`, `str2`)"""
       )
@@ -452,7 +452,7 @@ class DatasetUnpivotSuite extends QueryTest
     }
     checkError(
       exception = e6,
-      errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
+      condition = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
       parameters = Map.empty
     )
   }
@@ -507,7 +507,7 @@ class DatasetUnpivotSuite extends QueryTest
     }
     checkError(
       exception = e,
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`an`.`id`",
         "proposal" -> "`an.id`, `int1`, `long1`, `str.one`, `str.two`"),
@@ -607,7 +607,7 @@ class DatasetUnpivotSuite extends QueryTest
     }
     checkError(
       exception = e,
-      errorClass = "UNPIVOT_REQUIRES_ATTRIBUTES",
+      condition = "UNPIVOT_REQUIRES_ATTRIBUTES",
       parameters = Map(
         "given" -> "value",
         "empty" -> "id",
@@ -635,7 +635,7 @@ class DatasetUnpivotSuite extends QueryTest
     }
     checkError(
       exception = e2,
-      errorClass = "UNPIVOT_REQUIRES_ATTRIBUTES",
+      condition = "UNPIVOT_REQUIRES_ATTRIBUTES",
       parameters = Map(
         "given" -> "value",
         "empty" -> "id",
@@ -661,7 +661,7 @@ class DatasetUnpivotSuite extends QueryTest
         }
         checkError(
           exception = e,
-          errorClass = "UNPIVOT_VALUE_SIZE_MISMATCH",
+          condition = "UNPIVOT_VALUE_SIZE_MISMATCH",
           parameters = Map("names" -> "2"))
       }
     }

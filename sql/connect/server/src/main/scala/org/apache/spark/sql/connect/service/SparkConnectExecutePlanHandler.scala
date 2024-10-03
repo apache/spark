@@ -31,6 +31,15 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
     try {
       executeHolder.eventsManager.postStarted()
       executeHolder.start()
+    } catch {
+      // Errors raised before the execution holder has finished spawning a thread are considered
+      // plan execution failure, and the client should not try reattaching it afterwards.
+      case t: Throwable =>
+        SparkConnectService.executionManager.removeExecuteHolder(executeHolder.key)
+        throw t
+    }
+
+    try {
       val responseSender =
         new ExecuteGrpcResponseSender[proto.ExecutePlanResponse](executeHolder, responseObserver)
       executeHolder.runGrpcResponseSender(responseSender)

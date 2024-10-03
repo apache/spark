@@ -26,7 +26,7 @@ import org.apache.spark.sql.exceptions.SqlScriptingException.errorMessageWithLin
 class SqlScriptingException (
     errorClass: String,
     cause: Throwable,
-    origin: Origin,
+    val origin: Origin,
     messageParameters: Map[String, String] = Map.empty)
   extends Exception(
     errorMessageWithLineNumber(Option(origin), errorClass, messageParameters),

@@ -52,6 +52,8 @@ old_java_opt <- Sys.getenv("_JAVA_OPTIONS")
 Sys.setenv("_JAVA_OPTIONS" = paste("-XX:-UsePerfData", old_java_opt, sep = " "))
 ```
 
+SparkR is deprecated from Apache Spark 4.0.0 and will be removed in a future version.
+
 ## Overview
 
 SparkR is an R package that provides a light-weight frontend to use Apache Spark from R. With Spark `r packageVersion("SparkR")`, SparkR provides a distributed data frame implementation that supports data processing operations like selection, filtering, aggregation etc. and distributed machine learning using [MLlib](https://spark.apache.org/mllib/).

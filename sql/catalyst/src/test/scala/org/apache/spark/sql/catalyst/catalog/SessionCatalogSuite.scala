@@ -22,7 +22,7 @@ import scala.concurrent.duration._
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{AliasIdentifier, FullQualifiedTableName, FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -121,7 +121,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       exception = intercept[AnalysisException] {
         func(name)
       },
-      errorClass = "INVALID_SCHEMA_OR_RELATION_NAME",
+      condition = "INVALID_SCHEMA_OR_RELATION_NAME",
       parameters = Map("name" -> toSQLId(name))
     )
   }
@@ -171,7 +171,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           ResolveDefaultColumns.analyze(columnC, statementType)
         },
-        errorClass = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+        condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
         parameters = Map(
           "statement" -> "CREATE TABLE",
           "colName" -> "`c`",
@@ -180,7 +180,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           ResolveDefaultColumns.analyze(columnD, statementType)
         },
-        errorClass = "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
+        condition = "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
         parameters = Map(
           "statement" -> "CREATE TABLE",
           "colName" -> "`d`",
@@ -189,7 +189,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           ResolveDefaultColumns.analyze(columnE, statementType)
         },
-        errorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
+        condition = "INVALID_DEFAULT_VALUE.DATA_TYPE",
         parameters = Map(
           "statement" -> "CREATE TABLE",
           "colName" -> "`e`",
@@ -589,7 +589,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           sessionCatalog.alterTableDataSchema(
             TableIdentifier("t1", Some("default")), StructType(oldTab.dataSchema.drop(1)))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1071",
+        condition = "_LEGACY_ERROR_TEMP_1071",
         parameters = Map("nonExistentColumnNames" -> "[col1]"))
     }
   }
@@ -817,14 +817,14 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[NoSuchTableException] {
           catalog.getTempViewOrPermanentTableMetadata(TableIdentifier("view1"))
         },
-        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map("relationName" -> "`default`.`view1`")
       )
       checkError(
         exception = intercept[NoSuchTableException] {
           catalog.getTempViewOrPermanentTableMetadata(TableIdentifier("view1", Some("default")))
         },
-        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map("relationName" -> "`default`.`view1`")
       )
 
@@ -838,7 +838,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[NoSuchTableException] {
           catalog.getTempViewOrPermanentTableMetadata(TableIdentifier("view1", Some("default")))
         },
-        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map("relationName" -> "`default`.`view1`")
       )
     }
@@ -1000,7 +1000,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl2", Some("db2")),
             Seq(part1, partWithLessColumns), ignoreIfExists = false)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a",
           "partitionColumnNames" -> "a, b",
@@ -1011,7 +1011,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl2", Some("db2")),
             Seq(part1, partWithMoreColumns), ignoreIfExists = true)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a, b, c",
           "partitionColumnNames" -> "a, b",
@@ -1022,7 +1022,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl2", Some("db2")),
             Seq(partWithUnknownColumns, part1), ignoreIfExists = true)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a, unknown",
           "partitionColumnNames" -> "a, b",
@@ -1033,7 +1033,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl2", Some("db2")),
             Seq(partWithEmptyValue, part1), ignoreIfExists = true)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> "The spec ([a=3, b=]) contains an empty partition column value"))
     }
@@ -1126,7 +1126,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             purge = false,
             retainData = false)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> ("The spec (a, b, c) must be contained within the partition " +
             s"spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'")))
@@ -1139,7 +1139,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             purge = false,
             retainData = false)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> ("The spec (a, unknown) must be contained within the partition " +
             s"spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'")))
@@ -1152,7 +1152,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             purge = false,
             retainData = false)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> "The spec ([a=3, b=]) contains an empty partition column value"))
     }
@@ -1192,7 +1192,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithLessColumns.spec)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a",
           "partitionColumnNames" -> "a, b",
@@ -1201,7 +1201,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithMoreColumns.spec)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a, b, c",
           "partitionColumnNames" -> "a, b",
@@ -1210,7 +1210,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithUnknownColumns.spec)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a, unknown",
           "partitionColumnNames" -> "a, b",
@@ -1219,7 +1219,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithEmptyValue.spec)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> "The spec ([a=3, b=]) contains an empty partition column value"))
     }
@@ -1277,7 +1277,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl1", Some("db2")),
             Seq(part1.spec), Seq(partWithLessColumns.spec))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a",
           "partitionColumnNames" -> "a, b",
@@ -1288,7 +1288,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl1", Some("db2")),
             Seq(part1.spec), Seq(partWithMoreColumns.spec))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a, b, c",
           "partitionColumnNames" -> "a, b",
@@ -1299,7 +1299,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl1", Some("db2")),
             Seq(part1.spec), Seq(partWithUnknownColumns.spec))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a, unknown",
           "partitionColumnNames" -> "a, b",
@@ -1310,7 +1310,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl1", Some("db2")),
             Seq(part1.spec), Seq(partWithEmptyValue.spec))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> "The spec ([a=3, b=]) contains an empty partition column value"))
     }
@@ -1364,7 +1364,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithLessColumns))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a",
           "partitionColumnNames" -> "a, b",
@@ -1373,7 +1373,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithMoreColumns))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a, b, c",
           "partitionColumnNames" -> "a, b",
@@ -1382,7 +1382,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithUnknownColumns))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a, unknown",
           "partitionColumnNames" -> "a, b",
@@ -1391,7 +1391,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithEmptyValue))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> "The spec ([a=3, b=]) contains an empty partition column value"))
     }
@@ -1423,7 +1423,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")),
             Some(partWithMoreColumns.spec))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> ("The spec (a, b, c) must be contained within the partition spec (a, b) " +
             s"defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'")))
@@ -1432,7 +1432,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")),
             Some(partWithUnknownColumns.spec))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> ("The spec (a, unknown) must be contained within the partition " +
             s"spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'")))
@@ -1441,7 +1441,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")),
             Some(partWithEmptyValue.spec))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> "The spec ([a=3, b=]) contains an empty partition column value"))
     }
@@ -1471,7 +1471,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.listPartitions(TableIdentifier("tbl2", Some("db2")),
             Some(partWithMoreColumns.spec))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> ("The spec (a, b, c) must be contained within the partition spec (a, b) " +
             s"defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'")))
@@ -1480,7 +1480,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.listPartitions(TableIdentifier("tbl2", Some("db2")),
             Some(partWithUnknownColumns.spec))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> ("The spec (a, unknown) must be contained within the partition " +
             s"spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'")))
@@ -1489,7 +1489,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.listPartitions(TableIdentifier("tbl2", Some("db2")),
             Some(partWithEmptyValue.spec))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> "The spec ([a=3, b=]) contains an empty partition column value"))
     }
@@ -1582,7 +1582,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           newFunc("temp1", None), overrideIfExists = false, functionBuilder = Some(tempFunc3))
       }
       checkError(e,
-        errorClass = "ROUTINE_ALREADY_EXISTS",
+        condition = "ROUTINE_ALREADY_EXISTS",
         parameters = Map("routineName" -> "`temp1`",
           "newRoutineType" -> "routine",
           "existingRoutineType" -> "routine"))
@@ -1601,7 +1601,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             overrideIfExists = false,
             None)
         },
-        errorClass = "CANNOT_LOAD_FUNCTION_CLASS",
+        condition = "CANNOT_LOAD_FUNCTION_CLASS",
         parameters = Map(
           "className" -> "function_class_cannot_load",
           "functionName" -> "`temp2`"
@@ -1712,14 +1712,14 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[NoSuchFunctionException] {
           catalog.lookupFunction(FunctionIdentifier("func1"), arguments)
         },
-        errorClass = "ROUTINE_NOT_FOUND",
+        condition = "ROUTINE_NOT_FOUND",
         parameters = Map("routineName" -> "`default`.`func1`")
       )
       checkError(
         exception = intercept[NoSuchTempFunctionException] {
           catalog.dropTempFunction("func1", ignoreIfNotExists = false)
         },
-        errorClass = "ROUTINE_NOT_FOUND",
+        condition = "ROUTINE_NOT_FOUND",
         parameters = Map("routineName" -> "`func1`")
       )
       catalog.dropTempFunction("func1", ignoreIfNotExists = true)
@@ -1728,7 +1728,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[NoSuchTempFunctionException] {
           catalog.dropTempFunction("func2", ignoreIfNotExists = false)
         },
-        errorClass = "ROUTINE_NOT_FOUND",
+        condition = "ROUTINE_NOT_FOUND",
         parameters = Map("routineName" -> "`func2`")
       )
     }
@@ -1883,7 +1883,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     conf.setConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS, 1L)
 
     withConfAndEmptyCatalog(conf) { catalog =>
-      val table = FullQualifiedTableName(
+      val table = QualifiedTableName(
         CatalogManager.SESSION_CATALOG_NAME, catalog.getCurrentDatabase, "test")
 
       // First, make sure the test table is not cached.
@@ -1903,14 +1903,14 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   test("SPARK-34197: refreshTable should not invalidate the relation cache for temporary views") {
     withBasicCatalog { catalog =>
       createTempView(catalog, "tbl1", Range(1, 10, 1, 10), false)
-      val qualifiedName1 = FullQualifiedTableName(SESSION_CATALOG_NAME, "default", "tbl1")
+      val qualifiedName1 = QualifiedTableName(SESSION_CATALOG_NAME, "default", "tbl1")
       catalog.cacheTable(qualifiedName1, Range(1, 10, 1, 10))
       catalog.refreshTable(TableIdentifier("tbl1"))
       assert(catalog.getCachedTable(qualifiedName1) != null)
 
       createGlobalTempView(catalog, "tbl2", Range(2, 10, 1, 10), false)
       val qualifiedName2 =
-        FullQualifiedTableName(SESSION_CATALOG_NAME, catalog.globalTempDatabase, "tbl2")
+        QualifiedTableName(SESSION_CATALOG_NAME, catalog.globalTempDatabase, "tbl2")
       catalog.cacheTable(qualifiedName2, Range(2, 10, 1, 10))
       catalog.refreshTable(TableIdentifier("tbl2", Some(catalog.globalTempDatabase)))
       assert(catalog.getCachedTable(qualifiedName2) != null)

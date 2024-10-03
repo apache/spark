@@ -759,6 +759,18 @@ object SQLConf {
       .checkValue(_ > 0, "The initial number of partitions must be positive.")
       .createOptional
 
+  lazy val TRIM_COLLATION_ENABLED =
+    buildConf("spark.sql.collation.trim.enabled")
+      .internal()
+      .doc(
+        "Trim collation feature is under development and its use should be done under this" +
+        "feature flag. Trim collation trims leading, trailing or both spaces depending of" +
+        "specifier (LTRIM, RTRIM, TRIM)."
+      )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
   val DEFAULT_COLLATION =
     buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
       .doc("Sets default collation to use for string literals, parameter markers or the string" +
@@ -1842,6 +1854,13 @@ object SQLConf {
     .version("1.6.0")
     .intConf
     .createWithDefault(10000)
+
+  val DATAFRAME_TRANSPOSE_MAX_VALUES = buildConf("spark.sql.transposeMaxValues")
+    .doc("When doing a transpose without specifying values for the index column this is" +
+      " the maximum number of values that will be transposed without error.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(500)
 
   val RUN_SQL_ON_FILES = buildConf("spark.sql.runSQLOnFiles")
     .internal()
@@ -3171,6 +3190,15 @@ object SQLConf {
       .version("4.0.0")
       .fallbackConf(Python.PYTHON_WORKER_FAULTHANLDER_ENABLED)
 
+  val PYSPARK_PLOT_MAX_ROWS =
+    buildConf("spark.sql.pyspark.plotting.max_rows")
+      .doc("The visual limit on plots. If set to 1000 for top-n-based plots (pie, bar, barh), " +
+        "the first 1000 data points will be used for plotting. For sampled-based plots " +
+        "(scatter, area, line), 1000 data points will be randomly sampled.")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(1000)
+
   val ARROW_SPARKR_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.sparkr.enabled")
       .doc("When true, make use of Apache Arrow for columnar data transfers in SparkR. " +
@@ -3207,6 +3235,14 @@ object SQLConf {
         "grouping API such as DataFrame(.cogroup).groupby.applyInPandas because each group " +
         "becomes each ArrowRecordBatch. If set to zero or negative there is no limit.")
       .version("2.3.0")
+      .intConf
+      .createWithDefault(10000)
+
+  val ARROW_TRANSFORM_WITH_STATE_IN_PANDAS_MAX_RECORDS_PER_BATCH =
+    buildConf("spark.sql.execution.arrow.transformWithStateInPandas.maxRecordsPerBatch")
+      .doc("When using TransformWithStateInPandas, limit the maximum number of state records " +
+        "that can be written to a single ArrowRecordBatch in memory.")
+      .version("4.0.0")
       .intConf
       .createWithDefault(10000)
 
@@ -3829,6 +3865,15 @@ object SQLConf {
       .intConf
       .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
+  val PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN =
+    buildConf("spark.databricks.sql.optimizer.pruneFiltersCanPruneStreamingSubplan")
+      .internal()
+      .doc("Allow PruneFilters to remove streaming subplans when we encounter a false filter. " +
+        "This flag is to restore prior buggy behavior for broken pipelines.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -4421,6 +4466,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val VARIANT_ALLOW_DUPLICATE_KEYS =
+    buildConf("spark.sql.variant.allowDuplicateKeys")
+      .internal()
+      .doc("When set to false, parsing variant from JSON will throw an error if there are " +
+        "duplicate keys in the input JSON object. When set to true, the parser will keep the " +
+        "last occurrence of all fields with the same key.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
       .internal()
@@ -4787,7 +4842,7 @@ object SQLConf {
     buildConf("spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled")
       .internal()
       .doc("PySpark's SparkSession.createDataFrame infers the key/value types of a map from all " +
-        "paris in the map by default. If this config is set to true, it restores the legacy " +
+        "pairs in the map by default. If this config is set to true, it restores the legacy " +
         "behavior of only inferring the type from the first non-null pair.")
       .version("4.0.0")
       .booleanConf
@@ -4981,6 +5036,15 @@ object SQLConf {
       .stringConf
       .createWithDefault("versionAsOf")
 
+  val OPERATOR_PIPE_SYNTAX_ENABLED =
+    buildConf("spark.sql.operatorPipeSyntaxEnabled")
+      .doc("If true, enable operator pipe syntax for Apache Spark SQL. This uses the operator " +
+        "pipe marker |> to indicate separation between clauses of SQL in a manner that describes " +
+        "the sequence of steps that the query performs in a composable fashion.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
   val LEGACY_PERCENTILE_DISC_CALCULATION = buildConf("spark.sql.legacy.percentileDiscCalculation")
     .internal()
     .doc("If true, the old bogus percentile_disc calculation is used. The old calculation " +
@@ -5037,6 +5101,15 @@ object SQLConf {
       .internal()
       .doc("When set to true, allow scalar subqueries with group-by on a column that also " +
         " has an equality filter with a constant (SPARK-48557).")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val SCALAR_SUBQUERY_USE_SINGLE_JOIN =
+    buildConf("spark.sql.optimizer.scalarSubqueryUseSingleJoin")
+      .internal()
+      .doc("When set to true, use LEFT_SINGLE join for correlated scalar subqueries where " +
+        "optimizer can't prove that only 1 row will be returned")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
@@ -5430,6 +5503,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     }
   }
 
+  def trimCollationEnabled: Boolean = getConf(TRIM_COLLATION_ENABLED)
+
   override def defaultStringType: StringType = {
     if (getConf(DEFAULT_COLLATION).toUpperCase(Locale.ROOT) == "UTF8_BINARY") {
       StringType
@@ -5713,6 +5788,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def dataFramePivotMaxValues: Int = getConf(DATAFRAME_PIVOT_MAX_VALUES)
 
+  def dataFrameTransposeMaxValues: Int = getConf(DATAFRAME_TRANSPOSE_MAX_VALUES)
+
   def runSQLonFile: Boolean = getConf(RUN_SQL_ON_FILES)
 
   def enableTwoLevelAggMap: Boolean = getConf(ENABLE_TWOLEVEL_AGG_MAP)
@@ -5847,11 +5924,16 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def pythonUDFWorkerFaulthandlerEnabled: Boolean = getConf(PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED)
 
+  def pysparkPlotMaxRows: Int = getConf(PYSPARK_PLOT_MAX_ROWS)
+
   def arrowSparkREnabled: Boolean = getConf(ARROW_SPARKR_EXECUTION_ENABLED)
 
   def arrowPySparkFallbackEnabled: Boolean = getConf(ARROW_PYSPARK_FALLBACK_ENABLED)
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
+
+  def arrowTransformWithStateInPandasMaxRecordsPerBatch: Int =
+    getConf(ARROW_TRANSFORM_WITH_STATE_IN_PANDAS_MAX_RECORDS_PER_BATCH)
 
   def arrowUseLargeVarTypes: Boolean = getConf(ARROW_EXECUTION_USE_LARGE_VAR_TYPES)
 

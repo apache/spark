@@ -89,7 +89,7 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "3.25.3"
+  val protoVersion = "3.25.5"
   // GRPC version used for Spark Connect.
   val grpcVersion = "1.62.2"
 }
@@ -234,7 +234,11 @@ object SparkBuild extends PomBuild {
         // replace -Xfatal-warnings with fine-grained configuration, since 2.13.2
         // verbose warning on deprecation, error on all others
         // see `scalac -Wconf:help` for details
-        "-Wconf:cat=deprecation:wv,any:e",
+        // since 2.13.15, "-Wconf:cat=deprecation:wv,any:e" no longer takes effect and needs to
+        // be changed to "-Wconf:any:e", "-Wconf:cat=deprecation:wv",
+        // please refer to the details: https://github.com/scala/scala/pull/10708
+        "-Wconf:any:e",
+        "-Wconf:cat=deprecation:wv",
         // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
         "-Wunused:imports",
         "-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:e",
@@ -400,7 +404,7 @@ object SparkBuild extends PomBuild {
   enable(SparkUnidoc.settings)(spark)
 
   /* Enable unidoc only for the root spark connect client project */
-  enable(SparkConnectClientUnidoc.settings)(connectClient)
+  // enable(SparkConnectClientUnidoc.settings)(connectClient)
 
   /* Sql-api ANTLR generation settings */
   enable(SqlApi.settings)(sqlApi)
@@ -419,11 +423,6 @@ object SparkBuild extends PomBuild {
   enable(SparkProtobuf.settings)(protobuf)
 
   enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
-
-  if (!profiles.contains("volcano")) {
-    enable(Volcano.settings)(kubernetes)
-    enable(Volcano.settings)(kubernetesIntegrationTests)
-  }
 
   enable(KubernetesIntegrationTests.settings)(kubernetesIntegrationTests)
 
@@ -1056,7 +1055,7 @@ object KubernetesIntegrationTests {
  * Overrides to work around sbt's dependency resolution being different from Maven's.
  */
 object DependencyOverrides {
-  lazy val guavaVersion = sys.props.get("guava.version").getOrElse("14.0.1")
+  lazy val guavaVersion = sys.props.get("guava.version").getOrElse("33.1.0-jre")
   lazy val settings = Seq(
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
     dependencyOverrides += "xerces" % "xercesImpl" % "2.12.2",
@@ -1207,7 +1206,7 @@ object YARN {
     genConfigProperties := {
       val file = (Compile / classDirectory).value / s"org/apache/spark/deploy/yarn/$propFileName"
       val isHadoopProvided = SbtPomKeys.effectivePom.value.getProperties.get(hadoopProvidedProp)
-      IO.write(file, s"$hadoopProvidedProp = $isHadoopProvided")
+      sbt.IO.write(file, s"$hadoopProvidedProp = $isHadoopProvided")
     },
     Compile / copyResources := (Def.taskDyn {
       val c = (Compile / copyResources).value
@@ -1322,13 +1321,6 @@ object SparkR {
   )
 }
 
-object Volcano {
-  // Exclude all volcano file for Compile and Test
-  lazy val settings = Seq(
-    unmanagedSources / excludeFilter := HiddenFileFilter || "*Volcano*.scala"
-  )
-}
-
 trait SharedUnidocSettings {
 
   import BuildCommons._
@@ -1364,6 +1356,7 @@ trait SharedUnidocSettings {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/kvstore")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalyst")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/connect/")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/classic/")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalog/v2/utils")))
@@ -1421,6 +1414,7 @@ trait SharedUnidocSettings {
         "-tag", "constructor:X",
         "-tag", "todo:X",
         "-tag", "groupname:X",
+        "-tag", "inheritdoc",
         "--ignore-source-errors", "-notree"
       )
     },
@@ -1486,8 +1480,8 @@ object SparkConnectClientUnidoc extends SharedUnidocSettings {
   }
 
   lazy val settings = baseSettings ++ Seq(
-    (ScalaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon),
-    (JavaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon),
+    (ScalaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon, sqlApi),
+    (JavaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon, sqlApi),
   )
 }
 

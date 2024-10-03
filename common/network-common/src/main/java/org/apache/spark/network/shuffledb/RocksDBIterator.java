@@ -22,7 +22,6 @@ import java.util.AbstractMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
-import com.google.common.base.Throwables;
 import org.rocksdb.RocksIterator;
 
 /**
@@ -52,7 +51,7 @@ public class RocksDBIterator implements DBIterator {
         try {
           close();
         } catch (IOException ioe) {
-          throw Throwables.propagate(ioe);
+          throw new RuntimeException(ioe);
         }
       }
       return next != null;

@@ -29,9 +29,11 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractMapType, AbstractStringType, StringTypeAnyCollation}
+import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractMapType, AbstractStringType,
+  StringTypeWithCaseAccentSensitivity}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 
@@ -199,6 +201,20 @@ abstract class TypeCoercionBase {
           None
         }
       }
+    }
+  }
+
+  /**
+   * A type coercion rule that implicitly casts procedure arguments to expected types.
+   */
+  object ProcedureArgumentCoercion extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case c @ Call(ResolvedProcedure(_, _, procedure: BoundProcedure), args, _) if c.resolved =>
+        val expectedDataTypes = procedure.parameters.map(_.dataType)
+        val coercedArgs = args.zip(expectedDataTypes).map {
+          case (arg, expectedType) => implicitCast(arg, expectedType).getOrElse(arg)
+        }
+        c.copy(args = coercedArgs)
     }
   }
 
@@ -423,7 +439,7 @@ abstract class TypeCoercionBase {
         }
 
       case aj @ ArrayJoin(arr, d, nr)
-          if !AbstractArrayType(StringTypeAnyCollation).acceptsType(arr.dataType) &&
+          if !AbstractArrayType(StringTypeWithCaseAccentSensitivity).acceptsType(arr.dataType) &&
           ArrayType.acceptsType(arr.dataType) =>
         val containsNull = arr.dataType.asInstanceOf[ArrayType].containsNull
         implicitCast(arr, ArrayType(StringType, containsNull)) match {
@@ -838,6 +854,7 @@ object TypeCoercion extends TypeCoercionBase {
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
     UnpivotCoercion ::
     WidenSetOperationTypes ::
+    ProcedureArgumentCoercion ::
     new CombinedTypeCoercionRule(
       CollationTypeCasts ::
       InConversion ::

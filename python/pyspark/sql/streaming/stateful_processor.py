@@ -16,12 +16,12 @@
 #
 
 from abc import ABC, abstractmethod
-from typing import Any, TYPE_CHECKING, Iterator, Optional, Union, cast
+from typing import Any, List, TYPE_CHECKING, Iterator, Optional, Union, Tuple
 
-from pyspark.sql import Row
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
+from pyspark.sql.streaming.list_state_client import ListStateClient, ListStateIterator
 from pyspark.sql.streaming.value_state_client import ValueStateClient
-from pyspark.sql.types import StructType, _create_row, _parse_datatype_string
+from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
@@ -50,19 +50,11 @@ class ValueState:
         """
         return self._value_state_client.exists(self._state_name)
 
-    def get(self) -> Optional[Row]:
+    def get(self) -> Optional[Tuple]:
         """
         Get the state value if it exists. Returns None if the state variable does not have a value.
         """
-        value = self._value_state_client.get(self._state_name)
-        if value is None:
-            return None
-        schema = self.schema
-        if isinstance(schema, str):
-            schema = cast(StructType, _parse_datatype_string(schema))
-        # Create the Row using the values and schema fields
-        row = _create_row(schema.fieldNames(), value)
-        return row
+        return self._value_state_client.get(self._state_name)
 
     def update(self, new_value: Any) -> None:
         """
@@ -77,6 +69,58 @@ class ValueState:
         self._value_state_client.clear(self._state_name)
 
 
+class ListState:
+    """
+    Class used for arbitrary stateful operations with transformWithState to capture list value
+    state.
+
+    .. versionadded:: 4.0.0
+    """
+
+    def __init__(
+        self, list_state_client: ListStateClient, state_name: str, schema: Union[StructType, str]
+    ) -> None:
+        self._list_state_client = list_state_client
+        self._state_name = state_name
+        self.schema = schema
+
+    def exists(self) -> bool:
+        """
+        Whether list state exists or not.
+        """
+        return self._list_state_client.exists(self._state_name)
+
+    def get(self) -> Iterator[Tuple]:
+        """
+        Get list state with an iterator.
+        """
+        return ListStateIterator(self._list_state_client, self._state_name)
+
+    def put(self, new_state: List[Tuple]) -> None:
+        """
+        Update the values of the list state.
+        """
+        self._list_state_client.put(self._state_name, self.schema, new_state)
+
+    def append_value(self, new_state: Tuple) -> None:
+        """
+        Append a new value to the list state.
+        """
+        self._list_state_client.append_value(self._state_name, self.schema, new_state)
+
+    def append_list(self, new_state: List[Tuple]) -> None:
+        """
+        Append a list of new values to the list state.
+        """
+        self._list_state_client.append_list(self._state_name, self.schema, new_state)
+
+    def clear(self) -> None:
+        """
+        Remove this state.
+        """
+        self._list_state_client.clear(self._state_name)
+
+
 class StatefulProcessorHandle:
     """
     Represents the operation handle provided to the stateful processor used in transformWithState
@@ -88,7 +132,31 @@ class StatefulProcessorHandle:
     def __init__(self, stateful_processor_api_client: StatefulProcessorApiClient) -> None:
         self.stateful_processor_api_client = stateful_processor_api_client
 
-    def getValueState(self, state_name: str, schema: Union[StructType, str]) -> ValueState:
+    def getValueState(
+        self, state_name: str, schema: Union[StructType, str], ttl_duration_ms: Optional[int] = None
+    ) -> ValueState:
+        """
+        Function to create new or return existing single value state variable of given type.
+        The user must ensure to call this function only within the `init()` method of the
+        :class:`StatefulProcessor`.
+
+        Parameters
+        ----------
+        state_name : str
+            name of the state variable
+        schema : :class:`pyspark.sql.types.DataType` or str
+            The schema of the state variable. The value can be either a
+            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        ttlDurationMs: int
+            Time to live duration of the state in milliseconds. State values will not be returned
+            past ttlDuration and will be eventually removed from the state store. Any state update
+            resets the expiration time to current processing time plus ttlDuration.
+            If ttl is not specified the state will never expire.
+        """
+        self.stateful_processor_api_client.get_value_state(state_name, schema, ttl_duration_ms)
+        return ValueState(ValueStateClient(self.stateful_processor_api_client), state_name, schema)
+
+    def getListState(self, state_name: str, schema: Union[StructType, str]) -> ListState:
         """
         Function to create new or return existing single value state variable of given type.
         The user must ensure to call this function only within the `init()` method of the
@@ -102,8 +170,8 @@ class StatefulProcessorHandle:
             The schema of the state variable. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
         """
-        self.stateful_processor_api_client.get_value_state(state_name, schema)
-        return ValueState(ValueStateClient(self.stateful_processor_api_client), state_name, schema)
+        self.stateful_processor_api_client.get_list_state(state_name, schema)
+        return ListState(ListStateClient(self.stateful_processor_api_client), state_name, schema)
 
 
 class StatefulProcessor(ABC):

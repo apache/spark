@@ -32,6 +32,7 @@ BUCKETS	false
 BY	false
 BYTE	false
 CACHE	false
+CALL	true
 CALLED	false
 CASCADE	false
 CASE	true
@@ -141,6 +142,7 @@ HAVING	true
 HOUR	false
 HOURS	false
 IDENTIFIER	false
+IDENTITY	false
 IF	false
 IGNORE	false
 ILIKE	false
@@ -148,6 +150,7 @@ IMMEDIATE	false
 IMPORT	false
 IN	true
 INCLUDE	false
+INCREMENT	false
 INDEX	false
 INDEXES	false
 INNER	true
@@ -163,6 +166,7 @@ INTO	true
 INVOKER	false
 IS	true
 ITEMS	false
+ITERATE	false
 JOIN	true
 KEYS	false
 LANGUAGE	false
@@ -170,6 +174,7 @@ LAST	false
 LATERAL	true
 LAZY	false
 LEADING	true
+LEAVE	false
 LEFT	true
 LIKE	false
 LIMIT	false
@@ -182,6 +187,7 @@ LOCK	false
 LOCKS	false
 LOGICAL	false
 LONG	false
+LOOP	false
 MACRO	false
 MAP	false
 MATCHED	false
@@ -249,6 +255,7 @@ REFERENCES	true
 REFRESH	false
 RENAME	false
 REPAIR	false
+REPEAT	false
 REPEATABLE	false
 REPLACE	false
 RESET	false
@@ -334,6 +341,7 @@ UNKNOWN	true
 UNLOCK	false
 UNPIVOT	false
 UNSET	false
+UNTIL	false
 UPDATE	false
 USE	false
 USER	true
@@ -372,6 +380,7 @@ ANY
 AS
 AUTHORIZATION
 BOTH
+CALL
 CASE
 CAST
 CHECK
