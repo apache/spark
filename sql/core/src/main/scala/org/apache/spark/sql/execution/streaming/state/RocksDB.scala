@@ -332,8 +332,8 @@ class RocksDB(
         println(s"wei== loading version $version, stateStoreCkptId: $stateStoreCkptId")
 
         // Update the lineage from changelog
-        // When loading from the first version, stateStoreCkptId is not defined even if
-        // enableStateStoreCheckpointIds is true
+        // When loading from the first version (query restart, not necessarily verion=0,
+        // stateStoreCkptId is not defined even if enableStateStoreCheckpointIds is true
         if (version != 0 && enableStateStoreCheckpointIds && stateStoreCkptId.isDefined) {
           // It is possible that change log checkpointing is first enabled and then disabled.
           // In this case, loading changelog reader will fail because there are only zip files.

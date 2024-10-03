@@ -147,6 +147,20 @@ trait AlsoTestWithRocksDBFeatures
     }
   }
 
+  def testWithRocksDBStateStore(
+    testName: String, testTags: Tag*)(testBody: => Any): Unit = {
+    super.test(testName, testTags: _*) {
+      // in case tests have any code that needs to execute before every test
+      super.beforeEach()
+      withSQLConf(
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
+        testBody
+      }
+      // in case tests have any code that needs to execute after every test
+      super.afterEach()
+    }
+  }
+
   def testWithColumnFamilies(
       testName: String,
       testMode: TestMode,
