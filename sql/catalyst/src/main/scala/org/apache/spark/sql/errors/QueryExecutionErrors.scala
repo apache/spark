@@ -2852,4 +2852,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       )
     )
   }
+
+  def partitionColumnNotFoundInTheTableSchemaError(
+      column: String,
+      schema: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "PARTITION_COLUMN_NOT_FOUND_IN_SCHEMA",
+      messageParameters = Map(
+        "column" -> column,
+        "schema" -> schema
+      )
+    )
+  }
 }
