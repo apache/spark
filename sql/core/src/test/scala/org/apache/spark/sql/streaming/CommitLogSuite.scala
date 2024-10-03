@@ -76,7 +76,10 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
       assert(metadata.stateUniqueIds.size == commitMetadata.stateUniqueIds.size)
       commitMetadata.stateUniqueIds.foreach { case (operatorId, uniqueIds) =>
         assert(metadata.stateUniqueIds.contains(operatorId))
-        assert(metadata.stateUniqueIds(operatorId).sameElements(uniqueIds))
+        assert(metadata.stateUniqueIds(operatorId).length == uniqueIds.length)
+        assert(metadata.stateUniqueIds(operatorId).zip(uniqueIds).forall {
+          case (a, b) => a.sameElements(b)
+        })
       }
     }
   }
@@ -87,10 +90,10 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
   }
 
   test("Basic Commit Log V2 SerDe") {
-    val testStateUniqueIds: Map[Long, Array[String]] =
+    val testStateUniqueIds: Map[Long, Array[Array[String]]] =
       Map(
-        0L -> Array("unique_id1", "unique_id2", "unique_id3"),
-          1L -> Array("unique_id4", "unique_id5", "unique_id6")
+        0L -> Array(Array("unique_id1", "unique_id2"), Array("unique_id3", "unique_id4")),
+          1L -> Array(Array("unique_id5", "unique_id6"), Array("unique_id7", "unique_id8"))
       )
     val testMetadataV2 = CommitMetadata(0, testStateUniqueIds)
     testSerde(testMetadataV2, testCommitLogV2FilePath)

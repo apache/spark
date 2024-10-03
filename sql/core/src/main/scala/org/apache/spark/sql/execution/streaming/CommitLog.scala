@@ -104,7 +104,7 @@ object CommitLog {
 
 case class CommitMetadata(
     nextBatchWatermarkMs: Long = 0,
-    stateUniqueIds: Map[Long, Array[String]] = Map.empty) {
+    stateUniqueIds: Map[Long, Array[Array[String]]] = Map.empty) {
   def json: String = Serialization.write(this)(CommitMetadata.format)
 }
 
