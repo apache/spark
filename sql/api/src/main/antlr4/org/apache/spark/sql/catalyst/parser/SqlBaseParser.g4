@@ -69,6 +69,7 @@ compoundStatement
     | repeatStatement
     | leaveStatement
     | iterateStatement
+    | loopStatement
     ;
 
 setStatementWithOptionalVarKeyword
@@ -104,6 +105,10 @@ caseStatement
         (ELSE elseBody=compoundBody)? END CASE                #searchedCaseStatement
     | CASE caseVariable=expression (WHEN conditionExpressions+=expression THEN conditionalBodies+=compoundBody)+
         (ELSE elseBody=compoundBody)? END CASE                #simpleCaseStatement
+    ;
+
+loopStatement
+    : beginLabel? LOOP compoundBody END LOOP endLabel?
     ;
 
 singleStatement
@@ -1658,6 +1663,7 @@ ansiNonReserved
     | LOCKS
     | LOGICAL
     | LONG
+    | LOOP
     | MACRO
     | MAP
     | MATCHED
@@ -2016,6 +2022,7 @@ nonReserved
     | LOCKS
     | LOGICAL
     | LONG
+    | LOOP
     | MACRO
     | MAP
     | MATCHED
