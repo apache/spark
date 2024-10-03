@@ -28,7 +28,7 @@ abstract class AbstractStringType(
   override private[sql] def defaultConcreteType: DataType = SqlApiConf.get.defaultStringType
   override private[sql] def simpleString: String = "string"
   private[sql] def canUseTrimCollation(other: DataType): Boolean =
-    supportsTrimCollation && other.asInstanceOf[StringType].usesTrimCollation
+    supportsTrimCollation || !other.asInstanceOf[StringType].usesTrimCollation
 }
 
 /**
