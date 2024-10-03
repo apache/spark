@@ -148,7 +148,7 @@ RUN apt-get update && apt-get install -y \
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.13
 # TODO(SPARK-49862) Add BASIC_PIP_PKGS and CONNECT_PIP_PKGS to Python 3.13 image when it supports Python 3.13
 RUN python3.13 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
-RUN python3.13 -m pip install lxml && \
+RUN python3.13 -m pip install lxml numpy>=2.1 && \
     python3.13 -m pip cache purge
 
 # Remove unused installation packages to free up disk space
