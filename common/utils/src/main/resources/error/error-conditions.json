@@ -2148,12 +2148,6 @@
     },
     "sqlState" : "HY109"
   },
-  "INVALID_DATE_ARGUMENT_VALUE" : {
-    "message" : [
-      "<message>. If necessary set <ansiConfig> to false to bypass this error."
-    ],
-    "sqlState" : "22023"
-  },
   "INVALID_DATETIME_PATTERN" : {
     "message" : [
       "Unrecognized datetime pattern: <pattern>."
@@ -2176,6 +2170,12 @@
       }
     },
     "sqlState" : "22007"
+  },
+  "INVALID_DATE_ARGUMENT_VALUE" : {
+    "message" : [
+      "<message>. If necessary set <ansiConfig> to false to bypass this error."
+    ],
+    "sqlState" : "22023"
   },
   "INVALID_DEFAULT_VALUE" : {
     "message" : [
