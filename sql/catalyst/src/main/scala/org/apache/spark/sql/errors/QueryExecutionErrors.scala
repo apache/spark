@@ -302,12 +302,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     }
     val (unit, range, badValue) = extractDateTimeErrorInfo(e)
     new SparkDateTimeException(
-      errorClass = "DATE_TIME_FIELD_OUT_OF_BOUNDS",
+      errorClass = "DATETIME_FIELD_OUT_OF_BOUNDS",
       messageParameters = Map(
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key),
         "unit" -> unit,
         "range" -> range,
-        "badValue" -> badValue
+        "badValue" -> toSQLValue(badValue)
       ),
       context = Array.empty,
       summary = "",

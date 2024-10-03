@@ -1087,15 +1087,15 @@
     ],
     "sqlState" : "42K03"
   },
-  "DATETIME_OVERFLOW" : {
+  "DATETIME_FIELD_OUT_OF_BOUNDS" : {
     "message" : [
-      "Datetime operation overflow: <operation>."
+      "The value <badValue> you entered for <unit> is not valid. Please provide a value between <range>. To disable strict validation, you can turn off ANSI mode by setting <ansiConfig> to \"false\"."
     ],
     "sqlState" : "22008"
   },
-  "DATE_TIME_FIELD_OUT_OF_BOUNDS" : {
+  "DATETIME_OVERFLOW" : {
     "message" : [
-      "The value '<badValue>' you entered for <unit> is not valid. Please provide a value between <range>. To disable strict validation, you can turn off ANSI mode by setting <ansiConfig> to false."
+      "Datetime operation overflow: <operation>."
     ],
     "sqlState" : "22008"
   },
