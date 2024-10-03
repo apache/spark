@@ -179,7 +179,9 @@ class ListStateImplWithTTL[S](
     val unsafeRowValuesIterator = store.valuesIterator(groupingKey, stateName)
     // We clear the list, and use the iterator to put back all of the non-expired values
     store.remove(groupingKey, stateName)
+    removeEntryCount(store, groupingKey, stateName)
     var isFirst = true
+    var entryCount = 0L
     unsafeRowValuesIterator.foreach { encodedValue =>
       if (!stateTypesEncoder.isExpired(encodedValue, batchTimestampMs)) {
         if (isFirst) {
@@ -188,10 +190,13 @@ class ListStateImplWithTTL[S](
         } else {
           store.merge(groupingKey, encodedValue, stateName)
         }
+        entryCount += 1
       } else {
         numValuesExpired += 1
       }
     }
+    updateEntryCount(store, groupingKey, stateName, entryCount)
+    TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", numValuesExpired)
     numValuesExpired
   }
 

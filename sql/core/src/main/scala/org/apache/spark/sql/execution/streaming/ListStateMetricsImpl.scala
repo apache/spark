@@ -39,6 +39,13 @@ trait ListStateMetricsImpl {
 
   private def getRowCounterCFName(stateName: String) = "$rowCounter_" + stateName
 
+  /**
+   * Function to initialize the secondary index used to track number of elements in the list state
+   * per grouping key
+   * @param store - reference to the StateStore instance to be used for storing state
+   * @param stateName - name of logical state partition
+   * @param keyExprEnc - Spark SQL encoder for key
+   */
   def initMetrics(
       store: StateStore,
       keyExprEnc: ExpressionEncoder[Any],
@@ -47,6 +54,13 @@ trait ListStateMetricsImpl {
       counterCFValueSchema, NoPrefixKeyStateEncoderSpec(keyExprEnc.schema), isInternal = true)
   }
 
+  /**
+   * Function to get the number of entries in the list state for a given grouping key
+   * @param store - reference to the StateStore instance to be used for storing state
+   * @param encodedKey - encoded grouping key
+   * @param stateName - name of logical state partition
+   * @return
+   */
   def getEntryCount(
       store: StateStore,
       encodedKey: UnsafeRow,
@@ -60,6 +74,13 @@ trait ListStateMetricsImpl {
     countVal
   }
 
+  /**
+   * Function to update the number of entries in the list state for a given grouping key
+   * @param store - reference to the StateStore instance to be used for storing state
+   * @param encodedKey - encoded grouping key
+   * @param stateName - name of logical state partition
+   * @param updatedCount - updated count of entries in the list state
+   */
   def updateEntryCount(
       store: StateStore,
       encodedKey: UnsafeRow,
@@ -72,6 +93,12 @@ trait ListStateMetricsImpl {
       getRowCounterCFName(stateName))
   }
 
+  /**
+   * Function to remove the number of entries in the list state for a given grouping key
+   * @param store - reference to the StateStore instance to be used for storing state
+   * @param encodedKey - encoded grouping key
+   * @param stateName - name of logical state partition
+   */
   def removeEntryCount(
       store: StateStore,
       encodedKey: UnsafeRow,
