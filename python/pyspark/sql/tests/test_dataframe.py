@@ -959,9 +959,7 @@ class DataFrameTestsMixin:
     def test_local_checkpoint_dataframe_with_storage_level(self):
         # We don't have a way to reach into the server and assert the storage level server side, but
         # this test should cover for unexpected errors in the API.
-        df = self.spark.range(10).localCheckpoint(
-            eager = True, storageLevel = StorageLevel.DISK_ONLY
-        )
+        df = self.spark.range(10).localCheckpoint(eager=True, storageLevel=StorageLevel.DISK_ONLY)
         df.collect()
 
     def test_transpose(self):

@@ -367,7 +367,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         if storageLevel is None:
             javaStorageLevelOpt = gateway.jvm.scala.Option.empty()
         else:
-            javaStorageLevelOpt = gateway.jvm.scala.Option(
+            javaStorageLevelOpt = gateway.jvm.scala.Option.apply(
                 self._sc._getJavaStorageLevel(storageLevel)
             )
 
