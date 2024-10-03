@@ -302,7 +302,7 @@ class TransformWithListStateSuite extends StreamTest
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numListStateVars") > 0)
           assert(q.lastProgress.stateOperators(0).numRowsUpdated === 6)
-          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 6)
         }
       )
     }

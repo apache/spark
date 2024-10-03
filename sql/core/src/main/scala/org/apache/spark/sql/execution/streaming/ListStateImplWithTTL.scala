@@ -46,8 +46,9 @@ class ListStateImplWithTTL[S](
     ttlConfig: TTLConfig,
     batchTimestampMs: Long,
     metrics: Map[String, SQLMetric] = Map.empty)
-  extends SingleKeyTTLStateImpl(
-    stateName, store, keyExprEnc, batchTimestampMs) with ListState[S] {
+  extends SingleKeyTTLStateImpl(stateName, store, keyExprEnc, batchTimestampMs)
+  with ListStateMetricsImpl
+  with ListState[S] {
 
   private lazy val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder,
     stateName, hasTtl = true)
@@ -61,6 +62,8 @@ class ListStateImplWithTTL[S](
     store.createColFamilyIfAbsent(stateName, keyExprEnc.schema,
       getValueSchemaWithTTL(valEncoder.schema, true),
       NoPrefixKeyStateEncoderSpec(keyExprEnc.schema), useMultipleValuesPerKey = true)
+
+    initMetrics(store, keyExprEnc, stateName)
   }
 
   /** Whether state exists or not. */
@@ -102,6 +105,7 @@ class ListStateImplWithTTL[S](
 
     val encodedKey = stateTypesEncoder.encodeGroupingKey()
     var isFirst = true
+    var entryCount = getEntryCount(store, encodedKey, stateName)
 
     newState.foreach { v =>
       val encodedValue = stateTypesEncoder.encodeValue(v, ttlExpirationMs)
@@ -111,19 +115,23 @@ class ListStateImplWithTTL[S](
       } else {
         store.merge(encodedKey, encodedValue, stateName)
       }
+      entryCount += 1
       TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
     }
     upsertTTLForStateKey(encodedKey)
+    updateEntryCount(store, encodedKey, stateName, entryCount)
   }
 
   /** Append an entry to the list. */
   override def appendValue(newState: S): Unit = {
     StateStoreErrors.requireNonNullStateValue(newState, stateName)
     val encodedKey = stateTypesEncoder.encodeGroupingKey()
+    val entryCount = getEntryCount(store, encodedKey, stateName)
     store.merge(encodedKey,
       stateTypesEncoder.encodeValue(newState, ttlExpirationMs), stateName)
     TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
     upsertTTLForStateKey(encodedKey)
+    updateEntryCount(store, encodedKey, stateName, entryCount + 1)
   }
 
   /** Append an entire list to the existing value. */
@@ -131,18 +139,24 @@ class ListStateImplWithTTL[S](
     validateNewState(newState)
 
     val encodedKey = stateTypesEncoder.encodeGroupingKey()
+    var entryCount = getEntryCount(store, encodedKey, stateName)
     newState.foreach { v =>
       val encodedValue = stateTypesEncoder.encodeValue(v, ttlExpirationMs)
       store.merge(encodedKey, encodedValue, stateName)
+      entryCount += 1
       TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
     }
     upsertTTLForStateKey(encodedKey)
+    updateEntryCount(store, encodedKey, stateName, entryCount)
   }
 
   /** Remove this state. */
   override def clear(): Unit = {
-    store.remove(stateTypesEncoder.encodeGroupingKey(), stateName)
-    TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
+    val encodedKey = stateTypesEncoder.encodeGroupingKey()
+    store.remove(encodedKey, stateName)
+    val entryCount = getEntryCount(store, encodedKey, stateName)
+    TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", entryCount)
+    removeEntryCount(store, encodedKey, stateName)
     clearTTLState()
   }
 

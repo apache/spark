@@ -113,6 +113,7 @@ class ValueStateImplWithTTL[S](
     if (retRow != null) {
       if (stateTypesEncoder.isExpired(retRow, batchTimestampMs)) {
         store.remove(groupingKey, stateName)
+        TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
         result = 1L
       }
     }

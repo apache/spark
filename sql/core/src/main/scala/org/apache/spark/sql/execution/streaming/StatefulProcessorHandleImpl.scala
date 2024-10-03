@@ -51,8 +51,9 @@ object ImplicitGroupingKeyTracker {
 object TWSMetricsUtils {
   def incrementMetric(
       metrics: Map[String, SQLMetric],
-      metricName: String): Unit = {
-    metrics.get(metricName).foreach(_.add(1))
+      metricName: String,
+      countValue: Long = 1L): Unit = {
+    metrics.get(metricName).foreach(_.add(countValue))
   }
 }
 
