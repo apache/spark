@@ -341,6 +341,10 @@ public final class CollationFactory {
           SPACE_TRIMMING_OFFSET, SPACE_TRIMMING_MASK)];
       }
 
+      protected static UTF8String applyTrimmingPolicy(UTF8String s, int collationId) {
+        return applyTrimmingPolicy(s, getSpaceTrimming(collationId));
+      }
+
       /**
        * Utility function to trim spaces when collation uses space trimming.
        */
@@ -1142,10 +1146,8 @@ public final class CollationFactory {
 
   public static UTF8String getCollationKey(UTF8String input, int collationId) {
     Collation collation = fetchCollation(collationId);
-    Collation.CollationSpec.SpaceTrimming spaceTrimming =
-      Collation.CollationSpec.getSpaceTrimming(collationId);
-    if (spaceTrimming != Collation.CollationSpec.SpaceTrimming.NONE) {
-      input = Collation.CollationSpec.applyTrimmingPolicy(input, spaceTrimming);
+    if (usesTrimCollation(collationId)) {
+      input = Collation.CollationSpec.applyTrimmingPolicy(input, collationId);
     }
     if (collation.supportsBinaryEquality) {
       return input;
@@ -1160,10 +1162,8 @@ public final class CollationFactory {
 
   public static byte[] getCollationKeyBytes(UTF8String input, int collationId) {
     Collation collation = fetchCollation(collationId);
-    Collation.CollationSpec.SpaceTrimming spaceTrimming =
-      Collation.CollationSpec.getSpaceTrimming(collationId);
-    if (spaceTrimming != Collation.CollationSpec.SpaceTrimming.NONE) {
-      input = Collation.CollationSpec.applyTrimmingPolicy(input, spaceTrimming);
+    if (usesTrimCollation(collationId)) {
+      input = Collation.CollationSpec.applyTrimmingPolicy(input, collationId);
     }
     if (collation.supportsBinaryEquality) {
       return input.getBytes();
