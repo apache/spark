@@ -57,15 +57,15 @@ class TransformWithStateInPandasStateServer(
     errorOnDuplicatedFieldNames: Boolean,
     largeVarTypes: Boolean,
     arrowTransformWithStateInPandasMaxRecordsPerBatch: Int,
-    hasInitialState: Boolean,
-    initialStateSchema: StructType,
-    initialStateDataIterator: Iterator[(InternalRow, Iterator[InternalRow])],
     outputStreamForTest: DataOutputStream = null,
     valueStateMapForTest: mutable.HashMap[String, ValueStateInfo] = null,
     deserializerForTest: TransformWithStateInPandasDeserializer = null,
     arrowStreamWriterForTest: BaseStreamingArrowWriter = null,
     listStatesMapForTest : mutable.HashMap[String, ListStateInfo] = null,
-    listStateIteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null)
+    listStateIteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null,
+    hasInitialState: Boolean = false,
+    initialStateSchema: StructType = new StructType(),
+    initialStateDataIterator: Iterator[(InternalRow, Iterator[InternalRow])] = Iterator.empty)
   extends Runnable with Logging {
   private val keyRowDeserializer: ExpressionEncoder.Deserializer[Row] =
     ExpressionEncoder(groupingKeySchema).resolveAndBind().createDeserializer()
@@ -208,7 +208,7 @@ class TransformWithStateInPandasStateServer(
     }
   }
 
-  private def handleStatefulProcessorUtilRequest(message: UtilsCallCommand): Unit = {
+  private[sql] def handleStatefulProcessorUtilRequest(message: UtilsCallCommand): Unit = {
     message.getMethodCase match {
       case UtilsCallCommand.MethodCase.ISFIRSTBATCH =>
         if (!hasInitialState) {
@@ -220,7 +220,8 @@ class TransformWithStateInPandasStateServer(
         }
 
       case UtilsCallCommand.MethodCase.GETINITIALSTATE =>
-        if (!hasInitialState || initialStateKeyToRowMap.isEmpty) {
+        if (!hasInitialState ||
+          initialStateKeyToRowMap == null || initialStateKeyToRowMap.isEmpty) {
           sendResponse(1)
         } else {
           sendResponse(0)

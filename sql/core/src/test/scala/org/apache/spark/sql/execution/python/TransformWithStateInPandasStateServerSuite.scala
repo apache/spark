@@ -28,11 +28,12 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{Encoder, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.execution.streaming.{StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state.StateMessage
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, Exists, Get, HandleState, ListStateCall, ListStateGet, ListStatePut, SetHandleState, StateCallCommand, StatefulProcessorCall, ValueStateCall, ValueStateUpdate}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, Exists, Get, GetInitialState, HandleState, IsFirstBatch, ListStateCall, ListStateGet, ListStatePut, SetHandleState, StateCallCommand, StatefulProcessorCall, UtilsCallCommand, ValueStateCall, ValueStateUpdate}
 import org.apache.spark.sql.streaming.{ListState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -60,6 +61,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
   var arrowStreamWriter: BaseStreamingArrowWriter = _
   var valueStateMap: mutable.HashMap[String, ValueStateInfo] = mutable.HashMap()
   var listStateMap: mutable.HashMap[String, ListStateInfo] = mutable.HashMap()
+  var initialStateSchema: StructType = StructType(Seq())
+  var initialStateDataIterator: Iterator[(InternalRow, Iterator[InternalRow])] = _
 
   override def beforeEach(): Unit = {
     statefulProcessorHandle = mock(classOf[StatefulProcessorHandleImpl])
@@ -72,6 +75,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
       ValueStateInfo(valueState, stateSchema, stateDeserializer))
     listStateMap = mutable.HashMap[String, ListStateInfo](stateName ->
       ListStateInfo(listState, stateSchema, stateDeserializer, stateSerializer))
+    initialStateDataIterator = mock(classOf[Iterator[(InternalRow, Iterator[InternalRow])]])
     // Iterator map for list state. Please note that `handleImplicitGroupingKeyRequest` would
     // reset the iterator map to empty so be careful to call it if you want to access the iterator
     // map later.
@@ -82,7 +86,9 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
       statefulProcessorHandle, groupingKeySchema, "", false, false, 2,
       outputStream, valueStateMap, transformWithStateInPandasDeserializer, arrowStreamWriter,
-      listStateMap, listStateIteratorMap)
+      listStateMap, listStateIteratorMap,
+      hasInitialState = true, initialStateSchema = initialStateSchema,
+      initialStateDataIterator = initialStateDataIterator)
     when(transformWithStateInPandasDeserializer.readArrowBatches(any))
       .thenReturn(Seq(new GenericRowWithSchema(Array(1), stateSchema)))
   }
@@ -255,5 +261,20 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     stateServer.handleListStateRequest(message)
     verify(transformWithStateInPandasDeserializer).readArrowBatches(any)
     verify(listState).appendList(any)
+  }
+
+  test("stateful processor - is first batch") {
+    val message = UtilsCallCommand.newBuilder().setIsFirstBatch(
+      IsFirstBatch.newBuilder().build()).build()
+    stateServer.handleStatefulProcessorUtilRequest(message)
+    verify(outputStream).writeInt(0)
+  }
+
+  test("stateful processor - get initial state") {
+    val byteString: ByteString = ByteString.copyFrom(byteArray)
+    val message = UtilsCallCommand.newBuilder().setGetInitialState(
+      GetInitialState.newBuilder().setGroupingKey(byteString).build()).build()
+    stateServer.handleStatefulProcessorUtilRequest(message)
+    verify(outputStream).writeInt(argThat((x: Int) => x > 0))
   }
 }
