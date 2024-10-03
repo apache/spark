@@ -277,9 +277,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def ansiDateTimeError(e: Exception): SparkDateTimeException = {
+  def ansiDateTimeArgumentOutOfRange(e: Exception): SparkDateTimeException = {
     new SparkDateTimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2000",
+      errorClass = "INVALID_DATE_ARGUMENT_VALUE",
       messageParameters = Map(
         "message" -> e.getMessage,
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
@@ -287,9 +287,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def ansiIllegalArgumentError(message: String): SparkIllegalArgumentException = {
+  def ansiNoMicrosecondArgumentSupported(message: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2000",
+      errorClass = "INVALID_DATE_ARGUMENT_VALUE",
       messageParameters = Map(
         "message" -> message,
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))

@@ -154,7 +154,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "errorClass" : "INVALID_DATE_ARGUMENT_VALUE",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 61"
@@ -185,7 +185,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "errorClass" : "INVALID_DATE_ARGUMENT_VALUE",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 99"
@@ -200,7 +200,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "errorClass" : "INVALID_DATE_ARGUMENT_VALUE",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 999"

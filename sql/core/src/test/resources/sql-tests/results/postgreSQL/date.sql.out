@@ -687,7 +687,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "errorClass" : "INVALID_DATE_ARGUMENT_VALUE",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Invalid date 'FEBRUARY 30'"
@@ -702,7 +702,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "errorClass" : "INVALID_DATE_ARGUMENT_VALUE",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Invalid value for MonthOfYear (valid values 1 - 12): 13"
@@ -717,7 +717,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "errorClass" : "INVALID_DATE_ARGUMENT_VALUE",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Invalid value for DayOfMonth (valid values 1 - 28/31): -1"
