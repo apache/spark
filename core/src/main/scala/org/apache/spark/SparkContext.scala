@@ -240,6 +240,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _shutdownHookRef: AnyRef = _
   private var _statusStore: AppStatusStore = _
   private var _heartbeater: Heartbeater = _
+  private var _driverThreadDumpCollector: ThreadDumpCollector = _
   private var _resources: immutable.Map[String, ResourceInformation] = _
   private var _shuffleDriverComponents: ShuffleDriverComponents = _
   private var _plugins: Option[PluginContainer] = None
@@ -627,6 +628,15 @@ class SparkContext(config: SparkConf) extends Logging {
     _applicationAttemptId.foreach { attemptId =>
       _conf.set(APP_ATTEMPT_ID, attemptId)
       _env.blockManager.blockStoreClient.setAppAttemptId(attemptId)
+    }
+
+    // Create and start the thread dump collector for the Spark driver
+    if (_conf.get(DRIVER_THREAD_DUMP_COLLECTOR_ENABLED)) {
+      _driverThreadDumpCollector = new ThreadDumpCollector(
+        () => ThreadDumpCollector.saveThreadDumps(env),
+        "driver-threadDumpCollector",
+        conf.get(THREAD_DUMP_COLLECTOR_INTERVAL))
+      _driverThreadDumpCollector.start()
     }
 
     // initialize after application id and attempt id has been initialized
@@ -2382,6 +2392,12 @@ class SparkContext(config: SparkConf) extends Logging {
         _heartbeater.stop()
       }
       _heartbeater = null
+    }
+    if (_conf.get(DRIVER_THREAD_DUMP_COLLECTOR_ENABLED) && _driverThreadDumpCollector != null) {
+      Utils.tryLogNonFatalError {
+        _driverThreadDumpCollector.stop()
+      }
+      _driverThreadDumpCollector = null
     }
     if (env != null && _heartbeatReceiver != null) {
       Utils.tryLogNonFatalError {

@@ -835,6 +835,7 @@ private[spark] object LogKeys {
   case object TEMP_PATH extends LogKey
   case object TEST_SIZE extends LogKey
   case object THREAD extends LogKey
+  case object THREAD_DUMPS extends LogKey
   case object THREAD_ID extends LogKey
   case object THREAD_NAME extends LogKey
   case object THREAD_POOL_KEEPALIVE_TIME extends LogKey
