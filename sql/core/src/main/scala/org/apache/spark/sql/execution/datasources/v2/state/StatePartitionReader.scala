@@ -238,8 +238,7 @@ class StateStoreChangeDataPartitionReader(
   }
 
   override lazy val iter: Iterator[InternalRow] = {
-    if (stateVariableInfoOpt.isDefined && stateVariableInfoOpt.get.stateVariableType ==
-      StateVariableType.MapState) {
+    if (SchemaUtil.checkVariableType(stateVariableInfoOpt, StateVariableType.MapState)) {
       val groupingKeySchema = SchemaUtil.getSchemaAsDataType(
         keySchema, "key"
       ).asInstanceOf[StructType]
