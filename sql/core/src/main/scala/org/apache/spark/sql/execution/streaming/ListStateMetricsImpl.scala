@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
 import org.apache.spark.sql.types._
@@ -29,6 +28,11 @@ import org.apache.spark.sql.types._
  * reported as part of the query progress metrics.
  */
 trait ListStateMetricsImpl {
+  def stateStore: StateStore
+
+  def baseStateName: String
+
+  def exprEncSchema: StructType
 
   // We keep track of the count of entries in the list in a separate column family
   // to avoid scanning the entire list to get the count.
@@ -39,70 +43,43 @@ trait ListStateMetricsImpl {
 
   private def getRowCounterCFName(stateName: String) = "$rowCounter_" + stateName
 
-  /**
-   * Function to initialize the secondary index used to track number of elements in the list state
-   * per grouping key
-   * @param store - reference to the StateStore instance to be used for storing state
-   * @param stateName - name of logical state partition
-   * @param keyExprEnc - Spark SQL encoder for key
-   */
-  def initMetrics(
-      store: StateStore,
-      keyExprEnc: ExpressionEncoder[Any],
-      stateName: String): Unit = {
-    store.createColFamilyIfAbsent(getRowCounterCFName(stateName), keyExprEnc.schema,
-      counterCFValueSchema, NoPrefixKeyStateEncoderSpec(keyExprEnc.schema), isInternal = true)
-  }
+  stateStore.createColFamilyIfAbsent(getRowCounterCFName(baseStateName), exprEncSchema,
+    counterCFValueSchema, NoPrefixKeyStateEncoderSpec(exprEncSchema), isInternal = true)
 
   /**
    * Function to get the number of entries in the list state for a given grouping key
-   * @param store - reference to the StateStore instance to be used for storing state
    * @param encodedKey - encoded grouping key
-   * @param stateName - name of logical state partition
-   * @return
+   * @return - number of entries in the list state
    */
-  def getEntryCount(
-      store: StateStore,
-      encodedKey: UnsafeRow,
-      stateName: String): Long = {
-    val countRow = store.get(encodedKey, getRowCounterCFName(stateName))
-    val countVal: Long = if (countRow != null) {
+  def getEntryCount(encodedKey: UnsafeRow): Long = {
+    val countRow = stateStore.get(encodedKey, getRowCounterCFName(baseStateName))
+    if (countRow != null) {
       countRow.getLong(0)
     } else {
       0L
     }
-    countVal
   }
 
   /**
    * Function to update the number of entries in the list state for a given grouping key
-   * @param store - reference to the StateStore instance to be used for storing state
    * @param encodedKey - encoded grouping key
-   * @param stateName - name of logical state partition
    * @param updatedCount - updated count of entries in the list state
    */
   def updateEntryCount(
-      store: StateStore,
       encodedKey: UnsafeRow,
-      stateName: String,
       updatedCount: Long): Unit = {
     val updatedCountRow = new GenericInternalRow(1)
     updatedCountRow.setLong(0, updatedCount)
-    store.put(encodedKey,
+    stateStore.put(encodedKey,
       counterCFProjection(updatedCountRow.asInstanceOf[InternalRow]),
-      getRowCounterCFName(stateName))
+      getRowCounterCFName(baseStateName))
   }
 
   /**
    * Function to remove the number of entries in the list state for a given grouping key
-   * @param store - reference to the StateStore instance to be used for storing state
    * @param encodedKey - encoded grouping key
-   * @param stateName - name of logical state partition
    */
-  def removeEntryCount(
-      store: StateStore,
-      encodedKey: UnsafeRow,
-      stateName: String): Unit = {
-    store.remove(encodedKey, getRowCounterCFName(stateName))
+  def removeEntryCount(encodedKey: UnsafeRow): Unit = {
+    stateStore.remove(encodedKey, getRowCounterCFName(baseStateName))
   }
 }

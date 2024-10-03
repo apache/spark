@@ -23,6 +23,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.{ListState, TTLConfig}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.NextIterator
 
 /**
@@ -50,6 +51,10 @@ class ListStateImplWithTTL[S](
   with ListStateMetricsImpl
   with ListState[S] {
 
+  override def stateStore: StateStore = store
+  override def baseStateName: String = stateName
+  override def exprEncSchema: StructType = keyExprEnc.schema
+
   private lazy val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder,
     stateName, hasTtl = true)
 
@@ -62,8 +67,6 @@ class ListStateImplWithTTL[S](
     store.createColFamilyIfAbsent(stateName, keyExprEnc.schema,
       getValueSchemaWithTTL(valEncoder.schema, true),
       NoPrefixKeyStateEncoderSpec(keyExprEnc.schema), useMultipleValuesPerKey = true)
-
-    initMetrics(store, keyExprEnc, stateName)
   }
 
   /** Whether state exists or not. */
@@ -105,7 +108,7 @@ class ListStateImplWithTTL[S](
 
     val encodedKey = stateTypesEncoder.encodeGroupingKey()
     var isFirst = true
-    var entryCount = getEntryCount(store, encodedKey, stateName)
+    var entryCount = getEntryCount(encodedKey)
 
     newState.foreach { v =>
       val encodedValue = stateTypesEncoder.encodeValue(v, ttlExpirationMs)
@@ -119,19 +122,19 @@ class ListStateImplWithTTL[S](
       TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
     }
     upsertTTLForStateKey(encodedKey)
-    updateEntryCount(store, encodedKey, stateName, entryCount)
+    updateEntryCount(encodedKey, entryCount)
   }
 
   /** Append an entry to the list. */
   override def appendValue(newState: S): Unit = {
     StateStoreErrors.requireNonNullStateValue(newState, stateName)
     val encodedKey = stateTypesEncoder.encodeGroupingKey()
-    val entryCount = getEntryCount(store, encodedKey, stateName)
+    val entryCount = getEntryCount(encodedKey)
     store.merge(encodedKey,
       stateTypesEncoder.encodeValue(newState, ttlExpirationMs), stateName)
     TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
     upsertTTLForStateKey(encodedKey)
-    updateEntryCount(store, encodedKey, stateName, entryCount + 1)
+    updateEntryCount(encodedKey, entryCount + 1)
   }
 
   /** Append an entire list to the existing value. */
@@ -139,7 +142,7 @@ class ListStateImplWithTTL[S](
     validateNewState(newState)
 
     val encodedKey = stateTypesEncoder.encodeGroupingKey()
-    var entryCount = getEntryCount(store, encodedKey, stateName)
+    var entryCount = getEntryCount(encodedKey)
     newState.foreach { v =>
       val encodedValue = stateTypesEncoder.encodeValue(v, ttlExpirationMs)
       store.merge(encodedKey, encodedValue, stateName)
@@ -147,16 +150,16 @@ class ListStateImplWithTTL[S](
       TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
     }
     upsertTTLForStateKey(encodedKey)
-    updateEntryCount(store, encodedKey, stateName, entryCount)
+    updateEntryCount(encodedKey, entryCount)
   }
 
   /** Remove this state. */
   override def clear(): Unit = {
     val encodedKey = stateTypesEncoder.encodeGroupingKey()
     store.remove(encodedKey, stateName)
-    val entryCount = getEntryCount(store, encodedKey, stateName)
+    val entryCount = getEntryCount(encodedKey)
     TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", entryCount)
-    removeEntryCount(store, encodedKey, stateName)
+    removeEntryCount(encodedKey)
     clearTTLState()
   }
 
@@ -179,7 +182,7 @@ class ListStateImplWithTTL[S](
     val unsafeRowValuesIterator = store.valuesIterator(groupingKey, stateName)
     // We clear the list, and use the iterator to put back all of the non-expired values
     store.remove(groupingKey, stateName)
-    removeEntryCount(store, groupingKey, stateName)
+    removeEntryCount(groupingKey)
     var isFirst = true
     var entryCount = 0L
     unsafeRowValuesIterator.foreach { encodedValue =>
@@ -195,7 +198,7 @@ class ListStateImplWithTTL[S](
         numValuesExpired += 1
       }
     }
-    updateEntryCount(store, groupingKey, stateName, entryCount)
+    updateEntryCount(groupingKey, entryCount)
     TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", numValuesExpired)
     numValuesExpired
   }
