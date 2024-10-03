@@ -2127,7 +2127,7 @@ private[spark] class BlockManager(
       if (tellMaster) {
         // Only update storage level from the captured block status before deleting, so that
         // memory size and disk size are being kept for calculating delta. Reset the replica
-        // count 0 in storage level to notify that its a remove operation.
+        // count 0 in storage level to notify that it is a remove operation.
         val storageLevel = StorageLevel(blockStatus.get.storageLevel.toInt, 0)
         reportBlockStatus(blockId, blockStatus.get.copy(storageLevel = storageLevel))
       }
