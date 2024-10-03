@@ -4632,7 +4632,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-49604: GROUP_BY_POS_OUT_OF_RANGE should not appear if group by Literal") {
-    withTable("t1", "t2", "t3") {
+    withTable("t1", "t2", "t3", "t4") {
       sql("CREATE TABLE t1(c1 int) USING PARQUET")
       sql("CREATE TABLE t2 USING PARQUET AS SELECT c1, -1 AS x from t1 group by c1, x")
       sql("CREATE TABLE t3 USING PARQUET AS SELECT c1, 5 AS x, 5 AS y from t1 group by c1, x, y")
