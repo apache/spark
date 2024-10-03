@@ -129,8 +129,7 @@ class RocksDBFileManager(
     localTempDir: File,
     hadoopConf: Configuration,
     codecName: String = CompressionCodec.ZSTD,
-    loggingId: String = "",
-    checkpointFormatVersion: Int = 1)
+    loggingId: String = "")
   extends Logging {
 
   import RocksDBImmutableFile._
@@ -358,8 +357,6 @@ class RocksDBFileManager(
         }
       val maxVersion = versionAndUniqueIds.map(_._1).foldLeft(0L)(math.max)
       versionAndUniqueIds.filter(_._1 == maxVersion)
-      // If there is only one previous version file, skip the check for uniqueId
-      // TODO decision?
     } else {
       Array((0, None))
     }

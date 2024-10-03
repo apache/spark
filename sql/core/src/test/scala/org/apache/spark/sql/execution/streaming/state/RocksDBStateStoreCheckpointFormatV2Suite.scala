@@ -475,8 +475,6 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
           StopStream
         )
 
-        println("wei== stream stopped")
-
         // Run the stream with changelog checkpointing enabled.
         testStream(aggregated, Update)(
           StartStream(checkpointLocation = checkpointDir.getAbsolutePath),

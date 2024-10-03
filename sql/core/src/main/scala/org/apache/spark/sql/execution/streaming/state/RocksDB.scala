@@ -314,8 +314,6 @@ class RocksDB(
       MDC(LogKeys.UUID, stateStoreCkptId.getOrElse(""))}")
     var currLineage: Option[Array[(Long, Option[String])]] = None
     try {
-      // TODO[MUST] when loaded version = version, still need to get currentLineage
-      //  from previous version
       if (loadedVersion != version ||
         (enableStateStoreCheckpointIds && stateStoreCkptId.isDefined &&
           (loadedStateStoreCkptId.isEmpty || stateStoreCkptId.get != loadedStateStoreCkptId.get))) {
@@ -334,7 +332,7 @@ class RocksDB(
         // Update the lineage from changelog
         // When loading from the first version (query restart, not necessarily verion=0,
         // stateStoreCkptId is not defined even if enableStateStoreCheckpointIds is true
-        if (version != 0 && enableStateStoreCheckpointIds && stateStoreCkptId.isDefined) {
+        if (enableStateStoreCheckpointIds && stateStoreCkptId.isDefined) {
           // It is possible that change log checkpointing is first enabled and then disabled.
           // In this case, loading changelog reader will fail because there are only zip files.
           // It is also possible that state store was previously ran under format version 1
@@ -411,7 +409,6 @@ class RocksDB(
         metadata.maxColumnFamilyId.foreach { maxId =>
           maxColumnFamilyId.set(maxId)
         }
-        // TODO: update loadedUniqueId?
         // reset last snapshot version
         if (lastSnapshotVersion > latestSnapshotVersion) {
           // discard any newer snapshots
@@ -438,7 +435,7 @@ class RocksDB(
             metadata.numKeys
           }
         if (loadedVersion != version) {
-          replayChangelog(version, currLineage) // TODO: this code is not backward compatible
+          replayChangelog(version, currLineage)
         }
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.
@@ -571,7 +568,7 @@ class RocksDB(
 
     val versionsAndUniqueIds = stateStoreCkptIdLineage match {
       // First entry of lineage corresponds to loadedVersion
-      case Some(lineage) => lineage // TODO: assert lineage.head == loadedVersion
+      case Some(lineage) => lineage
       case None => (loadedVersion + 1 to endVersion).map((_, None)).toArray
     }
 
@@ -586,7 +583,6 @@ class RocksDB(
       var changelogReader: StateStoreChangelogReader = null
       try {
         changelogReader = fileManager.getChangelogReader(v, useColumnFamilies, uniqueId)
-        // TODO: verification? verify lineage is valid
         changelogReader.foreach { case (recordType, key, value) =>
           recordType match {
             case RecordType.PUT_RECORD =>
@@ -957,7 +953,6 @@ class RocksDB(
 
   def doMaintenance(): Unit = {
     if (enableChangelogCheckpointing) {
-      // TODO: here need to correctly setup loadedId
       uploadSnapshot()
     }
     val cleanupTime = timeTakenMs {
