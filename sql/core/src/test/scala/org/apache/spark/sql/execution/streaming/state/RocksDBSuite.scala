@@ -1326,9 +1326,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
       versionToUniqueId = versionToUniqueId1) { db =>
       db.load(10)
-      // scalastyle:off
-      db.iterator().map(toStr).foreach(println)
-      // scalastyle:on
       assert(toStr(db.get("a")) === "1")
       for (version <- 2 to 10) {
         // "1" -> "1", "2" -> "2", ...
@@ -1383,9 +1380,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
       versionToUniqueId = versionToUniqueId) { db =>
       db.load(10, None) // When reloading, the first checkpointUniqueId is None
-      // scalastyle:off
-      db.iterator().map(toStr).foreach(println)
-      // scalastyle:on
       assert(toStr(db.get("a")) === "1")
       for (version <- 2 to 10) {
         // "1" -> "1", "2" -> "2", ...
@@ -1434,9 +1428,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
       versionToUniqueId = versionToUniqueId) { db =>
       db.load(10, None)
-      // scalastyle:off
-      db.iterator().map(toStr).foreach(println)
-      // scalastyle:on
       assert(toStr(db.get("a")) === "1")
       for (version <- 2 to 10) {
         // "1" -> "1", "2" -> "2", ...
@@ -2805,10 +2796,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
         case _ => ckptId
       }
 
-      // scalastyle:off
-      println("wei== versionToUniqueId: ")
-      versionToUniqueId.foreach(x => println(x._1, x._2))
-      // scalastyle:on
       super.load(version, checkpointUniqueId, readOnly)
     }
 

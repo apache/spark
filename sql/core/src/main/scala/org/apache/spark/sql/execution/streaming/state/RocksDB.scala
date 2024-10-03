@@ -378,9 +378,6 @@ class RocksDB(
           currLineage = getLineageFromChangelogFile(version, useColumnFamilies, stateStoreCkptId)
         }
 
-        println("wei=== latest snapshots")
-        latestSnapshotVersionsAndUniqueIds.foreach(x => println(x._1, x._2))
-
         val (latestSnapshotVersion, latestSnapshotUniqueId) = {
           // When loading from version 0
           if (latestSnapshotVersionsAndUniqueIds.length == 0) {
