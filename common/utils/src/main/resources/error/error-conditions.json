@@ -132,12 +132,12 @@
     "subClass" : {
       "WITHOUT_SUGGESTION" : {
         "message" : [
-          " Try fixing values passed in the function, so that they do not produce overflow."
+          "Try fixing values passed in the function, so that they do not produce overflow."
         ]
       },
       "WITH_SUGGESTION" : {
         "message" : [
-          " Use `<hint>` to ignore overflow problem and return NULL."
+          "Use <functionName> to ignore overflow problem and return NULL."
         ]
       }
     },
