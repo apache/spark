@@ -4632,12 +4632,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-49604: GROUP_BY_POS_OUT_OF_RANGE should not appear if group by Literal") {
-    withTable("t1", "t2", "t3", "t4") {
+    withTable("t1", "t2", "t3", "t4", "t5") {
       sql("CREATE TABLE t1(c1 int) USING PARQUET")
       sql("CREATE TABLE t2 USING PARQUET AS SELECT c1, -1 AS x from t1 group by c1, x")
       sql("CREATE TABLE t3 USING PARQUET AS SELECT c1, 5 AS x, 5 AS y from t1 group by c1, x, y")
+      sql("CREATE TABLE t4 USING PARQUET AS SELECT c1, 1 + sum(c1), 5 AS y from t1 group by c1, y")
       val error = intercept[AnalysisException] {
-        sql("CREATE TABLE t4 USING PARQUET AS SELECT c1, -1 AS x, 5 AS y from t1 group by c1, x, 5")
+        sql("CREATE TABLE t5 USING PARQUET AS SELECT c1, -1 AS x, 5 AS y from t1 group by c1, x, 5")
       }
       assert(error.message contains "GROUP_BY_POS_OUT_OF_RANGE")
     }
