@@ -685,12 +685,15 @@ select make_date(2013, 2, 30)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
+org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
+  "errorClass" : "DATE_TIME_FIELD_OUT_OF_BOUNDS",
+  "sqlState" : "22008",
   "messageParameters" : {
-    "message" : "The Spark SQL phase optimization failed with an internal error. You hit a bug in Spark or the Spark plugins you use. Please, report this bug to the corresponding communities or vendors, and provide the full stack trace."
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "badValue" : "30",
+    "range" : "1 ... 28/31",
+    "unit" : "DAY"
   }
 }
 

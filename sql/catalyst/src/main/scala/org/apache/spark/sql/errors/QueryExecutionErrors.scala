@@ -281,10 +281,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     def extractDateTimeErrorInfo(e: Exception): (String, String, String) = {
       val errorMessage = e.getMessage
 
-      val pattern = "Invalid value for ([A-Za-z]+) \\(valid values (.+)\\): (.+)".r
+      val valuePattern = "Invalid value for ([A-Za-z]+) \\(valid values (.+)\\): (.+)".r
+      val datePattern = "Invalid date '[A-Z]+ ([0-9]+)'".r
 
       errorMessage match {
-        case pattern(field, range, badValue) =>
+        case valuePattern(field, range, badValue) =>
           val unit = field match {
             case "Year" => "YEAR"
             case "MonthOfYear" => "MONTH"
@@ -295,6 +296,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
           }
           val formattedRange = range.replace(" - ", " ... ")
           (unit, formattedRange, badValue)
+        case datePattern(badDate) =>
+          ("DAY", "1 ... 28/31", badDate)
       }
     }
     val (unit, range, badValue) = extractDateTimeErrorInfo(e)
