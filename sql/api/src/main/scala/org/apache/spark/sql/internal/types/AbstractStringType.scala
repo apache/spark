@@ -34,36 +34,62 @@ abstract class AbstractStringType(private[sql] val supportsTrimCollation: Boolea
 /**
  * Use StringTypeBinary for expressions supporting only binary collation.
  */
-case object StringTypeBinary extends AbstractStringType {
-  override private[sql] def acceptsType(other: DataType): Boolean =
-    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].supportsBinaryEquality &&
-      canUseTrimCollation(other)
-}
+case class StringTypeBinary(override val supportsTrimCollation: Boolean = false)
+  extends AbstractStringType(supportsTrimCollation) {
+    override private[sql] def acceptsType(other: DataType): Boolean =
+      other.isInstanceOf[StringType] && other.asInstanceOf[StringType].supportsBinaryEquality &&
+        canUseTrimCollation(other)
+ }
 
+object StringTypeBinary extends StringTypeBinary(false) {
+  def apply(supportsTrimCollation: Boolean): StringTypeBinary = {
+    new StringTypeBinary(supportsTrimCollation)
+  }
+}
 /**
  * Use StringTypeBinaryLcase for expressions supporting only binary and lowercase collation.
  */
-case object StringTypeBinaryLcase extends AbstractStringType {
+case class StringTypeBinaryLcase(override val supportsTrimCollation: Boolean = false)
+  extends AbstractStringType(supportsTrimCollation) {
   override private[sql] def acceptsType(other: DataType): Boolean =
     other.isInstanceOf[StringType] && (other.asInstanceOf[StringType].supportsBinaryEquality ||
       other.asInstanceOf[StringType].isUTF8LcaseCollation) && canUseTrimCollation(other)
 }
 
+object StringTypeBinaryLcase extends StringTypeBinaryLcase(false) {
+  def apply(supportsTrimCollation: Boolean): StringTypeBinaryLcase = {
+    new StringTypeBinaryLcase(supportsTrimCollation)
+  }
+}
 /**
  * Use StringTypeWithCaseAccentSensitivity for expressions supporting all collation types (binary
  * and ICU) but limited to using case and accent sensitivity specifiers.
  */
-case object StringTypeWithCaseAccentSensitivity extends AbstractStringType {
+case class StringTypeWithCaseAccentSensitivity(override val supportsTrimCollation: Boolean = false)
+  extends AbstractStringType(supportsTrimCollation) {
   override private[sql] def acceptsType(other: DataType): Boolean =
     other.isInstanceOf[StringType] && canUseTrimCollation(other)
+}
+
+object StringTypeWithCaseAccentSensitivity extends StringTypeWithCaseAccentSensitivity(false) {
+  def apply(supportsTrimCollation: Boolean): StringTypeWithCaseAccentSensitivity = {
+    new StringTypeWithCaseAccentSensitivity(supportsTrimCollation)
+  }
 }
 
 /**
  * Use StringTypeNonCSAICollation for expressions supporting all possible collation types except
  * CS_AI collation types.
  */
-case object StringTypeNonCSAICollation extends AbstractStringType {
+case class StringTypeNonCSAICollation (override val supportsTrimCollation: Boolean = false)
+  extends AbstractStringType(supportsTrimCollation) {
   override private[sql] def acceptsType(other: DataType): Boolean =
     other.isInstanceOf[StringType] && other.asInstanceOf[StringType].isNonCSAI &&
       canUseTrimCollation(other)
+}
+
+object StringTypeNonCSAICollation extends StringTypeNonCSAICollation(false) {
+  def apply(supportsTrimCollation: Boolean): StringTypeNonCSAICollation = {
+    new StringTypeNonCSAICollation(supportsTrimCollation)
+  }
 }
