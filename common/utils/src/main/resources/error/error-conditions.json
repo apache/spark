@@ -1087,6 +1087,12 @@
     ],
     "sqlState" : "42K03"
   },
+  "DATETIME_ARGUMENT_OUT_OF_RANGE" : {
+    "message" : [
+      "<message>. If necessary set <ansiConfig> to false to bypass this error."
+    ],
+    "sqlState" : "22023"
+  },
   "DATETIME_OVERFLOW" : {
     "message" : [
       "Datetime operation overflow: <operation>."
@@ -2175,12 +2181,6 @@
       }
     },
     "sqlState" : "22007"
-  },
-  "INVALID_DATE_ARGUMENT_VALUE" : {
-    "message" : [
-      "<message>. If necessary set <ansiConfig> to false to bypass this error."
-    ],
-    "sqlState" : "22023"
   },
   "INVALID_DEFAULT_VALUE" : {
     "message" : [
