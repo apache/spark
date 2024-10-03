@@ -1295,7 +1295,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     val t1 = "T_1"
     val t2 = "T_2"
 
-    case class HashJoinTestCase[R](collation: String, value1: String, value2: String, result: R)
+    case class HashJoinTestCase[R](collation: String, data1: String, data2: String, result: R)
     val testCases = Seq(
       HashJoinTestCase("UTF8_BINARY", "aa", "AA", Seq(Row("aa", 1, "aa", 2))),
       HashJoinTestCase("UTF8_LCASE", "aa", "AA", Seq(Row("aa", 1, "AA", 2), Row("aa", 1, "aa", 2))),
@@ -1308,10 +1308,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     testCases.foreach(t => {
       withTable(t1, t2) {
         sql(s"CREATE TABLE $t1 (x STRING COLLATE ${t.collation}, i int) USING PARQUET")
-        sql(s"INSERT INTO $t1 VALUES ('${t.value1}', 1)")
+        sql(s"INSERT INTO $t1 VALUES ('${t.data1}', 1)")
 
         sql(s"CREATE TABLE $t2 (y STRING COLLATE ${t.collation}, j int) USING PARQUET")
-        sql(s"INSERT INTO $t2 VALUES ('${t.value2}', 2), ('${t.value1}', 2)")
+        sql(s"INSERT INTO $t2 VALUES ('${t.data2}', 2), ('${t.data1}', 2)")
 
         val df = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.x = $t2.y")
         checkAnswer(df, t.result)
@@ -1348,7 +1348,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     val t1 = "T_1"
     val t2 = "T_2"
 
-    case class HashJoinTestCase[R](collation: String, value1: String, value2: String, result: R)
+    case class HashJoinTestCase[R](collation: String, data1: String, data2: String, result: R)
     val testCases = Seq(
       HashJoinTestCase("UTF8_BINARY", "aa", "AA",
         Seq(Row(Seq("aa"), 1, Seq("aa"), 2))),
@@ -1359,16 +1359,16 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       HashJoinTestCase("UNICODE_CI", "aa", "AA",
         Seq(Row(Seq("aa"), 1, Seq("AA"), 2), Row(Seq("aa"), 1, Seq("aa"), 2))),
       HashJoinTestCase("UNICODE_CI_TRIM", "aa", " AA ",
-        Seq(Row(Seq("aa"), 1, Seq(" AA "), 2), Row(Seq("aa"), 1, Seq("aa"), 2))),
+        Seq(Row(Seq("aa"), 1, Seq(" AA "), 2), Row(Seq("aa"), 1, Seq("aa"), 2)))
     )
 
     testCases.foreach(t => {
       withTable(t1, t2) {
         sql(s"CREATE TABLE $t1 (x ARRAY<STRING COLLATE ${t.collation}>, i int) USING PARQUET")
-        sql(s"INSERT INTO $t1 VALUES (array('${t.value1}'), 1)")
+        sql(s"INSERT INTO $t1 VALUES (array('${t.data1}'), 1)")
 
         sql(s"CREATE TABLE $t2 (y ARRAY<STRING COLLATE ${t.collation}>, j int) USING PARQUET")
-        sql(s"INSERT INTO $t2 VALUES (array('${t.value2}'), 2), (array('${t.value1}'), 2)")
+        sql(s"INSERT INTO $t2 VALUES (array('${t.data2}'), 2), (array('${t.data1}'), 2)")
 
         val df = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.x = $t2.y")
         checkAnswer(df, t.result)
@@ -1406,7 +1406,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     val t1 = "T_1"
     val t2 = "T_2"
 
-    case class HashJoinTestCase[R](collation: String, value1: String, value2: String, result: R)
+    case class HashJoinTestCase[R](collation: String, data1: String, data2: String, result: R)
     val testCases = Seq(
       HashJoinTestCase("UTF8_BINARY", "aa", "AA",
         Seq(Row(Seq(Seq("aa")), 1, Seq(Seq("aa")), 2))),
@@ -1424,12 +1424,12 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       withTable(t1, t2) {
         sql(s"CREATE TABLE $t1 (x ARRAY<ARRAY<STRING COLLATE ${t.collation}>>, i int) USING " +
           s"PARQUET")
-        sql(s"INSERT INTO $t1 VALUES (array(array('${t.value1}')), 1)")
+        sql(s"INSERT INTO $t1 VALUES (array(array('${t.data1}')), 1)")
 
         sql(s"CREATE TABLE $t2 (y ARRAY<ARRAY<STRING COLLATE ${t.collation}>>, j int) USING " +
           s"PARQUET")
-        sql(s"INSERT INTO $t2 VALUES (array(array('${t.value2}')), 2)," +
-          s" (array(array('${t.value1}')), 2)")
+        sql(s"INSERT INTO $t2 VALUES (array(array('${t.data2}')), 2)," +
+          s" (array(array('${t.data1}')), 2)")
 
         val df = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.x = $t2.y")
         checkAnswer(df, t.result)
@@ -1468,7 +1468,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     val t1 = "T_1"
     val t2 = "T_2"
 
-    case class HashJoinTestCase[R](collation: String, value1 : String, value2: String, result: R)
+    case class HashJoinTestCase[R](collation: String, data1 : String, data2: String, result: R)
     val testCases = Seq(
       HashJoinTestCase("UTF8_BINARY", "aa", "AA",
         Seq(Row(Row("aa"), 1, Row("aa"), 2))),
@@ -1484,11 +1484,11 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     testCases.foreach(t => {
       withTable(t1, t2) {
         sql(s"CREATE TABLE $t1 (x STRUCT<f:STRING COLLATE ${t.collation}>, i int) USING PARQUET")
-        sql(s"INSERT INTO $t1 VALUES (named_struct('f', '${t.value1}'), 1)")
+        sql(s"INSERT INTO $t1 VALUES (named_struct('f', '${t.data1}'), 1)")
 
         sql(s"CREATE TABLE $t2 (y STRUCT<f:STRING COLLATE ${t.collation}>, j int) USING PARQUET")
-        sql(s"INSERT INTO $t2 VALUES (named_struct('f', '${t.value2}'), 2)," +
-          s" (named_struct('f', '${t.value1}'), 2)")
+        sql(s"INSERT INTO $t2 VALUES (named_struct('f', '${t.data2}'), 2)," +
+          s" (named_struct('f', '${t.data1}'), 2)")
 
         val df = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.x = $t2.y")
         checkAnswer(df, t.result)
@@ -1521,19 +1521,19 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     val t1 = "T_1"
     val t2 = "T_2"
 
-    case class HashJoinTestCase[R](collation: String, result: R)
+    case class HashJoinTestCase[R](collation: String, data1: String, data2: String, result: R)
     val testCases = Seq(
-      HashJoinTestCase("UTF8_BINARY",
+      HashJoinTestCase("UTF8_BINARY", "aa", "AA",
         Seq(Row(Row(Seq(Row("aa"))), 1, Row(Seq(Row("aa"))), 2))),
-      HashJoinTestCase("UTF8_LCASE",
+      HashJoinTestCase("UTF8_LCASE", "aa", "AA",
         Seq(Row(Row(Seq(Row("aa"))), 1, Row(Seq(Row("AA"))), 2),
           Row(Row(Seq(Row("aa"))), 1, Row(Seq(Row("aa"))), 2))),
-      HashJoinTestCase("UNICODE",
+      HashJoinTestCase("UNICODE", "aa", "AA",
         Seq(Row(Row(Seq(Row("aa"))), 1, Row(Seq(Row("aa"))), 2))),
-      HashJoinTestCase("UNICODE_CI",
+      HashJoinTestCase("UNICODE_CI", "aa", "AA",
         Seq(Row(Row(Seq(Row("aa"))), 1, Row(Seq(Row("AA"))), 2),
           Row(Row(Seq(Row("aa"))), 1, Row(Seq(Row("aa"))), 2))),
-      HashJoinTestCase("UNICODE_CI_TRIM",
+      HashJoinTestCase("UNICODE_CI_TRIM", "aa", " AA ",
         Seq(Row(Row(Seq(Row("aa"))), 1, Row(Seq(Row(" AA "))), 2),
           Row(Row(Seq(Row("aa"))), 1, Row(Seq(Row("aa"))), 2)))
     )
@@ -1541,12 +1541,13 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       withTable(t1, t2) {
         sql(s"CREATE TABLE $t1 (x STRUCT<f:ARRAY<STRUCT<f:STRING COLLATE ${t.collation}>>>, " +
           s"i int) USING PARQUET")
-        sql(s"INSERT INTO $t1 VALUES (named_struct('f', array(named_struct('f', 'aa'))), 1)")
+        sql(s"INSERT INTO $t1 VALUES (named_struct('f', array(named_struct('f', '${t.data1}'))), 1)"
+        )
 
         sql(s"CREATE TABLE $t2 (y STRUCT<f:ARRAY<STRUCT<f:STRING COLLATE ${t.collation}>>>, " +
           s"j int) USING PARQUET")
-        sql(s"INSERT INTO $t2 VALUES (named_struct('f', array(named_struct('f', 'AA'))), 2), " +
-          s"(named_struct('f', array(named_struct('f', 'aa'))), 2)")
+        sql(s"INSERT INTO $t2 VALUES (named_struct('f', array(named_struct('f', '${t.data2}'))), 2)"
+          + s", (named_struct('f', array(named_struct('f', '${t.data1}'))), 2)")
 
         val df = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.x = $t2.y")
         checkAnswer(df, t.result)
