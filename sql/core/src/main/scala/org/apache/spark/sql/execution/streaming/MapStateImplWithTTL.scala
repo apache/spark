@@ -189,6 +189,7 @@ class MapStateImplWithTTL[K, V](
       if (stateTypesEncoder.isExpired(retRow, batchTimestampMs)) {
         store.remove(compositeKeyRow, stateName)
         numRemovedElements += 1
+        TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
       }
     }
     numRemovedElements
