@@ -41,15 +41,16 @@ trait SparkDateTimeUtils {
   final val singleMinuteTz = Pattern.compile("(\\+|\\-)(\\d\\d):(\\d)$")
 
   def getZoneId(timeZoneId: String): ZoneId = {
-    // To support the (+|-)h:mm format because it was supported before Spark 3.0.
-    var formattedZoneId = singleHourTz.matcher(timeZoneId).replaceFirst("$10$2:")
-    // To support the (+|-)hh:m format because it was supported before Spark 3.0.
-    formattedZoneId = singleMinuteTz.matcher(formattedZoneId).replaceFirst("$1$2:0$3")
-
     try {
+      // To support the (+|-)h:mm format because it was supported before Spark 3.0.
+      var formattedZoneId = singleHourTz.matcher(timeZoneId).replaceFirst("$10$2:")
+      // To support the (+|-)hh:m format because it was supported before Spark 3.0.
+      formattedZoneId = singleMinuteTz.matcher(formattedZoneId).replaceFirst("$1$2:0$3")
       ZoneId.of(formattedZoneId, ZoneId.SHORT_IDS)
     } catch {
       case e: java.time.DateTimeException =>
+        throw ExecutionErrors.zoneOffsetError(timeZoneId, e)
+      case e: java.time.zone.ZoneRulesException =>
         throw ExecutionErrors.zoneOffsetError(timeZoneId, e)
     }
   }
