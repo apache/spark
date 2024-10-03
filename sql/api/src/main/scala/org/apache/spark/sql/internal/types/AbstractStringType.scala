@@ -23,9 +23,12 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
 /**
  * AbstractStringType is an abstract class for StringType with collation support.
  */
-abstract class AbstractStringType extends AbstractDataType {
+abstract class AbstractStringType(
+    private[sql] val supportsTrimCollation: Boolean = false) extends AbstractDataType {
   override private[sql] def defaultConcreteType: DataType = SqlApiConf.get.defaultStringType
   override private[sql] def simpleString: String = "string"
+  private[sql] def canUseTrimCollation(other: DataType): Boolean =
+    supportsTrimCollation && other.asInstanceOf[StringType].usesTrimCollation
 }
 
 /**
@@ -33,7 +36,8 @@ abstract class AbstractStringType extends AbstractDataType {
  */
 case object StringTypeBinary extends AbstractStringType {
   override private[sql] def acceptsType(other: DataType): Boolean =
-    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].supportsBinaryEquality
+    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].supportsBinaryEquality &&
+      canUseTrimCollation(other)
 }
 
 /**
@@ -42,7 +46,7 @@ case object StringTypeBinary extends AbstractStringType {
 case object StringTypeBinaryLcase extends AbstractStringType {
   override private[sql] def acceptsType(other: DataType): Boolean =
     other.isInstanceOf[StringType] && (other.asInstanceOf[StringType].supportsBinaryEquality ||
-      other.asInstanceOf[StringType].isUTF8LcaseCollation)
+      other.asInstanceOf[StringType].isUTF8LcaseCollation) && canUseTrimCollation(other)
 }
 
 /**
@@ -50,7 +54,8 @@ case object StringTypeBinaryLcase extends AbstractStringType {
  * and ICU) but limited to using case and accent sensitivity specifiers.
  */
 case object StringTypeWithCaseAccentSensitivity extends AbstractStringType {
-  override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[StringType]
+  override private[sql] def acceptsType(other: DataType): Boolean =
+    other.isInstanceOf[StringType] && canUseTrimCollation(other)
 }
 
 /**
@@ -59,5 +64,6 @@ case object StringTypeWithCaseAccentSensitivity extends AbstractStringType {
  */
 case object StringTypeNonCSAICollation extends AbstractStringType {
   override private[sql] def acceptsType(other: DataType): Boolean =
-    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].isNonCSAI
+    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].isNonCSAI &&
+      canUseTrimCollation(other)
 }
