@@ -287,12 +287,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def ansiNoMicrosecondArgumentSupported(message: String): SparkIllegalArgumentException = {
+  def ansiIllegalIntervalArgumentValue(): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "INVALID_DATE_ARGUMENT_VALUE",
-      messageParameters = Map(
-        "message" -> message,
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
+      errorClass = "ILLEGAL_INTERVAL_ARGUMENT_VALUE",
+      messageParameters = Map("ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
   def overflowInSumOfDecimalError(context: QueryContext): ArithmeticException = {

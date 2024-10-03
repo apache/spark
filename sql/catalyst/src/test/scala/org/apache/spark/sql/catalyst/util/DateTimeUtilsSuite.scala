@@ -542,10 +542,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkError(
       exception = intercept[SparkIllegalArgumentException](
         dateAddInterval(input, new CalendarInterval(36, 47, 1))),
-      condition = "INVALID_DATE_ARGUMENT_VALUE",
-      parameters = Map(
-        "message" -> "Cannot add hours, minutes, seconds or microseconds to a date",
-        "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
+      condition = "ILLEGAL_INTERVAL_ARGUMENT_VALUE",
+      parameters = Map("ansiConfig" -> "\"spark.sql.ansi.enabled\""))
   }
 
   test("timestamp add interval") {

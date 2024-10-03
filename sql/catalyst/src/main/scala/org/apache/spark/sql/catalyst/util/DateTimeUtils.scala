@@ -304,8 +304,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
      start: Int,
      interval: CalendarInterval): Int = {
     if (interval.microseconds != 0) {
-      throw QueryExecutionErrors.ansiNoMicrosecondArgumentSupported(
-        "Cannot add hours, minutes, seconds or microseconds to a date")
+      throw QueryExecutionErrors.ansiIllegalIntervalArgumentValue()
     }
     val ld = daysToLocalDate(start).plusMonths(interval.months).plusDays(interval.days)
     localDateToDays(ld)
