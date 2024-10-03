@@ -26,8 +26,6 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
 
-//  import testImplicits._
-
   private def testCommitLogV2FilePath: Path = {
     getWorkspaceFilePath(
       "sql",
