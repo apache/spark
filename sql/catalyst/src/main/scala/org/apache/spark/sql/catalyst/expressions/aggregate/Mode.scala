@@ -19,13 +19,13 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult, UnresolvedWithinGroup}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, UnresolvedWithinGroup}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, ExpressionDescription, ImplicitCastInputTypes, SortOrder}
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLExpr
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, GenericArrayData, UnsafeRowUtils}
-import org.apache.spark.sql.errors.DataTypeErrors.{toSQLId, toSQLType}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, GenericArrayData, MapData, UnsafeRowUtils}
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, MapType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -51,24 +51,6 @@ case class Mode(
   override def dataType: DataType = child.dataType
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    // TODO: SPARK-49358: Mode expression for map type with collated fields
-    if (UnsafeRowUtils.isBinaryStable(child.dataType) ||
-      !child.dataType.existsRecursively(f => f.isInstanceOf[MapType] &&
-        !UnsafeRowUtils.isBinaryStable(f))) {
-      /*
-        * The Mode class uses collation awareness logic to handle string data.
-        * All complex types except MapType with collated fields are supported.
-       */
-      super.checkInputDataTypes()
-    } else {
-      TypeCheckResult.DataTypeMismatch("UNSUPPORTED_MODE_DATA_TYPE",
-        messageParameters =
-          Map("child" -> toSQLType(child.dataType),
-            "mode" -> toSQLId(prettyName)))
-    }
-  }
 
   override def prettyName: String = "mode"
 
@@ -115,6 +97,7 @@ case class Mode(
       case st: StructType =>
         processStructTypeWithBuffer(data.asInstanceOf[InternalRow].toSeq(st).zip(st.fields))
       case at: ArrayType => processArrayTypeWithBuffer(at, data.asInstanceOf[ArrayData])
+      case mt: MapType => processMapTypeWithBuffer(mt, data.asInstanceOf[MapData])
       case st: StringType =>
         CollationFactory.getCollationKey(data.asInstanceOf[UTF8String], st.collationId)
       case _ =>
@@ -140,6 +123,16 @@ case class Mode(
       collationAwareTransform(data.get(i, a.elementType), a.elementType))
   }
 
+  private def processMapTypeWithBuffer(mt: MapType, data: MapData): Map[Any, Any] = {
+    val transformedKeys = (0 until data.numElements()).map { i =>
+      collationAwareTransform(data.keyArray().get(i, mt.keyType), mt.keyType)
+    }
+    val transformedValues = (0 until data.numElements()).map { i =>
+      collationAwareTransform(data.valueArray().get(i, mt.valueType), mt.valueType)
+    }
+    transformedKeys.zip(transformedValues).toMap
+  }
+
   override def eval(buffer: OpenHashMap[AnyRef, Long]): Any = {
     if (buffer.isEmpty) {
       return null
@@ -157,8 +150,7 @@ case class Mode(
       *
       * The new map is then used in the rest of the Mode evaluation logic.
       *
-      * It is expected to work for all simple and complex types with
-      *  collated fields, except for MapType (temporarily).
+      * It is expected to work for all simple and complex types with collated fields.
       */
     val collationAwareBuffer = getCollationAwareBuffer(child.dataType, buffer)
 
