@@ -186,18 +186,49 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         }
         assert(ex1.isInstanceOf[StateDataSourceInvalidOptionValue])
         assert(ex1.getMessage.contains("Registered timers are not available"))
+      }
+    }
+  }
 
-        // TODO: this should be removed when readChangeFeed is supported for value state
-        val ex2 = intercept[Exception] {
-          spark.read
+  testWithChangelogCheckpointingEnabled("state data source cdf integration - " +
+    "value state with single variable") {
+    withTempDir { tempDir =>
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key ->
+          TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new StatefulProcessorWithSingleValueVar(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          AddData(inputData, "b"),
+          CheckNewAnswer(("b", "1")),
+          StopStream
+        )
+
+        val changeFeedDf = spark.read
             .format("statestore")
             .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
             .option(StateSourceOptions.STATE_VAR_NAME, "valueState")
-            .option(StateSourceOptions.READ_CHANGE_FEED, "true")
+            .option(StateSourceOptions.READ_CHANGE_FEED, true)
             .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
             .load()
-        }
-        assert(ex2.isInstanceOf[StateDataSourceConflictOptions])
+
+        val opDf = changeFeedDf.selectExpr(
+          "change_type",
+          "key.value AS groupingKey",
+          "value.id AS valueId", "value.name AS valueName",
+          "partition_id")
+
+        checkAnswer(opDf,
+          Seq(Row("update", "a", 1L, "dummyKey", 0), Row("update", "b", 1L, "dummyKey", 1)))
       }
     }
   }
@@ -260,19 +291,61 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         }
         assert(ex.isInstanceOf[StateDataSourceInvalidOptionValue])
         assert(ex.getMessage.contains("State variable non-exist is not defined"))
+      }
+    }
+  }
 
-        // TODO: this should be removed when readChangeFeed is supported for TTL based state
-        // variables
-        val ex1 = intercept[Exception] {
-          spark.read
-            .format("statestore")
-            .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
-            .option(StateSourceOptions.STATE_VAR_NAME, "countState")
-            .option(StateSourceOptions.READ_CHANGE_FEED, "true")
-            .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
-            .load()
+  testWithChangelogCheckpointingEnabled("state data source cdf integration - " +
+    "value state with single variable and TTL") {
+    withTempDir { tempDir =>
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key ->
+          TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new StatefulProcessorWithTTL(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+          AddData(inputData, "a"),
+          AddData(inputData, "b"),
+          Execute { _ =>
+            // wait for the batch to run since we are using processing time
+            Thread.sleep(5000)
+          },
+          StopStream
+        )
+
+        val stateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+          .option(StateSourceOptions.READ_CHANGE_FEED, true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+          .load()
+
+        val resultDf = stateReaderDf.selectExpr(
+          "key.value", "value.value", "value.ttlExpirationMs", "partition_id")
+
+        var count = 0L
+        resultDf.collect().foreach { row =>
+          count = count + 1
+          assert(row.getLong(2) > 0)
         }
-        assert(ex1.isInstanceOf[StateDataSourceConflictOptions])
+
+        // verify that 2 state rows are present
+        assert(count === 2)
+
+        val answerDf = stateReaderDf.selectExpr(
+          "change_type",
+          "key.value AS groupingKey",
+          "value.value.value AS valueId", "partition_id")
+        checkAnswer(answerDf,
+          Seq(Row("update", "a", 1L, 0), Row("update", "b", 1L, 1)))
       }
     }
   }

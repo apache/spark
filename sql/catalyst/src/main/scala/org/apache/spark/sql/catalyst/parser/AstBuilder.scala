@@ -2557,6 +2557,10 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitCollateClause(ctx: CollateClauseContext): String = withOrigin(ctx) {
+    val collationName = ctx.collationName.getText
+    if (!SQLConf.get.trimCollationEnabled && collationName.toUpperCase().contains("TRIM")) {
+      throw QueryCompilationErrors.trimCollationNotEnabledError()
+    }
     ctx.identifier.getText
   }
 
@@ -5889,7 +5893,19 @@ class AstBuilder extends DataTypeAstBuilder
           SubqueryAlias(SubqueryAlias.generateSubqueryName(), left)
       }
       withWhereClause(c, withSubqueryAlias)
-    }.get)
+    }.getOrElse(Option(ctx.pivotClause()).map { c =>
+      if (ctx.unpivotClause() != null) {
+        throw QueryParsingErrors.unpivotWithPivotInFromClauseNotAllowedError(ctx)
+      }
+      withPivot(c, left)
+    }.getOrElse(Option(ctx.unpivotClause()).map { c =>
+      if (ctx.pivotClause() != null) {
+        throw QueryParsingErrors.unpivotWithPivotInFromClauseNotAllowedError(ctx)
+      }
+      withUnpivot(c, left)
+    }.getOrElse(Option(ctx.sample).map { c =>
+      withSample(c, left)
+    }.get))))
   }
 
   /**

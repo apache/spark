@@ -229,7 +229,7 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
             .endMetadata()
           .withImmutable(true)
           .addToData(
-            Map(file.getName() -> Files.toString(file, StandardCharsets.UTF_8)).asJava)
+            Map(file.getName() -> Files.asCharSource(file, StandardCharsets.UTF_8).read()).asJava)
           .build()
       }
     } ++ {
