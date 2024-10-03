@@ -76,7 +76,10 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
       assert(metadata.stateUniqueIds.size == commitMetadata.stateUniqueIds.size)
       commitMetadata.stateUniqueIds.foreach { case (operatorId, uniqueIds) =>
         assert(metadata.stateUniqueIds.contains(operatorId))
-        assert(metadata.stateUniqueIds(operatorId).sameElements(uniqueIds))
+        assert(metadata.stateUniqueIds(operatorId).length == uniqueIds.length)
+        assert(metadata.stateUniqueIds(operatorId).zip(uniqueIds).forall {
+          case (a, b) => a.sameElements(b)
+        })
       }
     }
   }
