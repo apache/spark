@@ -1652,7 +1652,8 @@
       "Illegal input for day of week: <string>."
     ],
     "sqlState" : "22009"
-  },"ILLEGAL_INTERVAL_ARGUMENT_VALUE" : {
+  },
+  "ILLEGAL_INTERVAL_ARGUMENT_VALUE" : {
     "message" : [
       "Cannot add hours, minutes, seconds or microseconds to a date. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
