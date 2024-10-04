@@ -1519,6 +1519,8 @@ abstract class RoundBase(child: Expression, scale: Expression,
   override def left: Expression = child
   override def right: Expression = scale
 
+  // TODO(SPARK-49631): When changed to true or removed, update try_hint() for ceil and floor
+  //  functions.
   protected def ansiEnabled: Boolean = false
 
   // round of Decimal would eval to null if it fails to `changePrecision`

@@ -406,7 +406,7 @@ case class MakeInterval(
       case e: ArithmeticException =>
         if (failOnError) {
           throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage,
-            hint = "try_make_interval")
+            suggestedFunc = "try_make_interval")
         } else {
           null
         }
