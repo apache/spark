@@ -280,9 +280,11 @@ class TransformWithStateInPandasTestsMixin:
                 )
             elif batch_id == 2:
                 # ttl-count-0 expire and restart from count 0.
-                # ttl-count-1 get reset in batch 1 and keep the state.
+                # The TTL for value state ttl_count_state gets reset in batch 1 because of the
+                # update operation and ttl-count-1 keeps the state.
                 # ttl-list-state-count-0 expire and restart from count 0.
-                # ttl-list-state-count-1 get reset in batch 1 and keep the state.
+                # The TTL for list state ttl_list_state gets reset in batch 1 because of the
+                # put operation and ttl-list-state-count-1 keeps the state.
                 # non-ttl state never expires
                 assertDataFrameEqual(
                     batch_df,

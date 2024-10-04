@@ -376,7 +376,6 @@ class TransformWithStateInPandasStateServer(
           sendResponse(1, s"Value state $stateName already exists")
         }
         case StateVariableType.ListState => if (!listStates.contains(stateName)) {
-          // TODO(SPARK-49744): Add ttl support for list state.
           val state = if (ttlDurationMs.isEmpty) {
             statefulProcessorHandle.getListState[Row](stateName, Encoders.row(schema))
           } else {
