@@ -113,14 +113,14 @@ trait AlsoTestWithRocksDBFeatures
   case object TestWithChangelogCheckpointingDisabled extends TestMode
   case object TestWithBothChangelogCheckpointingEnabledAndDisabled extends TestMode
 
-  override protected def test(
-      testName: String, testTags: Tag*)(testBody: => Any)(implicit pos: Position): Unit = {
+  override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
+                             (implicit pos: Position): Unit = {
     testWithChangelogCheckpointingEnabled(testName, testTags: _*)(testBody)
     testWithChangelogCheckpointingDisabled(testName, testTags: _*)(testBody)
   }
 
-  def testWithChangelogCheckpointingEnabled(
-      testName: String, testTags: Tag*)(testBody: => Any): Unit = {
+  def testWithChangelogCheckpointingEnabled(testName: String, testTags: Tag*)
+                                        (testBody: => Any): Unit = {
     super.test(testName + " (with changelog checkpointing)", testTags: _*) {
       // in case tests have any code that needs to execute before every test
       super.beforeEach()
@@ -133,8 +133,8 @@ trait AlsoTestWithRocksDBFeatures
     }
   }
 
-  def testWithChangelogCheckpointingDisabled(
-      testName: String, testTags: Tag*)(testBody: => Any): Unit = {
+  def testWithChangelogCheckpointingDisabled(testName: String, testTags: Tag*)
+                                           (testBody: => Any): Unit = {
     super.test(testName + " (without changelog checkpointing)", testTags: _*) {
       // in case tests have any code that needs to execute before every test
       super.beforeEach()
