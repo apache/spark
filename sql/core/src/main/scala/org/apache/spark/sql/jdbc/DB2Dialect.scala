@@ -154,28 +154,6 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
     s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS ''"
   }
 
-  override def classifyException(
-      e: Throwable,
-      errorClass: String,
-      messageParameters: Map[String, String],
-      description: String): AnalysisException = {
-    e match {
-      case sqlException: SQLException =>
-        sqlException.getSQLState match {
-          // https://www.ibm.com/docs/en/db2/11.5?topic=messages-sqlstate
-          case "42893" =>
-            throw NonEmptyNamespaceException(
-              namespace = messageParameters.get("namespace").toArray,
-              details = sqlException.getMessage,
-              cause = Some(e))
-          case "42710" if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
-            val newTable = messageParameters("newName")
-            throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
-          case _ => super.classifyException(e, errorClass, messageParameters, description)
-        }
-      case _ => super.classifyException(e, errorClass, messageParameters, description)
-    }
-  }
 
   override def classifyException(
       e: Throwable,
