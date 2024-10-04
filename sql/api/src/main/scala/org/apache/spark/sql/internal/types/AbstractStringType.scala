@@ -21,7 +21,8 @@ import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
 
 /**
- * AbstractStringType is an abstract class for StringType with collation support.
+ * AbstractStringType is an abstract class for StringType with collation support. As every type of
+ * collation can support trim specifier this class is parametrized with it.
  */
 abstract class AbstractStringType(private[sql] val supportsTrimCollation: Boolean = false)
     extends AbstractDataType {
