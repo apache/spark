@@ -127,20 +127,8 @@
   },
   "BINARY_ARITHMETIC_OVERFLOW" : {
     "message" : [
-      "<value1> <symbol> <value2> caused overflow."
+      "<value1> <symbol> <value2> caused overflow. Use <functionName> to ignore overflow problem and return NULL."
     ],
-    "subClass" : {
-      "WITHOUT_SUGGESTION" : {
-        "message" : [
-          "Try fixing values passed in the function, so that they do not produce overflow."
-        ]
-      },
-      "WITH_SUGGESTION" : {
-        "message" : [
-          "Use <functionName> to ignore overflow problem and return NULL."
-        ]
-      }
-    },
     "sqlState" : "22003"
   },
   "BOOLEAN_STATEMENT_WITH_EMPTY_ROW" : {

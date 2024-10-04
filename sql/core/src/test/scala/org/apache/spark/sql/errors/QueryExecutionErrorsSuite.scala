@@ -763,7 +763,7 @@ class QueryExecutionErrorsSuite
         exception = intercept[SparkArithmeticException] {
           sql(s"select 127Y + 5Y").collect()
         },
-        condition = "BINARY_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+        condition = "BINARY_ARITHMETIC_OVERFLOW",
         parameters = Map(
           "value1" -> "127S",
           "symbol" -> "+",
@@ -779,7 +779,7 @@ class QueryExecutionErrorsSuite
         exception = intercept[SparkArithmeticException] {
           sql(s"select -2Y - 127Y").collect()
         },
-        condition = "BINARY_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+        condition = "BINARY_ARITHMETIC_OVERFLOW",
         parameters = Map(
           "value1" -> "-2S",
           "symbol" -> "-",
@@ -795,7 +795,7 @@ class QueryExecutionErrorsSuite
         exception = intercept[SparkArithmeticException] {
           sql(s"select 127Y * 5Y").collect()
         },
-        condition = "BINARY_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+        condition = "BINARY_ARITHMETIC_OVERFLOW",
         parameters = Map(
           "value1" -> "127S",
           "symbol" -> "*",
