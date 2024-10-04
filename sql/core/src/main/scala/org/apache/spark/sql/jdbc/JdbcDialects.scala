@@ -742,7 +742,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param messageParameters The message parameters of `errorClass`
    * @param description The error description
    * @param isRuntime Whether the exception is a runtime exception or not.
-   * @return `SparkThrowable` or its sub-class.
+   * @return `SparkThrowable + Throwable` or its sub-class.
    */
   def classifyException(
       e: Throwable,
@@ -751,18 +751,6 @@ abstract class JdbcDialect extends Serializable with Logging {
       description: String,
       isRuntime: Boolean): Throwable with SparkThrowable = {
     classifyException(description, e)
-  }
-
-  @deprecated("Please override the classifyException method with `isRuntime`", "4.0.0")
-  def classifyException(
-      e: Throwable,
-      errorClass: String,
-      messageParameters: Map[String, String],
-      description: String): AnalysisException = {
-    new AnalysisException(
-      errorClass = "...",
-      messageParameters = Map(),
-      cause = Some(e))
   }
 
   /**
