@@ -117,5 +117,5 @@ case class Collation(child: Expression)
     Literal.create(collationName, SQLConf.get.defaultStringType)
   }
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity(/* supportsBinaryEquality = */ true))
+    Seq(StringTypeWithCaseAccentSensitivity(/* supportsTrimCollation = */ true))
 }
