@@ -565,8 +565,7 @@ of the most common options to set are:
   <td>numExecutors * 2, with minimum of 3</td>
   <td>
     The maximum number of executor failures before failing the application.
-    This configuration only takes effect on YARN, or Kubernetes when 
-    <code>spark.kubernetes.allocation.pods.allocator</code> is set to 'direct'.
+    This configuration only takes effect on YARN and Kubernetes.
   </td>
   <td>3.5.0</td>
 </tr>
@@ -576,8 +575,7 @@ of the most common options to set are:
   <td>
     Interval after which executor failures will be considered independent and
     not accumulate towards the attempt count.
-    This configuration only takes effect on YARN, or Kubernetes when 
-    <code>spark.kubernetes.allocation.pods.allocator</code> is set to 'direct'.
+    This configuration only takes effect on YARN and Kubernetes.
   </td>
   <td>3.5.0</td>
 </tr>
