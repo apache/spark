@@ -200,8 +200,8 @@ public final class CollationFactory {
      * bit 29:    0 for UTF8_BINARY, 1 for ICU collations.
      * bit 28-24: Reserved.
      * bit 23-22: Reserved for version.
-     * bit 21-18: Reserved for space trimming.
-     * 0000 = none, 0001 = right trim. Bits 21-19 remain reserved and fixed to 0.
+     * bit 21-19 Zeros, reserved for future trimmings.
+     * bit 18 0 = none, 1 = right trim.
      * bit 17-0:  Depend on collation family.
      * ---
      * INDETERMINATE collation ID binary layout:
@@ -216,8 +216,8 @@ public final class CollationFactory {
      * UTF8_BINARY collation ID binary layout:
      * bit 31-24: Zeroes.
      * bit 23-22: Zeroes, reserved for version.
-     * bit 21-18: Reserved for space trimming.
-     * 0000 = none, 0001 = right trim. Bits 21-19 remain reserved and fixed to 0.
+     * bit 21-19 Zeros, reserved for future trimmings.
+     * bit 18 0 = none, 1 = right trim.
      * bit 17-3:  Zeroes.
      * bit 2:     0, reserved for accent sensitivity.
      * bit 1:     0, reserved for uppercase and case-insensitive.
@@ -270,9 +270,8 @@ public final class CollationFactory {
       }
 
       /**
-       * Bits 19-18 having value 00 for no space trimming, 01 for left space trimming
-       * 10 for right space trimming and 11 for both sides space trimming. Bits 21, 20
-       * remained reserved (and fixed to 0) for future use.
+       * Bit 18 in collation ID having value 0 for none and 1 for right trimming.
+       * Bits 21, 20, 19 remained reserved (and fixed to 0) for future use.
        */
       protected enum SpaceTrimming {
         NONE, RTRIM
