@@ -18,7 +18,7 @@
 package org.apache.spark.sql.artifact
 
 import java.io.File
-import java.net.{URI, URLClassLoader}
+import java.net.{URI, URL, URLClassLoader}
 import java.nio.ByteBuffer
 import java.nio.file.{CopyOption, Files, Path, Paths, StandardCopyOption}
 import java.util.concurrent.CopyOnWriteArrayList
@@ -90,7 +90,11 @@ class ArtifactManager(session: SparkSession) extends Logging {
   /**
    * Get the URLs of all jar artifacts.
    */
-  def getAddedJars: Seq[Path] = jarsList.asScala.toSeq
+  def getAddedJars: Seq[URL] = jarsList
+    .asScala
+    .map(ArtifactUtils.concatenatePaths(artifactPath, _))
+    .map(_.toUri.toURL)
+    .toSeq
 
   /**
    * Get the py-file names added to this SparkSession.
@@ -244,9 +248,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
    * Returns a [[ClassLoader]] for session-specific jar/class file resources.
    */
   def classloader: ClassLoader = {
-    val urls =
-      (getAddedJars.map(ArtifactUtils.concatenatePaths(artifactPath, _)) :+ classDir)
-        .map(_.toUri.toURL)
+    val urls = getAddedJars :+ classDir.toUri.toURL
     val prefixes = SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES)
     val userClasspathFirst = SparkEnv.get.conf.get(EXECUTOR_USER_CLASS_PATH_FIRST)
     val loader = if (prefixes.nonEmpty) {
@@ -292,35 +294,13 @@ class ArtifactManager(session: SparkSession) extends Logging {
     val oldBlockManager = session.sparkContext.env.blockManager
     val newBlockManager = newSession.sparkContext.env.blockManager
     val newBlockIds = cachedBlockIdList.asScala.map { blockId =>
-      val newBlockId = CacheId(sessionUUID = newSession.sessionUUID, hash = blockId.hash)
-      transferBlock(blockId, newBlockId, oldBlockManager, newBlockManager)
+      val newBlockId = blockId.copy(sessionUUID = newSession.sessionUUID)
+      copyBlock(blockId, newBlockId, oldBlockManager, newBlockManager)
     }
     newArtifactManager.cachedBlockIdList.addAll(newBlockIds.asJava)
     newArtifactManager.jarsList.addAll(jarsList)
     newArtifactManager.pythonIncludeList.addAll(pythonIncludeList)
     newArtifactManager
-  }
-
-  private def transferBlock(
-      fromId: CacheId,
-      toId: CacheId,
-      fromBlockManager: BlockManager,
-      toBlockManager: BlockManager): CacheId = {
-    fromBlockManager.getLocalBytes(fromId) match {
-      case Some(blockData) =>
-        Utils.tryWithSafeFinallyAndFailureCallbacks {
-          val updater = toBlockManager.ByteBufferBlockStoreUpdater(
-            blockId = toId,
-            level = StorageLevel.MEMORY_AND_DISK_SER,
-            classTag = implicitly[ClassTag[Array[Byte]]],
-            bytes = blockData.toChunkedByteBuffer(ByteBuffer.allocate),
-            tellMaster = false)
-          updater.save()
-          toId
-        }(finallyBlock = { fromBlockManager.releaseLock(fromId); blockData.dispose() })
-      case None =>
-        throw SparkException.internalError(s"Block $fromId not found in block manager.")
-    }
   }
 
   /**
@@ -400,4 +380,26 @@ object ArtifactManager extends Logging {
 
   private[artifact] lazy val artifactRootDirectory =
     Utils.createTempDir(ARTIFACT_DIRECTORY_PREFIX).toPath
+
+  private[artifact] def copyBlock(
+      fromId: CacheId,
+      toId: CacheId,
+      fromBlockManager: BlockManager,
+      toBlockManager: BlockManager): CacheId = {
+    fromBlockManager.getLocalBytes(fromId) match {
+      case Some(blockData) =>
+        Utils.tryWithSafeFinallyAndFailureCallbacks {
+          val updater = toBlockManager.ByteBufferBlockStoreUpdater(
+            blockId = toId,
+            level = StorageLevel.MEMORY_AND_DISK_SER,
+            classTag = implicitly[ClassTag[Array[Byte]]],
+            bytes = blockData.toChunkedByteBuffer(ByteBuffer.allocate),
+            tellMaster = false)
+          updater.save()
+          toId
+        }(finallyBlock = { fromBlockManager.releaseLock(fromId); blockData.dispose() })
+      case None =>
+        throw SparkException.internalError(s"Block $fromId not found in the block manager.")
+    }
+  }
 }

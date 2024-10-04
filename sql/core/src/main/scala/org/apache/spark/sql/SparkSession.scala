@@ -264,7 +264,8 @@ class SparkSession private(
    * @param reuseArtifactManager If true, reuse the artifact manager from the parent session.
    *                             Reusing the artifact manager will break resource isolation between
    *                             parent and child sessions, making artifacts visible to both.
-   *                             Use this option only in well-reasoned scenarios.
+   *                             Use this option only in well-reasoned scenarios where the child
+   *                             session won't modify the artifact manager.
    *
    * @note Other than the `SparkContext`, all shared state is initialized lazily.
    * This method will force the initialization of the shared state to ensure that parent

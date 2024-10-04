@@ -211,6 +211,9 @@ abstract class StreamExecution(
 
   /** Isolated spark session to run the batches with. */
   private val sparkSessionForStream = {
+    // Reuse the parent session's Artifact Manager to speed up the cloning.
+    // This is safe because the child session will be used internally and only for batch actions,
+    // which is safe from being modified by user.
     sparkSession.cloneSession(reuseArtifactManager = true)
   }
 
