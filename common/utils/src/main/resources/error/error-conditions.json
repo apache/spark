@@ -1397,21 +1397,6 @@
           "Check that the table <tableName> exists."
         ]
       },
-      "GET_SCHEMA" : {
-        "message" : [
-          "Fetching schema for external query or table has failed."
-        ]
-      },
-      "SYNTAX_ERROR" : {
-        "message" : [
-          "Query generated for external DBMS, during compile contains syntax error. Original query: <query>."
-        ]
-      },
-      "EXECUTE_QUERY" : {
-        "message" : [
-          "Failed to execute jdbc query: <query>."
-        ]
-      },
       "UNCLASSIFIED" : {
         "message" : [
           "<message>"

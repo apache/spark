@@ -293,10 +293,6 @@ private case class PostgresDialect()
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
-          case "42601" =>
-            throw QueryExecutionErrors.jdbcGeneratedQuerySyntaxError(
-              messageParameters.get("url").getOrElse(""),
-              messageParameters.get("query").getOrElse(""))
           case _ =>
             super.classifyException(e, errorClass, messageParameters, description, isRuntime)
         }

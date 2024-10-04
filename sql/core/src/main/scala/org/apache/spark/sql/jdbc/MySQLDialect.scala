@@ -369,16 +369,11 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
             val indexName = messageParameters("indexName")
             val tableName = messageParameters("tableName")
             throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
-          case 1064 =>
-            throw QueryExecutionErrors.jdbcGeneratedQuerySyntaxError(
-              messageParameters.get("url").getOrElse(""),
-              messageParameters.get("query").getOrElse(""))
           case _ =>
             super.classifyException(e, errorClass, messageParameters, description, isRuntime)
         }
       case unsupported: UnsupportedOperationException => throw unsupported
-      case _ =>
-        super.classifyException(e, errorClass, messageParameters, description, isRuntime)
+      case _ => super.classifyException(e, errorClass, messageParameters, description, isRuntime)
     }
   }
 

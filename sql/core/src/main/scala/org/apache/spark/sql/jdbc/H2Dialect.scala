@@ -33,7 +33,6 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, MetadataBuilder, ShortType, StringType, TimestampType}
 
@@ -241,11 +240,6 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
             val indexName = messageParameters("indexName")
             val tableName = messageParameters("tableName")
             throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
-          // SYNTAX_ERROR_1, SYNTAX_ERROR_2
-          case 42000 | 42001 =>
-            throw QueryExecutionErrors.jdbcGeneratedQuerySyntaxError(
-              messageParameters.get("url").getOrElse(""),
-              messageParameters.get("query").getOrElse(""))
           case _ => // do nothing
         }
       case _ => // do nothing
