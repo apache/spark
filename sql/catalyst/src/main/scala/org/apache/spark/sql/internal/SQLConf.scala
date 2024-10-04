@@ -2143,6 +2143,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STREAMING_SKIP_METADATA_EXIST_CHECK =
+    buildConf("spark.sql.streaming.metadataCache.skip.exist.check")
+      .internal()
+      .doc("Whether to check if the metadata file for offset and commit log already exist " +
+        "before creating them. If this is true, the creation may fail later if it tries to " +
+        "write to the same file")
+      .booleanConf
+      .createWithDefault(false)
+
 
   val STREAMING_OPTIMIZE_ONE_ROW_PLAN_ENABLED =
     buildConf("spark.sql.streaming.optimizeOneRowPlan.enabled")

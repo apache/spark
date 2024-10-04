@@ -70,6 +70,9 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   protected val metadataCacheEnabled: Boolean
     = sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_METADATA_CACHE_ENABLED)
 
+  protected val skipMetadataFileCheck: Boolean
+    = sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_SKIP_METADATA_EXIST_CHECK)
+
   /**
    * Cache the latest two batches. [[StreamExecution]] usually just accesses the latest two batches
    * when committing offsets, this cache will save some file system operations.
@@ -214,6 +217,29 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
     }
   }
 
+  protected def writeSilent(batchMetadataFile: Path, fn: OutputStream => Unit): Boolean = {
+    // Only write metadata when the batch has not yet been written
+    val output = fileManager.createAtomic(batchMetadataFile, overwriteIfPossible = false)
+    try {
+      fn(output)
+      output.close()
+      true
+    } catch {
+      case e: FileAlreadyExistsException =>
+        output.cancel()
+        // If next batch file already exists, then another concurrently running query has
+        // written it.
+        val qe = QueryExecutionErrors.multiStreamingQueriesUsingPathConcurrentlyError(path, e)
+        logWarning(s"Creating metadata file $batchMetadataFile failed because of " +
+            s"concurrent writes", qe)
+        false
+      case e: Throwable =>
+        output.cancel()
+        logWarning(s"Creating metadata file $batchMetadataFile failed with error", e)
+        false
+    }
+  }
+
   /**
    * Store the metadata for the specified batchId and return `true` if successful. This method
    * fills the content of metadata via executing function. If the function throws an exception,
@@ -231,11 +257,15 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
     val batchMetadataFile = batchIdToPath(batchId)
 
     if ((metadataCacheEnabled && batchCache.containsKey(batchId))
-      || fileManager.exists(batchMetadataFile)) {
+      || (!skipMetadataFileCheck && fileManager.exists(batchMetadataFile))) {
       false
     } else {
-      write(batchMetadataFile, fn)
-      true
+      if (skipMetadataFileCheck) {
+        writeSilent(batchMetadataFile, fn)
+      } else {
+        write(batchMetadataFile, fn)
+        true
+      }
     }
   }
 
