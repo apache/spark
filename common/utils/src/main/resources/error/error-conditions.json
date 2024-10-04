@@ -127,7 +127,7 @@
   },
   "BINARY_ARITHMETIC_OVERFLOW" : {
     "message" : [
-      "<value1> <symbol> <value2> caused overflow."
+      "<value1> <symbol> <value2> caused overflow. Use <functionName> to ignore overflow problem and return NULL."
     ],
     "sqlState" : "22003"
   },
