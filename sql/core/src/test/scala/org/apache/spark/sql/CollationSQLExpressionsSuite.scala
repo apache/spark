@@ -19,11 +19,10 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.util.Locale
 
 import scala.collection.immutable.Seq
 
-import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkThrowable}
+import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
@@ -1924,7 +1923,7 @@ class CollationSQLExpressionsSuite
     }
   }
 
-  test("Support mode expression with collated in recursively nested struct with map with keys") {
+  test("Support mode for string expression with collated complex type - nested map") {
     case class ModeTestCase(collationId: String, bufferValues: Map[String, Long], result: String)
     Seq(
       ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "{a -> 1}"),
@@ -1932,22 +1931,6 @@ class CollationSQLExpressionsSuite
       ModeTestCase("utf8_lcase", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "{b -> 1}"),
       ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "{b -> 1}")
     ).foreach { t1 =>
-      def checkThisError(t: ModeTestCase, query: String): Any = {
-        val c = s"STRUCT<m1: MAP<STRING COLLATE ${t.collationId.toUpperCase(Locale.ROOT)}, INT>>"
-        val c1 = s"\"${c}\""
-        checkError(
-          exception = intercept[SparkThrowable] {
-            sql(query).collect()
-          },
-          condition = "DATATYPE_MISMATCH.UNSUPPORTED_MODE_DATA_TYPE",
-          parameters = Map(
-            ("sqlExpr", "\"mode(i)\""),
-            ("child", c1),
-            ("mode", "`mode`")),
-          queryContext = Seq(ExpectedContext("mode(i)", 18, 24)).toArray
-        )
-      }
-
       def getValuesToAdd(t: ModeTestCase): String = {
         val valuesToAdd = t.bufferValues.map {
           case (elt, numRepeats) =>
@@ -1964,39 +1947,10 @@ class CollationSQLExpressionsSuite
         sql(s"INSERT INTO ${tableName} VALUES ${getValuesToAdd(t1)}")
         val query = "SELECT lower(cast(mode(i).m1 as string))" +
           s" FROM ${tableName}"
-        if (t1.collationId == "utf8_binary") {
-          checkAnswer(sql(query), Row(t1.result))
-        } else {
-          checkThisError(t1, query)
-        }
+        val queryResult = sql(query)
+        checkAnswer(queryResult, Row(t1.result))
       }
     }
-  }
-
-  test("UDT with collation  - Mode (throw exception)") {
-    case class ModeTestCase(collationId: String, bufferValues: Map[String, Long], result: String)
-    Seq(
-      ModeTestCase("utf8_lcase", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
-      ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
-      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
-    ).foreach { t1 =>
-        checkError(
-          exception = intercept[SparkIllegalArgumentException] {
-          Mode(
-              child = Literal.create(null,
-                MapType(StringType(t1.collationId), IntegerType))
-            ).collationAwareTransform(
-              data = Map.empty[String, Any],
-              dataType = MapType(StringType(t1.collationId), IntegerType)
-            )
-          },
-          condition = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.BAD_INPUTS",
-          parameters = Map(
-            "expression" -> "\"mode(NULL)\"",
-            "functionName" -> "\"MODE\"",
-            "dataType" -> s"\"MAP<STRING COLLATE ${t1.collationId.toUpperCase()}, INT>\"")
-         )
-      }
   }
 
   test("SPARK-48430: Map value extraction with collations") {
