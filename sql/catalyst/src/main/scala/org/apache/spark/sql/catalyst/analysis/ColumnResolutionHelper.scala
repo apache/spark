@@ -146,7 +146,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
         case GetColumnByOrdinal(ordinal, _) =>
           val attrCandidates = getAttrCandidates()
-          if(ordinal < 0 || ordinal >= attrCandidates.length) {
+          if (ordinal < 0 || ordinal >= attrCandidates.length) {
             throw QueryCompilationErrors.ordinalOutOfBoundsError(
               ordinal,
               attrCandidates

@@ -623,7 +623,7 @@
       "Column ordinal out of bounds. The number of columns in the table is <attributesLength>, but the column ordinal is <ordinal>.",
       "Attributes are the following: <attributes>."
     ],
-    "sqlState" : "42K0E"
+    "sqlState" : "22003"
   },
   "COMPARATOR_RETURNS_NULL" : {
     "message" : [

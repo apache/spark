@@ -4142,7 +4142,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "ordinal" -> ordinal.toString,
         "attributesLength" -> attributes.length.toString,
-        "attributes" -> attributes.map(_.name).mkString(", ")
+        "attributes" -> attributes.map(attr => toSQLId(attr.name)).mkString(", ")
       )
     )
   }
