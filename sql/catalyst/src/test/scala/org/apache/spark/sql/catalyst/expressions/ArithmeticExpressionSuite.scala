@@ -29,7 +29,8 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLConf
+import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.types._
 
 class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -117,24 +118,20 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       checkErrorInExpression[SparkArithmeticException](
-        UnaryMinus(Literal(Long.MinValue)), "ARITHMETIC_OVERFLOW",
-        Map("message" -> "long overflow", "try_alternative" ->
-            s""" If necessary set ${SQLConf.ANSI_ENABLED.key} to \"false\" to bypass this error.""")
+        UnaryMinus(Literal(Long.MinValue)), "ARITHMETIC_OVERFLOW.WITHOUT_TRY_SUGGESTION",
+        Map("message" -> "long overflow", "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY))
       )
       checkErrorInExpression[SparkArithmeticException](
-        UnaryMinus(Literal(Int.MinValue)), "ARITHMETIC_OVERFLOW",
-        Map("message" -> "integer overflow", "try_alternative" ->
-            s""" If necessary set ${SQLConf.ANSI_ENABLED.key} to \"false\" to bypass this error.""")
+        UnaryMinus(Literal(Int.MinValue)), "ARITHMETIC_OVERFLOW.WITHOUT_TRY_SUGGESTION",
+        Map("message" -> "integer overflow", "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY))
       )
       checkErrorInExpression[SparkArithmeticException](
-        UnaryMinus(Literal(Short.MinValue)), "ARITHMETIC_OVERFLOW",
-        Map("message" -> "short overflow", "try_alternative" ->
-            s""" If necessary set ${SQLConf.ANSI_ENABLED.key} to \"false\" to bypass this error.""")
+        UnaryMinus(Literal(Short.MinValue)), "ARITHMETIC_OVERFLOW.WITHOUT_TRY_SUGGESTION",
+        Map("message" -> "short overflow", "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY))
       )
       checkErrorInExpression[SparkArithmeticException](
-        UnaryMinus(Literal(Byte.MinValue)), "ARITHMETIC_OVERFLOW",
-        Map("message" -> "byte overflow", "try_alternative" ->
-            s""" If necessary set ${SQLConf.ANSI_ENABLED.key} to \"false\" to bypass this error.""")
+        UnaryMinus(Literal(Byte.MinValue)), "ARITHMETIC_OVERFLOW.WITHOUT_TRY_SUGGESTION",
+        Map("message" -> "byte overflow", "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY))
       )
       checkEvaluation(UnaryMinus(positiveShortLit), (- positiveShort).toShort)
       checkEvaluation(UnaryMinus(negativeShortLit), (- negativeShort).toShort)

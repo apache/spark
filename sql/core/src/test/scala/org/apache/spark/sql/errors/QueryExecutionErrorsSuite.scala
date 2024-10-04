@@ -699,16 +699,15 @@ class QueryExecutionErrorsSuite
     )
   }
 
-  test("ARITHMETIC_OVERFLOW: overflow on adding months") {
+  test("ARITHMETIC_OVERFLOW.WITHOUT_TRY_SUGGESTION: overflow on adding months") {
     checkError(
       exception = intercept[SparkArithmeticException](
         sql("select add_months('5500000-12-31', 10000000)").collect()
       ),
-      condition = "ARITHMETIC_OVERFLOW",
+      condition = "ARITHMETIC_OVERFLOW.WITHOUT_TRY_SUGGESTION",
       parameters = Map(
         "message" -> "integer overflow",
-        "try_alternative" ->
-          s""" If necessary set ${SQLConf.ANSI_ENABLED.key} to \"false\" to bypass this error."""))
+        "config" -> s""""${SQLConf.ANSI_ENABLED.key}""""))
   }
 
   test("FAILED_PARSE_STRUCT_TYPE: parsing invalid struct type") {
