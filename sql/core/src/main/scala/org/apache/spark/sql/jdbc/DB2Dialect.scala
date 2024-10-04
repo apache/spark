@@ -23,7 +23,6 @@ import java.util.Locale
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
