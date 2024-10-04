@@ -33,7 +33,7 @@ import scala.reflect.classTag
 import com.esotericsoftware.kryo.KryoException
 import org.apache.commons.lang3.RandomUtils
 import org.mockito.{ArgumentCaptor, ArgumentMatchers => mc}
-import org.mockito.Mockito.{atLeastOnce, doAnswer, mock, never, spy, times, verify, when}
+import org.mockito.Mockito.{doAnswer, mock, never, spy, times, verify, when}
 import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
@@ -666,7 +666,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       removedFromMemory: Boolean,
       removedFromDisk: Boolean): Unit = {
     def assertSizeReported(captor: ArgumentCaptor[Long], expectRemoved: Boolean): Unit = {
-      assert(captor.getAllValues().size() >= 1)
+      assert(captor.getAllValues().size() === 1)
       if (expectRemoved) {
         assert(captor.getValue() > 0)
       } else {
@@ -676,18 +676,15 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
 
     val memSizeCaptor = ArgumentCaptor.forClass(classOf[Long]).asInstanceOf[ArgumentCaptor[Long]]
     val diskSizeCaptor = ArgumentCaptor.forClass(classOf[Long]).asInstanceOf[ArgumentCaptor[Long]]
-    val storageLevelCaptor =
-      ArgumentCaptor.forClass(classOf[StorageLevel]).asInstanceOf[ArgumentCaptor[StorageLevel]]
-    verify(master, atLeastOnce()).updateBlockInfo(mc.eq(store.blockManagerId), mc.eq(blockId),
-      storageLevelCaptor.capture(), memSizeCaptor.capture(), diskSizeCaptor.capture())
+    verify(master).updateBlockInfo(mc.eq(store.blockManagerId), mc.eq(blockId),
+      mc.eq(StorageLevel.NONE), memSizeCaptor.capture(), diskSizeCaptor.capture())
     assertSizeReported(memSizeCaptor, removedFromMemory)
     assertSizeReported(diskSizeCaptor, removedFromDisk)
-    assert(storageLevelCaptor.getValue.replication == 0)
   }
 
   private def assertUpdateBlockInfoNotReported(store: BlockManager, blockId: BlockId): Unit = {
     verify(master, never()).updateBlockInfo(mc.eq(store.blockManagerId), mc.eq(blockId),
-      mc.any[StorageLevel](), mc.anyInt(), mc.anyInt())
+      mc.eq(StorageLevel.NONE), mc.anyInt(), mc.anyInt())
   }
 
   test("reregistration on heart beat") {
