@@ -520,7 +520,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
 
     withSQLConf(SQLConf.TRIM_COLLATION_ENABLED.key -> "false") {
       checkError(
-        exception = intercept[AnalysisException](sql(s"SET COLLATION UNICODE_CI_TRIM")),
+        exception = intercept[AnalysisException](sql(s"SET COLLATION UNICODE_CI_RTRIM")),
         condition = "UNSUPPORTED_FEATURE.TRIM_COLLATION"
       )
     }

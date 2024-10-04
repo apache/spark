@@ -764,8 +764,7 @@ object SQLConf {
       .internal()
       .doc(
         "Trim collation feature is under development and its use should be done under this" +
-        "feature flag. Trim collation trims leading, trailing or both spaces depending of" +
-        "specifier (LTRIM, RTRIM, TRIM)."
+        "feature flag. Trim collation trims trailing whitespaces from strings."
       )
       .version("4.0.0")
       .booleanConf
