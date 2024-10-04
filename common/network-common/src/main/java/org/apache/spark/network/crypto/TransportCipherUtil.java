@@ -17,13 +17,13 @@
 
 package org.apache.spark.network.crypto;
 
+import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import javax.crypto.spec.SecretKeySpec;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.crypto.tink.subtle.Hex;
 import com.google.crypto.tink.subtle.Hkdf;
-
-import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
-import java.security.GeneralSecurityException;
 
 class TransportCipherUtil {
     /*
