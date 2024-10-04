@@ -1272,6 +1272,21 @@ object JdbcUtils extends Logging with SQLConfHelper {
     }
   }
 
+  def classifyException[T](
+      errorClass: String,
+      messageParameters: Map[String, String],
+      dialect: JdbcDialect,
+      description: String,
+      isRuntime: Boolean)(f: => T): T = {
+    try {
+      f
+    } catch {
+      case e: SparkThrowable with Throwable => throw e
+      case e: Throwable =>
+        throw dialect.classifyException(e, errorClass, messageParameters, description, isRuntime)
+    }
+  }
+
   def withConnection[T](options: JDBCOptions)(f: Connection => T): T = {
     val dialect = JdbcDialects.get(options.url)
     val conn = dialect.createConnectionFactory(options)(-1)

@@ -24,8 +24,7 @@ import java.util.Locale
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -353,7 +352,8 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       e: Throwable,
       errorClass: String,
       messageParameters: Map[String, String],
-      description: String): AnalysisException = {
+      description: String,
+      isRuntime: Boolean): Throwable with SparkThrowable = {
     e match {
       case sqlException: SQLException =>
         sqlException.getErrorCode match {
@@ -373,10 +373,12 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
             throw QueryExecutionErrors.jdbcGeneratedQuerySyntaxError(
               messageParameters.get("url").getOrElse(""),
               messageParameters.get("query").getOrElse(""))
-          case _ => super.classifyException(e, errorClass, messageParameters, description)
+          case _ =>
+            super.classifyException(e, errorClass, messageParameters, description, isRuntime)
         }
       case unsupported: UnsupportedOperationException => throw unsupported
-      case _ => super.classifyException(e, errorClass, messageParameters, description)
+      case _ =>
+        super.classifyException(e, errorClass, messageParameters, description, isRuntime)
     }
   }
 

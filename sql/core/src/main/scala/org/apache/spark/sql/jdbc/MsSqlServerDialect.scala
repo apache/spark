@@ -22,7 +22,7 @@ import java.util.Locale
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.{Expression, NullOrdering, SortDirection}
@@ -207,7 +207,8 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       e: Throwable,
       errorClass: String,
       messageParameters: Map[String, String],
-      description: String): AnalysisException = {
+      description: String,
+      isRuntime: Boolean): Throwable with SparkThrowable = {
     e match {
       case sqlException: SQLException =>
         sqlException.getErrorCode match {
@@ -216,16 +217,18 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
-           case 15335 if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
-             val newTable = messageParameters("newName")
-             throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
+          case 15335 if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
+            val newTable = messageParameters("newName")
+            throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
           case 102 | 122 | 142 | 148 | 156 | 319 | 336 =>
             throw QueryExecutionErrors.jdbcGeneratedQuerySyntaxError(
               messageParameters.get("url").getOrElse(""),
               messageParameters.get("query").getOrElse(""))
-          case _ => super.classifyException(e, errorClass, messageParameters, description)
+          case _ =>
+            super.classifyException(e, errorClass, messageParameters, description, isRuntime)
         }
-      case _ => super.classifyException(e, errorClass, messageParameters, description)
+      case _ =>
+        super.classifyException(e, errorClass, messageParameters, description, isRuntime)
     }
   }
 

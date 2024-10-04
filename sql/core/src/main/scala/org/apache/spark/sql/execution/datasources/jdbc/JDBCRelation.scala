@@ -248,7 +248,8 @@ private[sql] object JDBCRelation extends Logging {
         "url" -> jdbcOptions.url),
       dialect = dialect,
       description =
-        s"Failed to fetch schema for: ${dialect.getSchemaQuery(jdbcOptions.tableOrQuery)}") {
+        s"Failed to fetch schema for: ${dialect.getSchemaQuery(jdbcOptions.tableOrQuery)}",
+      isRuntime = true) {
       JDBCRDD.resolveTable(jdbcOptions)
     }
     jdbcOptions.customSchema match {

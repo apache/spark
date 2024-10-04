@@ -290,7 +290,8 @@ class JDBCRDD(
         "url" -> options.url,
         "query" -> sqlText),
       dialect,
-      description = s"Failed to execute jdbc query: $sqlText"
+      description = s"Failed to execute jdbc query: $sqlText",
+      isRuntime = true
     ) {
       rs = stmt.executeQuery()
     }
