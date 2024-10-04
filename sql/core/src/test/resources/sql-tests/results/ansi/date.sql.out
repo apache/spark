@@ -57,7 +57,7 @@ org.apache.spark.SparkDateTimeException
   "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Invalid value for MonthOfYear (valid values 1 - 12): 13"
+    "rangeMessage" : "Invalid value for MonthOfYear (valid values 1 - 12): 13"
   }
 }
 
@@ -73,7 +73,7 @@ org.apache.spark.SparkDateTimeException
   "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Invalid value for DayOfMonth (valid values 1 - 28/31): 33"
+    "rangeMessage" : "Invalid value for DayOfMonth (valid values 1 - 28/31): 33"
   }
 }
 

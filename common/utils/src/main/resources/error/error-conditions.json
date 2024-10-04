@@ -1089,7 +1089,7 @@
   },
   "DATETIME_ARGUMENT_OUT_OF_RANGE" : {
     "message" : [
-      "<message>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "<rangeMessage>. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
     "sqlState" : "22023"
   },

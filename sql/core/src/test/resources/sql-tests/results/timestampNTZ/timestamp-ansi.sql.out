@@ -158,7 +158,7 @@ org.apache.spark.SparkDateTimeException
   "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 61"
+    "rangeMessage" : "Invalid value for SecondOfMinute (valid values 0 - 59): 61"
   }
 }
 
@@ -190,7 +190,7 @@ org.apache.spark.SparkDateTimeException
   "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 99"
+    "rangeMessage" : "Invalid value for SecondOfMinute (valid values 0 - 59): 99"
   }
 }
 
@@ -206,7 +206,7 @@ org.apache.spark.SparkDateTimeException
   "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 999"
+    "rangeMessage" : "Invalid value for SecondOfMinute (valid values 0 - 59): 999"
   }
 }
 
