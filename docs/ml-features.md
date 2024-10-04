@@ -855,6 +855,46 @@ for more details on the API.
 
 </div>
 
+## TargetEncoder
+
+Target Encoding maps a column of categorical indices into a numerical feature derived from the target. For string type input data, it is common to encode categorical features using [StringIndexer](ml-features.html#stringindexer) first.
+
+`TargetEncoder` can transform multiple columns, returning a target-encoded output column for each input column.
+
+`TargetEncoder` supports the `handleInvalid` parameter to choose how to handle invalid input during transforming data. Available options include 'keep' (any invalid inputs are assigned to an extra categorical index) and 'error' (throw an error).
+
+`TargetEncoder` supports the `targetType` parameter to choose the label type when fitting data, affecting how statistics are calculated. Available options include 'binary' (bin-counting) and 'continuous' (mean-encoding).
+
+`TargetEncoder` supports the `smoothing` parameter to tune how in-category stats and overall stats are weighted.
+
+**Examples**
+
+<div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [TargetEncoder Python docs](api/python/reference/api/pyspark.ml.feature.TargetEncoder.html) for more details on the API.
+
+{% include_example python/ml/target_encoder_example.py %}
+</div>
+
+<div data-lang="scala" markdown="1">
+
+Refer to the [TargetEncoder Scala docs](api/scala/org/apache/spark/ml/feature/TargetEncoder.html) for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/TargetEncoderExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [TargetEncoder Java docs](api/java/org/apache/spark/ml/feature/TargetEncoder.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaTargetEncoderExample.java %}
+</div>
+
+</div>
+
 ## VectorIndexer
 
 `VectorIndexer` helps index categorical features in datasets of `Vector`s.
