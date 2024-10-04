@@ -233,7 +233,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     case (firstRunConfig, secondRunConfig) =>
       testWithRocksDBStateStore("checkpointFormatVersion2 Backward Compatibility - simple agg - " +
         s"first run: (changeLogEnabled, ckpt ver): " +
-        s"${firstRunConfig(0)._2}, ${firstRunConfig(1)._2}," +
+        s"${firstRunConfig(0)._2}, ${firstRunConfig(1)._2}" +
         s" - second run: ${secondRunConfig(0)._2}, ${secondRunConfig(1)._2}") {
         withTempDir { checkpointDir =>
           val inputData = MemoryStream[Int]
@@ -281,7 +281,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     case (firstRunConfig, secondRunConfig) =>
       testWithRocksDBStateStore("checkpointFormatVersion2 Backward Compatibility - dedup - " +
         s"first run: (changeLogEnabled, ckpt ver): " +
-        s"${firstRunConfig(0)._2}, ${firstRunConfig(1)._2}," +
+        s"${firstRunConfig(0)._2}, ${firstRunConfig(1)._2}" +
         s" - second run: ${secondRunConfig(0)._2}, ${secondRunConfig(1)._2}") {
         withTempDir { checkpointDir =>
           val inputData = MemoryStream[Int]
@@ -329,7 +329,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     case (firstRunConfig, secondRunConfig) =>
       testWithRocksDBStateStore("checkpointFormatVersion2 Backward Compatibility - " +
         s"FlatMapGroupsWithState - first run: (changeLogEnabled, ckpt ver): " +
-        s"${firstRunConfig(0)._2}, ${firstRunConfig(1)._2}," +
+        s"${firstRunConfig(0)._2}, ${firstRunConfig(1)._2}" +
         s" - second run: ${secondRunConfig(0)._2}, ${secondRunConfig(1)._2}") {
         withTempDir { checkpointDir =>
           val stateFunc = (key: Int, values: Iterator[Int], state: GroupState[Int]) => {
@@ -390,7 +390,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     case (firstRunConfig, secondRunConfig) =>
       testWithRocksDBStateStore("checkpointFormatVersion2 Backward Compatibility - ss join - " +
         s"first run: (changeLogEnabled, ckpt ver): " +
-        s"${firstRunConfig(0)._2}, ${firstRunConfig(1)._2}," +
+        s"${firstRunConfig(0)._2}, ${firstRunConfig(1)._2}" +
         s" - second run: ${secondRunConfig(0)._2}, ${secondRunConfig(1)._2}") {
         withTempDir { checkpointDir =>
           val inputData1 = MemoryStream[Int]
@@ -451,6 +451,86 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
           }
         }
       }
+  }
+
+
+  testConfigSetups.foreach {
+    case (firstRunConfig, secondRunConfig) =>
+      testWithRocksDBStateStore("checkpointFormatVersion2 Backward Compatibility - " +
+        "transformWithState - first run: (changeLogEnabled, ckpt ver): " +
+        s"${firstRunConfig(0)._2}, ${firstRunConfig(1)._2}" +
+        s" - second run: ${secondRunConfig(0)._2}, ${secondRunConfig(1)._2}") {
+        withTempDir { checkpointDir =>
+          val inputData = MemoryStream[String]
+          val result = inputData.toDS()
+            .groupByKey(x => x)
+            .transformWithState(new RunningCountStatefulProcessor(),
+              TimeMode.None(),
+              OutputMode.Update())
+
+          withSQLConf(firstRunConfig: _*) {
+            testStream(result, Update())(
+              StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+              AddData(inputData, "a"),
+              CheckNewAnswer(("a", "1")),
+              Execute { q =>
+                assert(q.lastProgress.stateOperators(0)
+                  .customMetrics.get("numValueStateVars") > 0)
+                assert(q.lastProgress.stateOperators(0)
+                  .customMetrics.get("numRegisteredTimers") == 0)
+              },
+              AddData(inputData, "a", "b"),
+              CheckNewAnswer(("a", "2"), ("b", "1")),
+              StopStream
+            )
+            testStream(result, Update())(
+              StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+              // should remove state for "a" and not return anything for a
+              AddData(inputData, "a", "b"),
+              CheckNewAnswer(("b", "2")),
+              StopStream
+            )
+          }
+
+          withSQLConf(secondRunConfig: _*) {
+            testStream(result, Update())(
+              StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+              // should recreate state for "a" and return count as 1 and
+              AddData(inputData, "a", "c"),
+              CheckNewAnswer(("a", "1"), ("c", "1")),
+              StopStream
+            )
+          }
+        }
+      }
+  }
+
+  test("checkpointFormatVersion2 validate ") {
+    val inputData = MemoryStream[String]
+    val result = inputData.toDS()
+      .groupByKey(x => x)
+      .transformWithState(new RunningCountStatefulProcessor(),
+        TimeMode.None(),
+        OutputMode.Update())
+
+    testStream(result, Update())(
+      AddData(inputData, "a"),
+      CheckNewAnswer(("a", "1")),
+      Execute { q =>
+        assert(q.lastProgress.stateOperators(0).customMetrics.get("numValueStateVars") > 0)
+        assert(q.lastProgress.stateOperators(0).customMetrics.get("numRegisteredTimers") == 0)
+      },
+      AddData(inputData, "a", "b"),
+      CheckNewAnswer(("a", "2"), ("b", "1")),
+      StopStream,
+      StartStream(),
+      AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
+      CheckNewAnswer(("b", "2")),
+      StopStream,
+      StartStream(),
+      AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
+      CheckNewAnswer(("a", "1"), ("c", "1"))
+    )
   }
 
   // This test enable checkpoint format V2 without validating the checkpoint ID. Just to make
@@ -791,5 +871,36 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
       )
     }
     validateCheckpointInfo(6, 1, Set(2, 4, 6))
+  }
+
+  test("checkpointFormatVersion2 validate transformWithState") {
+    withTempDir { checkpointDir =>
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new RunningCountStatefulProcessor(),
+          TimeMode.None(),
+          OutputMode.Update())
+
+      testStream(result, Update())(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, "a"),
+        CheckNewAnswer(("a", "1")),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).customMetrics.get("numValueStateVars") > 0)
+          assert(q.lastProgress.stateOperators(0).customMetrics.get("numRegisteredTimers") == 0)
+        },
+        AddData(inputData, "a", "b"),
+        CheckNewAnswer(("a", "2"), ("b", "1")),
+        StopStream,
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
+        CheckNewAnswer(("b", "2")),
+        StopStream,
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
+        CheckNewAnswer(("a", "1"), ("c", "1"))
+      )
+    }
   }
 }

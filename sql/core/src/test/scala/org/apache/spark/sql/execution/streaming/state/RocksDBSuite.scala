@@ -210,18 +210,18 @@ trait AlsoTestWithRocksDBFeatures
     }
   }
 
-    def testWithStateStoreCheckpointIds(
-      testName: String,
-      testTags: Tag*)
-      (testBody: Boolean => Any): Unit = {
-      Seq(true, false).foreach { enableStateStoreCheckpointIds =>
-        val newTestName = s"$testName - with enableStateStoreCheckpointIds = " +
-          s"$enableStateStoreCheckpointIds"
-        test(newTestName, testTags: _*) { enableStateStoreCheckpointIds =>
-          testBody(enableStateStoreCheckpointIds)
-        }
+  def testWithStateStoreCheckpointIds(
+    testName: String,
+    testTags: Tag*)
+    (testBody: Boolean => Any): Unit = {
+    Seq(true, false).foreach { enableStateStoreCheckpointIds =>
+      val newTestName = s"$testName - with enableStateStoreCheckpointIds = " +
+        s"$enableStateStoreCheckpointIds"
+      test(newTestName, testTags: _*) { enableStateStoreCheckpointIds =>
+        testBody(enableStateStoreCheckpointIds)
       }
     }
+  }
 
   def testWithStateStoreCheckpointIdsAndChangelogEnabled(
     testName: String,
