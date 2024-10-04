@@ -30,8 +30,8 @@ import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode
  *
  * @since 2.0.0
  */
-abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Serializable {
-  type KVDS[KY, VL] <: KeyValueGroupedDataset[KY, VL, DS]
+abstract class KeyValueGroupedDataset[K, V] extends Serializable {
+  type KVDS[KL, VL] <: KeyValueGroupedDataset[KL, VL]
 
   /**
    * Returns a new [[KeyValueGroupedDataset]] where the type of the key has been mapped to the
@@ -40,7 +40,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    *
    * @since 1.6.0
    */
-  def keyAs[L: Encoder]: KVDS[L, V]
+  def keyAs[L: Encoder]: KeyValueGroupedDataset[L, V]
 
   /**
    * Returns a new [[KeyValueGroupedDataset]] where the given function `func` has been applied to
@@ -53,7 +53,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    *
    * @since 2.1.0
    */
-  def mapValues[W: Encoder](func: V => W): KVDS[K, W]
+  def mapValues[W: Encoder](func: V => W): KeyValueGroupedDataset[K, W]
 
   /**
    * Returns a new [[KeyValueGroupedDataset]] where the given function `func` has been applied to
@@ -68,7 +68,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    *
    * @since 2.1.0
    */
-  def mapValues[W](func: MapFunction[V, W], encoder: Encoder[W]): KVDS[K, W] = {
+  def mapValues[W](func: MapFunction[V, W], encoder: Encoder[W]): KeyValueGroupedDataset[K, W] = {
     mapValues(ToScalaUDF(func))(encoder)
   }
 
@@ -78,7 +78,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    *
    * @since 1.6.0
    */
-  def keys: DS[K]
+  def keys: Dataset[K]
 
   /**
    * (Scala-specific) Applies the given function to each group of data. For each unique group, the
@@ -98,7 +98,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    *
    * @since 1.6.0
    */
-  def flatMapGroups[U: Encoder](f: (K, Iterator[V]) => IterableOnce[U]): DS[U] = {
+  def flatMapGroups[U: Encoder](f: (K, Iterator[V]) => IterableOnce[U]): Dataset[U] = {
     flatMapSortedGroups(Nil: _*)(f)
   }
 
@@ -120,7 +120,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    *
    * @since 1.6.0
    */
-  def flatMapGroups[U](f: FlatMapGroupsFunction[K, V, U], encoder: Encoder[U]): DS[U] = {
+  def flatMapGroups[U](f: FlatMapGroupsFunction[K, V, U], encoder: Encoder[U]): Dataset[U] = {
     flatMapGroups(ToScalaUDF(f))(encoder)
   }
 
@@ -149,7 +149,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * @since 3.4.0
    */
   def flatMapSortedGroups[U: Encoder](sortExprs: Column*)(
-      f: (K, Iterator[V]) => IterableOnce[U]): DS[U]
+      f: (K, Iterator[V]) => IterableOnce[U]): Dataset[U]
 
   /**
    * (Java-specific) Applies the given function to each group of data. For each unique group, the
@@ -178,7 +178,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
   def flatMapSortedGroups[U](
       SortExprs: Array[Column],
       f: FlatMapGroupsFunction[K, V, U],
-      encoder: Encoder[U]): DS[U] = {
+      encoder: Encoder[U]): Dataset[U] = {
     import org.apache.spark.util.ArrayImplicits._
     flatMapSortedGroups(SortExprs.toImmutableArraySeq: _*)(ToScalaUDF(f))(encoder)
   }
@@ -201,7 +201,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    *
    * @since 1.6.0
    */
-  def mapGroups[U: Encoder](f: (K, Iterator[V]) => U): DS[U] = {
+  def mapGroups[U: Encoder](f: (K, Iterator[V]) => U): Dataset[U] = {
     flatMapGroups(UDFAdaptors.mapGroupsToFlatMapGroups(f))
   }
 
@@ -223,7 +223,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    *
    * @since 1.6.0
    */
-  def mapGroups[U](f: MapGroupsFunction[K, V, U], encoder: Encoder[U]): DS[U] = {
+  def mapGroups[U](f: MapGroupsFunction[K, V, U], encoder: Encoder[U]): Dataset[U] = {
     mapGroups(ToScalaUDF(f))(encoder)
   }
 
@@ -247,7 +247,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * @since 2.2.0
    */
   def mapGroupsWithState[S: Encoder, U: Encoder](
-      func: (K, Iterator[V], GroupState[S]) => U): DS[U]
+      func: (K, Iterator[V], GroupState[S]) => U): Dataset[U]
 
   /**
    * (Scala-specific) Applies the given function to each group of data, while maintaining a
@@ -271,7 +271,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * @since 2.2.0
    */
   def mapGroupsWithState[S: Encoder, U: Encoder](timeoutConf: GroupStateTimeout)(
-      func: (K, Iterator[V], GroupState[S]) => U): DS[U]
+      func: (K, Iterator[V], GroupState[S]) => U): Dataset[U]
 
   /**
    * (Scala-specific) Applies the given function to each group of data, while maintaining a
@@ -301,7 +301,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    */
   def mapGroupsWithState[S: Encoder, U: Encoder](
       timeoutConf: GroupStateTimeout,
-      initialState: KVDS[K, S])(func: (K, Iterator[V], GroupState[S]) => U): DS[U]
+      initialState: KVDS[K, S])(func: (K, Iterator[V], GroupState[S]) => U): Dataset[U]
 
   /**
    * (Java-specific) Applies the given function to each group of data, while maintaining a
@@ -329,7 +329,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
   def mapGroupsWithState[S, U](
       func: MapGroupsWithStateFunction[K, V, S, U],
       stateEncoder: Encoder[S],
-      outputEncoder: Encoder[U]): DS[U] = {
+      outputEncoder: Encoder[U]): Dataset[U] = {
     mapGroupsWithState[S, U](ToScalaUDF(func))(stateEncoder, outputEncoder)
   }
 
@@ -362,7 +362,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
       func: MapGroupsWithStateFunction[K, V, S, U],
       stateEncoder: Encoder[S],
       outputEncoder: Encoder[U],
-      timeoutConf: GroupStateTimeout): DS[U] = {
+      timeoutConf: GroupStateTimeout): Dataset[U] = {
     mapGroupsWithState[S, U](timeoutConf)(ToScalaUDF(func))(stateEncoder, outputEncoder)
   }
 
@@ -400,7 +400,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
       stateEncoder: Encoder[S],
       outputEncoder: Encoder[U],
       timeoutConf: GroupStateTimeout,
-      initialState: KVDS[K, S]): DS[U] = {
+      initialState: KVDS[K, S]): Dataset[U] = {
     val f = ToScalaUDF(func)
     mapGroupsWithState[S, U](timeoutConf, initialState)(f)(stateEncoder, outputEncoder)
   }
@@ -430,7 +430,8 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    */
   def flatMapGroupsWithState[S: Encoder, U: Encoder](
       outputMode: OutputMode,
-      timeoutConf: GroupStateTimeout)(func: (K, Iterator[V], GroupState[S]) => Iterator[U]): DS[U]
+      timeoutConf: GroupStateTimeout)(
+      func: (K, Iterator[V], GroupState[S]) => Iterator[U]): Dataset[U]
 
   /**
    * (Scala-specific) Applies the given function to each group of data, while maintaining a
@@ -462,7 +463,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
   def flatMapGroupsWithState[S: Encoder, U: Encoder](
       outputMode: OutputMode,
       timeoutConf: GroupStateTimeout,
-      initialState: KVDS[K, S])(func: (K, Iterator[V], GroupState[S]) => Iterator[U]): DS[U]
+      initialState: KVDS[K, S])(func: (K, Iterator[V], GroupState[S]) => Iterator[U]): Dataset[U]
 
   /**
    * (Java-specific) Applies the given function to each group of data, while maintaining a
@@ -496,7 +497,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
       outputMode: OutputMode,
       stateEncoder: Encoder[S],
       outputEncoder: Encoder[U],
-      timeoutConf: GroupStateTimeout): DS[U] = {
+      timeoutConf: GroupStateTimeout): Dataset[U] = {
     val f = ToScalaUDF(func)
     flatMapGroupsWithState[S, U](outputMode, timeoutConf)(f)(stateEncoder, outputEncoder)
   }
@@ -540,7 +541,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
       stateEncoder: Encoder[S],
       outputEncoder: Encoder[U],
       timeoutConf: GroupStateTimeout,
-      initialState: KVDS[K, S]): DS[U] = {
+      initialState: KVDS[K, S]): Dataset[U] = {
     flatMapGroupsWithState[S, U](outputMode, timeoutConf, initialState)(ToScalaUDF(func))(
       stateEncoder,
       outputEncoder)
@@ -568,7 +569,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
   private[sql] def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
-      outputMode: OutputMode): DS[U]
+      outputMode: OutputMode): Dataset[U]
 
   /**
    * (Scala-specific) Invokes methods defined in the stateful processor used in arbitrary state
@@ -597,7 +598,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
   private[sql] def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       eventTimeColumnName: String,
-      outputMode: OutputMode): DS[U]
+      outputMode: OutputMode): Dataset[U]
 
   /**
    * (Java-specific) Invokes methods defined in the stateful processor used in arbitrary state API
@@ -624,7 +625,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
       outputMode: OutputMode,
-      outputEncoder: Encoder[U]): DS[U] = {
+      outputEncoder: Encoder[U]): Dataset[U] = {
     transformWithState(statefulProcessor, timeMode, outputMode)(outputEncoder)
   }
 
@@ -660,7 +661,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
       statefulProcessor: StatefulProcessor[K, V, U],
       eventTimeColumnName: String,
       outputMode: OutputMode,
-      outputEncoder: Encoder[U]): DS[U] = {
+      outputEncoder: Encoder[U]): Dataset[U] = {
     transformWithState(statefulProcessor, eventTimeColumnName, outputMode)(outputEncoder)
   }
 
@@ -689,7 +690,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       timeMode: TimeMode,
       outputMode: OutputMode,
-      initialState: KVDS[K, S]): DS[U]
+      initialState: KVDS[K, S]): Dataset[U]
 
   /**
    * (Scala-specific) Invokes methods defined in the stateful processor used in arbitrary state
@@ -722,7 +723,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       eventTimeColumnName: String,
       outputMode: OutputMode,
-      initialState: KVDS[K, S]): DS[U]
+      initialState: KVDS[K, S]): Dataset[U]
 
   /**
    * (Java-specific) Invokes methods defined in the stateful processor used in arbitrary state API
@@ -756,7 +757,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
       outputMode: OutputMode,
       initialState: KVDS[K, S],
       outputEncoder: Encoder[U],
-      initialStateEncoder: Encoder[S]): DS[U] = {
+      initialStateEncoder: Encoder[S]): Dataset[U] = {
     transformWithState(statefulProcessor, timeMode, outputMode, initialState)(
       outputEncoder,
       initialStateEncoder)
@@ -798,7 +799,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
       initialState: KVDS[K, S],
       eventTimeColumnName: String,
       outputEncoder: Encoder[U],
-      initialStateEncoder: Encoder[S]): DS[U] = {
+      initialStateEncoder: Encoder[S]): Dataset[U] = {
     transformWithState(statefulProcessor, eventTimeColumnName, outputMode, initialState)(
       outputEncoder,
       initialStateEncoder)
@@ -811,7 +812,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    *
    * @since 1.6.0
    */
-  def reduceGroups(f: (V, V) => V): DS[(K, V)]
+  def reduceGroups(f: (V, V) => V): Dataset[(K, V)]
 
   /**
    * (Java-specific) Reduces the elements of each group of data using the specified binary
@@ -820,7 +821,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    *
    * @since 1.6.0
    */
-  def reduceGroups(f: ReduceFunction[V]): DS[(K, V)] = {
+  def reduceGroups(f: ReduceFunction[V]): Dataset[(K, V)] = {
     reduceGroups(ToScalaUDF(f))
   }
 
@@ -829,7 +830,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * and code reuse, we do this without the help of the type system and then use helper functions
    * that cast appropriately for the user facing interface.
    */
-  protected def aggUntyped(columns: TypedColumn[_, _]*): DS[_]
+  protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_]
 
   /**
    * Computes the given aggregation, returning a [[Dataset]] of tuples for each unique key and the
@@ -837,8 +838,8 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    *
    * @since 1.6.0
    */
-  def agg[U1](col1: TypedColumn[V, U1]): DS[(K, U1)] =
-    aggUntyped(col1).asInstanceOf[DS[(K, U1)]]
+  def agg[U1](col1: TypedColumn[V, U1]): Dataset[(K, U1)] =
+    aggUntyped(col1).asInstanceOf[Dataset[(K, U1)]]
 
   /**
    * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key and
@@ -846,8 +847,8 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    *
    * @since 1.6.0
    */
-  def agg[U1, U2](col1: TypedColumn[V, U1], col2: TypedColumn[V, U2]): DS[(K, U1, U2)] =
-    aggUntyped(col1, col2).asInstanceOf[DS[(K, U1, U2)]]
+  def agg[U1, U2](col1: TypedColumn[V, U1], col2: TypedColumn[V, U2]): Dataset[(K, U1, U2)] =
+    aggUntyped(col1, col2).asInstanceOf[Dataset[(K, U1, U2)]]
 
   /**
    * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key and
@@ -858,8 +859,8 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
   def agg[U1, U2, U3](
       col1: TypedColumn[V, U1],
       col2: TypedColumn[V, U2],
-      col3: TypedColumn[V, U3]): DS[(K, U1, U2, U3)] =
-    aggUntyped(col1, col2, col3).asInstanceOf[DS[(K, U1, U2, U3)]]
+      col3: TypedColumn[V, U3]): Dataset[(K, U1, U2, U3)] =
+    aggUntyped(col1, col2, col3).asInstanceOf[Dataset[(K, U1, U2, U3)]]
 
   /**
    * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key and
@@ -871,8 +872,8 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
       col1: TypedColumn[V, U1],
       col2: TypedColumn[V, U2],
       col3: TypedColumn[V, U3],
-      col4: TypedColumn[V, U4]): DS[(K, U1, U2, U3, U4)] =
-    aggUntyped(col1, col2, col3, col4).asInstanceOf[DS[(K, U1, U2, U3, U4)]]
+      col4: TypedColumn[V, U4]): Dataset[(K, U1, U2, U3, U4)] =
+    aggUntyped(col1, col2, col3, col4).asInstanceOf[Dataset[(K, U1, U2, U3, U4)]]
 
   /**
    * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key and
@@ -885,8 +886,8 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
       col2: TypedColumn[V, U2],
       col3: TypedColumn[V, U3],
       col4: TypedColumn[V, U4],
-      col5: TypedColumn[V, U5]): DS[(K, U1, U2, U3, U4, U5)] =
-    aggUntyped(col1, col2, col3, col4, col5).asInstanceOf[DS[(K, U1, U2, U3, U4, U5)]]
+      col5: TypedColumn[V, U5]): Dataset[(K, U1, U2, U3, U4, U5)] =
+    aggUntyped(col1, col2, col3, col4, col5).asInstanceOf[Dataset[(K, U1, U2, U3, U4, U5)]]
 
   /**
    * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key and
@@ -900,9 +901,9 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
       col3: TypedColumn[V, U3],
       col4: TypedColumn[V, U4],
       col5: TypedColumn[V, U5],
-      col6: TypedColumn[V, U6]): DS[(K, U1, U2, U3, U4, U5, U6)] =
+      col6: TypedColumn[V, U6]): Dataset[(K, U1, U2, U3, U4, U5, U6)] =
     aggUntyped(col1, col2, col3, col4, col5, col6)
-      .asInstanceOf[DS[(K, U1, U2, U3, U4, U5, U6)]]
+      .asInstanceOf[Dataset[(K, U1, U2, U3, U4, U5, U6)]]
 
   /**
    * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key and
@@ -917,9 +918,9 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
       col4: TypedColumn[V, U4],
       col5: TypedColumn[V, U5],
       col6: TypedColumn[V, U6],
-      col7: TypedColumn[V, U7]): DS[(K, U1, U2, U3, U4, U5, U6, U7)] =
+      col7: TypedColumn[V, U7]): Dataset[(K, U1, U2, U3, U4, U5, U6, U7)] =
     aggUntyped(col1, col2, col3, col4, col5, col6, col7)
-      .asInstanceOf[DS[(K, U1, U2, U3, U4, U5, U6, U7)]]
+      .asInstanceOf[Dataset[(K, U1, U2, U3, U4, U5, U6, U7)]]
 
   /**
    * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key and
@@ -935,9 +936,9 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
       col5: TypedColumn[V, U5],
       col6: TypedColumn[V, U6],
       col7: TypedColumn[V, U7],
-      col8: TypedColumn[V, U8]): DS[(K, U1, U2, U3, U4, U5, U6, U7, U8)] =
+      col8: TypedColumn[V, U8]): Dataset[(K, U1, U2, U3, U4, U5, U6, U7, U8)] =
     aggUntyped(col1, col2, col3, col4, col5, col6, col7, col8)
-      .asInstanceOf[DS[(K, U1, U2, U3, U4, U5, U6, U7, U8)]]
+      .asInstanceOf[Dataset[(K, U1, U2, U3, U4, U5, U6, U7, U8)]]
 
   /**
    * Returns a [[Dataset]] that contains a tuple with each key and the number of items present for
@@ -945,7 +946,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    *
    * @since 1.6.0
    */
-  def count(): DS[(K, Long)] = agg(cnt(lit(1)).as(PrimitiveLongEncoder))
+  def count(): Dataset[(K, Long)] = agg(cnt(lit(1)).as(PrimitiveLongEncoder))
 
   /**
    * (Scala-specific) Applies the given function to each cogrouped data. For each unique group,
@@ -956,7 +957,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * @since 1.6.0
    */
   def cogroup[U, R: Encoder](other: KVDS[K, U])(
-      f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): DS[R] = {
+      f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): Dataset[R] = {
     cogroupSorted(other)(Nil: _*)(Nil: _*)(f)
   }
 
@@ -971,7 +972,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
   def cogroup[U, R](
       other: KVDS[K, U],
       f: CoGroupFunction[K, V, U, R],
-      encoder: Encoder[R]): DS[R] = {
+      encoder: Encoder[R]): Dataset[R] = {
     cogroup(other)(ToScalaUDF(f))(encoder)
   }
 
@@ -991,7 +992,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
    * @since 3.4.0
    */
   def cogroupSorted[U, R: Encoder](other: KVDS[K, U])(thisSortExprs: Column*)(
-      otherSortExprs: Column*)(f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): DS[R]
+      otherSortExprs: Column*)(f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): Dataset[R]
 
   /**
    * (Java-specific) Applies the given function to each sorted cogrouped data. For each unique
@@ -1013,7 +1014,7 @@ abstract class KeyValueGroupedDataset[K, V, DS[U] <: Dataset[U, DS]] extends Ser
       thisSortExprs: Array[Column],
       otherSortExprs: Array[Column],
       f: CoGroupFunction[K, V, U, R],
-      encoder: Encoder[R]): DS[R] = {
+      encoder: Encoder[R]): Dataset[R] = {
     import org.apache.spark.util.ArrayImplicits._
     cogroupSorted(other)(thisSortExprs.toImmutableArraySeq: _*)(
       otherSortExprs.toImmutableArraySeq: _*)(ToScalaUDF(f))(encoder)

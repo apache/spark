@@ -46,6 +46,7 @@ message StatefulProcessorCall {
 message StateVariableRequest {
   oneof method {
     ValueStateCall valueStateCall = 1;
+    ListStateCall listStateCall = 2;
   }
 }
 
@@ -72,6 +73,18 @@ message ValueStateCall {
   }
 }
 
+message ListStateCall {
+  string stateName = 1;
+  oneof method {
+    Exists exists = 2;
+    ListStateGet listStateGet = 3;
+    ListStatePut listStatePut = 4;
+    AppendValue appendValue = 5;
+    AppendList appendList = 6;
+    Clear clear = 7;
+  }
+}
+
 message SetImplicitKey {
   bytes key = 1;
 }
@@ -90,6 +103,20 @@ message ValueStateUpdate {
 }
 
 message Clear {
+}
+
+message ListStateGet {
+  string iteratorId = 1;
+}
+
+message ListStatePut {
+}
+
+message AppendValue {
+  bytes value = 1;
+}
+
+message AppendList {
 }
 
 enum HandleState {

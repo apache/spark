@@ -72,6 +72,54 @@ struct<>
 
 
 -- !query
+create temporary view courseSales as select * from values
+  ("dotNET", 2012, 10000),
+  ("Java", 2012, 20000),
+  ("dotNET", 2012, 5000),
+  ("dotNET", 2013, 48000),
+  ("Java", 2013, 30000)
+  as courseSales(course, year, earnings)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create temporary view courseEarnings as select * from values
+  ("dotNET", 15000, 48000, 22500),
+  ("Java", 20000, 30000, NULL)
+  as courseEarnings(course, `2012`, `2013`, `2014`)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create temporary view courseEarningsAndSales as select * from values
+  ("dotNET", 15000, NULL, 48000, 1, 22500, 1),
+  ("Java", 20000, 1, 30000, 2, NULL, NULL)
+  as courseEarningsAndSales(
+    course, earnings2012, sales2012, earnings2013, sales2013, earnings2014, sales2014)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create temporary view yearsWithComplexTypes as select * from values
+  (2012, array(1, 1), map('1', 1), struct(1, 'a')),
+  (2013, array(2, 2), map('2', 2), struct(2, 'b'))
+  as yearsWithComplexTypes(y, a, m, s)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 table t
 |> select 1 as x
 -- !query schema
@@ -240,6 +288,56 @@ struct<x:int,y:string>
 
 -- !query
 table t
+|> select *
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+|> select * except (y)
+-- !query schema
+struct<x:int>
+-- !query output
+0
+1
+
+
+-- !query
+table t
+|> select /*+ repartition(3) */ *
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+|> select /*+ repartition(3) */ distinct x
+-- !query schema
+struct<x:int>
+-- !query output
+0
+1
+
+
+-- !query
+table t
+|> select /*+ repartition(3) */ all x
+-- !query schema
+struct<x:int>
+-- !query output
+0
+1
+
+
+-- !query
+table t
 |> select sum(x) as result
 -- !query schema
 struct<>
@@ -281,6 +379,485 @@ org.apache.spark.sql.AnalysisException
     "stopIndex" : 39,
     "fragment" : "sum(x)"
   } ]
+}
+
+
+-- !query
+table t
+|> where true
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+|> where x + length(y) < 4
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+
+
+-- !query
+table t
+|> where x + length(y) < 4
+|> where x + length(y) < 3
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+
+
+
+-- !query
+(select x, sum(length(y)) as sum_len from t group by x)
+|> where x = 1
+-- !query schema
+struct<x:int,sum_len:bigint>
+-- !query output
+1	3
+
+
+-- !query
+table t
+|> where t.x = 1
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+1	def
+
+
+-- !query
+table t
+|> where spark_catalog.default.t.x = 1
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+1	def
+
+
+-- !query
+(select col from st)
+|> where col.i1 = 1
+-- !query schema
+struct<col:struct<i1:int,i2:int>>
+-- !query output
+
+
+
+-- !query
+table st
+|> where st.col.i1 = 2
+-- !query schema
+struct<x:int,col:struct<i1:int,i2:int>>
+-- !query output
+1	{"i1":2,"i2":3}
+
+
+-- !query
+table t
+|> where exists (select a from other where x = a limit 1)
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+1	def
+
+
+-- !query
+table t
+|> where (select any_value(a) from other where x = a limit 1) = 1
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+1	def
+
+
+-- !query
+table t
+|> where sum(x) = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_WHERE_CONDITION",
+  "sqlState" : "42903",
+  "messageParameters" : {
+    "condition" : "\"(sum(x) = 1)\"",
+    "expressionList" : "sum(spark_catalog.default.t.x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 27,
+    "fragment" : "table t\n|> where sum(x) = 1"
+  } ]
+}
+
+
+-- !query
+table t
+|> where y = 'abc' or length(y) + sum(x) = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_WHERE_CONDITION",
+  "sqlState" : "42903",
+  "messageParameters" : {
+    "condition" : "\"((y = abc) OR ((length(y) + sum(x)) = 1))\"",
+    "expressionList" : "sum(spark_catalog.default.t.x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 52,
+    "fragment" : "table t\n|> where y = 'abc' or length(y) + sum(x) = 1"
+  } ]
+}
+
+
+-- !query
+table t
+|> where first_value(x) over (partition by y) = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "messageParameters" : {
+    "clauseName" : "WHERE"
+  }
+}
+
+
+-- !query
+select * from t where first_value(x) over (partition by y) = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "messageParameters" : {
+    "clauseName" : "WHERE"
+  }
+}
+
+
+-- !query
+table t
+|> select x, length(y) as z
+|> where x + length(y) < 4
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`x`, `z`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 57,
+    "stopIndex" : 57,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
+(select x, sum(length(y)) as sum_len from t group by x)
+|> where sum(length(y)) = 3
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`x`, `sum_len`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 77,
+    "stopIndex" : 77,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
+table courseSales
+|> select `year`, course, earnings
+|> pivot (
+     sum(earnings)
+     for course in ('dotNET', 'Java')
+  )
+-- !query schema
+struct<year:int,dotNET:bigint,Java:bigint>
+-- !query output
+2012	15000	20000
+2013	48000	30000
+
+
+-- !query
+table courseSales
+|> select `year` as y, course as c, earnings as e
+|> pivot (
+     sum(e) as s, avg(e) as a
+     for y in (2012 as firstYear, 2013 as secondYear)
+   )
+-- !query schema
+struct<c:string,firstYear_s:bigint,firstYear_a:double,secondYear_s:bigint,secondYear_a:double>
+-- !query output
+Java	20000	20000.0	30000	30000.0
+dotNET	15000	7500.0	48000	48000.0
+
+
+-- !query
+select course, `year`, y, a
+from courseSales
+join yearsWithComplexTypes on `year` = y
+|> pivot (
+     max(a)
+     for (y, course) in ((2012, 'dotNET'), (2013, 'Java'))
+   )
+-- !query schema
+struct<year:int,{2012, dotNET}:array<int>,{2013, Java}:array<int>>
+-- !query output
+2012	[1,1]	NULL
+2013	NULL	[2,2]
+
+
+-- !query
+select earnings, `year`, s
+from courseSales
+join yearsWithComplexTypes on `year` = y
+|> pivot (
+     sum(earnings)
+     for s in ((1, 'a'), (2, 'b'))
+   )
+-- !query schema
+struct<year:int,{1, a}:bigint,{2, b}:bigint>
+-- !query output
+2012	35000	NULL
+2013	NULL	78000
+
+
+-- !query
+table courseEarnings
+|> unpivot (
+     earningsYear for `year` in (`2012`, `2013`, `2014`)
+   )
+-- !query schema
+struct<course:string,year:string,earningsYear:int>
+-- !query output
+Java	2012	20000
+Java	2013	30000
+dotNET	2012	15000
+dotNET	2013	48000
+dotNET	2014	22500
+
+
+-- !query
+table courseEarnings
+|> unpivot include nulls (
+     earningsYear for `year` in (`2012`, `2013`, `2014`)
+   )
+-- !query schema
+struct<course:string,year:string,earningsYear:int>
+-- !query output
+Java	2012	20000
+Java	2013	30000
+Java	2014	NULL
+dotNET	2012	15000
+dotNET	2013	48000
+dotNET	2014	22500
+
+
+-- !query
+table courseEarningsAndSales
+|> unpivot include nulls (
+     (earnings, sales) for `year` in (
+       (earnings2012, sales2012) as `2012`,
+       (earnings2013, sales2013) as `2013`,
+       (earnings2014, sales2014) as `2014`)
+   )
+-- !query schema
+struct<course:string,year:string,earnings:int,sales:int>
+-- !query output
+Java	2012	20000	1
+Java	2013	30000	2
+Java	2014	NULL	NULL
+dotNET	2012	15000	NULL
+dotNET	2013	48000	1
+dotNET	2014	22500	1
+
+
+-- !query
+table courseSales
+|> select course, earnings
+|> pivot (
+     sum(earnings)
+     for `year` in (2012, 2013)
+   )
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`year`",
+    "proposal" : "`course`, `earnings`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 49,
+    "stopIndex" : 111,
+    "fragment" : "pivot (\n     sum(earnings)\n     for `year` in (2012, 2013)\n   )"
+  } ]
+}
+
+
+-- !query
+table courseSales
+|> pivot (
+     sum(earnings)
+     for `year` in (course, 2013)
+   )
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NON_LITERAL_PIVOT_VALUES",
+  "sqlState" : "42K08",
+  "messageParameters" : {
+    "expression" : "\"course\""
+  }
+}
+
+
+-- !query
+table courseSales
+|> select course, earnings
+|> pivot (
+     sum(earnings)
+     for `year` in (2012, 2013)
+   )
+   unpivot (
+     earningsYear for `year` in (`2012`, `2013`, `2014`)
+   )
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "NOT_ALLOWED_IN_FROM.UNPIVOT_WITH_PIVOT",
+  "sqlState" : "42601",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 186,
+    "fragment" : "table courseSales\n|> select course, earnings\n|> pivot (\n     sum(earnings)\n     for `year` in (2012, 2013)\n   )\n   unpivot (\n     earningsYear for `year` in (`2012`, `2013`, `2014`)\n   )"
+  } ]
+}
+
+
+-- !query
+table courseSales
+|> select course, earnings
+|> unpivot (
+     earningsYear for `year` in (`2012`, `2013`, `2014`)
+   )
+   pivot (
+     sum(earnings)
+     for `year` in (2012, 2013)
+   )
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "NOT_ALLOWED_IN_FROM.UNPIVOT_WITH_PIVOT",
+  "sqlState" : "42601",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 186,
+    "fragment" : "table courseSales\n|> select course, earnings\n|> unpivot (\n     earningsYear for `year` in (`2012`, `2013`, `2014`)\n   )\n   pivot (\n     sum(earnings)\n     for `year` in (2012, 2013)\n   )"
+  } ]
+}
+
+
+-- !query
+table courseSales
+|> select course, earnings
+|> pivot (
+     sum(earnings)
+     for `year` in (2012, 2013)
+   )
+   pivot (
+     sum(earnings)
+     for `year` in (2012, 2013)
+   )
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'pivot'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+table courseSales
+|> select course, earnings
+|> unpivot (
+     earningsYear for `year` in (`2012`, `2013`, `2014`)
+   )
+   unpivot (
+     earningsYear for `year` in (`2012`, `2013`, `2014`)
+   )
+   pivot (
+     sum(earnings)
+     for `year` in (2012, 2013)
+   )
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'unpivot'",
+    "hint" : ""
+  }
 }
 
 

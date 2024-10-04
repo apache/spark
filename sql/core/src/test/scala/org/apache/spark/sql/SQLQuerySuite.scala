@@ -111,10 +111,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-34678: describe functions for table-valued functions") {
+    sql("describe function range").show(false)
     checkKeywordsExist(sql("describe function range"),
       "Function: range",
       "Class: org.apache.spark.sql.catalyst.plans.logical.Range",
-      "range(end: long)"
+      "range(start[, end[, step[, numSlices]]])",
+      "range(end)",
+      "Returns a table of values within a specified range."
     )
   }
 
@@ -2568,20 +2571,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq(1 -> "a").toDF("i", "j").write.parquet(path.getCanonicalPath)
 
       val newSession = spark.newSession()
+      val newSqlConf = newSession.sessionState.conf
       val originalValue = newSession.sessionState.conf.runSQLonFile
 
       try {
-        newSession.conf.set(SQLConf.RUN_SQL_ON_FILES, false)
+        newSqlConf.setConf(SQLConf.RUN_SQL_ON_FILES, false)
         intercept[AnalysisException] {
           newSession.sql(s"SELECT i, j FROM parquet.`${path.getCanonicalPath}`")
         }
 
-        newSession.conf.set(SQLConf.RUN_SQL_ON_FILES, true)
+        newSqlConf.setConf(SQLConf.RUN_SQL_ON_FILES, true)
         checkAnswer(
           newSession.sql(s"SELECT i, j FROM parquet.`${path.getCanonicalPath}`"),
           Row(1, "a"))
       } finally {
-        newSession.conf.set(SQLConf.RUN_SQL_ON_FILES, originalValue)
+        newSqlConf.setConf(SQLConf.RUN_SQL_ON_FILES, originalValue)
       }
     }
   }
@@ -4923,6 +4927,19 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         stop = 45
       )
     )
+  }
+
+  test("SPARK-49743: OptimizeCsvJsonExpr does not change schema when pruning struct") {
+    val df = sql("""
+        | SELECT
+        |    from_json('[{"a": '||id||', "b": '|| (2*id) ||'}]', 'array<struct<a: INT, b: INT>>').a,
+        |    from_json('[{"a": '||id||', "b": '|| (2*id) ||'}]', 'array<struct<a: INT, b: INT>>').A
+        | FROM
+        |    range(3) as t
+        |""".stripMargin)
+    val expectedAnswer = Seq(
+      Row(Array(0), Array(0)), Row(Array(1), Array(1)), Row(Array(2), Array(2)))
+    checkAnswer(df, expectedAnswer)
   }
 }
 
