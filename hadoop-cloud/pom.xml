@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.5.2.0-openai-SNAPSHOT</version>
+    <version>3.5.2.1-openai-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
