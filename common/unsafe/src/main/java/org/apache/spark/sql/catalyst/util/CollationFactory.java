@@ -341,6 +341,22 @@ public final class CollationFactory {
           SPACE_TRIMMING_OFFSET, SPACE_TRIMMING_MASK)];
       }
 
+      protected static UTF8String applyTrimmingPolicy(UTF8String s, int collationId) {
+        return applyTrimmingPolicy(s, getSpaceTrimming(collationId));
+      }
+
+      /**
+       * Utility function to trim spaces when collation uses space trimming.
+       */
+      protected static UTF8String applyTrimmingPolicy(UTF8String s, SpaceTrimming spaceTrimming) {
+        return switch (spaceTrimming) {
+          case LTRIM -> s.trimLeft();
+          case RTRIM -> s.trimRight();
+          case TRIM -> s.trim();
+          default -> s; // NOTRIM
+        };
+      }
+
       /**
        * Main entry point for retrieving `Collation` instance from collation ID.
        */
@@ -1130,24 +1146,32 @@ public final class CollationFactory {
 
   public static UTF8String getCollationKey(UTF8String input, int collationId) {
     Collation collation = fetchCollation(collationId);
+    if (usesTrimCollation(collationId)) {
+      input = Collation.CollationSpec.applyTrimmingPolicy(input, collationId);
+    }
     if (collation.supportsBinaryEquality) {
       return input;
     } else if (collation.supportsLowercaseEquality) {
       return CollationAwareUTF8String.lowerCaseCodePoints(input);
     } else {
-      CollationKey collationKey = collation.collator.getCollationKey(input.toValidString());
+      CollationKey collationKey = collation.collator.getCollationKey(
+        input.toValidString());
       return UTF8String.fromBytes(collationKey.toByteArray());
     }
   }
 
   public static byte[] getCollationKeyBytes(UTF8String input, int collationId) {
     Collation collation = fetchCollation(collationId);
+    if (usesTrimCollation(collationId)) {
+      input = Collation.CollationSpec.applyTrimmingPolicy(input, collationId);
+    }
     if (collation.supportsBinaryEquality) {
       return input.getBytes();
     } else if (collation.supportsLowercaseEquality) {
       return CollationAwareUTF8String.lowerCaseCodePoints(input).getBytes();
     } else {
-      return collation.collator.getCollationKey(input.toValidString()).toByteArray();
+      return collation.collator.getCollationKey(
+        input.toValidString()).toByteArray();
     }
   }
 
