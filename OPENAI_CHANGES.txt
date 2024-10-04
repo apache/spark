@@ -50,3 +50,4 @@
 - [INTERNAL] Setup Buildkite CI for 3.5 branche
 - [INTERNAL] Update Spark Dockerfile to ignore already installed system packages
 - [INTERNAL] Ignore flaky tests
+- [INTERNAL] Add an config option to skip streaming metadata file check
