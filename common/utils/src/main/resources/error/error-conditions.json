@@ -618,6 +618,13 @@
     ],
     "sqlState" : "42703"
   },
+  "COLUMN_ORDINAL_OUT_OF_BOUNDS" : {
+    "message" : [
+      "Column ordinal out of bounds. The number of columns in the table is <attributesLength>, but the column ordinal is <ordinal>.",
+      "Attributes are the following: <attributes>."
+    ],
+    "sqlState" : "22003"
+  },
   "COMPARATOR_RETURNS_NULL" : {
     "message" : [
       "The comparator has returned a NULL for a comparison between <firstValue> and <secondValue>.",
