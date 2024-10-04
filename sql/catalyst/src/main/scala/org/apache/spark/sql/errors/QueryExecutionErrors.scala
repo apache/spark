@@ -295,8 +295,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
-  def overflowInSumOfDecimalError(context: QueryContext, hint: String = ""): ArithmeticException = {
-    arithmeticOverflowError("Overflow in sum of decimals", hint = hint, context = context)
+  def overflowInSumOfDecimalError(
+      context: QueryContext,
+      suggestedFunc: String): ArithmeticException = {
+    arithmeticOverflowError("Overflow in sum of decimals", suggestedFunc = suggestedFunc,
+      context = context)
   }
 
   def overflowInIntegralDivideError(context: QueryContext): ArithmeticException = {
@@ -304,7 +307,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def overflowInConvError(context: QueryContext): ArithmeticException = {
-    arithmeticOverflowError("Overflow in function conv()", hint = "try_conv", context = context)
+    arithmeticOverflowError("Overflow in function conv()", suggestedFunc = "try_conv",
+      context = context)
   }
 
   def mapSizeExceedArraySizeWhenZipMapError(size: Int): SparkRuntimeException = {

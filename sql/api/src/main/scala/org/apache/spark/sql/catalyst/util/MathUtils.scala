@@ -67,23 +67,23 @@ object MathUtils {
 
   def negateExact(a: Byte): Byte = {
     if (a == Byte.MinValue) { // if and only if x is Byte.MinValue, overflow can happen
-      throw ExecutionErrors.arithmeticOverflowError("byte overflow")
+      throw ExecutionErrors.arithmeticOverflowError("byte overflow", context = null)
     }
     (-a).toByte
   }
 
   def negateExact(a: Short): Short = {
     if (a == Short.MinValue) { // if and only if x is Short.MinValue, overflow can happen
-      throw ExecutionErrors.arithmeticOverflowError("short overflow")
+      throw ExecutionErrors.arithmeticOverflowError("short overflow", context = null)
     }
     (-a).toShort
   }
 
-  def negateExact(a: Int): Int = withOverflow(Math.negateExact(a))
+  def negateExact(a: Int): Int = withOverflow(Math.negateExact(a), context = null)
 
-  def negateExact(a: Long): Long = withOverflow(Math.negateExact(a))
+  def negateExact(a: Long): Long = withOverflow(Math.negateExact(a), context = null)
 
-  def toIntExact(a: Long): Int = withOverflow(Math.toIntExact(a))
+  def toIntExact(a: Long): Int = withOverflow(Math.toIntExact(a), context = null)
 
   // TODO(SPARK-49631): Fix suggestion when used.
   def floorDiv(a: Int, b: Int): Int = withOverflow(Math.floorDiv(a, b), hint = "try_divide")
@@ -92,12 +92,21 @@ object MathUtils {
   def floorDiv(a: Long, b: Long): Long = withOverflow(Math.floorDiv(a, b), hint = "try_divide")
 
   // TODO(SPARK-49631): Fix suggestion when used.
-  def floorMod(a: Int, b: Int): Int = withOverflow(Math.floorMod(a, b))
+  def floorMod(a: Int, b: Int): Int = withOverflow(Math.floorMod(a, b), context = null)
 
   // TODO(SPARK-49631): Fix suggestion when used.
-  def floorMod(a: Long, b: Long): Long = withOverflow(Math.floorMod(a, b))
+  def floorMod(a: Long, b: Long): Long = withOverflow(Math.floorMod(a, b), context = null)
 
-  def withOverflow[A](f: => A, hint: String = "", context: QueryContext = null): A = {
+  def withOverflow[A](f: => A, context: QueryContext): A = {
+    try {
+      f
+    } catch {
+      case e: ArithmeticException =>
+        throw ExecutionErrors.arithmeticOverflowError(e.getMessage, context)
+    }
+  }
+
+  def withOverflow[A](f: => A, hint: String, context: QueryContext = null): A = {
     try {
       f
     } catch {

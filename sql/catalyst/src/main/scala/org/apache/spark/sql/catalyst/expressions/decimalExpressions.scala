@@ -166,7 +166,9 @@ case class CheckOverflowInSum(
     val value = child.eval(input)
     if (value == null) {
       if (nullOnOverflow) null
-      else throw QueryExecutionErrors.overflowInSumOfDecimalError(context, hint = "try_sum")
+      else {
+        throw QueryExecutionErrors.overflowInSumOfDecimalError(context, suggestedFunc = "try_sum")
+      }
     } else {
       value.asInstanceOf[Decimal].toPrecision(
         dataType.precision,
@@ -271,7 +273,7 @@ case class DecimalDivideWithOverflowCheck(
         null
       } else {
         throw QueryExecutionErrors.overflowInSumOfDecimalError(
-          getContextOrNull(), hint = "try_average")
+          getContextOrNull(), suggestedFunc = "try_average")
       }
     } else {
       val value2 = right.eval(input)
