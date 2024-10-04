@@ -44,9 +44,10 @@ import org.apache.thrift.transport.TSocket
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkFunSuite}
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.HiveTestJars
 import org.apache.spark.sql.internal.SQLConf
@@ -1058,11 +1059,14 @@ class SingleSessionSuite extends HiveThriftServer2TestBase {
   test("unable to changing spark.sql.hive.thriftServer.singleSession using JDBC connections") {
     withJdbcStatement() { statement =>
       // JDBC connections are not able to set the conf spark.sql.hive.thriftServer.singleSession
-      val e = intercept[SQLException] {
-        statement.executeQuery("SET spark.sql.hive.thriftServer.singleSession=false")
-      }.getMessage
-      assert(e.contains(
-        "Cannot modify the value of a static config: spark.sql.hive.thriftServer.singleSession"))
+      checkError(
+        exception = intercept[AnalysisException](
+          statement.executeQuery("SET spark.sql.hive.thriftServer.singleSession=false")
+        ),
+        condition = "CANNOT_MODIFY_CONFIG",
+        parameters = Map(
+          "key" -> "\"spark.sql.hive.thriftServer.singleSession\"", "docroot" -> SPARK_DOC_ROOT)
+      )
     }
   }
 
