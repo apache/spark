@@ -161,7 +161,7 @@ case class DescribeTableExec(
             if (nestedField.isEmpty) {
               throw QueryExecutionErrors.partitionColumnNotFoundInTheTableSchemaError(
                 fieldNames.toSeq,
-                table.schema().catalogString
+                table.schema()
               )
             }
             nestedField.get
