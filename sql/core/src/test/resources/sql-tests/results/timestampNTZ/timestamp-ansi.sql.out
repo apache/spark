@@ -155,6 +155,7 @@ struct<>
 org.apache.spark.SparkDateTimeException
 {
   "errorClass" : "DATETIME_ARGUMENT_OUT_OF_RANGE",
+  "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 61"
@@ -186,6 +187,7 @@ struct<>
 org.apache.spark.SparkDateTimeException
 {
   "errorClass" : "DATETIME_ARGUMENT_OUT_OF_RANGE",
+  "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 99"
@@ -201,6 +203,7 @@ struct<>
 org.apache.spark.SparkDateTimeException
 {
   "errorClass" : "DATETIME_ARGUMENT_OUT_OF_RANGE",
+  "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 999"

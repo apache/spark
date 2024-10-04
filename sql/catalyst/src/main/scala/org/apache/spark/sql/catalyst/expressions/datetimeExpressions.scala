@@ -2496,7 +2496,7 @@ case class MakeDate(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     val failOnErrorBranch = if (failOnError) {
-      "throw QueryExecutionErrors.ansiDateTimeError(e);"
+      "throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e);"
     } else {
       s"${ev.isNull} = true;"
     }
