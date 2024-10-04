@@ -199,10 +199,10 @@ class ArtifactManager(session: SparkSession) extends Logging {
           FilenameUtils.separatorsToUnix(normalizedRemoteRelativePath.toString))}"
 
       if (normalizedRemoteRelativePath.startsWith(s"jars${File.separator}")) {
-        session.sparkContext.addJarIsolated(uri)
+        session.sparkContext.addJar(uri)
         jarsList.add(normalizedRemoteRelativePath)
       } else if (normalizedRemoteRelativePath.startsWith(s"pyfiles${File.separator}")) {
-        session.sparkContext.addFileIsolated(uri)
+        session.sparkContext.addFile(uri)
         val stringRemotePath = normalizedRemoteRelativePath.toString
         if (stringRemotePath.endsWith(".zip") || stringRemotePath.endsWith(
             ".egg") || stringRemotePath.endsWith(".jar")) {
@@ -211,9 +211,9 @@ class ArtifactManager(session: SparkSession) extends Logging {
       } else if (normalizedRemoteRelativePath.startsWith(s"archives${File.separator}")) {
         val canonicalUri =
           fragment.map(Utils.getUriBuilder(new URI(uri)).fragment).getOrElse(new URI(uri))
-        session.sparkContext.addArchiveIsolated(canonicalUri.toString)
+        session.sparkContext.addArchive(canonicalUri.toString)
       } else if (normalizedRemoteRelativePath.startsWith(s"files${File.separator}")) {
-        session.sparkContext.addFileIsolated(uri)
+        session.sparkContext.addFile(uri)
       }
     }
   }
