@@ -75,14 +75,14 @@
       "<message>"
     ],
     "subClass" : {
-      "WITH_TRY_SUGGESTION" : {
-        "message" : [
-          "Use <functionName> to tolerate overflow and return NULL instead."
-        ]
-      },
       "WITHOUT_TRY_SUGGESTION" : {
         "message" : [
           "If necessary set <config> to \"false\" to bypass this error."
+        ]
+      },
+      "WITH_TRY_SUGGESTION" : {
+        "message" : [
+          "Use <functionName> to tolerate overflow and return NULL instead."
         ]
       }
     },
