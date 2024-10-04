@@ -436,7 +436,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     withSQLConf((SQLConf.ANSI_ENABLED.key, "true")) {
       checkErrorInExpression[SparkIllegalArgumentException](
         DateAddInterval(Literal(d), Literal(new CalendarInterval(1, 1, 25 * MICROS_PER_HOUR))),
-        "ILLEGAL_INTERVAL_ARGUMENT_VALUE",
+        "INVALID_PARAMETER_VALUE.INTERVAL_WITH_MICROSECONDS",
         Map("ansiConfig" -> "\"spark.sql.ansi.enabled\""))
     }
 

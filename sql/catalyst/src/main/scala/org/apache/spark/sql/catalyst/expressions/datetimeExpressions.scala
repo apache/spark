@@ -1723,7 +1723,7 @@ case class DateAddInterval(
   override def nullSafeEval(start: Any, interval: Any): Any = {
     val itvl = interval.asInstanceOf[CalendarInterval]
     if (ansiEnabled || itvl.microseconds == 0) {
-      DateTimeUtils.dateAddInterval(start.asInstanceOf[Int], itvl)
+      DateTimeUtils.dateAddInterval(start.asInstanceOf[Int], itvl, prettyName)
     } else {
       val startTs = DateTimeUtils.daysToMicros(start.asInstanceOf[Int], zoneId)
       val resultTs = DateTimeUtils.timestampAddInterval(

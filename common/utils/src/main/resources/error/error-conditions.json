@@ -1089,7 +1089,7 @@
   },
   "DATETIME_ARGUMENT_OUT_OF_RANGE" : {
     "message" : [
-      "<message>. If necessary set <ansiConfig> to false to bypass this error."
+      "<message>. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
     "sqlState" : "22023"
   },
@@ -1652,12 +1652,6 @@
       "Illegal input for day of week: <string>."
     ],
     "sqlState" : "22009"
-  },
-  "ILLEGAL_INTERVAL_ARGUMENT_VALUE" : {
-    "message" : [
-      "Cannot add hours, minutes, seconds or microseconds to a date. If necessary set <ansiConfig> to \"false\" to bypass this error."
-    ],
-    "sqlState" : "22023"
   },
   "ILLEGAL_STATE_STORE_VALUE" : {
     "message" : [
@@ -2842,6 +2836,11 @@
       "INTEGER" : {
         "message" : [
           "expects an integer literal, but got <invalidValue>."
+        ]
+      },
+      "INTERVAL_WITH_MICROSECONDS" : {
+        "message" : [
+          "Cannot add hours, minutes, seconds or microseconds to a date. If necessary set <ansiConfig> to \"false\" to bypass this error."
         ]
       },
       "LENGTH" : {
