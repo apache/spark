@@ -261,6 +261,12 @@ class SparkSession private(
    * state as this session. The cloned session is independent of this session, that is, any
    * non-global change in either session is not reflected in the other.
    *
+   * @param reuseArtifactManager If true, reuse the artifact manager from the parent session.
+   *                             Reusing the artifact manager will break resource isolation between
+   *                             parent and child sessions, making artifacts visible to both.
+   *                             Use this option only in well-reasoned scenarios where the child
+   *                             session won't modify the artifact manager.
+   *
    * @note Other than the `SparkContext`, all shared state is initialized lazily.
    * This method will force the initialization of the shared state to ensure that parent
    * and child sessions are set up with the same shared state. If the underlying catalog

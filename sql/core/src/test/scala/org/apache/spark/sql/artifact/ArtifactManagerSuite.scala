@@ -394,14 +394,18 @@ class ArtifactManagerSuite extends SharedSparkSession {
       // Setup artifact dir
       FileUtils.copyDirectory(artifactPath.toFile, dir)
       val randomFilePath = path.resolve("random_file")
-      Files.write(randomFilePath, "test".getBytes(StandardCharsets.UTF_8))
+      val testBytes = "test".getBytes(StandardCharsets.UTF_8)
+      Files.write(randomFilePath, testBytes)
 
       // Register multiple kinds of artifacts
-      artifactManager.addArtifact(
+      artifactManager.addArtifact( // Class
         Paths.get("classes/Hello.class"), path.resolve("Hello.class"), None)
-      artifactManager.addArtifact(Paths.get("pyfiles/abc.zip"), randomFilePath, None)
-      artifactManager.addArtifact(
+      artifactManager.addArtifact( // Python
+        Paths.get("pyfiles/abc.zip"), randomFilePath, None, deleteStagedFile = false)
+      artifactManager.addArtifact( // JAR
         Paths.get("jars/udf_noA.jar"), path.resolve("udf_noA.jar"), None)
+      artifactManager.addArtifact( // Cached
+        Paths.get("cache/test"), randomFilePath, None)
       assert(FileUtils.listFiles(artifactManager.artifactPath.toFile, null, true).size() === 3)
 
       // Clone the artifact manager
@@ -409,6 +413,17 @@ class ArtifactManagerSuite extends SharedSparkSession {
       val newArtifactManager = newSession.artifactManager
       assert(newArtifactManager !== artifactManager)
       assert(newArtifactManager.artifactPath !== artifactManager.artifactPath)
+
+      // Load the cached artifact
+      val blockManager = newSession.sparkContext.env.blockManager
+      for (sessionId <- Seq(spark.sessionUUID, newSession.sessionUUID)) {
+        val cacheId = CacheId(sessionId, "test")
+        try {
+          assert(blockManager.getLocalBytes(cacheId).get.toByteBuffer().array() === testBytes)
+        } finally {
+          blockManager.releaseLock(cacheId)
+        }
+      }
 
       val allFiles = FileUtils.listFiles(newArtifactManager.artifactPath.toFile, null, true)
       assert(allFiles.size() === 3)
