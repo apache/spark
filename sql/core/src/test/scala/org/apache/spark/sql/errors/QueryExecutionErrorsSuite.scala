@@ -768,7 +768,7 @@ class QueryExecutionErrorsSuite
           "value1" -> "127S",
           "symbol" -> "+",
           "value2" -> "5S",
-          "hint" -> "try_add"),
+          "functionName" -> "`try_add`"),
         sqlState = "22003")
     }
   }
@@ -784,7 +784,7 @@ class QueryExecutionErrorsSuite
           "value1" -> "-2S",
           "symbol" -> "-",
           "value2" -> "127S",
-          "hint" -> "try_subtract"),
+          "functionName" -> "`try_subtract`"),
         sqlState = "22003")
     }
   }
@@ -800,7 +800,7 @@ class QueryExecutionErrorsSuite
           "value1" -> "127S",
           "symbol" -> "*",
           "value2" -> "5S",
-          "hint" -> "try_multiply"),
+          "functionName" -> "`try_multiply`"),
         sqlState = "22003")
     }
   }
