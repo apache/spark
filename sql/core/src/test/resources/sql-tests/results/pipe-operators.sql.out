@@ -1019,7 +1019,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 -- !query
 table t
-|> tablesample (-100 percent)
+|> tablesample (-100 percent) repeatable (0)
 -- !query schema
 struct<>
 -- !query output
@@ -1033,8 +1033,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 12,
-    "stopIndex" : 37,
-    "fragment" : "tablesample (-100 percent)"
+    "stopIndex" : 52,
+    "fragment" : "tablesample (-100 percent) repeatable (0)"
   } ]
 }
 
@@ -1256,36 +1256,20 @@ struct<a:int,a:int,a:int,a:int>
 
 -- !query
 table join_test_t1
-|> inner join join_test_t2 tablesample (100 percent repeatable 0) jt2 using (a)
+|> inner join join_test_t2 tablesample (100 percent) repeatable (0) jt2 using (a)
 -- !query schema
-struct<>
+struct<a:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'repeatable'",
-    "hint" : ": missing ')'"
-  }
-}
+1
 
 
 -- !query
 table join_test_t1
-|> inner join (select 1 as a) tablesample (100 percent repeatable 0) jt2 using (a)
+|> inner join (select 1 as a) tablesample (100 percent) repeatable (0) jt2 using (a)
 -- !query schema
-struct<>
+struct<a:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'repeatable'",
-    "hint" : ": missing ')'"
-  }
-}
+1
 
 
 -- !query

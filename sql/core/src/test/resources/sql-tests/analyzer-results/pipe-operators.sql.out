@@ -1088,7 +1088,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 -- !query
 table t
-|> tablesample (-100 percent)
+|> tablesample (-100 percent) repeatable (0)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
@@ -1100,8 +1100,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 12,
-    "stopIndex" : 37,
-    "fragment" : "tablesample (-100 percent)"
+    "stopIndex" : 52,
+    "fragment" : "tablesample (-100 percent) repeatable (0)"
   } ]
 }
 
@@ -1477,32 +1477,42 @@ Project [a#x, a#x, a#x, a#x]
 
 -- !query
 table join_test_t1
-|> inner join join_test_t2 tablesample (100 percent repeatable 0) jt2 using (a)
+|> inner join join_test_t2 tablesample (100 percent) repeatable (0) jt2 using (a)
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'repeatable'",
-    "hint" : ": missing ')'"
-  }
-}
+Project [a#x]
++- Join Inner, (a#x = a#x)
+   :- SubqueryAlias join_test_t1
+   :  +- View (`join_test_t1`, [a#x])
+   :     +- Project [cast(a#x as int) AS a#x]
+   :        +- Project [a#x]
+   :           +- SubqueryAlias grouping
+   :              +- LocalRelation [a#x]
+   +- Sample 0.0, 1.0, false, 0
+      +- SubqueryAlias jt2
+         +- SubqueryAlias join_test_t2
+            +- View (`join_test_t2`, [a#x])
+               +- Project [cast(a#x as int) AS a#x]
+                  +- Project [a#x]
+                     +- SubqueryAlias grouping
+                        +- LocalRelation [a#x]
 
 
 -- !query
 table join_test_t1
-|> inner join (select 1 as a) tablesample (100 percent repeatable 0) jt2 using (a)
+|> inner join (select 1 as a) tablesample (100 percent) repeatable (0) jt2 using (a)
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'repeatable'",
-    "hint" : ": missing ')'"
-  }
-}
+Project [a#x]
++- Join Inner, (a#x = a#x)
+   :- SubqueryAlias join_test_t1
+   :  +- View (`join_test_t1`, [a#x])
+   :     +- Project [cast(a#x as int) AS a#x]
+   :        +- Project [a#x]
+   :           +- SubqueryAlias grouping
+   :              +- LocalRelation [a#x]
+   +- SubqueryAlias jt2
+      +- Sample 0.0, 1.0, false, 0
+         +- Project [1 AS a#x]
+            +- OneRowRelation
 
 
 -- !query
