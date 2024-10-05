@@ -17,26 +17,18 @@
 
 package org.apache.spark.ml.recommendation
 
-import java.io.IOException
 import java.util.{Locale, Random}
 
-import scala.collection.immutable.Seq
-import scala.reflect.ClassTag
-import scala.util.{Sorting, Try}
-import scala.util.hashing.byteswap64
+import scala.util.Try
 
-import com.google.common.collect.{Ordering => GuavaOrdering}
-import org.apache.commons.lang3.NotImplementedException
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 
-import org.apache.spark.{Partitioner, SparkException}
+import org.apache.spark.Partitioner
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.PATH
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasBlockSize, _}
 import org.apache.spark.ml.recommendation.logistic.LogisticFactorizationBase
@@ -46,16 +38,11 @@ import org.apache.spark.ml.recommendation.logistic.pair.generator.BatchedGenerat
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
-import org.apache.spark.mllib.linalg.CholeskyDecomposition
-import org.apache.spark.mllib.optimization.NNLS
-import org.apache.spark.rdd.{DeterministicLevel, RDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
-import org.apache.spark.util.Utils
-import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet, SortDataFormat, Sorter}
-import org.apache.spark.util.random.XORShiftRandom
 
 
 /**
@@ -663,7 +650,7 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
     val validatedItems = checkLongs(dataset, $(itemCol))
     val validatedRatings = if ($(ratingCol).nonEmpty) {
       if ($(implicitPrefs)) {
-        (checkNonNanValues($(ratingCol), "Ratings") * $(alpha) + 1f).cast(FloatType)
+        checkNonNanValues($(ratingCol), "Ratings").cast(FloatType)
       } else {
         checkClassificationLabels($(ratingCol), Some(2))
       }
@@ -677,7 +664,7 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
       .getConf.get("spark.executor.cores").toInt
 
     val ratings = dataset
-      .select(validatedUsers, validatedItems, validatedRatings)
+      .select(validatedUsers, validatedItems, validatedRatings * $(alpha) + 1f)
       .rdd
       .map { case Row(u: Long, i: Long, r: Float) => (u, i, r) }
       .repartition(numExecutors * numCores / $(parallelism))
@@ -765,6 +752,8 @@ object LMF extends DefaultParamsReadable[LMF] with Logging {
                           checkpointInterval,
                           verbose
   ) {
+
+    override protected def gamma: Float = 1f / negative
 
     override protected def pairs(data: RDD[(Long, Long, Float)],
                                  partitioner1: Partitioner,
