@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.recommendation
 
-import org.apache.spark.ml.recommendation.ALSModel.collect_top_k
+import org.apache.spark.ml.recommendation.collect_top_k
 import org.apache.spark.ml.util.MLTest
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.{col, struct}
