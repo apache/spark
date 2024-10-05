@@ -3802,6 +3802,12 @@
     ],
     "sqlState" : "428FT"
   },
+  "PARTITION_COLUMN_NOT_FOUND_IN_SCHEMA" : {
+    "message" : [
+      "Partition column <column> not found in schema <schema>. Please provide the existing column for partitioning."
+    ],
+    "sqlState" : "42000"
+  },
   "PATH_ALREADY_EXISTS" : {
     "message" : [
       "Path <outputPath> already exists. Set mode as \"overwrite\" to overwrite the existing path."
