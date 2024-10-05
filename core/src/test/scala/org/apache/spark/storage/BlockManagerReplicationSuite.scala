@@ -38,6 +38,8 @@ import org.apache.spark.internal.config.Tests._
 import org.apache.spark.memory.UnifiedMemoryManager
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.netty.NettyBlockTransferService
+import org.apache.spark.network.shuffle.ExternalBlockStoreClient
+import org.apache.spark.network.util.{MapConfigProvider, TransportConf}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
@@ -293,6 +295,40 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
       val blockLocations = master.getLocations(blockId).toSet
       assert(blockLocations === Set(store1.blockManagerId, store3.blockManagerId))
     }
+  }
+
+  test("Test block location after replication with SHUFFLE_SERVICE_FETCH_RDD_ENABLED enabled") {
+    val newConf = conf.clone()
+    newConf.set(SHUFFLE_SERVICE_ENABLED, true)
+    newConf.set(SHUFFLE_SERVICE_FETCH_RDD_ENABLED, true)
+    val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
+    val shuffleClient = Some(new ExternalBlockStoreClient(
+        new TransportConf("shuffle", MapConfigProvider.EMPTY),
+        null, false, 5000))
+    master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager-2",
+      new BlockManagerMasterEndpoint(rpcEnv, true, newConf,
+        new LiveListenerBus(newConf), shuffleClient, blockManagerInfo, mapOutputTracker,
+        sc.env.shuffleManager, isDriver = true)),
+      rpcEnv.setupEndpoint("blockmanagerHeartbeat-2",
+      new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), newConf, true)
+
+    val shuffleServicePort = newConf.get(SHUFFLE_SERVICE_PORT)
+    val store1 = makeBlockManager(10000, "host-1")
+    val store2 = makeBlockManager(10000, "host-2")
+    assert(master.getPeers(store1.blockManagerId).toSet === Set(store2.blockManagerId))
+
+    val blockId = RDDBlockId(1, 2)
+    val message = new Array[Byte](1000)
+
+    // if SHUFFLE_SERVICE_FETCH_RDD_ENABLED is enabled, then shuffle port should be present.
+    store1.putSingle(blockId, message, StorageLevel.DISK_ONLY)
+    assert(master.getLocations(blockId).contains(
+      BlockManagerId("host-1", "localhost", shuffleServicePort, None)))
+
+    // after block is removed, shuffle port should be removed.
+    store1.removeBlock(blockId, true)
+    assert(!master.getLocations(blockId).contains(
+      BlockManagerId("host-1", "localhost", shuffleServicePort, None)))
   }
 
   test("block replication - addition and deletion of block managers") {
