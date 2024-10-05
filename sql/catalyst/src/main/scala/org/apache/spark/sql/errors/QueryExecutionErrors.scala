@@ -298,6 +298,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
           (unit, formattedRange, badValue)
         case datePattern(badDate) =>
           ("DAY", "1 ... 28/31", badDate)
+        case _ =>
+          throw new SparkDateTimeException(
+            errorClass = "_LEGACY_ERROR_TEMP_2000",
+            messageParameters = Map(
+              "message" -> errorMessage,
+              "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+            context = Array.empty,
+            summary = "")
       }
     }
     val (unit, range, badValue) = extractDateTimeErrorInfo(e)
