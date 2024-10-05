@@ -436,10 +436,10 @@ table join_test_t1
 |> select a, join_test_t1.a, jt2.a, jt3.a;
 
 table join_test_t1
-|> inner join join_test_t2 tablesample (100 percent) jt2 using (a);
+|> inner join join_test_t2 tablesample (100 percent repeatable 0) jt2 using (a);
 
 table join_test_t1
-|> inner join (select 1 as a) tablesample (100 percent) jt2 using (a);
+|> inner join (select 1 as a) tablesample (100 percent repeatable 0) jt2 using (a);
 
 table join_test_t1
 |> join join_test_t1 using (a);
