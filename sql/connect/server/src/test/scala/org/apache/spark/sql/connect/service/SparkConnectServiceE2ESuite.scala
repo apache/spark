@@ -109,7 +109,7 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       }
       // Check the async execute cleanup get called
       Eventually.eventually(timeout(eventuallyTimeout)) {
-        assert(executeHolder1.completionCallbackCalled)
+        assert(executeHolder1.completionCallbackCalled.get())
       }
     }
   }

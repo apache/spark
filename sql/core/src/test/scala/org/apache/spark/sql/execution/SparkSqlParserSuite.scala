@@ -902,6 +902,41 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       checkPipeWhere("TABLE t |> SELECT X, LENGTH(Y) AS Z |> WHERE X + LENGTH(Y) < 4")
       checkPipeWhere("TABLE t |> WHERE X = 1 AND Y = 2 |> WHERE X + Y = 3")
       checkPipeWhere("VALUES (0), (1) tab(col) |> WHERE col < 1")
+      // PIVOT and UNPIVOT operations
+      def checkPivotUnpivot(query: String): Unit = check(query, Seq(PIVOT, UNPIVOT))
+      checkPivotUnpivot(
+        """
+          |SELECT * FROM VALUES
+          |  ("dotNET", 2012, 10000),
+          |  ("Java", 2012, 20000),
+          |  ("dotNET", 2012, 5000),
+          |  ("dotNET", 2013, 48000),
+          |  ("Java", 2013, 30000)
+          |  AS courseSales(course, year, earnings)
+          ||> PIVOT (
+          |  SUM(earnings)
+          |  FOR course IN ('dotNET', 'Java')
+          |)
+          |""".stripMargin)
+      checkPivotUnpivot(
+        """
+          |SELECT * FROM VALUES
+          |  ("dotNET", 15000, 48000, 22500),
+          |  ("Java", 20000, 30000, NULL)
+          |  AS courseEarnings(course, `2012`, `2013`, `2014`)
+          ||> UNPIVOT (
+          |  earningsYear FOR year IN (`2012`, `2013`, `2014`)
+          |)
+          |""".stripMargin)
+      // Sampling operations
+      def checkSample(query: String): Unit = {
+        val plan: LogicalPlan = parser.parsePlan(query)
+        assert(plan.collectFirst(_.isInstanceOf[Sample]).nonEmpty)
+        assert(plan.containsAnyPattern(UNRESOLVED_RELATION, LOCAL_RELATION))
+      }
+      checkSample("TABLE t |> TABLESAMPLE (50 PERCENT)")
+      checkSample("TABLE t |> TABLESAMPLE (5 ROWS)")
+      checkSample("TABLE t |> TABLESAMPLE (BUCKET 4 OUT OF 10)")
       // Joins.
       def checkPipeJoin(query: String): Unit = check(query, Seq(JOIN))
       Seq("", "INNER", "LEFT", "LEFT OUTER", "SEMI", "LEFT SEMI", "RIGHT", "RIGHT OUTER", "FULL",

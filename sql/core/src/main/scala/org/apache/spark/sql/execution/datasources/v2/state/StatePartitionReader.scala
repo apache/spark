@@ -107,6 +107,8 @@ abstract class StatePartitionReaderBase(
       useColumnFamilies = useColFamilies, storeConf, hadoopConf.value,
       useMultipleValuesPerKey = useMultipleValuesPerKey)
 
+    val isInternal = partition.sourceOptions.readRegisteredTimers
+
     if (useColFamilies) {
       val store = provider.getStore(partition.sourceOptions.batchId + 1)
       require(stateStoreColFamilySchemaOpt.isDefined)
@@ -117,7 +119,8 @@ abstract class StatePartitionReaderBase(
         stateStoreColFamilySchema.keySchema,
         stateStoreColFamilySchema.valueSchema,
         stateStoreColFamilySchema.keyStateEncoderSpec.get,
-        useMultipleValuesPerKey = useMultipleValuesPerKey)
+        useMultipleValuesPerKey = useMultipleValuesPerKey,
+        isInternal = isInternal)
     }
     provider
   }
@@ -220,10 +223,18 @@ class StateStoreChangeDataPartitionReader(
       throw StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
         provider.getClass.toString)
     }
+
+    val colFamilyNameOpt = if (stateVariableInfoOpt.isDefined) {
+      Some(stateVariableInfoOpt.get.stateName)
+    } else {
+      None
+    }
+
     provider.asInstanceOf[SupportsFineGrainedReplay]
       .getStateStoreChangeDataReader(
         partition.sourceOptions.readChangeFeedOptions.get.changeStartBatchId + 1,
-        partition.sourceOptions.readChangeFeedOptions.get.changeEndBatchId + 1)
+        partition.sourceOptions.readChangeFeedOptions.get.changeEndBatchId + 1,
+        colFamilyNameOpt)
   }
 
   override lazy val iter: Iterator[InternalRow] = {

@@ -127,7 +127,7 @@
   },
   "BINARY_ARITHMETIC_OVERFLOW" : {
     "message" : [
-      "<value1> <symbol> <value2> caused overflow."
+      "<value1> <symbol> <value2> caused overflow. Use <functionName> to ignore overflow problem and return NULL."
     ],
     "sqlState" : "22003"
   },
@@ -618,6 +618,13 @@
     ],
     "sqlState" : "42703"
   },
+  "COLUMN_ORDINAL_OUT_OF_BOUNDS" : {
+    "message" : [
+      "Column ordinal out of bounds. The number of columns in the table is <attributesLength>, but the column ordinal is <ordinal>.",
+      "Attributes are the following: <attributes>."
+    ],
+    "sqlState" : "22003"
+  },
   "COMPARATOR_RETURNS_NULL" : {
     "message" : [
       "The comparator has returned a NULL for a comparison between <firstValue> and <secondValue>.",
@@ -631,6 +638,11 @@
       "Cannot process input data types for the expression: <expression>."
     ],
     "subClass" : {
+      "BAD_INPUTS" : {
+        "message" : [
+          "The input data types to <functionName> must be valid, but found the input types <dataType>."
+        ]
+      },
       "MISMATCHED_TYPES" : {
         "message" : [
           "All input types must be the same except nullable, containsNull, valueContainsNull flags, but found the input types <inputTypes>."
@@ -3023,7 +3035,7 @@
       },
       "MULTI_PART_NAME" : {
         "message" : [
-          "<statement> with multiple part function name(<funcName>) is not allowed."
+          "<statement> with multiple part name(<name>) is not allowed."
         ]
       },
       "OPTION_IS_INVALID" : {
@@ -4886,11 +4898,6 @@
           "Catalog <catalogName> does not support <operation>."
         ]
       },
-      "COLLATION" : {
-        "message" : [
-          "Collation is not yet supported."
-        ]
-      },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
         "message" : [
           "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY."
@@ -5116,6 +5123,11 @@
       "TRANSFORM_NON_HIVE" : {
         "message" : [
           "TRANSFORM with SERDE is only supported in hive mode."
+        ]
+      },
+      "TRIM_COLLATION" : {
+        "message" : [
+          "TRIM specifier in the collation."
         ]
       }
     },

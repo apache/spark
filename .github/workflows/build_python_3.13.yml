@@ -17,23 +17,29 @@
 # under the License.
 #
 
-name: "Build / Maven (master, Scala 2.13, Hadoop 3, JDK 21, macos-14)"
+name: "Build / Python-only (master, Python 3.13)"
 
 on:
   schedule:
-    - cron: '0 20 */2 * *'
+    - cron: '0 20 * * *'
 
 jobs:
   run-build:
     permissions:
       packages: write
     name: Run
-    uses: ./.github/workflows/maven_test.yml
+    uses: ./.github/workflows/build_and_test.yml
     if: github.repository == 'apache/spark'
     with:
-      java: 21
-      os: macos-14
+      java: 17
+      branch: master
+      hadoop: hadoop3
       envs: >-
         {
-          "OBJC_DISABLE_INITIALIZE_FORK_SAFETY": "YES"
+          "PYTHON_TO_TEST": "python3.13"
+        }
+      jobs: >-
+        {
+          "pyspark": "true",
+          "pyspark-pandas": "true"
         }

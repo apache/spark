@@ -65,16 +65,16 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
         .withMountPath(spec.mountPath)
         .withReadOnly(spec.mountReadOnly)
         .withSubPath(spec.mountSubPath)
+        .withSubPathExpr(spec.mountSubPathExpr)
         .withName(spec.volumeName)
         .build()
 
       val volumeBuilder = spec.volumeConf match {
-        case KubernetesHostPathVolumeConf(hostPath) =>
-          /* "" means that no checks will be performed before mounting the hostPath volume */
+        case KubernetesHostPathVolumeConf(hostPath, volumeType) =>
           new VolumeBuilder()
-            .withHostPath(new HostPathVolumeSource(hostPath, ""))
+            .withHostPath(new HostPathVolumeSource(hostPath, volumeType))
 
-        case KubernetesPVCVolumeConf(claimNameTemplate, storageClass, size, labels) =>
+        case KubernetesPVCVolumeConf(claimNameTemplate, storageClass, size, labels, annotations) =>
           val claimName = conf match {
             case c: KubernetesExecutorConf =>
               claimNameTemplate
@@ -91,12 +91,17 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
               case Some(customLabelsMap) => (customLabelsMap ++ defaultVolumeLabels).asJava
               case None => defaultVolumeLabels.asJava
             }
+            val volumeAnnotations = annotations match {
+              case Some(value) => value.asJava
+              case None => Map[String, String]().asJava
+            }
             additionalResources.append(new PersistentVolumeClaimBuilder()
               .withKind(PVC)
               .withApiVersion("v1")
               .withNewMetadata()
                 .withName(claimName)
                 .addToLabels(volumeLabels)
+                .addToAnnotations(volumeAnnotations)
                 .endMetadata()
               .withNewSpec()
                 .withStorageClassName(storageClass.get)
