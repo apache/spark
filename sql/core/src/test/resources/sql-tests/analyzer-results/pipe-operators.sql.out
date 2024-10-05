@@ -1106,6 +1106,208 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+table t
+|> union all table t
+-- !query analysis
+Union false, false
+:- SubqueryAlias spark_catalog.default.t
+:  +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> union table t
+-- !query analysis
+Distinct
++- Union false, false
+   :- SubqueryAlias spark_catalog.default.t
+   :  +- Relation spark_catalog.default.t[x#x,y#x] csv
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+(select * from t)
+|> union all table t
+-- !query analysis
+Union false, false
+:- Project [x#x, y#x]
+:  +- SubqueryAlias spark_catalog.default.t
+:     +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+(select * from t)
+|> union table t
+-- !query analysis
+Distinct
++- Union false, false
+   :- Project [x#x, y#x]
+   :  +- SubqueryAlias spark_catalog.default.t
+   :     +- Relation spark_catalog.default.t[x#x,y#x] csv
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+values (0, 'abc') tab(x, y)
+|> union all table t
+-- !query analysis
+Union false, false
+:- SubqueryAlias tab
+:  +- LocalRelation [x#x, y#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+values (0, 1) tab(x, y)
+|> union table t
+-- !query analysis
+Distinct
++- Union false, false
+   :- Project [x#x, cast(y#x as string) AS y#x]
+   :  +- SubqueryAlias tab
+   :     +- LocalRelation [x#x, y#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+(select * from t)
+|> union all (select * from t)
+-- !query analysis
+Union false, false
+:- Project [x#x, y#x]
+:  +- SubqueryAlias spark_catalog.default.t
+:     +- Relation spark_catalog.default.t[x#x,y#x] csv
++- Project [x#x, y#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> except all table t
+-- !query analysis
+Except All true
+:- SubqueryAlias spark_catalog.default.t
+:  +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> except table t
+-- !query analysis
+Except false
+:- SubqueryAlias spark_catalog.default.t
+:  +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> intersect all table t
+-- !query analysis
+Intersect All true
+:- SubqueryAlias spark_catalog.default.t
+:  +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> intersect table t
+-- !query analysis
+Intersect false
+:- SubqueryAlias spark_catalog.default.t
+:  +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> minus all table t
+-- !query analysis
+Except All true
+:- SubqueryAlias spark_catalog.default.t
+:  +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> minus table t
+-- !query analysis
+Except false
+:- SubqueryAlias spark_catalog.default.t
+:  +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> select x
+|> union all table t
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "NUM_COLUMNS_MISMATCH",
+  "sqlState" : "42826",
+  "messageParameters" : {
+    "firstNumColumns" : "1",
+    "invalidNumColumns" : "2",
+    "invalidOrdinalNum" : "second",
+    "operator" : "UNION"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 40,
+    "fragment" : "table t\n|> select x\n|> union all table t"
+  } ]
+}
+
+
+-- !query
+table t
+|> union all table st
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "second",
+    "dataType1" : "\"STRUCT<i1: INT, i2: INT>\"",
+    "dataType2" : "\"STRING\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 29,
+    "fragment" : "table t\n|> union all table st"
+  } ]
+}
+
+
+-- !query
 drop table t
 -- !query analysis
 DropTable false, false

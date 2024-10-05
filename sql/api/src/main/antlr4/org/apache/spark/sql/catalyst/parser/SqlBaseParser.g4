@@ -1510,6 +1510,7 @@ operatorPipeRightSide
     | pivotClause unpivotClause?
     | unpivotClause pivotClause?
     | sample
+    | operator=(UNION | EXCEPT | SETMINUS | INTERSECT) setQuantifier? right=queryTerm
     ;
 
 // When `SQL_standard_keyword_behavior=true`, there are 2 kinds of keywords in Spark SQL.

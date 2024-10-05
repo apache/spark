@@ -375,6 +375,73 @@ table t
 table t
 |> tablesample (200) repeatable (0);
 
+-- Union operators: positive tests.
+-----------------------------------
+
+-- Union all.
+table t
+|> union all table t;
+
+-- Union distinct.
+table t
+|> union table t;
+
+-- Union all with a table subquery.
+(select * from t)
+|> union all table t;
+
+-- Union distinct with a table subquery.
+(select * from t)
+|> union table t;
+
+-- Union all with a VALUES list.
+values (0, 'abc') tab(x, y)
+|> union all table t;
+
+-- Union distinct with a VALUES list.
+values (0, 1) tab(x, y)
+|> union table t;
+
+-- Union all with a table subquery on both the source and target sides.
+(select * from t)
+|> union all (select * from t);
+
+-- Except all.
+table t
+|> except all table t;
+
+-- Except distinct.
+table t
+|> except table t;
+
+-- Intersect all.
+table t
+|> intersect all table t;
+
+-- Intersect distinct.
+table t
+|> intersect table t;
+
+-- Minus all.
+table t
+|> minus all table t;
+
+-- Minus distinct.
+table t
+|> minus table t;
+
+-- Union operators: negative tests.
+-----------------------------------
+
+-- The UNION operator requires the same number of columns in the input relations.
+table t
+|> select x
+|> union all table t;
+
+-- The UNION operator requires the column types to be compatible.
+table t
+|> union all table st;
+
 -- Cleanup.
 -----------
 drop table t;

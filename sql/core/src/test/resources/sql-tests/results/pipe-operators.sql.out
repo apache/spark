@@ -1060,6 +1060,195 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+table t
+|> union all table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+0	abc
+1	def
+1	def
+
+
+-- !query
+table t
+|> union table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+(select * from t)
+|> union all table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+0	abc
+1	def
+1	def
+
+
+-- !query
+(select * from t)
+|> union table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+values (0, 'abc') tab(x, y)
+|> union all table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+0	abc
+1	def
+
+
+-- !query
+values (0, 1) tab(x, y)
+|> union table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	1
+0	abc
+1	def
+
+
+-- !query
+(select * from t)
+|> union all (select * from t)
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+0	abc
+1	def
+1	def
+
+
+-- !query
+table t
+|> except all table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+
+
+
+-- !query
+table t
+|> except table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+
+
+
+-- !query
+table t
+|> intersect all table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+|> intersect table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+|> minus all table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+
+
+
+-- !query
+table t
+|> minus table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+
+
+
+-- !query
+table t
+|> select x
+|> union all table t
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "NUM_COLUMNS_MISMATCH",
+  "sqlState" : "42826",
+  "messageParameters" : {
+    "firstNumColumns" : "1",
+    "invalidNumColumns" : "2",
+    "invalidOrdinalNum" : "second",
+    "operator" : "UNION"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 40,
+    "fragment" : "table t\n|> select x\n|> union all table t"
+  } ]
+}
+
+
+-- !query
+table t
+|> union all table st
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "second",
+    "dataType1" : "\"STRUCT<i1: INT, i2: INT>\"",
+    "dataType2" : "\"STRING\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 29,
+    "fragment" : "table t\n|> union all table st"
+  } ]
+}
+
+
+-- !query
 drop table t
 -- !query schema
 struct<>
