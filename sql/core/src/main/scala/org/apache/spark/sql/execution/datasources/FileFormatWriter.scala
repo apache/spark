@@ -383,32 +383,40 @@ object FileFormatWriter extends Logging {
 
     committer.setupTask(taskAttemptContext)
 
-    val dataWriter =
-      if (sparkPartitionId != 0 && !iterator.hasNext) {
-        // In case of empty job, leave first partition to save meta for file format like parquet.
-        new EmptyDirectoryDataWriter(description, taskAttemptContext, committer)
-      } else if (description.partitionColumns.isEmpty && description.bucketSpec.isEmpty) {
-        new SingleDirectoryDataWriter(description, taskAttemptContext, committer)
-      } else {
-        concurrentOutputWriterSpec match {
-          case Some(spec) =>
-            new DynamicPartitionDataConcurrentWriter(
-              description, taskAttemptContext, committer, spec)
-          case _ =>
-            new DynamicPartitionDataSingleWriter(description, taskAttemptContext, committer)
-        }
-      }
+    var dataWriter: FileFormatDataWriter = null
 
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
+      dataWriter =
+        if (sparkPartitionId != 0 && !iterator.hasNext) {
+          // In case of empty job, leave first partition to save meta for file format like parquet.
+          new EmptyDirectoryDataWriter(description, taskAttemptContext, committer)
+        } else if (description.partitionColumns.isEmpty && description.bucketSpec.isEmpty) {
+          new SingleDirectoryDataWriter(description, taskAttemptContext, committer)
+        } else {
+          concurrentOutputWriterSpec match {
+            case Some(spec) =>
+              new DynamicPartitionDataConcurrentWriter(
+                description, taskAttemptContext, committer, spec)
+            case _ =>
+              new DynamicPartitionDataSingleWriter(description, taskAttemptContext, committer)
+          }
+        }
+
       // Execute the task to write rows out and commit the task.
       dataWriter.writeWithIterator(iterator)
       dataWriter.commit()
     })(catchBlock = {
       // If there is an error, abort the task
-      dataWriter.abort()
+      if (dataWriter != null) {
+        dataWriter.abort()
+      } else {
+        committer.abortTask(taskAttemptContext)
+      }
       logError(log"Job ${MDC(JOB_ID, jobId)} aborted.")
     }, finallyBlock = {
-      dataWriter.close()
+      if (dataWriter != null) {
+        dataWriter.close()
+      }
     })
   }
 
