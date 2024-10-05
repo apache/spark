@@ -16,10 +16,8 @@
  */
 package org.apache.spark.ml.recommendation.logistic.local
 
-import java.util
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.atomic.AtomicLong
-import java.util.function.Consumer
 
 /**
  * @author ezamyatin
@@ -36,7 +34,7 @@ private[ml] object ParItr {
             totalCounter.decrementAndGet
           }
         } catch {
-          case _: InterruptedException => _
+          case _: InterruptedException =>
         }
       }.asInstanceOf[Runnable])
     }

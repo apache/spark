@@ -21,7 +21,6 @@ import java.util.Random
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
-import org.apache.commons.lang3.NotImplementedException
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
@@ -30,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.recommendation.logistic.local.{ItemData, Optimizer, Opts}
 import org.apache.spark.ml.recommendation.logistic.pair.LongPairMulti
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
+import org.apache.spark.sql.{SaveMode, SQLContext}
 import org.apache.spark.storage.StorageLevel
 
 private[ml] object LogisticFactorizationBase {
@@ -154,7 +153,7 @@ private[ml] abstract class LogisticFactorizationBase[T](
 
       val partitioner1 = new HashPartitioner(numPartitions) {
         override def getPartition(item: Any): Int = {
-          LogisticFactorizationBase.hash(item.asInstanceOf[Long], curEpoch, numPartitions)
+          LogisticFactorizationBase.hash(item.asInstanceOf[Long], curEpoch, this.numPartitions)
         }
       }
 

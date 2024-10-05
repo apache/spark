@@ -17,41 +17,12 @@
 
 package org.apache.spark.ml
 
-import java.{util => ju}
-import java.io.IOException
-import java.util.Locale
-
-import scala.collection.mutable
-import scala.reflect.ClassTag
-import scala.util.{Sorting, Try}
-import scala.util.hashing.byteswap64
-
 import com.google.common.collect.{Ordering => GuavaOrdering}
-import org.apache.hadoop.fs.Path
-import org.json4s.DefaultFormats
-import org.json4s.JsonDSL._
 
-import org.apache.spark.{Partitioner, SparkException}
-import org.apache.spark.annotation.Since
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.PATH
-import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.BLAS
-import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util._
-import org.apache.spark.ml.util.DatasetUtils._
-import org.apache.spark.ml.util.Instrumentation.instrumented
-import org.apache.spark.mllib.linalg.CholeskyDecomposition
-import org.apache.spark.mllib.optimization.NNLS
-import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
-import org.apache.spark.util.Utils
-import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet, SortDataFormat, Sorter}
-import org.apache.spark.util.random.XORShiftRandom
 
 
 package object recommendation {

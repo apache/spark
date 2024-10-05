@@ -60,7 +60,7 @@ private[ml] class Item2VecGenerator(sent: Iterator[Array[Long]],
 
             j += 1
 
-            if ((p1(i) eq p2(c)) && sent(i) != sent(c)) {
+            if ((p1(i) == p2(c)) && sent(i) != sent(c)) {
               return LongPair(p1(i), sent(i), sent(c))
             }
           }

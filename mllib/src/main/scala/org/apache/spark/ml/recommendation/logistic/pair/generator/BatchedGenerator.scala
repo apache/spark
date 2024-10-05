@@ -52,9 +52,9 @@ private[ml] class BatchedGenerator(private val pairGenerator: Iterator[LongPair]
 
   override def hasNext: Boolean = pairGenerator.hasNext || nonEmptyCounter > 0
 
-  override def next: LongPairMulti = {
+  override def next(): LongPairMulti = {
     while (pairGenerator.hasNext) {
-      val pair = pairGenerator.next
+      val pair = pairGenerator.next()
       val part = pair.part
 
       if (l(part).isEmpty) {
@@ -70,9 +70,9 @@ private[ml] class BatchedGenerator(private val pairGenerator: Iterator[LongPair]
           l(part).toArray, r(part).toArray,
           if (w == null) null else w(part).toArray)
 
-        l(part).clear
-        r(part).clear
-        if (w != null) w(part).clear
+        l(part).clear()
+        r(part).clear()
+        if (w != null) w(part).clear()
 
         nonEmptyCounter -= 1
         return result
@@ -88,9 +88,9 @@ private[ml] class BatchedGenerator(private val pairGenerator: Iterator[LongPair]
         l(ptr).toArray, r(ptr).toArray,
         if (w == null) null else w(ptr).toArray)
 
-      l(ptr).clear
-      r(ptr).clear
-      if (w != null) w(ptr).clear
+      l(ptr).clear()
+      r(ptr).clear()
+      if (w != null) w(ptr).clear()
       nonEmptyCounter -= 1
       return result
     }

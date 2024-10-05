@@ -52,7 +52,7 @@ private[ml] class WindowGenerator(sent: Iterator[Array[Long]],
             val c = i + j
             j += 1
 
-            if ((p1(i) eq p2(c)) && sent(i) != sent(c)) {
+            if ((p1(i) == p2(c)) && sent(i) != sent(c)) {
               return LongPair(p1(i), sent(i), sent(c))
             }
           }

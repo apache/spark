@@ -97,19 +97,19 @@ private[ml] object Optimizer {
     var trainWordsPow = 0.0
 
     while (a < n) {
-      trainWordsPow += Math.pow(cn(a), pow)
+      trainWordsPow += Math.pow(cn(a).toDouble, pow)
       a += 1
     }
 
     var i = 0
     a = 0
-    var d1 = Math.pow(cn(i), pow) / trainWordsPow
+    var d1 = Math.pow(cn(i).toDouble, pow) / trainWordsPow
 
     while (a < table.length && i < n) {
       table(a) = i
       if (a > d1 * table.length) {
         i += 1
-        d1 += Math.pow(cn(i), pow) / trainWordsPow
+        d1 += Math.pow(cn(i).toDouble, pow) / trainWordsPow
       }
       a += 1
     }
@@ -287,7 +287,7 @@ private[ml] class Optimizer(private val opts: Opts,
           val g = ((label - sigm) * opts.lr * weight).toFloat
 
           if (opts.verbose && opts.lambda > 0 && label > 0) {
-            lloss += expTable.logloss(f, label) * weight
+            lloss += expTable.logloss(f, label.toFloat) * weight
             llossn += 1
 
             llossReg += opts.lambda * blas.sdot(opts.dim, syn0, l1, 1, syn0, l1, 1)
@@ -401,8 +401,8 @@ private[ml] class Optimizer(private val opts: Opts,
 
   private def remap(pair: LongPairMulti): LongPairMulti = {
     pair.left.indices.foreach{i =>
-      pair.left(i) = vocabL.get(pair.left(i)).getOrElse(-1)
-      pair.right(i) = vocabR.get(pair.right(i)).getOrElse(-1)
+      pair.left(i) = vocabL.get(pair.left(i)).getOrElse(-1).toLong
+      pair.right(i) = vocabR.get(pair.right(i)).getOrElse(-1).toLong
     }
 
     pair

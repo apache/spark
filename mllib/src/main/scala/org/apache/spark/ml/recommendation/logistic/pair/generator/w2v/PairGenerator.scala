@@ -30,7 +30,7 @@ private[ml] abstract class PairGenerator(private val sent: Iterator[Array[Long]]
 
   override def hasNext: Boolean = {
     while (!it.hasNext && sent.hasNext) {
-      it = generate(sent.next)
+      it = generate(sent.next())
     }
 
     it.hasNext
@@ -38,11 +38,11 @@ private[ml] abstract class PairGenerator(private val sent: Iterator[Array[Long]]
 
   override def next(): LongPair = {
     while (!it.hasNext && sent.hasNext) {
-      it = generate(sent.next)
+      it = generate(sent.next())
     }
 
     if (it.hasNext) {
-      return it.next
+      return it.next()
     }
 
     throw new NoSuchElementException("next on empty iterator")
