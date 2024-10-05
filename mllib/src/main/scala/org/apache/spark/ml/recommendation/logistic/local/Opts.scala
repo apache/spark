@@ -24,6 +24,7 @@ private[ml] class Opts(val dim: Int,
                        val lr: Double,
                        val lambda: Double,
                        val gamma: Float,
-                       val implicitPref: Boolean) extends Serializable {
+                       val implicitPref: Boolean,
+                       val verbose: Boolean) extends Serializable {
   def vectorSize: Int = if (useBias) dim + 1 else dim
 }

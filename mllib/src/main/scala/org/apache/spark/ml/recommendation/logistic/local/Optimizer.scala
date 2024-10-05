@@ -283,12 +283,13 @@ private[ml] class Optimizer(private val opts: Opts,
           }
 
           val sigm = expTable.sigmoid(f)
-          lloss += expTable.logloss(f, label) * weight
-          llossn += 1
 
           val g = ((label - sigm) * opts.lr * weight).toFloat
 
-          if (opts.lambda > 0 && label > 0) {
+          if (opts.verbose && opts.lambda > 0 && label > 0) {
+            lloss += expTable.logloss(f, label) * weight
+            llossn += 1
+
             llossReg += opts.lambda * blas.sdot(opts.dim, syn0, l1, 1, syn0, l1, 1)
             llossReg += opts.lambda * blas.sdot(opts.dim, syn1neg, l2, 1, syn1neg, l2, 1)
             llossnReg += 1
@@ -408,11 +409,21 @@ private[ml] class Optimizer(private val opts: Opts,
   }
 
   def optimize(data: Iterator[LongPairMulti], cpus: Int): Unit = {
-    ParItr.foreach(data.map(remap), cpus, if (opts.implicitPref) {
-      pair: LongPairMulti => optimizeImplicitBatchRemapped(pair.left, pair.right, pair.rating)
+    if (cpus > 1) {
+      ParItr.foreach(data.map(remap), cpus, if (opts.implicitPref) {
+        pair: LongPairMulti => optimizeImplicitBatchRemapped(pair.left, pair.right, pair.rating)
+      } else {
+        pair: LongPairMulti => optimizeExplicitBatchRemapped(pair.left, pair.right, pair.rating)
+      })
     } else {
-      pair: LongPairMulti => optimizeExplicitBatchRemapped(pair.left, pair.right, pair.rating)
-    })
+      if (opts.implicitPref) {
+        data.map(remap)
+          .foreach(pair => optimizeImplicitBatchRemapped(pair.left, pair.right, pair.rating))
+      } else {
+        data.map(remap)
+          .foreach(pair => optimizeExplicitBatchRemapped(pair.left, pair.right, pair.rating))
+      }
+    }
   }
 
   def flush(): Iterator[ItemData] = {

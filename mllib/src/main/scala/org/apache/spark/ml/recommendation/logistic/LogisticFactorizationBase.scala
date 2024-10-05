@@ -68,117 +68,37 @@ private[ml] object LogisticFactorizationBase {
   }
 }
 
-private[ml] abstract class LogisticFactorizationBase extends Serializable with Logging {
-
-  protected var dotVectorSize: Int = 100
-  protected var negative: Int = 5
-  private var numIterations: Int = 1
-  private var learningRate: Double = 0.025
-  private var minLearningRate: Option[Double] = None
-  protected var numThread: Int = 1
-  private var numPartitions: Int = 1
-  private var pow: Double = 0
-  private var lambda: Double = 0
-  protected var useBias: Boolean = false
-  protected var intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK
-  protected var checkpointPath: String = _
-  protected var checkpointInterval: Int = 0
+private[ml] abstract class LogisticFactorizationBase[T](
+             dotVectorSize: Int = 10,
+             negative: Int = 10,
+             numIterations: Int = 1,
+             learningRate: Double = 0.025,
+             minLearningRate: Option[Double] = None,
+             numThread: Int = 1,
+             numPartitions: Int = 1,
+             pow: Double = 0,
+             lambda: Double = 0,
+             useBias: Boolean = false,
+             implicitPrefs: Boolean = true,
+             seed: Long = 0,
+             intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
+             finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
+             checkpointPath: Option[String] = None,
+             checkpointInterval: Int = 0,
+             verbose: Boolean = false)
+  extends Serializable with Logging {
 
   protected def gamma: Float = 1f
-  protected def implicitPref: Boolean = true
 
-  def setVectorSize(vectorSize: Int): this.type = {
-    require(vectorSize > 0,
-      s"vector size must be positive but got ${vectorSize}")
-    this.dotVectorSize = vectorSize
-    this
-  }
-
-  def setLearningRate(learningRate: Double): this.type = {
-    require(learningRate > 0,
-      s"Initial learning rate must be positive but got ${learningRate}")
-    this.learningRate = learningRate
-    this
-  }
-
-  def setMinLearningRate(minLearningRate: Option[Double]): this.type = {
-    require(minLearningRate.forall(_ > 0),
-      s"Initial learning rate must be positive but got ${minLearningRate}")
-    this.minLearningRate = minLearningRate
-    this
-  }
-
-  def setNumPartitions(numPartitions: Int): this.type = {
-    require(numPartitions > 0,
-      s"Number of partitions must be positive but got ${numPartitions}")
-    this.numPartitions = numPartitions
-    this
-  }
-
-  def setCheckpointPath(path: String): this.type = {
-    this.checkpointPath = path
-    this
-  }
-
-  def setCheckpointInterval(interval: Int): this.type = {
-    this.checkpointInterval = interval
-    this
-  }
-
-  def setNumIterations(numIterations: Int): this.type = {
-    require(numIterations > 0,
-      s"Number of iterations must be nonnegative but got ${numIterations}")
-    this.numIterations = numIterations
-    this
-  }
-
-  def setUseBias(useBias: Boolean): this.type = {
-    this.useBias = useBias
-    this
-  }
-
-  def setPow(pow: Double): this.type = {
-    require(pow >= 0,
-      s"Pow must be positive but got ${pow}")
-    this.pow = pow
-    this
-  }
-
-  def setLambda(lambda: Double): this.type = {
-    require(lambda >= 0,
-      s"Lambda must be positive but got ${lambda}")
-    this.lambda = lambda
-    this
-  }
-
-  def setNegative(negative: Int): this.type = {
-    require(negative > 0)
-    this.negative = negative
-    this
-  }
-
-  def setNumThread(numThread: Int): this.type = {
-    require(numThread >= 0,
-      s"Number of threads ${numThread}")
-    this.numThread = numThread
-    this
-  }
-
-  def setIntermediateRDDStorageLevel(storageLevel: StorageLevel): this.type = {
-    require(storageLevel != StorageLevel.NONE,
-      "SkipGram is not designed to run without persisting intermediate RDDs.")
-    this.intermediateRDDStorageLevel = storageLevel
-    this
-  }
-
-  protected def cacheAndCount[T](rdd: RDD[T]): RDD[T] = {
+  protected def cacheAndCount[E](rdd: RDD[E]): RDD[E] = {
     val r = rdd.persist(intermediateRDDStorageLevel)
     r.count()
     r
   }
 
   private def checkpoint(emb: RDD[ItemData],
-                         path: String)(implicit sc: SparkContext): RDD[ItemData] = {
+                         path: String,
+                        )(implicit sc: SparkContext): RDD[ItemData] = {
     val sqlc = new SQLContext(sc)
     import sqlc.implicits._
     if (emb != null) {
@@ -190,8 +110,7 @@ private[ml] abstract class LogisticFactorizationBase extends Serializable with L
 
     cacheAndCount(sqlc.read.parquet(path)
       .as[(Boolean, Long, Long, Array[Float])].rdd
-      .map(e => new ItemData(e._1, e._2, e._3, e._4))
-    )
+      .map(e => new ItemData(e._1, e._2, e._3, e._4)))
   }
 
   private def listFiles(path: String): Array[String] = {
@@ -199,34 +118,19 @@ private[ml] abstract class LogisticFactorizationBase extends Serializable with L
     Try(hdfs.listStatus(new Path(path)).map(_.getPath.getName)).getOrElse(Array.empty)
   }
 
-  protected def pairsFromSeq(sent: RDD[Array[Long]],
-                             partitioner1: Partitioner,
-                             partitioner2: Partitioner,
-                             seed: Long): RDD[LongPairMulti] = {
-    throw new NotImplementedException()
-  }
+  protected def pairs(data: RDD[T],
+                      partitioner1: Partitioner,
+                      partitioner2: Partitioner,
+                      seed: Long): RDD[LongPairMulti]
 
-  protected def pairsFromRat(sent: RDD[(Long, Long, Float)],
-                             partitioner1: Partitioner,
-                             partitioner2: Partitioner,
-                             seed: Long): RDD[LongPairMulti] = {
-    throw new NotImplementedException()
-  }
+  protected def initialize(data: RDD[T]): RDD[ItemData]
 
-  protected def initializeFromSeq(sent: RDD[Array[Long]]): RDD[ItemData] = {
-    throw new NotImplementedException()
-  }
+  private[recommendation] def train(data: RDD[T]): RDD[ItemData] = {
+    val sparkContext = data.sparkContext
 
-  protected def initializeFromRat(sent: RDD[(Long, Long, Float)]): RDD[ItemData] = {
-    throw new NotImplementedException()
-  }
-
-  protected def doFit(sent: Either[RDD[Array[Long]], RDD[(Long, Long, Float)]]): RDD[ItemData] = {
-    val sparkContext = sent.fold(_.sparkContext, _.sparkContext)
-
-    val latest = if (checkpointPath != null) {
-      listFiles(checkpointPath)
-        .filter(file => listFiles(checkpointPath + "/" + file).contains("_SUCCESS"))
+    val latest = if (checkpointPath.isDefined) {
+      listFiles(checkpointPath.get)
+        .filter(file => listFiles(checkpointPath.get + "/" + file).contains("_SUCCESS"))
         .map(_.split("_").map(_.toInt)).map{case Array(a, b) => (a, b)}
         .sorted.lastOption
     } else {
@@ -234,16 +138,17 @@ private[ml] abstract class LogisticFactorizationBase extends Serializable with L
     }
 
     latest.foreach(x => log.info(s"Continue training from epoch = ${x._1}, iteration = ${x._2}"))
+    val cached = ArrayBuffer.empty[RDD[ItemData]]
 
     var emb = latest
-      .map(x => checkpoint(null, checkpointPath + "/" + x._1 + "_" + x._2)(sparkContext))
-      .getOrElse{cacheAndCount(sent.fold(initializeFromSeq, initializeFromRat))}
+      .map(x => checkpoint(null, checkpointPath.get + "/" + x._1 + "_" + x._2)(sparkContext))
+      .getOrElse{cacheAndCount(initialize(data))}
+    cached += emb
 
     var checkpointIter = 0
     val (startEpoch, startIter) = latest.getOrElse((0, 0))
-    val cached = ArrayBuffer.empty[RDD[ItemData]]
     val partitionTable = sparkContext.broadcast(LogisticFactorizationBase
-      .createPartitionTable(numPartitions, new Random(0)))
+      .createPartitionTable(numPartitions, new Random(seed)))
 
     (startEpoch until numIterations).foreach {curEpoch =>
 
@@ -282,24 +187,22 @@ private[ml] abstract class LogisticFactorizationBase extends Serializable with L
             partitioner2.getPartition(i.id)
           }).partitionBy(partitionerKey).values
 
-        val cur = sent.fold(
-          pairsFromSeq(_, partitioner1, partitioner2,
-            (1L * curEpoch * numPartitions + pI) * numPartitions),
-          pairsFromRat(_, partitioner1, partitioner2,
+        val cur = pairs(data, partitioner1, partitioner2,
             (1L * curEpoch * numPartitions + pI) * numPartitions)
-        ).map(e => e.part -> e).partitionBy(partitionerKey).values
+          .map(e => e.part -> e).partitionBy(partitionerKey).values
 
         emb = cur.zipPartitions(embLR) { case (sIt, eItLR) =>
-          val sg = new Optimizer(new Opts(dotVectorSize, useBias,
-            negative, pow, curLearningRate, lambda, gamma, implicitPref), eItLR)
+          val sg = Optimizer(new Opts(dotVectorSize, useBias,
+            negative, pow, curLearningRate, lambda, gamma, implicitPrefs, verbose), eItLR)
 
           sg.optimize(sIt, numThread)
-
-          log.debug(
-            "LOSS: " + sg.loss.doubleValue() / sg.lossn.longValue() +
-            " (" + sg.loss.doubleValue() + " / " + sg.lossn.longValue() + ")" + "\t"  +
-            sg.lossReg.doubleValue() / sg.lossnReg.longValue() +
-            " (" + sg.lossReg.doubleValue() + " / " + sg.lossnReg.longValue() + ")")
+          if (verbose) {
+            log.debug(
+              "LOSS: " + sg.loss.doubleValue() / sg.lossn.longValue() +
+                " (" + sg.loss.doubleValue() + " / " + sg.lossn.longValue() + ")" + "\t" +
+                sg.lossReg.doubleValue() / sg.lossnReg.longValue() +
+                " (" + sg.lossReg.doubleValue() + " / " + sg.lossnReg.longValue() + ")")
+          }
 
           sg.flush()
         }.persist(intermediateRDDStorageLevel)
@@ -307,16 +210,23 @@ private[ml] abstract class LogisticFactorizationBase extends Serializable with L
         cached += emb
 
         if (checkpointInterval > 0 && (checkpointIter + 1) % checkpointInterval == 0) {
-          emb = checkpoint(emb, checkpointPath + "/" + curEpoch + "_" + (pI + 1))(sparkContext)
+          emb = checkpoint(emb, checkpointPath.get + "/" + curEpoch + "_" + (pI + 1))(sparkContext)
+
           cached.foreach(_.unpersist())
           cached.clear()
+
+          cached += emb
         }
         checkpointIter += 1
       }
     }
 
+    emb.persist(finalRDDStorageLevel)
+    emb.count()
+
+    cached.foreach(_.unpersist())
+    cached.clear()
+
     emb
   }
-
-  def fit(dataset: DataFrame): RDD[ItemData]
 }
