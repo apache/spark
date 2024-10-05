@@ -412,7 +412,8 @@ object FileFormatWriter extends Logging {
       } else {
         committer.abortTask(taskAttemptContext)
       }
-      logError(log"Job ${MDC(JOB_ID, jobId)} aborted.")
+      logError(log"Job: ${MDC(JOB_ID, jobId)}, Task: ${MDC(TASK_ID, taskId)}, " +
+        log"Task attempt ${MDC(TASK_ATTEMPT_ID, taskAttemptId)} aborted.")
     }, finallyBlock = {
       if (dataWriter != null) {
         dataWriter.close()
