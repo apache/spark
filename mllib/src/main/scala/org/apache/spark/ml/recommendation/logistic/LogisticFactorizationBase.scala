@@ -83,7 +83,7 @@ private[ml] abstract class LogisticFactorizationBase[T](
              intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
              finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
              checkpointPath: Option[String] = None,
-             checkpointInterval: Int = 0,
+             checkpointInterval: Int = -1,
              verbose: Boolean = false)
   extends Serializable with Logging {
 

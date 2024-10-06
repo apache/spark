@@ -142,7 +142,7 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
 
   /**
    * Param to decide whether to use implicit preference.
-   * Default: false
+   * Default: true
    * @group param
    */
   val implicitPrefs = new BooleanParam(this, "implicitPrefs", "whether to use implicit preference")
@@ -224,11 +224,11 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
 
   /**
    * Param for stepSize decay (positive).
-   * Default: NaN
+   * Default: None
    * @group param
    */
   val minStepSize: DoubleParam = new DoubleParam(this, "minStepSize",
-    "minimum step size to be used for stepSize decay (> 0 or NaN)", v => v > 0 || v.isNaN)
+    "minimum step size to be used for stepSize decay (> 0)", ParamValidators.gt(0))
   def getMinStepSize: Double = $(minStepSize)
 
   /**
@@ -242,12 +242,12 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
   def getNumPartitions: Int = $(numPartitions)
 
   /**
-   * Param for path to store intermediate state.
-   * Default: ""
+   * Param for path where the intermediate state will be saved.
+   * Default: None
    * @group param
    */
   val checkpointPath: Param[String] = new Param[String](this, "checkpointPath",
-    "path to store intermediate state")
+    "path where the intermediate state will be saved")
   def getCheckpointPath: String = $(checkpointPath)
 
   /**
@@ -259,12 +259,11 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
     "whether to verbose loss values")
   def getVerbose: Boolean = $(verbose)
 
-  setDefault(rank -> 10, implicitPrefs -> false, maxIter -> 10,
-    minStepSize -> Double.NaN, negative -> 10, fitIntercept -> false,
+  setDefault(rank -> 10, implicitPrefs -> true, maxIter -> 10,
+    negative -> 10, fitIntercept -> false,
     stepSize -> 0.025, pow -> 0.0, regParam -> 0.0,
     minUserCount -> 1, minItemCount -> 1, userCol -> "user",
     itemCol -> "item", maxIter -> 1, numPartitions -> 1, coldStartStrategy -> "nan",
-    checkpointInterval -> 10, checkpointPath -> "",
     intermediateStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name(),
     finalStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name(),
     verbose -> false)
@@ -667,13 +666,12 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
       checkpointPath, checkpointInterval, verbose, blockSize)
 
     val result = new LMF.Backend($(rank), $(negative), $(maxIter), $(stepSize),
-      Option.when(!$(minStepSize).isNaN)($(minStepSize)), $(parallelism), $(numPartitions),
+      get(minStepSize), $(parallelism), $(numPartitions),
       $(pow), $(minUserCount), $(minItemCount), $(regParam), $(fitIntercept),
       $(implicitPrefs), get(labelCol).isDefined, get(weightCol).isDefined,
       $(seed), StorageLevel.fromString($(intermediateStorageLevel)),
       StorageLevel.fromString($(finalStorageLevel)),
-      Option.when($(checkpointPath).nonEmpty)($(checkpointPath)),
-      $(checkpointInterval), $(verbose)).train(ratings)
+      get(checkpointPath), get(checkpointInterval).getOrElse(-1), $(verbose)).train(ratings)
 
     ratings.unpersist()
 
