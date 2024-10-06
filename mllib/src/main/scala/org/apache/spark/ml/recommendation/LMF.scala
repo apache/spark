@@ -574,7 +574,7 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
 
   /** @group setParam */
   @Since("4.0.0")
-  def setMinStepSize(value: Option[Double]): this.type = set(minStepSize, value)
+  def setMinStepSize(value: Double): this.type = set(minStepSize, value)
 
   /** @group setParam */
   @Since("4.0.0")
@@ -610,7 +610,7 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
 
   /** @group setParam */
   @Since("4.0.0")
-  def setCheckpointPath(value: Option[String]): this.type = set(checkpointPath, value)
+  def setCheckpointPath(value: String): this.type = set(checkpointPath, value)
 
   /** @group setParam */
   @Since("4.0.0")
