@@ -636,7 +636,7 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
     } {label =>
       if ($(implicitPrefs)) {
         throw new IllegalArgumentException(s"LMF does not support the labelCol " +
-          s"in implicitPrefs mode. All labels are treated as positives.")
+          s"in implicitPrefs mode. All rows are treated as positives.")
       } else {
         checkClassificationLabels(label, Some(2)).cast(FloatType)
       }
@@ -644,6 +644,11 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
 
     val validatedWeights = get(weightCol).fold(lit(LongPair.EMPTY))(
       checkNonNegativeWeights).cast(FloatType)
+
+    if (get(checkpointInterval).isDefined ^ get(checkpointPath).isDefined) {
+      throw new IllegalArgumentException(s"checkpointPath and checkpointInterval" +
+        s"must be set together.")
+    }
 
     val numExecutors = Try(dataset.sparkSession.sparkContext
       .getConf.get("spark.executor.instances").toInt).getOrElse($(numPartitions))
