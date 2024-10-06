@@ -119,6 +119,8 @@ private[recommendation] trait LMFModelParams extends Params with HasPredictionCo
 
   /** @group expertGetParam */
   def getColdStartStrategy: String = $(coldStartStrategy).toLowerCase(Locale.ROOT)
+
+  setDefault(blockSize -> 4096)
 }
 
 /**
@@ -247,8 +249,7 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
    * @group param
    */
   val minStepSize: DoubleParam = new DoubleParam(this, "minStepSize",
-    "minimum step size to be used for stepSize decay (> 0)",
-    ParamValidators.gt(0))
+    "minimum step size to be used for stepSize decay (> 0 or NaN)", v => v > 0 || v.isNaN)
   def getMinStepSize: Double = $(minStepSize)
 
   /**
@@ -650,21 +651,21 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
     val validatedItems = checkLongs(dataset, $(itemCol))
     val validatedRatings = if ($(ratingCol).nonEmpty) {
       if ($(implicitPrefs)) {
-        checkNonNanValues($(ratingCol), "Ratings").cast(FloatType)
+        checkNonNegativeWeights($(ratingCol)).cast(FloatType)
       } else {
-        checkClassificationLabels($(ratingCol), Some(2))
+        checkClassificationLabels($(ratingCol), Some(2)).cast(FloatType)
       }
     } else {
       lit(1.0f)
     }
 
-    val numExecutors = dataset.sparkSession.sparkContext
-      .getConf.get("spark.executor.instances").toInt
-    val numCores = dataset.sparkSession.sparkContext
-      .getConf.get("spark.executor.cores").toInt
+    val numExecutors = Try(dataset.sparkSession.sparkContext
+      .getConf.get("spark.executor.instances").toInt).getOrElse(1)
+    val numCores = Try(dataset.sparkSession.sparkContext
+      .getConf.get("spark.executor.cores").toInt).getOrElse(1)
 
     val ratings = dataset
-      .select(validatedUsers, validatedItems, validatedRatings * $(alpha) + 1f)
+      .select(validatedUsers, validatedItems, validatedRatings)
       .rdd
       .map { case Row(u: Long, i: Long, r: Float) => (u, i, r) }
       .repartition(numExecutors * numCores / $(parallelism))
@@ -678,11 +679,12 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
       checkpointPath, checkpointInterval, verbose, blockSize)
 
     val result = new LMF.Backend($(rank), $(negative), $(maxIter), $(stepSize),
-      $(minStepSize), $(parallelism), $(numPartitions), $(pow), $(minUserCount),
-      $(minItemCount), $(regParam), $(fitIntercept), $(implicitPrefs), $(seed),
-      StorageLevel.fromString($(intermediateStorageLevel)),
+      Option.when(!$(minStepSize).isNaN)($(minStepSize)), $(parallelism), $(numPartitions),
+      $(pow), $(minUserCount), $(minItemCount), $(regParam), $(fitIntercept),
+      $(implicitPrefs), $(seed), StorageLevel.fromString($(intermediateStorageLevel)),
       StorageLevel.fromString($(finalStorageLevel)),
-      $(checkpointPath), $(checkpointInterval), $(verbose)).train(ratings)
+      Option.when($(checkpointPath).nonEmpty)($(checkpointPath)),
+      $(checkpointInterval), $(verbose)).train(ratings)
 
     ratings.unpersist()
 
