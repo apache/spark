@@ -246,10 +246,10 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
    * Default: NaN
    * @group param
    */
-  val minStepSize: Param[Option[Double]] = new Param[Option[Double]](this, "minStepSize",
+  val minStepSize: DoubleParam = new DoubleParam(this, "minStepSize",
     "minimum step size to be used for stepSize decay (> 0)",
     ParamValidators.gt(0))
-  def getMinStepSize: Option[Double] = $(minStepSize)
+  def getMinStepSize: Double = $(minStepSize)
 
   /**
    * Param for number partitions used for factorization (positive).
@@ -263,12 +263,12 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
 
   /**
    * Param for path to store intermediate state.
-   * Default: None
+   * Default: ""
    * @group param
    */
-  val checkpointPath: Param[Option[String]] = new Param[Option[String]](this, "checkpointPath",
+  val checkpointPath: Param[String] = new Param[String](this, "checkpointPath",
     "path to store intermediate state")
-  def getCheckpointPath: Option[String] = $(checkpointPath)
+  def getCheckpointPath: String = $(checkpointPath)
 
   /**
    * Param to decide whether to verbose loss values.
@@ -280,12 +280,12 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
   def getVerbose: Boolean = $(verbose)
 
   setDefault(rank -> 10, implicitPrefs -> false, maxIter -> 10,
-    minStepSize -> None, negative -> 10, fitIntercept -> false,
+    minStepSize -> Double.NaN, negative -> 10, fitIntercept -> false,
     alpha -> 1.0, stepSize -> 0.025, pow -> 0.0, regParam -> 0.0,
     minUserCount -> 1, minItemCount -> 1, userCol -> "user",
     itemCol -> "item", ratingCol -> "rating", maxIter -> 1,
     numPartitions -> 1, coldStartStrategy -> "nan",
-    checkpointInterval -> 10, checkpointPath -> None,
+    checkpointInterval -> 10, checkpointPath -> "",
     intermediateStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name(),
     finalStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name(),
     verbose -> false)
