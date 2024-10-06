@@ -128,7 +128,7 @@ private[recommendation] trait LMFModelParams extends Params with HasPredictionCo
  */
 private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
   with HasRegParam with HasCheckpointInterval with HasSeed with HasStepSize
-  with HasParallelism with HasFitIntercept {
+  with HasParallelism with HasFitIntercept with HasLabelCol with HasWeightCol {
 
   /**
    * Param for rank of the matrix factorization.
@@ -149,17 +149,6 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
 
   /** @group getParam */
   def getImplicitPrefs: Boolean = $(implicitPrefs)
-
-  /**
-   * Param for the alpha parameter in the implicit preference formulation.
-   * Default: 1.0
-   * @group param
-   */
-  val alpha = new DoubleParam(this, "alpha", "alpha for implicit preference",
-    ParamValidators.gtEq(0))
-
-  /** @group getParam */
-  def getAlpha: Double = $(alpha)
 
   /**
    * Param for the power parameter in the negative sampling formula.
@@ -204,16 +193,6 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
 
   /** @group getParam */
   def getNegative: Int = $(negative)
-
-  /**
-   * Param for the column name for ratings.
-   * Default: "rating"
-   * @group param
-   */
-  val ratingCol = new Param[String](this, "ratingCol", "column name for ratings")
-
-  /** @group getParam */
-  def getRatingCol: String = $(ratingCol)
 
   /**
    * Param for StorageLevel for intermediate datasets. Pass in a string representation of
@@ -282,10 +261,9 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
 
   setDefault(rank -> 10, implicitPrefs -> false, maxIter -> 10,
     minStepSize -> Double.NaN, negative -> 10, fitIntercept -> false,
-    alpha -> 1.0, stepSize -> 0.025, pow -> 0.0, regParam -> 0.0,
+    stepSize -> 0.025, pow -> 0.0, regParam -> 0.0,
     minUserCount -> 1, minItemCount -> 1, userCol -> "user",
-    itemCol -> "item", ratingCol -> "rating", maxIter -> 1,
-    numPartitions -> 1, coldStartStrategy -> "nan",
+    itemCol -> "item", maxIter -> 1, numPartitions -> 1, coldStartStrategy -> "nan",
     checkpointInterval -> 10, checkpointPath -> "",
     intermediateStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name(),
     finalStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name(),
@@ -301,8 +279,9 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
     // user and item will be cast to Long
     SchemaUtils.checkNumericType(schema, $(userCol))
     SchemaUtils.checkNumericType(schema, $(itemCol))
-    // rating will be cast to Float
-    SchemaUtils.checkNumericType(schema, $(ratingCol))
+    // label will be cast to Float
+    get(labelCol).foreach(SchemaUtils.checkNumericType(schema, _))
+    get(weightCol).foreach(SchemaUtils.checkNumericType(schema, _))
     SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
   }
 }
@@ -547,10 +526,6 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
 
   /** @group setParam */
   @Since("4.0.0")
-  def setAlpha(value: Double): this.type = set(alpha, value)
-
-  /** @group setParam */
-  @Since("4.0.0")
   def setUserCol(value: String): this.type = set(userCol, value)
 
   /** @group setParam */
@@ -559,7 +534,11 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
 
   /** @group setParam */
   @Since("4.0.0")
-  def setRatingCol(value: String): this.type = set(ratingCol, value)
+  def setLabelCol(value: String): this.type = set(labelCol, value)
+
+  /** @group setParam */
+  @Since("4.0.0")
+  def setWeightCol(value: String): this.type = set(weightCol, value)
 
   /** @group setParam */
   @Since("4.0.0")
@@ -649,15 +628,24 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
 
     val validatedUsers = checkLongs(dataset, $(userCol))
     val validatedItems = checkLongs(dataset, $(itemCol))
-    val validatedRatings = if ($(ratingCol).nonEmpty) {
+    val validatedLabels = get(labelCol).fold{
       if ($(implicitPrefs)) {
-        checkNonNegativeWeights($(ratingCol)).cast(FloatType)
+        lit(LongPair.EMPTY)
       } else {
-        checkClassificationLabels($(ratingCol), Some(2)).cast(FloatType)
+        throw new IllegalArgumentException(s"The labelCol must be set with " +
+          s"implicitPrefs disabled.")
       }
-    } else {
-      lit(1.0f)
+    } {label =>
+      if ($(implicitPrefs)) {
+        throw new IllegalArgumentException(s"LMF does not support the labelCol " +
+          s"in implicitPrefs mode. All labels are treated as positives.")
+      } else {
+        checkClassificationLabels(label, Some(2)).cast(FloatType)
+      }
     }
+
+    val validatedWeights = get(weightCol).fold(lit(LongPair.EMPTY))(
+      checkNonNegativeWeights)
 
     val numExecutors = Try(dataset.sparkSession.sparkContext
       .getConf.get("spark.executor.instances").toInt).getOrElse($(numPartitions))
@@ -665,9 +653,9 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
       .getConf.get("spark.executor.cores").toInt).getOrElse(1)
 
     val ratings = dataset
-      .select(validatedUsers, validatedItems, validatedRatings)
+      .select(validatedUsers, validatedItems, validatedLabels, validatedWeights)
       .rdd
-      .map { case Row(u: Long, i: Long, r: Float) => (u, i, r) }
+      .map { case Row(u: Long, i: Long, l: Float, w: Float) => (u, i, l, w) }
       .repartition(numExecutors * numCores / $(parallelism))
       .persist(StorageLevel.fromString($(intermediateStorageLevel)))
 
@@ -681,7 +669,8 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
     val result = new LMF.Backend($(rank), $(negative), $(maxIter), $(stepSize),
       Option.when(!$(minStepSize).isNaN)($(minStepSize)), $(parallelism), $(numPartitions),
       $(pow), $(minUserCount), $(minItemCount), $(regParam), $(fitIntercept),
-      $(implicitPrefs), $(seed), StorageLevel.fromString($(intermediateStorageLevel)),
+      $(implicitPrefs), get(labelCol).isDefined, get(weightCol).isDefined,
+      $(seed), StorageLevel.fromString($(intermediateStorageLevel)),
       StorageLevel.fromString($(finalStorageLevel)),
       Option.when($(checkpointPath).nonEmpty)($(checkpointPath)),
       $(checkpointInterval), $(verbose)).train(ratings)
@@ -729,13 +718,15 @@ object LMF extends DefaultParamsReadable[LMF] with Logging {
                           lambda: Double,
                           useBias: Boolean,
                           implicitPrefs: Boolean,
+                          withLabel: Boolean,
+                          withWeight: Boolean,
                           seed: Long,
                           intermediateRDDStorageLevel: StorageLevel,
                           finalRDDStorageLevel: StorageLevel,
                           checkpointPath: Option[String],
                           checkpointInterval: Int,
                           verbose: Boolean
-                ) extends LogisticFactorizationBase[(Long, Long, Float)](
+                ) extends LogisticFactorizationBase[(Long, Long, Float, Float)](
                           dotVectorSize,
                           negative,
                           numIterations,
@@ -757,17 +748,17 @@ object LMF extends DefaultParamsReadable[LMF] with Logging {
 
     override protected def gamma: Float = 1f / negative
 
-    override protected def pairs(data: RDD[(Long, Long, Float)],
+    override protected def pairs(data: RDD[(Long, Long, Float, Float)],
                                  partitioner1: Partitioner,
                                  partitioner2: Partitioner,
                                  seed: Long): RDD[LongPairMulti] = {
       data.mapPartitions(it => BatchedGenerator(it
         .filter(e => partitioner1.getPartition(e._1) == partitioner2.getPartition(e._2))
-        .map(e => LongPair(partitioner1.getPartition(e._1), e._1, e._2, e._3)),
-        partitioner1.numPartitions, true))
+        .map(e => LongPair(partitioner1.getPartition(e._1), e._1, e._2, e._3, e._4)),
+        partitioner1.numPartitions, withLabel, withWeight))
     }
 
-    override protected def initialize(data: RDD[(Long, Long, Float)]): RDD[ItemData] = {
+    override protected def initialize(data: RDD[(Long, Long, Float, Float)]): RDD[ItemData] = {
       data.flatMap(e => Array((ItemData.TYPE_LEFT, e._1) -> 1L, (ItemData.TYPE_RIGHT, e._2) -> 1L))
         .reduceByKey(_ + _)
         .filter(e => if (e._1._1 == ItemData.TYPE_LEFT) {

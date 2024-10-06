@@ -27,23 +27,31 @@ private[ml] object BatchedGenerator {
 
   def apply(pairGenerator: Iterator[LongPair],
             numPartitions: Int,
-            withRating: Boolean): BatchedGenerator = {
-    val l = Array.fill(numPartitions)(ArrayBuffer.empty[Long])
-    val r = Array.fill(numPartitions)(ArrayBuffer.empty[Long])
-    val w = if (withRating) {
+            withLabel: Boolean,
+            withWeight: Boolean): BatchedGenerator = {
+    val left = Array.fill(numPartitions)(ArrayBuffer.empty[Long])
+    val right = Array.fill(numPartitions)(ArrayBuffer.empty[Long])
+    val label = if (withLabel) {
+      Array.fill(numPartitions)(ArrayBuffer.empty[Float])
+    } else {
+      null.asInstanceOf[Array[ArrayBuffer[Float]]]
+    }
+    val weight = if (withWeight) {
       Array.fill(numPartitions)(ArrayBuffer.empty[Float])
     } else {
       null.asInstanceOf[Array[ArrayBuffer[Float]]]
     }
 
-    new BatchedGenerator(pairGenerator, l, r, w, TOTAL_BATCH_SIZE / numPartitions)
+    new BatchedGenerator(pairGenerator, left, right, label, weight,
+      TOTAL_BATCH_SIZE / numPartitions)
   }
 }
 
 private[ml] class BatchedGenerator(private val pairGenerator: Iterator[LongPair],
-                                   private val l: Array[ArrayBuffer[Long]],
-                                   private val r: Array[ArrayBuffer[Long]],
-                                   private val w: Array[ArrayBuffer[Float]],
+                                   private val left: Array[ArrayBuffer[Long]],
+                                   private val right: Array[ArrayBuffer[Long]],
+                                   private val label: Array[ArrayBuffer[Float]],
+                                   private val weight: Array[ArrayBuffer[Float]],
                                    private val batchSize: Int
                                   ) extends Iterator[LongPairMulti] with Serializable {
 
@@ -57,40 +65,47 @@ private[ml] class BatchedGenerator(private val pairGenerator: Iterator[LongPair]
       val pair = pairGenerator.next()
       val part = pair.part
 
-      if (l(part).isEmpty) {
+      if (left(part).isEmpty) {
         nonEmptyCounter += 1
       }
 
-      l(part) += pair.left
-      r(part) += pair.right
-      if (w != null) w(part) += pair.rating
+      left(part) += pair.left
+      right(part) += pair.right
+      if (label != null) label(part) += pair.label
+      if (weight != null) weight(part) += pair.weight
 
-      if (l(part).size >= batchSize) {
+      if (left(part).size >= batchSize) {
         val result = LongPairMulti(part,
-          l(part).toArray, r(part).toArray,
-          if (w == null) null else w(part).toArray)
+          left(part).toArray, right(part).toArray,
+          if (label == null) null else label(part).toArray,
+          if (weight == null) null else weight(part).toArray,
+        )
 
-        l(part).clear()
-        r(part).clear()
-        if (w != null) w(part).clear()
+        left(part).clear()
+        right(part).clear()
+        if (label != null) label(part).clear()
+        if (weight != null) weight(part).clear()
 
         nonEmptyCounter -= 1
         return result
       }
     }
 
-    while (ptr < l.length && l(ptr).isEmpty) {
+    while (ptr < left.length && left(ptr).isEmpty) {
       ptr += 1
     }
 
-    if (ptr < l.length) {
+    if (ptr < left.length) {
       val result = LongPairMulti(ptr,
-        l(ptr).toArray, r(ptr).toArray,
-        if (w == null) null else w(ptr).toArray)
+        left(ptr).toArray, right(ptr).toArray,
+        if (label == null) null else label(ptr).toArray,
+        if (weight == null) null else weight(ptr).toArray
+      )
 
-      l(ptr).clear()
-      r(ptr).clear()
-      if (w != null) w(ptr).clear()
+      left(ptr).clear()
+      right(ptr).clear()
+      if (label != null) label(ptr).clear()
+      if (weight != null) weight(ptr).clear()
       nonEmptyCounter -= 1
       return result
     }

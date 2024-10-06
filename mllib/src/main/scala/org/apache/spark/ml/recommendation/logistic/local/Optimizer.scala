@@ -20,7 +20,6 @@ package org.apache.spark.ml.recommendation.logistic.local
 import java.util
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.atomic.AtomicLong
-import javax.annotation.Nullable
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -123,29 +122,33 @@ private[ml] object Optimizer {
     f
   }
 
-  private def shuffle(l: Array[Long],
-                      r: Array[Long],
-                      @Nullable w: Array[Float],
+  private def shuffle(batch: LongPairMulti,
                       rnd: java.util.Random): Unit = {
     var i = 0
-    val n = l.length
+    val n = batch.left.length
     var t = 0L
     var t1 = 0f
 
     while (i < n - 1) {
       val j = i + rnd.nextInt(n - i)
-      t = l(j)
-      l(j) = l(i)
-      l(i) = t
+      t = batch.left(j)
+      batch.left(j) = batch.left(i)
+      batch.left(i) = t
 
-      t = r(j)
-      r(j) = r(i)
-      r(i) = t
+      t = batch.right(j)
+      batch.right(j) = batch.right(i)
+      batch.right(i) = t
 
-      if (w != null) {
-        t1 = w(j)
-        w(j) = w(i)
-        w(i) = t1
+      if (batch.label != null) {
+        t1 = batch.label(j)
+        batch.label(j) = batch.label(i)
+        batch.label(i) = t1
+      }
+
+      if (batch.weight != null) {
+        t1 = batch.weight(j)
+        batch.weight(j) = batch.weight(i)
+        batch.weight(i) = t1
       }
 
       i += 1
@@ -225,11 +228,11 @@ private[ml] class Optimizer(private val opts: Opts,
   val lossn: AtomicLong = new AtomicLong(0)
   val lossnReg: AtomicLong = new AtomicLong(0)
 
-  private def optimizeImplicitBatchRemapped(l: Array[Long],
-                                            r: Array[Long],
-                                            @Nullable w: Array[Float]): Unit = {
-    assert(l.length == r.length)
-    Optimizer.shuffle(l, r, w, random)
+  private def optimizeImplicitBatchRemapped(batch: LongPairMulti): Unit = {
+    assert(batch.left.length == batch.right.length)
+    assert(batch.label == null)
+
+    Optimizer.shuffle(batch, random)
 
     var lloss = 0.0
     var llossReg = 0.0
@@ -243,9 +246,9 @@ private[ml] class Optimizer(private val opts: Opts,
     val neu1e = Array.fill(opts.vectorSize)(0f)
     val expTable = Optimizer.ExpTable.getInstance
 
-    while (pos < l.length) {
-      lastWord = l(pos).toInt
-      word = r(pos).toInt
+    while (pos < batch.left.length) {
+      lastWord = batch.left(pos).toInt
+      word = batch.right(pos).toInt
 
       if (word != -1 && lastWord != -1) {
         val l1 = lastWord * opts.vectorSize
@@ -259,20 +262,20 @@ private[ml] class Optimizer(private val opts: Opts,
           if (d == 0) {
             target = word
             label = 1
-            weight = if (w == null) 1f else w(pos)
+            weight = if (batch.weight == null) 1f else batch.weight(pos)
           } else {
             if (unigramTable != null) {
               target = unigramTable(random.nextInt(unigramTable.length))
-              while (target == -1 || l(pos) == i2R(target)) {
+              while (target == -1 || batch.left(pos) == i2R(target)) {
                 target = unigramTable(random.nextInt(unigramTable.length))
               }
             } else {
               target = random.nextInt(vocabR.size)
-              while (l(pos) == i2R(target)) {
+              while (batch.left(pos) == i2R(target)) {
                 target = random.nextInt(vocabR.size)
               }
             }
-            weight = opts.gamma
+            weight = if (batch.weight == null) opts.gamma else opts.gamma * batch.weight(pos)
             label = 0
           }
           val l2 = target * opts.vectorSize
@@ -324,11 +327,9 @@ private[ml] class Optimizer(private val opts: Opts,
     lossnReg.addAndGet(llossnReg)
   }
 
-  private def optimizeExplicitBatchRemapped(l: Array[Long],
-                                            r: Array[Long],
-                                            w: Array[Float]): Unit = {
-    assert(l.length == r.length)
-    Optimizer.shuffle(l, r, w, random)
+  private def optimizeExplicitBatchRemapped(batch: LongPairMulti): Unit = {
+    assert(batch.left.length == batch.right.length)
+    Optimizer.shuffle(batch, random)
 
     var lloss = 0.0
     var llossReg = 0.0
@@ -342,17 +343,17 @@ private[ml] class Optimizer(private val opts: Opts,
     val neu1e = Array.fill(opts.vectorSize)(0f)
     val expTable = Optimizer.ExpTable.getInstance
 
-    while (pos < l.length) {
-      lastWord = l(pos).toInt
-      word = r(pos).toInt
+    while (pos < batch.left.length) {
+      lastWord = batch.left(pos).toInt
+      word = batch.right(pos).toInt
 
       if (word != -1 && lastWord != -1) {
         val l1 = lastWord * opts.vectorSize
         val l2 = word * opts.vectorSize
 
         util.Arrays.fill(neu1e, 0)
-        val label = w(pos)
-        val weight = 1f
+        val label = batch.label(pos)
+        val weight = if (batch.weight == null) 1f else batch.weight(pos)
         assert(label == 0f || label == 1f)
 
         var f = blas.sdot(opts.dim, syn0, l1, 1, syn1neg, l2, 1)
@@ -411,17 +412,17 @@ private[ml] class Optimizer(private val opts: Opts,
   def optimize(data: Iterator[LongPairMulti], cpus: Int): Unit = {
     if (cpus > 1) {
       ParItr.foreach(data.map(remap), cpus, if (opts.implicitPref) {
-        pair: LongPairMulti => optimizeImplicitBatchRemapped(pair.left, pair.right, pair.rating)
+        pair: LongPairMulti => optimizeImplicitBatchRemapped(pair)
       } else {
-        pair: LongPairMulti => optimizeExplicitBatchRemapped(pair.left, pair.right, pair.rating)
+        pair: LongPairMulti => optimizeExplicitBatchRemapped(pair)
       })
     } else {
       if (opts.implicitPref) {
         data.map(remap)
-          .foreach(pair => optimizeImplicitBatchRemapped(pair.left, pair.right, pair.rating))
+          .foreach(pair => optimizeImplicitBatchRemapped(pair))
       } else {
         data.map(remap)
-          .foreach(pair => optimizeExplicitBatchRemapped(pair.left, pair.right, pair.rating))
+          .foreach(pair => optimizeExplicitBatchRemapped(pair))
       }
     }
   }
