@@ -151,10 +151,10 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
 
     withClue("Invalid explicit without labels") {
       val df = sc.parallelize(Seq(
-        (123L, 321L, 0.5),
-        (1234L, 4321L, 1.0)
-      )).toDF("item", "user", "label")
-      val e = intercept[Exception] { new LMF().setLabelCol("label")
+        (123L, 321L),
+        (1234L, 4321L)
+      )).toDF("item", "user")
+      val e = intercept[Exception] { new LMF()
         .setImplicitPrefs(false).setMaxIter(1).fit(df) }
       assert(e.getMessage.contains("The labelCol must be set in explicit mode."))
     }
