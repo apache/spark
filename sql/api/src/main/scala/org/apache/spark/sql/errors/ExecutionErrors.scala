@@ -114,12 +114,11 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
       summary = getSummary(context))
   }
 
-  def arithmeticOverflowError(
-      message: String,
-      context: QueryContext): ArithmeticException = {
+  def arithmeticOverflowError(message: String, context: QueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "ARITHMETIC_OVERFLOW.WITHOUT_TRY_SUGGESTION",
-      messageParameters = Map("message" -> message, "config" -> SqlApiConf.ANSI_ENABLED_KEY),
+      messageParameters =
+        Map("message" -> message, "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
