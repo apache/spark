@@ -303,7 +303,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def overflowInIntegralDivideError(context: QueryContext): ArithmeticException = {
-    arithmeticOverflowError("Overflow in integral divide", "try_divide", context)
+    arithmeticOverflowError("Overflow in integral divide.", "try_divide", context)
   }
 
   def overflowInConvError(context: QueryContext): ArithmeticException = {
