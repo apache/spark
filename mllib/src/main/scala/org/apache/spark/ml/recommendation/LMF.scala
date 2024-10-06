@@ -631,8 +631,7 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
       if ($(implicitPrefs)) {
         lit(LongPair.EMPTY)
       } else {
-        throw new IllegalArgumentException(s"The labelCol must be set with " +
-          s"implicitPrefs disabled.")
+        throw new IllegalArgumentException(s"The labelCol must be set in explicit mode.")
       }
     } {label =>
       if ($(implicitPrefs)) {
@@ -644,7 +643,7 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
     }
 
     val validatedWeights = get(weightCol).fold(lit(LongPair.EMPTY))(
-      checkNonNegativeWeights)
+      checkNonNegativeWeights).cast(FloatType)
 
     val numExecutors = Try(dataset.sparkSession.sparkContext
       .getConf.get("spark.executor.instances").toInt).getOrElse($(numPartitions))
