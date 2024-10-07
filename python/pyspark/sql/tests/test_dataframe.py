@@ -1550,6 +1550,9 @@ class DataFrameTestsMixin:
         df = self.spark.createDataFrame(pd.DataFrame({"a": [timedelta(microseconds=123)]}))
         self.assertEqual(df.toPandas().a.iloc[0], timedelta(microseconds=123))
 
+    @unittest.skipIf(
+        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Newline difference from the server"
+    )
     def test_repr_behaviors(self):
         import re
 
