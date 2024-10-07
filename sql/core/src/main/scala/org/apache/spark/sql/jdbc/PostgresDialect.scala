@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.NamedReference
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
@@ -292,10 +292,6 @@ private case class PostgresDialect()
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
-          case "42601" =>
-            throw QueryExecutionErrors.jdbcGeneratedQuerySyntaxError(
-              messageParameters.get("url").getOrElse(""),
-              messageParameters.get("query").getOrElse(""))
           case _ =>
             super.classifyException(e, errorClass, messageParameters, description, isRuntime)
         }
