@@ -161,6 +161,7 @@ public final class CollationFactory {
         Comparator<UTF8String> comparator,
         String version,
         ToLongFunction<UTF8String> hashFunction,
+        BiFunction<UTF8String, UTF8String, Boolean> equalsFunction,
         boolean supportsBinaryEquality,
         boolean supportsBinaryOrdering,
         boolean supportsLowercaseEquality) {
@@ -173,6 +174,7 @@ public final class CollationFactory {
       this.supportsBinaryEquality = supportsBinaryEquality;
       this.supportsBinaryOrdering = supportsBinaryOrdering;
       this.supportsLowercaseEquality = supportsLowercaseEquality;
+      this.equalsFunction = equalsFunction;
 
       // De Morgan's Law to check supportsBinaryOrdering => supportsBinaryEquality
       assert(!supportsBinaryOrdering || supportsBinaryEquality);
@@ -180,12 +182,6 @@ public final class CollationFactory {
       assert(!supportsBinaryEquality || !supportsLowercaseEquality);
 
       assert(SUPPORTED_PROVIDERS.contains(provider));
-
-      if (supportsBinaryEquality) {
-        this.equalsFunction = UTF8String::equals;
-      } else {
-        this.equalsFunction = (s1, s2) -> this.comparator.compare(s1, s2) == 0;
-      }
     }
 
     /**
@@ -538,24 +534,57 @@ public final class CollationFactory {
       @Override
       protected Collation buildCollation() {
         if (caseSensitivity == CaseSensitivity.UNSPECIFIED) {
+          Comparator<UTF8String> comparator;
+          ToLongFunction<UTF8String> hashFunction;
+          BiFunction<UTF8String, UTF8String, Boolean> equalsFunction;
+
+          if(spaceTrimming == SpaceTrimming.NONE) {
+            comparator = UTF8String::binaryCompare;
+            hashFunction = s -> (long) s.hashCode();
+            equalsFunction = UTF8String::equals;
+          }else {
+            comparator = (s1, s2) -> applyTrimmingPolicy(s1, spaceTrimming).binaryCompare(
+                    applyTrimmingPolicy(s2, spaceTrimming));
+            hashFunction = s -> (long) applyTrimmingPolicy(s, spaceTrimming).hashCode();
+            equalsFunction = (s1, s2) -> applyTrimmingPolicy(s1, spaceTrimming).equals(
+                    applyTrimmingPolicy(s2, spaceTrimming));
+          }
+
           return new Collation(
             normalizedCollationName(),
             PROVIDER_SPARK,
             null,
-            UTF8String::binaryCompare,
+            comparator,
             "1.0",
-            s -> (long) s.hashCode(),
+            hashFunction,
+            equalsFunction,
             /* supportsBinaryEquality = */ true,
             /* supportsBinaryOrdering = */ true,
             /* supportsLowercaseEquality = */ false);
         } else {
+          Comparator<UTF8String> comparator;
+          ToLongFunction<UTF8String> hashFunction;
+
+          if(spaceTrimming == SpaceTrimming.NONE ) {
+            comparator = CollationAwareUTF8String::compareLowerCase;
+            hashFunction = s ->
+                    (long) CollationAwareUTF8String.lowerCaseCodePoints(s).hashCode();
+          }else{
+            comparator = (s1, s2) -> CollationAwareUTF8String.compareLowerCase(
+                    applyTrimmingPolicy(s1, spaceTrimming),
+                    applyTrimmingPolicy(s2, spaceTrimming));
+            hashFunction = s -> (long) CollationAwareUTF8String.
+                    lowerCaseCodePoints(applyTrimmingPolicy(s, spaceTrimming)).hashCode();
+          }
+
           return new Collation(
             normalizedCollationName(),
             PROVIDER_SPARK,
             null,
-            CollationAwareUTF8String::compareLowerCase,
+            comparator,
             "1.0",
-            s -> (long) CollationAwareUTF8String.lowerCaseCodePoints(s).hashCode(),
+            hashFunction,
+            (s1, s2) -> comparator.compare(s1, s2) == 0,
             /* supportsBinaryEquality = */ false,
             /* supportsBinaryOrdering = */ false,
             /* supportsLowercaseEquality = */ true);
@@ -917,13 +946,31 @@ public final class CollationFactory {
         Collator collator = Collator.getInstance(resultLocale);
         // Freeze ICU collator to ensure thread safety.
         collator.freeze();
+
+        Comparator<UTF8String> comparator;
+        ToLongFunction<UTF8String> hashFunction;
+
+        if(spaceTrimming == SpaceTrimming.NONE){
+          hashFunction = s -> (long) collator.getCollationKey(
+                  s.toValidString()).hashCode();
+          comparator = (s1, s2) ->
+                  collator.compare(s1.toValidString(), s2.toValidString());
+        } else {
+          comparator = (s1, s2) -> collator.compare(
+                  applyTrimmingPolicy(s1, spaceTrimming).toValidString(),
+                  applyTrimmingPolicy(s2, spaceTrimming).toValidString());
+          hashFunction = s -> (long) collator.getCollationKey(
+                  applyTrimmingPolicy(s, spaceTrimming).toValidString()).hashCode();
+        }
+
         return new Collation(
           normalizedCollationName(),
           PROVIDER_ICU,
           collator,
-          (s1, s2) -> collator.compare(s1.toValidString(), s2.toValidString()),
+          comparator,
           ICU_COLLATOR_VERSION,
-          s -> (long) collator.getCollationKey(s.toValidString()).hashCode(),
+          hashFunction,
+          (s1, s2) -> comparator.compare(s1, s2) == 0,
           /* supportsBinaryEquality = */ false,
           /* supportsBinaryOrdering = */ false,
           /* supportsLowercaseEquality = */ false);
