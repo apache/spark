@@ -612,7 +612,7 @@ case class FileSourceScanExec(
   extends FileSourceScanLike {
 
   /** SQL metrics generated for JSON scans involving variants. */
-  protected lazy val variantBuilderMetrics: Map[String, SQLMetric] =
+  protected lazy val variantSQLMetrics: Map[String, SQLMetric] =
     VariantConstructionMetrics.createSQLMetrics(sparkContext)
 
   /**
@@ -622,7 +622,7 @@ case class FileSourceScanExec(
   override lazy val metrics: Map[String, SQLMetric] = super.metrics ++ {
     if (relation.fileFormat.isInstanceOf[JsonFileFormat] &&
       requiredSchema.existsRecursively(_.isInstanceOf[VariantType])) {
-      variantBuilderMetrics
+      variantSQLMetrics
     } else Map.empty[String, SQLMetric]
   }
 
@@ -844,7 +844,7 @@ case class FileSourceScanExec(
       fileConstantMetadataColumns, relation.fileFormat.fileConstantMetadataExtractors,
       new FileSourceOptions(CaseInsensitiveMap(relation.options)),
       Some(new FileScanMetrics(Some(topLevelVariantMetrics), Some(nestedVariantMetrics))),
-      Some(variantBuilderMetrics))
+      Some(variantSQLMetrics))
   }
 
   // Filters unused DynamicPruningExpression expressions - one which has been replaced

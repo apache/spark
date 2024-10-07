@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.metric
 
 import org.apache.spark.SparkContext
+import org.apache.spark.types.variant.VariantMetrics
 
 case class VariantMetricDescriptor (
   name: String,
@@ -105,5 +106,56 @@ object VariantConstructionMetrics {
         }
       }
     ).toMap
+  }
+
+  // Update SQL metrics with the data in topLevelVariantMetrics and nestedVariantMetrics
+  def updateSQLMetrics(
+      topLevelVariantMetrics: Option[VariantMetrics],
+      nestedVariantMetrics: Option[VariantMetrics],
+      sqlMetrics: Option[Map[String, SQLMetric]]): Unit = {
+    sqlMetrics match {
+      case Some(sqlMetrics) =>
+        topLevelVariantMetrics match {
+          case Some(metrics) =>
+            sqlMetrics(VARIANT_BUILDER_TOP_LEVEL_NUMBER_OF_VARIANTS)
+              .add(metrics.variantCount)
+            sqlMetrics(VARIANT_BUILDER_TOP_LEVEL_BYTE_SIZE_BOUND)
+              .add(metrics.byteSize)
+            sqlMetrics(VARIANT_BUILDER_TOP_LEVEL_NUM_SCALARS)
+              .add(metrics.numScalars)
+            sqlMetrics(VARIANT_BUILDER_TOP_LEVEL_NUM_PATHS)
+              .add(metrics.numPaths)
+            sqlMetrics(VARIANT_BUILDER_TOP_LEVEL_MAX_DEPTH)
+              .set(
+                Math.max(
+                  sqlMetrics(VARIANT_BUILDER_TOP_LEVEL_MAX_DEPTH).value,
+                  metrics.maxDepth
+                )
+              )
+            metrics.reset()
+          case None =>
+        }
+        nestedVariantMetrics match {
+          case Some(metrics) =>
+            sqlMetrics(VARIANT_BUILDER_NESTED_NUMBER_OF_VARIANTS)
+              .add(metrics.variantCount)
+            sqlMetrics(VARIANT_BUILDER_NESTED_BYTE_SIZE_BOUND)
+              .add(metrics.byteSize)
+            sqlMetrics(VARIANT_BUILDER_NESTED_NUM_SCALARS)
+              .add(metrics.numScalars)
+            sqlMetrics(VARIANT_BUILDER_NESTED_NUM_PATHS)
+              .add(metrics.numPaths)
+            sqlMetrics(VARIANT_BUILDER_NESTED_MAX_DEPTH)
+              .set(
+                Math.max(
+                  sqlMetrics(VARIANT_BUILDER_NESTED_MAX_DEPTH).value,
+                  metrics.maxDepth
+                )
+              )
+            metrics.reset()
+          case None =>
+        }
+      case None =>
+    }
   }
 }

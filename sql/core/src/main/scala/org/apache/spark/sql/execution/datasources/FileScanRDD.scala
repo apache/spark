@@ -83,59 +83,18 @@ case class FileScanMetrics(
     topLevelVariantMetrics: Option[VariantMetrics] = None,
     nestedVariantMetrics: Option[VariantMetrics] = None) {
 
-  // Update SQL metrics with the data in topLevelVariantMetrics and nestedVariantMetrics
+  // Update SQL metrics with the data in the metrics in this class
   def updateSQLMetrics(sqlMetrics: Option[Map[String, SQLMetric]]): Unit = {
-    sqlMetrics match {
-      case Some(sqlMetrics) =>
-        topLevelVariantMetrics match {
-          case Some(metrics) =>
-            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_NUMBER_OF_VARIANTS)
-              .add(metrics.variantCount)
-            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_BYTE_SIZE_BOUND)
-              .add(metrics.byteSize)
-            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_NUM_SCALARS)
-              .add(metrics.numScalars)
-            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_NUM_PATHS)
-              .add(metrics.numPaths)
-            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_MAX_DEPTH)
-              .set(
-                Math.max(
-                  sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_TOP_LEVEL_MAX_DEPTH).value,
-                  metrics.maxDepth
-                )
-              )
-            metrics.reset()
-          case None =>
-        }
-        nestedVariantMetrics match {
-          case Some(metrics) =>
-            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_NUMBER_OF_VARIANTS)
-              .add(metrics.variantCount)
-            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_BYTE_SIZE_BOUND)
-              .add(metrics.byteSize)
-            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_NUM_SCALARS)
-              .add(metrics.numScalars)
-            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_NUM_PATHS)
-              .add(metrics.numPaths)
-            sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_MAX_DEPTH)
-              .set(
-                Math.max(
-                  sqlMetrics(VariantConstructionMetrics.VARIANT_BUILDER_NESTED_MAX_DEPTH).value,
-                  metrics.maxDepth
-                )
-              )
-            metrics.reset()
-          case None =>
-        }
-      case None =>
-    }
+    // Update the variant metrics
+    VariantConstructionMetrics.updateSQLMetrics(topLevelVariantMetrics, nestedVariantMetrics,
+      sqlMetrics)
   }
 }
 
 /**
  * An RDD that scans a list of file partitions.
  * @param metadataColumns File-constant metadata columns to append to end of schema.
- * @param fileScanMetricsObject An optional object containing any data used to update metrics during
+ * @param fileScanMetrics An optional object containing any data used to update metrics during
  *                              the scan.
  * @param sqlMetrics An object containing a mapping from metric name to the SQLMetrics that could
  *                   be updated during the scan.
@@ -148,7 +107,7 @@ class FileScanRDD(
     val metadataColumns: Seq[AttributeReference] = Seq.empty,
     metadataExtractors: Map[String, PartitionedFile => Any] = Map.empty,
     options: FileSourceOptions = new FileSourceOptions(CaseInsensitiveMap(Map.empty)),
-    fileScanMetricsObject: Option[FileScanMetrics] = None,
+    fileScanMetrics: Option[FileScanMetrics] = None,
     sqlMetrics: Option[Map[String, SQLMetric]] = None)
   extends RDD[InternalRow](sparkSession.sparkContext, Nil) {
 
@@ -297,12 +256,9 @@ class FileScanRDD(
       /** Advances to the next file. Returns true if a new non-empty iterator is available. */
       private def nextIterator(): Boolean = {
         // This function is called at the end of each file and before the first file. Therefore,
-        // we update the Variant Metrics at the end of each JSON file and reset the
-        // variant metrics objects to process the next file.
-        fileScanMetricsObject match {
-          case Some(metrics) => metrics.updateSQLMetrics(sqlMetrics)
-          case None =>
-        }
+        // we update the metrics at the end of each JSON file and reset them to process the next
+        // file.
+        fileScanMetrics.foreach(_.updateSQLMetrics(sqlMetrics))
         if (files.hasNext) {
           currentFile = files.next()
           updateMetadataRow()
