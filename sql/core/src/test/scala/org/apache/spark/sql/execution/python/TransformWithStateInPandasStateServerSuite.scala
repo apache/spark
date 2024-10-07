@@ -124,6 +124,29 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     }
   }
 
+  Seq(true, false).foreach { useTTL =>
+    test(s"get list state, useTTL=$useTTL") {
+      val stateCallCommandBuilder = StateCallCommand.newBuilder()
+        .setStateName("newName")
+        .setSchema("StructType(List(StructField(value,IntegerType,true)))")
+      if (useTTL) {
+        stateCallCommandBuilder.setTtl(StateMessage.TTLConfig.newBuilder().setDurationMs(1000))
+      }
+      val message = StatefulProcessorCall
+        .newBuilder()
+        .setGetListState(stateCallCommandBuilder.build())
+        .build()
+      stateServer.handleStatefulProcessorCall(message)
+      if (useTTL) {
+        verify(statefulProcessorHandle)
+          .getListState[Row](any[String], any[Encoder[Row]], any[TTLConfig])
+      } else {
+        verify(statefulProcessorHandle).getListState[Row](any[String], any[Encoder[Row]])
+      }
+      verify(outputStream).writeInt(0)
+    }
+  }
+
   test("value state exists") {
     val message = ValueStateCall.newBuilder().setStateName(stateName)
       .setExists(Exists.newBuilder().build()).build()

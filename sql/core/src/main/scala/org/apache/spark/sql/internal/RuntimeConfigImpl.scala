@@ -42,7 +42,7 @@ class RuntimeConfigImpl private[sql](val sqlConf: SQLConf = new SQLConf) extends
   }
 
   /** @inheritdoc */
-  @throws[NoSuchElementException]("if the key is not set")
+  @throws[NoSuchElementException]("if the key is not set and there is no default value")
   def get(key: String): String = {
     sqlConf.getConfString(key)
   }
