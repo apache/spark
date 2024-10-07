@@ -24,9 +24,9 @@ import java.util.Locale
 
 import scala.util.Using
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.LogKeys.COLUMN_NAME
 import org.apache.spark.internal.MDC
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -260,7 +260,8 @@ private case class PostgresDialect()
       e: Throwable,
       errorClass: String,
       messageParameters: Map[String, String],
-      description: String): AnalysisException = {
+      description: String,
+      isRuntime: Boolean): Throwable with SparkThrowable = {
     e match {
       case sqlException: SQLException =>
         sqlException.getSQLState match {
@@ -279,7 +280,7 @@ private case class PostgresDialect()
               if (tblRegexp.nonEmpty) {
                 throw QueryCompilationErrors.tableAlreadyExistsError(tblRegexp.get.group(1))
               } else {
-                super.classifyException(e, errorClass, messageParameters, description)
+                super.classifyException(e, errorClass, messageParameters, description, isRuntime)
               }
             }
           case "42704" if errorClass == "FAILED_JDBC.DROP_INDEX" =>
@@ -291,10 +292,11 @@ private case class PostgresDialect()
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
-          case _ => super.classifyException(e, errorClass, messageParameters, description)
+          case _ =>
+            super.classifyException(e, errorClass, messageParameters, description, isRuntime)
         }
       case unsupported: UnsupportedOperationException => throw unsupported
-      case _ => super.classifyException(e, errorClass, messageParameters, description)
+      case _ => super.classifyException(e, errorClass, messageParameters, description, isRuntime)
     }
   }
 
