@@ -122,7 +122,7 @@ private[sql] case class Literal(
 /**
  * Reference to an attribute produced by one of the underlying DataFrames.
  *
- * @param unparsedIdentifier
+ * @param nameParts
  *   name of the attribute.
  * @param planId
  *   id of the plan (Dataframe) that produces the attribute.
@@ -130,14 +130,21 @@ private[sql] case class Literal(
  *   whether this is a metadata column.
  */
 private[sql] case class UnresolvedAttribute(
-    unparsedIdentifier: String,
+    nameParts: Seq[String],
     planId: Option[Long] = None,
     isMetadataColumn: Boolean = false,
     override val origin: Origin = CurrentOrigin.get)
     extends ColumnNode {
+
   override private[internal] def normalize(): UnresolvedAttribute =
     copy(planId = None, origin = NO_ORIGIN)
-  override def sql: String = unparsedIdentifier
+
+  override def sql: String = nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
+}
+
+private[sql] object UnresolvedAttribute {
+  // For testing
+  def apply(singlePart: String): UnresolvedAttribute = UnresolvedAttribute(singlePart :: Nil)
 }
 
 /**

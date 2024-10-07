@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.OrderUtils
+import org.apache.spark.sql.catalyst.util.AttributeNameParser
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter}
@@ -413,7 +414,11 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def metadataColumn(colName: String): Column = {
-    Column(UnresolvedAttribute(colName, getPlanId, isMetadataColumn = true))
+    Column(
+      UnresolvedAttribute(
+        AttributeNameParser.parseAttributeName(colName),
+        getPlanId,
+        isMetadataColumn = true))
   }
 
   /** @inheritdoc */

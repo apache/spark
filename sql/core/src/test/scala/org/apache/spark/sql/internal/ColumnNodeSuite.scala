@@ -151,7 +151,7 @@ class ColumnNodeSuite extends SparkFunSuite {
   test("normalization") {
     testNormalization(Literal(1))
     testNormalization(UnresolvedStar(Option("a.b"), planId = planId()))
-    testNormalization(UnresolvedAttribute("x", planId = planId()))
+    testNormalization(UnresolvedAttribute("x" :: Nil, planId = planId()))
     testNormalization(UnresolvedRegex(".*", planId = planId()))
     testNormalization(SqlExpression("1 + 1"))
     testNormalization(attribute("a"))
