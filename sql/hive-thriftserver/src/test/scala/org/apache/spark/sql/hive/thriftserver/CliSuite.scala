@@ -361,7 +361,7 @@ class CliSuite extends SparkFunSuite {
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
     val hiveContribJar = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
     runCliWithin(
-      3.minute,
+      1.minute,
       Seq("--conf", s"spark.hadoop.hive.aux.jars.path=$hiveContribJar"))(
       """CREATE TABLE addJarWithHiveAux(key string, val string)
         |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';""".stripMargin

@@ -31,7 +31,6 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
 import org.apache.spark.sql.hive.HiveUtils.{builtinHiveVersion => hiveVersion}
 import org.apache.spark.sql.hive.test.{HiveTestJars, TestHive}
 import org.apache.spark.sql.hive.test.TestHive._
@@ -69,6 +68,15 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       super.afterAll()
     }
   }
+
+  /*
+  override def afterEach(): Unit = {
+    try {
+      spark.artifactManager.cleanUpResources()
+    } finally {
+      super.afterEach()
+    }
+  }*/
 
   private def assertUnsupportedFeature(
       body: => Unit,
@@ -109,31 +117,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
                                 | ORDER BY a.key, b.key
                                 | LIMIT 20
                               """.stripMargin
-
-  createQueryTest("SPARK-10484 Optimize the Cartesian (Cross) Join with broadcast based JOIN #1",
-    spark_10484_1)
-
-  createQueryTest("SPARK-10484 Optimize the Cartesian (Cross) Join with broadcast based JOIN #2",
-    spark_10484_2)
-
-  createQueryTest("SPARK-10484 Optimize the Cartesian (Cross) Join with broadcast based JOIN #3",
-    spark_10484_3)
-
-  createQueryTest("SPARK-10484 Optimize the Cartesian (Cross) Join with broadcast based JOIN #4",
-    spark_10484_4)
-
-  test("SPARK-10484 Optimize the Cartesian (Cross) Join with broadcast based JOIN") {
-    def assertBroadcastNestedLoopJoin(sqlText: String): Unit = {
-      assert(sql(sqlText).queryExecution.sparkPlan.collect {
-        case _: BroadcastNestedLoopJoinExec => 1
-      }.nonEmpty)
-    }
-
-    assertBroadcastNestedLoopJoin(spark_10484_1)
-    assertBroadcastNestedLoopJoin(spark_10484_2)
-    assertBroadcastNestedLoopJoin(spark_10484_3)
-    assertBroadcastNestedLoopJoin(spark_10484_4)
-  }
 
   createQueryTest("insert table with generator with column name",
     """

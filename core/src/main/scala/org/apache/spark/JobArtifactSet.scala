@@ -111,6 +111,7 @@ private[spark] object JobArtifactSet {
       state = maybeState,
       jars = maybeState
         .map(s => sc.addedJars.getOrElse(s.uuid, Map.empty[String, Long]))
+        .map(_ ++ sc.addedJars.getOrElse("shared", Map.empty[String, Long]))
         .getOrElse(sc.allAddedJars).toMap,
       files = maybeState
         .map(s => sc.addedFiles.getOrElse(s.uuid, Map.empty[String, Long]))
