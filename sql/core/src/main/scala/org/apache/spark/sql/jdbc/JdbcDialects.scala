@@ -852,17 +852,6 @@ trait NoLegacyJDBCError extends JdbcDialect {
       e: Throwable,
       errorClass: String,
       messageParameters: Map[String, String],
-      description: String): AnalysisException = {
-    new AnalysisException(
-      errorClass = errorClass,
-      messageParameters = messageParameters,
-      cause = Some(e))
-  }
-
-  override def classifyException(
-      e: Throwable,
-      errorClass: String,
-      messageParameters: Map[String, String],
       description: String,
       isRuntime: Boolean): Throwable with SparkThrowable = {
     if (isRuntime) {
