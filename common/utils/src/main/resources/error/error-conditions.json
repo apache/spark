@@ -5141,6 +5141,11 @@
         "message" : [
           "TRIM specifier in the collation."
         ]
+      },
+      "UPDATE_COLUMN_NULLABILITY" : {
+        "message" : [
+          "UpdateColumnNullability for MySQL."
+        ]
       }
     },
     "sqlState" : "0A000"
@@ -7664,11 +7669,6 @@
   "_LEGACY_ERROR_TEMP_2270" : {
     "message" : [
       "comment on table is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2271" : {
-    "message" : [
-      "UpdateColumnNullability is not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_2272" : {
