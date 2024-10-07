@@ -27,7 +27,7 @@ from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
-    from pyspark.sql.types import DataType
+    from pyspark.sql.connect._typing import DataTypeOrString
 
 
 class CatalogMetadata(NamedTuple):
@@ -759,7 +759,7 @@ class Catalog:
         source: Optional[str] = None,
         schema: Optional[StructType] = None,
         **options: str,
-    ) -> DataFrame:
+    ) -> "DataFrame":
         """Creates a table based on the dataset in a data source.
 
         It returns the DataFrame associated with the external table.
@@ -791,7 +791,7 @@ class Catalog:
         schema: Optional[StructType] = None,
         description: Optional[str] = None,
         **options: str,
-    ) -> DataFrame:
+    ) -> "DataFrame":
         """Creates a table based on the dataset in a data source.
 
         .. versionadded:: 2.2.0
@@ -942,7 +942,7 @@ class Catalog:
         return self._jcatalog.dropGlobalTempView(viewName)
 
     def registerFunction(
-        self, name: str, f: Callable[..., Any], returnType: Optional["DataType"] = None
+        self, name: str, f: Callable[..., Any], returnType: Optional["DataTypeOrString"] = None
     ) -> "UserDefinedFunctionLike":
         """An alias for :func:`spark.udf.register`.
         See :meth:`pyspark.sql.UDFRegistration.register`.
