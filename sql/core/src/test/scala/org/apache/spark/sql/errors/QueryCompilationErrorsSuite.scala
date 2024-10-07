@@ -980,11 +980,6 @@ class QueryCompilationErrorsSuite
   }
 
   test("trailing comma in select statement") {
-
-    intercept[ParseException] {
-      sql("SELECT 1,")
-    }
-
     withTable("t1") {
       sql(s"CREATE TABLE t1 (c1 INT, c2 INT) USING PARQUET")
 
@@ -1005,6 +1000,7 @@ class QueryCompilationErrorsSuite
         val queryWithTrailingComma = query.replaceAll("\\?", ",")
 
         sql(queryWithoutTrailingComma)
+        print(queryWithTrailingComma)
         val exception = intercept[AnalysisException] {
           sql(queryWithTrailingComma)
         }
@@ -1024,6 +1020,12 @@ class QueryCompilationErrorsSuite
           sql(query)
         }
         assert(exception.getErrorClass === "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+      }
+
+      // sanity checks
+      sql(s"SELECT c1, from FROM VALUES(1, 2) AS T(c1, from)")
+      intercept[ParseException] {
+        sql("SELECT 1,")
       }
     }
   }

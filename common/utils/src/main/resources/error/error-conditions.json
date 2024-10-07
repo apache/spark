@@ -4475,7 +4475,7 @@
   },
   "TRAILING_COMMA_IN_SELECT" : {
     "message" : [
-      "Syntax error: trailing comma detected in SELECT clause. Please remove the trailing comma before the FROM clause."
+      "Trailing comma detected in SELECT clause. Remove the trailing comma before the FROM clause."
     ],
     "sqlState" : "42601"
   },
