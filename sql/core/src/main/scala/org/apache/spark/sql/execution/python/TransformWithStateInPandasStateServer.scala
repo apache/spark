@@ -175,20 +175,15 @@ class TransformWithStateInPandasStateServer(
     message.getMethodCase match {
       case StatefulProcessorCall.MethodCase.SETHANDLESTATE =>
         val requestedState = message.getSetHandleState.getState
-        println(s"I am inside set handle state, change to state: ${requestedState}")
         requestedState match {
           case HandleState.CREATED =>
-            println(log"set handle state to Created")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CREATED)
           case HandleState.INITIALIZED =>
-            println(log"set handle state to Initialized")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
           case HandleState.CLOSED =>
-            println(log"set handle state to Closed")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
           case _ =>
         }
-        println(s"I am done set handle state")
         sendResponse(0)
       case StatefulProcessorCall.MethodCase.GETVALUESTATE =>
         val stateName = message.getGetValueState.getStateName
@@ -222,7 +217,6 @@ class TransformWithStateInPandasStateServer(
 
       case UtilsCallCommand.MethodCase.GETINITIALSTATE =>
         if (!hasInitialState || initDataIter == null || !initDataIter.hasNext) {
-          println(s"i am here getting initial state, send status code 1")
           sendResponse(1)
         } else {
           sendResponse(0)
@@ -243,11 +237,8 @@ class TransformWithStateInPandasStateServer(
 
           val keyStatePair = initDataIter.next()
           var seenInitStateOnKey = false
-          println(s"I am here inside sending, key: ${keyStatePair._1}")
           while (keyStatePair._2.hasNext) {
             if (seenInitStateOnKey) {
-              println(s"I am here, seen init stat on key: " +
-                s"${keyRowDeserializer.apply(keyStatePair._1)}")
               throw StateStoreErrors.cannotReInitializeStateOnKey(
                 keyRowDeserializer.apply(keyStatePair._1).toString)
             } else {
@@ -255,12 +246,10 @@ class TransformWithStateInPandasStateServer(
               seenInitStateOnKey = true
               val outputRow = InternalRow(
                 PythonSQLUtils.toPyRow(keyRowDeserializer.apply(keyStatePair._1)), initialStateRow)
-              println(s"I am here before writing rows, outputrow: ${outputRow}")
               arrowStreamWriter.writeRow(outputRow)
             }
           }
           arrowStreamWriter.finalizeCurrentArrowBatch()
-          println(s"I am here after writing rows")
           Utils.tryWithSafeFinally {
             // end writes footer to the output stream and doesn't clean any resources.
             // It could throw exception if the output stream is closed, so it should be
@@ -270,7 +259,6 @@ class TransformWithStateInPandasStateServer(
             root.close()
             allocator.close()
           }
-          println(s"I am here after close everything")
         }
 
       case _ =>

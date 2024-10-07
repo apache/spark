@@ -89,7 +89,6 @@ class TransformWithStateInPandasTestsMixin:
         )
         return df_final
 
-    """
     def _test_transform_with_state_in_pandas_basic(
         self, stateful_processor, check_results, single_batch=False, timeMode="None"
     ):
@@ -319,7 +318,6 @@ class TransformWithStateInPandasTestsMixin:
             self.assertTrue(q.exception() is None)
         finally:
             input_dir.cleanup()
-    """
 
     def _test_transform_with_state_init_state_in_pandas(
             self, stateful_processor, check_results
@@ -385,8 +383,7 @@ class TransformWithStateInPandasTestsMixin:
                 # for key 3, verify init state was now processed
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="0", value=str(789 + 123 + 46 + 67)),
-                    # Row(id="3", value=str(987 + 12)),
-                    Row(id="3", value=str(12)),
+                    Row(id="3", value=str(987 + 12)),
                 }
 
         self._test_transform_with_state_init_state_in_pandas(SimpleStatefulProcessorWithInitialState(), check_results)

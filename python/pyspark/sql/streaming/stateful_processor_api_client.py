@@ -75,9 +75,7 @@ class StatefulProcessorApiClient:
         status = response_message[0]
         if status == 0:
             self.handle_state = state
-            print(f"after setting, done\n")
         else:
-            print(f"after setting, status non zero\n")
             # TODO(SPARK-49233): Classify errors thrown by internal methods.
             raise PySparkRuntimeError(f"Error setting handle state: " f"{response_message[1]}")
 
@@ -194,7 +192,6 @@ class StatefulProcessorApiClient:
             # we only expect 1 row at a time from jvm
             deserialized_key = self.pickleSer.loads(batch_df.at[0, 'key'])
             initial_state = DataFrame([batch_df.at[0, 'initialState']])
-            print(f"get initial state for key: {deserialized_key}\n")
             return tuple(deserialized_key), initial_state
 
         else:
