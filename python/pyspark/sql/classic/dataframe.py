@@ -364,6 +364,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         self, eager: bool = True, storageLevel: Optional[StorageLevel] = None
     ) -> ParentDataFrame:
         gateway = self._sc._gateway
+        assert gateway is not None
         if storageLevel is None:
             javaStorageLevelOpt = gateway.jvm.scala.Option.empty()
         else:
