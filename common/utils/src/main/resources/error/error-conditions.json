@@ -4473,11 +4473,17 @@
     ],
     "sqlState" : "428EK"
   },
+  "TRAILING_COMMA_IN_SELECT" : {
+    "message" : [
+      "Syntax error: trailing comma detected in SELECT clause. Please remove the trailing comma before the FROM clause."
+    ],
+    "sqlState" : "54006"
+  },
   "TRANSPOSE_EXCEED_ROW_LIMIT" : {
     "message" : [
       "Number of rows exceeds the allowed limit of <maxValues> for TRANSPOSE. If this was intended, set <config> to at least the current row count."
     ],
-    "sqlState" : "54006"
+    "sqlState" : "42601"
   },
   "TRANSPOSE_INVALID_INDEX_COLUMN" : {
     "message" : [

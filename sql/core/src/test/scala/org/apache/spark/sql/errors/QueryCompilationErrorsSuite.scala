@@ -979,6 +979,34 @@ class QueryCompilationErrorsSuite
     )
   }
 
+  test("trailing comma in select statement") {
+    withTable("t1") {
+      sql(s"CREATE TABLE t1 (c1 INT, c2 INT) USING PARQUET")
+
+      val queries = Seq(
+        "SELECT *? FROM t1",
+        "SELECT c1? FROM t1",
+        "SELECT c1? FROM t1 WHERE c1 = 1",
+        "SELECT c1? FROM t1 GROUP BY c1",
+        "SELECT *, RANK() OVER (ORDER BY c1)? FROM t1",
+        "SELECT c1? FROM t1 ORDER BY c1",
+        "WITH cte AS (SELECT c1? FROM t1) SELECT * FROM cte",
+        "WITH cte AS (SELECT c1 FROM t1) SELECT *? FROM cte",
+        "SELECT * FROM (SELECT c1? FROM t1)",
+      )
+
+      queries.foreach { query =>
+        val queryWithoutTrailingComma = query.replaceAll("\\?", "")
+        val queryWithTrailingComma = query.replaceAll("\\?", ",")
+
+        sql(queryWithoutTrailingComma)
+        val exception = intercept[AnalysisException] {
+          sql(queryWithTrailingComma)
+        }
+        assert(exception.getErrorClass === "TRAILING_COMMA_IN_SELECT")
+      }
+    }
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(

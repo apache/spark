@@ -173,6 +173,22 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     )
   }
 
+  private def checkTrailingCommaInSelect(plan: LogicalPlan): Unit = {
+    val lastExpression = plan match {
+      case proj: Project => Some(proj.projectList.last)
+      case agg: Aggregate => Some(agg.aggregateExpressions.last)
+      case _ => None
+    }
+
+    lastExpression match {
+      case Some(Alias(UnresolvedAttribute(Seq(name)), _)) =>
+        if (name.equalsIgnoreCase("FROM") && plan.exists(_.isInstanceOf[OneRowRelation])) {
+          throw QueryCompilationErrors.trailingCommaInSelectError(lastExpression.get.origin)
+        }
+      case _ =>
+    }
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We should inline all CTE relations to restore the original plan shape, as the analysis check
     // may need to match certain plan shapes. For dangling CTE relations, they will still be kept
@@ -209,6 +225,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
         val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
         write.table.tableNotFound(tblName)
+
+      // We should check for trailing comma errors first, since we would get less obvious
+      // unresolved column errors if we do it bottom up
+      case proj: Project =>
+        checkTrailingCommaInSelect(proj)
+      case agg: Aggregate =>
+        checkTrailingCommaInSelect(agg)
 
       case _ =>
     }

@@ -358,6 +358,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def trailingCommaInSelectError(origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "TRAILING_COMMA_IN_SELECT",
+      messageParameters = Map.empty,
+      origin = origin
+    )
+  }
+
   def unresolvedUsingColForJoinError(
       colName: String, suggestion: String, side: String): Throwable = {
     new AnalysisException(
