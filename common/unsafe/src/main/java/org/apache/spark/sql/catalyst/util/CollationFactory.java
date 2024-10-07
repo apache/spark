@@ -154,6 +154,12 @@ public final class CollationFactory {
      */
     public final boolean supportsLowercaseEquality;
 
+    /**
+     * Support for Space Trimming implies that that based on specifier (for now only right trim)
+     * leading, trailing or both spaces are removed from the input string before comparison.
+     */
+    public final boolean supportsSpaceTrimming;
+
     public Collation(
         String collationName,
         String provider,
@@ -164,7 +170,8 @@ public final class CollationFactory {
         BiFunction<UTF8String, UTF8String, Boolean> equalsFunction,
         boolean supportsBinaryEquality,
         boolean supportsBinaryOrdering,
-        boolean supportsLowercaseEquality) {
+        boolean supportsLowercaseEquality,
+        boolean supportsSpaceTrimming) {
       this.collationName = collationName;
       this.provider = provider;
       this.collator = collator;
@@ -175,6 +182,7 @@ public final class CollationFactory {
       this.supportsBinaryOrdering = supportsBinaryOrdering;
       this.supportsLowercaseEquality = supportsLowercaseEquality;
       this.equalsFunction = equalsFunction;
+      this.supportsSpaceTrimming = supportsSpaceTrimming;
 
       // De Morgan's Law to check supportsBinaryOrdering => supportsBinaryEquality
       assert(!supportsBinaryOrdering || supportsBinaryEquality);
@@ -537,6 +545,7 @@ public final class CollationFactory {
           Comparator<UTF8String> comparator;
           ToLongFunction<UTF8String> hashFunction;
           BiFunction<UTF8String, UTF8String, Boolean> equalsFunction;
+          boolean supportsSpaceTrimming = spaceTrimming != SpaceTrimming.NONE;
 
           if(spaceTrimming == SpaceTrimming.NONE) {
             comparator = UTF8String::binaryCompare;
@@ -560,7 +569,8 @@ public final class CollationFactory {
             equalsFunction,
             /* supportsBinaryEquality = */ true,
             /* supportsBinaryOrdering = */ true,
-            /* supportsLowercaseEquality = */ false);
+            /* supportsLowercaseEquality = */ false,
+            spaceTrimming != SpaceTrimming.NONE);
         } else {
           Comparator<UTF8String> comparator;
           ToLongFunction<UTF8String> hashFunction;
@@ -587,7 +597,8 @@ public final class CollationFactory {
             (s1, s2) -> comparator.compare(s1, s2) == 0,
             /* supportsBinaryEquality = */ false,
             /* supportsBinaryOrdering = */ false,
-            /* supportsLowercaseEquality = */ true);
+            /* supportsLowercaseEquality = */ true,
+            spaceTrimming != SpaceTrimming.NONE);
         }
       }
 
@@ -973,7 +984,8 @@ public final class CollationFactory {
           (s1, s2) -> comparator.compare(s1, s2) == 0,
           /* supportsBinaryEquality = */ false,
           /* supportsBinaryOrdering = */ false,
-          /* supportsLowercaseEquality = */ false);
+          /* supportsLowercaseEquality = */ false,
+          spaceTrimming != SpaceTrimming.NONE);
       }
 
       @Override
@@ -1150,14 +1162,6 @@ public final class CollationFactory {
             Collation.CollationSpecICU.AccentSensitivity.AI;
   }
 
-  /**
-   * Returns whether the collation uses trim collation for the given collation id.
-   */
-  public static boolean usesTrimCollation(int collationId) {
-    return Collation.CollationSpec.getSpaceTrimming(collationId) !=
-      Collation.CollationSpec.SpaceTrimming.NONE;
-  }
-
   public static void assertValidProvider(String provider) throws SparkException {
     if (!SUPPORTED_PROVIDERS.contains(provider.toLowerCase())) {
       Map<String, String> params = Map.of(
@@ -1184,10 +1188,10 @@ public final class CollationFactory {
 
   public static UTF8String getCollationKey(UTF8String input, int collationId) {
     Collation collation = fetchCollation(collationId);
-    if (usesTrimCollation(collationId)) {
+    if (collation.supportsSpaceTrimming) {
       input = Collation.CollationSpec.applyTrimmingPolicy(input, collationId);
     }
-    if (collation.supportsBinaryEquality) {
+    if (collation.supportsSpaceTrimming) {
       return input;
     } else if (collation.supportsLowercaseEquality) {
       return CollationAwareUTF8String.lowerCaseCodePoints(input);
@@ -1200,7 +1204,7 @@ public final class CollationFactory {
 
   public static byte[] getCollationKeyBytes(UTF8String input, int collationId) {
     Collation collation = fetchCollation(collationId);
-    if (usesTrimCollation(collationId)) {
+    if (collation.supportsSpaceTrimming) {
       input = Collation.CollationSpec.applyTrimmingPolicy(input, collationId);
     }
     if (collation.supportsBinaryEquality) {
