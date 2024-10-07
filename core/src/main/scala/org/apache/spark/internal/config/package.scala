@@ -273,15 +273,15 @@ package object config {
 
   private[spark] val EVENT_LOG_INCLUDE_TASK_METRICS_ACCUMULATORS =
     ConfigBuilder("spark.eventLog.includeTaskMetricsAccumulators")
-      .doc("Whether to include TaskMetrics' underlying accumulator values in the event log (as " +
-        "part of the Task/Stage/Job metrics' 'Accumulables' fields. This configuration defaults " +
-        "to false because the TaskMetrics values are already logged in the 'Task Metrics' " +
-        "fields (so the accumulator updates are redundant). This flag exists only as a " +
-        "backwards-compatibility escape hatch for applications that might rely on the old " +
-        "behavior. See SPARK-42204 for details.")
+      .doc("Whether to include TaskMetrics' underlying accumulator values in the event log " +
+        "(as part of the Task/Stage/Job metrics' 'Accumulables' fields. The TaskMetrics " +
+        "values are already logged in the 'Task Metrics' fields (so the accumulator updates " +
+        "are redundant). This flag defaults to true for behavioral backwards compatibility " +
+        "for applications that might rely on the redundant logging. " +
+        "See SPARK-42204 for details.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite")
