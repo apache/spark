@@ -2179,9 +2179,7 @@ class DataFrame(ParentDataFrame):
     def localCheckpoint(
         self, eager: bool = True, storageLevel: Optional[StorageLevel] = None
     ) -> ParentDataFrame:
-        cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager)
-        if storageLevel is not None:
-            cmd.storage_level.CopyFrom(storage_level_to_proto(storageLevel))
+        cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager, storage_level=storageLevel)
         _, properties, self._execution_info = self._session.client.execute_command(
             cmd.command(self._session.client)
         )
