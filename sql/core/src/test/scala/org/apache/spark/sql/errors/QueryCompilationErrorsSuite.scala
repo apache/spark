@@ -980,6 +980,11 @@ class QueryCompilationErrorsSuite
   }
 
   test("trailing comma in select statement") {
+
+    intercept[ParseException] {
+      sql("SELECT 1,")
+    }
+
     withTable("t1") {
       sql(s"CREATE TABLE t1 (c1 INT, c2 INT) USING PARQUET")
 
