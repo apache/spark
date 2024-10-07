@@ -152,8 +152,6 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
   override def removeSchemaCommentQuery(schema: String): String = {
     s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS ''"
   }
-
-
   override def classifyException(
       e: Throwable,
       errorClass: String,
