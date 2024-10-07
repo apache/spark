@@ -29,7 +29,7 @@ import scala.util.Random
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 
-import org.apache.spark.{SparkException, SparkSQLException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkSQLException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Observation, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -1513,6 +1513,25 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     val foobarCnt = spark.table("foobar").count()
     val res = InputOutputMetricsHelper.run(sql("SELECT * FROM foobar").toDF())
     assert(res === (foobarCnt, 0L, foobarCnt) :: Nil)
+  }
+
+  test("SPARK-49730: syntax error classification") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        val schema = StructType(
+          Seq(StructField("id", IntegerType, true, defaultMetadata(IntegerType))))
+
+        spark.read
+          .format("jdbc")
+          .schema(schema)
+          .option("url", urlWithUserAndPass)
+          .option("query", "SELECT * FRM tbl")
+          .load()
+      },
+      condition = "FAILED_JDBC.SYNTAX_ERROR",
+      parameters = Map(
+        "url" -> urlWithUserAndPass,
+        "query" -> "SELECT * FROM (SELECT * FRM tbl) SPARK_GEN_SUBQ_0 WHERE 1=0"))
   }
 
   test("unsupported types") {

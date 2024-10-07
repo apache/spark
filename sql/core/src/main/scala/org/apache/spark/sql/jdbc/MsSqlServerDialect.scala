@@ -220,6 +220,10 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
            case 15335 if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
              val newTable = messageParameters("newName")
              throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
+          case 102 | 122 | 142 | 148 | 156 | 319 | 336 =>
+            throw QueryExecutionErrors.jdbcGeneratedQuerySyntaxError(
+              messageParameters.get("url").getOrElse(""),
+              messageParameters.get("query").getOrElse(""))
           case _ =>
             super.classifyException(e, errorClass, messageParameters, description, isRuntime)
         }
