@@ -289,13 +289,14 @@ private[ml] class Optimizer(private val opts: Opts,
 
           val g = ((label - sigm) * opts.lr * weight).toFloat
 
-          if (opts.verbose && opts.lambda > 0 && label > 0) {
+          if (opts.verbose) {
             lloss += expTable.logloss(f, label.toFloat) * weight
             llossn += 1
-
-            llossReg += opts.lambda * blas.sdot(opts.dim, syn0, l1, 1, syn0, l1, 1)
-            llossReg += opts.lambda * blas.sdot(opts.dim, syn1neg, l2, 1, syn1neg, l2, 1)
-            llossnReg += 1
+            if (opts.lambda > 0 && label > 0) {
+              llossReg += opts.lambda * blas.sdot(opts.dim, syn0, l1, 1, syn0, l1, 1)
+              llossReg += opts.lambda * blas.sdot(opts.dim, syn1neg, l2, 1, syn1neg, l2, 1)
+              llossnReg += 1
+            }
           }
 
           if (opts.lambda > 0 && label > 0) {
