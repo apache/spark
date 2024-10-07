@@ -180,6 +180,17 @@ class StatefulProcessorHandle:
         self.stateful_processor_api_client.get_list_state(state_name, schema, ttl_duration_ms)
         return ListState(ListStateClient(self.stateful_processor_api_client), state_name, schema)
 
+    def deleteIfExists(self, state_name: str) -> None:
+        """
+        Function to delete and purge state variable if defined previously
+
+        Parameters
+        ----------
+        state_name : str
+            name of the state variable
+        """
+        self.stateful_processor_api_client.delete_if_exists(state_name)
+
 
 class StatefulProcessor(ABC):
     """

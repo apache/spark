@@ -2132,6 +2132,21 @@ public final class StateMessage {
      */
     org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommandOrBuilder getGetMapStateOrBuilder();
 
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.StateCallCommand deleteIfExists = 5;</code>
+     * @return Whether the deleteIfExists field is set.
+     */
+    boolean hasDeleteIfExists();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.StateCallCommand deleteIfExists = 5;</code>
+     * @return The deleteIfExists.
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand getDeleteIfExists();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.StateCallCommand deleteIfExists = 5;</code>
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommandOrBuilder getDeleteIfExistsOrBuilder();
+
     public org.apache.spark.sql.execution.streaming.state.StateMessage.StatefulProcessorCall.MethodCase getMethodCase();
   }
   /**
@@ -2183,6 +2198,7 @@ public final class StateMessage {
       GETVALUESTATE(2),
       GETLISTSTATE(3),
       GETMAPSTATE(4),
+      DELETEIFEXISTS(5),
       METHOD_NOT_SET(0);
       private final int value;
       private MethodCase(int value) {
@@ -2204,6 +2220,7 @@ public final class StateMessage {
           case 2: return GETVALUESTATE;
           case 3: return GETLISTSTATE;
           case 4: return GETMAPSTATE;
+          case 5: return DELETEIFEXISTS;
           case 0: return METHOD_NOT_SET;
           default: return null;
         }
@@ -2343,6 +2360,37 @@ public final class StateMessage {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand.getDefaultInstance();
     }
 
+    public static final int DELETEIFEXISTS_FIELD_NUMBER = 5;
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.StateCallCommand deleteIfExists = 5;</code>
+     * @return Whether the deleteIfExists field is set.
+     */
+    @java.lang.Override
+    public boolean hasDeleteIfExists() {
+      return methodCase_ == 5;
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.StateCallCommand deleteIfExists = 5;</code>
+     * @return The deleteIfExists.
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand getDeleteIfExists() {
+      if (methodCase_ == 5) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand.getDefaultInstance();
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.StateCallCommand deleteIfExists = 5;</code>
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommandOrBuilder getDeleteIfExistsOrBuilder() {
+      if (methodCase_ == 5) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand.getDefaultInstance();
+    }
+
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -2369,6 +2417,9 @@ public final class StateMessage {
       if (methodCase_ == 4) {
         output.writeMessage(4, (org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand) method_);
       }
+      if (methodCase_ == 5) {
+        output.writeMessage(5, (org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand) method_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -2393,6 +2444,10 @@ public final class StateMessage {
       if (methodCase_ == 4) {
         size += com.google.protobuf.CodedOutputStream
           .computeMessageSize(4, (org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand) method_);
+      }
+      if (methodCase_ == 5) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(5, (org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand) method_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
@@ -2427,6 +2482,10 @@ public final class StateMessage {
           if (!getGetMapState()
               .equals(other.getGetMapState())) return false;
           break;
+        case 5:
+          if (!getDeleteIfExists()
+              .equals(other.getDeleteIfExists())) return false;
+          break;
         case 0:
         default:
       }
@@ -2457,6 +2516,10 @@ public final class StateMessage {
         case 4:
           hash = (37 * hash) + GETMAPSTATE_FIELD_NUMBER;
           hash = (53 * hash) + getGetMapState().hashCode();
+          break;
+        case 5:
+          hash = (37 * hash) + DELETEIFEXISTS_FIELD_NUMBER;
+          hash = (53 * hash) + getDeleteIfExists().hashCode();
           break;
         case 0:
         default:
@@ -2601,6 +2664,9 @@ public final class StateMessage {
         if (getMapStateBuilder_ != null) {
           getMapStateBuilder_.clear();
         }
+        if (deleteIfExistsBuilder_ != null) {
+          deleteIfExistsBuilder_.clear();
+        }
         methodCase_ = 0;
         method_ = null;
         return this;
@@ -2655,6 +2721,13 @@ public final class StateMessage {
             result.method_ = method_;
           } else {
             result.method_ = getMapStateBuilder_.build();
+          }
+        }
+        if (methodCase_ == 5) {
+          if (deleteIfExistsBuilder_ == null) {
+            result.method_ = method_;
+          } else {
+            result.method_ = deleteIfExistsBuilder_.build();
           }
         }
         result.methodCase_ = methodCase_;
@@ -2723,6 +2796,10 @@ public final class StateMessage {
             mergeGetMapState(other.getGetMapState());
             break;
           }
+          case DELETEIFEXISTS: {
+            mergeDeleteIfExists(other.getDeleteIfExists());
+            break;
+          }
           case METHOD_NOT_SET: {
             break;
           }
@@ -2781,6 +2858,13 @@ public final class StateMessage {
                 methodCase_ = 4;
                 break;
               } // case 34
+              case 42: {
+                input.readMessage(
+                    getDeleteIfExistsFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                methodCase_ = 5;
+                break;
+              } // case 42
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -3378,6 +3462,148 @@ public final class StateMessage {
         methodCase_ = 4;
         onChanged();;
         return getMapStateBuilder_;
+      }
+
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand, org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommandOrBuilder> deleteIfExistsBuilder_;
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.StateCallCommand deleteIfExists = 5;</code>
+       * @return Whether the deleteIfExists field is set.
+       */
+      @java.lang.Override
+      public boolean hasDeleteIfExists() {
+        return methodCase_ == 5;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.StateCallCommand deleteIfExists = 5;</code>
+       * @return The deleteIfExists.
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand getDeleteIfExists() {
+        if (deleteIfExistsBuilder_ == null) {
+          if (methodCase_ == 5) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand.getDefaultInstance();
+        } else {
+          if (methodCase_ == 5) {
+            return deleteIfExistsBuilder_.getMessage();
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.StateCallCommand deleteIfExists = 5;</code>
+       */
+      public Builder setDeleteIfExists(org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand value) {
+        if (deleteIfExistsBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          method_ = value;
+          onChanged();
+        } else {
+          deleteIfExistsBuilder_.setMessage(value);
+        }
+        methodCase_ = 5;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.StateCallCommand deleteIfExists = 5;</code>
+       */
+      public Builder setDeleteIfExists(
+          org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand.Builder builderForValue) {
+        if (deleteIfExistsBuilder_ == null) {
+          method_ = builderForValue.build();
+          onChanged();
+        } else {
+          deleteIfExistsBuilder_.setMessage(builderForValue.build());
+        }
+        methodCase_ = 5;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.StateCallCommand deleteIfExists = 5;</code>
+       */
+      public Builder mergeDeleteIfExists(org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand value) {
+        if (deleteIfExistsBuilder_ == null) {
+          if (methodCase_ == 5 &&
+              method_ != org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand.getDefaultInstance()) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand.newBuilder((org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand) method_)
+                .mergeFrom(value).buildPartial();
+          } else {
+            method_ = value;
+          }
+          onChanged();
+        } else {
+          if (methodCase_ == 5) {
+            deleteIfExistsBuilder_.mergeFrom(value);
+          } else {
+            deleteIfExistsBuilder_.setMessage(value);
+          }
+        }
+        methodCase_ = 5;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.StateCallCommand deleteIfExists = 5;</code>
+       */
+      public Builder clearDeleteIfExists() {
+        if (deleteIfExistsBuilder_ == null) {
+          if (methodCase_ == 5) {
+            methodCase_ = 0;
+            method_ = null;
+            onChanged();
+          }
+        } else {
+          if (methodCase_ == 5) {
+            methodCase_ = 0;
+            method_ = null;
+          }
+          deleteIfExistsBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.StateCallCommand deleteIfExists = 5;</code>
+       */
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand.Builder getDeleteIfExistsBuilder() {
+        return getDeleteIfExistsFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.StateCallCommand deleteIfExists = 5;</code>
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommandOrBuilder getDeleteIfExistsOrBuilder() {
+        if ((methodCase_ == 5) && (deleteIfExistsBuilder_ != null)) {
+          return deleteIfExistsBuilder_.getMessageOrBuilder();
+        } else {
+          if (methodCase_ == 5) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.StateCallCommand deleteIfExists = 5;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand, org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommandOrBuilder> 
+          getDeleteIfExistsFieldBuilder() {
+        if (deleteIfExistsBuilder_ == null) {
+          if (!(methodCase_ == 5)) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand.getDefaultInstance();
+          }
+          deleteIfExistsBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+              org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand, org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommandOrBuilder>(
+                  (org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand) method_,
+                  getParentForChildren(),
+                  isClean());
+          method_ = null;
+        }
+        methodCase_ = 5;
+        onChanged();;
+        return deleteIfExistsBuilder_;
       }
       @java.lang.Override
       public final Builder setUnknownFields(
@@ -15152,7 +15378,7 @@ public final class StateMessage {
       "ark.sql.execution.streaming.state.Implic" +
       "itGroupingKeyRequestH\000B\010\n\006method\"H\n\rStat" +
       "eResponse\022\022\n\nstatusCode\030\001 \001(\005\022\024\n\014errorMe" +
-      "ssage\030\002 \001(\t\022\r\n\005value\030\003 \001(\014\"\211\003\n\025StatefulP" +
+      "ssage\030\002 \001(\t\022\r\n\005value\030\003 \001(\014\"\345\003\n\025StatefulP" +
       "rocessorCall\022X\n\016setHandleState\030\001 \001(\0132>.o" +
       "rg.apache.spark.sql.execution.streaming." +
       "state.SetHandleStateH\000\022Y\n\rgetValueState\030" +
@@ -15162,54 +15388,56 @@ public final class StateMessage {
       "xecution.streaming.state.StateCallComman" +
       "dH\000\022W\n\013getMapState\030\004 \001(\0132@.org.apache.sp" +
       "ark.sql.execution.streaming.state.StateC" +
-      "allCommandH\000B\010\n\006method\"\322\001\n\024StateVariable" +
-      "Request\022X\n\016valueStateCall\030\001 \001(\0132>.org.ap" +
-      "ache.spark.sql.execution.streaming.state" +
-      ".ValueStateCallH\000\022V\n\rlistStateCall\030\002 \001(\013" +
-      "2=.org.apache.spark.sql.execution.stream" +
-      "ing.state.ListStateCallH\000B\010\n\006method\"\340\001\n\032" +
-      "ImplicitGroupingKeyRequest\022X\n\016setImplici" +
-      "tKey\030\001 \001(\0132>.org.apache.spark.sql.execut" +
-      "ion.streaming.state.SetImplicitKeyH\000\022^\n\021" +
-      "removeImplicitKey\030\002 \001(\0132A.org.apache.spa" +
-      "rk.sql.execution.streaming.state.RemoveI" +
-      "mplicitKeyH\000B\010\n\006method\"}\n\020StateCallComma" +
-      "nd\022\021\n\tstateName\030\001 \001(\t\022\016\n\006schema\030\002 \001(\t\022F\n" +
-      "\003ttl\030\003 \001(\01329.org.apache.spark.sql.execut" +
-      "ion.streaming.state.TTLConfig\"\341\002\n\016ValueS" +
-      "tateCall\022\021\n\tstateName\030\001 \001(\t\022H\n\006exists\030\002 " +
-      "\001(\01326.org.apache.spark.sql.execution.str" +
-      "eaming.state.ExistsH\000\022B\n\003get\030\003 \001(\01323.org" +
-      ".apache.spark.sql.execution.streaming.st" +
-      "ate.GetH\000\022\\\n\020valueStateUpdate\030\004 \001(\0132@.or" +
+      "allCommandH\000\022Z\n\016deleteIfExists\030\005 \001(\0132@.o" +
+      "rg.apache.spark.sql.execution.streaming." +
+      "state.StateCallCommandH\000B\010\n\006method\"\322\001\n\024S" +
+      "tateVariableRequest\022X\n\016valueStateCall\030\001 " +
+      "\001(\0132>.org.apache.spark.sql.execution.str" +
+      "eaming.state.ValueStateCallH\000\022V\n\rlistSta" +
+      "teCall\030\002 \001(\0132=.org.apache.spark.sql.exec" +
+      "ution.streaming.state.ListStateCallH\000B\010\n" +
+      "\006method\"\340\001\n\032ImplicitGroupingKeyRequest\022X" +
+      "\n\016setImplicitKey\030\001 \001(\0132>.org.apache.spar" +
+      "k.sql.execution.streaming.state.SetImpli" +
+      "citKeyH\000\022^\n\021removeImplicitKey\030\002 \001(\0132A.or" +
       "g.apache.spark.sql.execution.streaming.s" +
-      "tate.ValueStateUpdateH\000\022F\n\005clear\030\005 \001(\01325" +
-      ".org.apache.spark.sql.execution.streamin" +
-      "g.state.ClearH\000B\010\n\006method\"\220\004\n\rListStateC" +
-      "all\022\021\n\tstateName\030\001 \001(\t\022H\n\006exists\030\002 \001(\01326" +
-      ".org.apache.spark.sql.execution.streamin" +
-      "g.state.ExistsH\000\022T\n\014listStateGet\030\003 \001(\0132<" +
-      ".org.apache.spark.sql.execution.streamin" +
-      "g.state.ListStateGetH\000\022T\n\014listStatePut\030\004" +
-      " \001(\0132<.org.apache.spark.sql.execution.st" +
-      "reaming.state.ListStatePutH\000\022R\n\013appendVa" +
-      "lue\030\005 \001(\0132;.org.apache.spark.sql.executi" +
-      "on.streaming.state.AppendValueH\000\022P\n\nappe" +
-      "ndList\030\006 \001(\0132:.org.apache.spark.sql.exec" +
-      "ution.streaming.state.AppendListH\000\022F\n\005cl" +
-      "ear\030\007 \001(\01325.org.apache.spark.sql.executi" +
-      "on.streaming.state.ClearH\000B\010\n\006method\"\035\n\016" +
-      "SetImplicitKey\022\013\n\003key\030\001 \001(\014\"\023\n\021RemoveImp" +
-      "licitKey\"\010\n\006Exists\"\005\n\003Get\"!\n\020ValueStateU" +
-      "pdate\022\r\n\005value\030\001 \001(\014\"\007\n\005Clear\"\"\n\014ListSta" +
-      "teGet\022\022\n\niteratorId\030\001 \001(\t\"\016\n\014ListStatePu" +
-      "t\"\034\n\013AppendValue\022\r\n\005value\030\001 \001(\014\"\014\n\nAppen" +
-      "dList\"\\\n\016SetHandleState\022J\n\005state\030\001 \001(\0162;" +
-      ".org.apache.spark.sql.execution.streamin" +
-      "g.state.HandleState\"\037\n\tTTLConfig\022\022\n\ndura" +
-      "tionMs\030\001 \001(\005*K\n\013HandleState\022\013\n\007CREATED\020\000" +
-      "\022\017\n\013INITIALIZED\020\001\022\022\n\016DATA_PROCESSED\020\002\022\n\n" +
-      "\006CLOSED\020\003b\006proto3"
+      "tate.RemoveImplicitKeyH\000B\010\n\006method\"}\n\020St" +
+      "ateCallCommand\022\021\n\tstateName\030\001 \001(\t\022\016\n\006sch" +
+      "ema\030\002 \001(\t\022F\n\003ttl\030\003 \001(\01329.org.apache.spar" +
+      "k.sql.execution.streaming.state.TTLConfi" +
+      "g\"\341\002\n\016ValueStateCall\022\021\n\tstateName\030\001 \001(\t\022" +
+      "H\n\006exists\030\002 \001(\01326.org.apache.spark.sql.e" +
+      "xecution.streaming.state.ExistsH\000\022B\n\003get" +
+      "\030\003 \001(\01323.org.apache.spark.sql.execution." +
+      "streaming.state.GetH\000\022\\\n\020valueStateUpdat" +
+      "e\030\004 \001(\0132@.org.apache.spark.sql.execution" +
+      ".streaming.state.ValueStateUpdateH\000\022F\n\005c" +
+      "lear\030\005 \001(\01325.org.apache.spark.sql.execut" +
+      "ion.streaming.state.ClearH\000B\010\n\006method\"\220\004" +
+      "\n\rListStateCall\022\021\n\tstateName\030\001 \001(\t\022H\n\006ex" +
+      "ists\030\002 \001(\01326.org.apache.spark.sql.execut" +
+      "ion.streaming.state.ExistsH\000\022T\n\014listStat" +
+      "eGet\030\003 \001(\0132<.org.apache.spark.sql.execut" +
+      "ion.streaming.state.ListStateGetH\000\022T\n\014li" +
+      "stStatePut\030\004 \001(\0132<.org.apache.spark.sql." +
+      "execution.streaming.state.ListStatePutH\000" +
+      "\022R\n\013appendValue\030\005 \001(\0132;.org.apache.spark" +
+      ".sql.execution.streaming.state.AppendVal" +
+      "ueH\000\022P\n\nappendList\030\006 \001(\0132:.org.apache.sp" +
+      "ark.sql.execution.streaming.state.Append" +
+      "ListH\000\022F\n\005clear\030\007 \001(\01325.org.apache.spark" +
+      ".sql.execution.streaming.state.ClearH\000B\010" +
+      "\n\006method\"\035\n\016SetImplicitKey\022\013\n\003key\030\001 \001(\014\"" +
+      "\023\n\021RemoveImplicitKey\"\010\n\006Exists\"\005\n\003Get\"!\n" +
+      "\020ValueStateUpdate\022\r\n\005value\030\001 \001(\014\"\007\n\005Clea" +
+      "r\"\"\n\014ListStateGet\022\022\n\niteratorId\030\001 \001(\t\"\016\n" +
+      "\014ListStatePut\"\034\n\013AppendValue\022\r\n\005value\030\001 " +
+      "\001(\014\"\014\n\nAppendList\"\\\n\016SetHandleState\022J\n\005s" +
+      "tate\030\001 \001(\0162;.org.apache.spark.sql.execut" +
+      "ion.streaming.state.HandleState\"\037\n\tTTLCo" +
+      "nfig\022\022\n\ndurationMs\030\001 \001(\005*K\n\013HandleState\022" +
+      "\013\n\007CREATED\020\000\022\017\n\013INITIALIZED\020\001\022\022\n\016DATA_PR" +
+      "OCESSED\020\002\022\n\n\006CLOSED\020\003b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -15232,7 +15460,7 @@ public final class StateMessage {
     internal_static_org_apache_spark_sql_execution_streaming_state_StatefulProcessorCall_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_StatefulProcessorCall_descriptor,
-        new java.lang.String[] { "SetHandleState", "GetValueState", "GetListState", "GetMapState", "Method", });
+        new java.lang.String[] { "SetHandleState", "GetValueState", "GetListState", "GetMapState", "DeleteIfExists", "Method", });
     internal_static_org_apache_spark_sql_execution_streaming_state_StateVariableRequest_descriptor =
       getDescriptor().getMessageTypes().get(3);
     internal_static_org_apache_spark_sql_execution_streaming_state_StateVariableRequest_fieldAccessorTable = new
