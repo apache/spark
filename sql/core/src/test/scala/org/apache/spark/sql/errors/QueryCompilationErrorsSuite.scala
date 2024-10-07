@@ -1010,6 +1010,21 @@ class QueryCompilationErrorsSuite
         }
         assert(exception.getErrorClass === "TRAILING_COMMA_IN_SELECT")
       }
+
+      val unresolvedColumnErrors = Seq(
+        "SELECT c3 FROM t1",
+        "SELECT from FROM t1",
+        "SELECT from FROM (SELECT 'a' as c1)",
+        "SELECT from AS col FROM t1",
+        "SELECT from AS from FROM t1",
+        "SELECT from from FROM t1"
+      )
+      unresolvedColumnErrors.foreach { query =>
+        val exception = intercept[AnalysisException] {
+          sql(query)
+        }
+        assert(exception.getErrorClass === "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+      }
     }
   }
 }
