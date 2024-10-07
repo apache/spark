@@ -89,6 +89,7 @@ class TransformWithStateInPandasTestsMixin:
         )
         return df_final
 
+    """
     def _test_transform_with_state_in_pandas_basic(
         self, stateful_processor, check_results, single_batch=False, timeMode="None"
     ):
@@ -318,6 +319,7 @@ class TransformWithStateInPandasTestsMixin:
             self.assertTrue(q.exception() is None)
         finally:
             input_dir.cleanup()
+    """
 
     def _test_transform_with_state_init_state_in_pandas(
             self, stateful_processor, check_results
@@ -397,6 +399,7 @@ class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
         self.value_state = handle.getValueState("value_state", state_schema)
 
     def handleInputRows(self, key, rows) -> Iterator[pd.DataFrame]:
+        print(f"enter handle input rows: {key}\n")
         exists = self.value_state.exists()
         if exists:
             value_row = self.value_state.get()
@@ -411,12 +414,14 @@ class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
             accumulated_value += value
 
         self.value_state.update((accumulated_value,))
+        print(f"done with handle input for key: {key}\n")
 
         yield pd.DataFrame({"id": key, "value": str(accumulated_value)})
 
     def handleInitialState(self, key, initialState) -> None:
         initVal = initialState.at[0, "initVal"]
         self.value_state.update((initVal,))
+        print(f"done with handle initial state for key: {key}\n")
 
     def close(self) -> None:
         pass

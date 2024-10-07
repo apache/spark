@@ -36,8 +36,9 @@ import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, Sta
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateVariableRequest, UtilsCallCommand, ValueStateCall}
 import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
 import org.apache.spark.sql.streaming.{ListState, TTLConfig, ValueState}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{BinaryType, StructType}
 import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.util.Utils
 
 /**
  * This class is used to handle the state requests from the Python side. It runs on a separate
@@ -93,10 +94,8 @@ class TransformWithStateInPandasStateServer(
     new mutable.HashMap[String, Iterator[Row]]()
   }
 
-  private val initialStateKeyToRowMap: Map[InternalRow, Iterator[InternalRow]] =
-    if (hasInitialState) {
-      initialStateDataIterator.toMap
-    } else Map.empty
+  private val initDataIter: Iterator[(InternalRow, Iterator[InternalRow])] =
+    initialStateDataIterator.toSeq.iterator
 
   def run(): Unit = {
     val listeningSocket = stateServerSocket.accept()
@@ -176,18 +175,20 @@ class TransformWithStateInPandasStateServer(
     message.getMethodCase match {
       case StatefulProcessorCall.MethodCase.SETHANDLESTATE =>
         val requestedState = message.getSetHandleState.getState
+        println(s"I am inside set handle state, change to state: ${requestedState}")
         requestedState match {
           case HandleState.CREATED =>
-            logInfo(log"set handle state to Created")
+            println(log"set handle state to Created")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CREATED)
           case HandleState.INITIALIZED =>
-            logInfo(log"set handle state to Initialized")
+            println(log"set handle state to Initialized")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
           case HandleState.CLOSED =>
-            logInfo(log"set handle state to Closed")
+            println(log"set handle state to Closed")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
           case _ =>
         }
+        println(s"I am done set handle state")
         sendResponse(0)
       case StatefulProcessorCall.MethodCase.GETVALUESTATE =>
         val stateName = message.getGetValueState.getStateName
@@ -220,44 +221,56 @@ class TransformWithStateInPandasStateServer(
         }
 
       case UtilsCallCommand.MethodCase.GETINITIALSTATE =>
-        if (!hasInitialState ||
-          initialStateKeyToRowMap == null || initialStateKeyToRowMap.isEmpty) {
+        if (!hasInitialState || initDataIter == null || !initDataIter.hasNext) {
+          println(s"i am here getting initial state, send status code 1")
           sendResponse(1)
         } else {
           sendResponse(0)
 
           outputStream.flush()
-          val arrowStreamWriter = {
-            val outputSchema = initialStateSchema
-            val arrowSchema = ArrowUtils.toArrowSchema(outputSchema, timeZoneId,
-              errorOnDuplicatedFieldNames, largeVarTypes)
-            val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-              s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
-            val root = VectorSchemaRoot.create(arrowSchema, allocator)
-            new BaseStreamingArrowWriter(root, new ArrowStreamWriter(root, null, outputStream),
+          val outputSchema = new StructType()
+            .add("key", BinaryType)
+            .add("initialState", initialStateSchema)
+          val arrowSchema = ArrowUtils.toArrowSchema(outputSchema, timeZoneId,
+            errorOnDuplicatedFieldNames, largeVarTypes)
+          val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+            s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
+          val root = VectorSchemaRoot.create(arrowSchema, allocator)
+          val writer = new ArrowStreamWriter(root, null, outputStream)
+          val arrowStreamWriter =
+            new BaseStreamingArrowWriter(root, writer,
               arrowTransformWithStateInPandasMaxRecordsPerBatch)
-          }
 
-          val keyBytes = message.getGetInitialState.getGroupingKey.toByteArray
-          // The key row is serialized as a byte array, we need to convert it back to a Row
-          val keyRow = PythonSQLUtils.toJVMRow(keyBytes, groupingKeySchema, keyRowDeserializer)
-          val groupingKeyToInternalRow =
-            ExpressionEncoder(groupingKeySchema).createSerializer().apply(keyRow)
-          val iter = initialStateKeyToRowMap
-            .get(groupingKeyToInternalRow).getOrElse(Iterator.empty)
-
+          val keyStatePair = initDataIter.next()
           var seenInitStateOnKey = false
-          while (iter.hasNext) {
+          println(s"I am here inside sending, key: ${keyStatePair._1}")
+          while (keyStatePair._2.hasNext) {
             if (seenInitStateOnKey) {
+              println(s"I am here, seen init stat on key: " +
+                s"${keyRowDeserializer.apply(keyStatePair._1)}")
               throw StateStoreErrors.cannotReInitializeStateOnKey(
-                keyRowDeserializer.apply(groupingKeyToInternalRow).toString)
+                keyRowDeserializer.apply(keyStatePair._1).toString)
             } else {
-              val initialStateRow = iter.next()
+              val initialStateRow = keyStatePair._2.next()
               seenInitStateOnKey = true
-              arrowStreamWriter.writeRow(initialStateRow)
+              val outputRow = InternalRow(
+                PythonSQLUtils.toPyRow(keyRowDeserializer.apply(keyStatePair._1)), initialStateRow)
+              println(s"I am here before writing rows, outputrow: ${outputRow}")
+              arrowStreamWriter.writeRow(outputRow)
             }
           }
           arrowStreamWriter.finalizeCurrentArrowBatch()
+          println(s"I am here after writing rows")
+          Utils.tryWithSafeFinally {
+            // end writes footer to the output stream and doesn't clean any resources.
+            // It could throw exception if the output stream is closed, so it should be
+            // in the try block.
+            writer.end()
+          } {
+            root.close()
+            allocator.close()
+          }
+          println(s"I am here after close everything")
         }
 
       case _ =>

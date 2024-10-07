@@ -497,19 +497,32 @@ class PandasGroupedOpsMixin:
 
             if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:
                 statefulProcessor.init(handle)
+                # only process initial state if first batch
+                print(f"before set handle state, key is: {key}\n")
                 statefulProcessorApiClient.set_handle_state(
                     StatefulProcessorHandleState.INITIALIZED
                 )
+                print(f"after set handle state, key is: {key}\n")
 
-            # only process initial state if first batch
             is_first_batch = statefulProcessorApiClient.is_first_batch()
-            statefulProcessorApiClient.set_implicit_key(key)
             if is_first_batch:
-                initial_state = statefulProcessorApiClient.get_initial_state(key)
-                # if user did not provide initial state df, initial_state will be None
-                if initial_state is not None:
-                    statefulProcessor.handleInitialState(key, initial_state)
+                print(f"inside first batch, trying to get initial_state, key is: {key}\n")
+                initial_state_iter = statefulProcessorApiClient.get_initial_state_iter()
+                # if user did not provide initial state df, initial_state_iter will be None
+                print(f"after getting init for key {key}, before handling initial state, got init state: {initial_state_iter}\n")
+                if initial_state_iter is not None:
+                    grouping_key, cur_initial_state = initial_state_iter
+                    print(f"inside first batch, before set implicit key, grouping_key is: {grouping_key}, "
+                          f"cur_initial_state: {cur_initial_state}\n")
+                    statefulProcessorApiClient.set_implicit_key(grouping_key)
+                    print(f"inside first batch, before handling initial state, key is: {key}\n")
+                    statefulProcessor.handleInitialState(grouping_key, cur_initial_state)
+                    print(f"inside first batch, after handling initial state, key is: {key}\n")
+                    statefulProcessorApiClient.remove_implicit_key()
 
+            print(f"before set implicit key, key is: {key}\n")
+            statefulProcessorApiClient.set_implicit_key(key)
+            print(f"before handle input rows, key is: {key}\n")
             result = statefulProcessor.handleInputRows(key, inputRows)
 
             return result

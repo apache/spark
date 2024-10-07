@@ -16567,12 +16567,6 @@ public final class StateMessage {
   public interface GetInitialStateOrBuilder extends
       // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.execution.streaming.state.GetInitialState)
       com.google.protobuf.MessageOrBuilder {
-
-    /**
-     * <code>bytes groupingKey = 1;</code>
-     * @return The groupingKey.
-     */
-    com.google.protobuf.ByteString getGroupingKey();
   }
   /**
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.GetInitialState}
@@ -16587,7 +16581,6 @@ public final class StateMessage {
       super(builder);
     }
     private GetInitialState() {
-      groupingKey_ = com.google.protobuf.ByteString.EMPTY;
     }
 
     @java.lang.Override
@@ -16615,17 +16608,6 @@ public final class StateMessage {
               org.apache.spark.sql.execution.streaming.state.StateMessage.GetInitialState.class, org.apache.spark.sql.execution.streaming.state.StateMessage.GetInitialState.Builder.class);
     }
 
-    public static final int GROUPINGKEY_FIELD_NUMBER = 1;
-    private com.google.protobuf.ByteString groupingKey_;
-    /**
-     * <code>bytes groupingKey = 1;</code>
-     * @return The groupingKey.
-     */
-    @java.lang.Override
-    public com.google.protobuf.ByteString getGroupingKey() {
-      return groupingKey_;
-    }
-
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -16640,9 +16622,6 @@ public final class StateMessage {
     @java.lang.Override
     public void writeTo(com.google.protobuf.CodedOutputStream output)
                         throws java.io.IOException {
-      if (!groupingKey_.isEmpty()) {
-        output.writeBytes(1, groupingKey_);
-      }
       getUnknownFields().writeTo(output);
     }
 
@@ -16652,10 +16631,6 @@ public final class StateMessage {
       if (size != -1) return size;
 
       size = 0;
-      if (!groupingKey_.isEmpty()) {
-        size += com.google.protobuf.CodedOutputStream
-          .computeBytesSize(1, groupingKey_);
-      }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
       return size;
@@ -16671,8 +16646,6 @@ public final class StateMessage {
       }
       org.apache.spark.sql.execution.streaming.state.StateMessage.GetInitialState other = (org.apache.spark.sql.execution.streaming.state.StateMessage.GetInitialState) obj;
 
-      if (!getGroupingKey()
-          .equals(other.getGroupingKey())) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
       return true;
     }
@@ -16684,8 +16657,6 @@ public final class StateMessage {
       }
       int hash = 41;
       hash = (19 * hash) + getDescriptor().hashCode();
-      hash = (37 * hash) + GROUPINGKEY_FIELD_NUMBER;
-      hash = (53 * hash) + getGroupingKey().hashCode();
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -16814,8 +16785,6 @@ public final class StateMessage {
       @java.lang.Override
       public Builder clear() {
         super.clear();
-        groupingKey_ = com.google.protobuf.ByteString.EMPTY;
-
         return this;
       }
 
@@ -16842,7 +16811,6 @@ public final class StateMessage {
       @java.lang.Override
       public org.apache.spark.sql.execution.streaming.state.StateMessage.GetInitialState buildPartial() {
         org.apache.spark.sql.execution.streaming.state.StateMessage.GetInitialState result = new org.apache.spark.sql.execution.streaming.state.StateMessage.GetInitialState(this);
-        result.groupingKey_ = groupingKey_;
         onBuilt();
         return result;
       }
@@ -16891,9 +16859,6 @@ public final class StateMessage {
 
       public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.GetInitialState other) {
         if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.GetInitialState.getDefaultInstance()) return this;
-        if (other.getGroupingKey() != com.google.protobuf.ByteString.EMPTY) {
-          setGroupingKey(other.getGroupingKey());
-        }
         this.mergeUnknownFields(other.getUnknownFields());
         onChanged();
         return this;
@@ -16920,11 +16885,6 @@ public final class StateMessage {
               case 0:
                 done = true;
                 break;
-              case 10: {
-                groupingKey_ = input.readBytes();
-
-                break;
-              } // case 10
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -16938,40 +16898,6 @@ public final class StateMessage {
         } finally {
           onChanged();
         } // finally
-        return this;
-      }
-
-      private com.google.protobuf.ByteString groupingKey_ = com.google.protobuf.ByteString.EMPTY;
-      /**
-       * <code>bytes groupingKey = 1;</code>
-       * @return The groupingKey.
-       */
-      @java.lang.Override
-      public com.google.protobuf.ByteString getGroupingKey() {
-        return groupingKey_;
-      }
-      /**
-       * <code>bytes groupingKey = 1;</code>
-       * @param value The groupingKey to set.
-       * @return This builder for chaining.
-       */
-      public Builder setGroupingKey(com.google.protobuf.ByteString value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  
-        groupingKey_ = value;
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>bytes groupingKey = 1;</code>
-       * @return This builder for chaining.
-       */
-      public Builder clearGroupingKey() {
-        
-        groupingKey_ = getDefaultInstance().getGroupingKey();
-        onChanged();
         return this;
       }
       @java.lang.Override
@@ -17237,10 +17163,9 @@ public final class StateMessage {
       "atchH\000\022Z\n\017getInitialState\030\002 \001(\0132?.org.ap" +
       "ache.spark.sql.execution.streaming.state" +
       ".GetInitialStateH\000B\010\n\006method\"\016\n\014IsFirstB" +
-      "atch\"&\n\017GetInitialState\022\023\n\013groupingKey\030\001" +
-      " \001(\014*K\n\013HandleState\022\013\n\007CREATED\020\000\022\017\n\013INIT" +
-      "IALIZED\020\001\022\022\n\016DATA_PROCESSED\020\002\022\n\n\006CLOSED\020" +
-      "\003b\006proto3"
+      "atch\"\021\n\017GetInitialState*K\n\013HandleState\022\013" +
+      "\n\007CREATED\020\000\022\017\n\013INITIALIZED\020\001\022\022\n\016DATA_PRO" +
+      "CESSED\020\002\022\n\n\006CLOSED\020\003b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -17383,7 +17308,7 @@ public final class StateMessage {
     internal_static_org_apache_spark_sql_execution_streaming_state_GetInitialState_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_GetInitialState_descriptor,
-        new java.lang.String[] { "GroupingKey", });
+        new java.lang.String[] { });
   }
 
   // @@protoc_insertion_point(outer_class_scope)

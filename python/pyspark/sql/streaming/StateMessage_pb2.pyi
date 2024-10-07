@@ -32,10 +32,8 @@ class Get(_message.Message):
     def __init__(self) -> None: ...
 
 class GetInitialState(_message.Message):
-    __slots__ = ["groupingKey"]
-    GROUPINGKEY_FIELD_NUMBER: ClassVar[int]
-    groupingKey: bytes
-    def __init__(self, groupingKey: Optional[bytes] = ...) -> None: ...
+    __slots__ = []
+    def __init__(self) -> None: ...
 
 class ImplicitGroupingKeyRequest(_message.Message):
     __slots__ = ["removeImplicitKey", "setImplicitKey"]

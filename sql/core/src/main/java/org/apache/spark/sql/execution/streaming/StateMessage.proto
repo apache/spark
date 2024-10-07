@@ -146,5 +146,4 @@ message IsFirstBatch {
 }
 
 message GetInitialState {
-  bytes groupingKey = 1;
 }
