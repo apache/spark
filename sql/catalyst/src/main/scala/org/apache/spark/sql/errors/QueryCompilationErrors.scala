@@ -1685,7 +1685,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def cannotSaveIntervalIntoExternalStorageError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1136",
+      errorClass = "CANNOT_SAVE_INTERVAL_TO_EXTERNAL_STORAGE",
       messageParameters = Map.empty)
   }
 

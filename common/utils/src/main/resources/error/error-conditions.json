@@ -400,6 +400,12 @@
     ],
     "sqlState" : "58030"
   },
+  "CANNOT_SAVE_INTERVAL_TO_EXTERNAL_STORAGE" : {
+    "message" : [
+      "Cannot save interval data type into external storage."
+    ],
+    "sqlState" : "42846"
+  },
   "CANNOT_UPDATE_FIELD" : {
     "message" : [
       "Cannot update <table> field <fieldName> type:"
@@ -6089,11 +6095,6 @@
   "_LEGACY_ERROR_TEMP_1135" : {
     "message" : [
       "<className> is not a valid Spark SQL Data Source."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1136" : {
-    "message" : [
-      "Cannot save interval data type into external storage."
     ]
   },
   "_LEGACY_ERROR_TEMP_1137" : {

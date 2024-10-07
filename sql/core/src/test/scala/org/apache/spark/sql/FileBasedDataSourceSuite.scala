@@ -512,7 +512,7 @@ class FileBasedDataSourceSuite extends QueryTest
               exception = intercept[AnalysisException] {
                 sql("select interval 1 days").write.format(format).mode("overwrite").save(tempDir)
               },
-              condition = "_LEGACY_ERROR_TEMP_1136",
+              condition = "CANNOT_SAVE_INTERVAL_TO_EXTERNAL_STORAGE",
               parameters = Map.empty
             )
           }
