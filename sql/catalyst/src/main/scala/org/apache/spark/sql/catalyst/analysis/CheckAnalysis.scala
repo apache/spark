@@ -175,9 +175,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
   private def checkTrailingCommaInSelect(plan: LogicalPlan): Unit = {
     val lastExpression = plan match {
-      case proj: Project => Some(proj.projectList.last)
-      case agg: Aggregate => Some(agg.aggregateExpressions.last)
-      case _ => None
+      case proj: Project if proj.projectList.nonEmpty =>
+        Some(proj.projectList.last)
+      case agg: Aggregate if agg.aggregateExpressions.nonEmpty =>
+        Some(agg.aggregateExpressions.last)
+      case _ =>
+        None
     }
 
     lastExpression match {

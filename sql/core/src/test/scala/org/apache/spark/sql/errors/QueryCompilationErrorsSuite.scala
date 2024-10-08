@@ -992,8 +992,7 @@ class QueryCompilationErrorsSuite
         "SELECT c1? FROM t1 ORDER BY c1",
         "WITH cte AS (SELECT c1? FROM t1) SELECT * FROM cte",
         "WITH cte AS (SELECT c1 FROM t1) SELECT *? FROM cte",
-        "SELECT * FROM (SELECT c1? FROM t1)",
-      )
+        "SELECT * FROM (SELECT c1? FROM t1)")
 
       queries.foreach { query =>
         val queryWithoutTrailingComma = query.replaceAll("\\?", "")
@@ -1013,8 +1012,7 @@ class QueryCompilationErrorsSuite
         "SELECT from FROM (SELECT 'a' as c1)",
         "SELECT from AS col FROM t1",
         "SELECT from AS from FROM t1",
-        "SELECT from from FROM t1"
-      )
+        "SELECT from from FROM t1")
       unresolvedColumnErrors.foreach { query =>
         val exception = intercept[AnalysisException] {
           sql(query)
@@ -1030,8 +1028,9 @@ class QueryCompilationErrorsSuite
         sql(s"SELECT from as from FROM from")
         sql(s"SELECT from from FROM from from")
         sql(s"SELECT c1, from FROM VALUES(1, 2) AS T(c1, from)")
+
         intercept[ParseException] {
-            sql("SELECT 1,")
+          sql("SELECT 1,")
         }
       }
     }
