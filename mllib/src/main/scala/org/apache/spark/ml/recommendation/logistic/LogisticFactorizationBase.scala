@@ -192,17 +192,15 @@ private[ml] abstract class LogisticFactorizationBase[T](
           .map(e => e.part -> e).partitionBy(partitionerKey).values
 
         emb = cur.zipPartitions(embLR) { case (sIt, eItLR) =>
-          val sg = Optimizer(new Opts(
-            dotVectorSize,
-            useBias,
-            negative,
-            pow.toFloat,
-            curLearningRate.toFloat,
-            lambdaU.toFloat,
-            lambdaI.toFloat,
-            gamma.toFloat,
-            implicitPrefs,
-            verbose), eItLR)
+          val opts = if (implicitPrefs) {
+            Opts.implicitOpts(dotVectorSize, useBias, negative, pow.toFloat,
+              curLearningRate.toFloat, lambdaU.toFloat, lambdaI.toFloat,
+              gamma.toFloat, verbose)
+          } else {
+            Opts.explicitOpts(dotVectorSize, useBias, curLearningRate.toFloat,
+              lambdaU.toFloat, lambdaI.toFloat, verbose)
+          }
+          val sg = Optimizer(opts, eItLR)
 
           sg.optimize(sIt, numThread, remapInplace = true)
           if (verbose) {
