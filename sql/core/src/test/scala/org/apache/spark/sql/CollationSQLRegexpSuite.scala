@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, StringType}
@@ -106,9 +107,11 @@ class CollationSQLRegexpSuite
           sql(s"INSERT INTO $tableName VALUES('first last')")
           val query = s"SELECT regexp_replace(s, '(?<first>[a-zA-Z]+) (?<last>[a-zA-Z]+)', " +
             s"'$$3 $$1') FROM $tableName"
-
+          val df = sql(query)
+          val plan = df.queryExecution.executedPlan
+          assert(plan.isInstanceOf[WholeStageCodegenExec] == (codegenMode == "CODEGEN_ONLY"))
           val exception = intercept[SparkException] {
-            sql(query).collect()
+            df.collect()
           }
           assert(exception.getMessage.contains("""Could not perform regexp_replace for """ +
             """`source = "first last"`, `pattern = "(?<first>[a-zA-Z]+) (?<last>[a-zA-Z]+)"`, """ +
