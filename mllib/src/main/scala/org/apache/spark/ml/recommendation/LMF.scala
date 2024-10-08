@@ -239,18 +239,6 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
   /** @group expertGetParam */
   def getPow: Double = $(pow)
 
-
-  /**
-   * Param for stepSize decay (positive).
-   * Default: None
-   * @group expertParam
-   */
-  val minStepSize: DoubleParam = new DoubleParam(this, "minStepSize",
-    "minimum step size to be used for stepSize decay (> 0)", ParamValidators.gt(0))
-
-  /** @group expertGetParam */
-  def getMinStepSize: Double = $(minStepSize)
-
   /**
    * Param for StorageLevel for intermediate datasets. Pass in a string representation of
    * `StorageLevel`. Cannot be "NONE".
@@ -626,10 +614,6 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
 
   /** @group expertSetParam */
   @Since("4.0.0")
-  def setMinStepSize(value: Double): this.type = set(minStepSize, value)
-
-  /** @group expertSetParam */
-  @Since("4.0.0")
   def setPow(value: Double): this.type = set(pow, value)
 
   /** @group expertSetParam */
@@ -707,13 +691,13 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    instr.logParams(this, rank, negative, maxIter, stepSize, minStepSize,
-      parallelism, numPartitions, pow, minUserCount, minItemCount, regParamU, regParamI,
+    instr.logParams(this, rank, negative, maxIter, stepSize, parallelism,
+      numPartitions, pow, minUserCount, minItemCount, regParamU, regParamI,
       fitIntercept, implicitPrefs, intermediateStorageLevel, finalStorageLevel,
       checkpointPath, checkpointInterval, verbose, blockSize)
 
     val result = new LMF.Backend($(rank), $(negative), $(maxIter), $(stepSize),
-      get(minStepSize), $(parallelism), $(numPartitions), $(pow),
+      $(parallelism), $(numPartitions), $(pow),
       $(minUserCount), $(minItemCount), $(regParamU), $(regParamI), $(fitIntercept),
       $(implicitPrefs), get(labelCol).isDefined, get(weightCol).isDefined,
       $(seed), StorageLevel.fromString($(intermediateStorageLevel)),
@@ -754,7 +738,6 @@ object LMF extends DefaultParamsReadable[LMF] with Logging {
                           negative: Int,
                           numIterations: Int,
                           learningRate: Double,
-                          minLearningRate: Option[Double],
                           numThread: Int,
                           numPartitions: Int,
                           pow: Double,
@@ -777,7 +760,6 @@ object LMF extends DefaultParamsReadable[LMF] with Logging {
                           negative,
                           numIterations,
                           learningRate,
-                          minLearningRate,
                           numThread,
                           numPartitions,
                           pow,

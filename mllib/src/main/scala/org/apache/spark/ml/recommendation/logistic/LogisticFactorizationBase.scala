@@ -72,7 +72,6 @@ private[ml] abstract class LogisticFactorizationBase[T](
              negative: Int = 10,
              numIterations: Int = 1,
              learningRate: Double = 0.025,
-             minLearningRate: Option[Double] = None,
              numThread: Int = 1,
              numPartitions: Int = 1,
              pow: Double = 0,
@@ -162,10 +161,6 @@ private[ml] abstract class LogisticFactorizationBase[T](
         val progress = (1.0 * curEpoch.toDouble * numPartitions + pI) /
           (numIterations * numPartitions)
 
-        val curLearningRate = minLearningRate.fold(learningRate)(e =>
-          Math.exp(Math.log(learningRate) -
-            (Math.log(learningRate) - Math.log(e)) * progress))
-
         val partitioner2 = new HashPartitioner(numPartitions) {
           override def getPartition(item: Any): Int = {
             val bucket = LogisticFactorizationBase.hash(
@@ -194,10 +189,10 @@ private[ml] abstract class LogisticFactorizationBase[T](
         emb = cur.zipPartitions(embLR) { case (sIt, eItLR) =>
           val opts = if (implicitPrefs) {
             Opts.implicitOpts(dotVectorSize, useBias, negative, pow.toFloat,
-              curLearningRate.toFloat, lambdaU.toFloat, lambdaI.toFloat,
+              learningRate.toFloat, lambdaU.toFloat, lambdaI.toFloat,
               gamma.toFloat, verbose)
           } else {
-            Opts.explicitOpts(dotVectorSize, useBias, curLearningRate.toFloat,
+            Opts.explicitOpts(dotVectorSize, useBias, learningRate.toFloat,
               lambdaU.toFloat, lambdaI.toFloat, verbose)
           }
           val sg = Optimizer(opts, eItLR)
