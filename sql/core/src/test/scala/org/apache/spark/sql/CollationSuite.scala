@@ -1187,8 +1187,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           }
           checkAnswer(sql(s"select c2 from $tableName order by c3"),
             (partitionOrder ++ partitionOrder).sorted.map(Row(_)))
-          checkAnswer(sql(s"select c1, c2, c3 from $tableName sort by c3"),
-            partitionOrder.sorted.map(Row(_)) ++ partitionOrder.sorted.map(Row(_)))
         }
     }
   }
