@@ -48,7 +48,7 @@ class StringType private (val collationId: Int) extends AtomicType with Serializ
     !CollationFactory.isCaseSensitiveAndAccentInsensitive(collationId)
 
   private[sql] def usesTrimCollation: Boolean =
-    CollationFactory.fetchCollation(collationId).supportsLowercaseEquality
+    CollationFactory.fetchCollation(collationId).supportsSpaceTrimming
 
   private[sql] def isUTF8BinaryCollation: Boolean =
     collationId == CollationFactory.UTF8_BINARY_COLLATION_ID

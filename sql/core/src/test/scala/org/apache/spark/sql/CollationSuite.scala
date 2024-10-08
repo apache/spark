@@ -101,8 +101,12 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   test("collate function syntax") {
     assert(sql(s"select collate('aaa', 'utf8_binary')").schema(0).dataType ==
       StringType("UTF8_BINARY"))
+    assert(sql(s"select collate('aaa', 'utf8_binary_rtrim')").schema(0).dataType ==
+      StringType("UTF8_BINARY_RTRIM"))
     assert(sql(s"select collate('aaa', 'utf8_lcase')").schema(0).dataType ==
       StringType("UTF8_LCASE"))
+    assert(sql(s"select collate('aaa', 'utf8_lcase_rtrim')").schema(0).dataType ==
+      StringType("UTF8_LCASE_RTRIM"))
   }
 
   test("collate function syntax with default collation set") {
@@ -260,14 +264,23 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     Seq(
       ("utf8_binary", "aaa", "AAA", false),
       ("utf8_binary", "aaa", "aaa", true),
+      ("utf8_binary_rtrim", "aaa", "AAA", false),
+      ("utf8_binary_rtrim", "aaa", "aaa  ", true),
       ("utf8_lcase", "aaa", "aaa", true),
       ("utf8_lcase", "aaa", "AAA", true),
       ("utf8_lcase", "aaa", "bbb", false),
+      ("utf8_lcase_rtrim", "aaa", "AAA  ", true),
+      ("utf8_lcase_rtrim", "aaa", "bbb", false),
       ("unicode", "aaa", "aaa", true),
       ("unicode", "aaa", "AAA", false),
+      ("unicode_rtrim", "aaa  ", "aaa ", true),
+      ("unicode_rtrim", "aaa", "AAA", false),
       ("unicode_CI", "aaa", "aaa", true),
       ("unicode_CI", "aaa", "AAA", true),
-      ("unicode_CI", "aaa", "bbb", false)
+      ("unicode_CI", "aaa", "bbb", false),
+      ("unicode_CI_rtrim", "aaa", "aaa", true),
+      ("unicode_CI_rtrim", "aaa ", "AAA  ", true),
+      ("unicode_CI_rtrim", "aaa", "bbb", false)
     ).foreach {
       case (collationName, left, right, expected) =>
         checkAnswer(
@@ -284,15 +297,19 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       ("utf8_binary", "AAA", "aaa", true),
       ("utf8_binary", "aaa", "aaa", false),
       ("utf8_binary", "aaa", "BBB", false),
+      ("utf8_binary_rtrim", "aaa ", "aaa  ", false),
       ("utf8_lcase", "aaa", "aaa", false),
       ("utf8_lcase", "AAA", "aaa", false),
       ("utf8_lcase", "aaa", "bbb", true),
+      ("utf8_lcase_rtrim", "AAA  ", "aaa", false),
       ("unicode", "aaa", "aaa", false),
       ("unicode", "aaa", "AAA", true),
       ("unicode", "aaa", "BBB", true),
+      ("unicode_rtrim", "aaa ", "aaa", false),
       ("unicode_CI", "aaa", "aaa", false),
       ("unicode_CI", "aaa", "AAA", false),
-      ("unicode_CI", "aaa", "bbb", true)
+      ("unicode_CI", "aaa", "bbb", true),
+      ("unicode_CI_rtrim", "aaa ", "aaa", false)
     ).foreach {
       case (collationName, left, right, expected) =>
         checkAnswer(
@@ -355,18 +372,22 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("aggregates count respects collation") {
     Seq(
+      ("utf8_binary_rtrim", Seq("aaa", "aaa "), Seq(Row(2, "aaa"))),
       ("utf8_binary", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
       ("utf8_binary", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
       ("utf8_binary", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
       ("utf8_lcase", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
       ("utf8_lcase", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
       ("utf8_lcase", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+      ("utf8_lcase_rtrim", Seq("aaa", "AAA  "), Seq(Row(2, "aaa"))),
       ("unicode", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
       ("unicode", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
       ("unicode", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+      ("unicode_rtrim", Seq("aaa", "aaa "), Seq(Row(2, "aaa"))),
       ("unicode_CI", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
       ("unicode_CI", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
-      ("unicode_CI", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb")))
+      ("unicode_CI", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+      ("unicode_CI_rtrim", Seq("aaa", "AAA "), Seq(Row(2, "aaa")))
     ).foreach {
       case (collationName: String, input: Seq[String], expected: Seq[Row]) =>
         checkAnswer(sql(

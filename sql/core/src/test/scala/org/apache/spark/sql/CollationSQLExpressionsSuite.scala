@@ -49,9 +49,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       Md5TestCase("Spark", "UTF8_BINARY", "8cde774d6f7333752ed72cacddb05126"),
+      Md5TestCase("Spark", "UTF8_BINARY_RTRIM", "8cde774d6f7333752ed72cacddb05126"),
       Md5TestCase("Spark", "UTF8_LCASE", "8cde774d6f7333752ed72cacddb05126"),
+      Md5TestCase("Spark", "UTF8_LCASE_RTRIM", "8cde774d6f7333752ed72cacddb05126"),
       Md5TestCase("SQL", "UNICODE", "9778840a0100cb30c982876741b0b5a2"),
-      Md5TestCase("SQL", "UNICODE_CI", "9778840a0100cb30c982876741b0b5a2")
+      Md5TestCase("SQL", "UNICODE_RTRIM", "9778840a0100cb30c982876741b0b5a2"),
+      Md5TestCase("SQL", "UNICODE_CI", "9778840a0100cb30c982876741b0b5a2"),
+      Md5TestCase("SQL", "UNICODE_CI_RTRIM", "9778840a0100cb30c982876741b0b5a2")
     )
 
     // Supported collations
@@ -81,11 +85,19 @@ class CollationSQLExpressionsSuite
     val testCases = Seq(
       Sha2TestCase("Spark", "UTF8_BINARY", 256,
         "529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b"),
+      Sha2TestCase("Spark", "UTF8_BINARY_RTRIM", 256,
+        "529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b"),
       Sha2TestCase("Spark", "UTF8_LCASE", 256,
+        "529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b"),
+      Sha2TestCase("Spark", "UTF8_LCASE_RTRIM", 256,
         "529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b"),
       Sha2TestCase("SQL", "UNICODE", 256,
         "a7056a455639d1c7deec82ee787db24a0c1878e2792b4597709f0facf7cc7b35"),
+      Sha2TestCase("SQL", "UNICODE_RTRIM", 256,
+        "a7056a455639d1c7deec82ee787db24a0c1878e2792b4597709f0facf7cc7b35"),
       Sha2TestCase("SQL", "UNICODE_CI", 256,
+        "a7056a455639d1c7deec82ee787db24a0c1878e2792b4597709f0facf7cc7b35"),
+      Sha2TestCase("SQL", "UNICODE_CI_RTRIM", 256,
         "a7056a455639d1c7deec82ee787db24a0c1878e2792b4597709f0facf7cc7b35")
     )
 
@@ -114,9 +126,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       Sha1TestCase("Spark", "UTF8_BINARY", "85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c"),
+      Sha1TestCase("Spark", "UTF8_BINARY_RTRIM", "85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c"),
       Sha1TestCase("Spark", "UTF8_LCASE", "85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c"),
+      Sha1TestCase("Spark", "UTF8_LCASE_RTRIM", "85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c"),
       Sha1TestCase("SQL", "UNICODE", "2064cb643caa8d9e1de12eea7f3e143ca9f8680d"),
-      Sha1TestCase("SQL", "UNICODE_CI", "2064cb643caa8d9e1de12eea7f3e143ca9f8680d")
+      Sha1TestCase("SQL", "UNICODE_RTRIM", "2064cb643caa8d9e1de12eea7f3e143ca9f8680d"),
+      Sha1TestCase("SQL", "UNICODE_CI", "2064cb643caa8d9e1de12eea7f3e143ca9f8680d"),
+      Sha1TestCase("SQL", "UNICODE_CI_RTRIM", "2064cb643caa8d9e1de12eea7f3e143ca9f8680d")
     )
 
     // Supported collations
@@ -144,9 +160,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       Crc321TestCase("Spark", "UTF8_BINARY", 1557323817),
+      Crc321TestCase("Spark", "UTF8_BINARY_RTRIM", 1557323817),
       Crc321TestCase("Spark", "UTF8_LCASE", 1557323817),
+      Crc321TestCase("Spark", "UTF8_LCASE_RTRIM", 1557323817),
       Crc321TestCase("SQL", "UNICODE", 1299261525),
-      Crc321TestCase("SQL", "UNICODE_CI", 1299261525)
+      Crc321TestCase("SQL", "UNICODE_RTRIM", 1299261525),
+      Crc321TestCase("SQL", "UNICODE_CI", 1299261525),
+      Crc321TestCase("SQL", "UNICODE_CI_RTRIM", 1299261525)
     )
 
     // Supported collations
@@ -172,9 +192,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       Murmur3HashTestCase("Spark", "UTF8_BINARY", 228093765),
+      Murmur3HashTestCase("Spark  ", "UTF8_BINARY_RTRIM", 1779328737),
       Murmur3HashTestCase("Spark", "UTF8_LCASE", -1928694360),
+      Murmur3HashTestCase("Spark  ", "UTF8_LCASE_RTRIM", -1928694360),
       Murmur3HashTestCase("SQL", "UNICODE", -1923567940),
-      Murmur3HashTestCase("SQL", "UNICODE_CI", 1029527950)
+      Murmur3HashTestCase("SQL ", "UNICODE_RTRIM", -1923567940),
+      Murmur3HashTestCase("SQL", "UNICODE_CI", 1029527950),
+      Murmur3HashTestCase("SQL ", "UNICODE_CI_RTRIM", 1029527950)
     )
 
     // Supported collations
@@ -200,9 +224,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       XxHash64TestCase("Spark", "UTF8_BINARY", -4294468057691064905L),
+      XxHash64TestCase("Spark ", "UTF8_BINARY_RTRIM", 6480371823304753502L),
       XxHash64TestCase("Spark", "UTF8_LCASE", -3142112654825786434L),
+      XxHash64TestCase("Spark ", "UTF8_LCASE_RTRIM", -3142112654825786434L),
       XxHash64TestCase("SQL", "UNICODE", 5964849564945649886L),
-      XxHash64TestCase("SQL", "UNICODE_CI", 3732497619779520590L)
+      XxHash64TestCase("SQL ", "UNICODE_RTRIM", 5964849564945649886L),
+      XxHash64TestCase("SQL", "UNICODE_CI", 3732497619779520590L),
+      XxHash64TestCase("SQL ", "UNICODE_CI_RTRIM", 3732497619779520590L)
     )
 
     // Supported collations
@@ -469,9 +497,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       BinTestCase("13", "UTF8_BINARY", "1101"),
+      BinTestCase("13", "UTF8_BINARY_RTRIM", "1101"),
       BinTestCase("13", "UTF8_LCASE", "1101"),
+      BinTestCase("13", "UTF8_LCASE_RTRIM", "1101"),
       BinTestCase("13", "UNICODE", "1101"),
-      BinTestCase("13", "UNICODE_CI", "1101")
+      BinTestCase("13", "UNICODE_RTRIM", "1101"),
+      BinTestCase("13", "UNICODE_CI", "1101"),
+      BinTestCase("13", "UNICODE_CI_RTRIM", "1101"),
     )
     testCases.foreach(t => {
       val query =
@@ -494,9 +526,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       HexTestCase("13", "UTF8_BINARY", "D"),
+      HexTestCase("13", "UTF8_BINARY_RTRIM", "D"),
       HexTestCase("13", "UTF8_LCASE", "D"),
+      HexTestCase("13", "UTF8_LCASE_RTRIM", "D"),
       HexTestCase("13", "UNICODE", "D"),
-      HexTestCase("13", "UNICODE_CI", "D")
+      HexTestCase("13", "UNICODE_RTRIM", "D"),
+      HexTestCase("13", "UNICODE_CI", "D"),
+      HexTestCase("13", "UNICODE_CI_RTRIM", "D")
     )
     testCases.foreach(t => {
       val query =

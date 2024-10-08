@@ -205,7 +205,9 @@ object UnsafeRowUtils {
    * can lead to rows being semantically equal even though their binary representations differ).
    */
   def isBinaryStable(dataType: DataType): Boolean = !dataType.existsRecursively {
-    case st: StringType => !CollationFactory.fetchCollation(st.collationId).supportsBinaryEquality
+    case st: StringType =>
+      (!CollationFactory.fetchCollation(st.collationId).supportsBinaryEquality ||
+        CollationFactory.fetchCollation(st.collationId).supportsSpaceTrimming)
     case _ => false
   }
 }
