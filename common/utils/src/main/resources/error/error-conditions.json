@@ -5144,7 +5144,7 @@
       },
       "UPDATE_COLUMN_NULLABILITY" : {
         "message" : [
-          "UpdateColumnNullability for MySQL."
+          "UpdateColumnNullability for MySQL and MS SQL Server."
         ]
       }
     },
