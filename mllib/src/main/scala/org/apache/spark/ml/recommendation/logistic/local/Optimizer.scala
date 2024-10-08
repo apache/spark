@@ -229,8 +229,9 @@ private[ml] class Optimizer(private val opts: Opts,
   val lossnReg: AtomicLong = new AtomicLong(0)
 
   private def optimizeImplicitBatchRemapped(batch: LongPairMulti): Unit = {
-    assert(batch.left.length == batch.right.length)
-    assert(batch.label == null)
+    if (batch.left.length == batch.right.length || batch.label != null) {
+      throw new IllegalArgumentException()
+    }
 
     Optimizer.shuffle(batch, random)
 
@@ -331,7 +332,9 @@ private[ml] class Optimizer(private val opts: Opts,
   }
 
   private def optimizeExplicitBatchRemapped(batch: LongPairMulti): Unit = {
-    assert(batch.left.length == batch.right.length)
+    if (batch.left.length == batch.right.length) {
+      throw new IllegalArgumentException()
+    }
     Optimizer.shuffle(batch, random)
 
     var lloss = 0.0
