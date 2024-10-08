@@ -192,7 +192,10 @@ class SparkSqlAstBuilder extends AstBuilder {
       if (interval.months != 0 || interval.days != 0 ||
         math.abs(interval.microseconds) > 18 * DateTimeConstants.MICROS_PER_HOUR ||
         interval.microseconds % DateTimeConstants.MICROS_PER_SECOND != 0) {
-        throw QueryParsingErrors.intervalValueOutOfRangeError(ctx.interval())
+        throw QueryParsingErrors.intervalValueOutOfRangeError(
+          toSQLValue((math.abs(interval.microseconds) / DateTimeConstants.MICROS_PER_HOUR).toInt),
+          ctx.interval()
+        )
       } else {
         val seconds = (interval.microseconds / DateTimeConstants.MICROS_PER_SECOND).toInt
         SetCommand(Some(key -> Some(ZoneOffset.ofTotalSeconds(seconds).toString)))

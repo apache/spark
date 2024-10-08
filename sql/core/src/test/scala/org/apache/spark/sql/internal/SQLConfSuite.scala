@@ -486,8 +486,8 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     val sqlText = "set time zone interval 19 hours"
     checkError(
       exception = intercept[ParseException](sql(sqlText)),
-      condition = "_LEGACY_ERROR_TEMP_0044",
-      parameters = Map.empty,
+      condition = "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
+      parameters = Map("input" -> "19"),
       context = ExpectedContext(sqlText, 0, 30))
   }
 
