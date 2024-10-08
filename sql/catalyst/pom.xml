@@ -121,16 +121,6 @@
     <dependency>
       <groupId>org.apache.datasketches</groupId>
       <artifactId>datasketches-java</artifactId>
-      <exclusions>
-        <exclusion>
-          <groupId>org.apache.datasketches</groupId>
-          <artifactId>datasketches-memory</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.datasketches</groupId>
-      <artifactId>datasketches-memory</artifactId>
     </dependency>
   </dependencies>
   <build>

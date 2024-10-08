@@ -213,7 +213,7 @@
     <commons-cli.version>1.9.0</commons-cli.version>
     <bouncycastle.version>1.78</bouncycastle.version>
     <tink.version>1.15.0</tink.version>
-    <datasketches.version>6.1.0</datasketches.version>
+    <datasketches.version>6.1.1</datasketches.version>
     <netty.version>4.1.110.Final</netty.version>
     <netty-tcnative.version>2.0.66.Final</netty-tcnative.version>
     <icu4j.version>75.1</icu4j.version>
@@ -2892,17 +2892,6 @@
         <groupId>org.apache.datasketches</groupId>
         <artifactId>datasketches-java</artifactId>
         <version>${datasketches.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>org.apache.datasketches</groupId>
-            <artifactId>datasketches-memory</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.datasketches</groupId>
-        <artifactId>datasketches-memory</artifactId>
-        <version>3.0.2</version>
       </dependency>
       <dependency>
         <groupId>jakarta.servlet</groupId>
