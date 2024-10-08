@@ -196,14 +196,14 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
 
     val userFactors = optimizer.flush()
       .filter(_.t == ItemData.TYPE_LEFT)
-      .map(e => e.id -> e.f).toMap
+      .map(e => e.id -> e.f).toArray
 
     val itemFactors = optimizer.flush()
       .filter(_.t == ItemData.TYPE_RIGHT)
-      .map(e => e.id -> e.f).toMap
+      .map(e => e.id -> e.f).toArray
 
     val trueAcc = LMFSuite.accuracy(testData, useBias = true,
-      trueUserFactors.toMap, trueItemFactors.toMap)
+      trueUserFactors, trueItemFactors)
     val acc = LMFSuite.accuracy(testData, opts.useBias, userFactors, itemFactors)
 
 
@@ -261,36 +261,35 @@ object LMFSuite extends Logging {
     1 / (1 + Math.exp(-x))
   }
 
-  private def likelyhood(data: Iterable[(Long, Long, Float, Float)],
-                         useBias: Boolean,
-                         userFactors: Map[Long, Array[Float]],
-                         itemFactors: Map[Long, Array[Float]]) = {
-    data.map{case (u, i, l, w) =>
-      val n = if (!useBias) userFactors(u).length else userFactors(u).length - 1
-      var e = BLAS.nativeBLAS.sdot(n,
-        userFactors(u), 1, itemFactors(i), 1)
+  private def epr(data: Iterable[(Long, Long, Float, Float)],
+                  useBias: Boolean,
+                  userFactors: Array[(Long, Array[Float])],
+                  itemFactors: Array[(Long, Array[Float])]) = {
 
-      if (useBias) {
-        e += userFactors(u)(n) + itemFactors(i)(n)
-      }
-      if (l == 0.0) (-e - Math.log(1 + Math.exp(-e))) * w
-      else -Math.log(1 + Math.exp(-e)) * w
-    }.sum
+    val user2i = userFactors.map(_._1).zipWithIndex.toMap
+    val item2i = itemFactors.map(_._1).zipWithIndex.toMap
+
+    val logits = getLogits(userFactors, itemFactors, useBias)
+    data.map{case (u, i, _, w) =>
+      itemFactors.indices
+        .sortBy(logits(user2i(u)))
+        .zipWithIndex
+        .filter(_._1 == item2i(i))
+        .head._2.toDouble / itemFactors.length * w
+    }.sum / data.map(_._4).sum
   }
 
   private def accuracy(data: Iterable[(Long, Long, Float, Float)],
                        useBias: Boolean,
-                       userFactors: Map[Long, Array[Float]],
-                       itemFactors: Map[Long, Array[Float]]) = {
+                       userFactors: Array[(Long, Array[Float])],
+                       itemFactors: Array[(Long, Array[Float])]) = {
+
+    val user2i = userFactors.map(_._1).zipWithIndex.toMap
+    val item2i = itemFactors.map(_._1).zipWithIndex.toMap
+
+    val logits = getLogits(userFactors, itemFactors, useBias)
     data.map{case (u, i, l, w) =>
-      val n = if (!useBias) userFactors(u).length else userFactors(u).length - 1
-      var e = BLAS.nativeBLAS.sdot(n,
-        userFactors(u), 1, itemFactors(i), 1)
-
-      if (useBias) {
-        e += userFactors(u)(n) + itemFactors(i)(n)
-      }
-
+      val e = logits(user2i(u))(item2i(i))
       if (e >= 0 && l > 0 || e < 0 && l == 0) {
         1.0 * w
       } else {
