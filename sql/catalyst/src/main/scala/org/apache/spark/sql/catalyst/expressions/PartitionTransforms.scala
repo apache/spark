@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, IntegerType}
@@ -37,8 +40,19 @@ import org.apache.spark.sql.types.{DataType, IntegerType}
 abstract class PartitionTransformExpression extends Expression with Unevaluable
   with UnaryLike[Expression] {
   override def nullable: Boolean = true
-}
 
+  override def eval(input: InternalRow): Any =
+    throw new AnalysisException(
+      errorClass = "PARTITION_TRANSFORM_NOT_IN_PARTITIONED_BY",
+      messageParameters = Map("expression" -> toString)
+    )
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw new AnalysisException(
+      errorClass = "PARTITION_TRANSFORM_NOT_IN_PARTITIONED_BY",
+      messageParameters = Map("expression" -> toString)
+    )
+}
 /**
  * Expression for the v2 partition transform years.
  */
