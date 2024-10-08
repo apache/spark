@@ -172,7 +172,7 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
     val random = new Random(239)
     val dim = 5
     val (trueUserFactors, trueItemFactors, trainData, testData) =
-      LMFSuite.genData(16384, 32, 16, dim, false, random)
+      LMFSuite.genData(16384, 32, 16, dim, implicitPrefs = false, random)
 
     val opts = Opts.explicitOpts(dim, false, 0.025f, 1f, 0.01f, false)
     val userCounts = trainData.groupMapReduce(_._1)(_ => 1L)(_ + _)
