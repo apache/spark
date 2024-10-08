@@ -287,7 +287,7 @@ private[ml] class Optimizer(private val opts: Opts,
 
           val sigm = expTable.sigmoid(f)
 
-          val g = ((label - sigm) * opts.lr * weight).toFloat
+          val g = (label - sigm) * opts.lr * weight
 
           if (opts.verbose) {
             lloss += expTable.logloss(f, label.toFloat) * weight
@@ -300,7 +300,7 @@ private[ml] class Optimizer(private val opts: Opts,
           }
 
           if (opts.lambda > 0 && label > 0) {
-            blas.saxpy(opts.dim, (-opts.lambda * opts.lr).toFloat, syn0, l1, 1, neu1e, 0, 1)
+            blas.saxpy(opts.dim, -opts.lambda * opts.lr, syn0, l1, 1, neu1e, 0, 1)
           }
           blas.saxpy(opts.dim, g, syn1neg, l2, 1, neu1e, 0, 1)
           if (opts.useBias) {
@@ -308,7 +308,7 @@ private[ml] class Optimizer(private val opts: Opts,
           }
 
           if (opts.lambda > 0 && label > 0) {
-            blas.saxpy(opts.dim, (-opts.lambda * opts.lr).toFloat, syn1neg, l2, 1, syn1neg, l2, 1)
+            blas.saxpy(opts.dim, -opts.lambda * opts.lr, syn1neg, l2, 1, syn1neg, l2, 1)
           }
           blas.saxpy(opts.dim, g, syn0, l1, 1, syn1neg, l2, 1)
           if (opts.useBias) {
@@ -364,7 +364,7 @@ private[ml] class Optimizer(private val opts: Opts,
         }
 
         val sigm = expTable.sigmoid(f)
-        val g = ((label - sigm) * opts.lr * weight).toFloat
+        val g = (label - sigm) * opts.lr * weight
 
         if (opts.verbose) {
           lloss += expTable.logloss(f, label) * weight
@@ -378,7 +378,7 @@ private[ml] class Optimizer(private val opts: Opts,
         }
 
         if (opts.lambda > 0) {
-          blas.saxpy(opts.dim, (-opts.lambda * opts.lr).toFloat, syn0, l1, 1, neu1e, 0, 1)
+          blas.saxpy(opts.dim, -opts.lambda * opts.lr, syn0, l1, 1, neu1e, 0, 1)
         }
         blas.saxpy(opts.dim, g, syn1neg, l2, 1, neu1e, 0, 1)
         if (opts.useBias) {
@@ -386,7 +386,7 @@ private[ml] class Optimizer(private val opts: Opts,
         }
 
         if (opts.lambda > 0 && label > 0) {
-          blas.saxpy(opts.dim, (-opts.lambda * opts.lr).toFloat, syn1neg, l2, 1, syn1neg, l2, 1)
+          blas.saxpy(opts.dim, -opts.lambda * opts.lr, syn1neg, l2, 1, syn1neg, l2, 1)
         }
         blas.saxpy(opts.dim, g, syn0, l1, 1, syn1neg, l2, 1)
         if (opts.useBias) {
