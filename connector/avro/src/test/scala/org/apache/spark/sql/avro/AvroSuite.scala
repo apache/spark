@@ -1673,8 +1673,12 @@ abstract class AvroSuite
           exception = intercept[AnalysisException] {
             sql("select interval 1 days").write.format("avro").mode("overwrite").save(tempDir)
           },
-          condition = "CANNOT_SAVE_INTERVAL_TO_EXTERNAL_STORAGE",
-          parameters = Map.empty
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = Map(
+            "format" -> "Avro",
+            "columnName" -> "`INTERVAL '1 days'`",
+            "columnType" -> "\"INTERVAL\""
+        )
         )
         checkError(
           exception = intercept[AnalysisException] {

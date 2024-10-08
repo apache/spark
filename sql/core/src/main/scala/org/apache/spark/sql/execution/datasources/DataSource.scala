@@ -18,13 +18,10 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.util.{Locale, ServiceConfigurationError, ServiceLoader}
-
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
@@ -35,6 +32,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, 
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, TypeUtils}
 import org.apache.spark.sql.connector.catalog.TableProvider
+import org.apache.spark.sql.errors.DataTypeErrors.{toSQLId, toSQLType}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
@@ -514,7 +512,8 @@ case class DataSource(
         dataSource.createRelation(
           sparkSession.sqlContext, mode, caseInsensitiveOptions, Dataset.ofRows(sparkSession, data))
       case format: FileFormat =>
-        disallowWritingIntervals(outputColumns.map(_.dataType), forbidAnsiIntervals = false)
+        val dataTypesWithNames = outputColumns.map(attr => (attr.dataType, attr.name))
+        disallowWritingIntervals(dataTypesWithNames, format.toString, forbidAnsiIntervals = false)
         val cmd = planForWritingFileFormat(format, mode, data)
         val qe = sparkSession.sessionState.executePlan(cmd)
         qe.assertCommandExecuted()
@@ -539,7 +538,8 @@ case class DataSource(
         }
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
-        disallowWritingIntervals(data.schema.map(_.dataType), forbidAnsiIntervals = false)
+        val dataTypesWithNames = data.schema.map(field => (field.dataType, field.name))
+        disallowWritingIntervals(dataTypesWithNames, format.toString, forbidAnsiIntervals = false)
         DataSource.validateSchema(data.schema, sparkSession.sessionState.conf)
         planForWritingFileFormat(format, mode, data)
       case _ => throw SparkException.internalError(
@@ -566,12 +566,15 @@ case class DataSource(
   }
 
   private def disallowWritingIntervals(
-      dataTypes: Seq[DataType],
+      dataTypesWithNames: Seq[(DataType, String)],
+      format: String,
       forbidAnsiIntervals: Boolean): Unit = {
-    dataTypes.foreach(
-      TypeUtils.invokeOnceForInterval(_, forbidAnsiIntervals) {
-      throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError()
-    })
+    dataTypesWithNames.foreach { case (dataType, columnName) =>
+      TypeUtils.invokeOnceForInterval(dataType, forbidAnsiIntervals) {
+      throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError(
+        format, toSQLId(columnName), toSQLType(dataType)
+      )}
+    }
   }
 }
 

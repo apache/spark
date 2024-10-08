@@ -400,12 +400,6 @@
     ],
     "sqlState" : "58030"
   },
-  "CANNOT_SAVE_INTERVAL_TO_EXTERNAL_STORAGE" : {
-    "message" : [
-      "Cannot save interval data type into external storage."
-    ],
-    "sqlState" : "42846"
-  },
   "CANNOT_UPDATE_FIELD" : {
     "message" : [
       "Cannot update <table> field <fieldName> type:"

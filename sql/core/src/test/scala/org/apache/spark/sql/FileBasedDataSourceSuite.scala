@@ -506,14 +506,23 @@ class FileBasedDataSourceSuite extends QueryTest
         withSQLConf(
           SQLConf.USE_V1_SOURCE_LIST.key -> useV1List,
           SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+          val formatMapping = Map(
+            "csv" -> "CSV",
+            "json" -> "JSON",
+            "parquet" -> "Parquet",
+            "orc" -> "ORC"
+          )
           // write path
           Seq("csv", "json", "parquet", "orc").foreach { format =>
             checkError(
               exception = intercept[AnalysisException] {
                 sql("select interval 1 days").write.format(format).mode("overwrite").save(tempDir)
               },
-              condition = "CANNOT_SAVE_INTERVAL_TO_EXTERNAL_STORAGE",
-              parameters = Map.empty
+              condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+              parameters = Map(
+                "format" -> formatMapping(format),
+                "columnName" -> "`INTERVAL '1 days'`",
+                "columnType" -> "\"INTERVAL\"")
             )
           }
 
