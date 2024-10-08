@@ -403,28 +403,37 @@ private[ml] class Optimizer(private val opts: Opts,
     lossnReg.addAndGet(llossnReg)
   }
 
-  private def remap(pair: LongPairMulti): LongPairMulti = {
-    pair.left.indices.foreach{i =>
-      pair.left(i) = vocabL.get(pair.left(i)).getOrElse(-1).toLong
-      pair.right(i) = vocabR.get(pair.right(i)).getOrElse(-1).toLong
+  private def remap(pair: LongPairMulti, inplace: Boolean): LongPairMulti = {
+    val newPair = if (inplace) {
+      pair
+    } else {
+      LongPairMulti(pair.part, pair.left.clone(), pair.right.clone(),
+        if (pair.label == null) null else pair.label.clone(),
+        if (pair.weight == null) null else pair.weight.clone(),
+      )
     }
 
-    pair
+    newPair.left.indices.foreach{i =>
+      newPair.left(i) = vocabL.get(newPair.left(i)).getOrElse(-1).toLong
+      newPair.right(i) = vocabR.get(newPair.right(i)).getOrElse(-1).toLong
+    }
+
+    newPair
   }
 
-  def optimize(data: Iterator[LongPairMulti], cpus: Int): Unit = {
+  def optimize(data: Iterator[LongPairMulti], cpus: Int, remapInplace: Boolean): Unit = {
     if (cpus > 1) {
-      ParItr.foreach(data.map(remap), cpus, if (opts.implicitPref) {
+      ParItr.foreach(data.map(remap(_, remapInplace)), cpus, if (opts.implicitPref) {
         pair: LongPairMulti => optimizeImplicitBatchRemapped(pair)
       } else {
         pair: LongPairMulti => optimizeExplicitBatchRemapped(pair)
       })
     } else {
       if (opts.implicitPref) {
-        data.map(remap)
+        data.map(remap(_, remapInplace))
           .foreach(pair => optimizeImplicitBatchRemapped(pair))
       } else {
-        data.map(remap)
+        data.map(remap(_, remapInplace))
           .foreach(pair => optimizeExplicitBatchRemapped(pair))
       }
     }

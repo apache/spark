@@ -202,7 +202,7 @@ private[ml] abstract class LogisticFactorizationBase[T](
             implicitPrefs,
             verbose), eItLR)
 
-          sg.optimize(sIt, numThread)
+          sg.optimize(sIt, numThread, remapInplace = true)
           if (verbose) {
             log.debug(
               "LOSS: " + sg.loss.doubleValue() / sg.lossn.longValue() +
