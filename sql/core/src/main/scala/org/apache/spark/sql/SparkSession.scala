@@ -927,17 +927,9 @@ object SparkSession extends api.BaseSparkSessionCompanion with Logging {
         assertOnDriver()
       }
 
-      def shouldUseSession(session: Option[SparkSession]): Option[SparkSession] = {
-        if (!forceCreate && session.isDefined && session.get.isUsable) {
-          session
-        } else {
-          None
-        }
-      }
-
       // Get the session from current thread's active session.
-      val active = shouldUseSession(getActiveSession)
-      if (active.isDefined) {
+      val active = getActiveSession
+      if (!forceCreate && active.isDefined) {
         val session = active.get
         applyModifiableSettings(session, new java.util.HashMap[String, String](options.asJava))
         return session
@@ -946,8 +938,8 @@ object SparkSession extends api.BaseSparkSessionCompanion with Logging {
       // Global synchronization so we will only set the default session once.
       SparkSession.synchronized {
         // If the current thread does not have an active session, get it from the global session.
-        val default = shouldUseSession(getDefaultSession)
-        if (default.isDefined) {
+        val default = getDefaultSession
+        if (!forceCreate && default.isDefined) {
           val session = default.get
           applyModifiableSettings(session, new java.util.HashMap[String, String](options.asJava))
           return session
@@ -994,25 +986,16 @@ object SparkSession extends api.BaseSparkSessionCompanion with Logging {
   def builder(): Builder = new Builder
 
   /** @inheritdoc */
-  override def getActiveSession: Option[SparkSession] = {
-    if (Utils.isInRunningSparkTask) {
-      None
-    } else {
-      super.getActiveSession
-    }
-  }
+  override def getActiveSession: Option[SparkSession] = super.getActiveSession
 
   /** @inheritdoc */
-  override def getDefaultSession: Option[SparkSession] = {
-    if (Utils.isInRunningSparkTask) {
-      None
-    } else {
-      super.getDefaultSession
-    }
-  }
+  override def getDefaultSession: Option[SparkSession] = super.getDefaultSession
 
   /** @inheritdoc */
   override def active: SparkSession = super.active
+
+  override protected def canUseSession(session: SparkSession): Boolean =
+    session.isUsable && !Utils.isInRunningSparkTask
 
   /**
    * Apply modifiable settings to an existing [[SparkSession]]. This method are used

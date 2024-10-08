@@ -84,7 +84,7 @@ class SparkSession private[sql] (
 
   private[sql] val observationRegistry = new ConcurrentHashMap[Long, Observation]()
 
-  private[sql] def hijackServerSideSessionIdForTesting(suffix: String) = {
+  private[sql] def hijackServerSideSessionIdForTesting(suffix: String): Unit = {
     client.hijackServerSideSessionIdForTesting(suffix)
   }
 

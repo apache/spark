@@ -567,8 +567,8 @@ abstract class SparkSession extends Serializable with Closeable {
   /**
    * Check to see if the session is still usable.
    *
-   * In classic this means that the underlying `SparkContext` has been shut down. In Connect this
-   * means the connection to the server has been closed.
+   * In Classic this means that the underlying `SparkContext` is still active. In Connect this
+   * means the connection to the server is usable.
    */
   private[sql] def isUsable: Boolean
 }
@@ -718,10 +718,20 @@ private[sql] abstract class BaseSparkSessionCompanion extends SparkSessionCompan
   }
 
   /** @inheritdoc */
-  def getActiveSession: Option[Session] = Option(activeThreadSession.get)
+  def getActiveSession: Option[Session] = usableSession(activeThreadSession.get())
 
   /** @inheritdoc */
-  def getDefaultSession: Option[Session] = Option(defaultSession.get)
+  def getDefaultSession: Option[Session] = usableSession(defaultSession.get())
+
+  private def usableSession(session: Session): Option[Session] = {
+    if ((session ne null) && canUseSession(session)) {
+      Some(session)
+    } else {
+      None
+    }
+  }
+
+  protected def canUseSession(session: Session): Boolean = session.isUsable
 
   /**
    * Set the (global) default [[SparkSession]], and (thread-local) active [[SparkSession]] when
