@@ -284,6 +284,7 @@ class ColumnTestsMixin:
         self.assertEqual(str(when_cond), "Column<'CASE WHEN foo THEN NULL END'>")
 
     def test_col_field_ops_representation(self):
+        # SPARK-49894: Test string representation of columns
         c = sf.col("c")
 
         # getField
