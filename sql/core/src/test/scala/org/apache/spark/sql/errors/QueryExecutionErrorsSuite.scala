@@ -1007,15 +1007,14 @@ class QueryExecutionErrorsSuite
   }
 
   test("PartitionTransformExpression throws error on eval") {
-    val expr = Years(Literal("foo")).eval()
+
     val e = intercept[AnalysisException] {
-      expr
+      Years(Literal("foo")).eval()
     }
     checkError(
       exception = e,
       condition = "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY",
-      parameters = Map("expression" -> ""),
-      sqlState = "42123")
+      parameters = Map("expression" -> "YEARS(FOO)"))
   }
 
   test("INTERNAL_ERROR: Calling doGenCode on unresolved") {

@@ -21,6 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLStmt
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
@@ -43,13 +44,13 @@ abstract class PartitionTransformExpression extends Expression with Unevaluable
 
   override def eval(input: InternalRow): Any =
     throw new AnalysisException(
-      errorClass = "PARTITION_TRANSFORM_NOT_IN_PARTITIONED_BY",
-      messageParameters = Map("expression" -> toString)
+      errorClass = "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY",
+      messageParameters = Map("expression" -> toSQLStmt(toString))
     )
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     throw new AnalysisException(
-      errorClass = "PARTITION_TRANSFORM_NOT_IN_PARTITIONED_BY",
+      errorClass = "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY",
       messageParameters = Map("expression" -> toString)
     )
 }
