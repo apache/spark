@@ -7417,6 +7417,12 @@
         "standard": "N",
         "usedBy": ["Databricks"]
     },
+    "KD010": {
+        "description": "external data source failure",
+        "origin": "Databricks",
+        "standard": "N",
+        "usedBy": ["Databricks"]
+    },
     "P0000": {
         "description": "procedural logic error",
         "origin": "PostgreSQL",

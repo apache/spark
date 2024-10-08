@@ -982,6 +982,7 @@ class CollationSQLExpressionsSuite
       StringToMapTestCase("1/AX2/BX3/C", "x", "/", "UNICODE_CI",
         Map("1" -> "A", "2" -> "B", "3" -> "C"))
     )
+    val unsupportedTestCase = StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UNICODE_AI", null)
     testCases.foreach(t => {
       // Unit test.
       val text = Literal.create(t.text, StringType(t.collation))
@@ -996,6 +997,29 @@ class CollationSQLExpressionsSuite
         assert(sql(query).schema.fields.head.dataType.sameType(dataType))
       }
     })
+    // Test unsupported collation.
+    withSQLConf(SQLConf.DEFAULT_COLLATION.key -> unsupportedTestCase.collation) {
+      val query =
+        s"select str_to_map('${unsupportedTestCase.text}', '${unsupportedTestCase.pairDelim}', " +
+        s"'${unsupportedTestCase.keyValueDelim}')"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(query).collect()
+        },
+        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        sqlState = Some("42K09"),
+        parameters = Map(
+          "sqlExpr" -> ("\"str_to_map('a:1,b:2,c:3' collate UNICODE_AI, " +
+            "'?' collate UNICODE_AI, '?' collate UNICODE_AI)\""),
+          "paramIndex" -> "first",
+          "inputSql" -> "\"'a:1,b:2,c:3' collate UNICODE_AI\"",
+          "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
+          "requiredType" -> "\"STRING\""),
+        context = ExpectedContext(
+          fragment = "str_to_map('a:1,b:2,c:3', '?', '?')",
+          start = 7,
+          stop = 41))
+    }
   }
 
   test("Support RaiseError misc expression with collation") {

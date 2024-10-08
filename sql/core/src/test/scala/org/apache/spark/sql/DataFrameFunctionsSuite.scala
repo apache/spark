@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql
 
-import java.lang.reflect.Modifier
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
+import scala.reflect.runtime.universe.runtimeMirror
 import scala.util.Random
 
 import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
@@ -82,7 +82,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "bucket", "days", "hours", "months", "years", // Datasource v2 partition transformations
       "product", // Discussed in https://github.com/apache/spark/pull/30745
       "unwrap_udt",
-      "collect_top_k",
       "timestamp_add",
       "timestamp_diff"
     )
@@ -92,10 +91,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val word_pattern = """\w*"""
 
     // Set of DataFrame functions in org.apache.spark.sql.functions
-    val dataFrameFunctions = functions.getClass
-      .getDeclaredMethods
-      .filter(m => Modifier.isPublic(m.getModifiers))
-      .map(_.getName)
+    val dataFrameFunctions = runtimeMirror(getClass.getClassLoader)
+      .reflect(functions)
+      .symbol
+      .typeSignature
+      .decls
+      .filter(s => s.isMethod && s.isPublic)
+      .map(_.name.toString)
       .toSet
       .filter(_.matches(word_pattern))
       .diff(excludedDataFrameFunctions)
@@ -962,6 +964,36 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "inputType" -> "\"STRING\""
       ),
       queryContext = Array(ExpectedContext("", "", 0, 12, "sort_array(a)"))
+    )
+
+    val df4 = Seq((Array[Int](2, 1, 3), true), (Array.empty[Int], false)).toDF("a", "b")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df4.selectExpr("sort_array(a, b)").collect()
+      },
+      condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      sqlState = "42K09",
+      parameters = Map(
+        "inputName" -> "`ascendingOrder`",
+        "inputType" -> "\"BOOLEAN\"",
+        "inputExpr" -> "\"b\"",
+        "sqlExpr" -> "\"sort_array(a, b)\""),
+      context = ExpectedContext(fragment = "sort_array(a, b)", start = 0, stop = 15)
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df4.selectExpr("sort_array(a, 'A')").collect()
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      sqlState = "42K09",
+      parameters = Map(
+        "sqlExpr" -> "\"sort_array(a, A)\"",
+        "paramIndex" -> "second",
+        "inputSql" -> "\"A\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"BOOLEAN\""),
+      context = ExpectedContext(fragment = "sort_array(a, 'A')", start = 0, stop = 17)
     )
 
     checkAnswer(

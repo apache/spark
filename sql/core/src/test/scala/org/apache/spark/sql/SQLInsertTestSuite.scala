@@ -445,8 +445,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
               parameters = Map(
                 "expression" -> "'ansi'",
                 "sourceType" -> "\"STRING\"",
-                "targetType" -> "\"INT\"",
-                "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+                "targetType" -> "\"INT\""
               ),
               context = ExpectedContext("insert into t partition(a='ansi')", 0, 32)
             )
