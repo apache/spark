@@ -276,9 +276,7 @@ class Dataset[T] private[sql] (
     df.withResult { result =>
       assert(result.length == 1)
       assert(result.schema.size == 1)
-      // scalastyle:off println
-      println(result.toArray.head)
-      // scalastyle:on println
+      print(result.toArray.head)
     }
   }
 

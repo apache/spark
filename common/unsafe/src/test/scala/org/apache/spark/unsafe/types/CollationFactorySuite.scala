@@ -369,6 +369,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       1 << 15, // UTF8_BINARY mandatory zero bit 15 breach.
       1 << 16, // UTF8_BINARY mandatory zero bit 16 breach.
       1 << 17, // UTF8_BINARY mandatory zero bit 17 breach.
+      1 << 19, // UTF8_BINARY mandatory zero bit 19 breach.
       1 << 20, // UTF8_BINARY mandatory zero bit 20 breach.
       1 << 21, // UTF8_BINARY mandatory zero bit 21 breach.
       1 << 23, // UTF8_BINARY mandatory zero bit 23 breach.
@@ -381,6 +382,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       (1 << 29) | (1 << 13), // ICU mandatory zero bit 13 breach.
       (1 << 29) | (1 << 14), // ICU mandatory zero bit 14 breach.
       (1 << 29) | (1 << 15), // ICU mandatory zero bit 15 breach.
+      (1 << 29) | (1 << 19), // ICU mandatory zero bit 19 breach.
       (1 << 29) | (1 << 20), // ICU mandatory zero bit 20 breach.
       (1 << 29) | (1 << 21), // ICU mandatory zero bit 21 breach.
       (1 << 29) | (1 << 22), // ICU mandatory zero bit 22 breach.
