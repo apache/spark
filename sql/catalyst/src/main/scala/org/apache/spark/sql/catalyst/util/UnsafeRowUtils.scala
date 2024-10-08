@@ -206,8 +206,8 @@ object UnsafeRowUtils {
    */
   def isBinaryStable(dataType: DataType): Boolean = !dataType.existsRecursively {
     case st: StringType =>
-      (!CollationFactory.fetchCollation(st.collationId).supportsBinaryEquality ||
-        CollationFactory.fetchCollation(st.collationId).supportsSpaceTrimming)
+      val collation = CollationFactory.fetchCollation(st.collationId)
+      (!collation.supportsBinaryEquality || collation.supportsSpaceTrimming)
     case _ => false
   }
 }
