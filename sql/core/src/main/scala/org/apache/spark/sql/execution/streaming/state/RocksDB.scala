@@ -134,6 +134,7 @@ class RocksDB(
   rocksDbOptions.setTableFormatConfig(tableFormatConfig)
   rocksDbOptions.setMaxOpenFiles(conf.maxOpenFiles)
   rocksDbOptions.setAllowFAllocate(conf.allowFAllocate)
+  rocksDbOptions.setAvoidFlushDuringShutdown(true)
   rocksDbOptions.setMergeOperator(new StringAppendOperator())
 
   if (conf.boundedMemoryUsage) {

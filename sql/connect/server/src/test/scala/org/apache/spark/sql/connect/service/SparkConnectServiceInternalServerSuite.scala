@@ -189,13 +189,6 @@ class SparkConnectServiceInternalServerSuite extends SparkFunSuite with LocalSpa
     // In the meanwhile, no any end event should be posted
     assert(listenerInstance.serviceEndEvents.size() == 0)
 
-    // The listener is able to get the SparkConf from the event
-    val event = listenerInstance.serviceStartedEvents.get(0)
-    assert(event.sparkConf != null)
-    val sparkConf = event.sparkConf
-    assert(sparkConf.contains("spark.driver.host"))
-    assert(sparkConf.contains("spark.app.id"))
-
     // Try to start an already started SparkConnectService
     SparkConnectService.start(sc)
     // The listener should still receive only one started event

@@ -18,19 +18,17 @@
 package org.apache.spark.sql.expressions
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.Encoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveBooleanEncoder, ProductEncoder}
+import org.apache.spark.sql.{Encoder, Encoders}
 
 /**
  * An aggregator that uses a single associative and commutative reduce function. This reduce
- * function can be used to go through all input values and reduces them to a single value.
- * If there is no input, a null value is returned.
+ * function can be used to go through all input values and reduces them to a single value. If
+ * there is no input, a null value is returned.
  *
  * This class currently assumes there is at least one input row.
  */
 private[sql] class ReduceAggregator[T: Encoder](func: (T, T) => T)
-  extends Aggregator[T, (Boolean, T), T] {
+    extends Aggregator[T, (Boolean, T), T] {
 
   @transient private val encoder = implicitly[Encoder[T]]
 
@@ -47,10 +45,8 @@ private[sql] class ReduceAggregator[T: Encoder](func: (T, T) => T)
 
   override def zero: (Boolean, T) = (false, _zero.asInstanceOf[T])
 
-  override def bufferEncoder: Encoder[(Boolean, T)] = {
-    ProductEncoder.tuple(Seq(PrimitiveBooleanEncoder, encoder.asInstanceOf[AgnosticEncoder[T]]))
-      .asInstanceOf[Encoder[(Boolean, T)]]
-  }
+  override def bufferEncoder: Encoder[(Boolean, T)] =
+    Encoders.tuple(Encoders.scalaBoolean, encoder)
 
   override def outputEncoder: Encoder[T] = encoder
 

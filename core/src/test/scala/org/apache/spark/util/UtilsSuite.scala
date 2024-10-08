@@ -735,8 +735,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     withTempDir { tmpDir =>
       val outFile = File.createTempFile("test-load-spark-properties", "test", tmpDir)
       System.setProperty("spark.test.fileNameLoadB", "2")
-      Files.write("spark.test.fileNameLoadA true\n" +
-        "spark.test.fileNameLoadB 1\n", outFile, UTF_8)
+      Files.asCharSink(outFile, UTF_8).write("spark.test.fileNameLoadA true\n" +
+        "spark.test.fileNameLoadB 1\n")
       val properties = Utils.getPropertiesFromFile(outFile.getAbsolutePath)
       properties
         .filter { case (k, v) => k.startsWith("spark.")}
@@ -765,7 +765,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       val innerSourceDir = Utils.createTempDir(root = sourceDir.getPath)
       val sourceFile = File.createTempFile("someprefix", "somesuffix", innerSourceDir)
       val targetDir = new File(tempDir, "target-dir")
-      Files.write("some text", sourceFile, UTF_8)
+      Files.asCharSink(sourceFile, UTF_8).write("some text")
 
       val path =
         if (Utils.isWindows) {

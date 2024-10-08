@@ -10913,7 +10913,7 @@ def unbase64(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def ltrim(col: "ColumnOrName") -> Column:
+def ltrim(col: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
     """
     Trim the spaces from left end for the specified string value.
 
@@ -10926,6 +10926,10 @@ def ltrim(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to work on.
+    trim : :class:`~pyspark.sql.Column` or str, optional
+        The trim string characters to trim, the default value is a single space
+
+        .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -10934,21 +10938,40 @@ def ltrim(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Trim the spaces
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame(["   Spark", "Spark  ", " Spark"], "STRING")
-    >>> df.select(ltrim("value").alias("r")).withColumn("length", length("r")).show()
-    +-------+------+
-    |      r|length|
-    +-------+------+
-    |  Spark|     5|
-    |Spark  |     7|
-    |  Spark|     5|
-    +-------+------+
+    >>> df.select("*", sf.ltrim("value")).show()
+    +--------+------------+
+    |   value|ltrim(value)|
+    +--------+------------+
+    |   Spark|       Spark|
+    | Spark  |     Spark  |
+    |   Spark|       Spark|
+    +--------+------------+
+
+    Example 2: Trim specified characters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(["***Spark", "Spark**", "*Spark"], "STRING")
+    >>> df.select("*", sf.ltrim("value", sf.lit("*"))).show()
+    +--------+--------------------------+
+    |   value|TRIM(LEADING * FROM value)|
+    +--------+--------------------------+
+    |***Spark|                     Spark|
+    | Spark**|                   Spark**|
+    |  *Spark|                     Spark|
+    +--------+--------------------------+
     """
-    return _invoke_function_over_columns("ltrim", col)
+    if trim is not None:
+        return _invoke_function_over_columns("ltrim", col, trim)
+    else:
+        return _invoke_function_over_columns("ltrim", col)
 
 
 @_try_remote_functions
-def rtrim(col: "ColumnOrName") -> Column:
+def rtrim(col: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
     """
     Trim the spaces from right end for the specified string value.
 
@@ -10961,6 +10984,10 @@ def rtrim(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to work on.
+    trim : :class:`~pyspark.sql.Column` or str, optional
+        The trim string characters to trim, the default value is a single space
+
+        .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -10969,21 +10996,40 @@ def rtrim(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Trim the spaces
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame(["   Spark", "Spark  ", " Spark"], "STRING")
-    >>> df.select(rtrim("value").alias("r")).withColumn("length", length("r")).show()
-    +--------+------+
-    |       r|length|
-    +--------+------+
-    |   Spark|     8|
-    |   Spark|     5|
-    |   Spark|     6|
-    +--------+------+
+    >>> df.select("*", sf.rtrim("value")).show()
+    +--------+------------+
+    |   value|rtrim(value)|
+    +--------+------------+
+    |   Spark|       Spark|
+    | Spark  |       Spark|
+    |   Spark|       Spark|
+    +--------+------------+
+
+    Example 2: Trim specified characters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(["***Spark", "Spark**", "*Spark"], "STRING")
+    >>> df.select("*", sf.rtrim("value", sf.lit("*"))).show()
+    +--------+---------------------------+
+    |   value|TRIM(TRAILING * FROM value)|
+    +--------+---------------------------+
+    |***Spark|                   ***Spark|
+    | Spark**|                      Spark|
+    |  *Spark|                     *Spark|
+    +--------+---------------------------+
     """
-    return _invoke_function_over_columns("rtrim", col)
+    if trim is not None:
+        return _invoke_function_over_columns("rtrim", col, trim)
+    else:
+        return _invoke_function_over_columns("rtrim", col)
 
 
 @_try_remote_functions
-def trim(col: "ColumnOrName") -> Column:
+def trim(col: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
     """
     Trim the spaces from both ends for the specified string column.
 
@@ -10996,6 +11042,10 @@ def trim(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to work on.
+    trim : :class:`~pyspark.sql.Column` or str, optional
+        The trim string characters to trim, the default value is a single space
+
+        .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -11004,17 +11054,36 @@ def trim(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Trim the spaces
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame(["   Spark", "Spark  ", " Spark"], "STRING")
-    >>> df.select(trim("value").alias("r")).withColumn("length", length("r")).show()
-    +-----+------+
-    |    r|length|
-    +-----+------+
-    |Spark|     5|
-    |Spark|     5|
-    |Spark|     5|
-    +-----+------+
+    >>> df.select("*", sf.trim("value")).show()
+    +--------+-----------+
+    |   value|trim(value)|
+    +--------+-----------+
+    |   Spark|      Spark|
+    | Spark  |      Spark|
+    |   Spark|      Spark|
+    +--------+-----------+
+
+    Example 2: Trim specified characters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(["***Spark", "Spark**", "*Spark"], "STRING")
+    >>> df.select("*", sf.trim("value", sf.lit("*"))).show()
+    +--------+-----------------------+
+    |   value|TRIM(BOTH * FROM value)|
+    +--------+-----------------------+
+    |***Spark|                  Spark|
+    | Spark**|                  Spark|
+    |  *Spark|                  Spark|
+    +--------+-----------------------+
     """
-    return _invoke_function_over_columns("trim", col)
+    if trim is not None:
+        return _invoke_function_over_columns("trim", col, trim)
+    else:
+        return _invoke_function_over_columns("trim", col)
 
 
 @_try_remote_functions

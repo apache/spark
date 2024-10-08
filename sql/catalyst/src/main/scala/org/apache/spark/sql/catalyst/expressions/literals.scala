@@ -441,47 +441,53 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def eval(input: InternalRow): Any = value
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val javaType = CodeGenerator.javaType(dataType)
-    if (value == null) {
-      ExprCode.forNullValue(dataType)
-    } else {
-      def toExprCode(code: String): ExprCode = {
-        ExprCode.forNonNullValue(JavaCode.literal(code, dataType))
-      }
-      dataType match {
-        case BooleanType | IntegerType | DateType | _: YearMonthIntervalType =>
-          toExprCode(value.toString)
-        case FloatType =>
-          value.asInstanceOf[Float] match {
-            case v if v.isNaN =>
-              toExprCode("Float.NaN")
-            case Float.PositiveInfinity =>
-              toExprCode("Float.POSITIVE_INFINITY")
-            case Float.NegativeInfinity =>
-              toExprCode("Float.NEGATIVE_INFINITY")
-            case _ =>
-              toExprCode(s"${value}F")
-          }
-        case DoubleType =>
-          value.asInstanceOf[Double] match {
-            case v if v.isNaN =>
-              toExprCode("Double.NaN")
-            case Double.PositiveInfinity =>
-              toExprCode("Double.POSITIVE_INFINITY")
-            case Double.NegativeInfinity =>
-              toExprCode("Double.NEGATIVE_INFINITY")
-            case _ =>
-              toExprCode(s"${value}D")
-          }
-        case ByteType | ShortType =>
-          ExprCode.forNonNullValue(JavaCode.expression(s"($javaType)$value", dataType))
-        case TimestampType | TimestampNTZType | LongType | _: DayTimeIntervalType =>
-          toExprCode(s"${value}L")
-        case _ =>
-          val constRef = ctx.addReferenceObj("literal", value, javaType)
-          ExprCode.forNonNullValue(JavaCode.global(constRef, dataType))
+    def gen(ctx: CodegenContext, ev: ExprCode, dataType: DataType): ExprCode = {
+      val javaType = CodeGenerator.javaType(dataType)
+      if (value == null) {
+        ExprCode.forNullValue(dataType)
+      } else {
+        def toExprCode(code: String): ExprCode = {
+          ExprCode.forNonNullValue(JavaCode.literal(code, dataType))
+        }
+
+        dataType match {
+          case BooleanType | IntegerType | DateType | _: YearMonthIntervalType =>
+            toExprCode(value.toString)
+          case FloatType =>
+            value.asInstanceOf[Float] match {
+              case v if v.isNaN =>
+                toExprCode("Float.NaN")
+              case Float.PositiveInfinity =>
+                toExprCode("Float.POSITIVE_INFINITY")
+              case Float.NegativeInfinity =>
+                toExprCode("Float.NEGATIVE_INFINITY")
+              case _ =>
+                toExprCode(s"${value}F")
+            }
+          case DoubleType =>
+            value.asInstanceOf[Double] match {
+              case v if v.isNaN =>
+                toExprCode("Double.NaN")
+              case Double.PositiveInfinity =>
+                toExprCode("Double.POSITIVE_INFINITY")
+              case Double.NegativeInfinity =>
+                toExprCode("Double.NEGATIVE_INFINITY")
+              case _ =>
+                toExprCode(s"${value}D")
+            }
+          case ByteType | ShortType =>
+            ExprCode.forNonNullValue(JavaCode.expression(s"($javaType)$value", dataType))
+          case TimestampType | TimestampNTZType | LongType | _: DayTimeIntervalType =>
+            toExprCode(s"${value}L")
+          case udt: UserDefinedType[_] =>
+            gen(ctx, ev, udt.sqlType)
+          case _ =>
+            val constRef = ctx.addReferenceObj("literal", value, javaType)
+            ExprCode.forNonNullValue(JavaCode.global(constRef, dataType))
+        }
       }
     }
+    gen(ctx, ev, dataType)
   }
 
   override def sql: String = (value, dataType) match {

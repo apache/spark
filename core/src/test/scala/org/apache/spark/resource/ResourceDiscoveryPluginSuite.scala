@@ -148,7 +148,7 @@ object TestResourceDiscoveryPlugin {
   def writeFile(conf: SparkConf, id: String): Unit = {
     val path = conf.get(TEST_PATH_CONF)
     val fileName = s"$id - ${UUID.randomUUID.toString}"
-    Files.write(id, new File(path, fileName), StandardCharsets.UTF_8)
+    Files.asCharSink(new File(path, fileName), StandardCharsets.UTF_8).write(id)
   }
 }
 

@@ -28,7 +28,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.catalyst.{FullQualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -56,7 +56,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   private val tableCreationLocks = Striped.lazyWeakLock(100)
 
   /** Acquires a lock on the table cache for the duration of `f`. */
-  private def withTableCreationLock[A](tableName: FullQualifiedTableName, f: => A): A = {
+  private def withTableCreationLock[A](tableName: QualifiedTableName, f: => A): A = {
     val lock = tableCreationLocks.get(tableName)
     lock.lock()
     try f finally {
@@ -66,7 +66,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
   // For testing only
   private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {
-    val key = FullQualifiedTableName(
+    val key = QualifiedTableName(
       // scalastyle:off caselocale
       table.catalog.getOrElse(CatalogManager.SESSION_CATALOG_NAME).toLowerCase,
       table.database.getOrElse(sessionState.catalog.getCurrentDatabase).toLowerCase,
@@ -76,7 +76,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   }
 
   private def getCached(
-      tableIdentifier: FullQualifiedTableName,
+      tableIdentifier: QualifiedTableName,
       pathsInMetastore: Seq[Path],
       schemaInMetastore: StructType,
       expectedFileFormat: Class[_ <: FileFormat],
@@ -120,7 +120,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   }
 
   private def logWarningUnexpectedFileFormat(
-      tableIdentifier: FullQualifiedTableName,
+      tableIdentifier: QualifiedTableName,
       expectedFileFormat: Class[_ <: FileFormat],
       actualFileFormat: String): Unit = {
     logWarning(log"Table ${MDC(TABLE_NAME, tableIdentifier)} should be stored as " +
@@ -201,7 +201,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       fileType: String,
       isWrite: Boolean): LogicalRelation = {
     val metastoreSchema = relation.tableMeta.schema
-    val tableIdentifier = FullQualifiedTableName(relation.tableMeta.identifier.catalog.get,
+    val tableIdentifier = QualifiedTableName(relation.tableMeta.identifier.catalog.get,
       relation.tableMeta.database, relation.tableMeta.identifier.table)
 
     val lazyPruningEnabled = sparkSession.sessionState.conf.manageFilesourcePartitions

@@ -17,32 +17,12 @@
 
 package org.apache.spark.network.crypto;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.crypto.tink.subtle.Hex;
-import com.google.crypto.tink.subtle.Hkdf;
 import io.netty.channel.Channel;
 
-import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 
 interface TransportCipher {
     String getKeyId() throws GeneralSecurityException;
     void addToChannel(Channel channel) throws IOException, GeneralSecurityException;
-}
-
-class TransportCipherUtil {
-    /*
-     * This method is used for testing to verify key derivation.
-     */
-    @VisibleForTesting
-    static String getKeyId(SecretKeySpec key) throws GeneralSecurityException {
-        byte[] keyIdBytes = Hkdf.computeHkdf("HmacSha256",
-                key.getEncoded(),
-                null,
-                "keyID".getBytes(StandardCharsets.UTF_8),
-                32);
-        return Hex.encode(keyIdBytes);
-    }
 }

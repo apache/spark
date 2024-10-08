@@ -18,7 +18,6 @@ package org.apache.spark.sql.protobuf
 
 import java.io.FileNotFoundException
 import java.nio.file.{Files, NoSuchFileException, Paths}
-import java.util.Collections
 
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -30,7 +29,7 @@ import org.apache.spark.sql.functions.lit
 
 // scalastyle:off: object.name
 object functions {
-  // scalastyle:on: object.name
+// scalastyle:on: object.name
 
   /**
    * Converts a binary column of Protobuf format into its corresponding catalyst value. The
@@ -44,7 +43,7 @@ object functions {
    *   The Protobuf descriptor file. This file is usually created using `protoc` with
    *   `--descriptor_set_out` and `--include_imports` options.
    * @param options
-   * @since 3.5.0
+   * @since 3.4.0
    */
   @Experimental
   def from_protobuf(
@@ -52,8 +51,8 @@ object functions {
       messageName: String,
       descFilePath: String,
       options: java.util.Map[String, String]): Column = {
-    val binaryFileDescSet = readDescriptorFileContent(descFilePath)
-    from_protobuf(data, messageName, binaryFileDescSet, options)
+    val descriptorFileContent = readDescriptorFileContent(descFilePath)
+    from_protobuf(data, messageName, descriptorFileContent, options)
   }
 
   /**
@@ -95,31 +94,12 @@ object functions {
    * @param descFilePath
    *   The Protobuf descriptor file. This file is usually created using `protoc` with
    *   `--descriptor_set_out` and `--include_imports` options.
-   * @since 3.5.0
+   * @since 3.4.0
    */
   @Experimental
   def from_protobuf(data: Column, messageName: String, descFilePath: String): Column = {
-    from_protobuf(data, messageName, descFilePath, emptyOptions)
-  }
-
-  /**
-   * Converts a binary column of Protobuf format into its corresponding catalyst value.
-   * `messageClassName` points to Protobuf Java class. The jar containing Java class should be
-   * shaded. Specifically, `com.google.protobuf.*` should be shaded to
-   * `org.sparkproject.spark_protobuf.protobuf.*`.
-   * https://github.com/rangadi/shaded-protobuf-classes is useful to create shaded jar from
-   * Protobuf files.
-   *
-   * @param data
-   *   the binary column.
-   * @param messageClassName
-   *   The full name for Protobuf Java class. E.g. <code>com.example.protos.ExampleEvent</code>.
-   *   The jar with these classes needs to be shaded as described above.
-   * @since 3.5.0
-   */
-  @Experimental
-  def from_protobuf(data: Column, messageClassName: String): Column = {
-    Column.fn("from_protobuf", data, lit(messageClassName))
+    val fileContent = readDescriptorFileContent(descFilePath)
+    from_protobuf(data, messageName, fileContent)
   }
 
   /**
@@ -140,7 +120,27 @@ object functions {
       data: Column,
       messageName: String,
       binaryFileDescriptorSet: Array[Byte]): Column = {
-    from_protobuf(data, messageName, binaryFileDescriptorSet, emptyOptions)
+    Column.fn("from_protobuf", data, lit(messageName), lit(binaryFileDescriptorSet))
+  }
+
+  /**
+   * Converts a binary column of Protobuf format into its corresponding catalyst value.
+   * `messageClassName` points to Protobuf Java class. The jar containing Java class should be
+   * shaded. Specifically, `com.google.protobuf.*` should be shaded to
+   * `org.sparkproject.spark_protobuf.protobuf.*`.
+   * https://github.com/rangadi/shaded-protobuf-classes is useful to create shaded jar from
+   * Protobuf files.
+   *
+   * @param data
+   *   the binary column.
+   * @param messageClassName
+   *   The full name for Protobuf Java class. E.g. <code>com.example.protos.ExampleEvent</code>.
+   *   The jar with these classes needs to be shaded as described above.
+   * @since 3.4.0
+   */
+  @Experimental
+  def from_protobuf(data: Column, messageClassName: String): Column = {
+    Column.fn("from_protobuf", data, lit(messageClassName))
   }
 
   /**
@@ -157,7 +157,7 @@ object functions {
    *   The full name for Protobuf Java class. E.g. <code>com.example.protos.ExampleEvent</code>.
    *   The jar with these classes needs to be shaded as described above.
    * @param options
-   * @since 3.5.0
+   * @since 3.4.0
    */
   @Experimental
   def from_protobuf(
@@ -178,11 +178,11 @@ object functions {
    * @param descFilePath
    *   The Protobuf descriptor file. This file is usually created using `protoc` with
    *   `--descriptor_set_out` and `--include_imports` options.
-   * @since 3.5.0
+   * @since 3.4.0
    */
   @Experimental
   def to_protobuf(data: Column, messageName: String, descFilePath: String): Column = {
-    to_protobuf(data, messageName, descFilePath, emptyOptions)
+    to_protobuf(data, messageName, descFilePath, Map.empty[String, String].asJava)
   }
 
   /**
@@ -204,7 +204,7 @@ object functions {
       data: Column,
       messageName: String,
       binaryFileDescriptorSet: Array[Byte]): Column = {
-    to_protobuf(data, messageName, binaryFileDescriptorSet, emptyOptions)
+    Column.fn("to_protobuf", data, lit(messageName), lit(binaryFileDescriptorSet))
   }
 
   /**
@@ -216,10 +216,9 @@ object functions {
    * @param messageName
    *   the protobuf MessageName to look for in descriptor file.
    * @param descFilePath
-   *   The Protobuf descriptor file. This file is usually created using `protoc` with
-   *   `--descriptor_set_out` and `--include_imports` options.
+   *   the protobuf descriptor file.
    * @param options
-   * @since 3.5.0
+   * @since 3.4.0
    */
   @Experimental
   def to_protobuf(
@@ -227,8 +226,8 @@ object functions {
       messageName: String,
       descFilePath: String,
       options: java.util.Map[String, String]): Column = {
-    val binaryFileDescriptorSet = readDescriptorFileContent(descFilePath)
-    to_protobuf(data, messageName, binaryFileDescriptorSet, options)
+    val fileContent = readDescriptorFileContent(descFilePath)
+    to_protobuf(data, messageName, fileContent, options)
   }
 
   /**
@@ -271,7 +270,7 @@ object functions {
    * @param messageClassName
    *   The full name for Protobuf Java class. E.g. <code>com.example.protos.ExampleEvent</code>.
    *   The jar with these classes needs to be shaded as described above.
-   * @since 3.5.0
+   * @since 3.4.0
    */
   @Experimental
   def to_protobuf(data: Column, messageClassName: String): Column = {
@@ -291,7 +290,7 @@ object functions {
    *   The full name for Protobuf Java class. E.g. <code>com.example.protos.ExampleEvent</code>.
    *   The jar with these classes needs to be shaded as described above.
    * @param options
-   * @since 3.5.0
+   * @since 3.4.0
    */
   @Experimental
   def to_protobuf(
@@ -300,8 +299,6 @@ object functions {
       options: java.util.Map[String, String]): Column = {
     Column.fnWithOptions("to_protobuf", options.asScala.iterator, data, lit(messageClassName))
   }
-
-  private def emptyOptions: java.util.Map[String, String] = Collections.emptyMap[String, String]()
 
   // This method is copied from org.apache.spark.sql.protobuf.util.ProtobufUtils
   private def readDescriptorFileContent(filePath: String): Array[Byte] = {
@@ -312,7 +309,8 @@ object functions {
         throw CompilationErrors.cannotFindDescriptorFileError(filePath, ex)
       case ex: NoSuchFileException =>
         throw CompilationErrors.cannotFindDescriptorFileError(filePath, ex)
-      case NonFatal(ex) => throw CompilationErrors.descriptorParseError(ex)
+      case NonFatal(ex) =>
+        throw CompilationErrors.descriptorParseError(ex)
     }
   }
 }

@@ -75,7 +75,7 @@ class UISeleniumSuite
       // overrides all other potential log4j configurations contained in other dependency jar files.
       val tempLog4jConf = org.apache.spark.util.Utils.createTempDir().getCanonicalPath
 
-      Files.write(
+      Files.asCharSink(new File(s"$tempLog4jConf/log4j2.properties"), StandardCharsets.UTF_8).write(
         """rootLogger.level = info
           |rootLogger.appenderRef.file.ref = console
           |appender.console.type = Console
@@ -83,9 +83,7 @@ class UISeleniumSuite
           |appender.console.target = SYSTEM_ERR
           |appender.console.layout.type = PatternLayout
           |appender.console.layout.pattern = %d{HH:mm:ss.SSS} %p %c: %maxLen{%m}{512}%n%ex{8}%n
-        """.stripMargin,
-        new File(s"$tempLog4jConf/log4j2.properties"),
-        StandardCharsets.UTF_8)
+        """.stripMargin)
 
       tempLog4jConf
     }

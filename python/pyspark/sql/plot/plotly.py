@@ -27,4 +27,19 @@ if TYPE_CHECKING:
 def plot_pyspark(data: "DataFrame", kind: str, **kwargs: Any) -> "Figure":
     import plotly
 
+    if kind == "pie":
+        return plot_pie(data, **kwargs)
+
     return plotly.plot(PySparkPlotAccessor.plot_data_map[kind](data), kind, **kwargs)
+
+
+def plot_pie(data: "DataFrame", **kwargs: Any) -> "Figure":
+    # TODO(SPARK-49530): Support pie subplots with plotly backend
+    from plotly import express
+
+    pdf = PySparkPlotAccessor.plot_data_map["pie"](data)
+    x = kwargs.pop("x", None)
+    y = kwargs.pop("y", None)
+    fig = express.pie(pdf, values=y, names=x, **kwargs)
+
+    return fig

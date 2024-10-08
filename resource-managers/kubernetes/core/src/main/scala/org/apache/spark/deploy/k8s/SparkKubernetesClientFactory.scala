@@ -107,7 +107,7 @@ object SparkKubernetesClientFactory extends Logging {
         (token, configBuilder) => configBuilder.withOauthToken(token)
       }.withOption(oauthTokenFile) {
         (file, configBuilder) =>
-            configBuilder.withOauthToken(Files.toString(file, Charsets.UTF_8))
+            configBuilder.withOauthToken(Files.asCharSource(file, Charsets.UTF_8).read())
       }.withOption(caCertFile) {
         (file, configBuilder) => configBuilder.withCaCertFile(file)
       }.withOption(clientKeyFile) {

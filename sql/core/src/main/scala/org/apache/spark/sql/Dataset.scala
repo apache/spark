@@ -412,11 +412,11 @@ class Dataset[T] private[sql](
     // Print a footer
     if (vertical && rows.tail.isEmpty) {
       // In a vertical mode, print an empty row set explicitly
-      sb.append("(0 rows)\n")
+      sb.append("(0 rows)")
     } else if (hasMoreData) {
       // For Data that has more than "numRows" records
       val rowsString = if (numRows == 1) "row" else "rows"
-      sb.append(s"only showing top $numRows $rowsString\n")
+      sb.append(s"only showing top $numRows $rowsString")
     }
 
     sb.toString()

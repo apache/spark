@@ -15,17 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.aggregate
+package org.apache.spark.sql.internal
 
 import org.apache.spark.api.java.function.MapFunction
-import org.apache.spark.sql.{Encoder, TypedColumn}
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.{Encoder, Encoders, TypedColumn}
 import org.apache.spark.sql.expressions.Aggregator
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines internal implementations for aggregators.
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
 
 class TypedSumDouble[IN](val f: IN => Double) extends Aggregator[IN, Double, Double] {
   override def zero: Double = 0.0
@@ -33,8 +31,8 @@ class TypedSumDouble[IN](val f: IN => Double) extends Aggregator[IN, Double, Dou
   override def merge(b1: Double, b2: Double): Double = b1 + b2
   override def finish(reduction: Double): Double = reduction
 
-  override def bufferEncoder: Encoder[Double] = ExpressionEncoder[Double]()
-  override def outputEncoder: Encoder[Double] = ExpressionEncoder[Double]()
+  override def bufferEncoder: Encoder[Double] = Encoders.scalaDouble
+  override def outputEncoder: Encoder[Double] = Encoders.scalaDouble
 
   // Java api support
   def this(f: MapFunction[IN, java.lang.Double]) = this((x: IN) => f.call(x).asInstanceOf[Double])
@@ -44,15 +42,14 @@ class TypedSumDouble[IN](val f: IN => Double) extends Aggregator[IN, Double, Dou
   }
 }
 
-
 class TypedSumLong[IN](val f: IN => Long) extends Aggregator[IN, Long, Long] {
   override def zero: Long = 0L
   override def reduce(b: Long, a: IN): Long = b + f(a)
   override def merge(b1: Long, b2: Long): Long = b1 + b2
   override def finish(reduction: Long): Long = reduction
 
-  override def bufferEncoder: Encoder[Long] = ExpressionEncoder[Long]()
-  override def outputEncoder: Encoder[Long] = ExpressionEncoder[Long]()
+  override def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+  override def outputEncoder: Encoder[Long] = Encoders.scalaLong
 
   // Java api support
   def this(f: MapFunction[IN, java.lang.Long]) = this((x: IN) => f.call(x).asInstanceOf[Long])
@@ -62,7 +59,6 @@ class TypedSumLong[IN](val f: IN => Long) extends Aggregator[IN, Long, Long] {
   }
 }
 
-
 class TypedCount[IN](val f: IN => Any) extends Aggregator[IN, Long, Long] {
   override def zero: Long = 0
   override def reduce(b: Long, a: IN): Long = {
@@ -71,8 +67,8 @@ class TypedCount[IN](val f: IN => Any) extends Aggregator[IN, Long, Long] {
   override def merge(b1: Long, b2: Long): Long = b1 + b2
   override def finish(reduction: Long): Long = reduction
 
-  override def bufferEncoder: Encoder[Long] = ExpressionEncoder[Long]()
-  override def outputEncoder: Encoder[Long] = ExpressionEncoder[Long]()
+  override def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+  override def outputEncoder: Encoder[Long] = Encoders.scalaLong
 
   // Java api support
   def this(f: MapFunction[IN, Object]) = this((x: IN) => f.call(x).asInstanceOf[Any])
@@ -80,7 +76,6 @@ class TypedCount[IN](val f: IN => Any) extends Aggregator[IN, Long, Long] {
     toColumn.asInstanceOf[TypedColumn[IN, java.lang.Long]]
   }
 }
-
 
 class TypedAverage[IN](val f: IN => Double) extends Aggregator[IN, (Double, Long), Double] {
   override def zero: (Double, Long) = (0.0, 0L)
@@ -90,8 +85,10 @@ class TypedAverage[IN](val f: IN => Double) extends Aggregator[IN, (Double, Long
     (b1._1 + b2._1, b1._2 + b2._2)
   }
 
-  override def bufferEncoder: Encoder[(Double, Long)] = ExpressionEncoder[(Double, Long)]()
-  override def outputEncoder: Encoder[Double] = ExpressionEncoder[Double]()
+  override def bufferEncoder: Encoder[(Double, Long)] =
+    Encoders.tuple(Encoders.scalaDouble, Encoders.scalaLong)
+
+  override def outputEncoder: Encoder[Double] = Encoders.scalaDouble
 
   // Java api support
   def this(f: MapFunction[IN, java.lang.Double]) = this((x: IN) => f.call(x).asInstanceOf[Double])

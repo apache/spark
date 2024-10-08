@@ -809,7 +809,7 @@ class WithField(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"WithField({self._structExpr}, {self._fieldName}, {self._valueExpr})"
+        return f"update_field({self._structExpr}, {self._fieldName}, {self._valueExpr})"
 
 
 class DropField(Expression):
@@ -833,7 +833,7 @@ class DropField(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"DropField({self._structExpr}, {self._fieldName})"
+        return f"drop_field({self._structExpr}, {self._fieldName})"
 
 
 class UnresolvedExtractValue(Expression):
@@ -857,7 +857,7 @@ class UnresolvedExtractValue(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"UnresolvedExtractValue({str(self._child)}, {str(self._extraction)})"
+        return f"{self._child}['{self._extraction}']"
 
 
 class UnresolvedRegex(Expression):

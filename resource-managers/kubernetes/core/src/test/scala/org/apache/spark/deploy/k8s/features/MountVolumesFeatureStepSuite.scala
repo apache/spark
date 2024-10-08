@@ -496,4 +496,81 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(mounts(1).getMountPath === "/tmp/bar")
     assert(mounts(1).getSubPath === "bar")
   }
+
+  test("SPARK-49833: Create and mounts persistentVolumeClaims in driver with annotations") {
+    val volumeConf = KubernetesVolumeSpec(
+      "testVolume",
+      "/tmp",
+      "",
+      "",
+      true,
+      KubernetesPVCVolumeConf(claimName = MountVolumesFeatureStep.PVC_ON_DEMAND,
+        storageClass = Some("gp3"),
+        size = Some("1Mi"),
+        annotations = Some(Map("env" -> "test")))
+    )
+
+    val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
+    val step = new MountVolumesFeatureStep(kubernetesConf)
+    val configuredPod = step.configurePod(SparkPod.initialPod())
+    assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
+    val pvcClaim = configuredPod.pod.getSpec.getVolumes.get(0).getPersistentVolumeClaim
+    assert(pvcClaim.getClaimName.endsWith("-driver-pvc-0"))
+  }
+
+  test("SPARK-49833: Create and mounts persistentVolumeClaims in executors with annotations") {
+    val volumeConf = KubernetesVolumeSpec(
+      "testVolume",
+      "/tmp",
+      "",
+      "",
+      true,
+      KubernetesPVCVolumeConf(claimName = MountVolumesFeatureStep.PVC_ON_DEMAND,
+        storageClass = Some("gp3"),
+        size = Some("1Mi"),
+        annotations = Some(Map("env" -> "exec-test")))
+    )
+
+    val executorConf = KubernetesTestConf.createExecutorConf(volumes = Seq(volumeConf))
+    val executorStep = new MountVolumesFeatureStep(executorConf)
+    val executorPod = executorStep.configurePod(SparkPod.initialPod())
+
+    assert(executorPod.pod.getSpec.getVolumes.size() === 1)
+    val executorPVC = executorPod.pod.getSpec.getVolumes.get(0).getPersistentVolumeClaim
+    assert(executorPVC.getClaimName.endsWith("-exec-1-pvc-0"))
+  }
+
+  test("SPARK-49833: Mount multiple volumes to executor with annotations") {
+    val pvcVolumeConf1 = KubernetesVolumeSpec(
+      "checkpointVolume1",
+      "/checkpoints1",
+      "",
+      "",
+      true,
+      KubernetesPVCVolumeConf(claimName = "pvcClaim1",
+        storageClass = Some("gp3"),
+        size = Some("1Mi"),
+        annotations = Some(Map("env1" -> "exec-test-1")))
+    )
+
+    val pvcVolumeConf2 = KubernetesVolumeSpec(
+      "checkpointVolume2",
+      "/checkpoints2",
+      "",
+      "",
+      true,
+      KubernetesPVCVolumeConf(claimName = "pvcClaim2",
+        storageClass = Some("gp3"),
+        size = Some("1Mi"),
+        annotations = Some(Map("env2" -> "exec-test-2")))
+    )
+
+    val kubernetesConf = KubernetesTestConf.createExecutorConf(
+      volumes = Seq(pvcVolumeConf1, pvcVolumeConf2))
+    val step = new MountVolumesFeatureStep(kubernetesConf)
+    val configuredPod = step.configurePod(SparkPod.initialPod())
+
+    assert(configuredPod.pod.getSpec.getVolumes.size() === 2)
+    assert(configuredPod.container.getVolumeMounts.size() === 2)
+  }
 }

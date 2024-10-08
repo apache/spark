@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.config
-import org.apache.spark.sql.internal.RuntimeConfigImpl
+import org.apache.spark.sql.internal.{RuntimeConfigImpl, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.CHECKPOINT_LOCATION
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 
@@ -80,5 +80,25 @@ class RuntimeConfigSuite extends SparkFunSuite {
       conf.set(config.CPUS_PER_TASK.key, 4)
     }
     assert(ex.getMessage.contains("Spark config"))
+  }
+
+  test("set and get a config with defaultValue") {
+    val conf = newConf()
+    val key = SQLConf.SESSION_LOCAL_TIMEZONE.key
+    // By default, the value when getting an unset config entry is its defaultValue.
+    assert(conf.get(key) == SQLConf.SESSION_LOCAL_TIMEZONE.defaultValue.get)
+    assert(conf.getOption(key).contains(SQLConf.SESSION_LOCAL_TIMEZONE.defaultValue.get))
+    // Get the unset config entry with a different default value, which should return the given
+    // default parameter.
+    assert(conf.get(key, "Europe/Amsterdam") == "Europe/Amsterdam")
+
+    // Set a config entry.
+    conf.set(key, "Europe/Berlin")
+    // Get the set config entry.
+    assert(conf.get(key) == "Europe/Berlin")
+    // Unset the config entry.
+    conf.unset(key)
+    // Get the unset config entry, which should return its defaultValue again.
+    assert(conf.get(key) == SQLConf.SESSION_LOCAL_TIMEZONE.defaultValue.get)
   }
 }

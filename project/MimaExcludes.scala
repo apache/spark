@@ -178,7 +178,19 @@ object MimaExcludes {
 
     // SPARK-49282: Shared SparkSessionBuilder
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.SparkSession$Builder"),
+
+    // SPARK-49286: Avro/Protobuf functions in sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.functions"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.functions$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.protobuf.functions"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.protobuf.functions$"),
+
+    // SPARK-49434: Move aggregators to sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.javalang.typed"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.scalalang.typed"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.scalalang.typed$"),
   ) ++ loggingExcludes("org.apache.spark.sql.DataFrameReader") ++
+    loggingExcludes("org.apache.spark.sql.streaming.DataStreamReader") ++
     loggingExcludes("org.apache.spark.sql.SparkSession#Builder")
 
   // Default exclude rules

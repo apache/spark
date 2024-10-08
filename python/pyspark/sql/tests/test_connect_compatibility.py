@@ -21,11 +21,13 @@ import inspect
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.sql.classic.dataframe import DataFrame as ClassicDataFrame
-from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
 from pyspark.sql.classic.column import Column as ClassicColumn
-from pyspark.sql.connect.column import Column as ConnectColumn
 from pyspark.sql.session import SparkSession as ClassicSparkSession
-from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
+
+if should_test_connect:
+    from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+    from pyspark.sql.connect.column import Column as ConnectColumn
+    from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
 
 
 class ConnectCompatibilityTestsMixin:

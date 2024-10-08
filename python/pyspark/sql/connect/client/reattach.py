@@ -24,7 +24,7 @@ import warnings
 import uuid
 from collections.abc import Generator
 from typing import Optional, Any, Iterator, Iterable, Tuple, Callable, cast, Type, ClassVar
-from multiprocessing.pool import ThreadPool
+from concurrent.futures import ThreadPoolExecutor
 import os
 
 import grpc
@@ -58,19 +58,18 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
     # Lock to manage the pool
     _lock: ClassVar[RLock] = RLock()
-    _release_thread_pool_instance: Optional[ThreadPool] = None
+    _release_thread_pool_instance: Optional[ThreadPoolExecutor] = None
 
     @classmethod  # type: ignore[misc]
     @property
-    def _release_thread_pool(cls) -> ThreadPool:
+    def _release_thread_pool(cls) -> ThreadPoolExecutor:
         # Perform a first check outside the critical path.
         if cls._release_thread_pool_instance is not None:
             return cls._release_thread_pool_instance
         with cls._lock:
             if cls._release_thread_pool_instance is None:
-                cls._release_thread_pool_instance = ThreadPool(
-                    os.cpu_count() if os.cpu_count() else 8
-                )
+                max_workers = os.cpu_count() or 8
+                cls._release_thread_pool_instance = ThreadPoolExecutor(max_workers=max_workers)
             return cls._release_thread_pool_instance
 
     @classmethod
@@ -81,8 +80,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         """
         with cls._lock:
             if cls._release_thread_pool_instance is not None:
-                cls._release_thread_pool.close()  # type: ignore[attr-defined]
-                cls._release_thread_pool.join()  # type: ignore[attr-defined]
+                cls._release_thread_pool.shutdown()  # type: ignore[attr-defined]
                 cls._release_thread_pool_instance = None
 
     def __init__(
@@ -212,7 +210,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
         with self._lock:
             if self._release_thread_pool_instance is not None:
-                self._release_thread_pool.apply_async(target)
+                self._release_thread_pool.submit(target)
 
     def _release_all(self) -> None:
         """
@@ -237,7 +235,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
         with self._lock:
             if self._release_thread_pool_instance is not None:
-                self._release_thread_pool.apply_async(target)
+                self._release_thread_pool.submit(target)
         self._result_complete = True
 
     def _call_iter(self, iter_fun: Callable) -> Any:

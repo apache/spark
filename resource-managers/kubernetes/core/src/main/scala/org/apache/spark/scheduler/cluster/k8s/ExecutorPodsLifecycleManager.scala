@@ -27,18 +27,20 @@ import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.ExecutorFailureTracker
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesUtils._
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.EXECUTOR_ID
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.scheduler.ExecutorExited
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.apache.spark.util.SparkExitCode.EXCEED_MAX_EXECUTOR_FAILURES
 
 private[spark] class ExecutorPodsLifecycleManager(
     val conf: SparkConf,
     kubernetesClient: KubernetesClient,
-    snapshotsStore: ExecutorPodsSnapshotsStore) extends Logging {
+    snapshotsStore: ExecutorPodsSnapshotsStore,
+    clock: Clock = new SystemClock()) extends Logging {
 
   import ExecutorPodsLifecycleManager._
 
@@ -62,11 +64,31 @@ private[spark] class ExecutorPodsLifecycleManager(
 
   private val namespace = conf.get(KUBERNETES_NAMESPACE)
 
+  private val sparkContainerName = conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME)
+    .getOrElse(DEFAULT_EXECUTOR_CONTAINER_NAME)
+
+  protected val maxNumExecutorFailures = ExecutorFailureTracker.maxNumExecutorFailures(conf)
+
+  @volatile private var failedExecutorIds = Set.empty[Long]
+
+  protected val failureTracker = new ExecutorFailureTracker(conf, clock)
+
+  protected[spark] def getNumExecutorsFailed: Int = failureTracker.numFailedExecutors
+
   def start(schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     val eventProcessingInterval = conf.get(KUBERNETES_EXECUTOR_EVENT_PROCESSING_INTERVAL)
-    snapshotsStore.addSubscriber(eventProcessingInterval) {
-      onNewSnapshots(schedulerBackend, _)
+    snapshotsStore.addSubscriber(eventProcessingInterval) { executorPodsSnapshot =>
+      onNewSnapshots(schedulerBackend, executorPodsSnapshot)
+      if (failureTracker.numFailedExecutors > maxNumExecutorFailures) {
+        logError(log"Max number of executor failures " +
+          log"(${MDC(LogKeys.MAX_EXECUTOR_FAILURES, maxNumExecutorFailures)}) reached")
+        stopApplication(EXCEED_MAX_EXECUTOR_FAILURES)
+      }
     }
+  }
+
+  private[k8s] def stopApplication(exitCode: Int): Unit = {
+    sys.exit(exitCode)
   }
 
   private def onNewSnapshots(
@@ -74,6 +96,17 @@ private[spark] class ExecutorPodsLifecycleManager(
       snapshots: Seq[ExecutorPodsSnapshot]): Unit = {
     val execIdsRemovedInThisRound = mutable.HashSet.empty[Long]
     snapshots.foreach { snapshot =>
+      val currentFailedExecutorIds = snapshot.executorPods.filter {
+        case (_, PodFailed(_)) => true
+        case _ => false
+      }.keySet
+
+      val newFailedExecutorIds = currentFailedExecutorIds -- failedExecutorIds
+      if (newFailedExecutorIds.nonEmpty) {
+        logWarning(log"${MDC(LogKeys.COUNT, newFailedExecutorIds.size)} new failed executors.")
+        newFailedExecutorIds.foreach { _ => failureTracker.registerExecutorFailure() }
+      }
+      failedExecutorIds = failedExecutorIds ++ currentFailedExecutorIds
       snapshot.executorPods.foreach { case (execId, state) =>
         state match {
           case _state if isPodInactive(_state.pod) =>
@@ -101,7 +134,7 @@ private[spark] class ExecutorPodsLifecycleManager(
               execIdsRemovedInThisRound += execId
               if (schedulerBackend.isExecutorActive(execId.toString)) {
                 logInfo(log"Snapshot reported succeeded executor with id " +
-                  log"${MDC(EXECUTOR_ID, execId)}, even though the application has not " +
+                  log"${MDC(LogKeys.EXECUTOR_ID, execId)}, even though the application has not " +
                   log"requested for it to be removed.")
               } else {
                 logDebug(s"Snapshot reported succeeded executor with id $execId," +
@@ -246,7 +279,8 @@ private[spark] class ExecutorPodsLifecycleManager(
 
   private def findExitCode(podState: FinalPodState): Int = {
     podState.pod.getStatus.getContainerStatuses.asScala.find { containerStatus =>
-      containerStatus.getState.getTerminated != null
+      containerStatus.getName == sparkContainerName &&
+        containerStatus.getState.getTerminated != null
     }.map { terminatedContainer =>
       terminatedContainer.getState.getTerminated.getExitCode.toInt
     }.getOrElse(UNKNOWN_EXIT_CODE)

@@ -48,7 +48,7 @@ class HadoopConfDriverFeatureStepSuite extends SparkFunSuite {
     val confFiles = Set("core-site.xml", "hdfs-site.xml")
 
     confFiles.foreach { f =>
-      Files.write("some data", new File(confDir, f), UTF_8)
+      Files.asCharSink(new File(confDir, f), UTF_8).write("some data")
     }
 
     val sparkConf = new SparkConfWithEnv(Map(ENV_HADOOP_CONF_DIR -> confDir.getAbsolutePath()))

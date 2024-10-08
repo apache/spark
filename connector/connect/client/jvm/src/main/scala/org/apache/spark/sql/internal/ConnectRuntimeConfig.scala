@@ -38,7 +38,7 @@ class ConnectRuntimeConfig private[sql] (client: SparkConnectClient)
   }
 
   /** @inheritdoc */
-  @throws[NoSuchElementException]("if the key is not set")
+  @throws[NoSuchElementException]("if the key is not set and there is no default value")
   def get(key: String): String = getOption(key).getOrElse {
     throw new NoSuchElementException(key)
   }

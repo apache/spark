@@ -383,7 +383,7 @@ object NonLocalModeSparkPlugin {
       resources: Map[String, ResourceInformation]): Unit = {
     val path = conf.get(TEST_PATH_CONF)
     val strToWrite = createFileStringWithGpuAddrs(id, resources)
-    Files.write(strToWrite, new File(path, s"$filePrefix$id"), StandardCharsets.UTF_8)
+    Files.asCharSink(new File(path, s"$filePrefix$id"), StandardCharsets.UTF_8).write(strToWrite)
   }
 
   def reset(): Unit = {

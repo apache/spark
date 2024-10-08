@@ -143,7 +143,7 @@ class Dataset[T] private[sql] (
   // Make sure we don't forget to set plan id.
   assert(plan.getRoot.getCommon.hasPlanId)
 
-  private[sql] val agnosticEncoder: AgnosticEncoder[T] = encoderFor(encoder)
+  private[sql] val agnosticEncoder: AgnosticEncoder[T] = agnosticEncoderFor(encoder)
 
   override def toString: String = {
     try {
@@ -274,9 +274,7 @@ class Dataset[T] private[sql] (
     df.withResult { result =>
       assert(result.length == 1)
       assert(result.schema.size == 1)
-      // scalastyle:off println
-      println(result.toArray.head)
-      // scalastyle:on println
+      print(result.toArray.head)
     }
   }
 
@@ -437,7 +435,7 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def select[U1](c1: TypedColumn[T, U1]): Dataset[U1] = {
-    val encoder = encoderFor(c1.encoder)
+    val encoder = agnosticEncoderFor(c1.encoder)
     val col = if (encoder.schema == encoder.dataType) {
       functions.inline(functions.array(c1))
     } else {
@@ -452,7 +450,7 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
-    val encoder = ProductEncoder.tuple(columns.map(c => encoderFor(c.encoder)))
+    val encoder = ProductEncoder.tuple(columns.map(c => agnosticEncoderFor(c.encoder)))
     selectUntyped(encoder, columns)
   }
 
@@ -526,7 +524,7 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T] = {
-    KeyValueGroupedDatasetImpl[K, T](this, encoderFor[K], func)
+    KeyValueGroupedDatasetImpl[K, T](this, agnosticEncoderFor[K], func)
   }
 
   /** @inheritdoc */
@@ -881,7 +879,7 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def mapPartitions[U: Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
-    val outputEncoder = encoderFor[U]
+    val outputEncoder = agnosticEncoderFor[U]
     val udf = SparkUserDefinedFunction(
       function = func,
       inputEncoders = agnosticEncoder :: Nil,

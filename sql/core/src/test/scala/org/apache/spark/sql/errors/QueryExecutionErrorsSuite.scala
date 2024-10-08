@@ -767,7 +767,40 @@ class QueryExecutionErrorsSuite
         parameters = Map(
           "value1" -> "127S",
           "symbol" -> "+",
-          "value2" -> "5S"),
+          "value2" -> "5S",
+          "functionName" -> "`try_add`"),
+        sqlState = "22003")
+    }
+  }
+
+  test("BINARY_ARITHMETIC_OVERFLOW: byte minus byte result overflow") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          sql(s"select -2Y - 127Y").collect()
+        },
+        condition = "BINARY_ARITHMETIC_OVERFLOW",
+        parameters = Map(
+          "value1" -> "-2S",
+          "symbol" -> "-",
+          "value2" -> "127S",
+          "functionName" -> "`try_subtract`"),
+        sqlState = "22003")
+    }
+  }
+
+  test("BINARY_ARITHMETIC_OVERFLOW: byte multiply byte result overflow") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          sql(s"select 127Y * 5Y").collect()
+        },
+        condition = "BINARY_ARITHMETIC_OVERFLOW",
+        parameters = Map(
+          "value1" -> "127S",
+          "symbol" -> "*",
+          "value2" -> "5S",
+          "functionName" -> "`try_multiply`"),
         sqlState = "22003")
     }
   }

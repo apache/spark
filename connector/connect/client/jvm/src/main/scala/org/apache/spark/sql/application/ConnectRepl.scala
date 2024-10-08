@@ -50,8 +50,9 @@ object ConnectRepl {
       /_/
 
 Type in expressions to have them evaluated.
+Spark connect server version %s.
 Spark session available as 'spark'.
-   """.format(spark_version)
+   """
 
   def main(args: Array[String]): Unit = doMain(args)
 
@@ -102,7 +103,7 @@ Spark session available as 'spark'.
     // Please note that we make ammonite generate classes instead of objects.
     // Classes tend to have superior serialization behavior when using UDFs.
     val main = new ammonite.Main(
-      welcomeBanner = Option(splash),
+      welcomeBanner = Option(splash.format(spark_version, spark.version)),
       predefCode = predefCode,
       replCodeWrapper = ExtendedCodeClassWrapper,
       scriptCodeWrapper = ExtendedCodeClassWrapper,

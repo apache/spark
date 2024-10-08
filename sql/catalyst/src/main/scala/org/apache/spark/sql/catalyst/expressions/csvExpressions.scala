@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeWithCaseAccentSensitivity
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -147,7 +147,7 @@ case class CsvToStructs(
     converter(parser.parse(csv))
   }
 
-  override def inputTypes: Seq[AbstractDataType] = StringTypeAnyCollation :: Nil
+  override def inputTypes: Seq[AbstractDataType] = StringTypeWithCaseAccentSensitivity :: Nil
 
   override def prettyName: String = "from_csv"
 

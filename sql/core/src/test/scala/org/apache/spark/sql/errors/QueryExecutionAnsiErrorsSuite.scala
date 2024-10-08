@@ -391,4 +391,14 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-49773: INVALID_TIMEZONE for bad timezone") {
+    checkError(
+      exception = intercept[SparkDateTimeException] {
+        sql("select make_timestamp(1, 2, 28, 23, 1, 1, -100)").collect()
+      },
+      condition = "INVALID_TIMEZONE",
+      parameters = Map("timeZone" -> "-100")
+    )
+  }
 }

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, ValidatorUtil, XmlInferSchema, XmlOptions}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeWithCaseAccentSensitivity
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -124,7 +124,7 @@ case class XmlToStructs(
     defineCodeGen(ctx, ev, input => s"(InternalRow) $expr.nullSafeEval($input)")
   }
 
-  override def inputTypes: Seq[AbstractDataType] = StringTypeAnyCollation :: Nil
+  override def inputTypes: Seq[AbstractDataType] = StringTypeWithCaseAccentSensitivity :: Nil
 
   override def prettyName: String = "from_xml"
 

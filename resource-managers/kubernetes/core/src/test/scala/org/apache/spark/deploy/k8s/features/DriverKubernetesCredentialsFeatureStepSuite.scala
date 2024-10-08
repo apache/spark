@@ -128,7 +128,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite {
 
   private def writeCredentials(credentialsFileName: String, credentialsContents: String): File = {
     val credentialsFile = new File(credentialsTempDirectory, credentialsFileName)
-    Files.write(credentialsContents, credentialsFile, Charsets.UTF_8)
+    Files.asCharSink(credentialsFile, Charsets.UTF_8).write(credentialsContents)
     credentialsFile
   }
 }

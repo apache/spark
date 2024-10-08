@@ -17,7 +17,8 @@
 
 from typing import Any, TYPE_CHECKING, Optional, Union
 from types import ModuleType
-from pyspark.errors import PySparkRuntimeError, PySparkValueError
+from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
+from pyspark.sql.types import NumericType
 from pyspark.sql.utils import require_minimum_plotly_version
 
 
@@ -97,6 +98,7 @@ class PySparkPlotAccessor:
         "bar": PySparkTopNPlotBase().get_top_n,
         "barh": PySparkTopNPlotBase().get_top_n,
         "line": PySparkSampledPlotBase().get_sampled,
+        "pie": PySparkTopNPlotBase().get_top_n,
         "scatter": PySparkSampledPlotBase().get_sampled,
     }
     _backends = {}  # type: ignore[var-annotated]
@@ -299,3 +301,40 @@ class PySparkPlotAccessor:
         >>> df.plot.area(x='date', y=['sales', 'signups', 'visits'])  # doctest: +SKIP
         """
         return self(kind="area", x=x, y=y, **kwargs)
+
+    def pie(self, x: str, y: str, **kwargs: Any) -> "Figure":
+        """
+        Generate a pie plot.
+
+        A pie plot is a proportional representation of the numerical data in a
+        column.
+
+        Parameters
+        ----------
+        x : str
+            Name of column to be used as the category labels for the pie plot.
+        y : str
+            Name of the column to plot.
+        **kwargs
+            Additional keyword arguments.
+
+        Returns
+        -------
+        :class:`plotly.graph_objs.Figure`
+
+        Examples
+        --------
+        """
+        schema = self.data.schema
+
+        # Check if 'y' is a numerical column
+        y_field = schema[y] if y in schema.names else None
+        if y_field is None or not isinstance(y_field.dataType, NumericType):
+            raise PySparkTypeError(
+                errorClass="PLOT_NOT_NUMERIC_COLUMN",
+                messageParameters={
+                    "arg_name": "y",
+                    "arg_type": str(y_field.dataType) if y_field else "None",
+                },
+            )
+        return self(kind="pie", x=x, y=y, **kwargs)

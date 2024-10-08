@@ -301,6 +301,7 @@ LOCK: 'LOCK';
 LOCKS: 'LOCKS';
 LOGICAL: 'LOGICAL';
 LONG: 'LONG';
+LOOP: 'LOOP';
 MACRO: 'MACRO';
 MAP: 'MAP' {incComplexTypeLevelCounter();};
 MATCHED: 'MATCHED';

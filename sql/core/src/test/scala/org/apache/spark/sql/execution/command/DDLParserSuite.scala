@@ -688,7 +688,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     checkError(
       exception = parseException(sql1),
       condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "funcName" -> "`a`.`b`"),
+      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "name" -> "`a`.`b`"),
       context = ExpectedContext(
         fragment = sql1,
         start = 0,
@@ -698,7 +698,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     checkError(
       exception = parseException(sql2),
       condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "funcName" -> "`a`.`b`"),
+      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "name" -> "`a`.`b`"),
       context = ExpectedContext(
         fragment = sql2,
         start = 0,
