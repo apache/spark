@@ -35,7 +35,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoder, Kry
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NamedParameter, UnresolvedGenerator}
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Concat, CreateArray, EmptyRow, Expression, Flatten, Grouping, Literal, RowNumber, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Concat, CreateArray, EmptyRow, Expression, Flatten, Grouping, Literal, RowNumber, UnaryExpression, Years}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
@@ -1004,6 +1004,18 @@ class QueryExecutionErrorsSuite
       condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "Cannot evaluate expression: namedparameter(foo)"),
       sqlState = "XX000")
+  }
+
+  test("PartitionTransformExpression throws error on eval") {
+    val expr = Years(Literal("foo")).eval()
+    val e = intercept[AnalysisException] {
+      expr
+    }
+    checkError(
+      exception = e,
+      condition = "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY",
+      parameters = Map("expression" -> ""),
+      sqlState = "42123")
   }
 
   test("INTERNAL_ERROR: Calling doGenCode on unresolved") {
