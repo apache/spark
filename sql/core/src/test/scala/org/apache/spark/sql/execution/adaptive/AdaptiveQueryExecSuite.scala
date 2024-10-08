@@ -2841,21 +2841,21 @@ class AdaptiveQueryExecSuite
           """
             |SELECT tt2.value
             |FROM (
-            |	SELECT value
-            |	FROM t1
-            |	WHERE NOT EXISTS (
-            |			SELECT 1
-            |			FROM (
-            |				SELECT t2.id
-            |				FROM t2
-            |					JOIN t3 ON t2.id = t3.id
-            |				AND t2.id > 100
-            |			) tt
-            |			WHERE t1.value = tt.id
-            |		)
-            |		AND t1.value = 1
+            |  SELECT value
+            |  FROM t1
+            |  WHERE NOT EXISTS (
+            |      SELECT 1
+            |      FROM (
+            |        SELECT t2.id
+            |        FROM t2
+            |          JOIN t3 ON t2.id = t3.id
+            |        AND t2.id > 100
+            |      ) tt
+            |      WHERE t1.value = tt.id
+            |    )
+            |    AND t1.value = 1
             |) tt2
-            |	LEFT JOIN t4 ON tt2.value = t4.id
+            |  LEFT JOIN t4 ON tt2.value = t4.id
             |""".stripMargin
         )
         assert(findTopLevelBroadcastNestedLoopJoin(adaptivePlan).size == 1)
