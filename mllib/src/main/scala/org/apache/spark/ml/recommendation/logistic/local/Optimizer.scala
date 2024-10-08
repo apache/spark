@@ -292,23 +292,25 @@ private[ml] class Optimizer(private val opts: Opts,
           if (opts.verbose) {
             lloss += expTable.logloss(f, label.toFloat) * weight
             llossn += 1
-            if (opts.lambda > 0 && label > 0) {
-              llossReg += opts.lambda * weight * blas.sdot(opts.dim, syn0, l1, 1, syn0, l1, 1)
-              llossReg += opts.lambda * weight * blas.sdot(opts.dim, syn1neg, l2, 1, syn1neg, l2, 1)
+            if (label > 0) {
+              llossReg += opts.lambdaL * weight * blas.sdot(opts.dim, syn0,
+                l1, 1, syn0, l1, 1)
+              llossReg += opts.lambdaR * weight * blas.sdot(opts.dim, syn1neg,
+                l2, 1, syn1neg, l2, 1)
               llossnReg += 1
             }
           }
 
-          if (opts.lambda > 0 && label > 0) {
-            blas.saxpy(opts.dim, -opts.lambda * weight * opts.lr, syn0, l1, 1, neu1e, 0, 1)
+          if (opts.lambdaL > 0 && label > 0) {
+            blas.saxpy(opts.dim, -opts.lambdaL * weight * opts.lr, syn0, l1, 1, neu1e, 0, 1)
           }
           blas.saxpy(opts.dim, g, syn1neg, l2, 1, neu1e, 0, 1)
           if (opts.useBias) {
             neu1e(opts.dim) += g * 1
           }
 
-          if (opts.lambda > 0 && label > 0) {
-            blas.saxpy(opts.dim, -opts.lambda * weight * opts.lr, syn1neg, l2, 1, syn1neg, l2, 1)
+          if (opts.lambdaR > 0 && label > 0) {
+            blas.saxpy(opts.dim, -opts.lambdaR * weight * opts.lr, syn1neg, l2, 1, syn1neg, l2, 1)
           }
           blas.saxpy(opts.dim, g, syn0, l1, 1, syn1neg, l2, 1)
           if (opts.useBias) {
@@ -370,23 +372,21 @@ private[ml] class Optimizer(private val opts: Opts,
           lloss += expTable.logloss(f, label) * weight
           llossn += 1
 
-          if (opts.lambda > 0) {
-            llossReg += opts.lambda * weight * blas.sdot(opts.dim, syn0, l1, 1, syn0, l1, 1)
-            llossReg += opts.lambda * weight * blas.sdot(opts.dim, syn1neg, l2, 1, syn1neg, l2, 1)
-            llossnReg += 1
-          }
+          llossReg += opts.lambdaL * weight * blas.sdot(opts.dim, syn0, l1, 1, syn0, l1, 1)
+          llossReg += opts.lambdaR * weight * blas.sdot(opts.dim, syn1neg, l2, 1, syn1neg, l2, 1)
+          llossnReg += 1
         }
 
-        if (opts.lambda > 0) {
-          blas.saxpy(opts.dim, -opts.lambda * weight * opts.lr, syn0, l1, 1, neu1e, 0, 1)
+        if (opts.lambdaL > 0) {
+          blas.saxpy(opts.dim, -opts.lambdaL * weight * opts.lr, syn0, l1, 1, neu1e, 0, 1)
         }
         blas.saxpy(opts.dim, g, syn1neg, l2, 1, neu1e, 0, 1)
         if (opts.useBias) {
           neu1e(opts.dim) += g * 1
         }
 
-        if (opts.lambda > 0 && label > 0) {
-          blas.saxpy(opts.dim, -opts.lambda * weight * opts.lr, syn1neg, l2, 1, syn1neg, l2, 1)
+        if (opts.lambdaR > 0) {
+          blas.saxpy(opts.dim, -opts.lambdaR * weight * opts.lr, syn1neg, l2, 1, syn1neg, l2, 1)
         }
         blas.saxpy(opts.dim, g, syn0, l1, 1, syn1neg, l2, 1)
         if (opts.useBias) {

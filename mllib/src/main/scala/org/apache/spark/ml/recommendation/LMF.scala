@@ -127,7 +127,7 @@ private[recommendation] trait LMFModelParams extends Params with HasPredictionCo
  * Common params for LMF.
  */
 private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
-  with HasRegParam with HasCheckpointInterval with HasSeed with HasStepSize
+  with HasCheckpointInterval with HasSeed with HasStepSize
   with HasParallelism with HasFitIntercept with HasLabelCol with HasWeightCol {
 
   /**
@@ -149,17 +149,6 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
 
   /** @group getParam */
   def getImplicitPrefs: Boolean = $(implicitPrefs)
-
-  /**
-   * Param for the power parameter in the negative sampling formula.
-   * Default: 0.0
-   * @group param
-   */
-  val pow = new DoubleParam(this, "pow", "power for negative sampling (>= 0)",
-    ParamValidators.gtEq(0))
-
-  /** @group getParam */
-  def getPow: Double = $(pow)
 
   /**
    * The minimum number of times a user must appear to be included in the lmf factorization.
@@ -195,6 +184,74 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
   def getNegative: Int = $(negative)
 
   /**
+   * Param for number partitions used for factorization (positive).
+   * Default: 1
+   * @group param
+   */
+  val numPartitions: IntParam = new IntParam(this, "numPartitions",
+    "number partitions to be used to split the data (> 0)",
+    ParamValidators.gt(0))
+
+  /** @group getParam */
+  def getNumPartitions: Int = $(numPartitions)
+
+  /**
+   * Param for path where the intermediate state will be saved.
+   * Default: None
+   * @group param
+   */
+  val checkpointPath: Param[String] = new Param[String](this, "checkpointPath",
+    "path where the intermediate state will be saved")
+
+  /** @group getParam */
+  def getCheckpointPath: String = $(checkpointPath)
+
+  /**
+   * Param for user factors regularization parameter (&gt;= 0).
+   * Default: 0
+   * @group expertGetParam
+   */
+  final val regParamU: DoubleParam = new DoubleParam(this, "regParamU",
+    "regularization parameter for user factors (>= 0)", ParamValidators.gtEq(0))
+
+  /** @group expertGetParam */
+  final def getRegParamU: Double = $(regParamU)
+
+  /**
+   * Param for item factors regularization parameter (&gt;= 0).
+   * Default: 0
+   * @group expertParam
+   */
+  final val regParamI: DoubleParam = new DoubleParam(this, "regParamI",
+    "regularization parameter for item factors (>= 0)", ParamValidators.gtEq(0))
+
+  /** @group expertGetParam */
+  final def getRegParamI: Double = $(regParamI)
+
+  /**
+   * Param for the power parameter in the negative sampling formula.
+   * Default: 0.0
+   * @group expertParam
+   */
+  val pow = new DoubleParam(this, "pow", "power for negative sampling (>= 0)",
+    ParamValidators.gtEq(0))
+
+  /** @group expertGetParam */
+  def getPow: Double = $(pow)
+
+
+  /**
+   * Param for stepSize decay (positive).
+   * Default: None
+   * @group expertParam
+   */
+  val minStepSize: DoubleParam = new DoubleParam(this, "minStepSize",
+    "minimum step size to be used for stepSize decay (> 0)", ParamValidators.gt(0))
+
+  /** @group expertGetParam */
+  def getMinStepSize: Double = $(minStepSize)
+
+  /**
    * Param for StorageLevel for intermediate datasets. Pass in a string representation of
    * `StorageLevel`. Cannot be "NONE".
    * Default: "MEMORY_AND_DISK".
@@ -223,45 +280,19 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
   def getFinalStorageLevel: String = $(finalStorageLevel)
 
   /**
-   * Param for stepSize decay (positive).
-   * Default: None
-   * @group param
-   */
-  val minStepSize: DoubleParam = new DoubleParam(this, "minStepSize",
-    "minimum step size to be used for stepSize decay (> 0)", ParamValidators.gt(0))
-  def getMinStepSize: Double = $(minStepSize)
-
-  /**
-   * Param for number partitions used for factorization (positive).
-   * Default: 1
-   * @group param
-   */
-  val numPartitions: IntParam = new IntParam(this, "numPartitions",
-    "number partitions to be used to split the data (> 0)",
-    ParamValidators.gt(0))
-  def getNumPartitions: Int = $(numPartitions)
-
-  /**
-   * Param for path where the intermediate state will be saved.
-   * Default: None
-   * @group param
-   */
-  val checkpointPath: Param[String] = new Param[String](this, "checkpointPath",
-    "path where the intermediate state will be saved")
-  def getCheckpointPath: String = $(checkpointPath)
-
-  /**
    * Param to decide whether to verbose loss values.
    * Default: false
-   * @group param
+   * @group expertParam
    */
   val verbose: BooleanParam = new BooleanParam(this, "verbose",
     "whether to verbose loss values")
+
+  /** @group expertGetParam */
   def getVerbose: Boolean = $(verbose)
 
   setDefault(rank -> 10, implicitPrefs -> true, maxIter -> 10,
     negative -> 10, fitIntercept -> false,
-    stepSize -> 0.025, pow -> 0.0, regParam -> 0.0,
+    stepSize -> 0.025, pow -> 0.0, regParamU -> 0.0, regParamI -> 0.0,
     minUserCount -> 1, minItemCount -> 1, userCol -> "user",
     itemCol -> "item", maxIter -> 1, numPartitions -> 1, coldStartStrategy -> "nan",
     intermediateStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name(),
@@ -553,19 +584,11 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
 
   /** @group setParam */
   @Since("4.0.0")
-  def setMinStepSize(value: Double): this.type = set(minStepSize, value)
-
-  /** @group setParam */
-  @Since("4.0.0")
   def setParallelism(value: Int): this.type = set(parallelism, value)
 
   /** @group setParam */
   @Since("4.0.0")
   def setNumPartitions(value: Int): this.type = set(numPartitions, value)
-
-  /** @group setParam */
-  @Since("4.0.0")
-  def setPow(value: Double): this.type = set(pow, value)
 
   /** @group setParam */
   @Since("4.0.0")
@@ -579,9 +602,15 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
   @Since("4.0.0")
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
 
-  /** @group setParam */
+  /**
+   * Set the same regularization value for users and items.
+   *
+   * @group setParam */
   @Since("4.0.0")
-  def setRegParam(value: Double): this.type = set(regParam, value)
+  def setRegParam(value: Double): this.type = {
+    set(regParamI, value)
+    set(regParamU, value)
+  }
 
   /** @group setParam */
   @Since("4.0.0")
@@ -595,7 +624,21 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
   @Since("4.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  /** @group setParam */
+  /** @group expertSetParam */
+  @Since("4.0.0")
+  def setMinStepSize(value: Double): this.type = set(minStepSize, value)
+
+  /** @group expertSetParam */
+  @Since("4.0.0")
+  def setPow(value: Double): this.type = set(pow, value)
+
+  /** @group expertSetParam */
+  def setRegParamU(value: Double): this.type = set(regParamU, value)
+
+  /** @group expertSetParam */
+  def setRegParamI(value: Double): this.type = set(regParamI, value)
+
+  /** @group expertSetParam */
   @Since("4.0.0")
   def setVerbose(value: Boolean): this.type = set(verbose, value)
 
@@ -665,13 +708,13 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, rank, negative, maxIter, stepSize, minStepSize,
-      parallelism, numPartitions, pow, minUserCount, minItemCount, regParam,
+      parallelism, numPartitions, pow, minUserCount, minItemCount, regParamU, regParamI,
       fitIntercept, implicitPrefs, intermediateStorageLevel, finalStorageLevel,
       checkpointPath, checkpointInterval, verbose, blockSize)
 
     val result = new LMF.Backend($(rank), $(negative), $(maxIter), $(stepSize),
-      get(minStepSize), $(parallelism), $(numPartitions),
-      $(pow), $(minUserCount), $(minItemCount), $(regParam), $(fitIntercept),
+      get(minStepSize), $(parallelism), $(numPartitions), $(pow),
+      $(minUserCount), $(minItemCount), $(regParamU), $(regParamI), $(fitIntercept),
       $(implicitPrefs), get(labelCol).isDefined, get(weightCol).isDefined,
       $(seed), StorageLevel.fromString($(intermediateStorageLevel)),
       StorageLevel.fromString($(finalStorageLevel)),
@@ -717,7 +760,8 @@ object LMF extends DefaultParamsReadable[LMF] with Logging {
                           pow: Double,
                           minUserCount: Int,
                           minItemCount: Int,
-                          lambda: Double,
+                          lambdaU: Double,
+                          lambdaI: Double,
                           useBias: Boolean,
                           implicitPrefs: Boolean,
                           withLabel: Boolean,
@@ -737,7 +781,8 @@ object LMF extends DefaultParamsReadable[LMF] with Logging {
                           numThread,
                           numPartitions,
                           pow,
-                          lambda,
+                          lambdaU,
+                          lambdaI,
                           useBias,
                           implicitPrefs,
                           seed: Long,
