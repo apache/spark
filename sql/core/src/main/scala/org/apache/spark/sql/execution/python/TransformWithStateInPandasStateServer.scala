@@ -189,8 +189,12 @@ class TransformWithStateInPandasStateServer(
       case StatefulProcessorCall.MethodCase.GETLISTSTATE =>
         val stateName = message.getGetListState.getStateName
         val schema = message.getGetListState.getSchema
-        // TODO(SPARK-49744): Add ttl support for list state.
-        initializeStateVariable(stateName, schema, StateVariableType.ListState, None)
+        val ttlDurationMs = if (message.getGetListState.hasTtl) {
+          Some(message.getGetListState.getTtl.getDurationMs)
+        } else {
+            None
+        }
+        initializeStateVariable(stateName, schema, StateVariableType.ListState, ttlDurationMs)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
     }
@@ -372,10 +376,14 @@ class TransformWithStateInPandasStateServer(
           sendResponse(1, s"Value state $stateName already exists")
         }
         case StateVariableType.ListState => if (!listStates.contains(stateName)) {
-          // TODO(SPARK-49744): Add ttl support for list state.
+          val state = if (ttlDurationMs.isEmpty) {
+            statefulProcessorHandle.getListState[Row](stateName, Encoders.row(schema))
+          } else {
+            statefulProcessorHandle.getListState(
+              stateName, Encoders.row(schema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
+          }
           listStates.put(stateName,
-            ListStateInfo(statefulProcessorHandle.getListState[Row](stateName,
-              Encoders.row(schema)), schema, expressionEncoder.createDeserializer(),
+            ListStateInfo(state, schema, expressionEncoder.createDeserializer(),
               expressionEncoder.createSerializer()))
           sendResponse(0)
         } else {

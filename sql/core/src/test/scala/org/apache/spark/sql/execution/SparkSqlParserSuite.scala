@@ -928,6 +928,15 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
           |  earningsYear FOR year IN (`2012`, `2013`, `2014`)
           |)
           |""".stripMargin)
+      // Sampling operations
+      def checkSample(query: String): Unit = {
+        val plan: LogicalPlan = parser.parsePlan(query)
+        assert(plan.collectFirst(_.isInstanceOf[Sample]).nonEmpty)
+        assert(plan.containsAnyPattern(UNRESOLVED_RELATION, LOCAL_RELATION))
+      }
+      checkSample("TABLE t |> TABLESAMPLE (50 PERCENT)")
+      checkSample("TABLE t |> TABLESAMPLE (5 ROWS)")
+      checkSample("TABLE t |> TABLESAMPLE (BUCKET 4 OUT OF 10)")
     }
   }
 }

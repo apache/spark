@@ -37,8 +37,10 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.deploy.k8s.KubernetesUtils._
+import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.ExecutorExited
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
+import org.apache.spark.util.{ManualClock, SparkExitCode}
 
 class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -66,6 +68,7 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
     namedExecutorPods = mutable.Map.empty[String, PodResource]
     when(schedulerBackend.getExecutorsWithRegistrationTs()).thenReturn(Map.empty[String, Long])
+    when(schedulerBackend.getExecutorIds()).thenReturn(Seq.empty)
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.inNamespace(anyString())).thenReturn(podsWithNamespace)
     when(podsWithNamespace.withName(any(classOf[String]))).thenAnswer(namedPodsAnswer())
@@ -74,6 +77,48 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
       kubernetesClient,
       snapshotsStore)
     eventHandlerUnderTest.start(schedulerBackend)
+  }
+
+  test("SPARK-41210: Window based executor failure tracking mechanism") {
+    var _exitCode = -1
+    var waitForExecutorPodsClock = new ManualClock(0L)
+    val _conf = eventHandlerUnderTest.conf.clone
+      .set(MAX_EXECUTOR_FAILURES.key, "2")
+      .set(EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS.key, "2s")
+    snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
+    eventHandlerUnderTest = new ExecutorPodsLifecycleManager(_conf,
+      kubernetesClient, snapshotsStore, waitForExecutorPodsClock) {
+      override private[k8s] def stopApplication(exitCode: Int): Unit = {
+        logError("!!!")
+        _exitCode = exitCode
+      }
+    }
+    eventHandlerUnderTest.start(schedulerBackend)
+    assert(eventHandlerUnderTest.getNumExecutorsFailed === 0)
+
+    waitForExecutorPodsClock.advance(1000)
+    snapshotsStore.updatePod(failedExecutorWithoutDeletion(1))
+    snapshotsStore.updatePod(failedExecutorWithoutDeletion(2))
+    snapshotsStore.notifySubscribers()
+    assert(eventHandlerUnderTest.getNumExecutorsFailed === 2)
+    assert(_exitCode === -1)
+
+    waitForExecutorPodsClock.advance(1000)
+    snapshotsStore.notifySubscribers()
+    assert(eventHandlerUnderTest.getNumExecutorsFailed === 2)
+    assert(_exitCode === -1)
+
+    waitForExecutorPodsClock.advance(2000)
+    assert(eventHandlerUnderTest.getNumExecutorsFailed === 0)
+    assert(_exitCode === -1)
+
+    waitForExecutorPodsClock.advance(1000)
+    snapshotsStore.updatePod(failedExecutorWithoutDeletion(3))
+    snapshotsStore.updatePod(failedExecutorWithoutDeletion(4))
+    snapshotsStore.updatePod(failedExecutorWithoutDeletion(5))
+    snapshotsStore.notifySubscribers()
+    assert(eventHandlerUnderTest.getNumExecutorsFailed === 3)
+    assert(_exitCode === SparkExitCode.EXCEED_MAX_EXECUTOR_FAILURES)
   }
 
   test("When an executor reaches error states immediately, remove from the scheduler backend.") {

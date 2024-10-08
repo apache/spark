@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, ResolveDefaultColumns => DefaultCols}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, CharVarcharUtils, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.connector.V1Function
-import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
+import org.apache.spark.sql.types.{MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -87,7 +87,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       val colName = a.column.name(0)
       val dataType = a.dataType.getOrElse {
         table.schema.findNestedField(Seq(colName), resolver = conf.resolver)
-          .map(_._2.dataType)
+          .map {
+            case (_, StructField(_, st: StringType, _, metadata)) =>
+              CharVarcharUtils.getRawType(metadata).getOrElse(st)
+            case (_, field) => field.dataType
+          }
           .getOrElse {
             throw QueryCompilationErrors.unresolvedColumnError(
               toSQLId(a.column.name), table.schema.fieldNames)
