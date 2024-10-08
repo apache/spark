@@ -687,6 +687,7 @@ private[spark] object LogKeys {
   case object RIGHT_LOGICAL_PLAN_STATS_SIZE_IN_BYTES extends LogKey
   case object RMSE extends LogKey
   case object ACCURACY extends LogKey
+  case object EPR extends LogKey
   case object ROCKS_DB_LOG_LEVEL extends LogKey
   case object ROCKS_DB_LOG_MESSAGE extends LogKey
   case object RPC_ADDRESS extends LogKey
