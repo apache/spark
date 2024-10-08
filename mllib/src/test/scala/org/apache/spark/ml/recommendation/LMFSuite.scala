@@ -174,23 +174,23 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
     val (trueUserFactors, trueItemFactors, trainData, testData) =
       LMFSuite.genData(16384, 32, 16, dim, implicitPrefs = false, random)
 
-    val opts = Opts.explicitOpts(dim, false, 0.025f, 1f, 0.01f, false)
+    val opts = Opts.explicitOpts(dim, useBias = true, 0.025f, 1f, 0.01f, verbose = false)
     val userCounts = trainData.groupMapReduce(_._1)(_ => 1L)(_ + _)
     val itemCounts = trainData.groupMapReduce(_._2)(_ => 1L)(_ + _)
 
     val optimizer = Optimizer(opts,
       trueUserFactors.map{case (i, f) => new ItemData(ItemData.TYPE_LEFT,
         i, userCounts.getOrElse(i, 0L),
-        Optimizer.initEmbedding(opts.dim, false, random))}.iterator ++
+        Optimizer.initEmbedding(opts.dim, opts.useBias, random))}.iterator ++
         trueItemFactors.map{case (i, f) => new ItemData(ItemData.TYPE_RIGHT,
           i, itemCounts.getOrElse(i, 0L),
-          Optimizer.initEmbedding(opts.dim, false, random))}.iterator)
+          Optimizer.initEmbedding(opts.dim, opts.useBias, random))}.iterator)
 
     val batch = LongPairMulti(0, trainData.map(_._1), trainData.map(_._2),
       trainData.map(_._3), trainData.map(_._4))
 
     (0 until 100).foreach{_ =>
-      optimizer.optimize(Iterator(batch), 1, false);
+      optimizer.optimize(Iterator(batch), 1, remapInplace = false);
     }
 
     val userFactors = optimizer.flush()
