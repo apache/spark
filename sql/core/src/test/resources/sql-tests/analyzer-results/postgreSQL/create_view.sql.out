@@ -69,17 +69,14 @@ CREATE VIEW key_dependent_view_no_cols AS
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`FROM`"
-  },
+  "errorClass" : "TRAILING_COMMA_IN_SELECT",
+  "sqlState" : "42601",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 53,
-    "stopIndex" : 56,
-    "fragment" : "FROM"
+    "stopIndex" : 72,
+    "fragment" : "FROM view_base_table"
   } ]
 }
 
