@@ -157,17 +157,17 @@ class RocksDB(
   private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
   @volatile private var loadedVersion = -1L   // -1 = nothing valid is loaded
 
-  // variables to manage checkpoint ID. Once a checkpoingting finishes, it nees to return
-  // the `lastCommittedStateStoreCkptId` as the committed checkpointID, as well as
-  // `LastCommitBasedStateStoreCkptId` as the checkpontID of the previous version that is based on.
+  // variables to manage checkpoint ID. Once a checkpointing finishes, it needs to return
+  // `lastCommittedStateStoreCkptId` as the committed checkpointID, as well as
+  // `lastCommitBasedStateStoreCkptId` as the checkpontID of the previous version that is based on.
   // `loadedStateStoreCkptId` is the checkpointID for the current live DB. After the batch finishes
-  // and checkpoint finishes, it will turn into `LastCommitBasedStateStoreCkptId`.
+  // and checkpoint finishes, it will turn into `lastCommitBasedStateStoreCkptId`.
   // `sessionStateStoreCkptId` store an ID to be used for future checkpoints. It will be used as
   // `lastCommittedStateStoreCkptId` after the checkpoint is committed. It will be reused until
   // we have to use a new one. We have to update `sessionStateStoreCkptId` if we reload a previous
-  // batch version, because we have to use a new checkpointID for re-committing a version.
+  // batch version, as we would have to use a new checkpointID for re-committing a version.
   // The reusing is to help debugging but is not required for the algorithm to work.
-  private var LastCommitBasedStateStoreCkptId: Option[String] = None
+  private var lastCommitBasedStateStoreCkptId: Option[String] = None
   private var lastCommittedStateStoreCkptId: Option[String] = None
   private var loadedStateStoreCkptId: Option[String] = None
   private var sessionStateStoreCkptId: Option[String] = None
@@ -332,7 +332,7 @@ class RocksDB(
         fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
       }
       if (enableStateStoreCheckpointIds) {
-        LastCommitBasedStateStoreCkptId = None
+        lastCommitBasedStateStoreCkptId = None
         lastCommittedStateStoreCkptId = None
         loadedStateStoreCkptId = stateStoreCkptId
         sessionStateStoreCkptId = Some(java.util.UUID.randomUUID.toString)
@@ -345,7 +345,7 @@ class RocksDB(
     } catch {
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded data
-        LastCommitBasedStateStoreCkptId = None
+        lastCommitBasedStateStoreCkptId = None
         lastCommittedStateStoreCkptId = None
         loadedStateStoreCkptId = None
         sessionStateStoreCkptId = None
@@ -700,7 +700,7 @@ class RocksDB(
       numKeysOnLoadedVersion = numKeysOnWritingVersion
       loadedVersion = newVersion
       if (enableStateStoreCheckpointIds) {
-        LastCommitBasedStateStoreCkptId = loadedStateStoreCkptId
+        lastCommitBasedStateStoreCkptId = loadedStateStoreCkptId
         lastCommittedStateStoreCkptId = sessionStateStoreCkptId
         loadedStateStoreCkptId = sessionStateStoreCkptId
       }
@@ -790,7 +790,7 @@ class RocksDB(
     acquire(RollbackStore)
     numKeysOnWritingVersion = numKeysOnLoadedVersion
     loadedVersion = -1L
-    LastCommitBasedStateStoreCkptId = None
+    lastCommitBasedStateStoreCkptId = None
     lastCommittedStateStoreCkptId = None
     loadedStateStoreCkptId = None
     sessionStateStoreCkptId = None
@@ -847,7 +847,7 @@ class RocksDB(
       partitionId,
       loadedVersion,
       lastCommittedStateStoreCkptId,
-      LastCommitBasedStateStoreCkptId)
+      lastCommitBasedStateStoreCkptId)
   }
 
   /** Get current instantaneous statistics */

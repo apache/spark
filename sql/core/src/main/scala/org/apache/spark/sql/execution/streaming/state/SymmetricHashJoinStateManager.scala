@@ -414,15 +414,16 @@ class SymmetricHashJoinStateManager(
     keyWithIndexToValue.abortIfNeeded()
   }
 
-  def getLatestCheckpointInfo(): (StateStoreCheckpointInfo, StateStoreCheckpointInfo) = {
-    val ci1 = keyToNumValues.getLatestCheckpointInfo()
-    val ci2 = keyWithIndexToValue.getLatestCheckpointInfo()
+  def getLatestCheckpointInfo(): JoinerStateStoreCkptInfo = {
+    val keyToNumValuesCkptInfo = keyToNumValues.getLatestCheckpointInfo()
+    val keyWithIndexToValueCkptInfo = keyWithIndexToValue.getLatestCheckpointInfo()
 
-    assert(ci1.partitionId == ci2.partitionId)
-    assert(ci1.batchVersion == ci2.batchVersion)
-    assert(ci1.stateStoreCkptId.isDefined == ci2.stateStoreCkptId.isDefined)
+    assert(keyToNumValuesCkptInfo.partitionId == keyWithIndexToValueCkptInfo.partitionId)
+    assert(keyToNumValuesCkptInfo.batchVersion == keyWithIndexToValueCkptInfo.batchVersion)
+    assert(keyToNumValuesCkptInfo.stateStoreCkptId.isDefined ==
+      keyWithIndexToValueCkptInfo.stateStoreCkptId.isDefined)
 
-    (ci1, ci2)
+    JoinerStateStoreCkptInfo(keyToNumValuesCkptInfo, keyWithIndexToValueCkptInfo)
   }
 
   /** Get the combined metrics of all the state stores */
@@ -830,49 +831,55 @@ object SymmetricHashJoinStateManager {
     result
   }
 
-  def mergeStateStoreCheckpointInfo(
-      ci1: (StateStoreCheckpointInfo, StateStoreCheckpointInfo),
-      ci2: (StateStoreCheckpointInfo, StateStoreCheckpointInfo)):
+  def mergeStateStoreCheckpointInfo(joinCkptInfo: JoinStateStoreCkptInfo):
       StatefulOpStateStoreCheckpointInfo = {
     // Stream-stream join has 4 state stores instead of one. So it will generate 4 different
     // checkpoint IDs. The approach we take here is to merge them into one ID in the
     // checkpointing path. The driver will process this single checkpointID. When it is passed
     // back to the executors, they will split it back into 4 IDs and use them to load the state.
     // This function is used to merge two checkpoint IDs into one.
-    assert(ci1._1.partitionId == ci2._1.partitionId)
-    assert(ci1._1.batchVersion == ci2._1.batchVersion)
-    assert(ci1._1.stateStoreCkptId.isDefined == ci2._1.stateStoreCkptId.isDefined)
+    assert(
+      joinCkptInfo.left.keyToNumValues.partitionId == joinCkptInfo.right.keyToNumValues.partitionId)
+    assert(joinCkptInfo.left.keyToNumValues.batchVersion ==
+      joinCkptInfo.right.keyToNumValues.batchVersion)
+    assert(joinCkptInfo.left.keyToNumValues.stateStoreCkptId.isDefined ==
+      joinCkptInfo.right.keyToNumValues.stateStoreCkptId.isDefined)
     StatefulOpStateStoreCheckpointInfo(
-      ci1._1.partitionId,
-      ci1._1.batchVersion,
-      ci1._1.stateStoreCkptId.map(
+      joinCkptInfo.left.keyToNumValues.partitionId,
+      joinCkptInfo.left.keyToNumValues.batchVersion,
+      joinCkptInfo.left.keyToNumValues.stateStoreCkptId.map(
         Array(
           _,
-          ci1._2.stateStoreCkptId.get,
-          ci2._1.stateStoreCkptId.get,
-          ci2._2.stateStoreCkptId.get)),
-      ci1._1.baseStateStoreCkptId.map(
+          joinCkptInfo.left.valueToNumKeys.stateStoreCkptId.get,
+          joinCkptInfo.right.keyToNumValues.stateStoreCkptId.get,
+          joinCkptInfo.right.valueToNumKeys.stateStoreCkptId.get)),
+      joinCkptInfo.left.keyToNumValues.baseStateStoreCkptId.map(
         Array(
           _,
-          ci1._2.baseStateStoreCkptId.get,
-          ci2._1.baseStateStoreCkptId.get,
-          ci2._2.baseStateStoreCkptId.get)))
+          joinCkptInfo.left.valueToNumKeys.baseStateStoreCkptId.get,
+          joinCkptInfo.right.keyToNumValues.baseStateStoreCkptId.get,
+          joinCkptInfo.right.valueToNumKeys.baseStateStoreCkptId.get)))
   }
 
-  def splitStateStoreCheckpointInfo(
+  def getStateStoreCheckpointIds(
       partitionId: Int,
-      stateStoreCkptIds: Option[Array[String]]): Array[Option[String]] = {
+      stateInfo: StatefulOperatorStateInfo): JoinStateStoreCheckpointId = {
     // Stream-stream join has 4 state stores instead of one. So it will generate 4 different
-    // checkpoint IDs. Since we take the approach of merging them into one ID in the
-    // checkpointing path, we need to split them back into 4 IDs when loading the state.
-    // The split logic mirrors the merge logic in `mergeStateStoreCheckpointInfo()`.
-    stateStoreCkptIds.map { ids =>
-        assert(ids.size > partitionId, s"Checkpoint IDs $ids does not have enough partitions")
-        val split = ids(partitionId).split(",")
-        assert(split.size == 4, s"Invalid checkpoint IDs $ids")
-        split.map(Option(_))
-      }
+    // checkpoint IDs. They are translated from each joiners' state store into an array
+    // through mergeStateStoreCheckpointInfo(). This function is used to read it back into
+    // individual state store checkpoint IDs.
+    val stateStoreCkptIds = stateInfo
+      .stateStoreCkptIds
+      .map(_(partitionId))
+      .map(_.map(Option(_)))
       .getOrElse(Array.fill[Option[String]](4)(None))
+    JoinStateStoreCheckpointId(
+      left = JoinerStateStoreCheckpointId(
+        keyToNumValues = stateStoreCkptIds(0),
+        valueToNumKeys = stateStoreCkptIds(1)),
+      right = JoinerStateStoreCheckpointId(
+        keyToNumValues = stateStoreCkptIds(2),
+        valueToNumKeys = stateStoreCkptIds(3)))
   }
 
   private sealed trait StateStoreType

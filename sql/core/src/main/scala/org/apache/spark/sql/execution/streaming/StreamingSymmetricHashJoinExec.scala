@@ -303,14 +303,9 @@ case class StreamingSymmetricHashJoinExec(
     val updateStartTimeNs = System.nanoTime
     val joinedRow = new JoinedRow
 
-    // Parse checkpointID string and divide it into individual stateStoreCkptIds.
     assert(stateInfo.isDefined, "State info not defined")
-    val stateStoreCkptIds = stateInfo
-      .get
-      .stateStoreCkptIds
-      .map(_(partitionId))
-      .map(_.map(Option(_)))
-      .getOrElse(Array.fill[Option[String]](4)(None))
+    val checkpointIds = SymmetricHashJoinStateManager.getStateStoreCheckpointIds(
+      partitionId, stateInfo.get)
 
     val inputSchema = left.output ++ right.output
     val postJoinFilter =
@@ -318,11 +313,11 @@ case class StreamingSymmetricHashJoinExec(
     val leftSideJoiner = new OneSideHashJoiner(
       LeftSide, left.output, leftKeys, leftInputIter,
       condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId,
-      stateStoreCkptIds(0), stateStoreCkptIds(1), skippedNullValueCount)
+      checkpointIds.left.keyToNumValues, checkpointIds.left.valueToNumKeys, skippedNullValueCount)
     val rightSideJoiner = new OneSideHashJoiner(
       RightSide, right.output, rightKeys, rightInputIter,
       condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId,
-      stateStoreCkptIds(2), stateStoreCkptIds(3), skippedNullValueCount)
+      checkpointIds.right.keyToNumValues, checkpointIds.right.valueToNumKeys, skippedNullValueCount)
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
@@ -516,8 +511,9 @@ case class StreamingSymmetricHashJoinExec(
         val combinedMetrics = StateStoreMetrics.combine(Seq(leftSideMetrics, rightSideMetrics))
 
         val checkpointInfo = SymmetricHashJoinStateManager.mergeStateStoreCheckpointInfo(
-          leftSideJoiner.getLatestCheckpointInfo(),
-          rightSideJoiner.getLatestCheckpointInfo())
+          JoinStateStoreCkptInfo(
+            leftSideJoiner.getLatestCheckpointInfo(),
+            rightSideJoiner.getLatestCheckpointInfo()))
         setStateStoreCheckpointInfo(checkpointInfo)
 
         // Update SQL metrics
@@ -742,7 +738,7 @@ case class StreamingSymmetricHashJoinExec(
       joinStateManager.metrics
     }
 
-    def getLatestCheckpointInfo(): (StateStoreCheckpointInfo, StateStoreCheckpointInfo) = {
+    def getLatestCheckpointInfo(): JoinerStateStoreCkptInfo = {
       joinStateManager.getLatestCheckpointInfo()
     }
 
