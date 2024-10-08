@@ -1104,10 +1104,16 @@ object ExcludeShims {
     },
     Compile / internalDependencyClasspath :=
       classPathFilter.value((Compile / internalDependencyClasspath).value),
+    Compile / internalDependencyAsJars :=
+      classPathFilter.value((Compile / internalDependencyAsJars).value),
     Runtime / internalDependencyClasspath :=
       classPathFilter.value((Runtime / internalDependencyClasspath).value),
+    Runtime / internalDependencyAsJars :=
+      classPathFilter.value((Runtime / internalDependencyAsJars).value),
     Test / internalDependencyClasspath :=
       classPathFilter.value((Test / internalDependencyClasspath).value),
+    Test / internalDependencyAsJars :=
+      classPathFilter.value((Test / internalDependencyAsJars).value),
   )
 }
 
