@@ -706,7 +706,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
         } catch {
           case e: Exception =>
             throw new SparkException(s"Could not perform regexp_replace for " +
-              s"""`input = "$s"`, `pattern = "$p"`, `replacement = "$r"` """ +
+              s"""`source = "$s"`, `pattern = "$p"`, `replacement = "$r"` """ +
               s"""and `position = $i`""", e)
         }
       }
@@ -762,7 +762,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
           } catch (Exception e) {
             throw new $classNameSparkException(java.text.MessageFormat.format(
               "Could not perform regexp_replace for " +
-              "`input = \\"{0}\\"`, `pattern = \\"{1}\\"`, `replacement = \\"{2}\\"` and " +
+              "`source = \\"{0}\\"`, `pattern = \\"{1}\\"`, `replacement = \\"{2}\\"` and " +
               "`position = {3}`", $source, $regexp, $rep, $pos), e);
           }
         }

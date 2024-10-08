@@ -111,7 +111,7 @@ class CollationSQLRegexpSuite
             sql(query).collect()
           }
           assert(exception.getMessage.contains("""Could not perform regexp_replace for """ +
-            """`input = "first last"`, `pattern = "(?<first>[a-zA-Z]+) (?<last>[a-zA-Z]+)"`, """ +
+            """`source = "first last"`, `pattern = "(?<first>[a-zA-Z]+) (?<last>[a-zA-Z]+)"`, """ +
             """`replacement = "$3 $1"` and `position = 1`"""))
           assert(exception.getMessage.contains("No group 3"))
         }
