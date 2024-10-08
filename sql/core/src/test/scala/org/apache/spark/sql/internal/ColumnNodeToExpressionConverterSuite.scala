@@ -86,7 +86,7 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
     assert(expression1.getTagValue(LogicalPlan.IS_METADATA_COL).isEmpty)
 
     val expression2 = testConversion(
-      UnresolvedAttribute("y" :: Nil, Option(44L), isMetadataColumn = true),
+      UnresolvedAttribute("y", Option(44L), isMetadataColumn = true),
       analysis.UnresolvedAttribute("y"))
     assert(expression2.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(44L))
     assert(expression2.getTagValue(LogicalPlan.IS_METADATA_COL).isDefined)

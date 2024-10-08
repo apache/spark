@@ -24,7 +24,6 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{LEFT_EXPR, RIGHT_EXPR}
 import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
-import org.apache.spark.sql.catalyst.util.AttributeNameParser
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{lit, map}
 import org.apache.spark.sql.internal.ColumnNode
@@ -143,7 +142,7 @@ class Column(val node: ColumnNode) extends Logging {
     name match {
       case "*" => internal.UnresolvedStar(None, planId)
       case _ if name.endsWith(".*") => internal.UnresolvedStar(Option(name), planId)
-      case _ => internal.UnresolvedAttribute(AttributeNameParser.parseAttributeName(name), planId)
+      case _ => internal.UnresolvedAttribute(name, planId)
     }
   })
 

@@ -93,7 +93,7 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
   test("attribute") {
     testConversion(UnresolvedAttribute("x"), attribute("x"))
     testConversion(
-      UnresolvedAttribute("y" :: Nil, Option(44L), isMetadataColumn = true),
+      UnresolvedAttribute("y", Option(44L), isMetadataColumn = true),
       expr(
         _.getUnresolvedAttributeBuilder
           .setUnparsedIdentifier("y")

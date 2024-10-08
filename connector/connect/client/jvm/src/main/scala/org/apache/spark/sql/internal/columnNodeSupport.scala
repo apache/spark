@@ -53,8 +53,9 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
         builder.setLiteral(toLiteralProtoBuilder(value, dataType))
 
       case u @ UnresolvedAttribute(unparsedIdentifier, planId, isMetadataColumn, _) =>
+        val escapedName = u.sql
         val b = builder.getUnresolvedAttributeBuilder
-          .setUnparsedIdentifier(u.sql)
+          .setUnparsedIdentifier(escapedName)
         if (isMetadataColumn) {
           // We only set this field when it is needed. If we would always set it,
           // too many of the verbatims we use for testing would have to be regenerated.

@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicLong
 import ColumnNode._
 
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.catalyst.util.AttributeNameParser
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, Metadata}
 import org.apache.spark.util.SparkClassUtils
@@ -143,8 +144,15 @@ private[sql] case class UnresolvedAttribute(
 }
 
 private[sql] object UnresolvedAttribute {
-  // For testing
-  def apply(singlePart: String): UnresolvedAttribute = UnresolvedAttribute(singlePart :: Nil)
+  def apply(
+      unparsedIdentifier: String,
+      planId: Option[Long] = None,
+      isMetadataColumn: Boolean = false,
+      origin: Origin = CurrentOrigin.get): UnresolvedAttribute = UnresolvedAttribute(
+    AttributeNameParser.parseAttributeName(unparsedIdentifier),
+    planId = planId,
+    isMetadataColumn = isMetadataColumn,
+    origin = origin)
 }
 
 /**
