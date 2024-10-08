@@ -88,7 +88,7 @@ abstract class SparkFunSuite
 
   protected val enableAutoThreadAudit = true
 
-  protected val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1" || true
+  protected val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
   protected override def beforeAll(): Unit = {
     System.setProperty(IS_TESTING.key, "true")
