@@ -146,13 +146,25 @@ private[sql] case class UnresolvedAttribute(
 private[sql] object UnresolvedAttribute {
   def apply(
       unparsedIdentifier: String,
-      planId: Option[Long] = None,
-      isMetadataColumn: Boolean = false,
-      origin: Origin = CurrentOrigin.get): UnresolvedAttribute = UnresolvedAttribute(
+      planId: Option[Long],
+      isMetadataColumn: Boolean,
+      origin: Origin): UnresolvedAttribute = UnresolvedAttribute(
     AttributeNameParser.parseAttributeName(unparsedIdentifier),
     planId = planId,
     isMetadataColumn = isMetadataColumn,
     origin = origin)
+
+  def apply(
+      unparsedIdentifier: String,
+      planId: Option[Long],
+      isMetadataColumn: Boolean): UnresolvedAttribute =
+    apply(unparsedIdentifier, planId, isMetadataColumn, CurrentOrigin.get)
+
+  def apply(unparsedIdentifier: String, planId: Option[Long]): UnresolvedAttribute =
+    apply(unparsedIdentifier, planId, false, CurrentOrigin.get)
+
+  def apply(unparsedIdentifier: String): UnresolvedAttribute =
+    apply(unparsedIdentifier, None, false, CurrentOrigin.get)
 }
 
 /**
