@@ -173,20 +173,31 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     )
   }
 
-  private def checkTrailingCommaInSelect(plan: LogicalPlan): Unit = {
-    val lastExpression = plan match {
+  /**
+   * Checks for errors in a `SELECT` clause, such as a trailing comma or an empty select list.
+   *
+   * @param plan The logical plan of the query.
+   * @param starRemoved Whether a '*' (wildcard) was removed from the select list.
+   * @throws AnalysisException if the select list is empty or ends with a trailing comma.
+   */
+  protected def checkTrailingCommaInSelect(
+      plan: LogicalPlan,
+      starRemoved: Boolean = false): Unit = {
+    val exprList = plan match {
       case proj: Project if proj.projectList.nonEmpty =>
-        Some(proj.projectList.last)
+        proj.projectList
       case agg: Aggregate if agg.aggregateExpressions.nonEmpty =>
-        Some(agg.aggregateExpressions.last)
+        agg.aggregateExpressions
       case _ =>
-        None
+        Seq.empty
     }
 
-    lastExpression match {
+    exprList.lastOption match {
       case Some(Alias(UnresolvedAttribute(Seq(name)), _)) =>
         if (name.equalsIgnoreCase("FROM") && plan.exists(_.isInstanceOf[OneRowRelation])) {
-          throw QueryCompilationErrors.trailingCommaInSelectError(lastExpression.get.origin)
+          if (exprList.size > 1  || starRemoved) {
+            throw QueryCompilationErrors.trailingCommaInSelectError(exprList.last.origin)
+          }
         }
       case _ =>
     }
