@@ -37,19 +37,19 @@ public class JavaTargetEncoderSuite extends SharedSparkSession {
   public void testTargetEncoderBinary() {
 
     List<Row> data = Arrays.asList(
-            RowFactory.create(0.0, 3.0, 5.0, 0.0, 1.0/3, 0.0, 1.0/3),
-            RowFactory.create(1.0, 4.0, 5.0, 1.0, 2.0/3, 1.0, 1.0/3),
-            RowFactory.create(2.0, 3.0, 5.0, 0.0, 1.0/3, 0.0, 1.0/3),
-            RowFactory.create(0.0, 4.0, 6.0, 1.0, 1.0/3, 1.0, 2.0/3),
-            RowFactory.create(1.0, 3.0, 6.0, 0.0, 2.0/3, 0.0, 2.0/3),
-            RowFactory.create(2.0, 4.0, 6.0, 1.0, 1.0/3, 1.0, 2.0/3),
-            RowFactory.create(0.0, 3.0, 7.0, 0.0, 1.0/3, 0.0, 0.0),
-            RowFactory.create(1.0, 4.0, 8.0, 1.0, 2.0/3, 1.0, 1.0),
-            RowFactory.create(2.0, 3.0, 9.0, 0.0, 1.0/3, 0.0, 0.0));
+            RowFactory.create((short)0, 3, 5.0, 0.0, 1.0/3, 0.0, 1.0/3),
+            RowFactory.create((short)1, 4, 5.0, 1.0, 2.0/3, 1.0, 1.0/3),
+            RowFactory.create((short)2, 3, 5.0, 0.0, 1.0/3, 0.0, 1.0/3),
+            RowFactory.create((short)0, 4, 6.0, 1.0, 1.0/3, 1.0, 2.0/3),
+            RowFactory.create((short)1, 3, 6.0, 0.0, 2.0/3, 0.0, 2.0/3),
+            RowFactory.create((short)2, 4, 6.0, 1.0, 1.0/3, 1.0, 2.0/3),
+            RowFactory.create((short)0, 3, 7.0, 0.0, 1.0/3, 0.0, 0.0),
+            RowFactory.create((short)1, 4, 8.0, 1.0, 2.0/3, 1.0, 1.0),
+            RowFactory.create((short)2, 3, null, 0.0, 1.0/3, 0.0, 0.0));
     StructType schema = createStructType(new StructField[]{
-            createStructField("input1", DoubleType, false),
-            createStructField("input2", DoubleType, false),
-            createStructField("input3", DoubleType, false),
+            createStructField("input1", ShortType, true),
+            createStructField("input2", IntegerType, true),
+            createStructField("input3", DoubleType, true),
             createStructField("label", DoubleType, false),
             createStructField("expected1", DoubleType, false),
             createStructField("expected2", DoubleType, false),
@@ -74,19 +74,19 @@ public class JavaTargetEncoderSuite extends SharedSparkSession {
   public void testTargetEncoderContinuous() {
 
     List<Row> data = Arrays.asList(
-            RowFactory.create(0.0, 3.0, 5.0, 10.0, 40.0, 50.0, 20.0),
-            RowFactory.create(1.0, 4.0, 5.0, 20.0, 50.0, 50.0, 20.0),
-            RowFactory.create(2.0, 3.0, 5.0, 30.0, 60.0, 50.0, 20.0),
-            RowFactory.create(0.0, 4.0, 6.0, 40.0, 40.0, 50.0, 50.0),
-            RowFactory.create(1.0, 3.0, 6.0, 50.0, 50.0, 50.0, 50.0),
-            RowFactory.create(2.0, 4.0, 6.0, 60.0, 60.0, 50.0, 50.0),
-            RowFactory.create(0.0, 3.0, 7.0, 70.0, 40.0, 50.0, 70.0),
-            RowFactory.create(1.0, 4.0, 8.0, 80.0, 50.0, 50.0, 80.0),
-            RowFactory.create(2.0, 3.0, 9.0, 90.0, 60.0, 50.0, 90.0));
+            RowFactory.create((short)0, 3, 5.0, 10.0, 40.0, 50.0, 20.0),
+            RowFactory.create((short)1, 4, 5.0, 20.0, 50.0, 50.0, 20.0),
+            RowFactory.create((short)2, 3, 5.0, 30.0, 60.0, 50.0, 20.0),
+            RowFactory.create((short)0, 4, 6.0, 40.0, 40.0, 50.0, 50.0),
+            RowFactory.create((short)1, 3, 6.0, 50.0, 50.0, 50.0, 50.0),
+            RowFactory.create((short)2, 4, 6.0, 60.0, 60.0, 50.0, 50.0),
+            RowFactory.create((short)0, 3, 7.0, 70.0, 40.0, 50.0, 70.0),
+            RowFactory.create((short)1, 4, 8.0, 80.0, 50.0, 50.0, 80.0),
+            RowFactory.create((short)2, 3, null, 90.0, 60.0, 50.0, 90.0));
     StructType schema = createStructType(new StructField[]{
-            createStructField("input1", DoubleType, false),
-            createStructField("input2", DoubleType, false),
-            createStructField("input3", DoubleType, false),
+            createStructField("input1", ShortType, true),
+            createStructField("input2", IntegerType, true),
+            createStructField("input3", DoubleType, true),
             createStructField("label", DoubleType, false),
             createStructField("expected1", DoubleType, false),
             createStructField("expected2", DoubleType, false),

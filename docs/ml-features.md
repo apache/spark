@@ -857,15 +857,27 @@ for more details on the API.
 
 ## TargetEncoder
 
-Target Encoding maps a column of categorical indices into a numerical feature derived from the target. For string type input data, it is common to encode categorical features using [StringIndexer](ml-features.html#stringindexer) first.
+Target Encoding maps a column of categorical indices into a numerical feature derived from the target.
+Leveraging the relationship between categorical features and the target variable, target encoding usually performs better than one-hot encoding (while avoiding the need to add extra columns)
 
-`TargetEncoder` can transform multiple columns, returning a target-encoded output column for each input column.
+`TargetEncoder` can transform multiple columns, returning a single target-encoded output column for each input column.
+User can specify input and output column names by setting `inputCol` and `outputCol` for single-column use cases, or `inputCols` and `outputCols` for multi-column use cases (both arrays required to have the same size)
 
-`TargetEncoder` supports the `handleInvalid` parameter to choose how to handle invalid input during transforming data. Available options include 'keep' (any invalid inputs are assigned to an extra categorical index) and 'error' (throw an error).
+User can specify the target column name by setting `label`. This column contains the ground-truth labels from which encodings will be derived
 
-`TargetEncoder` supports the `targetType` parameter to choose the label type when fitting data, affecting how statistics are calculated. Available options include 'binary' (bin-counting) and 'continuous' (mean-encoding).
+`TargetEncoder` supports the `handleInvalid` parameter to choose how to handle invalid input during transforming data.
+Available options include 'keep' (any invalid inputs are assigned to an extra categorical index) and 'error' (throw an error).
+
+`TargetEncoder` supports the `targetType` parameter to choose the label type when fitting data, affecting how statistics are calculated.
+Available options include 'binary'  and 'continuous' (mean-encoding).
+When set to 'binary', encodings will be fitted from target conditional probabilities (a.k.a bin-counting).
+When set to 'continuous', encodings will be fitted from according to target mean (a.k.a. mean-encoding).
 
 `TargetEncoder` supports the `smoothing` parameter to tune how in-category stats and overall stats are weighted.
+When calculating encodings according only to in-class statistics, rarely seen categories are very likely to cause overfitting when used in learning.
+Smoothing prevents this behaviour by pondering in-class stats and overall stats according to weight of this class on the whole dataset.
+
+For string type input data, it is common to encode categorical features using [StringIndexer](ml-features.html#stringindexer) first.
 
 **Examples**
 
