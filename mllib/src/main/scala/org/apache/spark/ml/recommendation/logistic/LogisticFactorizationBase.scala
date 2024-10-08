@@ -87,7 +87,7 @@ private[ml] abstract class LogisticFactorizationBase[T](
              verbose: Boolean = false)
   extends Serializable with Logging {
 
-  protected def gamma: Float = 1f
+  protected def gamma: Double = 1.0
 
   protected def cacheAndCount[E](rdd: RDD[E]): RDD[E] = {
     val r = rdd.persist(intermediateRDDStorageLevel)
@@ -191,8 +191,16 @@ private[ml] abstract class LogisticFactorizationBase[T](
           .map(e => e.part -> e).partitionBy(partitionerKey).values
 
         emb = cur.zipPartitions(embLR) { case (sIt, eItLR) =>
-          val sg = Optimizer(new Opts(dotVectorSize, useBias,
-            negative, pow, curLearningRate, lambda, gamma, implicitPrefs, verbose), eItLR)
+          val sg = Optimizer(new Opts(
+            dotVectorSize,
+            useBias,
+            negative,
+            pow.toFloat,
+            curLearningRate.toFloat,
+            lambda.toFloat,
+            gamma.toFloat,
+            implicitPrefs,
+            verbose), eItLR)
 
           sg.optimize(sIt, numThread)
           if (verbose) {

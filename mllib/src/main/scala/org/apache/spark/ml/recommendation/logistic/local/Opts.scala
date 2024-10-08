@@ -20,9 +20,9 @@ package org.apache.spark.ml.recommendation.logistic.local
 private[ml] class Opts(val dim: Int,
                        val useBias: Boolean,
                        val negative: Int,
-                       val pow: Double,
-                       val lr: Double,
-                       val lambda: Double,
+                       val pow: Float,
+                       val lr: Float,
+                       val lambda: Float,
                        val gamma: Float,
                        val implicitPref: Boolean,
                        val verbose: Boolean) extends Serializable {

@@ -748,7 +748,7 @@ object LMF extends DefaultParamsReadable[LMF] with Logging {
                           verbose
   ) {
 
-    override protected def gamma: Float = 1f / negative
+    override protected def gamma: Double = 1.0 / negative
 
     override protected def pairs(data: RDD[(Long, Long, Float, Float)],
                                  partitioner1: Partitioner,
