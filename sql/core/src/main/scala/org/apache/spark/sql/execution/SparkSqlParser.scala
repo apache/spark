@@ -189,11 +189,27 @@ class SparkSqlAstBuilder extends AstBuilder {
     val key = SQLConf.SESSION_LOCAL_TIMEZONE.key
     if (ctx.interval != null) {
       val interval = parseIntervalLiteral(ctx.interval)
-      if (interval.months != 0 || interval.days != 0 ||
-        math.abs(interval.microseconds) > 18 * DateTimeConstants.MICROS_PER_HOUR ||
-        interval.microseconds % DateTimeConstants.MICROS_PER_SECOND != 0) {
+      if (interval.months != 0) {
+        throw QueryParsingErrors.intervalValueOutOfRangeError(
+          toSQLValue(interval.months),
+          ctx.interval()
+        )
+      }
+      else if (interval.days != 0) {
+        throw QueryParsingErrors.intervalValueOutOfRangeError(
+          toSQLValue(interval.days),
+          ctx.interval()
+        )
+      }
+      else if (math.abs(interval.microseconds) > 18 * DateTimeConstants.MICROS_PER_HOUR) {
         throw QueryParsingErrors.intervalValueOutOfRangeError(
           toSQLValue((math.abs(interval.microseconds) / DateTimeConstants.MICROS_PER_HOUR).toInt),
+          ctx.interval()
+        )
+      }
+      else if (interval.microseconds % DateTimeConstants.MICROS_PER_SECOND != 0) {
+        throw QueryParsingErrors.intervalValueOutOfRangeError(
+          toSQLValue((interval.microseconds / DateTimeConstants.MICROS_PER_SECOND).toInt),
           ctx.interval()
         )
       } else {

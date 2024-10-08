@@ -83,7 +83,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
   "sqlState" : "22006",
   "messageParameters" : {
-    "input" : "0"
+    "input" : "3"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -167,7 +167,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
   "sqlState" : "22006",
   "messageParameters" : {
-    "input" : "10"
+    "input" : "36000"
   },
   "queryContext" : [ {
     "objectType" : "",
