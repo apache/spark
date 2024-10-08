@@ -3355,12 +3355,14 @@ class SparkConnectPlanner(
     val target = Dataset
       .ofRows(session, transformRelation(checkpointCommand.getRelation))
     val checkpointed = if (checkpointCommand.getLocal) {
-      val storageLevelOpt = if (checkpointCommand.hasStorageLevel) {
-        Some(StorageLevelProtoConverter.toStorageLevel(checkpointCommand.getStorageLevel))
+      if (checkpointCommand.hasStorageLevel) {
+        target.localCheckpoint(
+          eager = checkpointCommand.getEager,
+          storageLevel =
+            StorageLevelProtoConverter.toStorageLevel(checkpointCommand.getStorageLevel))
       } else {
-        None
+        target.localCheckpoint(eager = checkpointCommand.getEager)
       }
-      target.localCheckpoint(eager = checkpointCommand.getEager, storageLevel = storageLevelOpt)
     } else {
       target.checkpoint(eager = checkpointCommand.getEager)
     }

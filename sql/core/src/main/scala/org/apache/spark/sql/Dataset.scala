@@ -1816,7 +1816,7 @@ class Dataset[T] private[sql](
   override def localCheckpoint(eager: Boolean): Dataset[T] = super.localCheckpoint(eager)
 
   /** @inheritdoc */
-  override def localCheckpoint(eager: Boolean, storageLevel: Option[StorageLevel]): Dataset[T] =
+  override def localCheckpoint(eager: Boolean, storageLevel: StorageLevel): Dataset[T] =
     super.localCheckpoint(eager, storageLevel)
 
   /** @inheritdoc */

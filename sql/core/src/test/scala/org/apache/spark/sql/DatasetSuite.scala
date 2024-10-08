@@ -1851,7 +1851,7 @@ class DatasetSuite extends QueryTest
 
   test("Dataset().localCheckpoint() lazy with StorageLevel") {
     val df = spark.range(10).repartition($"id" % 2)
-    val checkpointedDf = df.localCheckpoint(eager = false, Some(StorageLevel.DISK_ONLY))
+    val checkpointedDf = df.localCheckpoint(eager = false, StorageLevel.DISK_ONLY)
     val checkpointedPlan = checkpointedDf.queryExecution.analyzed
     val rdd = checkpointedPlan.asInstanceOf[LogicalRDD].rdd
     assert(rdd.getStorageLevel == StorageLevel.DISK_ONLY)
@@ -1862,7 +1862,7 @@ class DatasetSuite extends QueryTest
 
   test("Dataset().localCheckpoint() eager with StorageLevel") {
     val df = spark.range(10).repartition($"id" % 2)
-    val checkpointedDf = df.localCheckpoint(eager = true, Some(StorageLevel.DISK_ONLY))
+    val checkpointedDf = df.localCheckpoint(eager = true, StorageLevel.DISK_ONLY)
     val checkpointedPlan = checkpointedDf.queryExecution.analyzed
     val rdd = checkpointedPlan.asInstanceOf[LogicalRDD].rdd
     assert(rdd.isCheckpointed)

@@ -60,7 +60,7 @@ class CheckpointSuite extends ConnectFunSuite with RemoteSparkSession with SQLHe
     // We don't have a way to reach into the server and assert the storage level server side, but
     // this test should cover for unexpected errors in the API.
     val df =
-      spark.range(100).localCheckpoint(eager = true, storageLevel = Some(StorageLevel.DISK_ONLY))
+      spark.range(100).localCheckpoint(eager = true, storageLevel = StorageLevel.DISK_ONLY)
     df.collect()
   }
 

@@ -376,7 +376,7 @@ abstract class Dataset[T] extends Serializable {
    * @param eager
    *   Whether to checkpoint this dataframe immediately
    * @param storageLevel
-   *   Option. If defined, StorageLevel with which to checkpoint the data.
+   *   StorageLevel with which to checkpoint the data.
    * @note
    *   When checkpoint is used with eager = false, the final data that is checkpointed after the
    *   first action may be different from the data that was used during the job due to
@@ -386,8 +386,8 @@ abstract class Dataset[T] extends Serializable {
    * @group basic
    * @since 4.0.0
    */
-  def localCheckpoint(eager: Boolean, storageLevel: Option[StorageLevel]): Dataset[T] =
-    checkpoint(eager = eager, reliableCheckpoint = false, storageLevel = storageLevel)
+  def localCheckpoint(eager: Boolean, storageLevel: StorageLevel): Dataset[T] =
+    checkpoint(eager = eager, reliableCheckpoint = false, storageLevel = Some(storageLevel))
 
   /**
    * Returns a checkpointed version of this Dataset.
