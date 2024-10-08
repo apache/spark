@@ -17,7 +17,15 @@
 
 package org.apache.spark.ml.recommendation
 
-import org.apache.spark.internal.Logging
+import java.util.Random
+
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.ACCURACY
+import org.apache.spark.ml.linalg.BLAS
+import org.apache.spark.ml.recommendation.logistic.local.{ItemData, Optimizer, Opts}
+import org.apache.spark.ml.recommendation.logistic.pair.LongPairMulti
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
@@ -159,5 +167,155 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
       assert(e.getMessage.contains("The labelCol must be set in explicit mode."))
     }
   }
-  
+
+  test("LMF optimizer explicit") {
+    val random = new Random(239)
+    val dim = 5
+    val (trueUserFactors, trueItemFactors, trainData, testData) =
+      LMFSuite.genData(16384, 32, 16, dim, false, random)
+
+    val opts = new Opts(dim, false, 0, 0.0f, 0.025f, 1f, 0.01f, 1f, false, false)
+    val userCounts = trainData.groupMapReduce(_._1)(_ => 1L)(_ + _)
+    val itemCounts = trainData.groupMapReduce(_._2)(_ => 1L)(_ + _)
+
+    val optimizer = Optimizer(opts,
+      trueUserFactors.map{case (i, f) => new ItemData(ItemData.TYPE_LEFT,
+        i, userCounts.getOrElse(i, 0L),
+        Optimizer.initEmbedding(opts.dim, false, random))}.iterator ++
+        trueItemFactors.map{case (i, f) => new ItemData(ItemData.TYPE_RIGHT,
+          i, itemCounts.getOrElse(i, 0L),
+          Optimizer.initEmbedding(opts.dim, false, random))}.iterator)
+
+    val batch = LongPairMulti(0, trainData.map(_._1), trainData.map(_._2),
+      trainData.map(_._3), trainData.map(_._4))
+
+    (0 until 100).foreach{_ =>
+      optimizer.optimize(Iterator(batch), 1, false);
+    }
+
+    val userFactors = optimizer.flush()
+      .filter(_.t == ItemData.TYPE_LEFT)
+      .map(e => e.id -> e.f).toMap
+
+    val itemFactors = optimizer.flush()
+      .filter(_.t == ItemData.TYPE_RIGHT)
+      .map(e => e.id -> e.f).toMap
+
+    val trueAcc = LMFSuite.accuracy(testData, trueUserFactors.toMap, trueItemFactors.toMap)
+    val acc = LMFSuite.accuracy(testData, userFactors, itemFactors)
+
+    logInfo(log"True test accuracy is ${MDC(ACCURACY, trueAcc)}.")
+    logInfo(log"Actual test accuracy is ${MDC(ACCURACY, acc)}.")
+    assert(acc > 0.55)
+  }
+
+}
+
+object LMFSuite extends Logging {
+
+  private def genFactors(
+                          size: Int,
+                          rank: Int,
+                          random: Random): Array[(Long, Array[Float])] = {
+    require(size > 0 && size < Int.MaxValue / 3)
+    Array.fill(size)(random.nextLong()).zip(
+      Array.fill(size)(Array.fill(rank)(random.nextFloat() * 2 - 1)))
+  }
+
+  private def sample(weights: Array[Double], random: Random): Int = {
+    val sum = weights.sum
+    val t = random.nextDouble()
+    var i = 0
+    var s = 0.0
+    while (s <= sum * t) {
+      s += weights(i)
+      i += 1
+    }
+
+    i - 1
+  }
+
+  private def getLogits(userFactors: Array[(Long, Array[Float])],
+                        itemFactors: Array[(Long, Array[Float])]) = {
+    val r = Array.fill(userFactors.size)(Array.fill(itemFactors.size)(0f))
+    userFactors.indices
+      .foreach(i => itemFactors.indices
+        .foreach(j => r(i)(j) = BLAS.nativeBLAS.sdot(userFactors(i)._2.length,
+          userFactors(i)._2, 1, itemFactors(j)._2, 1)))
+    r
+  }
+
+  private def sigmoid(x: Double): Double = {
+    1 / (1 + Math.exp(-x))
+  }
+
+  private def likelyhood(data: Iterable[(Long, Long, Float, Float)],
+                         userFactors: Map[Long, Array[Float]],
+                         itemFactors: Map[Long, Array[Float]]) = {
+    data.map{case (u, i, l, w) =>
+      val e = BLAS.nativeBLAS.sdot(userFactors(u).length,
+        userFactors(u), 1, itemFactors(i), 1)
+      if (l == 0.0) (-e - Math.log(1 + Math.exp(-e))) * w
+      else -Math.log(1 + Math.exp(-e)) * w
+    }.sum
+  }
+
+  private def accuracy(data: Iterable[(Long, Long, Float, Float)],
+                       userFactors: Map[Long, Array[Float]],
+                       itemFactors: Map[Long, Array[Float]]) = {
+    data.map{case (u, i, l, w) =>
+      val e = BLAS.nativeBLAS.sdot(userFactors(u).length,
+        userFactors(u), 1, itemFactors(i), 1)
+      if (e >= 0 && l > 0 || e < 0 && l == 0) {
+        1.0 * w
+      } else {
+        0.0
+      }
+    }.sum / data.map(_._4).sum
+  }
+
+  private def genData(
+                           numUsers: Int,
+                           numItems: Int,
+                           numSamples: Int,
+                           rank: Int,
+                           implicitPrefs: Boolean,
+                           random: Random) = {
+
+    val userFactors = genFactors(numUsers, rank, random)
+    val itemFactors = genFactors(numItems, rank, random)
+
+    val logits = getLogits(userFactors, itemFactors)
+    val trainData = ArrayBuffer.empty[(Long, Long, Float, Float)]
+    val testData = ArrayBuffer.empty[(Long, Long, Float, Float)]
+
+    (0 until numUsers).foreach{i =>
+      val n = numSamples
+      val denom = logits(i).map(Math.exp(_)).sum
+      val softmax = logits(i).map(Math.exp(_)).map(_ / denom)
+
+      (0 until n)
+        .foreach{_ =>
+          val entry = if (implicitPrefs) {
+            (userFactors(i)._1, itemFactors(sample(softmax, random))._1, 1f, 1f)
+          } else {
+            val j = random.nextInt(numItems)
+            (userFactors(i)._1, itemFactors(j)._1,
+              {if (random.nextDouble() < sigmoid(logits(i)(j))) 1f else 0f}, 1f)
+          }
+
+          if (random.nextDouble() < 0.8) {
+            trainData += entry
+          } else {
+            testData += entry
+          }
+        }
+    }
+
+    (userFactors, itemFactors,
+      trainData.groupMapReduce(e => (e._1, e._2, e._3))(_._4)(_ + _)
+        .map(e => (e._1._1, e._1._2, e._1._3, e._2)).toArray,
+      testData.groupMapReduce(e => (e._1, e._2, e._3))(_._4)(_ + _)
+        .map(e => (e._1._1, e._1._2, e._1._3, e._2)).toArray)
+  }
 }
