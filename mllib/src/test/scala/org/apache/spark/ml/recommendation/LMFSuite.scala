@@ -172,7 +172,8 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
     val random = new Random(239)
     val dim = 5
     val (trueUserFactors, trueItemFactors, trainData, testData) =
-      LMFSuite.genData(16384, 32, 16, dim, implicitPrefs = false, random)
+      LMFSuite.genData(16384, 32, 16, dim,
+        implicitPrefs = false, useBias = true, random = random)
 
     val opts = Opts.explicitOpts(dim, useBias = true, 0.025f, 1f, 0.01f, verbose = false)
     val userCounts = trainData.groupMapReduce(_._1)(_ => 1L)(_ + _)
@@ -201,12 +202,14 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
       .filter(_.t == ItemData.TYPE_RIGHT)
       .map(e => e.id -> e.f).toMap
 
-    val trueAcc = LMFSuite.accuracy(testData, trueUserFactors.toMap, trueItemFactors.toMap)
-    val acc = LMFSuite.accuracy(testData, userFactors, itemFactors)
+    val trueAcc = LMFSuite.accuracy(testData, useBias = true,
+      trueUserFactors.toMap, trueItemFactors.toMap)
+    val acc = LMFSuite.accuracy(testData, opts.useBias, userFactors, itemFactors)
+
 
     logInfo(log"True test accuracy is ${MDC(ACCURACY, trueAcc)}.")
     logInfo(log"Actual test accuracy is ${MDC(ACCURACY, acc)}.")
-    assert(acc > 0.55)
+    assert(acc > 0.6)
   }
 
 }
@@ -236,12 +239,21 @@ object LMFSuite extends Logging {
   }
 
   private def getLogits(userFactors: Array[(Long, Array[Float])],
-                        itemFactors: Array[(Long, Array[Float])]) = {
+                        itemFactors: Array[(Long, Array[Float])],
+                        useBias: Boolean) = {
     val r = Array.fill(userFactors.size)(Array.fill(itemFactors.size)(0f))
     userFactors.indices
       .foreach(i => itemFactors.indices
-        .foreach(j => r(i)(j) = BLAS.nativeBLAS.sdot(userFactors(i)._2.length,
-          userFactors(i)._2, 1, itemFactors(j)._2, 1)))
+        .foreach{j =>
+          val n = if (!useBias) userFactors(i)._2.length else userFactors(i)._2.length - 1
+          var e = BLAS.nativeBLAS.sdot(n,
+            userFactors(i)._2, 1, itemFactors(j)._2, 1)
+
+          if (useBias) {
+            e += userFactors(i)._2(n) + itemFactors(j)._2(n)
+          }
+          r(i)(j) = e
+        })
     r
   }
 
@@ -250,22 +262,35 @@ object LMFSuite extends Logging {
   }
 
   private def likelyhood(data: Iterable[(Long, Long, Float, Float)],
+                         useBias: Boolean,
                          userFactors: Map[Long, Array[Float]],
                          itemFactors: Map[Long, Array[Float]]) = {
     data.map{case (u, i, l, w) =>
-      val e = BLAS.nativeBLAS.sdot(userFactors(u).length,
+      val n = if (!useBias) userFactors(u).length else userFactors(u).length - 1
+      var e = BLAS.nativeBLAS.sdot(n,
         userFactors(u), 1, itemFactors(i), 1)
+
+      if (useBias) {
+        e += userFactors(u)(n) + itemFactors(i)(n)
+      }
       if (l == 0.0) (-e - Math.log(1 + Math.exp(-e))) * w
       else -Math.log(1 + Math.exp(-e)) * w
     }.sum
   }
 
   private def accuracy(data: Iterable[(Long, Long, Float, Float)],
+                       useBias: Boolean,
                        userFactors: Map[Long, Array[Float]],
                        itemFactors: Map[Long, Array[Float]]) = {
     data.map{case (u, i, l, w) =>
-      val e = BLAS.nativeBLAS.sdot(userFactors(u).length,
+      val n = if (!useBias) userFactors(u).length else userFactors(u).length - 1
+      var e = BLAS.nativeBLAS.sdot(n,
         userFactors(u), 1, itemFactors(i), 1)
+
+      if (useBias) {
+        e += userFactors(u)(n) + itemFactors(i)(n)
+      }
+
       if (e >= 0 && l > 0 || e < 0 && l == 0) {
         1.0 * w
       } else {
@@ -279,13 +304,14 @@ object LMFSuite extends Logging {
                            numItems: Int,
                            numSamples: Int,
                            rank: Int,
+                           useBias: Boolean,
                            implicitPrefs: Boolean,
                            random: Random) = {
 
-    val userFactors = genFactors(numUsers, rank, random)
-    val itemFactors = genFactors(numItems, rank, random)
+    val userFactors = genFactors(numUsers, if (useBias) rank + 1 else rank, random)
+    val itemFactors = genFactors(numItems, if (useBias) rank + 1 else rank, random)
 
-    val logits = getLogits(userFactors, itemFactors)
+    val logits = getLogits(userFactors, itemFactors, useBias)
     val trainData = ArrayBuffer.empty[(Long, Long, Float, Float)]
     val testData = ArrayBuffer.empty[(Long, Long, Float, Float)]
 
