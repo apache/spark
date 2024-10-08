@@ -363,16 +363,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def localCheckpoint(
         self, eager: bool = True, storageLevel: Optional[StorageLevel] = None
     ) -> ParentDataFrame:
-        gateway = self._sc._gateway
-        assert gateway is not None
         if storageLevel is None:
-            javaStorageLevelOpt = gateway.jvm.scala.Option.empty()
+            jdf = self._jdf.localCheckpoint(eager)
         else:
-            javaStorageLevelOpt = gateway.jvm.scala.Option.apply(
-                self._sc._getJavaStorageLevel(storageLevel)
-            )
-
-        jdf = self._jdf.localCheckpoint(eager, javaStorageLevelOpt)
+            jdf = self._jdf.localCheckpoint(eager, self._sc._getJavaStorageLevel(storageLevel))
         return DataFrame(jdf, self.sparkSession)
 
     def withWatermark(self, eventTime: str, delayThreshold: str) -> ParentDataFrame:
