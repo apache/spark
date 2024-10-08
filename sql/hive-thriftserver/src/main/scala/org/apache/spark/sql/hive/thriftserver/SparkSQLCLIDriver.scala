@@ -168,7 +168,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     val auxJars = HiveConf.getVar(conf, HiveConf.getConfVars("hive.aux.jars.path"))
     if (StringUtils.isNotBlank(auxJars)) {
       val resourceLoader = SparkSQLEnv.sparkSession.sessionState.resourceLoader
-      StringUtils.split(auxJars, ",").foreach(resourceLoader.addJar(_))
+      SparkSQLEnv.sparkSession.artifactManager.withResources {
+        StringUtils.split(auxJars, ",").foreach(resourceLoader.addJar)
+      }
     }
 
     // The class loader of CliSessionState's conf is current main thread's class loader

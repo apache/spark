@@ -2157,19 +2157,12 @@ class SparkContext(config: SparkConf) extends Logging {
    * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
   def addJar(path: String): Unit = {
-    addJar(path, addedOnSubmit = false, shared = false)
+    addJar(path, false)
   }
 
-  def addSharedJar(path: String): Unit = {
-    addJar(path, addedOnSubmit = false, shared = true)
-  }
-
-  private def addJar(path: String, addedOnSubmit: Boolean, shared: Boolean = false): Unit = {
-    val scope = if (shared) {
-      "default"
-    } else {
-      JobArtifactSet.getCurrentJobArtifactState.map(_.uuid).getOrElse("default")
-    }
+  private def addJar(path: String, addedOnSubmit: Boolean): Unit = {
+    val jobArtifactUUID = JobArtifactSet
+      .getCurrentJobArtifactState.map(_.uuid).getOrElse("default")
     def addLocalJarFile(file: File): Seq[String] = {
       try {
         if (!file.exists()) {
@@ -2244,7 +2237,7 @@ class SparkContext(config: SparkConf) extends Logging {
       if (keys.nonEmpty) {
         val timestamp = if (addedOnSubmit) startTime else System.currentTimeMillis
         val (added, existed) = keys.partition(addedJars
-          .getOrElseUpdate(scope, new ConcurrentHashMap[String, Long]().asScala)
+          .getOrElseUpdate(jobArtifactUUID, new ConcurrentHashMap[String, Long]().asScala)
           .putIfAbsent(_, timestamp).isEmpty)
         if (added.nonEmpty) {
           val jarMessage = if (scheme != "ivy") {
