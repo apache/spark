@@ -5919,10 +5919,12 @@ class AstBuilder extends DataTypeAstBuilder
       withUnpivot(c, left)
     }.getOrElse(Option(ctx.sample).map { c =>
       withSample(c, left)
+    }.getOrElse(Option(ctx.joinRelation()).map { c =>
+      withJoinRelation(c, left)
     }.getOrElse(Option(ctx.operator).map { c =>
       val all = Option(ctx.setQuantifier()).exists(_.ALL != null)
       visitSetOperationImpl(left, plan(ctx.right), all, c.getType)
-    }.get)))))
+    }.get))))))
   }
 
   /**

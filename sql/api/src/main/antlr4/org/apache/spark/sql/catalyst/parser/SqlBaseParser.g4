@@ -1510,6 +1510,7 @@ operatorPipeRightSide
     | pivotClause unpivotClause?
     | unpivotClause pivotClause?
     | sample
+    | joinRelation
     | operator=(UNION | EXCEPT | SETMINUS | INTERSECT) setQuantifier? right=queryTerm
     ;
 
