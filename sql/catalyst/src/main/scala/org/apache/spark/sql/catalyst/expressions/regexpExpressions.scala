@@ -25,6 +25,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.commons.text.StringEscapeUtils
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
@@ -700,7 +701,14 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       m.region(position, source.length)
       result.delete(0, result.length())
       while (m.find) {
-        m.appendReplacement(result, lastReplacement)
+        try {
+          m.appendReplacement(result, lastReplacement)
+        } catch {
+          case e: Exception =>
+            throw new SparkException(s"Could not perform regexp_replace for " +
+              s"""`input = "$s"`, `pattern = "$p"`, `replacement = "$r"` """ +
+              s"""and `position = $i`""", e)
+        }
       }
       m.appendTail(result)
       UTF8String.fromString(result.toString)
@@ -719,6 +727,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     val termResult = ctx.freshName("termResult")
 
     val classNameStringBuffer = classOf[java.lang.StringBuffer].getCanonicalName
+    val classNameSparkException = classOf[SparkException].getCanonicalName
 
     val matcher = ctx.freshName("matcher")
     val source = ctx.freshName("source")
@@ -748,7 +757,14 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
         $matcher.region($position, $source.length());
 
         while ($matcher.find()) {
-          $matcher.appendReplacement($termResult, $termLastReplacement);
+          try {
+            $matcher.appendReplacement($termResult, $termLastReplacement);
+          } catch (Exception e) {
+            throw new $classNameSparkException(java.text.MessageFormat.format(
+              "Could not perform regexp_replace for " +
+              "`input = \\"{0}\\"`, `pattern = \\"{1}\\"`, `replacement = \\"{2}\\"` and " +
+              "`position = {3}`", $source, $regexp, $rep, $pos), e);
+          }
         }
         $matcher.appendTail($termResult);
         ${ev.value} = UTF8String.fromString($termResult.toString());

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.internal.SqlApiConf
@@ -92,6 +93,28 @@ class CollationSQLRegexpSuite
         checkAnswer(query, Row(t.result))
         val optimizedPlan = query.queryExecution.optimizedPlan.asInstanceOf[Project]
         assert(optimizedPlan.projectList.head.asInstanceOf[Alias].child.getClass == t.cls)
+      }
+    }
+  }
+
+  test("RegExpReplace throws the right exception when replace fails on a particular row") {
+    val tableName = "regexpReplaceException"
+    withTable(tableName) {
+      Seq("NO_CODEGEN", "CODEGEN_ONLY").foreach { codegenMode =>
+        withSQLConf("spark.sql.codegen.factoryMode" -> codegenMode) {
+          sql(s"CREATE TABLE IF NOT EXISTS $tableName(s STRING)")
+          sql(s"INSERT INTO $tableName VALUES('first last')")
+          val query = s"SELECT regexp_replace(s, '(?<first>[a-zA-Z]+) (?<last>[a-zA-Z]+)', " +
+            s"'$$3 $$1') FROM $tableName"
+
+          val exception = intercept[SparkException] {
+            sql(query).collect()
+          }
+          assert(exception.getMessage.contains("""Could not perform regexp_replace for """ +
+            """`input = "first last"`, `pattern = "(?<first>[a-zA-Z]+) (?<last>[a-zA-Z]+)"`, """ +
+            """`replacement = "$3 $1"` and `position = 1`"""))
+          assert(exception.getMessage.contains("No group 3"))
+        }
       }
     }
   }
