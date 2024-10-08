@@ -937,6 +937,12 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       checkSample("TABLE t |> TABLESAMPLE (50 PERCENT)")
       checkSample("TABLE t |> TABLESAMPLE (5 ROWS)")
       checkSample("TABLE t |> TABLESAMPLE (BUCKET 4 OUT OF 10)")
+      // Joins.
+      def checkPipeJoin(query: String): Unit = check(query, Seq(JOIN))
+      Seq("", "INNER", "LEFT", "LEFT OUTER", "SEMI", "LEFT SEMI", "RIGHT", "RIGHT OUTER", "FULL",
+        "FULL OUTER", "ANTI", "LEFT ANTI", "CROSS").foreach { joinType =>
+        checkPipeJoin(s"TABLE t |> $joinType JOIN other ON (t.x = other.x)")
+      }
     }
   }
 }

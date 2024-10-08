@@ -5916,7 +5916,9 @@ class AstBuilder extends DataTypeAstBuilder
       withUnpivot(c, left)
     }.getOrElse(Option(ctx.sample).map { c =>
       withSample(c, left)
-    }.get))))
+    }.getOrElse(Option(ctx.joinRelation()).map { c =>
+      withJoinRelation(c, left)
+    }.get)))))
   }
 
   /**

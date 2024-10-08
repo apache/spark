@@ -671,8 +671,7 @@ class DataFrameTestsMixin:
                     |+---+-----+
                     ||  1|    1|
                     |+---+-----+
-                    |only showing top 1 row
-                    |"""
+                    |only showing top 1 row"""
                     self.assertEqual(re.sub(pattern, "", expected3), df.__repr__())
 
         # test when eager evaluation is enabled and _repr_html_ will be called

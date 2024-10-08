@@ -2394,22 +2394,31 @@ def unbase64(col: "ColumnOrName") -> Column:
 unbase64.__doc__ = pysparkfuncs.unbase64.__doc__
 
 
-def ltrim(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("ltrim", col)
+def ltrim(col: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
+    if trim is not None:
+        return _invoke_function_over_columns("ltrim", trim, col)
+    else:
+        return _invoke_function_over_columns("ltrim", col)
 
 
 ltrim.__doc__ = pysparkfuncs.ltrim.__doc__
 
 
-def rtrim(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("rtrim", col)
+def rtrim(col: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
+    if trim is not None:
+        return _invoke_function_over_columns("rtrim", trim, col)
+    else:
+        return _invoke_function_over_columns("rtrim", col)
 
 
 rtrim.__doc__ = pysparkfuncs.rtrim.__doc__
 
 
-def trim(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("trim", col)
+def trim(col: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
+    if trim is not None:
+        return _invoke_function_over_columns("trim", trim, col)
+    else:
+        return _invoke_function_over_columns("trim", col)
 
 
 trim.__doc__ = pysparkfuncs.trim.__doc__

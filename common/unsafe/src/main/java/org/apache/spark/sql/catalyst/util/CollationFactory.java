@@ -200,8 +200,8 @@ public final class CollationFactory {
      * bit 29:    0 for UTF8_BINARY, 1 for ICU collations.
      * bit 28-24: Reserved.
      * bit 23-22: Reserved for version.
-     * bit 21-18: Reserved for space trimming.
-     * 0000 = none, 0001 = left trim, 0010 = right trim, 0011 = trim.
+     * bit 21-19 Zeros, reserved for future trimmings.
+     * bit 18 0 = none, 1 = right trim.
      * bit 17-0:  Depend on collation family.
      * ---
      * INDETERMINATE collation ID binary layout:
@@ -216,8 +216,8 @@ public final class CollationFactory {
      * UTF8_BINARY collation ID binary layout:
      * bit 31-24: Zeroes.
      * bit 23-22: Zeroes, reserved for version.
-     * bit 21-18: Reserved for space trimming.
-     * 0000 = none, 0001 = left trim, 0010 = right trim, 0011 = trim.
+     * bit 21-19 Zeros, reserved for future trimmings.
+     * bit 18 0 = none, 1 = right trim.
      * bit 17-3:  Zeroes.
      * bit 2:     0, reserved for accent sensitivity.
      * bit 1:     0, reserved for uppercase and case-insensitive.
@@ -229,7 +229,7 @@ public final class CollationFactory {
      * bit 28-24: Zeroes.
      * bit 23-22: Zeroes, reserved for version.
      * bit 21-18: Reserved for space trimming.
-     * 0000 = none, 0001 = left trim, 0010 = right trim, 0011 = trim.
+     * 0000 = none, 0001 = right trim. Bits 21-19 remain reserved and fixed to 0.
      * bit 17:    0 = case-sensitive, 1 = case-insensitive.
      * bit 16:    0 = accent-sensitive, 1 = accent-insensitive.
      * bit 15-14: Zeroes, reserved for punctuation sensitivity.
@@ -237,20 +237,20 @@ public final class CollationFactory {
      * bit 11-0:  Locale ID as specified in `ICULocaleToId` mapping.
      * ---
      * Some illustrative examples of collation name to ID mapping:
-     * - UTF8_BINARY       -> 0
-     * - UTF8_LCASE        -> 1
-     * - UNICODE           -> 0x20000000
-     * - UNICODE_AI        -> 0x20010000
-     * - UNICODE_CI        -> 0x20020000
-     * - UNICODE_LTRIM     -> 0x20040000
-     * - UNICODE_RTRIM     -> 0x20080000
-     * - UNICODE_TRIM      -> 0x200C0000
-     * - UNICODE_CI_AI     -> 0x20030000
-     * - UNICODE_CI_TRIM   -> 0x200E0000
-     * - UNICODE_AI_TRIM   -> 0x200D0000
-     * - UNICODE_CI_AI_TRIM-> 0x200F0000
-     * - af                -> 0x20000001
-     * - af_CI_AI          -> 0x20030001
+     * - UTF8_BINARY        -> 0
+     * - UTF8_BINARY_RTRIM  -> 0x00040000
+     * - UTF8_LCASE         -> 1
+     * - UTF8_LCASE_RTRIM   -> 0x00040001
+     * - UNICODE            -> 0x20000000
+     * - UNICODE_AI         -> 0x20010000
+     * - UNICODE_CI         -> 0x20020000
+     * - UNICODE_RTRIM      -> 0x20040000
+     * - UNICODE_CI_AI      -> 0x20030000
+     * - UNICODE_CI_RTRIM   -> 0x20060000
+     * - UNICODE_AI_RTRIM   -> 0x20050000
+     * - UNICODE_CI_AI_RTRIM-> 0x20070000
+     * - af                 -> 0x20000001
+     * - af_CI_AI           -> 0x20030001
      */
     private abstract static class CollationSpec {
 
@@ -270,12 +270,11 @@ public final class CollationFactory {
       }
 
       /**
-       * Bits 19-18 having value 00 for no space trimming, 01 for left space trimming
-       * 10 for right space trimming and 11 for both sides space trimming. Bits 21, 20
-       * remained reserved (and fixed to 0) for future use.
+       * Bit 18 in collation ID having value 0 for none and 1 for right trimming.
+       * Bits 21, 20, 19 remained reserved (and fixed to 0) for future use.
        */
       protected enum SpaceTrimming {
-        NONE, LTRIM, RTRIM, TRIM
+        NONE, RTRIM
       }
 
       /**
@@ -307,7 +306,7 @@ public final class CollationFactory {
       /**
        * Bitmask corresponding to width in bits in binary collation ID layout.
        */
-      protected static final int SPACE_TRIMMING_MASK = 0b11;
+      protected static final int SPACE_TRIMMING_MASK = 0b1;
 
       private static final int INDETERMINATE_COLLATION_ID = -1;
 
@@ -349,12 +348,10 @@ public final class CollationFactory {
        * Utility function to trim spaces when collation uses space trimming.
        */
       protected static UTF8String applyTrimmingPolicy(UTF8String s, SpaceTrimming spaceTrimming) {
-        return switch (spaceTrimming) {
-          case LTRIM -> s.trimLeft();
-          case RTRIM -> s.trimRight();
-          case TRIM -> s.trim();
-          default -> s; // NOTRIM
-        };
+        if(spaceTrimming == SpaceTrimming.RTRIM){
+          return s.trimRight();
+        }
+        return s; // No trimming.
       }
 
       /**
@@ -505,12 +502,8 @@ public final class CollationFactory {
 
         SpaceTrimming spaceTrimming = SpaceTrimming.NONE;
         String remainingSpec = remainingSpecifiers.substring(1);
-        if (remainingSpec.equals("LTRIM")) {
-          spaceTrimming = SpaceTrimming.LTRIM;
-        } else if (remainingSpec.equals("RTRIM")) {
+        if (remainingSpec.equals("RTRIM")) {
           spaceTrimming = SpaceTrimming.RTRIM;
-        } else if(remainingSpec.equals("TRIM")) {
-          spaceTrimming = SpaceTrimming.TRIM;
         } else {
           throw collationInvalidNameException(originalName);
         }
@@ -851,9 +844,7 @@ public final class CollationFactory {
               accentSensitivity = AccentSensitivity.valueOf(specifier);
               isAccentSpecifierSet = true;
               break;
-            case "LTRIM":
             case "RTRIM":
-            case "TRIM":
               if (isSpaceTrimmingSpecifierSet) {
                 throw collationInvalidNameException(originalName);
               }
