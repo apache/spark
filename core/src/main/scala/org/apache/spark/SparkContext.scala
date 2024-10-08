@@ -1798,7 +1798,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   private def addFile(
       path: String, recursive: Boolean, addedOnSubmit: Boolean, isArchive: Boolean = false
-  ): Unit = {
+    ): Unit = {
     val jobArtifactUUID = JobArtifactSet
       .getCurrentJobArtifactState.map(_.uuid).getOrElse("default")
     val uri = Utils.resolveURI(path)

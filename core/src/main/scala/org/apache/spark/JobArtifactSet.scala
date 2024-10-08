@@ -106,7 +106,7 @@ private[spark] object JobArtifactSet {
    */
   def getActiveOrDefault(sc: SparkContext): JobArtifactSet = {
     val maybeState = currentClientSessionState.get().map(s => s.copy(
-      replClassDirUri = s.replClassDirUri.orElse(sc.conf.getOption("spark.repl.class.uri"))))
+        replClassDirUri = s.replClassDirUri.orElse(sc.conf.getOption("spark.repl.class.uri"))))
     new JobArtifactSet(
       state = maybeState,
       jars = maybeState
