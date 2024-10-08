@@ -17,6 +17,8 @@
 
 # mypy: disable-error-code="empty-body"
 
+import sys
+import random
 from typing import (
     Any,
     Callable,
@@ -2039,6 +2041,46 @@ class DataFrame:
         10
         """
         ...
+
+    def _preapare_args_for_sample(
+        self,
+        withReplacement: Optional[Union[float, bool]] = None,
+        fraction: Optional[Union[int, float]] = None,
+        seed: Optional[int] = None,
+    ) -> Tuple[bool, float, int]:
+        from pyspark.errors import PySparkTypeError
+
+        if isinstance(withReplacement, bool) and isinstance(fraction, float):
+            # For the cases below:
+            #   sample(True, 0.5 [, seed])
+            #   sample(True, fraction=0.5 [, seed])
+            #   sample(withReplacement=False, fraction=0.5 [, seed])
+            _seed = int(seed) if seed is not None else random.randint(0, sys.maxsize)
+            return withReplacement, fraction, _seed
+
+        elif withReplacement is None and isinstance(fraction, float):
+            # For the case below:
+            #   sample(faction=0.5 [, seed])
+            _seed = int(seed) if seed is not None else random.randint(0, sys.maxsize)
+            return False, fraction, _seed
+
+        elif isinstance(withReplacement, float):
+            # For the case below:
+            #   sample(0.5 [, seed])
+            _seed = int(fraction) if fraction is not None else random.randint(0, sys.maxsize)
+            _fraction = float(withReplacement)
+            return False, _fraction, _seed
+
+        else:
+            argtypes = [type(arg).__name__ for arg in [withReplacement, fraction, seed]]
+            raise PySparkTypeError(
+                errorClass="NOT_BOOL_OR_FLOAT_OR_INT",
+                messageParameters={
+                    "arg_name": "withReplacement (optional), "
+                    + "fraction (required) and seed (optional)",
+                    "arg_type": ", ".join(argtypes),
+                },
+            )
 
     @dispatch_df_method
     def sampleBy(
