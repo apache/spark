@@ -27,7 +27,7 @@ import java.io.ObjectOutputStream
  *      the parent object.
  *   c) If thread 1 waits for thread 2 to join, a deadlock occurs.
  */
-@SerialVersionUID(58826923869549028L)
+@SerialVersionUID(7964587975756091988L)
 private[spark] class Lazy[T](initializer: => T) extends Serializable {
 
   private[this] lazy val value: T = initializer
