@@ -260,10 +260,9 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
       q.transformExpressionsDownWithPruning(_.containsPattern(BINARY_ARITHMETIC)) {
       case a @ Add(_, _, f) if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
         val (foldables, others) = flattenAdd(a, groupingExpressionSet).partition(_.foldable)
-        val newExpr = if (foldables.nonEmpty) {
+        if (foldables.nonEmpty) {
           val foldableExpr = foldables.reduce((x, y) => Add(x, y, f))
           val foldableValue = foldableExpr.eval(EmptyRow)
-          val c = Literal.create(foldableValue, a.dataType)
           if (others.isEmpty) {
             Literal.create(foldableValue, a.dataType)
           } else if (foldableValue == 0) {
@@ -274,10 +273,9 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
         } else {
           a
         }
-        newExpr
       case m @ Multiply(_, _, f) if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
         val (foldables, others) = flattenMultiply(m, groupingExpressionSet).partition(_.foldable)
-        val newExpr = if (foldables.nonEmpty) {
+        if (foldables.nonEmpty) {
           val foldableExpr = foldables.reduce((x, y) => Multiply(x, y, f))
           val foldableValue = foldableExpr.eval(EmptyRow)
           if (others.isEmpty || foldableValue == 0) {
@@ -291,7 +289,6 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
         } else {
           m
         }
-        newExpr
     }
   }
 }
