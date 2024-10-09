@@ -503,10 +503,10 @@ class PandasGroupedOpsMixin:
                     initial_state_iter = statefulProcessorApiClient.get_initial_state_iter()
                     # if user did not provide initial state df, initial_state_iter will be None
                     if initial_state_iter is not None:
-                        grouping_key, cur_initial_state = initial_state_iter
-                        statefulProcessorApiClient.set_implicit_key(grouping_key)
-                        statefulProcessor.handleInitialState(grouping_key, cur_initial_state)
-                        statefulProcessorApiClient.remove_implicit_key()
+                        for grouping_key, cur_initial_state in initial_state_iter:
+                            statefulProcessorApiClient.set_implicit_key(grouping_key)
+                            statefulProcessor.handleInitialState(grouping_key, cur_initial_state)
+                            statefulProcessorApiClient.remove_implicit_key()
                 statefulProcessorApiClient.set_handle_state(
                     StatefulProcessorHandleState.INITIALIZED
                 )

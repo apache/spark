@@ -294,9 +294,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
   }
 
   test("stateful processor - get initial state") {
-    val byteString: ByteString = ByteString.copyFrom(byteArray)
     val message = UtilsCallCommand.newBuilder().setGetInitialState(
-      GetInitialState.newBuilder().setGroupingKey(byteString).build()).build()
+      GetInitialState.newBuilder().build()).build()
     stateServer.handleStatefulProcessorUtilRequest(message)
     verify(outputStream).writeInt(argThat((x: Int) => x > 0))
   }
