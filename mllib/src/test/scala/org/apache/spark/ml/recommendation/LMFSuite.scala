@@ -190,6 +190,15 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
     val batch = LongPairMulti(0, trainData.map(_._1), trainData.map(_._2),
       trainData.map(_._3), trainData.map(_._4))
 
+    val rndUserFactors = optimizer.flush()
+      .filter(_.t == ItemData.TYPE_LEFT)
+      .map(e => e.id -> e.f).toArray
+
+    val rndItemFactors = optimizer.flush()
+      .filter(_.t == ItemData.TYPE_RIGHT)
+      .map(e => e.id -> e.f).toArray
+
+
     (0 until 100).foreach{_ =>
       optimizer.optimize(Iterator(batch), 1, remapInplace = false);
     }
@@ -204,12 +213,17 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
 
     val trueAcc = LMFSuite.accuracy(testData, useBias = true,
       trueUserFactors, trueItemFactors)
+
+    val rndAcc = LMFSuite.accuracy(testData, opts.useBias, rndUserFactors, rndItemFactors)
     val acc = LMFSuite.accuracy(testData, opts.useBias, userFactors, itemFactors)
 
-
     logInfo(log"True test accuracy is ${MDC(ACCURACY, trueAcc)}.")
+    logInfo(log"Random test accuracy is ${MDC(ACCURACY, rndAcc)}.")
     logInfo(log"Actual test accuracy is ${MDC(ACCURACY, acc)}.")
-    assert(acc > 0.6)
+
+    assert(trueAcc > 0.98)
+    assert(0.49 < rndAcc && rndAcc < 0.51)
+    assert(acc > 0.8)
   }
 
   test("LMF optimizer implicit") {
@@ -263,10 +277,16 @@ object LMFSuite extends Logging {
   private def genFactors(
                           size: Int,
                           rank: Int,
+                          useBias: Boolean,
+                          stddev: Double,
                           random: Random): Array[(Long, Array[Float])] = {
     require(size > 0 && size < Int.MaxValue / 3)
+    val n = if (useBias) rank + 1 else rank
     Array.fill(size)(random.nextLong()).zip(
-      Array.fill(size)(Array.fill(rank)(random.nextFloat() * 2 - 1)))
+      Array.fill(size)((0 until n).map{i =>
+        if (i < rank) random.nextGaussian() * stddev
+        else random.nextDouble() * 2 - 1
+      }.map(_.toFloat).toArray))
   }
 
   private def sample(weights: Array[Double], random: Random): Int = {
@@ -351,8 +371,8 @@ object LMFSuite extends Logging {
                            implicitPrefs: Boolean,
                            random: Random) = {
 
-    val userFactors = genFactors(numUsers, if (useBias) rank + 1 else rank, random)
-    val itemFactors = genFactors(numItems, if (useBias) rank + 1 else rank, random)
+    val userFactors = genFactors(numUsers, rank, useBias, 5, random)
+    val itemFactors = genFactors(numItems, rank, useBias, 5, random)
 
     val logits = getLogits(userFactors, itemFactors, useBias)
     val trainData = ArrayBuffer.empty[(Long, Long, Float, Float)]
