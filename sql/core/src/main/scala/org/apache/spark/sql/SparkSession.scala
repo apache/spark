@@ -294,11 +294,7 @@ class SparkSession private(
     new Dataset(self, LocalRelation(encoder.schema), encoder)
   }
 
-  /**
-   * Creates a `DataFrame` from an RDD of Product (e.g. case classes, tuples).
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = withActive {
     val encoder = Encoders.product[A]
     Dataset.ofRows(self, ExternalRDD(rdd, self)(encoder))
@@ -311,37 +307,7 @@ class SparkSession private(
     Dataset.ofRows(self, LocalRelation.fromProduct(attributeSeq, data))
   }
 
-  /**
-   * :: DeveloperApi ::
-   * Creates a `DataFrame` from an `RDD` containing [[Row]]s using the given schema.
-   * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
-   * the provided schema. Otherwise, there will be runtime exception.
-   * Example:
-   * {{{
-   *  import org.apache.spark.sql._
-   *  import org.apache.spark.sql.types._
-   *  val sparkSession = new org.apache.spark.sql.SparkSession(sc)
-   *
-   *  val schema =
-   *    StructType(
-   *      StructField("name", StringType, false) ::
-   *      StructField("age", IntegerType, true) :: Nil)
-   *
-   *  val people =
-   *    sc.textFile("examples/src/main/resources/people.txt").map(
-   *      _.split(",")).map(p => Row(p(0), p(1).trim.toInt))
-   *  val dataFrame = sparkSession.createDataFrame(people, schema)
-   *  dataFrame.printSchema
-   *  // root
-   *  // |-- name: string (nullable = false)
-   *  // |-- age: integer (nullable = true)
-   *
-   *  dataFrame.createOrReplaceTempView("people")
-   *  sparkSession.sql("select name from people").collect.foreach(println)
-   * }}}
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @DeveloperApi
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = withActive {
     val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
@@ -353,14 +319,7 @@ class SparkSession private(
     internalCreateDataFrame(catalystRows.setName(rowRDD.name), schema)
   }
 
-  /**
-   * :: DeveloperApi ::
-   * Creates a `DataFrame` from a `JavaRDD` containing [[Row]]s using the given schema.
-   * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
-   * the provided schema. Otherwise, there will be runtime exception.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @DeveloperApi
   def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
     val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
@@ -374,14 +333,7 @@ class SparkSession private(
     Dataset.ofRows(self, LocalRelation.fromExternalRows(toAttributes(replaced), rows.asScala.toSeq))
   }
 
-  /**
-   * Applies a schema to an RDD of Java Beans.
-   *
-   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
-   * SELECT * queries will return the columns in an undefined order.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame = withActive {
     val attributeSeq: Seq[AttributeReference] = getSchema(beanClass)
     val className = beanClass.getName
@@ -392,14 +344,7 @@ class SparkSession private(
     Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRdd.setName(rdd.name))(self))
   }
 
-  /**
-   * Applies a schema to an RDD of Java Beans.
-   *
-   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
-   * SELECT * queries will return the columns in an undefined order.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def createDataFrame(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
     createDataFrame(rdd.rdd, beanClass)
   }
@@ -434,14 +379,7 @@ class SparkSession private(
     Dataset[T](self, plan)
   }
 
-  /**
-   * Creates a [[Dataset]] from an RDD of a given type. This method requires an
-   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
-   * that is generally created automatically through implicits from a `SparkSession`, or can be
-   * created explicitly by calling static methods on [[Encoders]].
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
     Dataset[T](self, ExternalRDD(data, self))
   }

@@ -84,6 +84,7 @@
     <module>common/utils</module>
     <module>common/variant</module>
     <module>common/tags</module>
+    <module>sql/connect/shims</module>
     <module>core</module>
     <module>graphx</module>
     <module>mllib</module>

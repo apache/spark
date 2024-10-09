@@ -14,12 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.rdd
 
-package org.apache.spark
-
-package object sql {
-  type DataFrame = Dataset[Row]
-
-  private[sql] def throwRddNotSupportedException(): Nothing =
-    throw new UnsupportedOperationException("RDDs are not supported in Spark Connect.")
-}
+class RDD[T]
