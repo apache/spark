@@ -17,7 +17,7 @@
 
 import math
 
-from typing import Any, TYPE_CHECKING, List, Optional, Union
+from typing import Any, TYPE_CHECKING, List, Optional, Tuple, Union
 from types import ModuleType
 from pyspark.errors import (
     PySparkRuntimeError,
@@ -524,6 +524,176 @@ class PySparkKdePlotBase:
             ]
         )
 
+    def hist(self, column: Union[str, List[str]], bins: int = 10, **kwargs: Any):
+        """
+        Draw one histogram of the DataFrame’s columns.
+
+        A `histogram`_ is a representation of the distribution of data.
+        This function calls :meth:`plotting.backend.plot`,
+        on each series in the DataFrame, resulting in one histogram per column.
+        This is useful when the DataFrame’s Series are in a similar scale.
+
+        .. _histogram: https://en.wikipedia.org/wiki/Histogram
+
+        Parameters
+        ----------
+        column: str or list of str
+            Column name or list of names to be used for creating the histogram.
+        bins : integer, default 10
+            Number of histogram bins to be used.
+        **kwargs
+            Additional keyword arguments.
+
+        Returns
+        -------
+        :class:`plotly.graph_objs.Figure`
+
+        Examples
+        --------
+        """
+        return self(kind="hist", column=column, bins=bins, **kwargs)
+
+
+class PySparkHistogramPlotBase:
+    @staticmethod
+    def get_bins(sdf: "DataFrame", bins: int) -> "np.ndarray":
+        import numpy as np
+
+        if len(sdf.columns) > 1:
+            min_col = F.least(*map(F.min, sdf))
+            max_col = F.greatest(*map(F.max, sdf))
+        else:
+            min_col = F.min(sdf.columns[-1])
+            max_col = F.max(sdf.columns[-1])
+        boundaries = sdf.select(min_col, max_col).first()
+
+        if boundaries[0] == boundaries[1]:
+            boundaries = (boundaries[0] - 0.5, boundaries[1] + 0.5)
+
+        return np.linspace(boundaries[0], boundaries[1], bins + 1)
+
+    @staticmethod
+    def compute_hist(sdf: "DataFrame", bins: "np.ndarray"):
+        import numpy as np
+        import pandas as pd
+
+        assert isinstance(bins, np.ndarray)
+
+        # 1. Make the bucket output flat to:
+        #     +----------+-------+
+        #     |__group_id|buckets|
+        #     +----------+-------+
+        #     |0         |0.0    |
+        #     |0         |0.0    |
+        #     |0         |1.0    |
+        #     |0         |2.0    |
+        #     |0         |3.0    |
+        #     |0         |3.0    |
+        #     |1         |0.0    |
+        #     |1         |1.0    |
+        #     |1         |1.0    |
+        #     |1         |2.0    |
+        #     |1         |1.0    |
+        #     |1         |0.0    |
+        #     +----------+-------+
+        colnames = sdf.columns
+        bucket_names = ["__{}_bucket".format(colname) for colname in colnames]
+
+        # determines which bucket a given value falls into, based on predefined bin intervals
+        # refers to org.apache.spark.ml.feature.Bucketizer#binarySearchForBuckets
+        def binary_search_for_buckets(value: Column):
+            index = _array_binary_search(F.lit(bins), value)
+            bucket = F.when(index >= 0, index).otherwise(-index - 2)
+            unboundErrMsg = F.lit(f"value %s out of the bins bounds: [{bins[0]}, {bins[-1]}]")
+            return (
+                F.when(value == F.lit(bins[-1]), F.lit(len(bins) - 2))
+                .when(value.between(F.lit(bins[0]), F.lit(bins[-1])), bucket)
+                .otherwise(F.raise_error(F.printf(unboundErrMsg, value)))
+            )
+
+        output_df = (
+            sdf.select(
+                F.posexplode(
+                    F.array([F.col(colname).cast("double") for colname in colnames])
+                ).alias("__group_id", "__value")
+            )
+            .where(F.col("__value").isNotNull() & ~F.col("__value").isNaN())
+            .select(
+                F.col("__group_id"),
+                binary_search_for_buckets(F.col("__value")).cast("double").alias("__bucket"),
+            )
+        )
+
+        # 2. Calculate the count based on each group and bucket.
+        #     +----------+-------+------+
+        #     |__group_id|buckets| count|
+        #     +----------+-------+------+
+        #     |0         |0.0    |2     |
+        #     |0         |1.0    |1     |
+        #     |0         |2.0    |1     |
+        #     |0         |3.0    |2     |
+        #     |1         |0.0    |2     |
+        #     |1         |1.0    |3     |
+        #     |1         |2.0    |1     |
+        #     +----------+-------+------+
+        result = (
+            output_df.groupby("__group_id", "__bucket")
+            .agg(F.count("*").alias("count"))
+            .toPandas()
+            .sort_values(by=["__group_id", "__bucket"])
+        )
+
+        # 3. Fill empty bins and calculate based on each group id. From:
+        #     +----------+--------+------+
+        #     |__group_id|__bucket| count|
+        #     +----------+--------+------+
+        #     |0         |0.0     |2     |
+        #     |0         |1.0     |1     |
+        #     |0         |2.0     |1     |
+        #     |0         |3.0     |2     |
+        #     +----------+--------+------+
+        #     +----------+--------+------+
+        #     |__group_id|__bucket| count|
+        #     +----------+--------+------+
+        #     |1         |0.0     |2     |
+        #     |1         |1.0     |3     |
+        #     |1         |2.0     |1     |
+        #     +----------+--------+------+
+        #
+        # to:
+        #     +-----------------+
+        #     |__values1__bucket|
+        #     +-----------------+
+        #     |2                |
+        #     |1                |
+        #     |1                |
+        #     |2                |
+        #     |0                |
+        #     +-----------------+
+        #     +-----------------+
+        #     |__values2__bucket|
+        #     +-----------------+
+        #     |2                |
+        #     |3                |
+        #     |1                |
+        #     |0                |
+        #     |0                |
+        #     +-----------------+
+        output_series = []
+        for i, (input_column_name, bucket_name) in enumerate(zip(colnames, bucket_names)):
+            current_bucket_result = result[result["__group_id"] == i]
+            # generates a pandas DF with one row for each bin
+            # we need this as some of the bins may be empty
+            indexes = pd.DataFrame({"__bucket": np.arange(0, len(bins) - 1)})
+            # merges the bins with counts on it and fills remaining ones with zeros
+            pdf = indexes.merge(current_bucket_result, how="left", on=["__bucket"]).fillna(0)[
+                ["count"]
+            ]
+            pdf.columns = [input_column_name]
+            output_series.append(pdf[input_column_name])
+
+        return output_series
+
 
 class PySparkBoxPlotBase:
     @staticmethod
@@ -621,3 +791,7 @@ def _invoke_internal_function_over_columns(name: str, *cols: "ColumnOrName") -> 
 
 def collect_top_k(col: Column, num: int, reverse: bool) -> Column:
     return _invoke_internal_function_over_columns("collect_top_k", col, F.lit(num), F.lit(reverse))
+
+
+def _array_binary_search(col: Column, value: Column) -> Column:
+    return _invoke_internal_function_over_columns("array_binary_search", col, value)
