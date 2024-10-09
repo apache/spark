@@ -540,13 +540,18 @@ class Dataset[T] private[sql](
   def isStreaming: Boolean = logicalPlan.isStreaming
 
   /** @inheritdoc */
-  protected[sql] def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T] = {
+  protected[sql] def checkpoint(
+      eager: Boolean,
+      reliableCheckpoint: Boolean,
+      storageLevel: Option[StorageLevel]): Dataset[T] = {
     val actionName = if (reliableCheckpoint) "checkpoint" else "localCheckpoint"
     withAction(actionName, queryExecution) { physicalPlan =>
       val internalRdd = physicalPlan.execute().map(_.copy())
       if (reliableCheckpoint) {
+        assert(storageLevel.isEmpty, "StorageLevel should not be defined for reliableCheckpoint")
         internalRdd.checkpoint()
       } else {
+        storageLevel.foreach(storageLevel => internalRdd.persist(storageLevel))
         internalRdd.localCheckpoint()
       }
 
@@ -1524,12 +1529,7 @@ class Dataset[T] private[sql](
     sparkSession.sessionState.executePlan(deserialized)
   }
 
-  /**
-   * Represents the content of the Dataset as an `RDD` of `T`.
-   *
-   * @group basic
-   * @since 1.6.0
-   */
+  /** @inheritdoc */
   lazy val rdd: RDD[T] = {
     val objectType = exprEnc.deserializer.dataType
     rddQueryExecution.toRdd.mapPartitions { rows =>
@@ -1537,19 +1537,8 @@ class Dataset[T] private[sql](
     }
   }
 
-  /**
-   * Returns the content of the Dataset as a `JavaRDD` of `T`s.
-   * @group basic
-   * @since 1.6.0
-   */
+  /** @inheritdoc */
   def toJavaRDD: JavaRDD[T] = rdd.toJavaRDD()
-
-  /**
-   * Returns the content of the Dataset as a `JavaRDD` of `T`s.
-   * @group basic
-   * @since 1.6.0
-   */
-  def javaRDD: JavaRDD[T] = toJavaRDD
 
   protected def createTempView(
       viewName: String,
@@ -1809,6 +1798,10 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   override def localCheckpoint(eager: Boolean): Dataset[T] = super.localCheckpoint(eager)
+
+  /** @inheritdoc */
+  override def localCheckpoint(eager: Boolean, storageLevel: StorageLevel): Dataset[T] =
+    super.localCheckpoint(eager, storageLevel)
 
   /** @inheritdoc */
   override def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] =

@@ -669,6 +669,16 @@
     ],
     "sqlState" : "40000"
   },
+  "CONFLICTING_DIRECTORY_STRUCTURES" : {
+    "message" : [
+      "Conflicting directory structures detected.",
+      "Suspicious paths:",
+      "<discoveredBasePaths>",
+      "If provided paths are partition directories, please set \"basePath\" in the options of the data source to specify the root directory of the table.",
+      "If there are multiple root directories, please load them separately and then union them."
+    ],
+    "sqlState" : "KD009"
+  },
   "CONFLICTING_PARTITION_COLUMN_NAMES" : {
     "message" : [
       "Conflicting partition column names detected:",
@@ -4487,6 +4497,12 @@
     ],
     "sqlState" : "428EK"
   },
+  "TRAILING_COMMA_IN_SELECT" : {
+    "message" : [
+      "Trailing comma detected in SELECT clause. Remove the trailing comma before the FROM clause."
+    ],
+    "sqlState" : "42601"
+  },
   "TRANSPOSE_EXCEED_ROW_LIMIT" : {
     "message" : [
       "Number of rows exceeds the allowed limit of <maxValues> for TRANSPOSE. If this was intended, set <config> to at least the current row count."
@@ -6678,11 +6694,6 @@
   "_LEGACY_ERROR_TEMP_1324" : {
     "message" : [
       "The pivot column <pivotColumn> has more than <maxValues> distinct values, this could indicate an error. If this was intended, set <config> to at least the number of distinct values of the pivot column."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1325" : {
-    "message" : [
-      "Cannot modify the value of a static config: <key>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1327" : {

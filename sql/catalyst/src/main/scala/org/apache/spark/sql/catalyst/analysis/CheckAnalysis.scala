@@ -173,6 +173,36 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     )
   }
 
+  /**
+   * Checks for errors in a `SELECT` clause, such as a trailing comma or an empty select list.
+   *
+   * @param plan The logical plan of the query.
+   * @param starRemoved Whether a '*' (wildcard) was removed from the select list.
+   * @throws AnalysisException if the select list is empty or ends with a trailing comma.
+   */
+  protected def checkTrailingCommaInSelect(
+      plan: LogicalPlan,
+      starRemoved: Boolean = false): Unit = {
+    val exprList = plan match {
+      case proj: Project if proj.projectList.nonEmpty =>
+        proj.projectList
+      case agg: Aggregate if agg.aggregateExpressions.nonEmpty =>
+        agg.aggregateExpressions
+      case _ =>
+        Seq.empty
+    }
+
+    exprList.lastOption match {
+      case Some(Alias(UnresolvedAttribute(Seq(name)), _)) =>
+        if (name.equalsIgnoreCase("FROM") && plan.exists(_.isInstanceOf[OneRowRelation])) {
+          if (exprList.size > 1  || starRemoved) {
+            throw QueryCompilationErrors.trailingCommaInSelectError(exprList.last.origin)
+          }
+        }
+      case _ =>
+    }
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We should inline all CTE relations to restore the original plan shape, as the analysis check
     // may need to match certain plan shapes. For dangling CTE relations, they will still be kept
@@ -209,6 +239,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
         val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
         write.table.tableNotFound(tblName)
+
+      // We should check for trailing comma errors first, since we would get less obvious
+      // unresolved column errors if we do it bottom up
+      case proj: Project =>
+        checkTrailingCommaInSelect(proj)
+      case agg: Aggregate =>
+        checkTrailingCommaInSelect(agg)
 
       case _ =>
     }

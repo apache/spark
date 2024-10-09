@@ -943,6 +943,18 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
         "FULL OUTER", "ANTI", "LEFT ANTI", "CROSS").foreach { joinType =>
         checkPipeJoin(s"TABLE t |> $joinType JOIN other ON (t.x = other.x)")
       }
+      // Set operations
+      def checkDistinct(query: String): Unit = check(query, Seq(DISTINCT_LIKE))
+      def checkExcept(query: String): Unit = check(query, Seq(EXCEPT))
+      def checkIntersect(query: String): Unit = check(query, Seq(INTERSECT))
+      def checkUnion(query: String): Unit = check(query, Seq(UNION))
+      checkDistinct("TABLE t |> UNION DISTINCT TABLE t")
+      checkExcept("TABLE t |> EXCEPT ALL TABLE t")
+      checkExcept("TABLE t |> EXCEPT DISTINCT TABLE t")
+      checkExcept("TABLE t |> MINUS ALL TABLE t")
+      checkExcept("TABLE t |> MINUS DISTINCT TABLE t")
+      checkIntersect("TABLE t |> INTERSECT ALL TABLE t")
+      checkUnion("TABLE t |> UNION ALL TABLE t")
     }
   }
 }
