@@ -255,6 +255,7 @@ class ReadwriterV2TestsMixin:
 
     def test_partitioning_functions(self):
         self.check_partitioning_functions(DataFrameWriterV2)
+        self.partitioning_functions_user_error()
 
     def check_partitioning_functions(self, tpe):
         import datetime
@@ -273,6 +274,23 @@ class ReadwriterV2TestsMixin:
         self.assertIsInstance(writer.partitionedBy(bucket(11, "id")), tpe)
         self.assertIsInstance(writer.partitionedBy(bucket(11, col("id"))), tpe)
         self.assertIsInstance(writer.partitionedBy(bucket(3, "id"), hours(col("ts"))), tpe)
+
+    def partitioning_functions_user_error(self):
+        import datetime
+        from pyspark.sql.functions.partitioning import years, months, days, hours, bucket
+
+        df = self.spark.createDataFrame(
+            [(1, datetime.datetime(2000, 1, 1), "foo")], ("id", "ts", "value")
+        )
+
+        with self.assertRaisesRegex(Exception, "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY"):
+            df.select(years("ts")).collect()
+        with self.assertRaisesRegex(Exception, "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY"):
+            df.select(months("ts")).collect()
+        with self.assertRaisesRegex(Exception, "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY"):
+            df.select(days("ts")).collect()
+        with self.assertRaisesRegex(Exception, "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY"):
+            df.select(bucket(2, "ts")).collect()
 
     def test_create(self):
         df = self.df
