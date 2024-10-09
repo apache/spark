@@ -25,6 +25,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AS_OF_JOIN, EXCEPT, INNER_LIKE_JOIN, INTERSECT, JOIN, LATERAL_JOIN, LEFT_SEMI_OR_ANTI_JOIN, NATURAL_LIKE_JOIN, OUTER_JOIN, UNION}
 
+/**
+ * This rule is to fill the static partition of the InsertIntoHadoopFsRelation command, When writing
+ * dynamic partitions. Exclude logical plans containing nodes such as join and intersect and except
+ * and union, and project nodes containing partition column calculations.
+ */
 object FillStaticPartitions extends Rule[LogicalPlan] with PredicateHelper {
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.transformWithPruning(!_.containsAnyPattern(OUTER_JOIN, JOIN, LATERAL_JOIN, AS_OF_JOIN,
