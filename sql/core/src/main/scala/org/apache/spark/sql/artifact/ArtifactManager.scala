@@ -73,14 +73,13 @@ class ArtifactManager(session: SparkSession) extends Logging {
       s"$artifactURI${File.separator}classes${File.separator}")
 
   protected[sql] val state: JobArtifactState = {
-    val sessionIsolated = session.sparkContext.conf.get("spark.session.isolate.artifacts", "true")
-    val replIsolated = session.sparkContext.conf.get("spark.repl.isolate.artifacts", "false")
-    logWarning(s"sessionIsolated: $sessionIsolated, replIsolated: $replIsolated")
+    val sessionIsolated = session.conf.get("spark.session.isolate.artifacts", "true")
+    val replIsolated = session.conf.get("spark.repl.isolate.artifacts", "false")
     (sessionIsolated, replIsolated) match {
       case ("true", "true") => JobArtifactState(session.sessionUUID, Some(replClassURI))
       case ("true", "false") => JobArtifactState(session.sessionUUID, None)
       case ("false", "true") => throw SparkException.internalError(
-        "Spark session isolation is disabled but REPL isolation is enabled.")
+        "To enable REPL isolation, session isolation must also be enabled.")
       case ("false", "false") => null
     }
   }
@@ -88,7 +87,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
   private var initialContextResourcesCopied = false
 
   def withResources[T](f: => T): T = {
-    Utils.withContextClassLoader(classloader) {
+    Utils.withContextClassLoader(classloader, retainChange = true) {
       JobArtifactSet.withActiveJobArtifactState(state) {
         // Copy over global initial resources to this session. Often used by spark-submit.
         copyInitialContextResourcesIfNeeded()
@@ -346,14 +345,16 @@ class ArtifactManager(session: SparkSession) extends Logging {
     // Clean up added files
     val fileserver = SparkEnv.get.rpcEnv.fileServer
     val sparkContext = session.sparkContext
-    val shouldUpdateEnv = sparkContext.addedFiles.contains(state.uuid) ||
-      sparkContext.addedArchives.contains(state.uuid) ||
-      sparkContext.addedJars.contains(state.uuid)
-    if (shouldUpdateEnv) {
-      sparkContext.addedFiles.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
-      sparkContext.addedArchives.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
-      sparkContext.addedJars.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeJar))
-      sparkContext.postEnvironmentUpdate()
+    if (state != null) {
+      val shouldUpdateEnv = sparkContext.addedFiles.contains(state.uuid) ||
+        sparkContext.addedArchives.contains(state.uuid) ||
+        sparkContext.addedJars.contains(state.uuid)
+      if (shouldUpdateEnv) {
+        sparkContext.addedFiles.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
+        sparkContext.addedArchives.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
+        sparkContext.addedJars.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeJar))
+        sparkContext.postEnvironmentUpdate()
+      }
     }
 
     // Clean up cached relations
