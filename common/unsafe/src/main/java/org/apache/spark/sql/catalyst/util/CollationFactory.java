@@ -551,12 +551,12 @@ public final class CollationFactory {
             comparator = UTF8String::binaryCompare;
             hashFunction = s -> (long) s.hashCode();
             equalsFunction = UTF8String::equals;
-          }else {
+          } else {
             comparator = (s1, s2) -> applyTrimmingPolicy(s1, spaceTrimming).binaryCompare(
-                    applyTrimmingPolicy(s2, spaceTrimming));
+              applyTrimmingPolicy(s2, spaceTrimming));
             hashFunction = s -> (long) applyTrimmingPolicy(s, spaceTrimming).hashCode();
             equalsFunction = (s1, s2) -> applyTrimmingPolicy(s1, spaceTrimming).equals(
-                    applyTrimmingPolicy(s2, spaceTrimming));
+              applyTrimmingPolicy(s2, spaceTrimming));
           }
 
           return new Collation(
@@ -575,16 +575,16 @@ public final class CollationFactory {
           Comparator<UTF8String> comparator;
           ToLongFunction<UTF8String> hashFunction;
 
-          if(spaceTrimming == SpaceTrimming.NONE ) {
+          if (spaceTrimming == SpaceTrimming.NONE ) {
             comparator = CollationAwareUTF8String::compareLowerCase;
             hashFunction = s ->
-                    (long) CollationAwareUTF8String.lowerCaseCodePoints(s).hashCode();
-          }else{
+              (long) CollationAwareUTF8String.lowerCaseCodePoints(s).hashCode();
+          } else {
             comparator = (s1, s2) -> CollationAwareUTF8String.compareLowerCase(
-                    applyTrimmingPolicy(s1, spaceTrimming),
-                    applyTrimmingPolicy(s2, spaceTrimming));
+              applyTrimmingPolicy(s1, spaceTrimming),
+              applyTrimmingPolicy(s2, spaceTrimming));
             hashFunction = s -> (long) CollationAwareUTF8String.
-                    lowerCaseCodePoints(applyTrimmingPolicy(s, spaceTrimming)).hashCode();
+              lowerCaseCodePoints(applyTrimmingPolicy(s, spaceTrimming)).hashCode();
           }
 
           return new Collation(
@@ -961,17 +961,17 @@ public final class CollationFactory {
         Comparator<UTF8String> comparator;
         ToLongFunction<UTF8String> hashFunction;
 
-        if(spaceTrimming == SpaceTrimming.NONE){
+        if (spaceTrimming == SpaceTrimming.NONE){
           hashFunction = s -> (long) collator.getCollationKey(
-                  s.toValidString()).hashCode();
+            s.toValidString()).hashCode();
           comparator = (s1, s2) ->
-                  collator.compare(s1.toValidString(), s2.toValidString());
+            collator.compare(s1.toValidString(), s2.toValidString());
         } else {
           comparator = (s1, s2) -> collator.compare(
-                  applyTrimmingPolicy(s1, spaceTrimming).toValidString(),
-                  applyTrimmingPolicy(s2, spaceTrimming).toValidString());
+            applyTrimmingPolicy(s1, spaceTrimming).toValidString(),
+            applyTrimmingPolicy(s2, spaceTrimming).toValidString());
           hashFunction = s -> (long) collator.getCollationKey(
-                  applyTrimmingPolicy(s, spaceTrimming).toValidString()).hashCode();
+            applyTrimmingPolicy(s, spaceTrimming).toValidString()).hashCode();
         }
 
         return new Collation(

@@ -503,7 +503,7 @@ class CollationSQLExpressionsSuite
       BinTestCase("13", "UNICODE", "1101"),
       BinTestCase("13", "UNICODE_RTRIM", "1101"),
       BinTestCase("13", "UNICODE_CI", "1101"),
-      BinTestCase("13", "UNICODE_CI_RTRIM", "1101"),
+      BinTestCase("13", "UNICODE_CI_RTRIM", "1101")
     )
     testCases.foreach(t => {
       val query =

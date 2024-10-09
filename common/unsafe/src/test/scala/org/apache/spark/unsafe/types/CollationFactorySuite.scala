@@ -146,7 +146,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UNICODE_CI", "aaa", "bbb", false),
       CollationTestCase("UNICODE_CI", "å", "a\u030A", true),
       CollationTestCase("UNICODE_CI", "Å", "a\u030A", true),
-      CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "AAA", true),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "AAA", true)
     )
 
     checks.foreach(testCase => {
@@ -190,7 +190,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UNICODE_CI", "aaa", "bbb", -1),
       CollationTestCase("UNICODE_CI_RTRIM", "aaa", "aaa  ", 0),
       CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "AAA", 0),
-      CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "bbb  ", -1),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "bbb  ", -1)
     )
 
     checks.foreach(testCase => {
