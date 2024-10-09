@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
 import org.apache.spark.sql.catalyst.rules.RuleIdCollection
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
@@ -1006,15 +1007,15 @@ class QueryExecutionErrorsSuite
       sqlState = "XX000")
   }
 
-  test("PartitionTransformExpression throws error on eval") {
-
-    val e = intercept[AnalysisException] {
-      Years(Literal("foo")).eval()
+  test("PartitionTransformExpression error on eval") {
+    val expr = Years(Literal("foo"))
+    val e = intercept[SparkException] {
+      expr.eval()
     }
     checkError(
       exception = e,
       condition = "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY",
-      parameters = Map("expression" -> "YEARS(FOO)"))
+      parameters = Map("expression" -> toSQLExpr(expr)))
   }
 
   test("INTERNAL_ERROR: Calling doGenCode on unresolved") {

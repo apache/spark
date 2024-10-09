@@ -4190,7 +4190,7 @@
   },
   "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY" : {
     "message" : [
-      "The expression <expression> must be inside 'partitionedBy'"
+      "The expression <expression> must be inside 'partitionedBy'."
     ],
     "sqlState": "42S23"
   },
