@@ -104,7 +104,8 @@ class SparkOptimizer(
     V2ScanRelationPushDown.ruleName :+
     V2ScanPartitioningAndOrdering.ruleName :+
     V2Writes.ruleName :+
-    ReplaceCTERefWithRepartition.ruleName
+    ReplaceCTERefWithRepartition.ruleName :+
+    RewriteCollationJoin.ruleName
 
   /**
    * Optimization batches that are executed before the regular optimization batches (also before

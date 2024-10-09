@@ -1576,7 +1576,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     })
   }
 
-  test("rewrite with collationkey should be an excludable rule") {
+  test("rewrite with collationkey should be an nonexcludable rule") {
     val t1 = "T_1"
     val t2 = "T_2"
     val collation = "UTF8_LCASE"
@@ -1594,16 +1594,16 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
         val queryPlan = df.queryExecution.executedPlan
 
-        // confirm that sort merge join is used instead of hash join
+        // confirm that hash join is used instead of sort merge join
         assert(
           collectFirst(queryPlan) {
             case _: HashJoin => ()
-          }.isEmpty
+          }.nonEmpty
         )
         assert(
           collectFirst(queryPlan) {
             case _: SortMergeJoinExec => ()
-          }.nonEmpty
+          }.isEmpty
         )
       }
     }
