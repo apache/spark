@@ -1059,13 +1059,13 @@ private[spark] class BlockManagerInfo(
         _blocks.put(blockId, blockStatus)
         _remainingMem -= memSize
         if (blockExists) {
-          logInfo(log"Updated ${MDC(BLOCK_ID, blockId)} in memory on " +
+          logDebug(log"Updated ${MDC(BLOCK_ID, blockId)} in memory on " +
             log"${MDC(HOST_PORT, blockManagerId.hostPort)}  (current size: " +
             log"${MDC(CURRENT_MEMORY_SIZE, Utils.bytesToString(memSize))}, original " +
             log"size: ${MDC(ORIGINAL_MEMORY_SIZE, Utils.bytesToString(originalMemSize))}, " +
             log"free: ${MDC(FREE_MEMORY_SIZE, Utils.bytesToString(_remainingMem))})")
         } else {
-          logInfo(log"Added ${MDC(BLOCK_ID, blockId)} in memory on " +
+          logDebug(log"Added ${MDC(BLOCK_ID, blockId)} in memory on " +
             log"${MDC(HOST_PORT, blockManagerId.hostPort)} " +
             log"(size: ${MDC(CURRENT_MEMORY_SIZE, Utils.bytesToString(memSize))}, " +
             log"free: ${MDC(FREE_MEMORY_SIZE, Utils.bytesToString(_remainingMem))})")
@@ -1075,12 +1075,12 @@ private[spark] class BlockManagerInfo(
         blockStatus = BlockStatus(storageLevel, memSize = 0, diskSize = diskSize)
         _blocks.put(blockId, blockStatus)
         if (blockExists) {
-          logInfo(log"Updated ${MDC(BLOCK_ID, blockId)} on disk on " +
+          logDebug(log"Updated ${MDC(BLOCK_ID, blockId)} on disk on " +
             log"${MDC(HOST_PORT, blockManagerId.hostPort)} " +
             log"(current size: ${MDC(CURRENT_DISK_SIZE, Utils.bytesToString(diskSize))}," +
             log" original size: ${MDC(ORIGINAL_DISK_SIZE, Utils.bytesToString(originalDiskSize))})")
         } else {
-          logInfo(log"Added ${MDC(BLOCK_ID, blockId)} on disk on " +
+          logDebug(log"Added ${MDC(BLOCK_ID, blockId)} on disk on " +
             log"${MDC(HOST_PORT, blockManagerId.hostPort)} (size: " +
             log"${MDC(CURRENT_DISK_SIZE, Utils.bytesToString(diskSize))})")
         }
@@ -1098,13 +1098,13 @@ private[spark] class BlockManagerInfo(
         blockStatus.remove(blockId)
       }
       if (originalLevel.useMemory) {
-        logInfo(log"Removed ${MDC(BLOCK_ID, blockId)} on " +
+        logDebug(log"Removed ${MDC(BLOCK_ID, blockId)} on " +
           log"${MDC(HOST_PORT, blockManagerId.hostPort)} in memory " +
           log"(size: ${MDC(ORIGINAL_MEMORY_SIZE, Utils.bytesToString(originalMemSize))}, " +
           log"free: ${MDC(FREE_MEMORY_SIZE, Utils.bytesToString(_remainingMem))})")
       }
       if (originalLevel.useDisk) {
-        logInfo(log"Removed ${MDC(BLOCK_ID, blockId)} on " +
+        logDebug(log"Removed ${MDC(BLOCK_ID, blockId)} on " +
           log"${MDC(HOST_PORT, blockManagerId.hostPort)} on disk" +
           log" (size: ${MDC(ORIGINAL_DISK_SIZE, Utils.bytesToString(originalDiskSize))})")
       }

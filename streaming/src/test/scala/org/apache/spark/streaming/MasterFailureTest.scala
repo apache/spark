@@ -375,7 +375,7 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
         val localFile = new File(localTestDir, (i + 1).toString)
         val hadoopFile = new Path(testDir, (i + 1).toString)
         val tempHadoopFile = new Path(testDir, ".tmp_" + (i + 1).toString)
-        Files.write(input(i) + "\n", localFile, StandardCharsets.UTF_8)
+        Files.asCharSink(localFile, StandardCharsets.UTF_8).write(input(i) + "\n")
         var tries = 0
         var done = false
             while (!done && tries < maxTries) {

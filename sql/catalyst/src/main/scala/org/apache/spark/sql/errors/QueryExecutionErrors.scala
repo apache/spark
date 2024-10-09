@@ -610,13 +610,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def binaryArithmeticCauseOverflowError(
-      eval1: Short, symbol: String, eval2: Short): SparkArithmeticException = {
+      eval1: Short,
+      symbol: String,
+      eval2: Short,
+      suggestedFunc: String): SparkArithmeticException = {
     new SparkArithmeticException(
       errorClass = "BINARY_ARITHMETIC_OVERFLOW",
       messageParameters = Map(
         "value1" -> toSQLValue(eval1, ShortType),
         "symbol" -> symbol,
-        "value2" -> toSQLValue(eval2, ShortType)),
+        "value2" -> toSQLValue(eval2, ShortType),
+        "functionName" -> toSQLId(suggestedFunc)),
       context = Array.empty,
       summary = "")
   }
@@ -2849,6 +2853,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "distinctPartColLists" -> distinctPartColLists.mkString("\n\t", "\n\t", "\n"),
         "suspiciousPaths" -> suspiciousPaths.map("\t" + _).mkString("\n", "\n", "")
+      )
+    )
+  }
+
+  def partitionColumnNotFoundInTheTableSchemaError(
+      column: Seq[String],
+      schema: StructType): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "PARTITION_COLUMN_NOT_FOUND_IN_SCHEMA",
+      messageParameters = Map(
+        "column" -> toSQLId(column),
+        "schema" -> toSQLType(schema)
       )
     )
   }

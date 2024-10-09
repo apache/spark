@@ -50,7 +50,7 @@ public class JavaLibSVMRelationSuite extends SharedSparkSession {
     tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource");
     File file = new File(tempDir, "part-00000");
     String s = "1 1:1.0 3:2.0 5:3.0\n0\n0 2:4.0 4:5.0 6:6.0";
-    Files.write(s, file, StandardCharsets.UTF_8);
+    Files.asCharSink(file, StandardCharsets.UTF_8).write(s);
     path = tempDir.toURI().toString();
   }
 

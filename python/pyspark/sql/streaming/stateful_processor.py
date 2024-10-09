@@ -61,7 +61,7 @@ class ValueState:
         """
         return self._value_state_client.get(self._state_name)
 
-    def update(self, new_value: Any) -> None:
+    def update(self, new_value: Tuple) -> None:
         """
         Update the value of the state.
         """
@@ -238,7 +238,9 @@ class StatefulProcessorHandle:
         self.stateful_processor_api_client.get_value_state(state_name, schema, ttl_duration_ms)
         return ValueState(ValueStateClient(self.stateful_processor_api_client), state_name, schema)
 
-    def getListState(self, state_name: str, schema: Union[StructType, str]) -> ListState:
+    def getListState(
+        self, state_name: str, schema: Union[StructType, str], ttl_duration_ms: Optional[int] = None
+    ) -> ListState:
         """
         Function to create new or return existing single value state variable of given type.
         The user must ensure to call this function only within the `init()` method of the
@@ -251,8 +253,13 @@ class StatefulProcessorHandle:
         schema : :class:`pyspark.sql.types.DataType` or str
             The schema of the state variable. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        ttlDurationMs: int
+            Time to live duration of the state in milliseconds. State values will not be returned
+            past ttlDuration and will be eventually removed from the state store. Any state update
+            resets the expiration time to current processing time plus ttlDuration.
+            If ttl is not specified the state will never expire.
         """
-        self.stateful_processor_api_client.get_list_state(state_name, schema)
+        self.stateful_processor_api_client.get_list_state(state_name, schema, ttl_duration_ms)
         return ListState(ListStateClient(self.stateful_processor_api_client), state_name, schema)
 
     def getMapState(

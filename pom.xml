@@ -120,7 +120,7 @@
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.7</asm.version>
     <slf4j.version>2.0.16</slf4j.version>
-    <log4j.version>2.22.1</log4j.version>
+    <log4j.version>2.24.1</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.4.0</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
@@ -161,7 +161,7 @@
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
     <!-- Do not use 3.0.0: https://github.com/GoogleCloudDataproc/hadoop-connectors/issues/1114 -->
-    <gcs-connector.version>hadoop3-2.2.21</gcs-connector.version>
+    <gcs-connector.version>hadoop3-2.2.25</gcs-connector.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
     <commons.httpcore.version>4.4.16</commons.httpcore.version>
@@ -180,8 +180,8 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.17.2</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.17.2</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.18.0</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.18.0</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.7</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
@@ -231,7 +231,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.13.3</kubernetes-client.version>
+    <kubernetes-client.version>6.13.4</kubernetes-client.version>
     <okio.version>1.17.6</okio.version>
 
     <test.java.home>${java.home}</test.java.home>
