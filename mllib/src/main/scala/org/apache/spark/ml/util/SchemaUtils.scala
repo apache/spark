@@ -19,8 +19,10 @@ package org.apache.spark.ml.util
 
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.VectorUDT
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.AttributeNameParser
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.internal.SQLConf
 
 
 /**
@@ -213,9 +215,13 @@ private[spark] object SchemaUtils {
    */
   def getSchemaField(schema: StructType, colName: String): StructField = {
     val colSplits = AttributeNameParser.parseAttributeName(colName)
-    var field = schema(colSplits(0))
-    for (colSplit <- colSplits.slice(1, colSplits.length)) {
-      field = field.dataType.asInstanceOf[StructType](colSplit)
+    val sqlConf = SparkSession.getActiveSession.get.sessionState.conf
+    val caseSensitive = sqlConf.getConf(SQLConf.CASE_SENSITIVE)
+
+    val field = if (caseSensitive) {
+      schema.findNestedField(colSplits).get._2
+    } else {
+      schema.findNestedFieldIgnoreCase(colSplits).get
     }
     field
   }
