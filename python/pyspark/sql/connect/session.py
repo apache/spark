@@ -1029,7 +1029,7 @@ class SparkSession:
             # Configurations to be set if unset.
             default_conf = {
                 "spark.plugins": "org.apache.spark.sql.connect.SparkConnectPlugin",
-                "spark.repl.isolate.artifacts", "true"
+                "spark.repl.isolate.artifacts": "true"
             }
 
             if "SPARK_TESTING" in os.environ:

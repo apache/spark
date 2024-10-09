@@ -698,7 +698,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
         sql(s"CREATE FUNCTION testListFiles1 AS '${classOf[ListFiles].getName}' " +
           s"USING ARCHIVE '${zipFile1.getAbsolutePath}'")
-        val df1 = sql(s"SELECT testListFiles1('${SparkFiles.get(zipFile1.getName)}')")
+        val df1 = sql(s"SELECT testListFiles1('${zipFile1.getName}')")
         val fileList1 =
           df1.collect().map(_.getList[String](0)).head.asScala.filter(_ != "META-INF")
 
@@ -717,7 +717,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
         sql(s"CREATE FUNCTION testListFiles2 AS '${classOf[ListFiles].getName}' " +
           s"USING ARCHIVE '${zipFile2.getAbsolutePath}#foo'")
-        val df2 = sql(s"SELECT testListFiles2('${SparkFiles.get("foo")}')")
+        val df2 = sql(s"SELECT testListFiles2('foo')")
         val fileList2 =
           df2.collect().map(_.getList[String](0)).head.asScala.filter(_ != "META-INF")
 
@@ -920,8 +920,9 @@ class ArraySumUDF extends UDF {
 
 class ListFiles extends UDF {
   import java.util.{ArrayList, Arrays, List => JList}
-  def evaluate(path: String): JList[String] = {
-    val fileArray = new File(path).list()
+  def evaluate(filaName: String): JList[String] = {
+    val absPath = SparkFiles.get(filaName)
+    val fileArray = new File(absPath).list()
     if (fileArray != null) Arrays.asList(fileArray: _*) else new ArrayList[String]()
   }
 }

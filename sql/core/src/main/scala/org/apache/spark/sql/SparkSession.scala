@@ -243,6 +243,13 @@ class SparkSession private(
   @Unstable
   private[sql] def artifactManager: ArtifactManager = sessionState.artifactManager
 
+  // Copy over global initial resources to this session. Often used by spark-submit.
+  sessionState.artifactManager.withResources {
+    sparkContext.files.foreach(sparkContext.addFile)
+    sparkContext.jars.foreach(sparkContext.addJar)
+    sparkContext.archives.foreach(sparkContext.addArchive)
+  }
+
   /** @inheritdoc */
   def newSession(): SparkSession = {
     new SparkSession(
