@@ -759,6 +759,17 @@ object SQLConf {
       .checkValue(_ > 0, "The initial number of partitions must be positive.")
       .createOptional
 
+  lazy val TRIM_COLLATION_ENABLED =
+    buildConf("spark.sql.collation.trim.enabled")
+      .internal()
+      .doc(
+        "Trim collation feature is under development and its use should be done under this" +
+        "feature flag. Trim collation trims trailing whitespaces from strings."
+      )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
   val DEFAULT_COLLATION =
     buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
       .doc("Sets default collation to use for string literals, parameter markers or the string" +
@@ -3171,26 +3182,12 @@ object SQLConf {
 
   val PYSPARK_PLOT_MAX_ROWS =
     buildConf("spark.sql.pyspark.plotting.max_rows")
-      .doc(
-        "The visual limit on top-n-based plots. If set to 1000, the first 1000 data points " +
-        "will be used for plotting.")
+      .doc("The visual limit on plots. If set to 1000 for top-n-based plots (pie, bar, barh), " +
+        "the first 1000 data points will be used for plotting. For sampled-based plots " +
+        "(scatter, area, line), 1000 data points will be randomly sampled.")
       .version("4.0.0")
       .intConf
       .createWithDefault(1000)
-
-  val PYSPARK_PLOT_SAMPLE_RATIO =
-    buildConf("spark.sql.pyspark.plotting.sample_ratio")
-      .doc(
-        "The proportion of data that will be plotted for sample-based plots. It is determined " +
-          "based on spark.sql.pyspark.plotting.max_rows if not explicitly set."
-      )
-      .version("4.0.0")
-      .doubleConf
-      .checkValue(
-        ratio => ratio >= 0.0 && ratio <= 1.0,
-        "The value should be between 0.0 and 1.0 inclusive."
-      )
-      .createOptional
 
   val ARROW_SPARKR_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.sparkr.enabled")
@@ -3228,6 +3225,14 @@ object SQLConf {
         "grouping API such as DataFrame(.cogroup).groupby.applyInPandas because each group " +
         "becomes each ArrowRecordBatch. If set to zero or negative there is no limit.")
       .version("2.3.0")
+      .intConf
+      .createWithDefault(10000)
+
+  val ARROW_TRANSFORM_WITH_STATE_IN_PANDAS_MAX_RECORDS_PER_BATCH =
+    buildConf("spark.sql.execution.arrow.transformWithStateInPandas.maxRecordsPerBatch")
+      .doc("When using TransformWithStateInPandas, limit the maximum number of state records " +
+        "that can be written to a single ArrowRecordBatch in memory.")
+      .version("4.0.0")
       .intConf
       .createWithDefault(10000)
 
@@ -5090,6 +5095,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val SCALAR_SUBQUERY_USE_SINGLE_JOIN =
+    buildConf("spark.sql.optimizer.scalarSubqueryUseSingleJoin")
+      .internal()
+      .doc("When set to true, use LEFT_SINGLE join for correlated scalar subqueries where " +
+        "optimizer can't prove that only 1 row will be returned")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ALLOW_SUBQUERY_EXPRESSIONS_IN_LAMBDAS_AND_HIGHER_ORDER_FUNCTIONS =
     buildConf("spark.sql.analyzer.allowSubqueryExpressionsInLambdasOrHigherOrderFunctions")
       .internal()
@@ -5478,6 +5492,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
       defaultNumShufflePartitions
     }
   }
+
+  def trimCollationEnabled: Boolean = getConf(TRIM_COLLATION_ENABLED)
 
   override def defaultStringType: StringType = {
     if (getConf(DEFAULT_COLLATION).toUpperCase(Locale.ROOT) == "UTF8_BINARY") {
@@ -5898,13 +5914,14 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def pysparkPlotMaxRows: Int = getConf(PYSPARK_PLOT_MAX_ROWS)
 
-  def pysparkPlotSampleRatio: Option[Double] = getConf(PYSPARK_PLOT_SAMPLE_RATIO)
-
   def arrowSparkREnabled: Boolean = getConf(ARROW_SPARKR_EXECUTION_ENABLED)
 
   def arrowPySparkFallbackEnabled: Boolean = getConf(ARROW_PYSPARK_FALLBACK_ENABLED)
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
+
+  def arrowTransformWithStateInPandasMaxRecordsPerBatch: Int =
+    getConf(ARROW_TRANSFORM_WITH_STATE_IN_PANDAS_MAX_RECORDS_PER_BATCH)
 
   def arrowUseLargeVarTypes: Boolean = getConf(ARROW_EXECUTION_USE_LARGE_VAR_TYPES)
 

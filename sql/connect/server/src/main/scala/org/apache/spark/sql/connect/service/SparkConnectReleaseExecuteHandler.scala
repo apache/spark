@@ -22,6 +22,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.connect.service.ExecuteKey
 
 class SparkConnectReleaseExecuteHandler(
     responseObserver: StreamObserver[proto.ReleaseExecuteResponse])
@@ -42,8 +43,9 @@ class SparkConnectReleaseExecuteHandler(
     // ReleaseExecute arrived after it was abandoned and timed out.
     // An asynchronous ReleastUntil operation may also arrive after ReleaseAll.
     // Because of that, make it noop and not fail if the ExecuteHolder is no longer there.
+    val executeKey = ExecuteKey(sessionHolder.userId, sessionHolder.sessionId, v.getOperationId)
     val executeHolderOption =
-      sessionHolder.executeHolder(v.getOperationId).foreach { executeHolder =>
+      SparkConnectService.executionManager.getExecuteHolder(executeKey).foreach { executeHolder =>
         if (!executeHolder.reattachable) {
           throw new SparkSQLException(
             errorClass = "INVALID_CURSOR.NOT_REATTACHABLE",

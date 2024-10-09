@@ -233,8 +233,8 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     // static sql configs
     checkError(
       exception = intercept[AnalysisException](sql(s"RESET ${StaticSQLConf.WAREHOUSE_PATH.key}")),
-      condition = "_LEGACY_ERROR_TEMP_1325",
-      parameters = Map("key" -> "spark.sql.warehouse.dir"))
+      condition = "CANNOT_MODIFY_CONFIG",
+      parameters = Map("key" -> "\"spark.sql.warehouse.dir\"", "docroot" -> SPARK_DOC_ROOT))
 
   }
 
@@ -315,10 +315,16 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   }
 
   test("cannot set/unset static SQL conf") {
-    val e1 = intercept[AnalysisException](sql(s"SET ${GLOBAL_TEMP_DATABASE.key}=10"))
-    assert(e1.message.contains("Cannot modify the value of a static config"))
-    val e2 = intercept[AnalysisException](spark.conf.unset(GLOBAL_TEMP_DATABASE.key))
-    assert(e2.message.contains("Cannot modify the value of a static config"))
+    checkError(
+      exception = intercept[AnalysisException](sql(s"SET ${GLOBAL_TEMP_DATABASE.key}=10")),
+      condition = "CANNOT_MODIFY_CONFIG",
+      parameters = Map("key" -> "\"spark.sql.globalTempDatabase\"", "docroot" -> SPARK_DOC_ROOT)
+    )
+    checkError(
+      exception = intercept[AnalysisException](spark.conf.unset(GLOBAL_TEMP_DATABASE.key)),
+      condition = "CANNOT_MODIFY_CONFIG",
+      parameters = Map("key" -> "\"spark.sql.globalTempDatabase\"", "docroot" -> SPARK_DOC_ROOT)
+    )
   }
 
   test("SPARK-36643: Show migration guide when attempting SparkConf") {
@@ -517,6 +523,13 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
         "confName" -> "spark.sql.session.collation.default",
         "proposals" -> "UNICODE"
       ))
+
+    withSQLConf(SQLConf.TRIM_COLLATION_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException](sql(s"SET COLLATION UNICODE_CI_RTRIM")),
+        condition = "UNSUPPORTED_FEATURE.TRIM_COLLATION"
+      )
+    }
   }
 
   test("SPARK-43028: config not found error") {

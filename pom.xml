@@ -84,6 +84,7 @@
     <module>common/utils</module>
     <module>common/variant</module>
     <module>common/tags</module>
+    <module>sql/connect/shims</module>
     <module>core</module>
     <module>graphx</module>
     <module>mllib</module>
@@ -120,7 +121,7 @@
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.7</asm.version>
     <slf4j.version>2.0.16</slf4j.version>
-    <log4j.version>2.22.1</log4j.version>
+    <log4j.version>2.24.1</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.4.0</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
@@ -137,7 +138,7 @@
     <kafka.version>3.8.0</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
-    <parquet.version>1.14.2</parquet.version>
+    <parquet.version>1.14.3</parquet.version>
     <orc.version>2.0.2</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.23</jetty.version>
@@ -151,7 +152,7 @@
     If you change codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
-    <codahale.metrics.version>4.2.27</codahale.metrics.version>
+    <codahale.metrics.version>4.2.28</codahale.metrics.version>
     <!-- Should be consistent with SparkBuild.scala and docs -->
     <avro.version>1.12.0</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
@@ -161,7 +162,7 @@
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
     <!-- Do not use 3.0.0: https://github.com/GoogleCloudDataproc/hadoop-connectors/issues/1114 -->
-    <gcs-connector.version>hadoop3-2.2.21</gcs-connector.version>
+    <gcs-connector.version>hadoop3-2.2.25</gcs-connector.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
     <commons.httpcore.version>4.4.16</commons.httpcore.version>
@@ -169,7 +170,7 @@
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
     <commons.collections4.version>4.4</commons.collections4.version>
-    <scala.version>2.13.14</scala.version>
+    <scala.version>2.13.15</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
     <scala-maven-plugin.version>4.9.1</scala-maven-plugin.version>
@@ -180,8 +181,8 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.17.2</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.17.2</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.18.0</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.18.0</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.7</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
@@ -226,12 +227,12 @@
     and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>17.0.0</arrow.version>
-    <ammonite.version>3.0.0-M2</ammonite.version>
+    <ammonite.version>3.0.0</ammonite.version>
     <jjwt.version>0.12.6</jjwt.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.13.3</kubernetes-client.version>
+    <kubernetes-client.version>6.13.4</kubernetes-client.version>
     <okio.version>1.17.6</okio.version>
 
     <test.java.home>${java.home}</test.java.home>
@@ -835,7 +836,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.6-5</version>
+        <version>1.5.6-6</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -3051,7 +3052,8 @@
               <arg>-explaintypes</arg>
               <arg>-release</arg>
               <arg>17</arg>
-              <arg>-Wconf:cat=deprecation:wv,any:e</arg>
+              <arg>-Wconf:any:e</arg>
+              <arg>-Wconf:cat=deprecation:wv</arg>
               <arg>-Wunused:imports</arg>
               <arg>-Wconf:cat=scaladoc:wv</arg>
               <arg>-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:e</arg>

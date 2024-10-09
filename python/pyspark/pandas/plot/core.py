@@ -215,7 +215,7 @@ class HistogramPlotBase(NumericPlotBase):
 
         # refers to org.apache.spark.ml.feature.Bucketizer#binarySearchForBuckets
         def binary_search_for_buckets(value: Column):
-            index = SF.binary_search(F.lit(bins), value)
+            index = SF.array_binary_search(F.lit(bins), value)
             bucket = F.when(index >= 0, index).otherwise(-index - 2)
             unboundErrMsg = F.lit(f"value %s out of the bins bounds: [{bins[0]}, {bins[-1]}]")
             return (

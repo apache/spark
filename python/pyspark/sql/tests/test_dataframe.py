@@ -671,8 +671,7 @@ class DataFrameTestsMixin:
                     |+---+-----+
                     ||  1|    1|
                     |+---+-----+
-                    |only showing top 1 row
-                    |"""
+                    |only showing top 1 row"""
                     self.assertEqual(re.sub(pattern, "", expected3), df.__repr__())
 
         # test when eager evaluation is enabled and _repr_html_ will be called
@@ -951,10 +950,16 @@ class DataFrameTestsMixin:
     def test_isinstance_dataframe(self):
         self.assertIsInstance(self.spark.range(1), DataFrame)
 
-    def test_checkpoint_dataframe(self):
+    def test_local_checkpoint_dataframe(self):
         with io.StringIO() as buf, redirect_stdout(buf):
             self.spark.range(1).localCheckpoint().explain()
             self.assertIn("ExistingRDD", buf.getvalue())
+
+    def test_local_checkpoint_dataframe_with_storage_level(self):
+        # We don't have a way to reach into the server and assert the storage level server side, but
+        # this test should cover for unexpected errors in the API.
+        df = self.spark.range(10).localCheckpoint(eager=True, storageLevel=StorageLevel.DISK_ONLY)
+        df.collect()
 
     def test_transpose(self):
         df = self.spark.createDataFrame([{"a": "x", "b": "y", "c": "z"}])
