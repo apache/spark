@@ -581,8 +581,7 @@ class FileSourceSQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSe
     val commandResults = df.queryExecution.optimizedPlan.collect {
       case _ @ CommandResult(_, _, commandPhysicalPlan, _) =>
         commandPhysicalPlan match {
-          case d: DataWritingCommandExec => d.asInstanceOf[DataWritingCommandExec].cmd
-            .asInstanceOf[InsertIntoHadoopFsRelationCommand]
+          case d: DataWritingCommandExec => d.cmd.asInstanceOf[InsertIntoHadoopFsRelationCommand]
           case a: AdaptiveSparkPlanExec if a.inputPlan.isInstanceOf[DataWritingCommandExec] =>
             a.inputPlan.asInstanceOf[DataWritingCommandExec].cmd
               .asInstanceOf[InsertIntoHadoopFsRelationCommand]
