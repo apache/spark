@@ -574,17 +574,18 @@ case class StreamingSymmetricHashJoinExec(
       Predicate.create(preJoinFilterExpr.getOrElse(Literal(true)), inputAttributes).eval _
 
     private val joinStateManager = new SymmetricHashJoinStateManager(
-      joinSide,
-      inputAttributes,
-      joinKeys,
-      stateInfo,
-      storeConf,
-      hadoopConfBcast.value.value,
-      partitionId,
-      keyToNumValuesStateStoreCkptId,
-      keyWithIndexToValueStateStoreCkptId,
-      stateFormatVersion,
-      skippedNullValueCount)
+      joinSide = joinSide,
+      inputValueAttributes = inputAttributes,
+      joinKeys = joinKeys,
+      stateInfo = stateInfo,
+      storeConf = storeConf,
+      hadoopConf = hadoopConfBcast.value.value,
+      partitionId = partitionId,
+      keyToNumValuesStateStoreCkptId = keyToNumValuesStateStoreCkptId,
+      keyWithIndexToValueStateStoreCkptId = keyWithIndexToValueStateStoreCkptId,
+      stateFormatVersion = stateFormatVersion,
+      skippedNullValueCount = skippedNullValueCount)
+
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
     private[this] val stateKeyWatermarkPredicateFunc = stateWatermarkPredicate match {

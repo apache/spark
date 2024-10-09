@@ -124,8 +124,8 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
 
   override def commit(): Long = innerStore.commit()
   override def metrics: StateStoreMetrics = innerStore.metrics
-  override def getStateStoreCheckpointInfo: StateStoreCheckpointInfo = {
-    val ret = innerStore.getStateStoreCheckpointInfo
+  override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {
+    val ret = innerStore.getStateStoreCheckpointInfo()
     CkptIdCollectingStateStoreWrapper.addCheckpointInfo(ret)
     ret
   }

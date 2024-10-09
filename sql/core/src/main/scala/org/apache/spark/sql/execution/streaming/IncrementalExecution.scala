@@ -134,6 +134,8 @@ class IncrementalExecution(
   /** Get the state info of the next stateful operator */
   private def nextStatefulOperationStateInfo(): StatefulOperatorStateInfo = {
     val operatorId = statefulOperatorId.getAndIncrement()
+    // TODO When state store checkpoint format V2 is used, after state store checkpoint ID is
+    // stored to the commit logs, we should assert the ID is not empty if it is not batch 0
     val ret = StatefulOperatorStateInfo(
       checkpointLocation,
       runId,

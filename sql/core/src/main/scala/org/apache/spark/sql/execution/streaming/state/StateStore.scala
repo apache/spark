@@ -191,9 +191,7 @@ trait StateStore extends ReadStateStore {
   def metrics: StateStoreMetrics
 
   /** Return information on recently generated checkpoints */
-  def getStateStoreCheckpointInfo: StateStoreCheckpointInfo = {
-    StateStoreCheckpointInfo(-1, -1, None, None)
-  }
+  def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo
 
   /**
    * Whether all updates have been committed
@@ -238,6 +236,10 @@ case class StateStoreMetrics(
     memoryUsedBytes: Long,
     customMetrics: Map[StateStoreCustomMetric, Long])
 
+/**
+ * State store checkpoint information, used to pass checkpointing information from executors
+ * to the driver after execution.
+ */
 case class StateStoreCheckpointInfo(
     partitionId: Int,
     batchVersion: Long,
@@ -367,8 +369,8 @@ case class RangeKeyScanStateEncoderSpec(
  *   version of the data can be accessed. It is the responsible of the provider to populate
  *   this store with context information like the schema of keys and values, etc.
  *
- *   If the checkpoint format version 2 is used, an additional argument `checkponitID` may be
- *   provided as part of `getStore(version, checkpoinId)`. The provider needs to guarantee
+ *   If the checkpoint format version 2 is used, an additional argument `checkpointID` may be
+ *   provided as part of `getStore(version, checkpointID)`. The provider needs to guarantee
  *   that the loaded version is of this unique ID. It needs to load the version for this specific
  *   ID from the checkpoint if needed.
  *
@@ -413,8 +415,10 @@ trait StateStoreProvider {
   /** Called when the provider instance is unloaded from the executor */
   def close(): Unit
 
-  /** Return an instance of [[StateStore]] representing state data of the given version.
-   * If `stateStoreCkptId` is provided, the instance also needs to match the ID. */
+  /**
+   * Return an instance of [[StateStore]] representing state data of the given version.
+   * If `stateStoreCkptId` is provided, the instance also needs to match the ID.
+   * */
   def getStore(
       version: Long,
       stateStoreCkptId: Option[String] = None): StateStore

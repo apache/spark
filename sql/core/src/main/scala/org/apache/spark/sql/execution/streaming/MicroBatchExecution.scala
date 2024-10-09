@@ -906,6 +906,10 @@ class MicroBatchExecution(
    */
   protected def markMicroBatchExecutionStart(execCtx: MicroBatchExecutionContext): Unit = {}
 
+  /**
+   * Store the state store checkpoint id for a finishing batch to `currentStateStoreCkptId`,
+   * which will be retrieved later when the next batch starts.
+   */
   private def updateStateStoreCkptIdForOperator(
       execCtx: MicroBatchExecutionContext,
       opId: Long,
@@ -917,12 +921,19 @@ class MicroBatchExecution(
         s"Batch version ${execCtx.batchId} should generate state store checkpoint " +
           s"version ${execCtx.batchId + 1} but we see ${v}")
     }
-    currentStateStoreCkptId.put(opId, checkpointInfo.map { c =>
-      assert(c.stateStoreCkptId.isDefined)
-      c.stateStoreCkptId.get
-    })
+    val ckptIds = checkpointInfo.map { info =>
+      assert(info.stateStoreCkptId.isDefined)
+      info.stateStoreCkptId.get
+    }
+    currentStateStoreCkptId.put(opId, ckptIds)
   }
 
+  /**
+   * Walk the query plan `latestExecPlan` to find out a StateStoreWriter operator. Retrieve
+   * the state store checkpoint id from the operator and update it to `currentStateStoreCkptId`.
+   * @param execCtx
+   * @param latestExecPlan
+   */
   private def updateStateStoreCkptId(
       execCtx: MicroBatchExecutionContext,
       latestExecPlan: SparkPlan): Unit = {
@@ -943,7 +954,7 @@ class MicroBatchExecution(
   protected def markMicroBatchEnd(execCtx: MicroBatchExecutionContext): Unit = {
     val latestExecPlan = execCtx.executionPlan.executedPlan
     watermarkTracker.updateWatermark(latestExecPlan)
-    if (sparkSession.sessionState.conf.stateStoreCheckpointFormatVersion >= 2) {
+    if (StatefulOperatorStateInfo.enableStateStoreCheckpointIds(sparkSession.sessionState.conf)) {
       updateStateStoreCkptId(execCtx, latestExecPlan)
     }
     execCtx.reportTimeTaken("commitOffsets") {

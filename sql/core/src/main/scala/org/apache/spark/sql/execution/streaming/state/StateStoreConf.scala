@@ -22,7 +22,7 @@ import org.apache.spark.sql.internal.SQLConf
 
 /** A class that contains configuration parameters for [[StateStore]]s. */
 class StateStoreConf(
-    @transient private val sqlConf: SQLConf,
+    @transient private[state] val sqlConf: SQLConf,
     val extraOptions: Map[String, String] = Map.empty)
   extends Serializable {
 

@@ -222,7 +222,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       StateStoreMetrics(mapToUpdate.size(), metricsFromProvider("memoryUsedBytes"), customMetrics)
     }
 
-    override def getStateStoreCheckpointInfo: StateStoreCheckpointInfo = {
+    override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {
       StateStoreCheckpointInfo(id.partitionId, newVersion, None, None)
     }
 
@@ -260,6 +260,11 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
   /** Get the state store for making updates to create a new `version` of the store. */
   override def getStore(version: Long, uniqueId: Option[String] = None): StateStore = {
+    if (uniqueId.isDefined) {
+      throw QueryExecutionErrors.cannotLoadStore(new SparkException(
+        "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1 " +
+        "but a state store checkpointID is passed in"))
+    }
     val newMap = getLoadedMapForStore(version)
     logInfo(log"Retrieved version ${MDC(LogKeys.STATE_STORE_VERSION, version)} " +
       log"of ${MDC(LogKeys.STATE_STORE_PROVIDER, HDFSBackedStateStoreProvider.this)} for update")
@@ -334,6 +339,11 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): Unit = {
+    assert(
+      storeConf.enableStateStoreCheckpointIds,
+      "HDFS State Store Provider doesn't support checkpointFormatVersion >= 2 " +
+        s"checkpointFormatVersion ${storeConf.sqlConf.stateStoreCheckpointFormatVersion}")
+
     this.stateStoreId_ = stateStoreId
     this.keySchema = keySchema
     this.valueSchema = valueSchema

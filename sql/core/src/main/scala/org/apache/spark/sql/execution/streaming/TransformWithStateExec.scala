@@ -548,7 +548,7 @@ case class TransformWithStateExec(
               DUMMY_VALUE_ROW_SCHEMA,
               NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
               version = stateInfo.get.storeVersion,
-              stateStoreCkptId = stateInfo.get.getStateStoreCkptId(partitionId).map(_(0)),
+              stateStoreCkptId = stateInfo.get.getStateStoreCkptId(partitionId).map(_.head),
               useColumnFamilies = true,
               storeConf = storeConf,
               hadoopConf = hadoopConfBroadcast.value.value

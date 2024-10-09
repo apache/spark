@@ -333,7 +333,6 @@ class RocksDB(
       }
       if (enableStateStoreCheckpointIds) {
         lastCommitBasedStateStoreCkptId = None
-        lastCommittedStateStoreCkptId = None
         loadedStateStoreCkptId = stateStoreCkptId
         sessionStateStoreCkptId = Some(java.util.UUID.randomUUID.toString)
       }
@@ -842,6 +841,11 @@ class RocksDB(
   /** Get the write buffer manager and cache */
   def getWriteBufferManagerAndCache(): (WriteBufferManager, Cache) = (writeBufferManager, lruCache)
 
+  /**
+   * Called by RocksDBStateStoreProvider to retrieve the checkpoint information to be
+   * passed back to the stateful operator. It will return the information for the latest
+   * state store checkpointing.
+   */
   def getLatestCheckpointInfo(partitionId: Int): StateStoreCheckpointInfo = {
     StateStoreCheckpointInfo(
       partitionId,

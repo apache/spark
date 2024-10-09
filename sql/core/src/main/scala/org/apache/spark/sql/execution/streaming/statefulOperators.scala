@@ -146,6 +146,10 @@ trait StateStoreReader extends StatefulOperator with Logging {
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 }
 
+/**
+ * Used to pass state store checkpoint information to load the correct state store checkpoint for a
+ * stateful operator. Will be passed from the driver to exeuctors to load state store.
+ */
 case class StatefulOpStateStoreCheckpointInfo(
     partitionId: Int,
     batchVersion: Long,
@@ -240,7 +244,13 @@ trait StateStoreWriter
    * class class [[StatefulOperatorStateInfo]]
    */
   def getStateStoreCheckpointInfo(): Array[StatefulOpStateStoreCheckpointInfo] = {
-    assert(StatefulOperatorStateInfo.enableStateStoreCheckpointIds(conf))
+    assert(
+      StatefulOperatorStateInfo.enableStateStoreCheckpointIds(conf),
+      "Should not fetch checkpoint Info if the state store checkpoint IDs are not enabled")
+    // Multiple entries can be returned for the same partitionID due to task speculative execution
+    // or task failures. All of them should represent a valid state store checkpoint and we just
+    // pick one of them.
+    // In the end, we sort them by partitionID.
     val ret = checkpointInfoAccumulator
       .value
       .asScala
@@ -333,13 +343,18 @@ trait StateStoreWriter
       longMetric(metric.name) += value
     }
 
-    val ssInfo = store.getStateStoreCheckpointInfo
-    setStateStoreCheckpointInfo(
-      StatefulOpStateStoreCheckpointInfo(
-        ssInfo.partitionId,
-        ssInfo.batchVersion,
-        ssInfo.stateStoreCkptId.map(Array( _)),
-        ssInfo.baseStateStoreCkptId.map(Array(_))))
+    if (StatefulOperatorStateInfo.enableStateStoreCheckpointIds(conf)) {
+      // Set the state store checkpoint information for the driver to collect
+      val ssInfo = store.getStateStoreCheckpointInfo()
+      setStateStoreCheckpointInfo(
+        StatefulOpStateStoreCheckpointInfo(
+          ssInfo.partitionId,
+          ssInfo.batchVersion,
+          ssInfo.stateStoreCkptId.map(Array(_)),
+          ssInfo.baseStateStoreCkptId.map(Array(_))
+        )
+      )
+    }
   }
 
   private def stateStoreCustomMetrics: Map[String, SQLMetric] = {

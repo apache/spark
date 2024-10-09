@@ -305,7 +305,7 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
-    override def getStateStoreCheckpointInfo: StateStoreCheckpointInfo = {
+    override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {
       val checkpointInfo = rocksDB.getLatestCheckpointInfo(id.partitionId)
       checkpointInfo
     }
@@ -392,7 +392,7 @@ private[sql] class RocksDBStateStoreProvider
       }
       rocksDB.load(
         version,
-        if (storeConf.enableStateStoreCheckpointIds) uniqueId else None)
+        stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None)
       new RocksDBStateStore(version)
     }
     catch {
@@ -414,8 +414,8 @@ private[sql] class RocksDBStateStoreProvider
       }
       rocksDB.load(
         version,
-        if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
-        true)
+        stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
+        readOnly = true)
       new RocksDBStateStore(version)
     }
     catch {

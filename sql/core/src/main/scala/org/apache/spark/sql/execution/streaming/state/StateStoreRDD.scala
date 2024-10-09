@@ -91,7 +91,7 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
     val inputIter = dataRDD.iterator(partition, ctxt)
     val store = StateStore.getReadOnly(
       storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
-      stateStoreCkptIds.map(_(partition.index)(0)),
+      stateStoreCkptIds.map(_(partition.index).head),
       useColumnFamilies, storeConf, hadoopConfBroadcast.value.value)
     storeReadFunction(store, inputIter)
   }
@@ -129,7 +129,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     val inputIter = dataRDD.iterator(partition, ctxt)
     val store = StateStore.get(
       storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
-      uniqueId.map(_(partition.index)(0)),
+      uniqueId.map(_(partition.index).head),
       useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
       useMultipleValuesPerKey)
     storeUpdateFunction(store, inputIter)
