@@ -504,9 +504,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
 
       {
         statement =>
-          val jarFile = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
           val queries = Seq(
-            s"ADD JAR $jarFile",
             "CREATE TABLE smallKV(key INT, val STRING) USING hive",
             s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE smallKV",
             """CREATE TABLE addJar(key string)

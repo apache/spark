@@ -159,15 +159,14 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
 
           assert(Thread.currentThread().getContextClassLoader eq sparkClassLoader)
 
-          // JAR will be loaded at first usage, and it will change the current thread's context
-          // classloader to jar classloader in sharedState. (see SessionState.addJar for details).
-          // However all verification queries are using DF, which will change the classloader back
-          // to sparkClassLoader when its done (see the usage of sparkSession.withActive in
-          // SQLExecution).
+          // JAR will be loaded at first usage, and it will change the current thread's
+          // context classloader to jar classloader in sharedState.
+          // See SessionState.addJar for details.
           udfInfo.fnVerifyQuery()
 
-          // Current thread's context classloader is changed back to sparkClassLoader.
-          assert(Thread.currentThread().getContextClassLoader eq sparkClassLoader)
+          assert(Thread.currentThread().getContextClassLoader ne sparkClassLoader)
+          assert(Thread.currentThread().getContextClassLoader eq
+            spark.sharedState.jarClassLoader)
 
           val udfExpr = udfInfo.fnCreateHiveUDFExpression()
           // force initializing - this is what we do in HiveSessionCatalog
