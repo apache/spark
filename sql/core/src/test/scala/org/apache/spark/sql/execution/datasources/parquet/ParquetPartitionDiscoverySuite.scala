@@ -111,7 +111,7 @@ abstract class ParquetPartitionDiscoverySuite
       "hdfs://host:9000/path/a=10/b=20",
       "hdfs://host:9000/path/a=10.5/b=hello")
 
-    var exception = intercept[AssertionError] {
+    var exception = intercept[SparkRuntimeException] {
       parsePartitions(
         paths.map(new Path(_)), true, Set.empty[Path], None, true, true, timeZoneId, false)
     }
@@ -173,7 +173,7 @@ abstract class ParquetPartitionDiscoverySuite
       "hdfs://host:9000/path/a=10/b=20",
       "hdfs://host:9000/path/path1")
 
-    exception = intercept[AssertionError] {
+    exception = intercept[SparkRuntimeException] {
       parsePartitions(
         paths.map(new Path(_)),
         true,
@@ -197,7 +197,7 @@ abstract class ParquetPartitionDiscoverySuite
       "hdfs://host:9000/tmp/tables/nonPartitionedTable1",
       "hdfs://host:9000/tmp/tables/nonPartitionedTable2")
 
-    exception = intercept[AssertionError] {
+    exception = intercept[SparkRuntimeException] {
       parsePartitions(
         paths.map(new Path(_)),
         true,
@@ -878,7 +878,7 @@ abstract class ParquetPartitionDiscoverySuite
 
       checkAnswer(twoPartitionsDF, df.filter("b != 3"))
 
-      intercept[AssertionError] {
+      intercept[SparkRuntimeException] {
         spark
           .read
           .parquet(
