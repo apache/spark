@@ -198,7 +198,6 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
       .filter(_.t == ItemData.TYPE_RIGHT)
       .map(e => e.id -> e.f).toArray
 
-
     (0 until 100).foreach{_ =>
       optimizer.optimize(Iterator(batch), 1, remapInplace = false);
     }
@@ -221,13 +220,13 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
     logInfo(log"Random test accuracy is ${MDC(ACCURACY, rndAcc)}.")
     logInfo(log"Actual test accuracy is ${MDC(ACCURACY, acc)}.")
 
-    assert(trueAcc > 0.98)
+    assert(0.98 < trueAcc)
     assert(0.49 < rndAcc && rndAcc < 0.51)
-    assert(acc > 0.8)
+    assert(0.8 < acc)
   }
 
   test("LMF optimizer implicit") {
-    val random = new Random(239)
+    val random = new Random(240)
     val dim = 5
     val (trueUserFactors, trueItemFactors, trainData, testData) =
       LMFSuite.genData(4096, 32, 16, dim,
@@ -249,6 +248,14 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
     val batch = LongPairMulti(0, trainData.map(_._1), trainData.map(_._2),
       null, trainData.map(_._4))
 
+    val rndUserFactors = optimizer.flush()
+      .filter(_.t == ItemData.TYPE_LEFT)
+      .map(e => e.id -> e.f).toArray
+
+    val rndItemFactors = optimizer.flush()
+      .filter(_.t == ItemData.TYPE_RIGHT)
+      .map(e => e.id -> e.f).toArray
+
     (0 until 100).foreach{_ =>
       optimizer.optimize(Iterator(batch), 1, remapInplace = false);
     }
@@ -263,11 +270,16 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
 
     val trueEpr = LMFSuite.epr(testData, useBias = true,
       trueUserFactors, trueItemFactors)
+    val rndEpr = LMFSuite.epr(testData, opts.useBias, rndUserFactors, rndItemFactors)
     val epr = LMFSuite.epr(testData, opts.useBias, userFactors, itemFactors)
 
     logInfo(log"True test epr is ${MDC(EPR, trueEpr)}.")
-    logInfo(log"Actual test epr is ${MDC(EPR, epr)}.")
-    assert(epr > 0.65)
+    logInfo(log"Random test epr is ${MDC(EPR, epr)}.")
+    logInfo(log"Actual test epr is ${MDC(EPR, rndEpr)}.")
+
+    assert(0.95 < trueEpr)
+    assert(0.45 < rndEpr && rndEpr < 0.55)
+    assert(0.95 < epr)
   }
 
 }
