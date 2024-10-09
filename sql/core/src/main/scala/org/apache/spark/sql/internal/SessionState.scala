@@ -106,14 +106,7 @@ private[sql] class SessionState(
   // when connecting to ThriftServer.
   lazy val streamingQueryManager: StreamingQueryManager = streamingQueryManagerBuilder()
 
-  private[sql] var _artifactManager: Option[ArtifactManager] = None
-
-  def artifactManager: ArtifactManager = {
-    _artifactManager.getOrElse {
-      _artifactManager = Some(artifactManagerBuilder())
-      _artifactManager.get
-    }
-  }
+  lazy val artifactManager: ArtifactManager = artifactManagerBuilder()
 
   def catalogManager: CatalogManager = analyzer.catalogManager
 

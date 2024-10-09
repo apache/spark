@@ -244,18 +244,14 @@ private[hive] class TestHiveSparkSession(
     new TestHiveSparkSession(sc, Some(sharedState), None, loadTestTables)
   }
 
-  override def cloneSession(reuseArtifactManager: Boolean = false): SparkSession = withActive {
+  override def cloneSession(): SparkSession = withActive {
     val result = new TestHiveSparkSession(
       sparkContext,
       Some(sharedState),
       Some(sessionState),
       loadTestTables)
     result.sessionState // force copy of SessionState
-    if (reuseArtifactManager) {
-      result.sessionState._artifactManager = Some(sessionState.artifactManager)
-    } else {
-      result.sessionState.artifactManager // force copy of ArtifactManager
-    }
+    result.sessionState.artifactManager // force copy of ArtifactManager and its resources
     result
   }
 

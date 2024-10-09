@@ -210,12 +210,7 @@ abstract class StreamExecution(
     this, s"spark.streaming.${Option(name).getOrElse(id)}")
 
   /** Isolated spark session to run the batches with. */
-  private val sparkSessionForStream = {
-    // Reuse the parent session's Artifact Manager to speed up the cloning.
-    // This is safe because the child session will be used internally and only for batch actions,
-    // which is safe from being modified by user.
-    sparkSession.cloneSession(reuseArtifactManager = true)
-  }
+  private val sparkSessionForStream = sparkSession.cloneSession()
 
   /**
    * The thread that runs the micro-batches of this stream. Note that this thread must be
