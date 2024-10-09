@@ -120,6 +120,101 @@ struct<>
 
 
 -- !query
+create temporary view join_test_t1 as select * from values (1) as grouping(a)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create temporary view join_test_t2 as select * from values (1) as grouping(a)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create temporary view join_test_t3 as select * from values (1) as grouping(a)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create temporary view join_test_empty_table as select a from join_test_t2 where false
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create temporary view lateral_test_t1(c1, c2)
+  as values (0, 1), (1, 2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create temporary view lateral_test_t2(c1, c2)
+  as values (0, 2), (0, 3)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create temporary view lateral_test_t3(c1, c2)
+  as values (0, array(0, 1)), (1, array(2)), (2, array()), (null, array(4))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create temporary view lateral_test_t4(c1, c2)
+  as values (0, 1), (0, 2), (1, 1), (1, 3)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create temporary view natural_join_test_t1 as select * from values
+  ("one", 1), ("two", 2), ("three", 3) as natural_join_test_t1(k, v1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create temporary view natural_join_test_t2 as select * from values
+  ("one", 1), ("two", 22), ("one", 5) as natural_join_test_t2(k, v2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create temporary view natural_join_test_t3 as select * from values
+  ("one", 4), ("two", 5), ("one", 6) as natural_join_test_t3(k, v3)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 table t
 |> select 1 as x
 -- !query schema
@@ -924,7 +1019,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 -- !query
 table t
-|> tablesample (-100 percent)
+|> tablesample (-100 percent) repeatable (0)
 -- !query schema
 struct<>
 -- !query output
@@ -938,8 +1033,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 12,
-    "stopIndex" : 37,
-    "fragment" : "tablesample (-100 percent)"
+    "stopIndex" : 52,
+    "fragment" : "tablesample (-100 percent) repeatable (0)"
   } ]
 }
 
@@ -1055,6 +1150,525 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "startIndex" : 12,
     "stopIndex" : 43,
     "fragment" : "tablesample (200) repeatable (0)"
+  } ]
+}
+
+
+-- !query
+table join_test_t1
+|> inner join join_test_empty_table
+-- !query schema
+struct<a:int,a:int>
+-- !query output
+
+
+
+-- !query
+table join_test_t1
+|> cross join join_test_empty_table
+-- !query schema
+struct<a:int,a:int>
+-- !query output
+
+
+
+-- !query
+table join_test_t1
+|> left outer join join_test_empty_table
+-- !query schema
+struct<a:int,a:int>
+-- !query output
+1	NULL
+
+
+-- !query
+table join_test_t1
+|> right outer join join_test_empty_table
+-- !query schema
+struct<a:int,a:int>
+-- !query output
+
+
+
+-- !query
+table join_test_t1
+|> full outer join join_test_empty_table using (a)
+-- !query schema
+struct<a:int>
+-- !query output
+1
+
+
+-- !query
+table join_test_t1
+|> full outer join join_test_empty_table on (join_test_t1.a = join_test_empty_table.a)
+-- !query schema
+struct<a:int,a:int>
+-- !query output
+1	NULL
+
+
+-- !query
+table join_test_t1
+|> left semi join join_test_empty_table
+-- !query schema
+struct<a:int>
+-- !query output
+
+
+
+-- !query
+table join_test_t1
+|> left anti join join_test_empty_table
+-- !query schema
+struct<a:int>
+-- !query output
+1
+
+
+-- !query
+select * from join_test_t1 where true
+|> inner join join_test_empty_table
+-- !query schema
+struct<a:int,a:int>
+-- !query output
+
+
+
+-- !query
+select 1 as x, 2 as y
+|> inner join (select 1 as x, 4 as y) using (x)
+-- !query schema
+struct<x:int,y:int,y:int>
+-- !query output
+1	2	4
+
+
+-- !query
+table join_test_t1
+|> inner join (join_test_t2 jt2 inner join join_test_t3 jt3 using (a)) using (a)
+|> select a, join_test_t1.a, jt2.a, jt3.a
+-- !query schema
+struct<a:int,a:int,a:int,a:int>
+-- !query output
+1	1	1	1
+
+
+-- !query
+table join_test_t1
+|> inner join join_test_t2 tablesample (100 percent) repeatable (0) jt2 using (a)
+-- !query schema
+struct<a:int>
+-- !query output
+1
+
+
+-- !query
+table join_test_t1
+|> inner join (select 1 as a) tablesample (100 percent) repeatable (0) jt2 using (a)
+-- !query schema
+struct<a:int>
+-- !query output
+1
+
+
+-- !query
+table join_test_t1
+|> join join_test_t1 using (a)
+-- !query schema
+struct<a:int>
+-- !query output
+1
+
+
+-- !query
+table lateral_test_t1
+|> join lateral (select c1)
+-- !query schema
+struct<c1:int,c2:int,c1:int>
+-- !query output
+0	1	0
+1	2	1
+
+
+-- !query
+table lateral_test_t1
+|> join lateral (select c1 from lateral_test_t2)
+-- !query schema
+struct<c1:int,c2:int,c1:int>
+-- !query output
+0	1	0
+0	1	0
+1	2	0
+1	2	0
+
+
+-- !query
+table lateral_test_t1
+|> join lateral (select lateral_test_t1.c1 from lateral_test_t2)
+-- !query schema
+struct<c1:int,c2:int,c1:int>
+-- !query output
+0	1	0
+0	1	0
+1	2	1
+1	2	1
+
+
+-- !query
+table lateral_test_t1
+|> join lateral (select lateral_test_t1.c1 + t2.c1 from lateral_test_t2 t2)
+-- !query schema
+struct<c1:int,c2:int,(outer(lateral_test_t1.c1) + c1):int>
+-- !query output
+0	1	0
+0	1	0
+1	2	1
+1	2	1
+
+
+-- !query
+table lateral_test_t1
+|> join lateral (select *)
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+0	1
+1	2
+
+
+-- !query
+table lateral_test_t1
+|> join lateral (select * from lateral_test_t2)
+-- !query schema
+struct<c1:int,c2:int,c1:int,c2:int>
+-- !query output
+0	1	0	2
+0	1	0	3
+1	2	0	2
+1	2	0	3
+
+
+-- !query
+table lateral_test_t1
+|> join lateral (select lateral_test_t1.* from lateral_test_t2)
+-- !query schema
+struct<c1:int,c2:int,c1:int,c2:int>
+-- !query output
+0	1	0	1
+0	1	0	1
+1	2	1	2
+1	2	1	2
+
+
+-- !query
+table lateral_test_t1
+|> join lateral (select lateral_test_t1.*, t2.* from lateral_test_t2 t2)
+-- !query schema
+struct<c1:int,c2:int,c1:int,c2:int,c1:int,c2:int>
+-- !query output
+0	1	0	1	0	2
+0	1	0	1	0	3
+1	2	1	2	0	2
+1	2	1	2	0	3
+
+
+-- !query
+table lateral_test_t1
+|> join lateral_test_t2
+|> join lateral (select lateral_test_t1.c2 + lateral_test_t2.c2)
+-- !query schema
+struct<c1:int,c2:int,c1:int,c2:int,(outer(lateral_test_t1.c2) + outer(lateral_test_t2.c2)):int>
+-- !query output
+0	1	0	2	3
+0	1	0	3	4
+1	2	0	2	4
+1	2	0	3	5
+
+
+-- !query
+table natural_join_test_t1
+|> natural join natural_join_test_t2
+|> where k = "one"
+-- !query schema
+struct<k:string,v1:int,v2:int>
+-- !query output
+one	1	1
+one	1	5
+
+
+-- !query
+table natural_join_test_t1
+|> natural join natural_join_test_t2 nt2
+|> select natural_join_test_t1.*
+-- !query schema
+struct<k:string,v1:int>
+-- !query output
+one	1
+one	1
+two	2
+
+
+-- !query
+table natural_join_test_t1
+|> natural join natural_join_test_t2 nt2
+|> natural join natural_join_test_t3 nt3
+|> select natural_join_test_t1.*, nt2.*, nt3.*
+-- !query schema
+struct<k:string,v1:int,k:string,v2:int,k:string,v3:int>
+-- !query output
+one	1	one	1	one	4
+one	1	one	1	one	6
+one	1	one	5	one	4
+one	1	one	5	one	6
+two	2	two	22	two	5
+
+
+-- !query
+table join_test_t1
+|> inner join join_test_empty_table
+   inner join join_test_empty_table
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'inner'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+table join_test_t1
+|> select 1 + 2 as result
+|> full outer join join_test_empty_table on (join_test_t1.a = join_test_empty_table.a)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`join_test_t1`.`a`",
+    "proposal" : "`result`, `join_test_empty_table`.`a`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 91,
+    "stopIndex" : 104,
+    "fragment" : "join_test_t1.a"
+  } ]
+}
+
+
+-- !query
+table join_test_t1 jt
+|> cross join (select * from jt)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'jt'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+table t
+|> union all table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+0	abc
+1	def
+1	def
+
+
+-- !query
+table t
+|> union table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+(select * from t)
+|> union all table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+0	abc
+1	def
+1	def
+
+
+-- !query
+(select * from t)
+|> union table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+values (0, 'abc') tab(x, y)
+|> union all table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+0	abc
+1	def
+
+
+-- !query
+values (0, 1) tab(x, y)
+|> union table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	1
+0	abc
+1	def
+
+
+-- !query
+(select * from t)
+|> union all (select * from t)
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+0	abc
+1	def
+1	def
+
+
+-- !query
+table t
+|> except all table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+
+
+
+-- !query
+table t
+|> except table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+
+
+
+-- !query
+table t
+|> intersect all table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+|> intersect table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+|> minus all table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+
+
+
+-- !query
+table t
+|> minus table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+
+
+
+-- !query
+table t
+|> select x
+|> union all table t
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "NUM_COLUMNS_MISMATCH",
+  "sqlState" : "42826",
+  "messageParameters" : {
+    "firstNumColumns" : "1",
+    "invalidNumColumns" : "2",
+    "invalidOrdinalNum" : "second",
+    "operator" : "UNION"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 40,
+    "fragment" : "table t\n|> select x\n|> union all table t"
+  } ]
+}
+
+
+-- !query
+table t
+|> union all table st
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "second",
+    "dataType1" : "\"STRUCT<i1: INT, i2: INT>\"",
+    "dataType2" : "\"STRING\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 29,
+    "fragment" : "table t\n|> union all table st"
   } ]
 }
 

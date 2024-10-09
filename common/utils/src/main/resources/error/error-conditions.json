@@ -669,6 +669,16 @@
     ],
     "sqlState" : "40000"
   },
+  "CONFLICTING_DIRECTORY_STRUCTURES" : {
+    "message" : [
+      "Conflicting directory structures detected.",
+      "Suspicious paths:",
+      "<discoveredBasePaths>",
+      "If provided paths are partition directories, please set \"basePath\" in the options of the data source to specify the root directory of the table.",
+      "If there are multiple root directories, please load them separately and then union them."
+    ],
+    "sqlState" : "KD009"
+  },
   "CONFLICTING_PARTITION_COLUMN_NAMES" : {
     "message" : [
       "Conflicting partition column names detected:",
@@ -4486,6 +4496,12 @@
       "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>."
     ],
     "sqlState" : "428EK"
+  },
+  "TRAILING_COMMA_IN_SELECT" : {
+    "message" : [
+      "Trailing comma detected in SELECT clause. Remove the trailing comma before the FROM clause."
+    ],
+    "sqlState" : "42601"
   },
   "TRANSPOSE_EXCEED_ROW_LIMIT" : {
     "message" : [
