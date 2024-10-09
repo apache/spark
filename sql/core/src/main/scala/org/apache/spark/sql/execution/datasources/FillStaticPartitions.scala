@@ -36,15 +36,15 @@ object FillStaticPartitions extends Rule[LogicalPlan] with PredicateHelper {
         val fillStaticPartitions = mutable.Map[String, String]()
 
         query foreach {
-          // exclude the case that the project contains partition column that will be computed
+          // exclude the case that the project contains partition column to be calculated
           case _ @ Project(projectList, _) =>
-            val partitionColumnContainsEval =
-              !projectList.filter(x => partitionColumns.map(_.name).contains(x.name))
-                .map { project =>
-                  val leaves = project.collectLeaves()
-                  leaves.size == 1 && leaves.head.isInstanceOf[AttributeReference]
-                }.reduceLeft(_ && _)
-            if (partitionColumnContainsEval) {
+            val partitionColumnNotContainsEval = projectList.filter(x => partitionColumns
+                .map(_.name).contains(x.name)).map { project =>
+              val leaves = project.collectLeaves()
+              leaves.size == 1 && leaves.head.isInstanceOf[AttributeReference]
+              }
+            if (partitionColumnNotContainsEval.nonEmpty &&
+              !partitionColumnNotContainsEval.reduceLeft(_ && _)) {
               return i
             }
           case _ @ PhysicalOperation(_, filters,
