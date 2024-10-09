@@ -1191,7 +1191,7 @@ public final class CollationFactory {
     if (collation.supportsSpaceTrimming) {
       input = Collation.CollationSpec.applyTrimmingPolicy(input, collationId);
     }
-    if (collation.supportsSpaceTrimming) {
+    if (collation.supportsBinaryEquality) {
       return input;
     } else if (collation.supportsLowercaseEquality) {
       return CollationAwareUTF8String.lowerCaseCodePoints(input);
