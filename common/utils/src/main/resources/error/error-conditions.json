@@ -127,7 +127,7 @@
   },
   "BINARY_ARITHMETIC_OVERFLOW" : {
     "message" : [
-      "<value1> <symbol> <value2> caused overflow."
+      "<value1> <symbol> <value2> caused overflow. Use <functionName> to ignore overflow problem and return NULL."
     ],
     "sqlState" : "22003"
   },
@@ -618,6 +618,13 @@
     ],
     "sqlState" : "42703"
   },
+  "COLUMN_ORDINAL_OUT_OF_BOUNDS" : {
+    "message" : [
+      "Column ordinal out of bounds. The number of columns in the table is <attributesLength>, but the column ordinal is <ordinal>.",
+      "Attributes are the following: <attributes>."
+    ],
+    "sqlState" : "22003"
+  },
   "COMPARATOR_RETURNS_NULL" : {
     "message" : [
       "The comparator has returned a NULL for a comparison between <firstValue> and <secondValue>.",
@@ -631,6 +638,11 @@
       "Cannot process input data types for the expression: <expression>."
     ],
     "subClass" : {
+      "BAD_INPUTS" : {
+        "message" : [
+          "The input data types to <functionName> must be valid, but found the input types <dataType>."
+        ]
+      },
       "MISMATCHED_TYPES" : {
         "message" : [
           "All input types must be the same except nullable, containsNull, valueContainsNull flags, but found the input types <inputTypes>."
@@ -656,6 +668,16 @@
       "Please make sure only one streaming job runs on a specific checkpoint location at a time."
     ],
     "sqlState" : "40000"
+  },
+  "CONFLICTING_DIRECTORY_STRUCTURES" : {
+    "message" : [
+      "Conflicting directory structures detected.",
+      "Suspicious paths:",
+      "<discoveredBasePaths>",
+      "If provided paths are partition directories, please set \"basePath\" in the options of the data source to specify the root directory of the table.",
+      "If there are multiple root directories, please load them separately and then union them."
+    ],
+    "sqlState" : "KD009"
   },
   "CONFLICTING_PARTITION_COLUMN_NAMES" : {
     "message" : [
@@ -3023,7 +3045,7 @@
       },
       "MULTI_PART_NAME" : {
         "message" : [
-          "<statement> with multiple part function name(<funcName>) is not allowed."
+          "<statement> with multiple part name(<name>) is not allowed."
         ]
       },
       "OPTION_IS_INVALID" : {
@@ -3100,6 +3122,12 @@
       "Cannot create the persistent object <objName> of the type <obj> because it references to the temporary object <tempObjName> of the type <tempObj>. Please make the temporary object <tempObjName> persistent, or make the persistent object <objName> temporary."
     ],
     "sqlState" : "42K0F"
+  },
+  "INVALID_TIMEZONE" : {
+    "message" : [
+      "The timezone: <timeZone> is invalid. The timezone must be either a region-based zone ID or a zone offset. Region IDs must have the form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in the format '(+|-)HH', '(+|-)HH:mm’ or '(+|-)HH:mm:ss', e.g '-08' , '+01:00' or '-13:33:33', and must be in the range from -18:00 to +18:00. 'Z' and 'UTC' are accepted as synonyms for '+00:00'."
+    ],
+    "sqlState" : "22009"
   },
   "INVALID_TIME_TRAVEL_SPEC" : {
     "message" : [
@@ -3790,6 +3818,12 @@
     ],
     "sqlState" : "428FT"
   },
+  "PARTITION_COLUMN_NOT_FOUND_IN_SCHEMA" : {
+    "message" : [
+      "Partition column <column> not found in schema <schema>. Please provide the existing column for partitioning."
+    ],
+    "sqlState" : "42000"
+  },
   "PATH_ALREADY_EXISTS" : {
     "message" : [
       "Path <outputPath> already exists. Set mode as \"overwrite\" to overwrite the existing path."
@@ -4463,6 +4497,12 @@
     ],
     "sqlState" : "428EK"
   },
+  "TRAILING_COMMA_IN_SELECT" : {
+    "message" : [
+      "Trailing comma detected in SELECT clause. Remove the trailing comma before the FROM clause."
+    ],
+    "sqlState" : "42601"
+  },
   "TRANSPOSE_EXCEED_ROW_LIMIT" : {
     "message" : [
       "Number of rows exceeds the allowed limit of <maxValues> for TRANSPOSE. If this was intended, set <config> to at least the current row count."
@@ -4886,11 +4926,6 @@
           "Catalog <catalogName> does not support <operation>."
         ]
       },
-      "COLLATION" : {
-        "message" : [
-          "Collation is not yet supported."
-        ]
-      },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
         "message" : [
           "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY."
@@ -5116,6 +5151,11 @@
       "TRANSFORM_NON_HIVE" : {
         "message" : [
           "TRANSFORM with SERDE is only supported in hive mode."
+        ]
+      },
+      "TRIM_COLLATION" : {
+        "message" : [
+          "TRIM specifier in the collation."
         ]
       }
     },

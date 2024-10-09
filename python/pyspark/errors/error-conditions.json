@@ -802,9 +802,19 @@
       "<package_name> >= <minimum_version> must be installed; however, it was not found."
     ]
   },
+  "PANDAS_UDF_OUTPUT_EXCEEDS_INPUT_ROWS" : {
+    "message": [
+      "The Pandas SCALAR_ITER UDF outputs more rows than input rows."
+    ]
+  },
   "PIPE_FUNCTION_EXITED": {
     "message": [
       "Pipe function `<func_name>` exited with error code <error_code>."
+    ]
+  },
+  "PLOT_NOT_NUMERIC_COLUMN": {
+    "message": [
+      "Argument <arg_name> must be a numerical column for plotting, got <arg_type>."
     ]
   },
   "PYTHON_HASH_SEED_NOT_SET": {

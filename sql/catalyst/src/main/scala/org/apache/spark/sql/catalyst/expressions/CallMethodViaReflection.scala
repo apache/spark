@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch,
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeWithCaseAccentSensitivity
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -84,7 +84,7 @@ case class CallMethodViaReflection(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
               "inputName" -> toSQLId("class"),
-              "inputType" -> toSQLType(StringTypeAnyCollation),
+              "inputType" -> toSQLType(StringTypeWithCaseAccentSensitivity),
               "inputExpr" -> toSQLExpr(children.head)
             )
           )
@@ -97,7 +97,7 @@ case class CallMethodViaReflection(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
               "inputName" -> toSQLId("method"),
-              "inputType" -> toSQLType(StringTypeAnyCollation),
+              "inputType" -> toSQLType(StringTypeWithCaseAccentSensitivity),
               "inputExpr" -> toSQLExpr(children(1))
             )
           )
@@ -114,7 +114,8 @@ case class CallMethodViaReflection(
               "paramIndex" -> ordinalNumber(idx),
               "requiredType" -> toSQLType(
                 TypeCollection(BooleanType, ByteType, ShortType,
-                  IntegerType, LongType, FloatType, DoubleType, StringTypeAnyCollation)),
+                  IntegerType, LongType, FloatType, DoubleType,
+                  StringTypeWithCaseAccentSensitivity)),
               "inputSql" -> toSQLExpr(e),
               "inputType" -> toSQLType(e.dataType))
           )

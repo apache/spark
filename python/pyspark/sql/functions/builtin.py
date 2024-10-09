@@ -4921,44 +4921,44 @@ def array_agg(col: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
     >>> df.agg(sf.sort_array(sf.array_agg('c'))).show()
-    +---------------------------------+
-    |sort_array(collect_list(c), true)|
-    +---------------------------------+
-    |                        [1, 1, 2]|
-    +---------------------------------+
+    +------------------------------+
+    |sort_array(array_agg(c), true)|
+    +------------------------------+
+    |                     [1, 1, 2]|
+    +------------------------------+
 
     Example 2: Using array_agg function on a string column
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([["apple"],["apple"],["banana"]], ["c"])
     >>> df.agg(sf.sort_array(sf.array_agg('c'))).show(truncate=False)
-    +---------------------------------+
-    |sort_array(collect_list(c), true)|
-    +---------------------------------+
-    |[apple, apple, banana]           |
-    +---------------------------------+
+    +------------------------------+
+    |sort_array(array_agg(c), true)|
+    +------------------------------+
+    |[apple, apple, banana]        |
+    +------------------------------+
 
     Example 3: Using array_agg function on a column with null values
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([[1],[None],[2]], ["c"])
     >>> df.agg(sf.sort_array(sf.array_agg('c'))).show()
-    +---------------------------------+
-    |sort_array(collect_list(c), true)|
-    +---------------------------------+
-    |                           [1, 2]|
-    +---------------------------------+
+    +------------------------------+
+    |sort_array(array_agg(c), true)|
+    +------------------------------+
+    |                        [1, 2]|
+    +------------------------------+
 
     Example 4: Using array_agg function on a column with different data types
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([[1],["apple"],[2]], ["c"])
     >>> df.agg(sf.sort_array(sf.array_agg('c'))).show()
-    +---------------------------------+
-    |sort_array(collect_list(c), true)|
-    +---------------------------------+
-    |                    [1, 2, apple]|
-    +---------------------------------+
+    +------------------------------+
+    |sort_array(array_agg(c), true)|
+    +------------------------------+
+    |                 [1, 2, apple]|
+    +------------------------------+
     """
     return _invoke_function_over_columns("array_agg", col)
 
@@ -6080,7 +6080,19 @@ def count_min_sketch(
     |0000000100000000000000640000000100000002000000005D96391C00000000000000320000000000000032|
     +----------------------------------------------------------------------------------------+
 
-    Example 3: Using a random seed
+    Example 3: Using a long seed
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(100).select(
+    ...     sf.hex(sf.count_min_sketch("id", sf.lit(1.5), 0.2, 1111111111111111111))
+    ... ).show(truncate=False)
+    +----------------------------------------------------------------------------------------+
+    |hex(count_min_sketch(id, 1.5, 0.2, 1111111111111111111))                                |
+    +----------------------------------------------------------------------------------------+
+    |00000001000000000000006400000001000000020000000044078BA100000000000000320000000000000032|
+    +----------------------------------------------------------------------------------------+
+
+    Example 4: Using a random seed
 
     >>> from pyspark.sql import functions as sf
     >>> spark.range(100).select(
@@ -8700,31 +8712,31 @@ def dateadd(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     >>> spark.createDataFrame(
     ...     [('2015-04-08', 2,)], ['dt', 'add']
     ... ).select(sf.dateadd("dt", 1)).show()
-    +---------------+
-    |date_add(dt, 1)|
-    +---------------+
-    |     2015-04-09|
-    +---------------+
+    +--------------+
+    |dateadd(dt, 1)|
+    +--------------+
+    |    2015-04-09|
+    +--------------+
 
     >>> import pyspark.sql.functions as sf
     >>> spark.createDataFrame(
     ...     [('2015-04-08', 2,)], ['dt', 'add']
     ... ).select(sf.dateadd("dt", sf.lit(2))).show()
-    +---------------+
-    |date_add(dt, 2)|
-    +---------------+
-    |     2015-04-10|
-    +---------------+
+    +--------------+
+    |dateadd(dt, 2)|
+    +--------------+
+    |    2015-04-10|
+    +--------------+
 
     >>> import pyspark.sql.functions as sf
     >>> spark.createDataFrame(
     ...     [('2015-04-08', 2,)], ['dt', 'add']
     ... ).select(sf.dateadd("dt", -1)).show()
-    +----------------+
-    |date_add(dt, -1)|
-    +----------------+
-    |      2015-04-07|
-    +----------------+
+    +---------------+
+    |dateadd(dt, -1)|
+    +---------------+
+    |     2015-04-07|
+    +---------------+
     """
     days = _enum_to_value(days)
     days = lit(days) if isinstance(days, int) else days
@@ -10331,11 +10343,11 @@ def current_database() -> Column:
     Examples
     --------
     >>> spark.range(1).select(current_database()).show()
-    +----------------+
-    |current_schema()|
-    +----------------+
-    |         default|
-    +----------------+
+    +------------------+
+    |current_database()|
+    +------------------+
+    |           default|
+    +------------------+
     """
     return _invoke_function("current_database")
 
@@ -10901,7 +10913,7 @@ def unbase64(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def ltrim(col: "ColumnOrName") -> Column:
+def ltrim(col: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
     """
     Trim the spaces from left end for the specified string value.
 
@@ -10914,6 +10926,10 @@ def ltrim(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to work on.
+    trim : :class:`~pyspark.sql.Column` or str, optional
+        The trim string characters to trim, the default value is a single space
+
+        .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -10922,21 +10938,40 @@ def ltrim(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Trim the spaces
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame(["   Spark", "Spark  ", " Spark"], "STRING")
-    >>> df.select(ltrim("value").alias("r")).withColumn("length", length("r")).show()
-    +-------+------+
-    |      r|length|
-    +-------+------+
-    |  Spark|     5|
-    |Spark  |     7|
-    |  Spark|     5|
-    +-------+------+
+    >>> df.select("*", sf.ltrim("value")).show()
+    +--------+------------+
+    |   value|ltrim(value)|
+    +--------+------------+
+    |   Spark|       Spark|
+    | Spark  |     Spark  |
+    |   Spark|       Spark|
+    +--------+------------+
+
+    Example 2: Trim specified characters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(["***Spark", "Spark**", "*Spark"], "STRING")
+    >>> df.select("*", sf.ltrim("value", sf.lit("*"))).show()
+    +--------+--------------------------+
+    |   value|TRIM(LEADING * FROM value)|
+    +--------+--------------------------+
+    |***Spark|                     Spark|
+    | Spark**|                   Spark**|
+    |  *Spark|                     Spark|
+    +--------+--------------------------+
     """
-    return _invoke_function_over_columns("ltrim", col)
+    if trim is not None:
+        return _invoke_function_over_columns("ltrim", col, trim)
+    else:
+        return _invoke_function_over_columns("ltrim", col)
 
 
 @_try_remote_functions
-def rtrim(col: "ColumnOrName") -> Column:
+def rtrim(col: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
     """
     Trim the spaces from right end for the specified string value.
 
@@ -10949,6 +10984,10 @@ def rtrim(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to work on.
+    trim : :class:`~pyspark.sql.Column` or str, optional
+        The trim string characters to trim, the default value is a single space
+
+        .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -10957,21 +10996,40 @@ def rtrim(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Trim the spaces
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame(["   Spark", "Spark  ", " Spark"], "STRING")
-    >>> df.select(rtrim("value").alias("r")).withColumn("length", length("r")).show()
-    +--------+------+
-    |       r|length|
-    +--------+------+
-    |   Spark|     8|
-    |   Spark|     5|
-    |   Spark|     6|
-    +--------+------+
+    >>> df.select("*", sf.rtrim("value")).show()
+    +--------+------------+
+    |   value|rtrim(value)|
+    +--------+------------+
+    |   Spark|       Spark|
+    | Spark  |       Spark|
+    |   Spark|       Spark|
+    +--------+------------+
+
+    Example 2: Trim specified characters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(["***Spark", "Spark**", "*Spark"], "STRING")
+    >>> df.select("*", sf.rtrim("value", sf.lit("*"))).show()
+    +--------+---------------------------+
+    |   value|TRIM(TRAILING * FROM value)|
+    +--------+---------------------------+
+    |***Spark|                   ***Spark|
+    | Spark**|                      Spark|
+    |  *Spark|                     *Spark|
+    +--------+---------------------------+
     """
-    return _invoke_function_over_columns("rtrim", col)
+    if trim is not None:
+        return _invoke_function_over_columns("rtrim", col, trim)
+    else:
+        return _invoke_function_over_columns("rtrim", col)
 
 
 @_try_remote_functions
-def trim(col: "ColumnOrName") -> Column:
+def trim(col: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
     """
     Trim the spaces from both ends for the specified string column.
 
@@ -10984,6 +11042,10 @@ def trim(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to work on.
+    trim : :class:`~pyspark.sql.Column` or str, optional
+        The trim string characters to trim, the default value is a single space
+
+        .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -10992,17 +11054,36 @@ def trim(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Trim the spaces
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame(["   Spark", "Spark  ", " Spark"], "STRING")
-    >>> df.select(trim("value").alias("r")).withColumn("length", length("r")).show()
-    +-----+------+
-    |    r|length|
-    +-----+------+
-    |Spark|     5|
-    |Spark|     5|
-    |Spark|     5|
-    +-----+------+
+    >>> df.select("*", sf.trim("value")).show()
+    +--------+-----------+
+    |   value|trim(value)|
+    +--------+-----------+
+    |   Spark|      Spark|
+    | Spark  |      Spark|
+    |   Spark|      Spark|
+    +--------+-----------+
+
+    Example 2: Trim specified characters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(["***Spark", "Spark**", "*Spark"], "STRING")
+    >>> df.select("*", sf.trim("value", sf.lit("*"))).show()
+    +--------+-----------------------+
+    |   value|TRIM(BOTH * FROM value)|
+    +--------+-----------------------+
+    |***Spark|                  Spark|
+    | Spark**|                  Spark|
+    |  *Spark|                  Spark|
+    +--------+-----------------------+
     """
-    return _invoke_function_over_columns("trim", col)
+    if trim is not None:
+        return _invoke_function_over_columns("trim", col, trim)
+    else:
+        return _invoke_function_over_columns("trim", col)
 
 
 @_try_remote_functions
@@ -11962,6 +12043,47 @@ def regexp_like(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def randstr(length: Union[Column, int], seed: Optional[Union[Column, int]] = None) -> Column:
+    """Returns a string of the specified length whose characters are chosen uniformly at random from
+    the following pool of characters: 0-9, a-z, A-Z. The random seed is optional. The string length
+    must be a constant two-byte or four-byte integer (SMALLINT or INT, respectively).
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    length : :class:`~pyspark.sql.Column` or int
+        Number of characters in the string to generate.
+    seed : :class:`~pyspark.sql.Column` or int
+        Optional random number seed to use.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The generated random string with the specified length.
+
+    Examples
+    --------
+    >>> spark.createDataFrame([('3',)], ['a']) \\
+    ...   .select(randstr(lit(5), lit(0)).alias('result')) \\
+    ...   .selectExpr("length(result) > 0").show()
+    +--------------------+
+    |(length(result) > 0)|
+    +--------------------+
+    |                true|
+    +--------------------+
+    """
+    length = _enum_to_value(length)
+    length = lit(length)
+    if seed is None:
+        return _invoke_function_over_columns("randstr", length)
+    else:
+        seed = _enum_to_value(seed)
+        seed = lit(seed)
+        return _invoke_function_over_columns("randstr", length, seed)
+
+
+@_try_remote_functions
 def regexp_count(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
     r"""Returns a count of the number of times that the Java regex pattern `regexp` is matched
     in the string `str`.
@@ -12325,6 +12447,57 @@ def unhex(col: "ColumnOrName") -> Column:
     [Row(unhex(a)=bytearray(b'ABC'))]
     """
     return _invoke_function_over_columns("unhex", col)
+
+
+@_try_remote_functions
+def uniform(
+    min: Union[Column, int, float],
+    max: Union[Column, int, float],
+    seed: Optional[Union[Column, int]] = None,
+) -> Column:
+    """Returns a random value with independent and identically distributed (i.i.d.) values with the
+    specified range of numbers. The random seed is optional. The provided numbers specifying the
+    minimum and maximum values of the range must be constant. If both of these numbers are integers,
+    then the result will also be an integer. Otherwise if one or both of these are floating-point
+    numbers, then the result will also be a floating-point number.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    min : :class:`~pyspark.sql.Column`, int, or float
+        Minimum value in the range.
+    max : :class:`~pyspark.sql.Column`, int, or float
+        Maximum value in the range.
+    seed : :class:`~pyspark.sql.Column` or int
+        Optional random number seed to use.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The generated random number within the specified range.
+
+    Examples
+    --------
+    >>> spark.createDataFrame([('3',)], ['a']) \\
+    ...    .select(uniform(lit(0), lit(10), lit(0)).alias('result')) \\
+    ...    .selectExpr("result < 15").show()
+    +-------------+
+    |(result < 15)|
+    +-------------+
+    |         true|
+    +-------------+
+    """
+    min = _enum_to_value(min)
+    min = lit(min)
+    max = _enum_to_value(max)
+    max = lit(max)
+    if seed is None:
+        return _invoke_function_over_columns("uniform", min, max)
+    else:
+        seed = _enum_to_value(seed)
+        seed = lit(seed)
+        return _invoke_function_over_columns("uniform", min, max, seed)
 
 
 @_try_remote_functions

@@ -187,6 +187,7 @@ LOCK	false
 LOCKS	false
 LOGICAL	false
 LONG	false
+LOOP	false
 MACRO	false
 MAP	false
 MATCHED	false
