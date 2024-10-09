@@ -81,11 +81,32 @@ class ArtifactManager(session: SparkSession) extends Logging {
     }
   }
 
+  private var initialContextResourcesCopied = false
+
   def withResources[T](f: => T): T = {
     Utils.withContextClassLoader(classloader) {
       JobArtifactSet.withActiveJobArtifactState(state) {
+        // Copy over global initial resources to this session. Often used by spark-submit.
+        copyInitialContextResourcesIfNeeded()
+
         f
       }
+    }
+  }
+
+  /**
+   * Duplicate initial resources in SparkContext to the current session.
+   * Originally they are provided upon SparkContext construction and already registered under
+   * a "default" session.
+   * This method must be called from within a [[JobArtifactSet.withActiveJobArtifactState]] block.
+  */
+  private def copyInitialContextResourcesIfNeeded(): Unit = synchronized {
+    if (!initialContextResourcesCopied) {
+      val sparkContext = session.sparkContext
+      sparkContext.files.foreach(sparkContext.addFile)
+      sparkContext.jars.foreach(sparkContext.addJar)
+      sparkContext.archives.foreach(sparkContext.addArchive)
+      initialContextResourcesCopied = true
     }
   }
 
