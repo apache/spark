@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Dict, Iterator, Union, cast, Tuple
+from typing import Dict, Iterator, Union, cast, Tuple, Optional
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.types import StructType, TYPE_CHECKING, _parse_datatype_string
@@ -68,7 +68,7 @@ class MapStateClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error checking map state exists: {response_message[1]}")
 
-    def get_value(self, state_name: str, key: Tuple) -> Tuple:
+    def get_value(self, state_name: str, key: Tuple) -> Optional[Tuple]:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
         bytes = self._stateful_processor_api_client._serialize_to_bytes(self.user_key_schema, key)
@@ -164,6 +164,9 @@ class MapStateClient:
                 for batch in iterator:
                     if data_batch is None:
                         data_batch = batch
+                if data_batch is None:
+                    # TODO(SPARK-49233): Classify user facing errors.
+                    raise PySparkRuntimeError("Error getting map state entry.")
                 pandas_df = data_batch.to_pandas()
                 index = 0
             else:
@@ -208,6 +211,12 @@ class MapStateClient:
                 for batch in iterator:
                     if data_batch is None:
                         data_batch = batch
+                if data_batch is None:
+                    entry_name = "key"
+                    if not is_key:
+                        entry_name = "value"
+                    # TODO(SPARK-49233): Classify user facing errors.
+                    raise PySparkRuntimeError(f"Error getting map state {entry_name}.")
                 pandas_df = data_batch.to_pandas()
                 index = 0
             else:

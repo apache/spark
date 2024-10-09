@@ -82,6 +82,9 @@ class ListStateClient:
                 for batch in iterator:
                     if data_batch is None:
                         data_batch = batch
+                if data_batch is None:
+                    # TODO(SPARK-49233): Classify user facing errors.
+                    raise PySparkRuntimeError("Error getting next list state row.")
                 pandas_df = data_batch.to_pandas()
                 index = 0
             else:
