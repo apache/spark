@@ -73,11 +73,15 @@ class ArtifactManager(session: SparkSession) extends Logging {
       s"$artifactURI${File.separator}classes${File.separator}")
 
   protected[sql] val state: JobArtifactState = {
-    val isIsolated = session.sparkContext.conf.get("spark.repl.isolate.artifacts", "false")
-    if (isIsolated == "true") {
-      JobArtifactState(session.sessionUUID, Some(replClassURI))
-    } else {
-      JobArtifactState(session.sessionUUID, None)
+    val sessionIsolated = session.sparkContext.conf.get("spark.session.isolate.artifacts", "true")
+    val replIsolated = session.sparkContext.conf.get("spark.repl.isolate.artifacts", "false")
+    logWarning(s"sessionIsolated: $sessionIsolated, replIsolated: $replIsolated")
+    (sessionIsolated, replIsolated) match {
+      case ("true", "true") => JobArtifactState(session.sessionUUID, Some(replClassURI))
+      case ("true", "false") => JobArtifactState(session.sessionUUID, None)
+      case ("false", "true") => throw SparkException.internalError(
+        "Spark session isolation is disabled but REPL isolation is enabled.")
+      case ("false", "false") => null
     }
   }
 

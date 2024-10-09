@@ -84,6 +84,8 @@ __all__ = ["SparkContext"]
 DEFAULT_CONFIGS: Dict[str, Any] = {
     "spark.serializer.objectStreamReset": 100,
     "spark.rdd.compress": True,
+    # Disable artifact isolation in PySpark, or user-added .py file won't work
+    "spark.session.isolate.artifacts": "false",
 }
 
 T = TypeVar("T")
