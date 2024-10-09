@@ -33,7 +33,7 @@ object LazyFunction {
 
 class LazySuite extends SparkFunSuite {
   // scalastyle:off
-  private val base64WithLambda = "rO0ABXNyACNjb20uZGF0YWJyaWNrcy5zcGFyay51dGlsLkxhenlVc2FnZR1EauidnWkHAgABTAAKbGF6eVN0cmluZ3QAIExjb20vZGF0YWJyaWNrcy9zcGFyay91dGlsL0xhenk7eHBzcgAeY29tLmRhdGFicmlja3Muc3BhcmsudXRpbC5MYXp5AND+xox5MeQDAANaAAhiaXRtYXAkMEwAC2luaXRpYWxpemVydAARTHNjYWxhL0Z1bmN0aW9uMDtMAAV2YWx1ZXQAEkxqYXZhL2xhbmcvT2JqZWN0O3hwAXB0AAtoZWxsbyB3b3JsZHg="
+  private val base64WithLambda = "rO0ABXNyAB9vcmcuYXBhY2hlLnNwYXJrLnV0aWwuTGF6eVVzYWdlHURq6J2daQcCAAFMAApsYXp5U3RyaW5ndAAcTG9yZy9hcGFjaGUvc3BhcmsvdXRpbC9MYXp5O3hwc3IAGm9yZy5hcGFjaGUuc3BhcmsudXRpbC5MYXp5bofmkNVKElQDAANaAAhiaXRtYXAkMEwAC2luaXRpYWxpemVydAARTHNjYWxhL0Z1bmN0aW9uMDtMAAV2YWx1ZXQAEkxqYXZhL2xhbmcvT2JqZWN0O3hwAXB0AAtoZWxsbyB3b3JsZHg="
   // scalastyle:on
 
   test("Lazy val works") {
@@ -45,13 +45,13 @@ class LazySuite extends SparkFunSuite {
     })
 
     // Ensure no initialization happened before the lazy value was dereferenced
-    assert(test == None)
+    assert(test.isEmpty)
 
     // Ensure the first invocation creates a new object
-    assert(lazyval() == test && test != None)
+    assert(lazyval() == test && test.isDefined)
 
     // Ensure the subsequent invocation serves the same object
-    assert(lazyval() == test && test != None)
+    assert(lazyval() == test && test.isDefined)
   }
 
   test("Lazy val serialization fails if the dereferenced object is not serializable") {
@@ -111,7 +111,7 @@ class LazySuite extends SparkFunSuite {
     val obj = deserializeFromBase64[Lazy[String]](serialized)
     val field = obj.getClass.getDeclaredField("serialVersionUID")
     field.setAccessible(true)
-    assert(field.getLong(obj) == 58826923869549028L)
+    assert(field.getLong(obj) == 7964587975756091988L)
   }
 
   def serializeToBase64[T](o: T): String = {
