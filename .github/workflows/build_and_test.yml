@@ -306,6 +306,12 @@ jobs:
         name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/*.log"
 
+  maven-test:
+    name: "Run Maven Test"
+    permissions:
+      packages: write
+    uses: ./.github/workflows/maven_test.yml
+
   infra-image:
     name: "Base image build"
     needs: precondition
