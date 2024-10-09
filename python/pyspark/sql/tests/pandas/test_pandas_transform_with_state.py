@@ -405,6 +405,7 @@ class TransformWithStateInPandasTestsMixin:
             else:
                 # for key 0, verify initial state was only processed once in the first batch;
                 # for key 3, verify init state was now processed
+                raise Exception(f"batch id: {batch_id}, batch df: {batch_df.show()}")
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="0", value=str(789 + 123 + 46 + 67)),
                     Row(id="3", value=str(987 + 12)),

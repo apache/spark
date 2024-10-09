@@ -94,8 +94,12 @@ class TransformWithStateInPandasStateServer(
     new mutable.HashMap[String, Iterator[Row]]()
   }
 
-  private val initDataIter: Iterator[(InternalRow, Iterator[InternalRow])] =
-    initialStateDataIterator.toSeq.iterator
+  private val initSeq: Seq[(InternalRow, Iterator[InternalRow])] =
+    initialStateDataIterator.toSeq
+  println(s"iniside initialization, initDataIter length: ${initSeq.length}, " +
+    s"init seq ele: ${initSeq(0)._1.getString(0)}")
+
+  private val initDataIter: Iterator[(InternalRow, Iterator[InternalRow])] = initSeq.iterator
 
   def run(): Unit = {
     val listeningSocket = stateServerSocket.accept()
@@ -227,6 +231,10 @@ class TransformWithStateInPandasStateServer(
           val outputSchema = new StructType()
             .add("key", BinaryType)
             .add("initialState", initialStateSchema)
+          println(s"inside handle request, init state iterator: ")
+          initDataIter.foreach { i =>
+            println(s"one row in iterator, i: ${i._1.getString(0)}")
+          }
 
           sendIteratorAsArrowBatches(initDataIter, outputSchema) { pair =>
             val groupingKey = pair._1
@@ -463,6 +471,7 @@ class TransformWithStateInPandasStateServer(
       val internalRow = func(data)
       arrowStreamWriter.writeRow(internalRow)
       rowCount += 1
+      println(s"after increment, rowcount: ${rowCount}")
     }
     arrowStreamWriter.finalizeCurrentArrowBatch()
     Utils.tryWithSafeFinally {

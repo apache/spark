@@ -53,6 +53,7 @@ class StatefulProcessorApiClient:
         self.utf8_deserializer = UTF8Deserializer()
         self.pickleSer = CPickleSerializer()
         self.serializer = ArrowStreamSerializer()
+        self._init_state_list: List[Tuple, "PandasDataFrameLike"] = []
 
     def set_handle_state(self, state: StatefulProcessorHandleState) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
@@ -178,26 +179,31 @@ class StatefulProcessorApiClient:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
         while True:
-            get_initial_state = stateMessage.GetInitialState()
-            request = stateMessage.UtilsCallCommand(getInitialState=get_initial_state)
-            stateful_processor_call = stateMessage.StatefulProcessorCall(utilsCall=request)
-            message = stateMessage.StateRequest(statefulProcessorCall=stateful_processor_call)
+            if len(self._init_state_list) == 0:
+                get_initial_state = stateMessage.GetInitialState()
+                request = stateMessage.UtilsCallCommand(getInitialState=get_initial_state)
+                stateful_processor_call = stateMessage.StatefulProcessorCall(utilsCall=request)
+                message = stateMessage.StateRequest(statefulProcessorCall=stateful_processor_call)
 
-            self._send_proto_message(message.SerializeToString())
-            response_message = self._receive_proto_message()
-            status = response_message[0]
-            if status == 1:
-                break
-            elif status == 0:
-                iterator = self._read_arrow_state()
-                for batch in iterator:
-                    batch_df = batch.to_pandas()
-                # TODO don't call only one key at a time
-                deserialized_key = tuple(self.pickleSer.loads(batch_df.at[0, 'key']))
-                initial_state = DataFrame([batch_df.at[0, 'initialState']])
-                yield deserialized_key, initial_state
-            else:
-                raise PySparkRuntimeError(f"Error getting initial state: " f"{response_message[1]}")
+                self._send_proto_message(message.SerializeToString())
+                response_message = self._receive_proto_message()
+                status = response_message[0]
+                if status == 1:
+                    break
+                elif status == 0:
+                    iterator = self._read_arrow_state()
+                    for batch in iterator:
+                        batch_df = batch.to_pandas()
+                        for i in range(batch.num_rows):
+                            deserialized_key = tuple(self.pickleSer.loads(batch_df.at[i, 'key']))
+                            initial_state = DataFrame([batch_df.at[i, 'initialState']])
+                            self._init_state_list.append([deserialized_key, initial_state])
+                else:
+                    raise PySparkRuntimeError(f"Error getting initial state: " f"{response_message[1]}")
+
+            pair = self._init_state_list[0]
+            self._init_state_list.pop(0)
+            yield pair
 
     def _send_proto_message(self, message: bytes) -> None:
         # Writing zero here to indicate message version. This allows us to evolve the message
