@@ -645,7 +645,7 @@ class FileSourceSQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSe
 
       assert(staticPartitions3 == Map("p1" -> "20240712", "p2" -> "1"))
       assert(fillStaticPartitions3.isEmpty)
-      assert(dynamicPartitionOverwrite3)
+      assert(!dynamicPartitionOverwrite3)
       assert(matchingPartitions3.map(_.spec) == Seq(
         Map("p1" -> "20240712", "p2" -> "1")
       ))
