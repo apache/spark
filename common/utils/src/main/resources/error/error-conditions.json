@@ -8704,6 +8704,11 @@
       "Doesn't support month or year interval: <interval>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3263": {
+    "message": [
+      "Some values in field <pos> are not the <type> type"
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"

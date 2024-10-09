@@ -1257,6 +1257,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "dataType" -> toSQLType(dataType)))
   }
 
+  def wrongDatatypeInSomeRows(pos: Int, dataType: DataType): SparkSQLException = {
+    new SparkSQLException(
+      errorClass = "_LEGACY_ERROR_TEMP_3263",
+      messageParameters = Map("pos" -> pos.toString(), "type" -> dataType.typeName))
+  }
+
   def rootConverterReturnNullError(): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "INVALID_JSON_ROOT_FIELD",
