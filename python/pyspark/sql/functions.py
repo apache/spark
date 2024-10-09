@@ -6710,31 +6710,31 @@ def dateadd(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     >>> spark.createDataFrame(
     ...     [('2015-04-08', 2,)], ['dt', 'add']
     ... ).select(sf.dateadd("dt", 1)).show()
-    +---------------+
-    |date_add(dt, 1)|
-    +---------------+
-    |     2015-04-09|
-    +---------------+
+    +--------------+
+    |dateadd(dt, 1)|
+    +--------------+
+    |    2015-04-09|
+    +--------------+
 
     >>> import pyspark.sql.functions as sf
     >>> spark.createDataFrame(
     ...     [('2015-04-08', 2,)], ['dt', 'add']
     ... ).select(sf.dateadd("dt", sf.lit(2))).show()
-    +---------------+
-    |date_add(dt, 2)|
-    +---------------+
-    |     2015-04-10|
-    +---------------+
+    +--------------+
+    |dateadd(dt, 2)|
+    +--------------+
+    |    2015-04-10|
+    +--------------+
 
     >>> import pyspark.sql.functions as sf
     >>> spark.createDataFrame(
     ...     [('2015-04-08', 2,)], ['dt', 'add']
     ... ).select(sf.dateadd("dt", -1)).show()
-    +----------------+
-    |date_add(dt, -1)|
-    +----------------+
-    |      2015-04-07|
-    +----------------+
+    +---------------+
+    |dateadd(dt, -1)|
+    +---------------+
+    |     2015-04-07|
+    +---------------+
     """
     days = lit(days) if isinstance(days, int) else days
     return _invoke_function_over_columns("dateadd", start, days)
