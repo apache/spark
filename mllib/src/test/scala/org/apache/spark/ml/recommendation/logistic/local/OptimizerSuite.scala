@@ -18,18 +18,16 @@
 package org.apache.spark.ml.recommendation.logistic.local
 
 import java.util.Random
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{ACCURACY, EPR}
 import org.apache.spark.ml.linalg.BLAS
-import org.apache.spark.ml.recommendation.logistic.local.{ItemData, Optimizer, Opts}
 import org.apache.spark.ml.recommendation.logistic.pair.LongPairMulti
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
-import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types._
+
 
 class OptimizerSuite extends MLTest with DefaultReadWriteTest with Logging {
 
@@ -40,6 +38,15 @@ class OptimizerSuite extends MLTest with DefaultReadWriteTest with Logging {
 
   override def afterAll(): Unit = {
     super.afterAll()
+  }
+
+  test("ParItr") {
+    val random = new Random(238)
+    val data = Array.fill(10000)(random.nextLong())
+    val trueSum = data.sum
+    val accum = new AtomicLong(0L)
+    ParItr.foreach(data.iterator, 5, (x: Long) => accum.addAndGet(x))
+    assert(trueSum == accum.get())
   }
 
   test("LMF optimizer explicit") {

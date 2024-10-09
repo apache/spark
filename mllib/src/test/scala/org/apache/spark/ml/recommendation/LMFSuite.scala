@@ -17,15 +17,8 @@
 
 package org.apache.spark.ml.recommendation
 
-import java.util.Random
 
-import scala.collection.mutable.ArrayBuffer
-
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{ACCURACY, EPR}
-import org.apache.spark.ml.linalg.BLAS
-import org.apache.spark.ml.recommendation.logistic.local.{ItemData, Optimizer, Opts}
-import org.apache.spark.ml.recommendation.logistic.pair.LongPairMulti
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf

@@ -36,7 +36,7 @@ private[ml] object ParItr {
         } catch {
           case _: InterruptedException =>
         }
-      }.asInstanceOf[Runnable])
+      })
     }
 
     threads.foreach(_.start())
