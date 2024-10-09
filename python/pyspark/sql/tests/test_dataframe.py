@@ -506,14 +506,16 @@ class DataFrameTestsMixin:
 
         # number of fields must match.
         self.assertRaisesRegex(
-            Exception, "FIELD_STRUCT_LENGTH_MISMATCH", lambda: rdd.toDF("key: int").collect()
+            Exception,
+            "FIELD_STRUCT_LENGTH_MISMATCH",
+            lambda: rdd.coalesce(1).toDF("key: int").collect(),
         )
 
         # field types mismatch will cause exception at runtime.
         self.assertRaisesRegex(
             Exception,
             "FIELD_DATA_TYPE_UNACCEPTABLE",
-            lambda: rdd.toDF("key: float, value: string").collect(),
+            lambda: rdd.coalesce(1).toDF("key: float, value: string").collect(),
         )
 
         # flat schema values will be wrapped into row.
