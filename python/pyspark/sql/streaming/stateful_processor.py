@@ -138,13 +138,9 @@ class MapState:
         self,
         map_state_client: MapStateClient,
         state_name: str,
-        key_schema: Union[StructType, str],
-        value_schema: Union[StructType, str],
     ) -> None:
         self._map_state_client = map_state_client
         self._state_name = state_name
-        self.key_schema = key_schema
-        self.value_schema = value_schema
 
     def exists(self) -> bool:
         """
@@ -154,23 +150,21 @@ class MapState:
 
     def get_value(self, key: Tuple) -> Optional[Tuple]:
         """
-        Get the state value if it exists.
+        Get the state value for given user key if it exists.
         """
-        return self._map_state_client.get_value(self._state_name, self.key_schema, key)
+        return self._map_state_client.get_value(self._state_name, key)
 
     def contains_key(self, key: Tuple) -> bool:
         """
         Check if the user key is contained in the map.
         """
-        return self._map_state_client.contains_key(self._state_name, self.key_schema, key)
+        return self._map_state_client.contains_key(self._state_name, key)
 
     def update_value(self, key: Tuple, value: Tuple) -> None:
         """
         Update value for given user key.
         """
-        return self._map_state_client.update_value(
-            self._state_name, self.key_schema, key, self.value_schema, value
-        )
+        return self._map_state_client.update_value(self._state_name, key, value)
 
     def iterator(self) -> Iterator[Tuple[Tuple, Tuple]]:
         """
@@ -194,7 +188,7 @@ class MapState:
         """
         Remove user key from map state.
         """
-        return self._map_state_client.remove_key(self._state_name, self.key_schema, key)
+        return self._map_state_client.remove_key(self._state_name, key)
 
     def clear(self) -> None:
         """
@@ -294,7 +288,7 @@ class StatefulProcessorHandle:
             state_name, key_schema, value_schema, ttl_duration_ms
         )
         return MapState(
-            MapStateClient(self.stateful_processor_api_client), state_name, key_schema, value_schema
+            MapStateClient(self.stateful_processor_api_client, key_schema, value_schema), state_name
         )
 
 

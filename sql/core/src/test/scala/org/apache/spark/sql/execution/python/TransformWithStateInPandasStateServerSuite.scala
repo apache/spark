@@ -319,7 +319,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
   test("map state get") {
     val byteString: ByteString = ByteString.copyFrom(byteArray)
     val message = MapStateCall.newBuilder().setStateName(stateName)
-      .setGetValue(GetValue.newBuilder().setKey(byteString).build()).build()
+      .setGetValue(GetValue.newBuilder().setUserKey(byteString).build()).build()
     val schema = new StructType().add("value", "int")
     when(mapState.getValue(any[Row])).thenReturn(getIntegerRow(1))
     stateServer.handleMapStateRequest(message)
@@ -330,7 +330,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
   test("map state contains key") {
     val byteString: ByteString = ByteString.copyFrom(byteArray)
     val message = MapStateCall.newBuilder().setStateName(stateName)
-      .setContainsKey(ContainsKey.newBuilder().setKey(byteString).build()).build()
+      .setContainsKey(ContainsKey.newBuilder().setUserKey(byteString).build()).build()
     stateServer.handleMapStateRequest(message)
     verify(mapState).containsKey(any[Row])
   }
@@ -338,7 +338,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
   test("map state update value") {
     val byteString: ByteString = ByteString.copyFrom(byteArray)
     val message = MapStateCall.newBuilder().setStateName(stateName)
-      .setUpdateValue(UpdateValue.newBuilder().setKey(byteString).setValue(byteString).build())
+      .setUpdateValue(UpdateValue.newBuilder().setUserKey(byteString).setValue(byteString).build())
       .build()
     stateServer.handleMapStateRequest(message)
     verify(mapState).updateValue(any[Row], any[Row])
@@ -455,7 +455,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
   test("remove key") {
     val byteString: ByteString = ByteString.copyFrom(byteArray)
     val message = MapStateCall.newBuilder().setStateName(stateName)
-      .setRemoveKey(RemoveKey.newBuilder().setKey(byteString).build()).build()
+      .setRemoveKey(RemoveKey.newBuilder().setUserKey(byteString).build()).build()
     stateServer.handleMapStateRequest(message)
     verify(mapState).removeKey(any[Row])
   }

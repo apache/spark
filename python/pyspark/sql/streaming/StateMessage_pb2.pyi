@@ -290,24 +290,24 @@ class AppendList(_message.Message):
     def __init__(self) -> None: ...
 
 class GetValue(_message.Message):
-    __slots__ = ("key",)
-    KEY_FIELD_NUMBER: _ClassVar[int]
-    key: bytes
-    def __init__(self, key: _Optional[bytes] = ...) -> None: ...
+    __slots__ = ("userKey",)
+    USERKEY_FIELD_NUMBER: _ClassVar[int]
+    userKey: bytes
+    def __init__(self, userKey: _Optional[bytes] = ...) -> None: ...
 
 class ContainsKey(_message.Message):
-    __slots__ = ("key",)
-    KEY_FIELD_NUMBER: _ClassVar[int]
-    key: bytes
-    def __init__(self, key: _Optional[bytes] = ...) -> None: ...
+    __slots__ = ("userKey",)
+    USERKEY_FIELD_NUMBER: _ClassVar[int]
+    userKey: bytes
+    def __init__(self, userKey: _Optional[bytes] = ...) -> None: ...
 
 class UpdateValue(_message.Message):
-    __slots__ = ("key", "value")
-    KEY_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("userKey", "value")
+    USERKEY_FIELD_NUMBER: _ClassVar[int]
     VALUE_FIELD_NUMBER: _ClassVar[int]
-    key: bytes
+    userKey: bytes
     value: bytes
-    def __init__(self, key: _Optional[bytes] = ..., value: _Optional[bytes] = ...) -> None: ...
+    def __init__(self, userKey: _Optional[bytes] = ..., value: _Optional[bytes] = ...) -> None: ...
 
 class Iterator(_message.Message):
     __slots__ = ("iteratorId",)
@@ -328,10 +328,10 @@ class Values(_message.Message):
     def __init__(self, iteratorId: _Optional[str] = ...) -> None: ...
 
 class RemoveKey(_message.Message):
-    __slots__ = ("key",)
-    KEY_FIELD_NUMBER: _ClassVar[int]
-    key: bytes
-    def __init__(self, key: _Optional[bytes] = ...) -> None: ...
+    __slots__ = ("userKey",)
+    USERKEY_FIELD_NUMBER: _ClassVar[int]
+    userKey: bytes
+    def __init__(self, userKey: _Optional[bytes] = ...) -> None: ...
 
 class SetHandleState(_message.Message):
     __slots__ = ("state",)

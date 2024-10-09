@@ -137,15 +137,15 @@ message AppendList {
 }
 
 message GetValue {
-  bytes key = 1;
+  bytes userKey = 1;
 }
 
 message ContainsKey {
-  bytes key = 1;
+  bytes userKey = 1;
 }
 
 message UpdateValue {
-  bytes key = 1;
+  bytes userKey = 1;
   bytes value = 2;
 }
 
@@ -162,7 +162,7 @@ message Values {
 }
 
 message RemoveKey {
-  bytes key = 1;
+  bytes userKey = 1;
 }
 
 enum HandleState {

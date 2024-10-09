@@ -28,8 +28,21 @@ __all__ = ["MapStateClient"]
 
 
 class MapStateClient:
-    def __init__(self, stateful_processor_api_client: StatefulProcessorApiClient) -> None:
+    def __init__(
+        self,
+        stateful_processor_api_client: StatefulProcessorApiClient,
+        user_key_schema: Union[StructType, str],
+        value_schema: Union[StructType, str],
+    ) -> None:
         self._stateful_processor_api_client = stateful_processor_api_client
+        if isinstance(user_key_schema, str):
+            self.user_key_schema = cast(StructType, _parse_datatype_string(user_key_schema))
+        else:
+            self.user_key_schema = user_key_schema
+        if isinstance(value_schema, str):
+            self.value_schema = cast(StructType, _parse_datatype_string(value_schema))
+        else:
+            self.value_schema = value_schema
         # Dictionaries to store the mapping between iterator id and a tuple of pandas DataFrame
         # and the index of the last row that was read.
         self.key_value_dict: Dict[str, Tuple["PandasDataFrameLike", int]] = {}
@@ -55,13 +68,11 @@ class MapStateClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error checking map state exists: {response_message[1]}")
 
-    def get_value(self, state_name: str, key_schema: Union[StructType, str], key: Tuple) -> Tuple:
+    def get_value(self, state_name: str, key: Tuple) -> Tuple:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
-        if isinstance(key_schema, str):
-            key_schema = cast(StructType, _parse_datatype_string(key_schema))
-        bytes = self._stateful_processor_api_client._serialize_to_bytes(key_schema, key)
-        get_value_call = stateMessage.GetValue(key=bytes)
+        bytes = self._stateful_processor_api_client._serialize_to_bytes(self.user_key_schema, key)
+        get_value_call = stateMessage.GetValue(userKey=bytes)
         map_state_call = stateMessage.MapStateCall(stateName=state_name, getValue=get_value_call)
         state_variable_request = stateMessage.StateVariableRequest(mapStateCall=map_state_call)
         message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
@@ -78,13 +89,11 @@ class MapStateClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error getting value: {response_message[1]}")
 
-    def contains_key(self, state_name: str, key_schema: Union[StructType, str], key: Tuple) -> bool:
+    def contains_key(self, state_name: str, key: Tuple) -> bool:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
-        if isinstance(key_schema, str):
-            key_schema = cast(StructType, _parse_datatype_string(key_schema))
-        bytes = self._stateful_processor_api_client._serialize_to_bytes(key_schema, key)
-        contains_key_call = stateMessage.ContainsKey(key=bytes)
+        bytes = self._stateful_processor_api_client._serialize_to_bytes(self.user_key_schema, key)
+        contains_key_call = stateMessage.ContainsKey(userKey=bytes)
         map_state_call = stateMessage.MapStateCall(
             stateName=state_name, containsKey=contains_key_call
         )
@@ -108,20 +117,18 @@ class MapStateClient:
     def update_value(
         self,
         state_name: str,
-        key_schema: Union[StructType, str],
         key: Tuple,
-        value_schema: Union[StructType, str],
         value: Tuple,
     ) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
-        if isinstance(key_schema, str):
-            key_schema = cast(StructType, _parse_datatype_string(key_schema))
-        if isinstance(value_schema, str):
-            value_schema = cast(StructType, _parse_datatype_string(value_schema))
-        key_bytes = self._stateful_processor_api_client._serialize_to_bytes(key_schema, key)
-        value_bytes = self._stateful_processor_api_client._serialize_to_bytes(value_schema, value)
-        update_value_call = stateMessage.UpdateValue(key=key_bytes, value=value_bytes)
+        key_bytes = self._stateful_processor_api_client._serialize_to_bytes(
+            self.user_key_schema, key
+        )
+        value_bytes = self._stateful_processor_api_client._serialize_to_bytes(
+            self.value_schema, value
+        )
+        update_value_call = stateMessage.UpdateValue(userKey=key_bytes, value=value_bytes)
         map_state_call = stateMessage.MapStateCall(
             stateName=state_name, updateValue=update_value_call
         )
@@ -216,13 +223,11 @@ class MapStateClient:
         pandas_row = pandas_df.iloc[index]
         return tuple(pandas_row)
 
-    def remove_key(self, state_name: str, key_schema: Union[StructType, str], key: Tuple) -> None:
+    def remove_key(self, state_name: str, key: Tuple) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
-        if isinstance(key_schema, str):
-            key_schema = cast(StructType, _parse_datatype_string(key_schema))
-        bytes = self._stateful_processor_api_client._serialize_to_bytes(key_schema, key)
-        remove_key_call = stateMessage.RemoveKey(key=bytes)
+        bytes = self._stateful_processor_api_client._serialize_to_bytes(self.user_key_schema, key)
+        remove_key_call = stateMessage.RemoveKey(userKey=bytes)
         map_state_call = stateMessage.MapStateCall(stateName=state_name, removeKey=remove_key_call)
         state_variable_request = stateMessage.StateVariableRequest(mapStateCall=map_state_call)
         message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)

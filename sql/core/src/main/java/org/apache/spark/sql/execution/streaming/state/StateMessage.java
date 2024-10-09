@@ -17089,10 +17089,10 @@ public final class StateMessage {
       com.google.protobuf.MessageOrBuilder {
 
     /**
-     * <code>bytes key = 1;</code>
-     * @return The key.
+     * <code>bytes userKey = 1;</code>
+     * @return The userKey.
      */
-    com.google.protobuf.ByteString getKey();
+    com.google.protobuf.ByteString getUserKey();
   }
   /**
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.GetValue}
@@ -17107,7 +17107,7 @@ public final class StateMessage {
       super(builder);
     }
     private GetValue() {
-      key_ = com.google.protobuf.ByteString.EMPTY;
+      userKey_ = com.google.protobuf.ByteString.EMPTY;
     }
 
     @java.lang.Override
@@ -17135,15 +17135,15 @@ public final class StateMessage {
               org.apache.spark.sql.execution.streaming.state.StateMessage.GetValue.class, org.apache.spark.sql.execution.streaming.state.StateMessage.GetValue.Builder.class);
     }
 
-    public static final int KEY_FIELD_NUMBER = 1;
-    private com.google.protobuf.ByteString key_;
+    public static final int USERKEY_FIELD_NUMBER = 1;
+    private com.google.protobuf.ByteString userKey_;
     /**
-     * <code>bytes key = 1;</code>
-     * @return The key.
+     * <code>bytes userKey = 1;</code>
+     * @return The userKey.
      */
     @java.lang.Override
-    public com.google.protobuf.ByteString getKey() {
-      return key_;
+    public com.google.protobuf.ByteString getUserKey() {
+      return userKey_;
     }
 
     private byte memoizedIsInitialized = -1;
@@ -17160,8 +17160,8 @@ public final class StateMessage {
     @java.lang.Override
     public void writeTo(com.google.protobuf.CodedOutputStream output)
                         throws java.io.IOException {
-      if (!key_.isEmpty()) {
-        output.writeBytes(1, key_);
+      if (!userKey_.isEmpty()) {
+        output.writeBytes(1, userKey_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -17172,9 +17172,9 @@ public final class StateMessage {
       if (size != -1) return size;
 
       size = 0;
-      if (!key_.isEmpty()) {
+      if (!userKey_.isEmpty()) {
         size += com.google.protobuf.CodedOutputStream
-          .computeBytesSize(1, key_);
+          .computeBytesSize(1, userKey_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
@@ -17191,8 +17191,8 @@ public final class StateMessage {
       }
       org.apache.spark.sql.execution.streaming.state.StateMessage.GetValue other = (org.apache.spark.sql.execution.streaming.state.StateMessage.GetValue) obj;
 
-      if (!getKey()
-          .equals(other.getKey())) return false;
+      if (!getUserKey()
+          .equals(other.getUserKey())) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
       return true;
     }
@@ -17204,8 +17204,8 @@ public final class StateMessage {
       }
       int hash = 41;
       hash = (19 * hash) + getDescriptor().hashCode();
-      hash = (37 * hash) + KEY_FIELD_NUMBER;
-      hash = (53 * hash) + getKey().hashCode();
+      hash = (37 * hash) + USERKEY_FIELD_NUMBER;
+      hash = (53 * hash) + getUserKey().hashCode();
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -17334,7 +17334,7 @@ public final class StateMessage {
       @java.lang.Override
       public Builder clear() {
         super.clear();
-        key_ = com.google.protobuf.ByteString.EMPTY;
+        userKey_ = com.google.protobuf.ByteString.EMPTY;
 
         return this;
       }
@@ -17362,7 +17362,7 @@ public final class StateMessage {
       @java.lang.Override
       public org.apache.spark.sql.execution.streaming.state.StateMessage.GetValue buildPartial() {
         org.apache.spark.sql.execution.streaming.state.StateMessage.GetValue result = new org.apache.spark.sql.execution.streaming.state.StateMessage.GetValue(this);
-        result.key_ = key_;
+        result.userKey_ = userKey_;
         onBuilt();
         return result;
       }
@@ -17411,8 +17411,8 @@ public final class StateMessage {
 
       public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.GetValue other) {
         if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.GetValue.getDefaultInstance()) return this;
-        if (other.getKey() != com.google.protobuf.ByteString.EMPTY) {
-          setKey(other.getKey());
+        if (other.getUserKey() != com.google.protobuf.ByteString.EMPTY) {
+          setUserKey(other.getUserKey());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         onChanged();
@@ -17441,7 +17441,7 @@ public final class StateMessage {
                 done = true;
                 break;
               case 10: {
-                key_ = input.readBytes();
+                userKey_ = input.readBytes();
 
                 break;
               } // case 10
@@ -17461,36 +17461,36 @@ public final class StateMessage {
         return this;
       }
 
-      private com.google.protobuf.ByteString key_ = com.google.protobuf.ByteString.EMPTY;
+      private com.google.protobuf.ByteString userKey_ = com.google.protobuf.ByteString.EMPTY;
       /**
-       * <code>bytes key = 1;</code>
-       * @return The key.
+       * <code>bytes userKey = 1;</code>
+       * @return The userKey.
        */
       @java.lang.Override
-      public com.google.protobuf.ByteString getKey() {
-        return key_;
+      public com.google.protobuf.ByteString getUserKey() {
+        return userKey_;
       }
       /**
-       * <code>bytes key = 1;</code>
-       * @param value The key to set.
+       * <code>bytes userKey = 1;</code>
+       * @param value The userKey to set.
        * @return This builder for chaining.
        */
-      public Builder setKey(com.google.protobuf.ByteString value) {
+      public Builder setUserKey(com.google.protobuf.ByteString value) {
         if (value == null) {
     throw new NullPointerException();
   }
   
-        key_ = value;
+        userKey_ = value;
         onChanged();
         return this;
       }
       /**
-       * <code>bytes key = 1;</code>
+       * <code>bytes userKey = 1;</code>
        * @return This builder for chaining.
        */
-      public Builder clearKey() {
+      public Builder clearUserKey() {
         
-        key_ = getDefaultInstance().getKey();
+        userKey_ = getDefaultInstance().getUserKey();
         onChanged();
         return this;
       }
@@ -17563,10 +17563,10 @@ public final class StateMessage {
       com.google.protobuf.MessageOrBuilder {
 
     /**
-     * <code>bytes key = 1;</code>
-     * @return The key.
+     * <code>bytes userKey = 1;</code>
+     * @return The userKey.
      */
-    com.google.protobuf.ByteString getKey();
+    com.google.protobuf.ByteString getUserKey();
   }
   /**
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ContainsKey}
@@ -17581,7 +17581,7 @@ public final class StateMessage {
       super(builder);
     }
     private ContainsKey() {
-      key_ = com.google.protobuf.ByteString.EMPTY;
+      userKey_ = com.google.protobuf.ByteString.EMPTY;
     }
 
     @java.lang.Override
@@ -17609,15 +17609,15 @@ public final class StateMessage {
               org.apache.spark.sql.execution.streaming.state.StateMessage.ContainsKey.class, org.apache.spark.sql.execution.streaming.state.StateMessage.ContainsKey.Builder.class);
     }
 
-    public static final int KEY_FIELD_NUMBER = 1;
-    private com.google.protobuf.ByteString key_;
+    public static final int USERKEY_FIELD_NUMBER = 1;
+    private com.google.protobuf.ByteString userKey_;
     /**
-     * <code>bytes key = 1;</code>
-     * @return The key.
+     * <code>bytes userKey = 1;</code>
+     * @return The userKey.
      */
     @java.lang.Override
-    public com.google.protobuf.ByteString getKey() {
-      return key_;
+    public com.google.protobuf.ByteString getUserKey() {
+      return userKey_;
     }
 
     private byte memoizedIsInitialized = -1;
@@ -17634,8 +17634,8 @@ public final class StateMessage {
     @java.lang.Override
     public void writeTo(com.google.protobuf.CodedOutputStream output)
                         throws java.io.IOException {
-      if (!key_.isEmpty()) {
-        output.writeBytes(1, key_);
+      if (!userKey_.isEmpty()) {
+        output.writeBytes(1, userKey_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -17646,9 +17646,9 @@ public final class StateMessage {
       if (size != -1) return size;
 
       size = 0;
-      if (!key_.isEmpty()) {
+      if (!userKey_.isEmpty()) {
         size += com.google.protobuf.CodedOutputStream
-          .computeBytesSize(1, key_);
+          .computeBytesSize(1, userKey_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
@@ -17665,8 +17665,8 @@ public final class StateMessage {
       }
       org.apache.spark.sql.execution.streaming.state.StateMessage.ContainsKey other = (org.apache.spark.sql.execution.streaming.state.StateMessage.ContainsKey) obj;
 
-      if (!getKey()
-          .equals(other.getKey())) return false;
+      if (!getUserKey()
+          .equals(other.getUserKey())) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
       return true;
     }
@@ -17678,8 +17678,8 @@ public final class StateMessage {
       }
       int hash = 41;
       hash = (19 * hash) + getDescriptor().hashCode();
-      hash = (37 * hash) + KEY_FIELD_NUMBER;
-      hash = (53 * hash) + getKey().hashCode();
+      hash = (37 * hash) + USERKEY_FIELD_NUMBER;
+      hash = (53 * hash) + getUserKey().hashCode();
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -17808,7 +17808,7 @@ public final class StateMessage {
       @java.lang.Override
       public Builder clear() {
         super.clear();
-        key_ = com.google.protobuf.ByteString.EMPTY;
+        userKey_ = com.google.protobuf.ByteString.EMPTY;
 
         return this;
       }
@@ -17836,7 +17836,7 @@ public final class StateMessage {
       @java.lang.Override
       public org.apache.spark.sql.execution.streaming.state.StateMessage.ContainsKey buildPartial() {
         org.apache.spark.sql.execution.streaming.state.StateMessage.ContainsKey result = new org.apache.spark.sql.execution.streaming.state.StateMessage.ContainsKey(this);
-        result.key_ = key_;
+        result.userKey_ = userKey_;
         onBuilt();
         return result;
       }
@@ -17885,8 +17885,8 @@ public final class StateMessage {
 
       public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.ContainsKey other) {
         if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.ContainsKey.getDefaultInstance()) return this;
-        if (other.getKey() != com.google.protobuf.ByteString.EMPTY) {
-          setKey(other.getKey());
+        if (other.getUserKey() != com.google.protobuf.ByteString.EMPTY) {
+          setUserKey(other.getUserKey());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         onChanged();
@@ -17915,7 +17915,7 @@ public final class StateMessage {
                 done = true;
                 break;
               case 10: {
-                key_ = input.readBytes();
+                userKey_ = input.readBytes();
 
                 break;
               } // case 10
@@ -17935,36 +17935,36 @@ public final class StateMessage {
         return this;
       }
 
-      private com.google.protobuf.ByteString key_ = com.google.protobuf.ByteString.EMPTY;
+      private com.google.protobuf.ByteString userKey_ = com.google.protobuf.ByteString.EMPTY;
       /**
-       * <code>bytes key = 1;</code>
-       * @return The key.
+       * <code>bytes userKey = 1;</code>
+       * @return The userKey.
        */
       @java.lang.Override
-      public com.google.protobuf.ByteString getKey() {
-        return key_;
+      public com.google.protobuf.ByteString getUserKey() {
+        return userKey_;
       }
       /**
-       * <code>bytes key = 1;</code>
-       * @param value The key to set.
+       * <code>bytes userKey = 1;</code>
+       * @param value The userKey to set.
        * @return This builder for chaining.
        */
-      public Builder setKey(com.google.protobuf.ByteString value) {
+      public Builder setUserKey(com.google.protobuf.ByteString value) {
         if (value == null) {
     throw new NullPointerException();
   }
   
-        key_ = value;
+        userKey_ = value;
         onChanged();
         return this;
       }
       /**
-       * <code>bytes key = 1;</code>
+       * <code>bytes userKey = 1;</code>
        * @return This builder for chaining.
        */
-      public Builder clearKey() {
+      public Builder clearUserKey() {
         
-        key_ = getDefaultInstance().getKey();
+        userKey_ = getDefaultInstance().getUserKey();
         onChanged();
         return this;
       }
@@ -18037,10 +18037,10 @@ public final class StateMessage {
       com.google.protobuf.MessageOrBuilder {
 
     /**
-     * <code>bytes key = 1;</code>
-     * @return The key.
+     * <code>bytes userKey = 1;</code>
+     * @return The userKey.
      */
-    com.google.protobuf.ByteString getKey();
+    com.google.protobuf.ByteString getUserKey();
 
     /**
      * <code>bytes value = 2;</code>
@@ -18061,7 +18061,7 @@ public final class StateMessage {
       super(builder);
     }
     private UpdateValue() {
-      key_ = com.google.protobuf.ByteString.EMPTY;
+      userKey_ = com.google.protobuf.ByteString.EMPTY;
       value_ = com.google.protobuf.ByteString.EMPTY;
     }
 
@@ -18090,15 +18090,15 @@ public final class StateMessage {
               org.apache.spark.sql.execution.streaming.state.StateMessage.UpdateValue.class, org.apache.spark.sql.execution.streaming.state.StateMessage.UpdateValue.Builder.class);
     }
 
-    public static final int KEY_FIELD_NUMBER = 1;
-    private com.google.protobuf.ByteString key_;
+    public static final int USERKEY_FIELD_NUMBER = 1;
+    private com.google.protobuf.ByteString userKey_;
     /**
-     * <code>bytes key = 1;</code>
-     * @return The key.
+     * <code>bytes userKey = 1;</code>
+     * @return The userKey.
      */
     @java.lang.Override
-    public com.google.protobuf.ByteString getKey() {
-      return key_;
+    public com.google.protobuf.ByteString getUserKey() {
+      return userKey_;
     }
 
     public static final int VALUE_FIELD_NUMBER = 2;
@@ -18126,8 +18126,8 @@ public final class StateMessage {
     @java.lang.Override
     public void writeTo(com.google.protobuf.CodedOutputStream output)
                         throws java.io.IOException {
-      if (!key_.isEmpty()) {
-        output.writeBytes(1, key_);
+      if (!userKey_.isEmpty()) {
+        output.writeBytes(1, userKey_);
       }
       if (!value_.isEmpty()) {
         output.writeBytes(2, value_);
@@ -18141,9 +18141,9 @@ public final class StateMessage {
       if (size != -1) return size;
 
       size = 0;
-      if (!key_.isEmpty()) {
+      if (!userKey_.isEmpty()) {
         size += com.google.protobuf.CodedOutputStream
-          .computeBytesSize(1, key_);
+          .computeBytesSize(1, userKey_);
       }
       if (!value_.isEmpty()) {
         size += com.google.protobuf.CodedOutputStream
@@ -18164,8 +18164,8 @@ public final class StateMessage {
       }
       org.apache.spark.sql.execution.streaming.state.StateMessage.UpdateValue other = (org.apache.spark.sql.execution.streaming.state.StateMessage.UpdateValue) obj;
 
-      if (!getKey()
-          .equals(other.getKey())) return false;
+      if (!getUserKey()
+          .equals(other.getUserKey())) return false;
       if (!getValue()
           .equals(other.getValue())) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
@@ -18179,8 +18179,8 @@ public final class StateMessage {
       }
       int hash = 41;
       hash = (19 * hash) + getDescriptor().hashCode();
-      hash = (37 * hash) + KEY_FIELD_NUMBER;
-      hash = (53 * hash) + getKey().hashCode();
+      hash = (37 * hash) + USERKEY_FIELD_NUMBER;
+      hash = (53 * hash) + getUserKey().hashCode();
       hash = (37 * hash) + VALUE_FIELD_NUMBER;
       hash = (53 * hash) + getValue().hashCode();
       hash = (29 * hash) + getUnknownFields().hashCode();
@@ -18311,7 +18311,7 @@ public final class StateMessage {
       @java.lang.Override
       public Builder clear() {
         super.clear();
-        key_ = com.google.protobuf.ByteString.EMPTY;
+        userKey_ = com.google.protobuf.ByteString.EMPTY;
 
         value_ = com.google.protobuf.ByteString.EMPTY;
 
@@ -18341,7 +18341,7 @@ public final class StateMessage {
       @java.lang.Override
       public org.apache.spark.sql.execution.streaming.state.StateMessage.UpdateValue buildPartial() {
         org.apache.spark.sql.execution.streaming.state.StateMessage.UpdateValue result = new org.apache.spark.sql.execution.streaming.state.StateMessage.UpdateValue(this);
-        result.key_ = key_;
+        result.userKey_ = userKey_;
         result.value_ = value_;
         onBuilt();
         return result;
@@ -18391,8 +18391,8 @@ public final class StateMessage {
 
       public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.UpdateValue other) {
         if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.UpdateValue.getDefaultInstance()) return this;
-        if (other.getKey() != com.google.protobuf.ByteString.EMPTY) {
-          setKey(other.getKey());
+        if (other.getUserKey() != com.google.protobuf.ByteString.EMPTY) {
+          setUserKey(other.getUserKey());
         }
         if (other.getValue() != com.google.protobuf.ByteString.EMPTY) {
           setValue(other.getValue());
@@ -18424,7 +18424,7 @@ public final class StateMessage {
                 done = true;
                 break;
               case 10: {
-                key_ = input.readBytes();
+                userKey_ = input.readBytes();
 
                 break;
               } // case 10
@@ -18449,36 +18449,36 @@ public final class StateMessage {
         return this;
       }
 
-      private com.google.protobuf.ByteString key_ = com.google.protobuf.ByteString.EMPTY;
+      private com.google.protobuf.ByteString userKey_ = com.google.protobuf.ByteString.EMPTY;
       /**
-       * <code>bytes key = 1;</code>
-       * @return The key.
+       * <code>bytes userKey = 1;</code>
+       * @return The userKey.
        */
       @java.lang.Override
-      public com.google.protobuf.ByteString getKey() {
-        return key_;
+      public com.google.protobuf.ByteString getUserKey() {
+        return userKey_;
       }
       /**
-       * <code>bytes key = 1;</code>
-       * @param value The key to set.
+       * <code>bytes userKey = 1;</code>
+       * @param value The userKey to set.
        * @return This builder for chaining.
        */
-      public Builder setKey(com.google.protobuf.ByteString value) {
+      public Builder setUserKey(com.google.protobuf.ByteString value) {
         if (value == null) {
     throw new NullPointerException();
   }
   
-        key_ = value;
+        userKey_ = value;
         onChanged();
         return this;
       }
       /**
-       * <code>bytes key = 1;</code>
+       * <code>bytes userKey = 1;</code>
        * @return This builder for chaining.
        */
-      public Builder clearKey() {
+      public Builder clearUserKey() {
         
-        key_ = getDefaultInstance().getKey();
+        userKey_ = getDefaultInstance().getUserKey();
         onChanged();
         return this;
       }
@@ -20232,10 +20232,10 @@ public final class StateMessage {
       com.google.protobuf.MessageOrBuilder {
 
     /**
-     * <code>bytes key = 1;</code>
-     * @return The key.
+     * <code>bytes userKey = 1;</code>
+     * @return The userKey.
      */
-    com.google.protobuf.ByteString getKey();
+    com.google.protobuf.ByteString getUserKey();
   }
   /**
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.RemoveKey}
@@ -20250,7 +20250,7 @@ public final class StateMessage {
       super(builder);
     }
     private RemoveKey() {
-      key_ = com.google.protobuf.ByteString.EMPTY;
+      userKey_ = com.google.protobuf.ByteString.EMPTY;
     }
 
     @java.lang.Override
@@ -20278,15 +20278,15 @@ public final class StateMessage {
               org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveKey.class, org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveKey.Builder.class);
     }
 
-    public static final int KEY_FIELD_NUMBER = 1;
-    private com.google.protobuf.ByteString key_;
+    public static final int USERKEY_FIELD_NUMBER = 1;
+    private com.google.protobuf.ByteString userKey_;
     /**
-     * <code>bytes key = 1;</code>
-     * @return The key.
+     * <code>bytes userKey = 1;</code>
+     * @return The userKey.
      */
     @java.lang.Override
-    public com.google.protobuf.ByteString getKey() {
-      return key_;
+    public com.google.protobuf.ByteString getUserKey() {
+      return userKey_;
     }
 
     private byte memoizedIsInitialized = -1;
@@ -20303,8 +20303,8 @@ public final class StateMessage {
     @java.lang.Override
     public void writeTo(com.google.protobuf.CodedOutputStream output)
                         throws java.io.IOException {
-      if (!key_.isEmpty()) {
-        output.writeBytes(1, key_);
+      if (!userKey_.isEmpty()) {
+        output.writeBytes(1, userKey_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -20315,9 +20315,9 @@ public final class StateMessage {
       if (size != -1) return size;
 
       size = 0;
-      if (!key_.isEmpty()) {
+      if (!userKey_.isEmpty()) {
         size += com.google.protobuf.CodedOutputStream
-          .computeBytesSize(1, key_);
+          .computeBytesSize(1, userKey_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
@@ -20334,8 +20334,8 @@ public final class StateMessage {
       }
       org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveKey other = (org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveKey) obj;
 
-      if (!getKey()
-          .equals(other.getKey())) return false;
+      if (!getUserKey()
+          .equals(other.getUserKey())) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
       return true;
     }
@@ -20347,8 +20347,8 @@ public final class StateMessage {
       }
       int hash = 41;
       hash = (19 * hash) + getDescriptor().hashCode();
-      hash = (37 * hash) + KEY_FIELD_NUMBER;
-      hash = (53 * hash) + getKey().hashCode();
+      hash = (37 * hash) + USERKEY_FIELD_NUMBER;
+      hash = (53 * hash) + getUserKey().hashCode();
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -20477,7 +20477,7 @@ public final class StateMessage {
       @java.lang.Override
       public Builder clear() {
         super.clear();
-        key_ = com.google.protobuf.ByteString.EMPTY;
+        userKey_ = com.google.protobuf.ByteString.EMPTY;
 
         return this;
       }
@@ -20505,7 +20505,7 @@ public final class StateMessage {
       @java.lang.Override
       public org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveKey buildPartial() {
         org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveKey result = new org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveKey(this);
-        result.key_ = key_;
+        result.userKey_ = userKey_;
         onBuilt();
         return result;
       }
@@ -20554,8 +20554,8 @@ public final class StateMessage {
 
       public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveKey other) {
         if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveKey.getDefaultInstance()) return this;
-        if (other.getKey() != com.google.protobuf.ByteString.EMPTY) {
-          setKey(other.getKey());
+        if (other.getUserKey() != com.google.protobuf.ByteString.EMPTY) {
+          setUserKey(other.getUserKey());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         onChanged();
@@ -20584,7 +20584,7 @@ public final class StateMessage {
                 done = true;
                 break;
               case 10: {
-                key_ = input.readBytes();
+                userKey_ = input.readBytes();
 
                 break;
               } // case 10
@@ -20604,36 +20604,36 @@ public final class StateMessage {
         return this;
       }
 
-      private com.google.protobuf.ByteString key_ = com.google.protobuf.ByteString.EMPTY;
+      private com.google.protobuf.ByteString userKey_ = com.google.protobuf.ByteString.EMPTY;
       /**
-       * <code>bytes key = 1;</code>
-       * @return The key.
+       * <code>bytes userKey = 1;</code>
+       * @return The userKey.
        */
       @java.lang.Override
-      public com.google.protobuf.ByteString getKey() {
-        return key_;
+      public com.google.protobuf.ByteString getUserKey() {
+        return userKey_;
       }
       /**
-       * <code>bytes key = 1;</code>
-       * @param value The key to set.
+       * <code>bytes userKey = 1;</code>
+       * @param value The userKey to set.
        * @return This builder for chaining.
        */
-      public Builder setKey(com.google.protobuf.ByteString value) {
+      public Builder setUserKey(com.google.protobuf.ByteString value) {
         if (value == null) {
     throw new NullPointerException();
   }
   
-        key_ = value;
+        userKey_ = value;
         onChanged();
         return this;
       }
       /**
-       * <code>bytes key = 1;</code>
+       * <code>bytes userKey = 1;</code>
        * @return This builder for chaining.
        */
-      public Builder clearKey() {
+      public Builder clearUserKey() {
         
-        key_ = getDefaultInstance().getKey();
+        userKey_ = getDefaultInstance().getUserKey();
         onChanged();
         return this;
       }
@@ -21911,18 +21911,18 @@ public final class StateMessage {
       "t\"!\n\020ValueStateUpdate\022\r\n\005value\030\001 \001(\014\"\007\n\005" +
       "Clear\"\"\n\014ListStateGet\022\022\n\niteratorId\030\001 \001(" +
       "\t\"\016\n\014ListStatePut\"\034\n\013AppendValue\022\r\n\005valu" +
-      "e\030\001 \001(\014\"\014\n\nAppendList\"\027\n\010GetValue\022\013\n\003key" +
-      "\030\001 \001(\014\"\032\n\013ContainsKey\022\013\n\003key\030\001 \001(\014\")\n\013Up" +
-      "dateValue\022\013\n\003key\030\001 \001(\014\022\r\n\005value\030\002 \001(\014\"\036\n" +
-      "\010Iterator\022\022\n\niteratorId\030\001 \001(\t\"\032\n\004Keys\022\022\n" +
-      "\niteratorId\030\001 \001(\t\"\034\n\006Values\022\022\n\niteratorI" +
-      "d\030\001 \001(\t\"\030\n\tRemoveKey\022\013\n\003key\030\001 \001(\014\"\\\n\016Set" +
-      "HandleState\022J\n\005state\030\001 \001(\0162;.org.apache." +
-      "spark.sql.execution.streaming.state.Hand" +
-      "leState\"\037\n\tTTLConfig\022\022\n\ndurationMs\030\001 \001(\005" +
-      "*K\n\013HandleState\022\013\n\007CREATED\020\000\022\017\n\013INITIALI" +
-      "ZED\020\001\022\022\n\016DATA_PROCESSED\020\002\022\n\n\006CLOSED\020\003b\006p" +
-      "roto3"
+      "e\030\001 \001(\014\"\014\n\nAppendList\"\033\n\010GetValue\022\017\n\007use" +
+      "rKey\030\001 \001(\014\"\036\n\013ContainsKey\022\017\n\007userKey\030\001 \001" +
+      "(\014\"-\n\013UpdateValue\022\017\n\007userKey\030\001 \001(\014\022\r\n\005va" +
+      "lue\030\002 \001(\014\"\036\n\010Iterator\022\022\n\niteratorId\030\001 \001(" +
+      "\t\"\032\n\004Keys\022\022\n\niteratorId\030\001 \001(\t\"\034\n\006Values\022" +
+      "\022\n\niteratorId\030\001 \001(\t\"\034\n\tRemoveKey\022\017\n\007user" +
+      "Key\030\001 \001(\014\"\\\n\016SetHandleState\022J\n\005state\030\001 \001" +
+      "(\0162;.org.apache.spark.sql.execution.stre" +
+      "aming.state.HandleState\"\037\n\tTTLConfig\022\022\n\n" +
+      "durationMs\030\001 \001(\005*K\n\013HandleState\022\013\n\007CREAT" +
+      "ED\020\000\022\017\n\013INITIALIZED\020\001\022\022\n\016DATA_PROCESSED\020" +
+      "\002\022\n\n\006CLOSED\020\003b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -22047,19 +22047,19 @@ public final class StateMessage {
     internal_static_org_apache_spark_sql_execution_streaming_state_GetValue_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_GetValue_descriptor,
-        new java.lang.String[] { "Key", });
+        new java.lang.String[] { "UserKey", });
     internal_static_org_apache_spark_sql_execution_streaming_state_ContainsKey_descriptor =
       getDescriptor().getMessageTypes().get(20);
     internal_static_org_apache_spark_sql_execution_streaming_state_ContainsKey_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_ContainsKey_descriptor,
-        new java.lang.String[] { "Key", });
+        new java.lang.String[] { "UserKey", });
     internal_static_org_apache_spark_sql_execution_streaming_state_UpdateValue_descriptor =
       getDescriptor().getMessageTypes().get(21);
     internal_static_org_apache_spark_sql_execution_streaming_state_UpdateValue_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_UpdateValue_descriptor,
-        new java.lang.String[] { "Key", "Value", });
+        new java.lang.String[] { "UserKey", "Value", });
     internal_static_org_apache_spark_sql_execution_streaming_state_Iterator_descriptor =
       getDescriptor().getMessageTypes().get(22);
     internal_static_org_apache_spark_sql_execution_streaming_state_Iterator_fieldAccessorTable = new
@@ -22083,7 +22083,7 @@ public final class StateMessage {
     internal_static_org_apache_spark_sql_execution_streaming_state_RemoveKey_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_RemoveKey_descriptor,
-        new java.lang.String[] { "Key", });
+        new java.lang.String[] { "UserKey", });
     internal_static_org_apache_spark_sql_execution_streaming_state_SetHandleState_descriptor =
       getDescriptor().getMessageTypes().get(26);
     internal_static_org_apache_spark_sql_execution_streaming_state_SetHandleState_fieldAccessorTable = new

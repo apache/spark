@@ -362,7 +362,7 @@ class TransformWithStateInPandasStateServer(
           sendResponse(2, s"state $stateName doesn't exist")
         }
       case MapStateCall.MethodCase.GETVALUE =>
-        val keyBytes = message.getGetValue.getKey.toByteArray
+        val keyBytes = message.getGetValue.getUserKey.toByteArray
         val keyRow = PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema,
           mapStateInfo.keyDeserializer)
         val value = mapStateInfo.mapState.getValue(keyRow)
@@ -376,7 +376,7 @@ class TransformWithStateInPandasStateServer(
           sendResponse(0)
         }
       case MapStateCall.MethodCase.CONTAINSKEY =>
-        val keyBytes = message.getContainsKey.getKey.toByteArray
+        val keyBytes = message.getContainsKey.getUserKey.toByteArray
         val keyRow = PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema,
           mapStateInfo.keyDeserializer)
         if (mapStateInfo.mapState.containsKey(keyRow)) {
@@ -385,7 +385,7 @@ class TransformWithStateInPandasStateServer(
           sendResponse(2, s"Map state $stateName doesn't contain key ${keyRow.toString()}")
         }
       case MapStateCall.MethodCase.UPDATEVALUE =>
-        val keyBytes = message.getUpdateValue.getKey.toByteArray
+        val keyBytes = message.getUpdateValue.getUserKey.toByteArray
         val keyRow = PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema,
           mapStateInfo.keyDeserializer)
         val valueBytes = message.getUpdateValue.getValue.toByteArray
@@ -456,7 +456,7 @@ class TransformWithStateInPandasStateServer(
         sendIteratorAsArrowBatches(iteratorOption.get, mapStateInfo.valueSchema,
           arrowStreamWriterForTest) {data => mapStateInfo.valueSerializer(data)}
       case MapStateCall.MethodCase.REMOVEKEY =>
-        val keyBytes = message.getRemoveKey.getKey.toByteArray
+        val keyBytes = message.getRemoveKey.getUserKey.toByteArray
         val keyRow = PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema,
           mapStateInfo.keyDeserializer)
         mapStateInfo.mapState.removeKey(keyRow)
