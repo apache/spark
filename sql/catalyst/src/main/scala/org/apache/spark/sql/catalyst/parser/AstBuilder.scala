@@ -337,6 +337,10 @@ class AstBuilder extends DataTypeAstBuilder
         if Option(c.beginLabel()).isDefined &&
           c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
         => true
+      case c: LoopStatementContext
+        if Option(c.beginLabel()).isDefined &&
+          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+        => true
       case _ => false
     }
   }
@@ -372,6 +376,13 @@ class AstBuilder extends DataTypeAstBuilder
       throw SqlScriptingErrors.labelDoesNotExist(
         CurrentOrigin.get, labelText, "ITERATE")
     }
+
+  override def visitLoopStatement(ctx: LoopStatementContext): LoopStatement = {
+    val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
+    val body = visitCompoundBody(ctx.compoundBody())
+
+    LoopStatement(body, Some(labelText))
+  }
 
   override def visitSingleStatement(ctx: SingleStatementContext): LogicalPlan = withOrigin(ctx) {
     Option(ctx.statement().asInstanceOf[ParserRuleContext])
@@ -5903,7 +5914,11 @@ class AstBuilder extends DataTypeAstBuilder
         throw QueryParsingErrors.unpivotWithPivotInFromClauseNotAllowedError(ctx)
       }
       withUnpivot(c, left)
-    }.get)))
+    }.getOrElse(Option(ctx.sample).map { c =>
+      withSample(c, left)
+    }.getOrElse(Option(ctx.joinRelation()).map { c =>
+      withJoinRelation(c, left)
+    }.get)))))
   }
 
   /**

@@ -26,8 +26,10 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
@@ -274,9 +276,7 @@ class Dataset[T] private[sql] (
     df.withResult { result =>
       assert(result.length == 1)
       assert(result.schema.size == 1)
-      // scalastyle:off println
-      println(result.toArray.head)
-      // scalastyle:on println
+      print(result.toArray.head)
     }
   }
 
@@ -1465,4 +1465,10 @@ class Dataset[T] private[sql] (
       func: MapFunction[T, K],
       encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
     super.groupByKey(func, encoder).asInstanceOf[KeyValueGroupedDataset[K, T]]
+
+  /** @inheritdoc */
+  override def rdd: RDD[T] = throwRddNotSupportedException()
+
+  /** @inheritdoc */
+  override def toJavaRDD: JavaRDD[T] = throwRddNotSupportedException()
 }

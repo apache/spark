@@ -29,10 +29,13 @@ import com.google.common.cache.{CacheBuilder, CacheLoader}
 import io.grpc.ClientInterceptor
 import org.apache.arrow.memory.RootAllocator
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.internal.Logging
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
@@ -89,6 +92,10 @@ class SparkSession private[sql] (
   }
 
   /** @inheritdoc */
+  override def sparkContext: SparkContext =
+    throw new UnsupportedOperationException("sparkContext is not supported in Spark Connect.")
+
+  /** @inheritdoc */
   val conf: RuntimeConfig = new ConnectRuntimeConfig(client)
 
   /** @inheritdoc */
@@ -143,6 +150,30 @@ class SparkSession private[sql] (
   def createDataset[T: Encoder](data: java.util.List[T]): Dataset[T] = {
     createDataset(data.asScala.toSeq)
   }
+
+  /** @inheritdoc */
+  override def createDataFrame[A <: Product: TypeTag](rdd: RDD[A]): DataFrame =
+    throwRddNotSupportedException()
+
+  /** @inheritdoc */
+  override def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame =
+    throwRddNotSupportedException()
+
+  /** @inheritdoc */
+  override def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame =
+    throwRddNotSupportedException()
+
+  /** @inheritdoc */
+  override def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame =
+    throwRddNotSupportedException()
+
+  /** @inheritdoc */
+  override def createDataFrame(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame =
+    throwRddNotSupportedException()
+
+  /** @inheritdoc */
+  override def createDataset[T: Encoder](data: RDD[T]): Dataset[T] =
+    throwRddNotSupportedException()
 
   /** @inheritdoc */
   @Experimental
