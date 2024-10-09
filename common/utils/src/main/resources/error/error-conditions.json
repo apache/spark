@@ -3814,6 +3814,12 @@
     ],
     "sqlState" : "42000"
   },
+  "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY" : {
+    "message" : [
+      "The expression <expression> must be inside 'partitionedBy'."
+    ],
+    "sqlState" : "42S23"
+  },
   "PATH_ALREADY_EXISTS" : {
     "message" : [
       "Path <outputPath> already exists. Set mode as \"overwrite\" to overwrite the existing path."
@@ -4187,12 +4193,6 @@
       "Cannot change <stateVarName> to <newType> between query restarts. Please set <stateVarName> to <oldType>, or restart with a new checkpoint directory."
     ],
     "sqlState" : "42K06"
-  },
-  "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY" : {
-    "message" : [
-      "The expression <expression> must be inside 'partitionedBy'."
-    ],
-    "sqlState": "42S23"
   },
   "STATE_STORE_KEY_ROW_FORMAT_VALIDATION_FAILURE" : {
     "message" : [
