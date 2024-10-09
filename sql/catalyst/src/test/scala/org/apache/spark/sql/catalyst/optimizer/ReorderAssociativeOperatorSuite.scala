@@ -74,4 +74,33 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-49915: Handle zero and one in associative operators") {
+    val originalQuery =
+      testRelation.select(
+        $"a" + 0,
+        Literal(-3) + $"a" + 3,
+        $"b" * 0 * 1 * 2 * 3,
+        $"b" * 1 * 1,
+        ($"b" + 0) * 1 * 2 * 3 * 4,
+        $"a" + 0 + $"b" + 0 + $"c" + 0,
+        $"a" + 0 + $"b" * 1 + $"c" + 0
+      )
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer =
+      testRelation
+        .select(
+          $"a".as("(a + 0)"),
+          $"a".as("((-3 + a) + 3)"),
+          Literal(0).as("((((b * 0) * 1) * 2) * 3)"),
+          $"b".as("((b * 1) * 1)"),
+          ($"b" * 24).as("(((((b + 0) * 1) * 2) * 3) * 4)"),
+          ($"a" + $"b" + $"c").as("""(((((a + 0) + b) + 0) + c) + 0)"""),
+          ($"a" + $"b" + $"c").as("((((a + 0) + (b * 1)) + c) + 0)")
+        ).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
 }
