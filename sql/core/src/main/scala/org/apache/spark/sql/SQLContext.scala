@@ -23,7 +23,7 @@ import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
+import org.apache.spark.annotation.{DeveloperApi, Stable}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
@@ -156,19 +156,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   def getAllConfs: immutable.Map[String, String] = {
     sparkSession.conf.getAll
   }
-
-  /**
-   * :: Experimental ::
-   * A collection of methods that are considered experimental, but can be used to hook into
-   * the query planner for advanced functionality.
-   *
-   * @group basic
-   * @since 1.3.0
-   */
-  @Experimental
-  @transient
-  @Unstable
-  def experimental: ExperimentalMethods = sparkSession.experimental
 
   /**
    * Returns a `DataFrame` with no rows or columns.

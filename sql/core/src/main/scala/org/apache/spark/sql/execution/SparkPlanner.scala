@@ -26,14 +26,13 @@ import org.apache.spark.sql.execution.command.v2.V2CommandStrategy
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, FileSourceStrategy}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Strategy
 
-class SparkPlanner(val session: SparkSession, val experimentalMethods: ExperimentalMethods)
+class SparkPlanner(val session: SparkSession)
   extends SparkStrategies with SQLConfHelper {
 
   def numPartitions: Int = conf.numShufflePartitions
 
   override def strategies: Seq[Strategy] =
-    experimentalMethods.extraStrategies ++
-      extraPlanningStrategies ++ (
+    extraPlanningStrategies ++ (
       LogicalQueryStageStrategy ::
       PythonEvals ::
       new DataSourceV2Strategy(session) ::
@@ -50,8 +49,8 @@ class SparkPlanner(val session: SparkSession, val experimentalMethods: Experimen
       BasicOperators :: Nil)
 
   /**
-   * Override to add extra planning strategies to the planner. These strategies are tried after
-   * the strategies defined in [[ExperimentalMethods]], and before the regular strategies.
+   * Override to add extra planning strategies to the planner. These strategies are tried before
+   * the regular strategies.
    */
   def extraPlanningStrategies: Seq[Strategy] = Nil
 

@@ -45,7 +45,6 @@ import org.apache.spark.util.{DependencyUtils, Utils}
  *
  * @param sharedState The state shared across sessions, e.g. global view manager, external catalog.
  * @param conf SQL-specific key-value configurations.
- * @param experimentalMethods Interface to add custom planning strategies and optimizers.
  * @param functionRegistry Internal catalog for managing functions registered by the user.
  * @param udfRegistration Interface exposed to the user for registering user-defined functions.
  * @param udtfRegistration Interface exposed to the user for registering user-defined
@@ -71,7 +70,6 @@ import org.apache.spark.util.{DependencyUtils, Utils}
 private[sql] class SessionState(
     sharedState: SharedState,
     val conf: SQLConf,
-    val experimentalMethods: ExperimentalMethods,
     val functionRegistry: FunctionRegistry,
     val tableFunctionRegistry: TableFunctionRegistry,
     val udfRegistration: UDFRegistration,

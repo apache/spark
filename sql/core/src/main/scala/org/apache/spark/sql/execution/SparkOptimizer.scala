@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.ExperimentalMethods
 import org.apache.spark.sql.catalyst.analysis.RewriteCollationJoin
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer._
@@ -31,8 +30,7 @@ import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggreg
 
 class SparkOptimizer(
     catalogManager: CatalogManager,
-    catalog: SessionCatalog,
-    experimentalMethods: ExperimentalMethods)
+    catalog: SessionCatalog)
   extends Optimizer(catalogManager) {
 
   override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
@@ -92,7 +90,6 @@ class SparkOptimizer(
       LimitPushDownThroughWindow,
       EliminateLimits,
       ConstantFolding) :+
-    Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*) :+
     Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition) :+
     Batch("RewriteCollationJoin", Once, RewriteCollationJoin)
 
@@ -113,9 +110,8 @@ class SparkOptimizer(
   def preOptimizationBatches: Seq[Batch] = Nil
 
   /**
-   * Optimization batches that are executed after the regular optimization batches, but before the
-   * batch executing the [[ExperimentalMethods]] optimizer rules. This hook can be used to add
-   * custom optimizer batches to the Spark optimizer.
+   * Optimization batches that are executed after the regular optimization batches This hook can be
+   * used to add custom optimizer batches to the Spark optimizer.
    *
    * Note that 'Extract Python UDFs' batch is an exception and ran after the batches defined here.
    */

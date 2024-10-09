@@ -17,7 +17,7 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
+import org.apache.spark.sql.{SparkSession, UDFRegistration, _}
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveSessionCatalog, ResolveTranspose, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{FunctionExpressionBuilder, SessionCatalog}
@@ -125,16 +125,6 @@ abstract class BaseSessionStateBuilder(
    */
   protected lazy val dataSourceManager: DataSourceManager = {
     parentState.map(_.dataSourceManager.clone()).getOrElse(new DataSourceManager)
-  }
-
-  /**
-   * Experimental methods that can be used to define custom optimization rules and custom planning
-   * strategies.
-   *
-   * This either gets cloned from a pre-existing version or newly created.
-   */
-  protected lazy val experimentalMethods: ExperimentalMethods = {
-    parentState.map(_.experimentalMethods.clone()).getOrElse(new ExperimentalMethods)
   }
 
   /**
@@ -265,7 +255,7 @@ abstract class BaseSessionStateBuilder(
    * Note: this depends on `catalog` and `experimentalMethods` fields.
    */
   protected def optimizer: Optimizer = {
-    new SparkOptimizer(catalogManager, catalog, experimentalMethods) {
+    new SparkOptimizer(catalogManager, catalog) {
       override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
         super.earlyScanPushDownRules ++ customEarlyScanPushDownRules
 
@@ -311,7 +301,7 @@ abstract class BaseSessionStateBuilder(
    * Note: this depends on the `conf` and `experimentalMethods` fields.
    */
   protected def planner: SparkPlanner = {
-    new SparkPlanner(session, experimentalMethods) {
+    new SparkPlanner(session) {
       override def extraPlanningStrategies: Seq[Strategy] =
         super.extraPlanningStrategies ++ customPlanningStrategies
     }
@@ -388,7 +378,6 @@ abstract class BaseSessionStateBuilder(
     new SessionState(
       session.sharedState,
       conf,
-      experimentalMethods,
       functionRegistry,
       tableFunctionRegistry,
       udfRegistration,

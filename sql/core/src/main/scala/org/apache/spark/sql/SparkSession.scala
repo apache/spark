@@ -204,17 +204,6 @@ class SparkSession private(
    */
   def listenerManager: ExecutionListenerManager = sessionState.listenerManager
 
-  /**
-   * :: Experimental ::
-   * A collection of methods that are considered experimental, but can be used to hook into
-   * the query planner for advanced functionality.
-   *
-   * @since 2.0.0
-   */
-  @Experimental
-  @Unstable
-  def experimental: ExperimentalMethods = sessionState.experimentalMethods
-
   /** @inheritdoc */
   def udf: UDFRegistration = sessionState.udfRegistration
 

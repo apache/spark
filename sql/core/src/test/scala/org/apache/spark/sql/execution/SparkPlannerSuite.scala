@@ -23,8 +23,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, Log
 import org.apache.spark.sql.test.SharedSparkSession
 
 class SparkPlannerSuite extends SharedSparkSession {
-  import testImplicits._
-
   test("Ensure to go down only the first branch, not any other possible branches") {
 
     case object NeverPlanned extends LeafNode {
@@ -49,15 +47,13 @@ class SparkPlannerSuite extends SharedSparkSession {
       }
     }
 
-    try {
-      spark.experimental.extraStrategies = TestStrategy :: Nil
-
-      val ds = Seq("a", "b", "c").toDS().union(Seq("d", "e", "f").toDS())
-
-      assert(ds.collect().toSeq === Seq("a", "b", "c", "d", "e", "f"))
-      assert(planned === 4)
-    } finally {
-      spark.experimental.extraStrategies = Nil
+    val session = sessionWithExtensions { extensions =>
+      extensions.injectPlannerStrategy(_ => TestStrategy)
     }
+    import session.implicits._
+
+    val ds = Seq("a", "b", "c").toDS().union(Seq("d", "e", "f").toDS())
+    assert(ds.collect().toSeq === Seq("a", "b", "c", "d", "e", "f"))
+    assert(planned === 4)
   }
 }

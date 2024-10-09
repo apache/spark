@@ -189,6 +189,11 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.javalang.typed"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.scalalang.typed"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.scalalang.typed$"),
+
+    // SPARK-49711: Remove ExperimentalMethods
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ExperimentalMethods"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.SQLContext.experimental"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.SparkSession.experimental"),
   ) ++ loggingExcludes("org.apache.spark.sql.DataFrameReader") ++
     loggingExcludes("org.apache.spark.sql.streaming.DataStreamReader") ++
     loggingExcludes("org.apache.spark.sql.SparkSession#Builder")

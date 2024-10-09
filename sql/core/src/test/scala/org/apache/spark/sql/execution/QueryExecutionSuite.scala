@@ -156,33 +156,54 @@ class QueryExecutionSuite extends SharedSparkSession {
   }
 
   test("toString() exception/error handling") {
-    spark.experimental.extraStrategies = Seq[SparkStrategy]((_: LogicalPlan) => Nil)
-
-    def qe: QueryExecution = new QueryExecution(spark, OneRowRelation())
-
     // Nothing!
-    assert(qe.toString.contains("OneRowRelation"))
+    val session1 = sessionWithExtensions { extensions =>
+      extensions.injectPlannerStrategy(_ => (_: LogicalPlan) => Nil)
+    }
+    val qe1 = session1.sessionState.executePlan(OneRowRelation())
+    assert(qe1.toString.contains("OneRowRelation"))
 
     // Throw an AnalysisException - this should be captured.
-    spark.experimental.extraStrategies = Seq[SparkStrategy](
-      (_: LogicalPlan) => throw new AnalysisException(
-        "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
-        messageParameters = Map("dataSourceType" -> "XXX")))
-    assert(qe.toString.contains("org.apache.spark.sql.AnalysisException"))
+    val session2 = sessionWithExtensions { extensions =>
+      extensions.injectPlannerStrategy(_ => (_: LogicalPlan) =>
+        throw new AnalysisException(
+          "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
+          messageParameters = Map("dataSourceType" -> "XXX")))
+    }
+    val qe2 = session2.sessionState.executePlan(OneRowRelation())
+    assert(qe2.toString.contains("org.apache.spark.sql.AnalysisException"))
 
     // Throw an Error - this should not be captured.
-    spark.experimental.extraStrategies = Seq[SparkStrategy](
-      (_: LogicalPlan) => throw new Error("error"))
-    val error = intercept[Error](qe.toString)
+    val session3 = sessionWithExtensions { extensions =>
+      extensions.injectPlannerStrategy(_ => (_: LogicalPlan) => throw new Error("error"))
+    }
+    val error = intercept[Error] {
+      session3.sessionState
+        .executePlan(OneRowRelation())
+        .toString
+    }
     assert(error.getMessage.contains("error"))
-
-    spark.experimental.extraStrategies = Nil
   }
 
   test("SPARK-28346: clone the query plan between different stages") {
     val tag1 = new TreeNodeTag[String]("a")
     val tag2 = new TreeNodeTag[String]("b")
     val tag3 = new TreeNodeTag[String]("c")
+    val tag4 = new TreeNodeTag[String]("d")
+    val tag5 = new TreeNodeTag[String]("e")
+
+    val session = sessionWithExtensions { extensions =>
+      extensions.injectPlannerStrategy(_ => new SparkStrategy() {
+        override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
+          plan.foreach {
+            case r: org.apache.spark.sql.catalyst.plans.logical.Range =>
+              r.setTagValue(tag4, "v")
+            case _ =>
+          }
+          Seq(FastOperator(plan.output))
+        }
+      })
+    }
 
     def assertNoTag(tag: TreeNodeTag[String], plans: QueryPlan[_]*): Unit = {
       plans.foreach { plan =>
@@ -190,7 +211,7 @@ class QueryExecutionSuite extends SharedSparkSession {
       }
     }
 
-    val df = spark.range(10)
+    val df = session.range(10)
     val analyzedPlan = df.queryExecution.analyzed
     val cachedPlan = df.queryExecution.withCachedData
     val optimizedPlan = df.queryExecution.optimizedPlan
@@ -204,26 +225,10 @@ class QueryExecutionSuite extends SharedSparkSession {
     optimizedPlan.setTagValue(tag3, "v")
     assertNoTag(tag3, analyzedPlan, cachedPlan)
 
-    val tag4 = new TreeNodeTag[String]("d")
-    try {
-      spark.experimental.extraStrategies = Seq(new SparkStrategy() {
-        override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
-          plan.foreach {
-            case r: org.apache.spark.sql.catalyst.plans.logical.Range =>
-              r.setTagValue(tag4, "v")
-            case _ =>
-          }
-          Seq(FastOperator(plan.output))
-        }
-      })
-      // trigger planning
-      df.queryExecution.sparkPlan
-      assert(optimizedPlan.getTagValue(tag4).isEmpty)
-    } finally {
-      spark.experimental.extraStrategies = Nil
-    }
+    // trigger planning
+    df.queryExecution.sparkPlan
+    assert(optimizedPlan.getTagValue(tag4).isEmpty)
 
-    val tag5 = new TreeNodeTag[String]("e")
     df.queryExecution.executedPlan.setTagValue(tag5, "v")
     assertNoTag(tag5, df.queryExecution.sparkPlan)
   }

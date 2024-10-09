@@ -24,7 +24,7 @@ import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{DebugFilesystem, SparkConf}
 import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.{SparkSession, SparkSessionExtensions, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -118,6 +118,13 @@ trait SharedSparkSessionBase
     if (_spark == null) {
       _spark = createSparkSession
     }
+  }
+
+  protected def sessionWithExtensions(f: SparkSessionExtensions => Unit): SparkSession = {
+    SparkSession.builder()
+      .config(sparkConf)
+      .withExtensions(f)
+      .create()
   }
 
   /**

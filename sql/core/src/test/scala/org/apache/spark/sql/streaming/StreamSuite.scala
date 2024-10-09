@@ -395,19 +395,20 @@ class StreamSuite extends StreamTest {
       CheckSinkLatestBatchId(2))
   }
 
+  // Borked
   test("insert an extraStrategy") {
-    try {
-      spark.experimental.extraStrategies = TestStrategy :: Nil
-
-      val inputData = MemoryStream[(String, Int)]
-      val df = inputData.toDS().map(_._1).toDF("a")
-
-      testStream(df)(
-        AddData(inputData, ("so slow", 1)),
-        CheckAnswer("so fast"))
-    } finally {
-      spark.experimental.extraStrategies = Nil
+    val session = sessionWithExtensions { extensions =>
+      extensions.injectPlannerStrategy(_ => TestStrategy)
     }
+
+    val inputData = MemoryStream(
+      Encoders.tuple(Encoders.STRING, Encoders.scalaInt),
+      session.sqlContext)
+    val df = inputData.toDS().map(_._1).toDF("a")
+
+    testStream(df)(
+      AddData(inputData, ("so slow", 1)),
+      CheckAnswer("so fast"))
   }
 
   testQuietly("handle fatal errors thrown from the stream thread") {

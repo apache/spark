@@ -19,17 +19,11 @@ package org.apache.spark.sql
 
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, StringType, StructField, StructType}
 
 @deprecated("This suite is deprecated to silent compiler deprecation warnings", "2.0.0")
 class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
-
-  object DummyRule extends Rule[LogicalPlan] {
-    def apply(p: LogicalPlan): LogicalPlan = p
-  }
 
   test("getOrCreate instantiates SQLContext") {
     val sqlContext = SQLContext.getOrCreate(sc)
@@ -74,12 +68,6 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
     intercept[AnalysisException] {
       session2.sql("select myadd(1, 2)").explain()
     }
-  }
-
-  test("Catalyst optimization passes are modifiable at runtime") {
-    val sqlContext = SQLContext.getOrCreate(sc)
-    sqlContext.experimental.extraOptimizations = Seq(DummyRule)
-    assert(sqlContext.sessionState.optimizer.batches.flatMap(_.rules).contains(DummyRule))
   }
 
   test("get all tables") {

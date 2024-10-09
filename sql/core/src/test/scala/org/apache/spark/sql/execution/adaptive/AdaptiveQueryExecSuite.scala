@@ -28,7 +28,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.shuffle.sort.SortShuffleManager
-import org.apache.spark.sql.{DataFrame, Dataset, QueryTest, Row, SparkSession, Strategy}
+import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
@@ -911,53 +911,44 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-47148: AQE should avoid to submit shuffle job on cancellation") {
-    def createJoinedDF(): DataFrame = {
-      // Use subquery expression containing `slow_udf` to delay the submission of shuffle jobs.
-      val df = sql("SELECT id, (SELECT slow_udf() FROM range(2)) FROM range(5)")
-      val df2 = sql("SELECT id FROM range(10)").coalesce(2)
-      val df3 = sql("SELECT id, (SELECT slow_udf() FROM range(2)) FROM range(15) WHERE id > 2")
-      df.join(df2, Seq("id")).join(df3, Seq("id"))
+    val session = sessionWithExtensions { extensions =>
+      extensions.injectPlannerStrategy(_ => TestProblematicCoalesceStrategy)
     }
+    session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
+    session.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, -1)
+    session.udf.register("slow_udf", () => {
+      Thread.sleep(3000)
+      1
+    })
 
-    withUserDefinedFunction("slow_udf" -> true) {
-      spark.udf.register("slow_udf", () => {
-        Thread.sleep(3000)
-        1
-      })
+    // Use subquery expression containing `slow_udf` to delay the submission of shuffle jobs.
+    val df = session.sql("SELECT id, (SELECT slow_udf() FROM range(2)) FROM range(5)")
+    val df2 = session.sql("SELECT id FROM range(10)").coalesce(2)
+    val df3 = session.sql(
+      "SELECT id, (SELECT slow_udf() FROM range(2)) FROM range(15) WHERE id > 2")
+    val joined = df.join(df2, Seq("id")).join(df3, Seq("id"))
+    joined.explain(true)
 
-      try {
-        spark.experimental.extraStrategies = TestProblematicCoalesceStrategy :: Nil
-        withSQLConf(
-          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-          val joined = createJoinedDF()
-          joined.explain(true)
-
-          val error = intercept[SparkException] {
-            joined.collect()
-          }
-          assert(error.getMessage() contains "coalesce test error")
-
-          val adaptivePlan = joined.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
-
-          // All QueryStages should be based on ShuffleQueryStageExec
-          val shuffleQueryStageExecs = collect(adaptivePlan) {
-            case sqse: ShuffleQueryStageExec => sqse
-          }
-          assert(shuffleQueryStageExecs.length == 3, s"Physical Plan should include " +
-            s"3 ShuffleQueryStages. Physical Plan: $adaptivePlan")
-          // First ShuffleQueryStage is cancelled before shuffle job is submitted.
-          assert(shuffleQueryStageExecs(0).shuffle.futureAction.get.isEmpty)
-          // Second ShuffleQueryStage has submitted the shuffle job but it failed.
-          assert(shuffleQueryStageExecs(1).shuffle.futureAction.get.isDefined,
-            "Materialization should be started but it is failed.")
-          // Third ShuffleQueryStage is cancelled before shuffle job is submitted.
-          assert(shuffleQueryStageExecs(2).shuffle.futureAction.get.isEmpty)
-        }
-      } finally {
-        spark.experimental.extraStrategies = Nil
-      }
+    val error = intercept[SparkException] {
+      joined.collect()
     }
+    assert(error.getMessage() contains "coalesce test error")
+
+    val adaptivePlan = joined.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+
+    // All QueryStages should be based on ShuffleQueryStageExec
+    val shuffleQueryStageExecs = collect(adaptivePlan) {
+      case sqse: ShuffleQueryStageExec => sqse
+    }
+    assert(shuffleQueryStageExecs.length == 3, s"Physical Plan should include " +
+      s"3 ShuffleQueryStages. Physical Plan: $adaptivePlan")
+    // First ShuffleQueryStage is cancelled before shuffle job is submitted.
+    assert(shuffleQueryStageExecs(0).shuffle.futureAction.get.isEmpty)
+    // Second ShuffleQueryStage has submitted the shuffle job but it failed.
+    assert(shuffleQueryStageExecs(1).shuffle.futureAction.get.isDefined,
+      "Materialization should be started but it is failed.")
+    // Third ShuffleQueryStage is cancelled before shuffle job is submitted.
+    assert(shuffleQueryStageExecs(2).shuffle.futureAction.get.isEmpty)
   }
 
   test("SPARK-30403: AQE should handle InSubquery") {
@@ -1277,30 +1268,23 @@ class AdaptiveQueryExecSuite
   }
 
   test("No deadlock in UI update") {
-    object TestStrategy extends Strategy {
+    case class TestStrategy(session: SparkSession) extends Strategy {
       def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
         case _: Aggregate =>
-          withSQLConf(
-            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-            SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
-            spark.range(5).rdd
-          }
+          session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "true")
+          session.conf.set(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key, "true")
+          session.range(5).rdd
           Nil
         case _ => Nil
       }
     }
-
-    withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
-      try {
-        spark.experimental.extraStrategies = TestStrategy :: Nil
-        val df = spark.range(10).groupBy($"id").count()
-        df.collect()
-      } finally {
-        spark.experimental.extraStrategies = Nil
-      }
+    val session = sessionWithExtensions { extensions =>
+      extensions.injectPlannerStrategy(TestStrategy)
     }
+    session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "true")
+    session.conf.set(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key, "true")
+    val df = session.range(10).groupBy($"id").count()
+    df.collect()
   }
 
   test("SPARK-31658: SQL UI should show write commands") {

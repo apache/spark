@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan}
-import org.apache.spark.sql.test.SharedSparkSession
 
 case class FastOperator(output: Seq[Attribute]) extends LeafExecNode {
 
@@ -42,26 +41,5 @@ object TestStrategy extends Strategy {
     case Project(Seq(attr), _) if attr.name == "a" =>
       FastOperator(attr.toAttribute :: Nil) :: Nil
     case _ => Nil
-  }
-}
-
-class ExtraStrategiesSuite extends QueryTest with SharedSparkSession {
-  import testImplicits._
-
-  test("insert an extraStrategy") {
-    try {
-      spark.experimental.extraStrategies = TestStrategy :: Nil
-
-      val df = sparkContext.parallelize(Seq(("so slow", 1))).toDF("a", "b")
-      checkAnswer(
-        df.select("a"),
-        Row("so fast"))
-
-      checkAnswer(
-        df.select("a", "b"),
-        Row("so slow", 1))
-    } finally {
-      spark.experimental.extraStrategies = Nil
-    }
   }
 }

@@ -21,8 +21,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
 
@@ -98,37 +96,6 @@ class SessionStateSuite extends SparkFunSuite {
     } finally {
       activeSession.sessionState.functionRegistry.dropFunction(testFuncName1)
       activeSession.sessionState.functionRegistry.dropFunction(testFuncName2)
-    }
-  }
-
-  test("fork new session and inherit experimental methods") {
-    val originalExtraOptimizations = activeSession.experimental.extraOptimizations
-    val originalExtraStrategies = activeSession.experimental.extraStrategies
-    try {
-      object DummyRule1 extends Rule[LogicalPlan] {
-        def apply(p: LogicalPlan): LogicalPlan = p
-      }
-      object DummyRule2 extends Rule[LogicalPlan] {
-        def apply(p: LogicalPlan): LogicalPlan = p
-      }
-      val optimizations = List(DummyRule1, DummyRule2)
-      activeSession.experimental.extraOptimizations = optimizations
-      val forkedSession = activeSession.cloneSession()
-
-      // inheritance
-      assert(forkedSession ne activeSession)
-      assert(forkedSession.experimental ne activeSession.experimental)
-      assert(forkedSession.experimental.extraOptimizations.toSet ==
-        activeSession.experimental.extraOptimizations.toSet)
-
-      // independence
-      forkedSession.experimental.extraOptimizations = List(DummyRule2)
-      assert(activeSession.experimental.extraOptimizations == optimizations)
-      activeSession.experimental.extraOptimizations = List(DummyRule1)
-      assert(forkedSession.experimental.extraOptimizations == List(DummyRule2))
-    } finally {
-      activeSession.experimental.extraOptimizations = originalExtraOptimizations
-      activeSession.experimental.extraStrategies = originalExtraStrategies
     }
   }
 
