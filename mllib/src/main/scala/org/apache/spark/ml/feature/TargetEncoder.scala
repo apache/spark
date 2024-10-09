@@ -192,7 +192,7 @@ class TargetEncoder @Since("4.0.0") (@Since("4.0.0") override val uid: String)
         Array.fill(inputFeatures.length) {
           Map.empty[Option[Double], (Double, Double)]
         })(
-        (agg, row: Row) => {
+        (agg, row: Row) => if (!row.isNullAt(inputFeatures.length)) {
           val label = label_type match {
             case ByteType => row.getByte(inputFeatures.length).toDouble
             case ShortType => row.getShort(inputFeatures.length).toDouble
@@ -242,7 +242,7 @@ class TargetEncoder @Since("4.0.0") (@Since("4.0.0") override val uid: String)
               }
             }
           }.toArray
-        },
+        } else agg,  // ignore null-labeled observations
         (agg1, agg2) => inputFeatures.indices.map {
           feature => {
             val categories = agg1(feature).keySet ++ agg2(feature).keySet

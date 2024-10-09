@@ -385,6 +385,34 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
 
   }
 
+  test("TargetEncoder - null label") {
+
+    val data_nolabel = Row(2.toShort, 3, 5.0,
+      null, 1.0/3, 0.0, 0.0, null, 60.0, 50.0, 90.0, 57.5, 50.0, 70.0)
+
+    val df_nolabel = spark
+      .createDataFrame(sc.parallelize(data :+ data_nolabel), schema)
+
+    val encoder = new TargetEncoder()
+      .setLabelCol("continuousLabel")
+      .setTargetType(TargetEncoder.TARGET_CONTINUOUS)
+      .setInputCols(Array("input1", "input2", "input3"))
+      .setOutputCols(Array("output1", "output2", "output3"))
+
+    val model = encoder.fit(df_nolabel)
+
+    val expected_encodings = Map(
+      "input1" -> Map(Some(0.0) -> 40.0, Some(1.0) -> 50.0, Some(2.0) -> 60.0, Some(-1.0) -> 50.0),
+      "input2" -> Map(Some(3.0) -> 50.0, Some(4.0) -> 50.0, Some(-1.0) -> 50.0),
+      "input3" -> HashMap(Some(5.0) -> 20.0, Some(6.0) -> 50.0, Some(7.0) -> 70.0,
+        Some(8.0) -> 80.0, Some(9.0) -> 90.0, Some(-1.0) -> 50.0))
+
+    print(model.encodings)
+
+    assert(model.encodings.equals(expected_encodings))
+
+  }
+
   test("TargetEncoder - non-binary labels") {
 
     val encoder = new TargetEncoder()
