@@ -519,10 +519,14 @@ trait SupportsFineGrainedReplay {
    *
    * @param startVersion starting changelog version
    * @param endVersion ending changelog version
+   * @param colFamilyNameOpt optional column family name to read from
    * @return iterator that gives tuple(recordType: [[RecordType.Value]], nested key: [[UnsafeRow]],
    *         nested value: [[UnsafeRow]], batchId: [[Long]])
    */
-  def getStateStoreChangeDataReader(startVersion: Long, endVersion: Long):
+  def getStateStoreChangeDataReader(
+      startVersion: Long,
+      endVersion: Long,
+      colFamilyNameOpt: Option[String] = None):
     NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)]
 }
 

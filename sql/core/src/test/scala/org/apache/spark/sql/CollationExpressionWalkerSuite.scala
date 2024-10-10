@@ -66,10 +66,10 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       collationType: CollationType): Any =
     inputEntry match {
       case e: Class[_] if e.isAssignableFrom(classOf[Expression]) =>
-        generateLiterals(StringTypeAnyCollation, collationType)
+        generateLiterals(StringTypeWithCaseAccentSensitivity, collationType)
       case se: Class[_] if se.isAssignableFrom(classOf[Seq[Expression]]) =>
-        CreateArray(Seq(generateLiterals(StringTypeAnyCollation, collationType),
-          generateLiterals(StringTypeAnyCollation, collationType)))
+        CreateArray(Seq(generateLiterals(StringTypeWithCaseAccentSensitivity, collationType),
+          generateLiterals(StringTypeWithCaseAccentSensitivity, collationType)))
       case oe: Class[_] if oe.isAssignableFrom(classOf[Option[Any]]) => None
       case b: Class[_] if b.isAssignableFrom(classOf[Boolean]) => false
       case dt: Class[_] if dt.isAssignableFrom(classOf[DataType]) => StringType
@@ -142,12 +142,12 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
           lit => Literal.create(Seq(lit.asInstanceOf[Literal].value), ArrayType(lit.dataType))
         ).head
       case ArrayType =>
-        generateLiterals(StringTypeAnyCollation, collationType).map(
+        generateLiterals(StringTypeWithCaseAccentSensitivity, collationType).map(
           lit => Literal.create(Seq(lit.asInstanceOf[Literal].value), ArrayType(lit.dataType))
         ).head
       case MapType =>
-        val key = generateLiterals(StringTypeAnyCollation, collationType)
-        val value = generateLiterals(StringTypeAnyCollation, collationType)
+        val key = generateLiterals(StringTypeWithCaseAccentSensitivity, collationType)
+        val value = generateLiterals(StringTypeWithCaseAccentSensitivity, collationType)
         CreateMap(Seq(key, value))
       case MapType(keyType, valueType, _) =>
         val key = generateLiterals(keyType, collationType)
@@ -159,8 +159,9 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
         CreateMap(Seq(key, value))
       case StructType =>
         CreateNamedStruct(
-          Seq(Literal("start"), generateLiterals(StringTypeAnyCollation, collationType),
-          Literal("end"), generateLiterals(StringTypeAnyCollation, collationType)))
+          Seq(Literal("start"),
+            generateLiterals(StringTypeWithCaseAccentSensitivity, collationType),
+          Literal("end"), generateLiterals(StringTypeWithCaseAccentSensitivity, collationType)))
     }
 
   /**
@@ -209,10 +210,10 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       case ArrayType(elementType, _) =>
         "array(" + generateInputAsString(elementType, collationType) + ")"
       case ArrayType =>
-        "array(" + generateInputAsString(StringTypeAnyCollation, collationType) + ")"
+        "array(" + generateInputAsString(StringTypeWithCaseAccentSensitivity, collationType) + ")"
       case MapType =>
-        "map(" + generateInputAsString(StringTypeAnyCollation, collationType) + ", " +
-          generateInputAsString(StringTypeAnyCollation, collationType) + ")"
+        "map(" + generateInputAsString(StringTypeWithCaseAccentSensitivity, collationType) + ", " +
+          generateInputAsString(StringTypeWithCaseAccentSensitivity, collationType) + ")"
       case MapType(keyType, valueType, _) =>
         "map(" + generateInputAsString(keyType, collationType) + ", " +
           generateInputAsString(valueType, collationType) + ")"
@@ -220,8 +221,9 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
         "map(" + generateInputAsString(keyType, collationType) + ", " +
           generateInputAsString(valueType, collationType) + ")"
       case StructType =>
-        "named_struct( 'start', " + generateInputAsString(StringTypeAnyCollation, collationType) +
-          ", 'end', " + generateInputAsString(StringTypeAnyCollation, collationType) + ")"
+        "named_struct( 'start', " +
+          generateInputAsString(StringTypeWithCaseAccentSensitivity, collationType) + ", 'end', " +
+          generateInputAsString(StringTypeWithCaseAccentSensitivity, collationType) + ")"
       case StructType(fields) =>
         "named_struct(" + fields.map(f => "'" + f.name + "', " +
           generateInputAsString(f.dataType, collationType)).mkString(", ") + ")"
@@ -267,10 +269,12 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       case ArrayType(elementType, _) =>
         "array<" + generateInputTypeAsStrings(elementType, collationType) + ">"
       case ArrayType =>
-        "array<" + generateInputTypeAsStrings(StringTypeAnyCollation, collationType) + ">"
+        "array<" + generateInputTypeAsStrings(StringTypeWithCaseAccentSensitivity, collationType) +
+          ">"
       case MapType =>
-        "map<" + generateInputTypeAsStrings(StringTypeAnyCollation, collationType) + ", " +
-          generateInputTypeAsStrings(StringTypeAnyCollation, collationType) + ">"
+        "map<" + generateInputTypeAsStrings(StringTypeWithCaseAccentSensitivity, collationType) +
+          ", " +
+          generateInputTypeAsStrings(StringTypeWithCaseAccentSensitivity, collationType) + ">"
       case MapType(keyType, valueType, _) =>
         "map<" + generateInputTypeAsStrings(keyType, collationType) + ", " +
           generateInputTypeAsStrings(valueType, collationType) + ">"
@@ -278,9 +282,10 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
         "map<" + generateInputTypeAsStrings(keyType, collationType) + ", " +
           generateInputTypeAsStrings(valueType, collationType) + ">"
       case StructType =>
-        "struct<start:" + generateInputTypeAsStrings(StringTypeAnyCollation, collationType) +
+        "struct<start:" +
+          generateInputTypeAsStrings(StringTypeWithCaseAccentSensitivity, collationType) +
           ", end:" +
-          generateInputTypeAsStrings(StringTypeAnyCollation, collationType) + ">"
+          generateInputTypeAsStrings(StringTypeWithCaseAccentSensitivity, collationType) + ">"
       case StructType(fields) =>
         "named_struct<" + fields.map(f => "'" + f.name + "', " +
           generateInputTypeAsStrings(f.dataType, collationType)).mkString(", ") + ">"
@@ -293,8 +298,8 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
    */
   def hasStringType(inputType: AbstractDataType): Boolean = {
     inputType match {
-      case _: StringType | StringTypeAnyCollation | StringTypeBinaryLcase | AnyDataType =>
-        true
+      case _: StringType | StringTypeWithCaseAccentSensitivity | StringTypeBinaryLcase | AnyDataType
+      => true
       case ArrayType => true
       case MapType => true
       case MapType(keyType, valueType, _) => hasStringType(keyType) || hasStringType(valueType)
@@ -408,7 +413,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       var input: Seq[Expression] = Seq.empty
       var i = 0
       for (_ <- 1 to 10) {
-        input = input :+ generateLiterals(StringTypeAnyCollation, Utf8Binary)
+        input = input :+ generateLiterals(StringTypeWithCaseAccentSensitivity, Utf8Binary)
         try {
           method.invoke(null, funInfo.getClassName, input).asInstanceOf[ExpectsInputTypes]
         }
@@ -498,7 +503,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
           var input: Seq[Expression] = Seq.empty
           var result: Expression = null
           for (_ <- 1 to 10) {
-            input = input :+ generateLiterals(StringTypeAnyCollation, Utf8Binary)
+            input = input :+ generateLiterals(StringTypeWithCaseAccentSensitivity, Utf8Binary)
             try {
               val tempResult = method.invoke(null, f.getClassName, input)
               if (result == null) result = tempResult.asInstanceOf[Expression]
@@ -609,7 +614,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
           var input: Seq[Expression] = Seq.empty
           var result: Expression = null
           for (_ <- 1 to 10) {
-            input = input :+ generateLiterals(StringTypeAnyCollation, Utf8Binary)
+            input = input :+ generateLiterals(StringTypeWithCaseAccentSensitivity, Utf8Binary)
             try {
               val tempResult = method.invoke(null, f.getClassName, input)
               if (result == null) result = tempResult.asInstanceOf[Expression]
@@ -736,7 +741,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
             assert(resultUTF8.collect() === resultUTF8Lcase.collect())
           }
         } catch {
-          case e: SparkRuntimeException => assert(e.getErrorClass == "USER_RAISED_EXCEPTION")
+          case e: SparkRuntimeException => assert(e.getCondition == "USER_RAISED_EXCEPTION")
           case other: Throwable => throw other
         }
       }

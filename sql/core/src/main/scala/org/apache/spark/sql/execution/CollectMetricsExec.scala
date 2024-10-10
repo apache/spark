@@ -67,7 +67,6 @@ case class CollectMetricsExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     val collector = accumulator
-    collector.reset()
     child.execute().mapPartitions { rows =>
       // Only publish the value of the accumulator when the task has completed. This is done by
       // updating a task local accumulator ('updater') which will be merged with the actual

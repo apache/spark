@@ -1217,8 +1217,8 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
     val tempFile1 = new File(tempDataPath, "testData2-ints-part1.json")
     val tempFile2 = new File(tempDataPath, "testData2-ints-part2.json")
-    Files.write(json1, tempFile1, StandardCharsets.UTF_8)
-    Files.write(json2, tempFile2, StandardCharsets.UTF_8)
+    Files.asCharSink(tempFile1, StandardCharsets.UTF_8).write(json1)
+    Files.asCharSink(tempFile2, StandardCharsets.UTF_8).write(json2)
 
     validateConversion(schema, arrowBatches(0), tempFile1)
     validateConversion(schema, arrowBatches(1), tempFile2)
@@ -1501,7 +1501,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
     // NOTE: coalesce to single partition because can only load 1 batch in validator
     val batchBytes = df.coalesce(1).toArrowBatchRdd.collect().head
     val tempFile = new File(tempDataPath, file)
-    Files.write(json, tempFile, StandardCharsets.UTF_8)
+    Files.asCharSink(tempFile, StandardCharsets.UTF_8).write(json)
     validateConversion(df.schema, batchBytes, tempFile, timeZoneId, errorOnDuplicatedFieldNames)
   }
 

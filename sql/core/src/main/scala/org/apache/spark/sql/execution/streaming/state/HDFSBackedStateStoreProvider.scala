@@ -282,7 +282,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       newMap
     }
     catch {
-      case e: SparkException if e.getErrorClass.contains("CANNOT_LOAD_STATE_STORE") =>
+      case e: SparkException if e.getCondition.contains("CANNOT_LOAD_STATE_STORE") =>
         throw e
       case e: OutOfMemoryError =>
         throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
@@ -991,8 +991,16 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     result
   }
 
-  override def getStateStoreChangeDataReader(startVersion: Long, endVersion: Long):
+  override def getStateStoreChangeDataReader(
+      startVersion: Long,
+      endVersion: Long,
+      colFamilyNameOpt: Option[String] = None):
     StateStoreChangeDataReader = {
+    // Multiple column families are not supported with HDFSBackedStateStoreProvider
+    if (colFamilyNameOpt.isDefined) {
+      throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
+    }
+
     new HDFSBackedStateStoreChangeDataReader(fm, baseDir, startVersion, endVersion,
       CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec),
       keySchema, valueSchema)
