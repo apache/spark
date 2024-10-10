@@ -233,6 +233,7 @@ def lit(col: Any) -> Column:
 def col(col: str) -> Column:
     """
     Returns a :class:`~pyspark.sql.Column` based on the given column name.
+    An alias of :func:`column`.
 
     .. versionadded:: 1.3.0
 
