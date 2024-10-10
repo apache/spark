@@ -497,18 +497,6 @@ class PandasGroupedOpsMixin:
 
             if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:
                 statefulProcessor.init(handle)
-                # only process initial state if first batch
-                is_first_batch = statefulProcessorApiClient.is_first_batch()
-                if is_first_batch:
-                    initial_state_iter = statefulProcessorApiClient.get_initial_state_iter()
-                    # if user did not provide initial state df, initial_state_iter will be None
-                    if initial_state_iter is not None:
-                        for grouping_key, cur_initial_state in initial_state_iter:
-                            print(f"got initial state here for key: {key}, grouping key: {grouping_key},"
-                                  f" initial state: {cur_initial_state}\n")
-                            statefulProcessorApiClient.set_implicit_key(grouping_key)
-                            statefulProcessor.handleInitialState(grouping_key, cur_initial_state)
-                            statefulProcessorApiClient.remove_implicit_key()
                 statefulProcessorApiClient.set_handle_state(
                     StatefulProcessorHandleState.INITIALIZED
                 )
@@ -518,21 +506,67 @@ class PandasGroupedOpsMixin:
 
             return result
 
+        def transformWithStateWithInitStateUDF(
+                statefulProcessorApiClient: StatefulProcessorApiClient,
+                key: Any,
+                inputRows: Iterator["PandasDataFrameLike"],
+                initialStates: Iterator["PandasDataFrameLike"]
+        ) -> Iterator["PandasDataFrameLike"]:
+            handle = StatefulProcessorHandle(statefulProcessorApiClient)
+
+            if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:
+                statefulProcessor.init(handle)
+                # only process initial state if first batch
+                is_first_batch = statefulProcessorApiClient.is_first_batch()
+                if is_first_batch:
+                    initial_state_iter = initialStates
+                    # if we don't have initial state for the given key, iterator could be None
+                    if initial_state_iter is not None:
+                        for cur_initial_state in initial_state_iter:
+                            print(f"got initial state here for key: {key},"
+                                  f" initial state: {cur_initial_state}\n")
+                            if cur_initial_state.empty:
+                                print(f"got empty initial state here for key: {key},"
+                                      f" initial state: {cur_initial_state}\n")
+                            else:
+                                statefulProcessorApiClient.set_implicit_key(key)
+                                statefulProcessor.handleInitialState(key, cur_initial_state)
+                                statefulProcessorApiClient.remove_implicit_key()
+                statefulProcessorApiClient.set_handle_state(
+                    StatefulProcessorHandleState.INITIALIZED
+                )
+
+            # if we don't have state for the given key, iterator could be None
+            if inputRows is not None:
+                statefulProcessorApiClient.set_implicit_key(key)
+                result = statefulProcessor.handleInputRows(key, inputRows)
+
+            return result
+
         if isinstance(outputStructType, str):
             outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
 
-        udf = pandas_udf(
-            transformWithStateUDF,  # type: ignore
-            returnType=outputStructType,
-            functionType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
-        )
         df = self._df
-        udf_column = udf(*[df[col] for col in df.columns])
 
         if initialState is None:
             initial_state_java_obj = None
+
+            udf = pandas_udf(
+                transformWithStateUDF,  # type: ignore
+                returnType=outputStructType,
+                functionType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
+            )
+            udf_column = udf(*[df[col] for col in df.columns])
         else:
+            print(f"I am here, not empty initial state\n")
             initial_state_java_obj = initialState._jgd
+
+            udf = pandas_udf(
+                transformWithStateWithInitStateUDF,  # type: ignore
+                returnType=outputStructType,
+                functionType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
+            )
+            udf_column = udf(*[df[col] for col in df.columns])
 
         jdf = self._jgd.transformWithStateInPandas(
             udf_column._jc,

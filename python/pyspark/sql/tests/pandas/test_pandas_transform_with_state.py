@@ -348,7 +348,7 @@ class TransformWithStateInPandasTestsMixin:
     ):
         input_path = tempfile.mkdtemp()
         self._prepare_test_resource1(input_path)
-        self._prepare_test_resource3(input_path)
+        # self._prepare_test_resource3(input_path)
 
         df = self._build_test_df(input_path)
 
@@ -398,6 +398,7 @@ class TransformWithStateInPandasTestsMixin:
                 # for key 1, it did not appear in the initial state df;
                 # for key 3, it did not appear in the first batch of input keys
                 # so it won't be emitted
+                raise Exception(f"batch id : ${batch_id}, batch df: {batch_df.show()}")
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="0", value=str(789 + 123 + 46)),
                     Row(id="1", value=str(146 + 346)),

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, PythonUDF, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
+import org.apache.spark.sql.execution.{BinaryExecNode, CoGroupedIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.PandasGroupUtils.{executePython, groupAndProject, resolveArgOffsets}
 import org.apache.spark.sql.execution.streaming.{StatefulOperatorPartitioning, StatefulOperatorStateInfo, StatefulProcessorHandleImpl, StateStoreWriter, WatermarkSupport}
@@ -171,15 +171,8 @@ case class TransformWithStateInPandasExec(
             storeConf = storeConf,
             hadoopConf = hadoopConfBroadcast.value.value
           )
-
-          // dedup attributes here because grouping attributes appear twice (key and value)
-          val (dedupAttributes, _) =
-            resolveArgOffsets(initialState.output, initialStateGroupingAttrs)
-          val initData =
-            groupAndProject(initStateIterator, initialStateGroupingAttrs,
-              initialState.output, dedupAttributes)
-
-          processDataWithPartition(store, childDataIterator, initData)
+          println(s"I am here entering non-empty initState iter")
+          processDataWithPartition(store, childDataIterator, initStateIterator)
       }
     }
   }
@@ -187,7 +180,7 @@ case class TransformWithStateInPandasExec(
   private def processDataWithPartition(
       store: StateStore,
       dataIterator: Iterator[InternalRow],
-      initStateIterator: Iterator[(InternalRow, Iterator[InternalRow])] = Iterator.empty):
+      initStateIterator: Iterator[InternalRow] = Iterator.empty):
   Iterator[InternalRow] = {
     val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
     val commitTimeMs = longMetric("commitTimeMs")
@@ -200,23 +193,60 @@ case class TransformWithStateInPandasExec(
 
     val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
       groupingKeyExprEncoder, timeMode, isStreaming = true, batchTimestampMs, metrics)
-    val runner = new TransformWithStateInPandasPythonRunner(
-      chainedFunc,
-      PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
-      Array(argOffsets),
-      DataTypeUtils.fromAttributes(dedupAttributes),
-      processorHandle,
-      sessionLocalTimeZone,
-      pythonRunnerConf,
-      pythonMetrics,
-      jobArtifactUUID,
-      groupingKeySchema,
-      hasInitialState,
-      initialStateSchema,
-      initStateIterator
-    )
 
-    val outputIterator = executePython(data, output, runner)
+      val outputIterator = if (!hasInitialState) {
+      val runner = new TransformWithStateInPandasPythonRunner(
+        chainedFunc,
+        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
+        Array(argOffsets),
+        DataTypeUtils.fromAttributes(dedupAttributes),
+        processorHandle,
+        sessionLocalTimeZone,
+        pythonRunnerConf,
+        pythonMetrics,
+        jobArtifactUUID,
+        groupingKeySchema,
+        hasInitialState,
+        initialStateSchema,
+        Iterator.empty
+      )
+      executePython(data, output, runner)
+    } else {
+      // dedup attributes here because grouping attributes appear twice (key and value)
+      val (initDedupAttributes, initArgOffsets) =
+        resolveArgOffsets(initialState.output, initialStateGroupingAttrs)
+      val initData =
+        groupAndProject(initStateIterator, initialStateGroupingAttrs,
+          initialState.output, initDedupAttributes)
+      val groupedData: Iterator[(InternalRow, Iterator[InternalRow], Iterator[InternalRow])] =
+        new CoGroupedIterator(data, initData, groupingAttributes)
+      /*
+      println(s"goupedData here: ")
+      groupedData.foreach { p =>
+        println(s"grouped Data key: ${p._1.getString(0)}")
+        println(s"grouped Data input data: " +
+          s"${if (p._2.hasNext) {p._2.next().getInt(1)} else "empty"}, " +
+          s"init data: ${if (p._3.hasNext) {p._3.next().getInt(1)} else "empty"}")
+      } */
+
+      val runner = new TransformWithStateInPandasPythonInitialStateRunner(
+        chainedFunc,
+        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
+        Array(argOffsets ++ initArgOffsets),
+        DataTypeUtils.fromAttributes(dedupAttributes),
+        DataTypeUtils.fromAttributes(initDedupAttributes),
+        processorHandle,
+        sessionLocalTimeZone,
+        pythonRunnerConf,
+        pythonMetrics,
+        jobArtifactUUID,
+        groupingKeySchema,
+        hasInitialState,
+        initialStateSchema,
+        initData
+      )
+      executePython(groupedData, output, runner)
+    }
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator, {
       // Note: Due to the iterator lazy execution, this metric also captures the time taken

@@ -96,8 +96,6 @@ class TransformWithStateInPandasStateServer(
 
   private val initSeq: Seq[(InternalRow, Iterator[InternalRow])] =
     initialStateDataIterator.toSeq
-  println(s"iniside initialization, initDataIter length: ${initSeq.length}, " +
-    s"init seq ele: ${initSeq(0)._1.getString(0)}")
 
   private val initDataIter: Iterator[(InternalRow, Iterator[InternalRow])] = initSeq.iterator
 
