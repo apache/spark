@@ -109,6 +109,11 @@ public interface DataWriter<T> extends Closeable {
    */
   WriterCommitMessage commit() throws IOException;
 
+  default WriterCommitMessage commit(long taskWriteDataTime) throws IOException {
+    // Do nothing
+    return null;
+  }
+
   /**
    * Aborts this writer if it is failed. Implementations should clean up the data for already
    * written records.
