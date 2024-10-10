@@ -24,6 +24,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, StorageLevelProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
@@ -32,7 +33,7 @@ import org.apache.spark.util.ArrayImplicits._
 private[connect] class SparkConnectAnalyzeHandler(
     responseObserver: StreamObserver[proto.AnalyzePlanResponse])
     extends Logging {
-
+  implicit val withRelations: Set[RelationWrapper] = Set.empty
   def handle(request: proto.AnalyzePlanRequest): Unit = {
     val previousSessionId = request.hasClientObservedServerSideSessionId match {
       case true => Some(request.getClientObservedServerSideSessionId)

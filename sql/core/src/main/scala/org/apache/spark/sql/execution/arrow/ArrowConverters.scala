@@ -34,6 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -418,7 +419,7 @@ private[sql] object ArrowConverters extends Logging {
         session.sessionState.conf.sessionLocalTimeZone,
         errorOnDuplicatedFieldNames = false,
         TaskContext.get())
-
+      implicit val withRelations: Set[RelationWrapper] = Set.empty
       // Project/copy it. Otherwise, the Arrow column vectors will be closed and released out.
       val proj = UnsafeProjection.create(attrs, attrs)
       Dataset.ofRows(session,

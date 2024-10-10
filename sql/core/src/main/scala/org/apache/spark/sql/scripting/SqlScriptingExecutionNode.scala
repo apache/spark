@@ -20,6 +20,7 @@ package org.apache.spark.sql.scripting
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
@@ -75,6 +76,7 @@ trait NonLeafStatementExec extends CompoundStatementExec {
       assert(!statement.isExecuted)
       statement.isExecuted = true
 
+      implicit val withRelations: Set[RelationWrapper] = Set.empty
       // DataFrame evaluates to True if it is single row, single column
       //  of boolean type with value True.
       val df = Dataset.ofRows(session, statement.parsedPlan)

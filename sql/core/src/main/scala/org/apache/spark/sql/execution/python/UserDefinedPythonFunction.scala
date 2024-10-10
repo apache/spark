@@ -25,6 +25,7 @@ import net.razorvine.pickle.Pickler
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
@@ -161,6 +162,7 @@ case class UserDefinedPythonTableFunction(
   /** Returns a [[DataFrame]] that will evaluate to calling this UDTF with the given input. */
   def apply(session: SparkSession, exprs: Column*): DataFrame = {
     val udtf = builder(exprs.map(session.expression), session.sessionState.sqlParser)
+    implicit val withRelations: Set[RelationWrapper] = Set.empty
     Dataset.ofRows(session, udtf)
   }
 }

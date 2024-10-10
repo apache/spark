@@ -25,10 +25,18 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 
 object DeduplicateRelations extends Rule[LogicalPlan] {
-
   type ExprIdMap = mutable.HashMap[Class[_], mutable.HashSet[Long]]
 
-  override def apply(plan: LogicalPlan): LogicalPlan = {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan match {
+    case SkipDedupRelRuleMarker(child) => AnalysisContext.setDedupRelatiionSkipFlag(true)
+        child
+
+    case _  if AnalysisContext.get.skipDedupRelations => plan
+
+    case _ => applyInternal(plan)
+  }
+
+  def applyInternal(plan: LogicalPlan): LogicalPlan = {
     val newPlan = renewDuplicatedRelations(mutable.HashMap.empty, plan)._1
 
     // Wait for `ResolveMissingReferences` to resolve missing attributes first
@@ -482,3 +490,5 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
     AttributeSet(projectList.collect { case o: OuterReference => o.toAttribute })
   }
 }
+
+case class RelationWrapper(cls: Class[_], outputAttrIds: Seq[Long])
