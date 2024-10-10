@@ -266,13 +266,12 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     val query = testData.select($"value").limit(2).toJSON
     val planned = query.queryExecution.sparkPlan
     assert(planned.exists(_.isInstanceOf[CollectLimitExec]))
-    val t = testData.select($"value").toJSON.logicalPlan.output
   }
 
   test("SPARK-49919: TakeOrderedAndProject can be applied with toJSON") {
     val query = testData.select($"key", $"value").sort($"key").limit(2).toJSON
     val planned = query.queryExecution.executedPlan
-    assert(planned.isInstanceOf[execution.TakeOrderedAndProjectExec])
+    assert(planned.exists(_.isInstanceOf[execution.TakeOrderedAndProjectExec]))
   }
 
   test("PartitioningCollection") {
