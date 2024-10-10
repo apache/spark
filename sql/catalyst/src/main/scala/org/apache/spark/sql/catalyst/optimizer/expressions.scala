@@ -73,6 +73,11 @@ object ConstantFolding extends Rule[LogicalPlan] {
       Literal(c.children.length)
     case Size(c: CreateMap, _) if c.children.forall(hasNoSideEffect) =>
       Literal(c.children.length / 2)
+    case Size(MapFromArrays(l: CreateArray, r: CreateArray), _)
+      if l.children.forall(hasNoSideEffect) && r.children.forall(hasNoSideEffect) =>
+      Literal(l.children.length)
+    case Size(MapFromEntries(c: CreateArray), _) if c.children.forall(hasNoSideEffect) =>
+      Literal(c.children.length)
 
     case e if e.getTagValue(FAILED_TO_EVALUATE).isDefined => e
 
