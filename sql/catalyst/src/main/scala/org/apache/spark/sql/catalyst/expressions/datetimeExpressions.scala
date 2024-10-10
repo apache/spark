@@ -1724,7 +1724,7 @@ case class DateAddInterval(
   override def nullSafeEval(start: Any, interval: Any): Any = {
     val itvl = interval.asInstanceOf[CalendarInterval]
     if (ansiEnabled || itvl.microseconds == 0) {
-      DateTimeUtils.dateAddInterval(start.asInstanceOf[Int], itvl)
+      DateTimeUtils.dateAddInterval(start.asInstanceOf[Int], itvl, prettyName)
     } else {
       val startTs = DateTimeUtils.daysToMicros(start.asInstanceOf[Int], zoneId)
       val resultTs = DateTimeUtils.timestampAddInterval(
@@ -1736,14 +1736,14 @@ case class DateAddInterval(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     nullSafeCodeGen(ctx, ev, (sd, i) => if (ansiEnabled) {
-      s"""${ev.value} = $dtu.dateAddInterval($sd, $i);"""
+      s"""${ev.value} = $dtu.dateAddInterval($sd, $i, "$prettyName");"""
     } else {
       val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
       val startTs = ctx.freshName("startTs")
       val resultTs = ctx.freshName("resultTs")
       s"""
          |if ($i.microseconds == 0) {
-         |  ${ev.value} = $dtu.dateAddInterval($sd, $i);
+         |  ${ev.value} = $dtu.dateAddInterval($sd, $i, "$prettyName");
          |} else {
          |  long $startTs = $dtu.daysToMicros($sd, $zid);
          |  long $resultTs =
@@ -2490,14 +2490,14 @@ case class MakeDate(
       localDateToDays(ld)
     } catch {
       case e: java.time.DateTimeException =>
-        if (failOnError) throw QueryExecutionErrors.ansiDateTimeError(e) else null
+        if (failOnError) throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e) else null
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     val failOnErrorBranch = if (failOnError) {
-      "throw QueryExecutionErrors.ansiDateTimeError(e);"
+      "throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e);"
     } else {
       s"${ev.isNull} = true;"
     }
@@ -2724,7 +2724,7 @@ case class MakeTimestamp(
     } catch {
       case e: SparkDateTimeException if failOnError => throw e
       case e: DateTimeException if failOnError =>
-        throw QueryExecutionErrors.ansiDateTimeError(e)
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e)
       case _: DateTimeException => null
     }
   }
@@ -2755,7 +2755,7 @@ case class MakeTimestamp(
     val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val d = Decimal.getClass.getName.stripSuffix("$")
     val failOnErrorBranch = if (failOnError) {
-      "throw QueryExecutionErrors.ansiDateTimeError(e);"
+      "throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e);"
     } else {
       s"${ev.isNull} = true;"
     }
