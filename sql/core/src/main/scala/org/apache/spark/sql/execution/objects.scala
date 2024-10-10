@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.streaming.GroupStateImpl
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.GroupStateTimeout
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.ArrowUtils
 
 /**
  * Physical version of `ObjectProducer`.
@@ -252,7 +253,8 @@ case class MapPartitionsInRWithArrowExec(
       val outputProject = UnsafeProjection.create(output, output)
       columnarBatchIter.flatMap { batch =>
         val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
-        assert(outputTypes == actualDataTypes, "Invalid schema from dapply(): " +
+        val arrowOutputTypes = outputTypes.map(ArrowUtils.toArrowOutputSchema)
+        assert(arrowOutputTypes == actualDataTypes, "Invalid schema from dapply(): " +
           s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
         batch.rowIterator.asScala
       }.map(outputProject)
@@ -598,7 +600,8 @@ case class FlatMapGroupsInRWithArrowExec(
 
       columnarBatchIter.flatMap { batch =>
         val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
-        assert(outputTypes == actualDataTypes, "Invalid schema from gapply(): " +
+        val arrowOutputTypes = outputTypes.map(ArrowUtils.toArrowOutputSchema)
+        assert(arrowOutputTypes == actualDataTypes, "Invalid schema from gapply(): " +
           s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
         batch.rowIterator().asScala
       }.map(outputProject)
