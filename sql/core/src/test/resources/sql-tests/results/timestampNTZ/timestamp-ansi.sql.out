@@ -154,10 +154,13 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "sqlState" : "22008",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 61"
+    "badValue" : "'61'",
+    "range" : "0 ... 59",
+    "unit" : "SECOND"
   }
 }
 
@@ -185,10 +188,13 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "sqlState" : "22008",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 99"
+    "badValue" : "'99'",
+    "range" : "0 ... 59",
+    "unit" : "SECOND"
   }
 }
 
@@ -200,10 +206,13 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "sqlState" : "22008",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 999"
+    "badValue" : "'999'",
+    "range" : "0 ... 59",
+    "unit" : "SECOND"
   }
 }
 
