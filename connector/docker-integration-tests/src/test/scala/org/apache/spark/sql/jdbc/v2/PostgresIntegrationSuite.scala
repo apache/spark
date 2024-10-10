@@ -72,14 +72,17 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
 
     val query =
       """
-        INSERT INTO array_test_table (int_array, float_array, timestamp_array, string_array, datetime_array, array_of_int_arrays)
+        INSERT INTO array_test_table
+        (int_array, float_array, timestamp_array, string_array,
+        datetime_array, array_of_int_arrays)
         VALUES
         (
             ARRAY[1, 2, 3],                       -- Array of integers
             ARRAY[1.1, 2.2, 3.3],                 -- Array of floats
-            ARRAY['2023-01-01 12:00'::timestamp, '2023-06-01 08:30'::timestamp],  -- Array of timestamps
+            ARRAY['2023-01-01 12:00'::timestamp, '2023-06-01 08:30'::timestamp],
             ARRAY['hello', 'world'],              -- Array of strings
-            ARRAY['2023-10-04 12:00:00+00'::timestamptz, '2023-12-01 14:15:00+00'::timestamptz], -- Array of datetimes with time zone
+            ARRAY['2023-10-04 12:00:00+00'::timestamptz,
+            '2023-12-01 14:15:00+00'::timestamptz],
             ARRAY[ARRAY[1, 2]]    -- Array of arrays of integers
         ),
         (
@@ -87,7 +90,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
             ARRAY[10.5, 20.5, 30.5],
             ARRAY['2022-01-01 09:15'::timestamp, '2022-03-15 07:45'::timestamp],
             ARRAY['postgres', 'arrays'],
-            ARRAY['2022-11-22 09:00:00+00'::timestamptz, '2022-12-31 23:59:59+00'::timestamptz],
+            ARRAY['2022-11-22 09:00:00+00'::timestamptz,
+            '2022-12-31 23:59:59+00'::timestamptz],
             ARRAY[ARRAY[10, 20]]
         );
       """
