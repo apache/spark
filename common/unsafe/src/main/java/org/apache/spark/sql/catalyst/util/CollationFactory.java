@@ -583,8 +583,8 @@ public final class CollationFactory {
             comparator = (s1, s2) -> CollationAwareUTF8String.compareLowerCase(
               applyTrimmingPolicy(s1, spaceTrimming),
               applyTrimmingPolicy(s2, spaceTrimming));
-            hashFunction = s -> (long) CollationAwareUTF8String.
-              lowerCaseCodePoints(applyTrimmingPolicy(s, spaceTrimming)).hashCode();
+            hashFunction = s -> (long) CollationAwareUTF8String.lowerCaseCodePoints(
+              applyTrimmingPolicy(s, spaceTrimming)).hashCode();
           }
 
           return new Collation(
