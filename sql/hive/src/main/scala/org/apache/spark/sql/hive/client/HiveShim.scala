@@ -724,15 +724,18 @@ private[client] class Shim_v2_0 extends Shim with Logging {
     }
 
     object SupportedAttribute {
-      // hive varchar is treated as catalyst string, but hive varchar can't be pushed down.
-      private val varcharKeys = table.getPartitionKeys.asScala
-        .filter(col => col.getType.startsWith(serdeConstants.VARCHAR_TYPE_NAME) ||
-          col.getType.startsWith(serdeConstants.CHAR_TYPE_NAME))
-        .map(col => col.getName).toSet
+      // hive varchar is treated as catalyst string, which can be pushed down to
+      // Hive Metastore since HIVE-26661.
+      val unsupportedKeys = if (!SQLConf.get.metastorePartitionPruningVarchar) {
+        table.getPartitionKeys.asScala
+          .filter(col => col.getType.startsWith(serdeConstants.VARCHAR_TYPE_NAME) ||
+              col.getType.startsWith(serdeConstants.CHAR_TYPE_NAME))
+          .map(col => col.getName).toSet
+      } else Set.empty
 
       def unapply(attr: Attribute): Option[String] = {
         val resolver = SQLConf.get.resolver
-        if (varcharKeys.exists(c => resolver(c, attr.name))) {
+        if (unsupportedKeys.exists(c => resolver(c, attr.name))) {
           None
         } else if (attr.dataType.isInstanceOf[IntegralType] || attr.dataType == StringType ||
             attr.dataType == DateType) {
