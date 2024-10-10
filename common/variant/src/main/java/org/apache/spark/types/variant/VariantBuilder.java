@@ -68,7 +68,7 @@ public class VariantBuilder {
     variantMetrics.variantCount += 1;
     Variant v = builder.result();
     variantMetrics.byteSize += v.value.length + v.metadata.length;
-    return builder.result();
+    return v;
   }
 
   // Build the variant metadata from `dictionaryKeys` and return the variant result.
