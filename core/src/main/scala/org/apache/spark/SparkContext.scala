@@ -669,7 +669,8 @@ class SparkContext(config: SparkConf) extends Logging {
         schedulerBackend match {
           case b: ExecutorAllocationClient =>
             Some(new ExecutorAllocationManager(
-              schedulerBackend.asInstanceOf[ExecutorAllocationClient], listenerBus, _conf,
+              schedulerBackend.asInstanceOf[ExecutorAllocationClient],
+              _taskScheduler, listenerBus, _conf,
               cleaner = cleaner, resourceProfileManager = resourceProfileManager,
               reliableShuffleStorage = _shuffleDriverComponents.supportsReliableStorage()))
           case _ =>
