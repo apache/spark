@@ -210,12 +210,17 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
         AddData(inputStream, MapInputEvent("k1", "key2", "put", 2)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
-        // advance clock to expire first key
-        AdvanceManualClock(30 * 1000),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
+        },
         AddData(inputStream, MapInputEvent("k1", "key1", "get", -1),
           MapInputEvent("k1", "key2", "get", -1)),
-        AdvanceManualClock(1 * 1000),
+        // advance clock to expire first key
+        AdvanceManualClock(30 * 1000),
         CheckNewAnswer(MapOutputEvent("k1", "key2", 2, isTTLValue = false, -1)),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
+        },
         StopStream
       )
     }
