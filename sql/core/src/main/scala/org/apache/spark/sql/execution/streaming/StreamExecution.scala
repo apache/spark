@@ -223,7 +223,9 @@ abstract class StreamExecution(
         // To fix call site like "run at <unknown>:0", we bridge the call site from the caller
         // thread to this micro batch thread
         sparkSession.sparkContext.setCallSite(callSite)
-        runStream()
+        JobArtifactSet.withActiveJobArtifactState(jobArtifactState) {
+          runStream()
+        }
       }
     }
 

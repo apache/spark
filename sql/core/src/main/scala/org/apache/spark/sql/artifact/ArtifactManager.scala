@@ -86,29 +86,46 @@ class ArtifactManager(session: SparkSession) extends Logging {
 
   private var initialContextResourcesCopied = false
 
-  def withResources[T](f: => T): T = {
-    Utils.withContextClassLoader(classloader, retainChange = true) {
-      JobArtifactSet.withActiveJobArtifactState(state) {
-        // Copy over global initial resources to this session. Often used by spark-submit.
-        // copyInitialContextResourcesIfNeeded()
+  /** The number of JARs added at the time of the last [[withResources]] call. */
+  private val lastNumberOfJarsInScope = new ThreadLocal[Int] {
+    override def initialValue(): Int = -1
+  }
 
-        f
+  def withResources[T](f: => T): T = {
+    // Generating class loader is slow, and often withResources is layered multiple times since
+    // SparkSession.withActive is often layered. We have to do some check here to avoid layering
+    // too many class loaders. Layering too much heavily impacts streaming performance.
+    // jarsList is append-only, so we can use its size to decide whether we need a new layer.
+    val prevNumOfJars = lastNumberOfJarsInScope.get()
+    if (prevNumOfJars == jarsList.size()) {
+      try f finally { lastNumberOfJarsInScope.set(prevNumOfJars) }
+    } else {
+      lastNumberOfJarsInScope.set(jarsList.size())
+
+      Utils.withContextClassLoader(classloader, retainChange = true) {
+        JobArtifactSet.withActiveJobArtifactState(state) {
+          // Copy over global initial resources to this session. Often used by spark-submit.
+          copyInitialContextResourcesIfNeeded()
+
+          try f finally { lastNumberOfJarsInScope.set(prevNumOfJars) }
+        }
       }
     }
   }
 
   /**
-   * Duplicate initial resources in SparkContext to the current session.
-   * Originally they are provided upon SparkContext construction and already registered under
-   * a "default" session.
+   * Duplicate all resources provided in SparkContext constructor into the current session.
    * This method must be called from within a [[JobArtifactSet.withActiveJobArtifactState]] block.
   */
-  private def copyInitialContextResourcesIfNeeded(): Unit = session.synchronized {
+  private def copyInitialContextResourcesIfNeeded(): Unit = synchronized {
     if (!initialContextResourcesCopied) {
-      val sparkContext = session.sparkContext
-      sparkContext.files.foreach(sparkContext.addFile)
-      sparkContext.jars.foreach(sparkContext.addJar)
-      sparkContext.archives.foreach(sparkContext.addArchive)
+      val currentUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid).getOrElse("default")
+      if (currentUUID != "default") {
+        val sparkContext = session.sparkContext
+        sparkContext.files.foreach(sparkContext.addFile)
+        sparkContext.jars.foreach(sparkContext.addJar)
+        sparkContext.archives.foreach(sparkContext.addArchive)
+      }
       initialContextResourcesCopied = true
     }
   }
