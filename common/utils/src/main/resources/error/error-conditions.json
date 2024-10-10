@@ -2537,6 +2537,11 @@
           "Interval string does not match second-nano format of ss.nnnnnnnnn."
         ]
       },
+      "TIMEZONE_INTERVAL_OUT_OF_RANGE" : {
+        "message" : [
+          "The interval value must be in the range of [-18, +18] hours with second precision."
+        ]
+      },
       "UNKNOWN_PARSING_ERROR" : {
         "message" : [
           "Unknown error when parsing <word>."
@@ -5701,11 +5706,6 @@
   "_LEGACY_ERROR_TEMP_0043" : {
     "message" : [
       "Expected format is 'RESET' or 'RESET key'. If you want to include special characters in key, please use quotes, e.g., RESET `key`."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0044" : {
-    "message" : [
-      "The interval value must be in the range of [-18, +18] hours with second precision."
     ]
   },
   "_LEGACY_ERROR_TEMP_0045" : {
