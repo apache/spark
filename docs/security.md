@@ -58,6 +58,11 @@ client should provide HTTP `Authorization` header which contains JSON Web Token 
 the shared secret key. Please note that this feature requires a Spark distribution built with
 `jjwt` profile.
 
+In conjunction to, or alternatively to the JWSFilter based authorisation, you can utilise a proxy to handle authentication to the REST submission server.
+You must configure the setting `spark.master.rest.auth.mode` to `"SecureGateway"`, which will enable you to continue to use the
+setting `spark.authenticate` properties for all other internal authentication, unless specified otherwise below. The default
+setting of this value is `"None"`, which will throw fatal errors during master startup when used in combination with `spark.authenticate`.
+
 ### YARN
 
 For Spark on [YARN](running-on-yarn.html), Spark will automatically handle generating and
