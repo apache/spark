@@ -278,7 +278,7 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
         if (foldables.nonEmpty) {
           val foldableExpr = foldables.reduce((x, y) => Multiply(x, y, f))
           val foldableValue = foldableExpr.eval(EmptyRow)
-          if (others.isEmpty || foldableValue == 0) {
+          if (others.isEmpty || (foldableValue == 0 && !m.nullable)) {
             Literal.create(foldableValue, m.dataType)
           } else if (foldableValue == 1) {
             others.reduce((x, y) => Multiply(x, y, f))
