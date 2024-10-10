@@ -176,15 +176,25 @@ private[spark] object Utils
   }
 
   /**
-   * Run a segment of code using a different context class loader in the current thread
+   * Run a segment of code using a different context class loader in the current thread.
+   *
+   * If `retainChange` is `true` and `fn` changed the context class loader during execution,
+   * the class loader will be not reverted to the original one when this method returns.
    */
-  def withContextClassLoader[T](ctxClassLoader: ClassLoader)(fn: => T): T = {
-    val oldClassLoader = Thread.currentThread().getContextClassLoader()
+  def withContextClassLoader[T](
+      ctxClassLoader: ClassLoader,
+      retainChange: Boolean = false)(fn: => T): T = {
+    val oldClassLoader = Thread.currentThread().getContextClassLoader
+    var classLoaderAfterFn: ClassLoader = null
     try {
       Thread.currentThread().setContextClassLoader(ctxClassLoader)
-      fn
+      val ret = fn
+      classLoaderAfterFn = Thread.currentThread().getContextClassLoader
+      ret
     } finally {
-      Thread.currentThread().setContextClassLoader(oldClassLoader)
+      if (!retainChange || classLoaderAfterFn == ctxClassLoader) {
+        Thread.currentThread().setContextClassLoader(oldClassLoader)
+      }
     }
   }
 

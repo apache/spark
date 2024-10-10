@@ -301,7 +301,10 @@ object SQLExecution extends Logging {
     val activeSession = sparkSession
     val sc = sparkSession.sparkContext
     val localProps = Utils.cloneProperties(sc.getLocalProperties)
-    val artifactState = JobArtifactSet.getCurrentJobArtifactState.orNull
+    // `getCurrentJobArtifactState` will return a stat only in Spark Connect mode. In non-Connect
+    // mode, we default back to the resources of the current Spark session.
+    val artifactState = JobArtifactSet.getCurrentJobArtifactState.getOrElse(
+      activeSession.artifactManager.state)
     exec.submit(() => JobArtifactSet.withActiveJobArtifactState(artifactState) {
       val originalSession = SparkSession.getActiveSession
       val originalLocalProps = sc.getLocalProperties
