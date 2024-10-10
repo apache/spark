@@ -645,7 +645,9 @@ case class FileSourceScanExec(
     }
   }
 
+  // Object used to collect data about the top-level variants constructed during the scan
   val topLevelVariantMetrics: VariantMetrics = new VariantMetrics()
+  // Object used to collect data about the nested variants constructed during the scan
   val nestedVariantMetrics: VariantMetrics = new VariantMetrics()
 
   lazy val inputRDD: RDD[InternalRow] = {
@@ -655,6 +657,8 @@ case class FileSourceScanExec(
       val hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options)
       relation.fileFormat match {
         case f: JsonFileFormat =>
+          // Json scans support collecting metrics related to the variants constructed during the
+          // scan, and therefore, we use a different code path.
           f.buildReaderWithPartitionValuesAndVariantMetrics(
             sparkSession = relation.sparkSession,
             dataSchema = relation.dataSchema,
@@ -843,8 +847,7 @@ case class FileSourceScanExec(
       new StructType(requiredSchema.fields ++ relation.partitionSchema.fields),
       fileConstantMetadataColumns, relation.fileFormat.fileConstantMetadataExtractors,
       new FileSourceOptions(CaseInsensitiveMap(relation.options)),
-      Some(new FileScanMetrics(Some(topLevelVariantMetrics), Some(nestedVariantMetrics))),
-      Some(variantSQLMetrics))
+      Some(new FileScanMetrics(topLevelVariantMetrics, nestedVariantMetrics, variantSQLMetrics)))
   }
 
   // Filters unused DynamicPruningExpression expressions - one which has been replaced

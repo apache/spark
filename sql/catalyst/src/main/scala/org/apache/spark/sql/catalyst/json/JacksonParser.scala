@@ -131,10 +131,8 @@ class JacksonParser(
     }
     try {
       val vm = if (isTopLevel) topLevelVariantMetrics else nestedVariantMetrics
-      val v = vm match {
-        case Some(metrics) => VariantBuilder.parseJson(parser, variantAllowDuplicateKeys, metrics)
-        case None => VariantBuilder.parseJson(parser, variantAllowDuplicateKeys)
-      }
+      val v = VariantBuilder.parseJson(parser, variantAllowDuplicateKeys,
+        vm.getOrElse(new VariantMetrics()))
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
       case _: VariantSizeLimitException =>

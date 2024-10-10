@@ -108,54 +108,47 @@ object VariantConstructionMetrics {
     ).toMap
   }
 
-  // Update SQL metrics with the data in topLevelVariantMetrics and nestedVariantMetrics
+  // Update SQL metrics with the data in topLevelVariantMetrics and nestedVariantMetrics. Also,
+  // reset the metrics in topLevelVariantMetrics and nestedVariantMetrics once their data has been
+  // recorded.
   def updateSQLMetrics(
-      topLevelVariantMetrics: Option[VariantMetrics],
-      nestedVariantMetrics: Option[VariantMetrics],
-      sqlMetrics: Option[Map[String, SQLMetric]]): Unit = {
-    sqlMetrics match {
-      case Some(sqlMetrics) =>
-        topLevelVariantMetrics match {
-          case Some(metrics) =>
-            sqlMetrics(VARIANT_BUILDER_TOP_LEVEL_NUMBER_OF_VARIANTS)
-              .add(metrics.variantCount)
-            sqlMetrics(VARIANT_BUILDER_TOP_LEVEL_BYTE_SIZE_BOUND)
-              .add(metrics.byteSize)
-            sqlMetrics(VARIANT_BUILDER_TOP_LEVEL_NUM_SCALARS)
-              .add(metrics.numScalars)
-            sqlMetrics(VARIANT_BUILDER_TOP_LEVEL_NUM_PATHS)
-              .add(metrics.numPaths)
-            sqlMetrics(VARIANT_BUILDER_TOP_LEVEL_MAX_DEPTH)
-              .set(
-                Math.max(
-                  sqlMetrics(VARIANT_BUILDER_TOP_LEVEL_MAX_DEPTH).value,
-                  metrics.maxDepth
-                )
-              )
-            metrics.reset()
-          case None =>
-        }
-        nestedVariantMetrics match {
-          case Some(metrics) =>
-            sqlMetrics(VARIANT_BUILDER_NESTED_NUMBER_OF_VARIANTS)
-              .add(metrics.variantCount)
-            sqlMetrics(VARIANT_BUILDER_NESTED_BYTE_SIZE_BOUND)
-              .add(metrics.byteSize)
-            sqlMetrics(VARIANT_BUILDER_NESTED_NUM_SCALARS)
-              .add(metrics.numScalars)
-            sqlMetrics(VARIANT_BUILDER_NESTED_NUM_PATHS)
-              .add(metrics.numPaths)
-            sqlMetrics(VARIANT_BUILDER_NESTED_MAX_DEPTH)
-              .set(
-                Math.max(
-                  sqlMetrics(VARIANT_BUILDER_NESTED_MAX_DEPTH).value,
-                  metrics.maxDepth
-                )
-              )
-            metrics.reset()
-          case None =>
-        }
-      case None =>
-    }
+      topLevelVariantMetrics: VariantMetrics,
+      nestedVariantMetrics: VariantMetrics,
+      sqlMetrics: Map[String, SQLMetric]): Unit = {
+    // Update top-level variant metrics
+    sqlMetrics(VARIANT_BUILDER_TOP_LEVEL_NUMBER_OF_VARIANTS)
+      .add(topLevelVariantMetrics.variantCount)
+    sqlMetrics(VARIANT_BUILDER_TOP_LEVEL_BYTE_SIZE_BOUND)
+      .add(topLevelVariantMetrics.byteSize)
+    sqlMetrics(VARIANT_BUILDER_TOP_LEVEL_NUM_SCALARS)
+      .add(topLevelVariantMetrics.numScalars)
+    sqlMetrics(VARIANT_BUILDER_TOP_LEVEL_NUM_PATHS)
+      .add(topLevelVariantMetrics.numPaths)
+    sqlMetrics(VARIANT_BUILDER_TOP_LEVEL_MAX_DEPTH)
+      .set(
+        Math.max(
+          sqlMetrics(VARIANT_BUILDER_TOP_LEVEL_MAX_DEPTH).value,
+          topLevelVariantMetrics.maxDepth
+        )
+      )
+    topLevelVariantMetrics.reset()
+
+    // Update nested variant metrics
+    sqlMetrics(VARIANT_BUILDER_NESTED_NUMBER_OF_VARIANTS)
+      .add(nestedVariantMetrics.variantCount)
+    sqlMetrics(VARIANT_BUILDER_NESTED_BYTE_SIZE_BOUND)
+      .add(nestedVariantMetrics.byteSize)
+    sqlMetrics(VARIANT_BUILDER_NESTED_NUM_SCALARS)
+      .add(nestedVariantMetrics.numScalars)
+    sqlMetrics(VARIANT_BUILDER_NESTED_NUM_PATHS)
+      .add(nestedVariantMetrics.numPaths)
+    sqlMetrics(VARIANT_BUILDER_NESTED_MAX_DEPTH)
+      .set(
+        Math.max(
+          sqlMetrics(VARIANT_BUILDER_NESTED_MAX_DEPTH).value,
+          nestedVariantMetrics.maxDepth
+        )
+      )
+    nestedVariantMetrics.reset()
   }
 }

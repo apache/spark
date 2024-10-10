@@ -53,7 +53,7 @@ public class VariantBuilder {
   public static Variant parseJson(String json, boolean allowDuplicateKeys) throws IOException {
     try (JsonParser parser = new JsonFactory().createParser(json)) {
       parser.nextToken();
-      return parseJson(parser, allowDuplicateKeys);
+      return parseJson(parser, allowDuplicateKeys, new VariantMetrics());
     }
   }
 
@@ -69,16 +69,6 @@ public class VariantBuilder {
     Variant v = builder.result();
     variantMetrics.byteSize += v.value.length + v.metadata.length;
     return builder.result();
-  }
-
-  /**
-   * Similar to {@link #parseJson(JsonParser, boolean, VariantMetrics)}, but does not require the
-   * caller to provide a VariantMetrics object and therefore, the caller cannot collect statistics
-   * about the variant being built.
-   */
-  public static Variant parseJson(JsonParser parser, boolean allowDuplicateKeys)
-      throws IOException {
-    return parseJson(parser, allowDuplicateKeys, new VariantMetrics());
   }
 
   // Build the variant metadata from `dictionaryKeys` and return the variant result.
