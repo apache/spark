@@ -391,10 +391,11 @@ class PlanParserSuite extends AnalysisTest {
     }
 
     val sql1 = s"$baseSql order by a sort by a"
+    val parameters = Map("clauses" -> "ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY")
     checkError(
       exception = parseException(sql1),
       condition = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
-      parameters = Map.empty,
+      parameters = parameters,
       context = ExpectedContext(
         fragment = "order by a sort by a",
         start = 16,
@@ -404,7 +405,7 @@ class PlanParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(sql2),
       condition = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
-      parameters = Map.empty,
+      parameters = parameters,
       context = ExpectedContext(
         fragment = "cluster by a distribute by a",
         start = 16,
@@ -414,7 +415,7 @@ class PlanParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(sql3),
       condition = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
-      parameters = Map.empty,
+      parameters = parameters,
       context = ExpectedContext(
         fragment = "order by a cluster by a",
         start = 16,
@@ -424,7 +425,7 @@ class PlanParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(sql4),
       condition = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
-      parameters = Map.empty,
+      parameters = parameters,
       context = ExpectedContext(
         fragment = "order by a distribute by a",
         start = 16,
