@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.execution.streaming.{StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state.StateMessage
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, Exists, Get, HandleState, ListStateCall, ListStateGet, ListStatePut, SetHandleState, StateCallCommand, StatefulProcessorCall, ValueStateCall, ValueStateUpdate}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, DeleteTimer, Exists, ExpiryTimerRequest, Get, GetProcessingTime, GetWatermark, HandleState, ListStateCall, ListStateGet, ListStatePut, ListTimers, RegisterTimer, SetHandleState, StateCallCommand, StatefulProcessorCall, TimerRequest, TimerStateCallCommand, TimerValueRequest, ValueStateCall, ValueStateUpdate}
 import org.apache.spark.sql.streaming.{ListState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -60,6 +60,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
   var arrowStreamWriter: BaseStreamingArrowWriter = _
   var valueStateMap: mutable.HashMap[String, ValueStateInfo] = mutable.HashMap()
   var listStateMap: mutable.HashMap[String, ListStateInfo] = mutable.HashMap()
+  var batchTimestampMs: Option[Long] = _
+  var eventTimeWatermarkForEviction: Option[Long] = _
 
   override def beforeEach(): Unit = {
     statefulProcessorHandle = mock(classOf[StatefulProcessorHandleImpl])
@@ -79,10 +81,12 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
       Iterator(new GenericRowWithSchema(Array(1), stateSchema)))
     transformWithStateInPandasDeserializer = mock(classOf[TransformWithStateInPandasDeserializer])
     arrowStreamWriter = mock(classOf[BaseStreamingArrowWriter])
+    batchTimestampMs = mock(classOf[Option[Long]])
+    eventTimeWatermarkForEviction = mock(classOf[Option[Long]])
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
       statefulProcessorHandle, groupingKeySchema, "", false, false, 2,
       outputStream, valueStateMap, transformWithStateInPandasDeserializer, arrowStreamWriter,
-      listStateMap, listStateIteratorMap)
+      listStateMap, listStateIteratorMap, batchTimestampMs, eventTimeWatermarkForEviction)
     when(transformWithStateInPandasDeserializer.readArrowBatches(any))
       .thenReturn(Seq(new GenericRowWithSchema(Array(1), stateSchema)))
   }
@@ -278,5 +282,69 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     stateServer.handleListStateRequest(message)
     verify(transformWithStateInPandasDeserializer).readArrowBatches(any)
     verify(listState).appendList(any)
+  }
+
+  test("timer value get processing time") {
+    val message = TimerRequest.newBuilder().setTimerValueRequest(
+      TimerValueRequest.newBuilder().setGetProcessingTimer(
+        GetProcessingTime.newBuilder().build()
+      ).build()
+    ).build()
+    stateServer.handleTimerRequest(message)
+    verify(batchTimestampMs).isDefined
+    verify(outputStream).writeInt(argThat((x: Int) => x > 0))
+  }
+
+  test("timer value get watermark") {
+    val message = TimerRequest.newBuilder().setTimerValueRequest(
+      TimerValueRequest.newBuilder().setGetWatermark(
+        GetWatermark.newBuilder().build()
+      ).build()
+    ).build()
+    stateServer.handleTimerRequest(message)
+    verify(eventTimeWatermarkForEviction).isDefined
+    verify(outputStream).writeInt(argThat((x: Int) => x > 0))
+  }
+
+  test("get expiry timers") {
+    val message = TimerRequest.newBuilder().setExpiryTimerRequest(
+      ExpiryTimerRequest.newBuilder().setExpiryTimestampMs(
+        10L
+      ).build()
+    ).build()
+    stateServer.handleTimerRequest(message)
+    verify(statefulProcessorHandle).getExpiredTimers(any[Long])
+  }
+
+  test("stateful processor register timer") {
+    val message = StatefulProcessorCall.newBuilder().setTimerStateCall(
+      TimerStateCallCommand.newBuilder()
+        .setRegister(RegisterTimer.newBuilder().setExpiryTimestampMs(10L).build())
+        .build()
+    ).build()
+    stateServer.handleStatefulProcessorCall(message)
+    verify(statefulProcessorHandle).registerTimer(any[Long])
+    verify(outputStream).writeInt(0)
+  }
+
+  test("stateful processor delete timer") {
+    val message = StatefulProcessorCall.newBuilder().setTimerStateCall(
+      TimerStateCallCommand.newBuilder()
+        .setDelete(DeleteTimer.newBuilder().setExpiryTimestampMs(10L).build())
+        .build()
+    ).build()
+    stateServer.handleStatefulProcessorCall(message)
+    verify(statefulProcessorHandle).deleteTimer(any[Long])
+    verify(outputStream).writeInt(0)
+  }
+
+  test("stateful processor list timer") {
+    val message = StatefulProcessorCall.newBuilder().setTimerStateCall(
+      TimerStateCallCommand.newBuilder()
+        .setList(ListTimers.newBuilder().build())
+        .build()
+    ).build()
+    stateServer.handleStatefulProcessorCall(message)
+    verify(statefulProcessorHandle).listTimers()
   }
 }

@@ -30,12 +30,14 @@ import org.apache.arrow.vector.ipc.ArrowStreamWriter
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.api.python.PythonSQLUtils
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState, StateVariableType}
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateVariableRequest, ValueStateCall}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateVariableRequest, TimerRequest, TimerStateCallCommand, TimerValueRequest, ValueStateCall}
 import org.apache.spark.sql.streaming.{ListState, TTLConfig, ValueState}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{BinaryType, LongType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.util.Utils
 
 /**
  * This class is used to handle the state requests from the Python side. It runs on a separate
@@ -60,8 +62,13 @@ class TransformWithStateInPandasStateServer(
     deserializerForTest: TransformWithStateInPandasDeserializer = null,
     arrowStreamWriterForTest: BaseStreamingArrowWriter = null,
     listStatesMapForTest : mutable.HashMap[String, ListStateInfo] = null,
-    listStateIteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null)
+    listStateIteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null,
+    batchTimestampMs: Option[Long] = None,
+    eventTimeWatermarkForEviction: Option[Long] = None)
   extends Runnable with Logging {
+
+  import PythonResponseWriterUtils._
+
   private val keyRowDeserializer: ExpressionEncoder.Deserializer[Row] =
     ExpressionEncoder(groupingKeySchema).resolveAndBind().createDeserializer()
   private var inputStream: DataInputStream = _
@@ -87,6 +94,10 @@ class TransformWithStateInPandasStateServer(
   } else {
     new mutable.HashMap[String, Iterator[Row]]()
   }
+
+  private var expiryTimestampIter: Option[Iterator[(Any, Long)]] = None
+
+  private var listTimerIter: Option[Iterator[Long]] = None
 
   def run(): Unit = {
     val listeningSocket = stateServerSocket.accept()
@@ -137,8 +148,54 @@ class TransformWithStateInPandasStateServer(
         handleStatefulProcessorCall(message.getStatefulProcessorCall)
       case StateRequest.MethodCase.STATEVARIABLEREQUEST =>
         handleStateVariableRequest(message.getStateVariableRequest)
+      case StateRequest.MethodCase.TIMERREQUEST =>
+        handleTimerRequest(message.getTimerRequest)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
+    }
+  }
+
+  private[sql] def handleTimerRequest(message: TimerRequest): Unit = {
+    message.getMethodCase match {
+      case TimerRequest.MethodCase.TIMERVALUEREQUEST =>
+        val timerRequest = message.getTimerValueRequest()
+        timerRequest.getMethodCase match {
+          case TimerValueRequest.MethodCase.GETPROCESSINGTIMER =>
+            val procTimestamp: Long =
+              if (batchTimestampMs.isDefined) batchTimestampMs.get else -1L
+            sendResponseWithLongVal(0, null, procTimestamp)
+          case TimerValueRequest.MethodCase.GETWATERMARK =>
+            val eventTimestamp: Long =
+              if (eventTimeWatermarkForEviction.isDefined) eventTimeWatermarkForEviction.get
+              else -1L
+            sendResponseWithLongVal(0, null, eventTimestamp)
+          case _ =>
+            throw new IllegalArgumentException("Invalid timer value method call")
+        }
+
+      case TimerRequest.MethodCase.EXPIRYTIMERREQUEST =>
+        val expiryRequest = message.getExpiryTimerRequest()
+        val expiryTimestamp = expiryRequest.getExpiryTimestampMs
+        if (!expiryTimestampIter.isDefined) {
+          expiryTimestampIter =
+            Option(statefulProcessorHandle.getExpiredTimers(expiryTimestamp))
+        }
+        // expiryTimestampIter could be None in the TWSPandasServerSuite
+        if (!expiryTimestampIter.isDefined || !expiryTimestampIter.get.hasNext) {
+          // iterator is exhausted, signal the end of iterator on python client
+          sendResponse(1)
+        } else {
+          sendResponse(0)
+          val outputSchema = new StructType()
+            .add("key", BinaryType)
+            .add(StructField("timestamp", LongType))
+          sendIteratorAsArrowBatches(expiryTimestampIter.get, outputSchema) { data =>
+            InternalRow(PythonSQLUtils.toPyRow(data._1.asInstanceOf[Row]), data._2)
+          }
+        }
+
+      case _ =>
+        throw new IllegalArgumentException("Invalid timer request method call")
     }
   }
 
@@ -173,6 +230,12 @@ class TransformWithStateInPandasStateServer(
           case HandleState.INITIALIZED =>
             logInfo(log"set handle state to Initialized")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
+          case HandleState.DATA_PROCESSED =>
+            logInfo(log"set handle state to Data Processed")
+            statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.DATA_PROCESSED)
+          case HandleState.TIMER_PROCESSED =>
+            logInfo(log"set handle state to Timer Processed")
+            statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.TIMER_PROCESSED)
           case HandleState.CLOSED =>
             logInfo(log"set handle state to Closed")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
@@ -190,11 +253,43 @@ class TransformWithStateInPandasStateServer(
         val stateName = message.getGetListState.getStateName
         val schema = message.getGetListState.getSchema
         val ttlDurationMs = if (message.getGetListState.hasTtl) {
-          Some(message.getGetListState.getTtl.getDurationMs)
-        } else {
-            None
-        }
+            Some(message.getGetListState.getTtl.getDurationMs)
+          } else {
+              None
+          }
         initializeStateVariable(stateName, schema, StateVariableType.ListState, ttlDurationMs)
+      case StatefulProcessorCall.MethodCase.TIMERSTATECALL =>
+        message.getTimerStateCall.getMethodCase match {
+          case TimerStateCallCommand.MethodCase.REGISTER =>
+            val expiryTimestamp =
+              message.getTimerStateCall.getRegister.getExpiryTimestampMs
+            statefulProcessorHandle.registerTimer(expiryTimestamp)
+            sendResponse(0)
+          case TimerStateCallCommand.MethodCase.DELETE =>
+            val expiryTimestamp =
+              message.getTimerStateCall.getDelete.getExpiryTimestampMs
+            statefulProcessorHandle.deleteTimer(expiryTimestamp)
+            sendResponse(0)
+          case TimerStateCallCommand.MethodCase.LIST =>
+            if (!listTimerIter.isDefined) {
+              listTimerIter = Option(statefulProcessorHandle.listTimers())
+            }
+            // listTimerIter could be None in the TWSPandasServerSuite
+            if (!listTimerIter.isDefined || !listTimerIter.get.hasNext) {
+              // avoid sending over empty batch
+              sendResponse(1)
+            } else {
+              sendResponse(0)
+              val outputSchema = new StructType()
+                .add(StructField("timestamp", LongType))
+              sendIteratorAsArrowBatches(listTimerIter.get, outputSchema) { data =>
+                InternalRow(data)
+              }
+            }
+
+          case _ =>
+            throw new IllegalArgumentException("Invalid timer state method call")
+        }
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
     }
@@ -336,24 +431,6 @@ class TransformWithStateInPandasStateServer(
     }
   }
 
-  private def sendResponse(
-      status: Int,
-      errorMessage: String = null,
-      byteString: ByteString = null): Unit = {
-    val responseMessageBuilder = StateResponse.newBuilder().setStatusCode(status)
-    if (status != 0 && errorMessage != null) {
-      responseMessageBuilder.setErrorMessage(errorMessage)
-    }
-    if (byteString != null) {
-      responseMessageBuilder.setValue(byteString)
-    }
-    val responseMessage = responseMessageBuilder.build()
-    val responseMessageBytes = responseMessage.toByteArray
-    val byteLength = responseMessageBytes.length
-    outputStream.writeInt(byteLength)
-    outputStream.write(responseMessageBytes)
-  }
-
   private def initializeStateVariable(
       stateName: String,
       schemaString: String,
@@ -389,6 +466,75 @@ class TransformWithStateInPandasStateServer(
         } else {
           sendResponse(1, s"List state $stateName already exists")
         }
+    }
+  }
+
+  /** Utils object for sending response to Python client. */
+  private object PythonResponseWriterUtils {
+    def sendResponse(
+        status: Int,
+        errorMessage: String = null,
+        byteString: ByteString = null): Unit = {
+      val responseMessageBuilder = StateResponse.newBuilder().setStatusCode(status)
+      if (status != 0 && errorMessage != null) {
+        responseMessageBuilder.setErrorMessage(errorMessage)
+      }
+      if (byteString != null) {
+        responseMessageBuilder.setValue(byteString)
+      }
+      val responseMessage = responseMessageBuilder.build()
+      val responseMessageBytes = responseMessage.toByteArray
+      val byteLength = responseMessageBytes.length
+      outputStream.writeInt(byteLength)
+      outputStream.write(responseMessageBytes)
+    }
+
+    def sendResponseWithLongVal(
+        status: Int,
+        errorMessage: String = null,
+        longVal: Long): Unit = {
+      val responseMessageBuilder = StateResponseWithLongTypeVal.newBuilder().setStatusCode(status)
+      if (status != 0 && errorMessage != null) {
+        responseMessageBuilder.setErrorMessage(errorMessage)
+      }
+      responseMessageBuilder.setValue(longVal)
+      val responseMessage = responseMessageBuilder.build()
+      val responseMessageBytes = responseMessage.toByteArray
+      val byteLength = responseMessageBytes.length
+      outputStream.writeInt(byteLength)
+      outputStream.write(responseMessageBytes)
+    }
+
+    def sendIteratorAsArrowBatches[T](
+        iter: Iterator[T], outputSchema: StructType)(func: T => InternalRow): Unit = {
+      outputStream.flush()
+      val arrowSchema = ArrowUtils.toArrowSchema(outputSchema, timeZoneId,
+        errorOnDuplicatedFieldNames, largeVarTypes)
+      val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+        s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
+      val root = VectorSchemaRoot.create(arrowSchema, allocator)
+      val writer = new ArrowStreamWriter(root, null, outputStream)
+
+      val arrowStreamWriter = new BaseStreamingArrowWriter(root, writer,
+          arrowTransformWithStateInPandasMaxRecordsPerBatch)
+      var rowCount = 0
+      while (iter.hasNext &&
+        rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {
+        val data = iter.next()
+        val internalRow = func(data)
+        arrowStreamWriter.writeRow(internalRow)
+        rowCount += 1
+      }
+      arrowStreamWriter.finalizeCurrentArrowBatch()
+      Utils.tryWithSafeFinally {
+        // end writes footer to the output stream and doesn't clean any resources.
+        // It could throw exception if the output stream is closed, so it should be
+        // in the try block.
+        writer.end()
+      } {
+        root.close()
+        allocator.close()
+      }
     }
   }
 }
