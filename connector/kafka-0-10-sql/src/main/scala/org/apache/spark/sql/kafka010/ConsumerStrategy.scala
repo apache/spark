@@ -22,12 +22,12 @@ import java.{util => ju}
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import org.apache.kafka.clients.admin.Admin
+import org.apache.kafka.clients.admin.{Admin, TopicDescription}
 import org.apache.kafka.clients.consumer.{Consumer, KafkaConsumer}
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaRedactionUtil}
+import org.apache.spark.kafka010.KafkaConfigUpdater
 
 /**
  * Subscribe allows you to subscribe to a fixed collection of topics.
@@ -45,12 +45,15 @@ private[kafka010] sealed trait ConsumerStrategy extends Logging {
   /** Creates an [[org.apache.kafka.clients.admin.AdminClient]] */
   def createAdmin(kafkaParams: ju.Map[String, Object]): Admin = {
     val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
-    logDebug(s"Admin params: ${KafkaRedactionUtil.redactParams(updatedKafkaParams.asScala.toSeq)}")
     Admin.create(updatedKafkaParams)
   }
 
+  /** Returns the assigned or subscribed [[PartitionDescription]] */
+  def assignedPartitionDescriptions(admin: Admin): Set[PartitionDescription]
+
   /** Returns the assigned or subscribed [[TopicPartition]] */
-  def assignedTopicPartitions(admin: Admin): Set[TopicPartition]
+  def assignedTopicPartitions(admin: Admin): Set[TopicPartition] =
+    assignedPartitionDescriptions(admin).map(_.toTopicPartition)
 
   /**
    * Updates the parameters with security if needed.
@@ -61,16 +64,20 @@ private[kafka010] sealed trait ConsumerStrategy extends Logging {
       .setAuthenticationConfigIfNeeded()
       .build()
 
-  protected def retrieveAllPartitions(admin: Admin, topics: Set[String]): Set[TopicPartition] = {
-    admin.describeTopics(topics.asJava).all().get().asScala.filterNot(_._2.isInternal).flatMap {
-      case (topic, topicDescription) =>
-        topicDescription.partitions().asScala.map { topicPartitionInfo =>
-          val partition = topicPartitionInfo.partition()
-          logDebug(s"Partition found: $topic:$partition")
-          new TopicPartition(topic, partition)
-        }
-    }.toSet
-  }
+  protected def retrieveAllPartitions(
+    admin: Admin,
+    topics: Set[String]): Set[PartitionDescription] =
+    admin.describeTopics(topics.asJava)
+      .all()
+      .get()
+      .asScala
+      .map(_._2)
+      .filterNot(_.isInternal)
+      .flatMap { (topicDescription: TopicDescription) =>
+        val topic = topicDescription.name()
+        topicDescription.partitions.asScala
+          .map(tpi => PartitionDescription.fromTopicPartitionInfo(topic, tpi))
+      }.toSet
 }
 
 /**
@@ -86,10 +93,11 @@ private[kafka010] case class AssignStrategy(partitions: Array[TopicPartition])
     consumer
   }
 
-  override def assignedTopicPartitions(admin: Admin): Set[TopicPartition] = {
+  override def assignedPartitionDescriptions(admin: Admin): Set[PartitionDescription] = {
     val topics = partitions.map(_.topic()).toSet
     logDebug(s"Topics for assignment: $topics")
-    retrieveAllPartitions(admin, topics).filter(partitions.contains(_))
+    retrieveAllPartitions(admin, topics)
+      .filter((pd: PartitionDescription) => partitions.contains(pd.toTopicPartition))
   }
 
   override def toString: String = s"Assign[${partitions.mkString(", ")}]"
@@ -108,9 +116,8 @@ private[kafka010] case class SubscribeStrategy(topics: Seq[String])
     consumer
   }
 
-  override def assignedTopicPartitions(admin: Admin): Set[TopicPartition] = {
+  override def assignedPartitionDescriptions(admin: Admin): Set[PartitionDescription] =
     retrieveAllPartitions(admin, topics.toSet)
-  }
 
   override def toString: String = s"Subscribe[${topics.mkString(", ")}]"
 }
@@ -130,7 +137,7 @@ private[kafka010] case class SubscribePatternStrategy(topicPattern: String)
     consumer
   }
 
-  override def assignedTopicPartitions(admin: Admin): Set[TopicPartition] = {
+  override def assignedPartitionDescriptions(admin: Admin): Set[PartitionDescription] = {
     logDebug(s"Topic pattern: $topicPattern")
     var topics = mutable.Seq.empty[String]
     // listTopics is not listing internal topics by default so no filter needed

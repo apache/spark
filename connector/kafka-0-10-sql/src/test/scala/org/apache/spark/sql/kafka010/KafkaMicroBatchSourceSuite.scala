@@ -54,6 +54,23 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
+class CustomTestKPLAssigner extends KafkaPartitionLocationAssigner {
+  type LocationMap = Map[PartitionDescription, Array[ExecutorDescription]]
+  override def getLocationPreferences(
+                                       partDescrs: Array[PartitionDescription],
+                                       knownExecutors: Array[ExecutorDescription]): LocationMap = {
+    val executors = Array(
+      ExecutorDescription("exec0", "host0"),
+      ExecutorDescription("exec1", "host1"))
+
+    partDescrs.map { partitionDescription =>
+      val execs = executors
+        .filter(exec => exec.id.contains(partitionDescription.partition.toString))
+      (partitionDescription -> execs)
+    }.toMap
+  }
+}
+
 abstract class KafkaSourceTest extends StreamTest with SharedSparkSession with KafkaTest {
 
   protected var testUtils: KafkaTestUtils = _
@@ -1660,6 +1677,29 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
         }
       }
     )
+  }
+
+  test("SPARK-46798: custom location assigner") {
+    val topic = newTopic()
+    val tp = new TopicPartition(topic, 0)
+    testUtils.createTopic(topic, partitions = 1)
+    SparkSession.setActiveSession(spark)
+    withTempDir { dir =>
+      val provider = new KafkaSourceProvider()
+      val options = Map(
+        "kafka.bootstrap.servers" -> testUtils.brokerAddress,
+        "subscribe" -> topic,
+        "partitionlocationassigner" -> "org.apache.spark.sql.kafka010.CustomTestKPLAssigner"
+      )
+      val dsOptions = new CaseInsensitiveStringMap(options.asJava)
+      val table = provider.getTable(dsOptions)
+      val stream = table.newScanBuilder(dsOptions).build().toMicroBatchStream(dir.getAbsolutePath)
+      val inputPartitions = stream.planInputPartitions(
+        KafkaSourceOffset(Map(tp -> 0L)),
+        KafkaSourceOffset(Map(tp -> 100L))).map(_.asInstanceOf[KafkaBatchInputPartition])
+
+      inputPartitions.foreach(p => p.preferredLocations().foreach(loc => assert(loc.equals("host0"))))
+    }
   }
 
   testWithUninterruptibleThread("minPartitions is supported") {
