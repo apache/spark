@@ -19,10 +19,9 @@ package org.apache.spark.ml.util
 
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.VectorUDT
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.AttributeNameParser
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types._
 
 
 /**
