@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql
 
+import java.math.BigInteger
 import java.util
 
 import scala.collection.mutable
@@ -215,6 +216,11 @@ class Dataset[T] private[sql] (
           .getSchema
           .getSchema)
       .asInstanceOf[StructType]
+  }
+
+  /** @inheritdoc */
+  def sizeInBytesApproximation(): BigInteger = {
+    sparkSession.sizeInBytes(plan.getRoot)
   }
 
   /** @inheritdoc */

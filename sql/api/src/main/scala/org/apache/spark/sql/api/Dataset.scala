@@ -19,6 +19,7 @@ package org.apache.spark.sql.api
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 
+import _root_.java.math.BigInteger
 import _root_.java.util
 
 import org.apache.spark.annotation.{DeveloperApi, Stable}
@@ -221,6 +222,14 @@ abstract class Dataset[T] extends Serializable {
    */
   def printSchema(level: Int): Unit = println(schema.treeString(level))
   // scalastyle:on println
+
+  /**
+   * Returns an approximate size in bytes of the Dataset.
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def sizeInBytesApproximation(): BigInteger
 
   /**
    * Prints the plans (logical and physical) with a format specified by a given explain mode.
