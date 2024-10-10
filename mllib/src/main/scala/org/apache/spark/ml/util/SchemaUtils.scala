@@ -215,15 +215,7 @@ private[spark] object SchemaUtils {
    */
   def getSchemaField(schema: StructType, colName: String): StructField = {
     val colSplits = AttributeNameParser.parseAttributeName(colName)
-    val sqlConf = SparkSession.getActiveSession.get.sessionState.conf
-    val caseSensitive = sqlConf.getConf(SQLConf.CASE_SENSITIVE)
-
-    val field = if (caseSensitive) {
-      schema.findNestedField(colSplits).get._2
-    } else {
-      schema.findNestedFieldIgnoreCase(colSplits).get
-    }
-    field
+    schema.findNestedField(colSplits, resolver = SQLConf.get.resolver).get._2
   }
 
   /**
