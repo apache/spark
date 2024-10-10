@@ -629,4 +629,12 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       checkAnswer(df6, Row(LocalDateTime.of(2018, 11, 17, 13, 33, 33)))
     }
   }
+
+  test("SPARK-49695: Postgres fix xor push-down") {
+    val df = spark.sql("select c0, c1 from bar where c1 ^ 42 = 0")
+    val rows = df.collect()
+    assert(rows.length == 1)
+    assert(rows(0).getInt(2) === 42)
+    assert(rows(0).getString(1) === "hello")
+  }
 }
