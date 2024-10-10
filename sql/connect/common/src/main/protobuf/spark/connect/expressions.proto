@@ -53,11 +53,14 @@ message Expression {
     MergeAction merge_action = 19;
     TypedAggregateExpression typed_aggregate_expression = 20;
 
+    Unknown unknown = 998;
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // relations they can add them here. During the planning the correct resolution is done.
     google.protobuf.Any extension = 999;
   }
 
+  // Used for testing purposes only.
+  message Unknown {}
 
   // Expression for the OVER clause or WINDOW clause.
   message Window {

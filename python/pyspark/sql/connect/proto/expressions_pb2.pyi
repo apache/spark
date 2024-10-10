@@ -59,6 +59,15 @@ class Expression(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    class Unknown(google.protobuf.message.Message):
+        """Used for testing purposes only."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        def __init__(
+            self,
+        ) -> None: ...
+
     class Window(google.protobuf.message.Message):
         """Expression for the OVER clause or WINDOW clause."""
 
@@ -1184,6 +1193,7 @@ class Expression(google.protobuf.message.Message):
     NAMED_ARGUMENT_EXPRESSION_FIELD_NUMBER: builtins.int
     MERGE_ACTION_FIELD_NUMBER: builtins.int
     TYPED_AGGREGATE_EXPRESSION_FIELD_NUMBER: builtins.int
+    UNKNOWN_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___ExpressionCommon: ...
@@ -1228,6 +1238,8 @@ class Expression(google.protobuf.message.Message):
     @property
     def typed_aggregate_expression(self) -> global___TypedAggregateExpression: ...
     @property
+    def unknown(self) -> global___Expression.Unknown: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         relations they can add them here. During the planning the correct resolution is done.
@@ -1256,6 +1268,7 @@ class Expression(google.protobuf.message.Message):
         named_argument_expression: global___NamedArgumentExpression | None = ...,
         merge_action: global___MergeAction | None = ...,
         typed_aggregate_expression: global___TypedAggregateExpression | None = ...,
+        unknown: global___Expression.Unknown | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -1289,6 +1302,8 @@ class Expression(google.protobuf.message.Message):
             b"sort_order",
             "typed_aggregate_expression",
             b"typed_aggregate_expression",
+            "unknown",
+            b"unknown",
             "unresolved_attribute",
             b"unresolved_attribute",
             "unresolved_extract_value",
@@ -1338,6 +1353,8 @@ class Expression(google.protobuf.message.Message):
             b"sort_order",
             "typed_aggregate_expression",
             b"typed_aggregate_expression",
+            "unknown",
+            b"unknown",
             "unresolved_attribute",
             b"unresolved_attribute",
             "unresolved_extract_value",
@@ -1379,6 +1396,7 @@ class Expression(google.protobuf.message.Message):
             "named_argument_expression",
             "merge_action",
             "typed_aggregate_expression",
+            "unknown",
             "extension",
         ]
         | None
