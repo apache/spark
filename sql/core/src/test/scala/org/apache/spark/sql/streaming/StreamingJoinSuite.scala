@@ -540,7 +540,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
       val opId = 0
       val path =
         Utils.createDirectory(tempDir.getAbsolutePath, Random.nextFloat().toString).toString
-      val stateInfo = StatefulOperatorStateInfo(path, queryId, opId, 0L, 5)
+      val stateInfo = StatefulOperatorStateInfo(path, queryId, opId, 0L, 5, None)
 
       implicit val sqlContext = spark.sqlContext
       val coordinatorRef = sqlContext.streams.stateStoreCoordinator
