@@ -293,7 +293,7 @@ class QueryExecutionErrorsSuite
         val e = intercept[SparkException] {
           df.write.parquet(dir.getCanonicalPath)
         }
-        assert(e.getErrorClass == "TASK_WRITE_FAILED")
+        assert(e.getCondition == "TASK_WRITE_FAILED")
 
         val format = "Parquet"
         val config = "\"" + SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key + "\""
@@ -312,7 +312,7 @@ class QueryExecutionErrorsSuite
         val ex = intercept[SparkException] {
           spark.read.schema("time timestamp_ntz").orc(file.getCanonicalPath).collect()
         }
-        assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
+        assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
         checkError(
           exception = ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
           condition = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
@@ -334,7 +334,7 @@ class QueryExecutionErrorsSuite
         val ex = intercept[SparkException] {
           spark.read.schema("time timestamp_ltz").orc(file.getCanonicalPath).collect()
         }
-        assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
+        assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
         checkError(
           exception = ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
           condition = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
@@ -382,7 +382,7 @@ class QueryExecutionErrorsSuite
     }
 
     val e2 = e1.getCause.asInstanceOf[SparkException]
-    assert(e2.getErrorClass == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
+    assert(e2.getCondition == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
 
     checkError(
       exception = e2.getCause.asInstanceOf[SparkRuntimeException],
@@ -921,7 +921,7 @@ class QueryExecutionErrorsSuite
     val e = intercept[StreamingQueryException] {
       query.awaitTermination()
     }
-    assert(e.getErrorClass === "STREAM_FAILED")
+    assert(e.getCondition === "STREAM_FAILED")
     assert(e.getCause.isInstanceOf[NullPointerException])
   }
 
