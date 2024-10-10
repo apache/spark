@@ -1074,7 +1074,7 @@ jobs:
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
     name: Run Spark on Kubernetes Integration test
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
       - name: Checkout Spark repository
