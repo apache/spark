@@ -44,6 +44,8 @@ private[protobuf] class TaskDataWrapperSerializer extends ProtobufSerDe[TaskData
       .setMemoryBytesSpilled(input.memoryBytesSpilled)
       .setDiskBytesSpilled(input.diskBytesSpilled)
       .setPeakExecutionMemory(input.peakExecutionMemory)
+      .setPeakOnHeapExecutionMemory(input.peakOnHeapExecutionMemory)
+      .setPeakOffHeapExecutionMemory(input.peakOffHeapExecutionMemory)
       .setInputBytesRead(input.inputBytesRead)
       .setInputRecordsRead(input.inputRecordsRead)
       .setOutputBytesWritten(input.outputBytesWritten)
@@ -111,6 +113,8 @@ private[protobuf] class TaskDataWrapperSerializer extends ProtobufSerDe[TaskData
       memoryBytesSpilled = binary.getMemoryBytesSpilled,
       diskBytesSpilled = binary.getDiskBytesSpilled,
       peakExecutionMemory = binary.getPeakExecutionMemory,
+      peakOnHeapExecutionMemory = binary.getPeakOnHeapExecutionMemory,
+      peakOffHeapExecutionMemory = binary.getPeakOffHeapExecutionMemory,
       inputBytesRead = binary.getInputBytesRead,
       inputRecordsRead = binary.getInputRecordsRead,
       outputBytesWritten = binary.getOutputBytesWritten,
