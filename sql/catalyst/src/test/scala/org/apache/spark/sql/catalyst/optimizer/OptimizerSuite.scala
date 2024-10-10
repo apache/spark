@@ -314,7 +314,7 @@ class OptimizerSuite extends PlanTest {
     }
   }
 
-  test("array compact contains null") {
+  test("SPARK-49924: Keep containsNull after replace ArrayCompact") {
     val optimizer = new SimpleTestOptimizer() {
       override def defaultBatches: Seq[Batch] =
         Batch("test", fixedPoint,

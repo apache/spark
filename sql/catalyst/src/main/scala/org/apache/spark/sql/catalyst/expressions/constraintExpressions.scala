@@ -53,13 +53,11 @@ case class KnownNotNull(child: Expression) extends TaggingExpression {
 }
 
 case class KnownNotContainsNull(child: Expression) extends TaggingExpression {
-  override def nullable: Boolean = child.nullable
-
   override def dataType: DataType =
     child.dataType.asInstanceOf[ArrayType].copy(containsNull = false)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    child.genCode(ctx).copy(isNull = FalseLiteral)
+    child.genCode(ctx)
   }
 
   override protected def withNewChildInternal(newChild: Expression): KnownNotContainsNull =
