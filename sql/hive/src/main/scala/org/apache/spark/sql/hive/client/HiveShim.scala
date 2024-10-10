@@ -415,8 +415,11 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       try {
         val partitionSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
           catalogTable.partitionSchema)
+        val transformedPredicates = predicates.map(_.transform {
+          case a: AttributeReference => a.withName(a.name.toLowerCase(Locale.ROOT))
+        })
         val boundPredicate = ExternalCatalogUtils.generatePartitionPredicateByFilter(
-          catalogTable, partitionSchema, predicates)
+          catalogTable, partitionSchema, transformedPredicates)
 
         def toRow(spec: TablePartitionSpec): InternalRow = {
           InternalRow.fromSeq(partitionSchema.map { field =>

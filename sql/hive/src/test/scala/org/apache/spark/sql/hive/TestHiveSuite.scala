@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHiveSparkSession}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 
-class TestHiveSuite extends TestHiveSingleton with SQLTestUtils {
+class TestHiveSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("load test table based on case sensitivity") {
     val testHiveSparkSession = spark.asInstanceOf[TestHiveSparkSession]
 
@@ -46,5 +46,20 @@ class TestHiveSuite extends TestHiveSingleton with SQLTestUtils {
 
   test("SPARK-15887: hive-site.xml should be loaded") {
     assert(hiveClient.getConf("hive.in.test", "") == "true")
+  }
+
+  test("SPARK-49507: Fix Expected only partition pruning predicates exception") {
+    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK.key -> "true") {
+      sql(s"""CREATE TABLE t (ID BIGINT, DT STRING)
+             |STORED AS PARQUET
+             |PARTITIONED BY (DT)
+             |""".stripMargin)
+      sql(s"""
+             |INSERT INTO TABLE t SELECT 1, '20240820'
+             |""".stripMargin)
+      checkAnswer(
+        sql("SELECT * FROM t WHERE dt=20240820"),
+        Row(1, "20240820") :: Nil)
+    }
   }
 }
