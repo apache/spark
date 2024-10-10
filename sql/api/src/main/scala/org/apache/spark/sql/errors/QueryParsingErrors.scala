@@ -86,6 +86,15 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES", ctx)
   }
 
+  def pipeOperatorAggregateUnsupportedCaseError(
+      caseArgument: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+      messageParameters = Map("case" -> caseArgument),
+      ctx)
+  }
+
   def distributeByUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0012", ctx)
   }

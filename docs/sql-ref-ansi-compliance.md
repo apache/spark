@@ -400,6 +400,7 @@ Below is a list of all the keywords in Spark SQL.
 |--|----------------------|-------------------------|--------|
 |ADD|non-reserved|non-reserved|non-reserved|
 |AFTER|non-reserved|non-reserved|non-reserved|
+|AGGREGATE|non-reserved|non-reserved|non-reserved|
 |ALL|reserved|non-reserved|reserved|
 |ALTER|non-reserved|non-reserved|reserved|
 |ALWAYS|non-reserved|non-reserved|non-reserved|

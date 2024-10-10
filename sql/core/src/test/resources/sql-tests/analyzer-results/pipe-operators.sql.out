@@ -2023,6 +2023,424 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+select 1 as x, 2 as y
+|> aggregate group by x, y
+-- !query analysis
+Aggregate [x#x, y#x], [x#x, y#x]
++- Project [1 AS x#x, 2 AS y#x]
+   +- OneRowRelation
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate group by 1, 2
+-- !query analysis
+Aggregate [1, 2], [1 AS 1#x, 2 AS 2#x]
++- Project [3 AS x#x, 4 AS y#x]
+   +- OneRowRelation
+
+
+-- !query
+table other
+|> aggregate sum(b) as result group by a
+-- !query analysis
+Aggregate [a#x], [a#x, sum(b#x) AS result#xL]
++- SubqueryAlias spark_catalog.default.other
+   +- Relation spark_catalog.default.other[a#x,b#x] json
+
+
+-- !query
+table t
+|> aggregate sum(x)
+-- !query analysis
+Aggregate [sum(x#x) AS sum(x)#xL]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> aggregate sum(x) + 1 as result_plus_one
+-- !query analysis
+Aggregate [(sum(x#x) + cast(1 as bigint)) AS result_plus_one#xL]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table other
+|> aggregate group by a
+|> where a = 1
+-- !query analysis
+Filter (a#x = 1)
++- SubqueryAlias __auto_generated_subquery_name
+   +- Aggregate [a#x], [a#x]
+      +- SubqueryAlias spark_catalog.default.other
+         +- Relation spark_catalog.default.other[a#x,b#x] json
+
+
+-- !query
+select 1 as x, 2 as y, 3 as z
+|> aggregate group by x, y, x + y as z
+-- !query analysis
+Aggregate [x#x, y#x, (x#x + y#x)], [x#x, y#x, (x#x + y#x) AS z#x]
++- Project [1 AS x#x, 2 AS y#x, 3 AS z#x]
+   +- OneRowRelation
+
+
+-- !query
+select 1 as x, 2 as y, 3 as z
+|> aggregate group by x as z, x + y as z
+-- !query analysis
+Aggregate [x#x, (x#x + y#x)], [x#x AS z#x, (x#x + y#x) AS z#x]
++- Project [1 AS x#x, 2 AS y#x, 3 AS z#x]
+   +- OneRowRelation
+
+
+-- !query
+select 1 as x, 2 as y, named_struct('z', 3) as st
+|> aggregate group by x, y, x, x, st.z, (st).z, 1 + x, 2 + x
+-- !query analysis
+Aggregate [x#x, y#x, x#x, x#x, st#x.z, st#x.z, (1 + x#x), (2 + x#x)], [x#x, y#x, x#x, x#x, st#x.z AS z#x, st#x.z AS z#x, (1 + x#x) AS (1 + x)#x, (2 + x#x) AS (2 + x)#x]
++- Project [1 AS x#x, 2 AS y#x, named_struct(z, 3) AS st#x]
+   +- OneRowRelation
+
+
+-- !query
+select 1 x, 2 y, 3 z
+|> aggregate sum(z) z group by x, y
+|> aggregate avg(z) z group by x
+|> aggregate count(distinct z) c
+-- !query analysis
+Aggregate [count(distinct z#x) AS c#xL]
++- Aggregate [x#x], [x#x, avg(z#xL) AS z#x]
+   +- Aggregate [x#x, y#x], [x#x, y#x, sum(z#x) AS z#xL]
+      +- Project [1 AS x#x, 2 AS y#x, 3 AS z#x]
+         +- OneRowRelation
+
+
+-- !query
+select 1 x, 3 z
+|> aggregate count(*) group by x, z, x
+|> select x
+-- !query analysis
+Project [x#x]
++- Aggregate [x#x, z#x, x#x], [x#x, z#x, x#x, count(1) AS count(1)#xL]
+   +- Project [1 AS x#x, 3 AS z#x]
+      +- OneRowRelation
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate group by all
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "case" : "GROUP BY ALL"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 47,
+    "fragment" : "select 3 as x, 4 as y\n|> aggregate group by all"
+  } ]
+}
+
+
+-- !query
+table courseSales
+|> aggregate sum(earnings) group by rollup(course, `year`)
+|> where course = 'dotNET' and `year` = '2013'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "case" : "GROUP BY ROLLUP"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 123,
+    "fragment" : "table courseSales\n|> aggregate sum(earnings) group by rollup(course, `year`)\n|> where course = 'dotNET' and `year` = '2013'"
+  } ]
+}
+
+
+-- !query
+table courseSales
+|> aggregate sum(earnings) group by cube(course, `year`)
+|> where course = 'dotNET' and `year` = '2013'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "case" : "GROUP BY CUBE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 121,
+    "fragment" : "table courseSales\n|> aggregate sum(earnings) group by cube(course, `year`)\n|> where course = 'dotNET' and `year` = '2013'"
+  } ]
+}
+
+
+-- !query
+table courseSales
+|> aggregate sum(earnings) group by course, `year` grouping sets(course, `year`)
+|> where course = 'dotNET' and `year` = '2013'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "case" : "GROUPING SETS"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 145,
+    "fragment" : "table courseSales\n|> aggregate sum(earnings) group by course, `year` grouping sets(course, `year`)\n|> where course = 'dotNET' and `year` = '2013'"
+  } ]
+}
+
+
+-- !query
+table courseSales
+|> aggregate sum(earnings), grouping(course) + 1
+   group by course
+|> where course = 'dotNET' and `year` = '2013'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "case" : "GROUPING"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 132,
+    "fragment" : "table courseSales\n|> aggregate sum(earnings), grouping(course) + 1\n   group by course\n|> where course = 'dotNET' and `year` = '2013'"
+  } ]
+}
+
+
+-- !query
+table courseSales
+|> aggregate sum(earnings), grouping_id(course)
+   group by course
+|> where course = 'dotNET' and `year` = '2013'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "case" : "GROUPING_ID"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 131,
+    "fragment" : "table courseSales\n|> aggregate sum(earnings), grouping_id(course)\n   group by course\n|> where course = 'dotNET' and `year` = '2013'"
+  } ]
+}
+
+
+-- !query
+select 1 as x, 2 as y
+|> aggregate group by ()
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "')'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+table other
+|> aggregate a
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_GROUP_BY",
+  "sqlState" : "42803",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 26,
+    "fragment" : "table other\n|> aggregate a"
+  } ]
+}
+
+
+-- !query
+table other
+|> aggregate a group by a
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "case" : "Non-aggregate expressions in place of aggregate functions, even if they appear separately in the GROUP BY clause"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 37,
+    "fragment" : "table other\n|> aggregate a group by a"
+  } ]
+}
+
+
+-- !query
+table other
+|> select sum(a) as result
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "expr" : "sum(a#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 23,
+    "stopIndex" : 28,
+    "fragment" : "sum(a)"
+  } ]
+}
+
+
+-- !query
+table other
+|> aggregate
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "The AGGREGATE clause requires a list of aggregate expressions or a list of grouping expressions, or both"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 24,
+    "fragment" : "table other\n|> aggregate"
+  } ]
+}
+
+
+-- !query
+table other
+|> aggregate group by
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`group`",
+    "proposal" : "`a`, `b`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 30,
+    "fragment" : "group"
+  } ]
+}
+
+
+-- !query
+table other
+|> group by a
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'group'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+table other
+|> aggregate sum(a) over () group by b
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "case" : "window functions"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 50,
+    "fragment" : "table other\n|> aggregate sum(a) over () group by b"
+  } ]
+}
+
+
+-- !query
+select 1 x, 2 y, 3 z
+|> aggregate count(*) AS c, sum(x) AS x group by x
+|> where c = 1
+|> where x = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`x`, `x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 97,
+    "stopIndex" : 97,
+    "fragment" : "x"
+  } ]
+}
+
+
+-- !query
 drop table t
 -- !query analysis
 DropTable false, false

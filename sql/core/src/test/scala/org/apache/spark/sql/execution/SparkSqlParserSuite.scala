@@ -955,6 +955,12 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       checkExcept("TABLE t |> MINUS DISTINCT TABLE t")
       checkIntersect("TABLE t |> INTERSECT ALL TABLE t")
       checkUnion("TABLE t |> UNION ALL TABLE t")
+      // Aggregation
+      parser.parsePlan("SELECT a, b FROM t |> AGGREGATE SUM(a)")
+      parser.parsePlan("SELECT a, b FROM t |> AGGREGATE SUM(a) AS result GROUP BY b")
+      parser.parsePlan("SELECT a, b FROM t |> AGGREGATE GROUP BY b")
+      parser.parsePlan("SELECT a, b FROM t |> AGGREGATE b, COUNT(*) AS result GROUP BY b")
+      parser.parsePlan("SELECT a, b FROM t |> AGGREGATE COUNT(*) AS result GROUP BY b WITH ROLLUP")
     }
   }
 }

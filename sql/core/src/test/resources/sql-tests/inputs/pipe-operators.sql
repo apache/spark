@@ -571,6 +571,130 @@ table t
 table t
 |> union all table st;
 
+-- Aggregation operators: positive tests.
+-----------------------------------------
+
+-- Basic aggregation on a constant table.
+select 1 as x, 2 as y
+|> aggregate group by x, y;
+
+-- Basic aggregation with group by ordinals.
+select 3 as x, 4 as y
+|> aggregate group by 1, 2;
+
+-- Basic aggregation with a GROUP BY clause.
+table other
+|> aggregate sum(b) as result group by a;
+
+-- Basic table aggregation.
+table t
+|> aggregate sum(x);
+
+-- Basic table aggregation with an alias.
+table t
+|> aggregate sum(x) + 1 as result_plus_one;
+
+-- Grouping with no aggregate functions.
+table other
+|> aggregate group by a
+|> where a = 1;
+
+-- Group by an expression on columns, all of which are already grouped.
+select 1 as x, 2 as y, 3 as z
+|> aggregate group by x, y, x + y as z;
+
+-- Group by an expression on columns, some of which (y) aren't already grouped.
+select 1 as x, 2 as y, 3 as z
+|> aggregate group by x as z, x + y as z;
+
+-- We get an output column for each item in GROUP BY, even when they are duplicate expressions.
+select 1 as x, 2 as y, named_struct('z', 3) as st
+|> aggregate group by x, y, x, x, st.z, (st).z, 1 + x, 2 + x;
+
+-- Chained aggregates.
+select 1 x, 2 y, 3 z
+|> aggregate sum(z) z group by x, y
+|> aggregate avg(z) z group by x
+|> aggregate count(distinct z) c;
+
+-- Ambiguous name from duplicate GROUP BY item. This is generally allowed.
+select 1 x, 3 z
+|> aggregate count(*) group by x, z, x
+|> select x;
+
+-- Aggregation operators: negative tests.
+-----------------------------------------
+
+-- GROUP BY ALL is not currently supported.
+select 3 as x, 4 as y
+|> aggregate group by all;
+
+-- GROUP BY ROLLUP is not supported yet.
+table courseSales
+|> aggregate sum(earnings) group by rollup(course, `year`)
+|> where course = 'dotNET' and `year` = '2013';
+
+-- GROUP BY CUBE is not supported yet.
+table courseSales
+|> aggregate sum(earnings) group by cube(course, `year`)
+|> where course = 'dotNET' and `year` = '2013';
+
+-- GROUPING SETS is not supported yet.
+table courseSales
+|> aggregate sum(earnings) group by course, `year` grouping sets(course, `year`)
+|> where course = 'dotNET' and `year` = '2013';
+
+-- GROUPING/GROUPING_ID is not supported yet.
+table courseSales
+|> aggregate sum(earnings), grouping(course) + 1
+   group by course
+|> where course = 'dotNET' and `year` = '2013';
+
+-- GROUPING/GROUPING_ID is not supported yet.
+table courseSales
+|> aggregate sum(earnings), grouping_id(course)
+   group by course
+|> where course = 'dotNET' and `year` = '2013';
+
+-- GROUP BY () is not valid syntax.
+select 1 as x, 2 as y
+|> aggregate group by ();
+
+-- Non-aggregate expressions are not allowed in place of aggregate functions.
+table other
+|> aggregate a;
+
+-- Non-aggregate expressions are not allowed in place of aggregate functions, even if they appear
+-- separately in the GROUP BY clause.
+table other
+|> aggregate a group by a;
+
+-- Using aggregate functions without the AGGREGATE keyword is not allowed.
+table other
+|> select sum(a) as result;
+
+-- The AGGREGATE keyword requires a GROUP BY clause and/or aggregation function(s).
+table other
+|> aggregate;
+
+-- The AGGREGATE GROUP BY list cannot be empty.
+table other
+|> aggregate group by;
+
+-- The AGGREGATE keyword is required to perform grouping.
+table other
+|> group by a;
+
+-- Window functions are not allowed in the AGGREGATE expression list.
+table other
+|> aggregate sum(a) over () group by b;
+
+-- Ambiguous name from AGGREGATE list vs GROUP BY.
+select 1 x, 2 y, 3 z
+|> aggregate count(*) AS c, sum(x) AS x group by x
+|> where c = 1
+|> where x = 1;
+
 -- Cleanup.
 -----------
 drop table t;
