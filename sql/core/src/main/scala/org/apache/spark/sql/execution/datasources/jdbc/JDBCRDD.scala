@@ -284,7 +284,17 @@ class JDBCRDD(
     stmt.setQueryTimeout(options.queryTimeout)
 
     val startTime = System.nanoTime
-    rs = stmt.executeQuery()
+    JdbcUtils.classifyException(
+      errorClass = "FAILED_JDBC.EXECUTE_QUERY",
+      messageParameters = Map(
+        "url" -> options.url,
+        "query" -> sqlText),
+      dialect,
+      description = s"Failed to execute jdbc query: $sqlText",
+      isRuntime = true
+    ) {
+      rs = stmt.executeQuery()
+    }
     val endTime = System.nanoTime
 
     val executionTime = endTime - startTime

@@ -158,6 +158,25 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(1).equals("class java.lang.String"))
   }
 
+  test("SPARK-49730: syntax error classification") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        val schema = StructType(
+          Seq(StructField("id", IntegerType, true)))
+
+        spark.read
+          .format("jdbc")
+          .schema(schema)
+          .option("url", jdbcUrl)
+          .option("query", "SELECT * FRM tbl")
+          .load()
+      },
+      condition = "FAILED_JDBC.SYNTAX_ERROR",
+      parameters = Map(
+        "url" -> jdbcUrl,
+        "query" -> "SELECT * FROM (SELECT * FRM tbl) SPARK_GEN_SUBQ_0 WHERE 1=0"))
+  }
+
   test("Numeric types") {
     Seq(true, false).foreach { flag =>
       withSQLConf(SQLConf.LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED.key -> s"$flag") {
