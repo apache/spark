@@ -1259,7 +1259,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def wrongDatatypeInSomeRows(pos: Int, dataType: DataType): SparkSQLException = {
     new SparkSQLException(
-      errorClass = "_LEGACY_ERROR_TEMP_3263",
+      errorClass = "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH",
       messageParameters = Map("pos" -> pos.toString(), "type" -> dataType.typeName))
   }
 

@@ -606,6 +606,12 @@
     ],
     "sqlState" : "42711"
   },
+  "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH" : {
+    "message" : [
+      "Some values in field <pos> are incompatible with the column array type. Expected type <type>."
+    ],
+    "sqlState" : "0A000"
+  },
   "COLUMN_NOT_DEFINED_IN_TABLE" : {
     "message" : [
       "<colType> column <colName> is not defined in table <tableName>, defined table columns are: <tableCols>."
@@ -8702,11 +8708,6 @@
   "_LEGACY_ERROR_TEMP_3262" : {
     "message" : [
       "Doesn't support month or year interval: <interval>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3263": {
-    "message": [
-      "Some values in field <pos> are not the <type> type"
     ]
   },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
