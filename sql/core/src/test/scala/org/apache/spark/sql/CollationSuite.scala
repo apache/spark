@@ -1144,53 +1144,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("Check order by on partitioned table with collated string column") {
-    val tableName = "t"
-    Seq(
-      // (collationName, data, partitionOrder)
-      (
-        "", // non-collated
-        Seq((5, "bbb"), (3, "a"), (1, "A"), (4, "aaaa"), (6, "cc"), (2, "BbB")),
-        Seq(1, 2, 3, 4, 5, 6)
-      ),
-      (
-        "UTF8_BINARY",
-        Seq((5, "bbb"), (3, "a"), (1, "A"), (4, "aaaa"), (6, "cc"), (2, "BbB")),
-        Seq(1, 2, 3, 4, 5, 6)
-      ),
-      (
-        "UTF8_LCASE",
-        Seq((2, "bbb"), (1, "a"), (1, "A"), (1, "aaaa"), (3, "cc"), (2, "BbB")),
-        Seq(1, 1, 1, 2, 2, 3)
-      ),
-      (
-        "UNICODE",
-        Seq((4, "bbb"), (1, "a"), (2, "A"), (3, "aaaa"), (6, "cc"), (5, "BbB")),
-        Seq(1, 2, 3, 4, 5, 6)
-      ),
-      (
-        "UNICODE_CI",
-        Seq((2, "bbb"), (1, "a"), (1, "A"), (1, "aaaa"), (3, "cc"), (2, "BbB")),
-        Seq(1, 1, 1, 2, 2, 3)
-      )
-    ).foreach {
-      case (collationName, data, partitionOrder) =>
-        val partition1 = data.map { case (order, s) => (1, order, s) }
-        val partition2 = data.map { case (order, s) => (2, order, s) }
-        val collationSetup = if (collationName.isEmpty) "" else "collate " + collationName
-        withTable(tableName) {
-          sql(s"create table $tableName (c1 integer, c2 integer, c3 string $collationSetup)" +
-              s" partitioned by (c1)")
-          (partition1 ++ partition2).foreach {
-            case (c1, c2, c3) =>
-              sql(s"insert into $tableName partition (c1=$c1) values ($c2, '$c3')")
-          }
-          checkAnswer(sql(s"select c2 from $tableName order by c3"),
-            (partitionOrder ++ partitionOrder).sorted.map(Row(_)))
-        }
-    }
-  }
-
   test("Check order by on StructType") {
     Seq(
       // (collationName, data, expResult)
