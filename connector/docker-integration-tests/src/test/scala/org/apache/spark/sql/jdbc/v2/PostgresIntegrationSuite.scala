@@ -125,7 +125,6 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       "array[array['2022-01-01 09:15'::timestamp]])").executeUpdate()
     connection.prepareStatement("INSERT INTO array_timestamptz VALUES " +
       "(array[array['2022-01-01 09:15'::timestamptz]])").executeUpdate()
-    
     connection.prepareStatement(
     "CREATE TABLE datetime (name VARCHAR(32), date1 DATE, time1 TIMESTAMP)")
     .executeUpdate()
