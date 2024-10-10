@@ -163,7 +163,7 @@ class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSparkSession
       exception = intercept[SparkUnsupportedOperationException] {
         Seq(InvalidInJava(1)).toDS()
       },
-      condition = "_LEGACY_ERROR_TEMP_2140",
+      condition = "INVALID_JAVA_IDENTIFIER_AS_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "abstract",
         "walkedTypePath" -> "- root class: \"org.apache.spark.sql.InvalidInJava\""))
@@ -174,7 +174,7 @@ class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSparkSession
       exception = intercept[SparkUnsupportedOperationException] {
         Seq(InvalidInJava2(1)).toDS()
       },
-      condition = "_LEGACY_ERROR_TEMP_2140",
+      condition = "INVALID_JAVA_IDENTIFIER_AS_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "0",
         "walkedTypePath" ->
