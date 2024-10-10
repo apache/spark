@@ -264,6 +264,50 @@ class HeartbeatReceiverSuite
       STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT.key))
   }
 
+  test("SPARK-48758: test the executor registered states are consistent between scheduler and heartbeater") {
+    val rpcEnv = sc.env.rpcEnv
+    val fakeClusterManager = new FakeClusterManager(rpcEnv)
+    val fakeClusterManagerRef = rpcEnv.setupEndpoint("fake-cm", fakeClusterManager)
+    val listenerBus = new LiveListenerBus(sc.conf)
+    val mockMetricsSystem = mock(classOf[MetricsSystem])
+    listenerBus.start(sc, mockMetricsSystem)
+    when(sc.listenerBus).thenReturn(listenerBus)
+    when(sc.heartbeatReceiver).thenReturn(heartbeatReceiverRef)
+    val fakeSchedulerBackend = new FakeSchedulerBackend(scheduler, rpcEnv, fakeClusterManagerRef)
+    when(sc.schedulerBackend).thenReturn(fakeSchedulerBackend)
+
+    heartbeatReceiverRef.askSync[Boolean](TaskSchedulerIsSet)
+
+    // simulate the slow event listener in the listener queue before the heartbeatReceiver listener
+    sc.listenerBus.addToManagementQueue(new SparkListener() {
+      override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
+        if (executorAdded.executorId != "driver") {
+          Thread.sleep(2000)
+        }
+      }
+    })
+    // register the heartbeatReceiver listener to make sure it's after the
+    // slow listener above
+    sc.listenerBus.addToManagementQueue(heartbeatReceiver)
+
+    fakeSchedulerBackend.start()
+    val dummyExecutorEndpoint1 = new FakeExecutorEndpoint(rpcEnv)
+    val dummyExecutorEndpointRef1 = rpcEnv.setupEndpoint("fake-executor-1", dummyExecutorEndpoint1)
+
+    // register the executor
+    fakeSchedulerBackend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor(executorId1, dummyExecutorEndpointRef1, "1.2.3.4", 0, Map.empty))
+
+    // simulate the executor starting to heartbeat
+    val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
+      Heartbeat(executorId1,
+        Array.empty[(Long, Seq[AccumulatorV2[_, _]])],
+        BlockManagerId(executorId1, "1.2.3.4", 8008),
+        new ExecutorMetrics(Array.empty[Long])))
+
+    assert(!response.reregisterBlockManager)
+  }
+
   /** Manually send a heartbeat and return the response. */
   private def triggerHeartbeat(
       executorId: String,
