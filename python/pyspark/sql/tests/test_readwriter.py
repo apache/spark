@@ -298,6 +298,10 @@ class ReadwriterV2TestsMixin:
         with self.assertRaisesRegex(
             Exception, "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY"
         ):
+            df.select(hours("ts")).collect()
+        with self.assertRaisesRegex(
+            Exception, "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY"
+        ):
             df.select(bucket(2, "ts")).collect()
 
     def test_create(self):
