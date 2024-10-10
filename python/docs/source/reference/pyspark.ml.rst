@@ -104,6 +104,8 @@ Feature
     StopWordsRemover
     StringIndexer
     StringIndexerModel
+    TargetEncoder
+    TargetEncoderModel
     Tokenizer
     UnivariateFeatureSelector
     UnivariateFeatureSelectorModel
