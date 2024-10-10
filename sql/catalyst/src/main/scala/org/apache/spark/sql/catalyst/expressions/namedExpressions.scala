@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, METADATA_COL_ATTR_KEY}
 import org.apache.spark.sql.types._
+import org.apache.spark.types.variant.VariantMetrics
 import org.apache.spark.util.collection.BitSet
 import org.apache.spark.util.collection.ImmutableBitSet
 
@@ -163,6 +164,10 @@ case class Alias(child: Expression, name: String)(
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     throw SparkException.internalError("Alias.doGenCode should not be called.")
   }
+
+  override val isVariantConstructorExpression: Boolean = child.isVariantConstructorExpression
+
+  override val variantMetrics: VariantMetrics = child.variantMetrics
 
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable

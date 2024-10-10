@@ -30,6 +30,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
+import org.apache.spark.types.variant.VariantMetrics
 import org.apache.spark.util.SerializableConfiguration
 
 class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
@@ -89,14 +90,39 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     }
   }
 
-  override def buildReader(
+  /**
+   * Exactly the same as [[buildReaderWithPartitionValues]] except that the reader function returned
+   * also updates Variant Metrics
+   */
+  def buildReaderWithPartitionValuesAndVariantMetrics(
       sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String],
-      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+      hadoopConf: Configuration,
+      topLevelVariantMetrics: VariantMetrics,
+      nestedVariantMetrics: VariantMetrics): PartitionedFile => Iterator[InternalRow] = {
+    val dataReader = buildReaderWithVariantMetrics(sparkSession, dataSchema, partitionSchema,
+      requiredSchema, filters, options, hadoopConf, topLevelVariantMetrics, nestedVariantMetrics)
+    buildReaderWithPartitionValuesHelper(dataReader, partitionSchema, requiredSchema)
+  }
+
+  /**
+   * Helper function for [[buildReader]] and [[buildReaderWithVariantMetrics]]
+   */
+  private def buildReaderHelper(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String],
+      hadoopConf: Configuration,
+      topLevelVariantMetrics: Option[VariantMetrics] = None,
+      nestedVariantMetrics: Option[VariantMetrics] = None)
+      : PartitionedFile => Iterator[InternalRow] = {
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
@@ -120,13 +146,40 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
         actualSchema,
         parsedOptions,
         allowArrayAsStructs = true,
-        filters)
+        filters, topLevelVariantMetrics, nestedVariantMetrics)
       JsonDataSource(parsedOptions).readFile(
         broadcastedHadoopConf.value.value,
         file,
         parser,
         requiredSchema)
     }
+  }
+
+  private def buildReaderWithVariantMetrics(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String],
+      hadoopConf: Configuration,
+      topLevelVariantMetrics: VariantMetrics,
+      nestedVariantMetrics: VariantMetrics): PartitionedFile => Iterator[InternalRow] = {
+    buildReaderHelper(sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options,
+      hadoopConf, Some(topLevelVariantMetrics), Some(nestedVariantMetrics))
+  }
+
+  override def buildReader(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String],
+      hadoopConf: Configuration)
+      : PartitionedFile => Iterator[InternalRow] = {
+    buildReaderHelper(sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options,
+      hadoopConf)
   }
 
   override def toString: String = "JSON"

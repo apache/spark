@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
-import org.apache.spark.types.variant.{Variant, VariantBuilder, VariantSizeLimitException, VariantUtil}
+import org.apache.spark.types.variant.{Variant, VariantBuilder, VariantMetrics, VariantSizeLimitException, VariantUtil}
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 /**
@@ -34,7 +34,8 @@ object VariantExpressionEvalUtils {
   def parseJson(
       input: UTF8String,
       allowDuplicateKeys: Boolean = false,
-      failOnError: Boolean = true): VariantVal = {
+      failOnError: Boolean = true,
+      variantMetrics: VariantMetrics = new VariantMetrics()): VariantVal = {
     def parseJsonFailure(exception: Throwable): VariantVal = {
       if (failOnError) {
         throw exception
@@ -43,7 +44,7 @@ object VariantExpressionEvalUtils {
       }
     }
     try {
-      val v = VariantBuilder.parseJson(input.toString, allowDuplicateKeys)
+      val v = VariantBuilder.parseJson(input.toString, allowDuplicateKeys, variantMetrics)
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
       case _: VariantSizeLimitException =>
