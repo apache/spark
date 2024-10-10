@@ -295,16 +295,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
-  def overflowInSumOfDecimalError(context: QueryContext): ArithmeticException = {
-    arithmeticOverflowError("Overflow in sum of decimals", context = context)
+  def overflowInSumOfDecimalError(
+      context: QueryContext,
+      suggestedFunc: String): ArithmeticException = {
+    arithmeticOverflowError("Overflow in sum of decimals", suggestedFunc = suggestedFunc,
+      context = context)
   }
 
   def overflowInIntegralDivideError(context: QueryContext): ArithmeticException = {
-    arithmeticOverflowError("Overflow in integral divide", "try_divide", context)
+    arithmeticOverflowError("Overflow in integral divide.", "try_divide", context)
   }
 
   def overflowInConvError(context: QueryContext): ArithmeticException = {
-    arithmeticOverflowError("Overflow in function conv()", context = context)
+    arithmeticOverflowError("Overflow in function conv()", suggestedFunc = "try_conv",
+      context = context)
   }
 
   def mapSizeExceedArraySizeWhenZipMapError(size: Int): SparkRuntimeException = {
@@ -597,16 +601,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2041",
       messageParameters = Map("methodName" -> methodName))
-  }
-
-  def arithmeticOverflowError(e: ArithmeticException): SparkArithmeticException = {
-    new SparkArithmeticException(
-      errorClass = "_LEGACY_ERROR_TEMP_2042",
-      messageParameters = Map(
-        "message" -> e.getMessage,
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = Array.empty,
-      summary = "")
   }
 
   def binaryArithmeticCauseOverflowError(

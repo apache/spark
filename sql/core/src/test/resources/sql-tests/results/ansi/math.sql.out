@@ -46,11 +46,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_round`",
     "message" : "Overflow"
   },
   "queryContext" : [ {
@@ -70,11 +69,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_round`",
     "message" : "Overflow"
   },
   "queryContext" : [ {
@@ -134,11 +132,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_round`",
     "message" : "Overflow"
   },
   "queryContext" : [ {
@@ -158,11 +155,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_round`",
     "message" : "Overflow"
   },
   "queryContext" : [ {
@@ -222,11 +218,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_round`",
     "message" : "Overflow"
   },
   "queryContext" : [ {
@@ -246,11 +241,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_round`",
     "message" : "Overflow"
   },
   "queryContext" : [ {
@@ -310,11 +304,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_round`",
     "message" : "Overflow"
   },
   "queryContext" : [ {
@@ -334,11 +327,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_round`",
     "message" : "Overflow"
   },
   "queryContext" : [ {
@@ -398,11 +390,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_bround`",
     "message" : "Overflow"
   },
   "queryContext" : [ {
@@ -422,11 +413,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_bround`",
     "message" : "Overflow"
   },
   "queryContext" : [ {
@@ -486,11 +476,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_bround`",
     "message" : "Overflow"
   },
   "queryContext" : [ {
@@ -510,11 +499,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_bround`",
     "message" : "Overflow"
   },
   "queryContext" : [ {
@@ -574,11 +562,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_bround`",
     "message" : "Overflow"
   },
   "queryContext" : [ {
@@ -598,11 +585,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_bround`",
     "message" : "Overflow"
   },
   "queryContext" : [ {
@@ -662,11 +648,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_bround`",
     "message" : "Overflow"
   },
   "queryContext" : [ {
@@ -686,11 +671,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_bround`",
     "message" : "Overflow"
   },
   "queryContext" : [ {
@@ -734,11 +718,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_conv`",
     "message" : "Overflow in function conv()"
   },
   "queryContext" : [ {
@@ -758,11 +741,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_conv`",
     "message" : "Overflow in function conv()"
   },
   "queryContext" : [ {
@@ -782,11 +764,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_conv`",
     "message" : "Overflow in function conv()"
   },
   "queryContext" : [ {

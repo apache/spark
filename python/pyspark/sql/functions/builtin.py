@@ -6614,6 +6614,59 @@ def randn(seed: Optional[int] = None) -> Column:
 
 
 @_try_remote_functions
+def try_round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    """
+    This is a special version of `round` that performs the same operation, but returns a
+    NULL value instead of raising an error if the decoding cannot be performed.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        The target column or column name to compute the round on.
+    scale : :class:`~pyspark.sql.Column` or int, optional
+        An optional parameter to control the rounding behavior.
+
+        .. versionchanged:: 4.0.0
+            Support Column type.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A column for the rounded value.
+
+    Examples
+    --------
+    Example 1: Try compute the rounded of a column value
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.try_round(sf.lit(2.5))).show()
+    +-----------------+
+    |try_round(2.5, 0)|
+    +-----------------+
+    |              3.0|
+    +-----------------+
+
+    Example 2: Try compute the rounded of a column value with a specified scale
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.try_round(sf.lit(2.1267), sf.lit(2))).show()
+    +--------------------+
+    |try_round(2.1267, 2)|
+    +--------------------+
+    |                2.13|
+    +--------------------+
+    """
+    if scale is None:
+        return _invoke_function_over_columns("try_round", col)
+    else:
+        scale = _enum_to_value(scale)
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("try_round", col, scale)  # type: ignore[arg-type]
+
+
+@_try_remote_functions
 def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
     """
     Round the given value to `scale` decimal places using HALF_UP rounding mode if `scale` >= 0
@@ -6667,6 +6720,59 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
         return _invoke_function_over_columns("round", col, scale)  # type: ignore[arg-type]
+
+
+@_try_remote_functions
+def try_bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    """
+    This is a special version of `bround` that performs the same operation, but returns a
+    NULL value instead of raising an error if the decoding cannot be performed.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        The target column or column name to compute the round on.
+    scale : :class:`~pyspark.sql.Column` or int, optional
+        An optional parameter to control the rounding behavior.
+
+        .. versionchanged:: 4.0.0
+            Support Column type.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A column for the rounded value.
+
+    Examples
+    --------
+    Example 1: Try compute the rounded of a column value
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.try_bround(sf.lit(2.5))).show()
+    +------------------+
+    |try_bround(2.5, 0)|
+    +------------------+
+    |               2.0|
+    +------------------+
+
+    Example 2: Try compute the rounded of a column value with a specified scale
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.try_bround(sf.lit(2.1267), sf.lit(2))).show()
+    +---------------------+
+    |try_bround(2.1267, 2)|
+    +---------------------+
+    |                 2.13|
+    +---------------------+
+    """
+    if scale is None:
+        return _invoke_function_over_columns("try_bround", col)
+    else:
+        scale = _enum_to_value(scale)
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("try_bround", col, scale)  # type: ignore[arg-type]
 
 
 @_try_remote_functions
@@ -7246,6 +7352,41 @@ def log2(col: "ColumnOrName") -> Column:
     +----+
     """
     return _invoke_function_over_columns("log2", col)
+
+
+@_try_remote_functions
+def try_conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
+    """
+    This is a special version of `conv` that performs the same operation, but returns a
+    NULL value instead of raising an error if the decoding cannot be performed.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        a column to convert base for.
+    fromBase: int
+        from base number.
+    toBase: int
+        to base number.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        logariphm of given value.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("010101",)], ['n'])
+    >>> df.select(try_conv(df.n, 2, 16).alias('hex')).collect()
+    [Row(hex='15')]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function(
+        "try_conv", _to_java_column(col), _enum_to_value(fromBase), _enum_to_value(toBase)
+    )
 
 
 @_try_remote_functions
@@ -20095,6 +20236,162 @@ def make_dt_interval(
     _mins = lit(0) if mins is None else mins
     _secs = lit(decimal.Decimal(0)) if secs is None else secs
     return _invoke_function_over_columns("make_dt_interval", _days, _hours, _mins, _secs)
+
+
+@_try_remote_functions
+def try_make_interval(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    weeks: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+) -> Column:
+    """
+    This is a special version of `make_interval` that performs the same operation, but returns a
+    NULL value instead of raising an error if the decoding cannot be performed.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    years : :class:`~pyspark.sql.Column` or str, optional
+        The number of years, positive or negative.
+    months : :class:`~pyspark.sql.Column` or str, optional
+        The number of months, positive or negative.
+    weeks : :class:`~pyspark.sql.Column` or str, optional
+        The number of weeks, positive or negative.
+    days : :class:`~pyspark.sql.Column` or str, optional
+        The number of days, positive or negative.
+    hours : :class:`~pyspark.sql.Column` or str, optional
+        The number of hours, positive or negative.
+    mins : :class:`~pyspark.sql.Column` or str, optional
+        The number of minutes, positive or negative.
+    secs : :class:`~pyspark.sql.Column` or str, optional
+        The number of seconds with the fractional part in microsecond precision.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column that contains an interval.
+
+    Examples
+    --------
+
+    Example 1: Try make interval from years, months, weeks, days, hours, mins and secs.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.try_make_interval(
+    ...     df.year, df.month, df.week, df.day, df.hour, df.min, df.sec)
+    ... ).show(truncate=False)
+    +---------------------------------------------------------------+
+    |try_make_interval(year, month, week, day, hour, min, sec)      |
+    +---------------------------------------------------------------+
+    |100 years 11 months 8 days 12 hours 30 minutes 1.001001 seconds|
+    +---------------------------------------------------------------+
+
+    Example 2: Try make interval from years, months, weeks, days, hours and mins.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.try_make_interval(
+    ...     df.year, df.month, df.week, df.day, df.hour, df.min)
+    ... ).show(truncate=False)
+    +-------------------------------------------------------+
+    |try_make_interval(year, month, week, day, hour, min, 0)|
+    +-------------------------------------------------------+
+    |100 years 11 months 8 days 12 hours 30 minutes         |
+    +-------------------------------------------------------+
+
+    Example 3: Try make interval from years, months, weeks, days and hours.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.try_make_interval(
+    ...     df.year, df.month, df.week, df.day, df.hour)
+    ... ).show(truncate=False)
+    +-----------------------------------------------------+
+    |try_make_interval(year, month, week, day, hour, 0, 0)|
+    +-----------------------------------------------------+
+    |100 years 11 months 8 days 12 hours                  |
+    +-----------------------------------------------------+
+
+    Example 4: Try make interval from years, months, weeks and days.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.try_make_interval(df.year, df.month, df.week, df.day)).show(truncate=False)
+    +--------------------------------------------------+
+    |try_make_interval(year, month, week, day, 0, 0, 0)|
+    +--------------------------------------------------+
+    |100 years 11 months 8 days                        |
+    +--------------------------------------------------+
+
+    Example 5: Try make interval from years, months and weeks.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.try_make_interval(df.year, df.month, df.week)).show(truncate=False)
+    +------------------------------------------------+
+    |try_make_interval(year, month, week, 0, 0, 0, 0)|
+    +------------------------------------------------+
+    |100 years 11 months 7 days                      |
+    +------------------------------------------------+
+
+    Example 6: Try make interval from years and months.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.try_make_interval(df.year, df.month)).show(truncate=False)
+    +---------------------------------------------+
+    |try_make_interval(year, month, 0, 0, 0, 0, 0)|
+    +---------------------------------------------+
+    |100 years 11 months                          |
+    +---------------------------------------------+
+
+    Example 7: Try make interval from years.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.try_make_interval(df.year)).show(truncate=False)
+    +-----------------------------------------+
+    |try_make_interval(year, 0, 0, 0, 0, 0, 0)|
+    +-----------------------------------------+
+    |100 years                                |
+    +-----------------------------------------+
+
+    Example 8: Try make interval.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.try_make_interval()).show(truncate=False)
+    +--------------------------------------+
+    |try_make_interval(0, 0, 0, 0, 0, 0, 0)|
+    +--------------------------------------+
+    |0 seconds                             |
+    +--------------------------------------+
+
+    """
+    _years = lit(0) if years is None else years
+    _months = lit(0) if months is None else months
+    _weeks = lit(0) if weeks is None else weeks
+    _days = lit(0) if days is None else days
+    _hours = lit(0) if hours is None else hours
+    _mins = lit(0) if mins is None else mins
+    _secs = lit(decimal.Decimal(0)) if secs is None else secs
+    return _invoke_function_over_columns(
+        "try_make_interval", _years, _months, _weeks, _days, _hours, _mins, _secs
+    )
 
 
 @_try_remote_functions

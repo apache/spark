@@ -2419,6 +2419,16 @@ object functions {
   def ceiling(e: Column): Column = Column.fn("ceiling", e)
 
   /**
+   * This is a special version of `conv` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the decoding cannot be performed.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def try_conv(num: Column, fromBase: Int, toBase: Int): Column =
+    Column.fn("try_conv", num, lit(fromBase), lit(toBase))
+
+  /**
    * Convert a number in a string column from one base to another.
    *
    * @group math_funcs
@@ -2902,12 +2912,30 @@ object functions {
   def rint(columnName: String): Column = rint(Column(columnName))
 
   /**
+   * This is a special version of `round` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the decoding cannot be performed.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def try_round(e: Column): Column = try_round(e, 0)
+
+  /**
    * Returns the value of the column `e` rounded to 0 decimal places with HALF_UP round mode.
    *
    * @group math_funcs
    * @since 1.5.0
    */
   def round(e: Column): Column = round(e, 0)
+
+  /**
+   * This is a special version of `round` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the decoding cannot be performed.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def try_round(e: Column, scale: Int): Column = Column.fn("try_round", e, lit(scale))
 
   /**
    * Round the value of `e` to `scale` decimal places with HALF_UP round mode if `scale` is
@@ -2919,6 +2947,15 @@ object functions {
   def round(e: Column, scale: Int): Column = Column.fn("round", e, lit(scale))
 
   /**
+   * This is a special version of `round` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the decoding cannot be performed.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def try_round(e: Column, scale: Column): Column = Column.fn("try_round", e, scale)
+
+  /**
    * Round the value of `e` to `scale` decimal places with HALF_UP round mode if `scale` is
    * greater than or equal to 0 or at integral part when `scale` is less than 0.
    *
@@ -2926,6 +2963,15 @@ object functions {
    * @since 4.0.0
    */
   def round(e: Column, scale: Column): Column = Column.fn("round", e, scale)
+
+  /**
+   * This is a special version of `bround` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the decoding cannot be performed.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def try_bround(e: Column): Column = try_bround(e, 0)
 
   /**
    * Returns the value of the column `e` rounded to 0 decimal places with HALF_EVEN round mode.
@@ -2936,6 +2982,15 @@ object functions {
   def bround(e: Column): Column = bround(e, 0)
 
   /**
+   * This is a special version of `bround` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the decoding cannot be performed.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def try_bround(e: Column, scale: Int): Column = Column.fn("try_bround", e, lit(scale))
+
+  /**
    * Round the value of `e` to `scale` decimal places with HALF_EVEN round mode if `scale` is
    * greater than or equal to 0 or at integral part when `scale` is less than 0.
    *
@@ -2943,6 +2998,15 @@ object functions {
    * @since 2.0.0
    */
   def bround(e: Column, scale: Int): Column = Column.fn("bround", e, lit(scale))
+
+  /**
+   * This is a special version of `bround` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the decoding cannot be performed.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def try_bround(e: Column, scale: Column): Column = Column.fn("try_bround", e, scale)
 
   /**
    * Round the value of `e` to `scale` decimal places with HALF_EVEN round mode if `scale` is
@@ -7935,6 +7999,23 @@ object functions {
       mins: Column,
       secs: Column): Column =
     Column.fn("make_interval", years, months, weeks, days, hours, mins, secs)
+
+  /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if the decoding cannot be performed.
+   *
+   * @group url_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
+    Column.fn("try_make_interval", years, months, weeks, days, hours, mins, secs)
 
   /**
    * Make interval from years, months, weeks, days, hours and mins.

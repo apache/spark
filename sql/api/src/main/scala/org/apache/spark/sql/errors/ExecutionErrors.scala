@@ -114,19 +114,22 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
       summary = getSummary(context))
   }
 
+  def arithmeticOverflowError(message: String, context: QueryContext): ArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "ARITHMETIC_OVERFLOW.WITHOUT_TRY_SUGGESTION",
+      messageParameters =
+        Map("message" -> message, "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)),
+      context = getQueryContext(context),
+      summary = getSummary(context))
+  }
+
   def arithmeticOverflowError(
       message: String,
-      hint: String = "",
+      suggestedFunc: String,
       context: QueryContext = null): ArithmeticException = {
-    val alternative = if (hint.nonEmpty) {
-      s" Use '$hint' to tolerate overflow and return NULL instead."
-    } else ""
     new SparkArithmeticException(
-      errorClass = "ARITHMETIC_OVERFLOW",
-      messageParameters = Map(
-        "message" -> message,
-        "alternative" -> alternative,
-        "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)),
+      errorClass = "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
+      messageParameters = Map("message" -> message, "functionName" -> toSQLId(suggestedFunc)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }

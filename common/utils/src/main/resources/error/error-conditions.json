@@ -72,8 +72,20 @@
   },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
-      "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
+      "<message>"
     ],
+    "subClass" : {
+      "WITHOUT_TRY_SUGGESTION" : {
+        "message" : [
+          "If necessary set <config> to \"false\" to bypass this error."
+        ]
+      },
+      "WITH_TRY_SUGGESTION" : {
+        "message" : [
+          "Use <functionName> to tolerate overflow and return NULL instead."
+        ]
+      }
+    },
     "sqlState" : "22003"
   },
   "ASSIGNMENT_ARITY_MISMATCH" : {
@@ -6842,11 +6854,6 @@
   "_LEGACY_ERROR_TEMP_2041" : {
     "message" : [
       "<methodName> is not implemented."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2042" : {
-    "message" : [
-      "<message>. If necessary set <ansiConfig> to false to bypass this error."
     ]
   },
   "_LEGACY_ERROR_TEMP_2045" : {

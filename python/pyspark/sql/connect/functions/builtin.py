@@ -574,6 +574,18 @@ def bin(col: "ColumnOrName") -> Column:
 bin.__doc__ = pysparkfuncs.bin.__doc__
 
 
+def try_bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    if scale is None:
+        return _invoke_function_over_columns("try_bround", col)
+    else:
+        scale = _enum_to_value(scale)
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("try_bround", col, scale)  # type: ignore[arg-type]
+
+
+try_bround.__doc__ = pysparkfuncs.try_bround.__doc__
+
+
 def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
     if scale is None:
         return _invoke_function_over_columns("bround", col)
@@ -615,6 +627,13 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
 
 
 ceiling.__doc__ = pysparkfuncs.ceiling.__doc__
+
+
+def try_conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
+    return _invoke_function("try_conv", _to_col(col), lit(fromBase), lit(toBase))
+
+
+try_conv.__doc__ = pysparkfuncs.conv.__doc__
 
 
 def conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
@@ -820,6 +839,18 @@ def rint(col: "ColumnOrName") -> Column:
 
 
 rint.__doc__ = pysparkfuncs.rint.__doc__
+
+
+def try_round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    if scale is None:
+        return _invoke_function_over_columns("try_round", col)
+    else:
+        scale = _enum_to_value(scale)
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("try_round", col, scale)  # type: ignore[arg-type]
+
+
+try_round.__doc__ = pysparkfuncs.try_round.__doc__
 
 
 def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
@@ -3669,6 +3700,31 @@ def make_dt_interval(
 
 
 make_dt_interval.__doc__ = pysparkfuncs.make_dt_interval.__doc__
+
+
+def try_make_interval(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    weeks: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+) -> Column:
+    _years = lit(0) if years is None else _to_col(years)
+    _months = lit(0) if months is None else _to_col(months)
+    _weeks = lit(0) if weeks is None else _to_col(weeks)
+    _days = lit(0) if days is None else _to_col(days)
+    _hours = lit(0) if hours is None else _to_col(hours)
+    _mins = lit(0) if mins is None else _to_col(mins)
+    _secs = lit(decimal.Decimal(0)) if secs is None else _to_col(secs)
+
+    return _invoke_function_over_columns(
+        "try_make_interval", _years, _months, _weeks, _days, _hours, _mins, _secs
+    )
+
+
+try_make_interval.__doc__ = pysparkfuncs.try_make_interval.__doc__
 
 
 def make_interval(

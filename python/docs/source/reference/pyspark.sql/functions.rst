@@ -143,9 +143,12 @@ Mathematical Functions
     tan
     tanh
     try_add
+    try_bround
+    try_conv
     try_divide
     try_mod
     try_multiply
+    try_round
     try_subtract
     unhex
     uniform
@@ -297,6 +300,7 @@ Date and Timestamp Functions
     to_unix_timestamp
     to_utc_timestamp
     trunc
+    try_make_interval
     try_to_timestamp
     unix_date
     unix_micros
