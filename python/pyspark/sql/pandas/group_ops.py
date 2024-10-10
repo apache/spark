@@ -366,6 +366,7 @@ class PandasGroupedOpsMixin:
         outputStructType: Union[StructType, str],
         outputMode: str,
         timeMode: str,
+        initialState: "GroupedData" = None
     ) -> DataFrame:
         """
         Invokes methods defined in the stateful processor used in arbitrary state API v2. It
@@ -496,6 +497,18 @@ class PandasGroupedOpsMixin:
 
             if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:
                 statefulProcessor.init(handle)
+                # only process initial state if first batch
+                is_first_batch = statefulProcessorApiClient.is_first_batch()
+                if is_first_batch:
+                    initial_state_iter = statefulProcessorApiClient.get_initial_state_iter()
+                    # if user did not provide initial state df, initial_state_iter will be None
+                    if initial_state_iter is not None:
+                        for grouping_key, cur_initial_state in initial_state_iter:
+                            print(f"got initial state here for key: {key}, grouping key: {grouping_key},"
+                                  f" initial state: {cur_initial_state}\n")
+                            statefulProcessorApiClient.set_implicit_key(grouping_key)
+                            statefulProcessor.handleInitialState(grouping_key, cur_initial_state)
+                            statefulProcessorApiClient.remove_implicit_key()
                 statefulProcessorApiClient.set_handle_state(
                     StatefulProcessorHandleState.INITIALIZED
                 )
@@ -516,11 +529,17 @@ class PandasGroupedOpsMixin:
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
 
+        if initialState is None:
+            initial_state_java_obj = None
+        else:
+            initial_state_java_obj = initialState._jgd
+
         jdf = self._jgd.transformWithStateInPandas(
             udf_column._jc,
             self.session._jsparkSession.parseDataType(outputStructType.json()),
             outputMode,
             timeMode,
+            initial_state_java_obj
         )
         return DataFrame(jdf, self.session)
 

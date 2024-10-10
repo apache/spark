@@ -50,7 +50,10 @@ class TransformWithStateInPandasPythonRunner(
     initialWorkerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
-    groupingKeySchema: StructType)
+    groupingKeySchema: StructType,
+    hasInitialState: Boolean,
+    initialStateSchema: StructType,
+    initialStateDataIterator: Iterator[(InternalRow, Iterator[InternalRow])])
   extends BasePythonRunner[InType, OutType](funcs.map(_._1), evalType, argOffsets, jobArtifactUUID)
   with PythonArrowInput[InType]
   with BasicPythonArrowOutput
@@ -104,7 +107,10 @@ class TransformWithStateInPandasPythonRunner(
     executionContext.execute(
       new TransformWithStateInPandasStateServer(stateServerSocket, processorHandle,
         groupingKeySchema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes,
-        sqlConf.arrowTransformWithStateInPandasMaxRecordsPerBatch))
+        sqlConf.arrowTransformWithStateInPandasMaxRecordsPerBatch,
+        hasInitialState = hasInitialState,
+        initialStateSchema = initialStateSchema,
+        initialStateDataIterator = initialStateDataIterator))
 
     context.addTaskCompletionListener[Unit] { _ =>
       logInfo(log"completion listener called")
