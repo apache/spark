@@ -94,7 +94,7 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
         .select(
           $"a".as("(a + 0)"),
           $"a".as("((-3 + a) + 3)"),
-          Literal(0).as("((((b * 0) * 1) * 2) * 3)"),
+          ($"b" * 0).as("((((b * 0) * 1) * 2) * 3)"),
           $"b".as("((b * 1) * 1)"),
           ($"b" * 24).as("(((((b + 0) * 1) * 2) * 3) * 4)"),
           ($"a" + $"b" + $"c").as("""(((((a + 0) + b) + 0) + c) + 0)"""),
