@@ -195,6 +195,15 @@ class TransformWithStateInPandasStateServer(
             None
         }
         initializeStateVariable(stateName, schema, StateVariableType.ListState, ttlDurationMs)
+      case StatefulProcessorCall.MethodCase.DELETEIFEXISTS =>
+        val stateName = message.getDeleteIfExists.getStateName
+        statefulProcessorHandle.deleteIfExists(stateName)
+        if (valueStates.contains(stateName)) {
+          valueStates.remove(stateName)
+        } else if (listStates.contains(stateName)) {
+          listStates.remove(stateName)
+        }
+        sendResponse(0)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
     }

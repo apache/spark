@@ -141,6 +141,17 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     }
   }
 
+  test("delete if exists") {
+    val stateCallCommandBuilder = StateCallCommand.newBuilder()
+        .setStateName("stateName")
+    val message = StatefulProcessorCall
+        .newBuilder()
+        .setDeleteIfExists(stateCallCommandBuilder.build())
+        .build()
+    stateServer.handleStatefulProcessorCall(message)
+    verify(statefulProcessorHandle).deleteIfExists(any[String])
+  }
+
   test("value state exists") {
     val message = ValueStateCall.newBuilder().setStateName(stateName)
       .setExists(Exists.newBuilder().build()).build()
