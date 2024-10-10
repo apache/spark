@@ -1257,6 +1257,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "dataType" -> toSQLType(dataType)))
   }
 
+  def wrongDatatypeInSomeRows(pos: Int, dataType: DataType): SparkSQLException = {
+    new SparkSQLException(
+      errorClass = "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH",
+      messageParameters = Map("pos" -> pos.toString(), "type" -> toSQLType(dataType)))
+  }
+
   def rootConverterReturnNullError(): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "INVALID_JSON_ROOT_FIELD",
