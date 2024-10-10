@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.SQLException
+import java.sql.{SQLException, Statement}
 import java.util.Locale
 
 import scala.util.control.NonFatal
@@ -28,13 +28,14 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.{Expression, NullOrdering, SortDirection}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.MsSqlServerDialect.{GEOGRAPHY, GEOMETRY}
 import org.apache.spark.sql.types._
 
 
-private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCError {
+private case class MsSqlServerDialect() extends JdbcDialect with MergeByTempTable
+    with NoLegacyJDBCError {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:sqlserver")
 
@@ -243,6 +244,23 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
     new MsSqlServerSQLQueryBuilder(this, options)
 
   override def supportsLimit: Boolean = true
+
+  override def createTempTableName(): String = "##" + super.createTempTableName()
+
+  override def createTempTable(
+      statement: Statement,
+      tableName: String,
+      strSchema: String,
+      options: JdbcOptionsInWrite): Unit = {
+    // MsSqlServer does not have a temp table specific syntax
+    super.createTable(statement, tableName, strSchema, options)
+  }
+
+  override def getCreatePrimaryIndex(tableName: String, columns: Array[String]): String = {
+    val indexColumns = columns.map(quoteIdentifier).mkString(", ")
+    s"ALTER TABLE $tableName ADD PRIMARY KEY CLUSTERED ($indexColumns)"
+  }
+
 }
 
 private object MsSqlServerDialect {

@@ -31,6 +31,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -203,6 +204,32 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
       assert(3 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties()).count())
       assert(2 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties()).collect()(0).length)
     }
+  }
+
+  test("Upsert") {
+    JdbcDialects.registerDialect(H2Dialect())
+    val table = "upsert"
+    spark
+      .range(10)
+      .select(col("id"), col("id").as("val"))
+      .write
+      .jdbc(url, table, new Properties())
+    spark
+      .range(5, 15, 1, 10)
+      .withColumn("val", lit(-1))
+      .write
+      .options(Map("upsert" -> "true", "upsertKeyColumns" -> "id"))
+      .mode(SaveMode.Append)
+      .jdbc(url, table, new Properties())
+    val result = spark.read
+      .jdbc(url, table, new Properties())
+      .select((col("val") === -1).as("updated"))
+      .groupBy(col("updated"))
+      .count()
+      .sort(col("updated"))
+      .collect()
+    // we expect 5 unchanged rows (ids 0..4) and 10 updated rows (ids 5..14)
+    assert(result === Seq(Row(false, 5), Row(true, 10)))
   }
 
   test("Truncate") {
