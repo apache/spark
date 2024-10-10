@@ -4928,7 +4928,7 @@
       },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
         "message" : [
-          "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY."
+          "Combination of <clauses>."
         ]
       },
       "COMMENT_NAMESPACE" : {

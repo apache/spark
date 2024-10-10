@@ -82,8 +82,12 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def combinationQueryResultClausesUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
-    new ParseException(errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES", ctx)
+  def combinationQueryResultClausesUnsupportedError(
+      ctx: QueryOrganizationContext, clauses: String): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
+      messageParameters = Map("clauses" -> clauses),
+      ctx)
   }
 
   def distributeByUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
