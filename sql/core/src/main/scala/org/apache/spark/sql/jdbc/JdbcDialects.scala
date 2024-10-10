@@ -477,15 +477,20 @@ abstract class JdbcDialect extends Serializable with Logging {
   def isSupportedFunction(funcName: String): Boolean = false
 
   /**
+   * The [[JDBCSQLBuilder]] that match database dialect.
+   */
+  @Since("4.0.0")
+  protected[jdbc] def jdbcSQLBuilder(): JDBCSQLBuilder = new JDBCSQLBuilder()
+
+  /**
    * Converts V2 expression to String representing a SQL expression.
    * @param expr The V2 expression to be converted.
    * @return Converted value.
    */
   @Since("3.3.0")
   def compileExpression(expr: Expression): Option[String] = {
-    val jdbcSQLBuilder = new JDBCSQLBuilder()
     try {
-      Some(jdbcSQLBuilder.build(expr))
+      Some(jdbcSQLBuilder().build(expr))
     } catch {
       case NonFatal(e) =>
         logWarning("Error occurs while compiling V2 expression", e)
