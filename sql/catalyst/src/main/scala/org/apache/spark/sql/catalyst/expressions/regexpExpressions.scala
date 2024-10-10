@@ -25,7 +25,6 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.commons.text.StringEscapeUtils
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
@@ -705,9 +704,8 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
           m.appendReplacement(result, lastReplacement)
         } catch {
           case e: Exception =>
-            throw new SparkException(s"Could not perform regexp_replace for " +
-              s"""`source = "$s"`, `pattern = "$p"`, `replacement = "$r"` """ +
-              s"""and `position = $i`""", e)
+            throw QueryExecutionErrors.invalidRegexpReplaceError(s.toString,
+              p.toString, r.toString, i.asInstanceOf[Int], e)
         }
       }
       m.appendTail(result)
@@ -727,7 +725,6 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     val termResult = ctx.freshName("termResult")
 
     val classNameStringBuffer = classOf[java.lang.StringBuffer].getCanonicalName
-    val classNameSparkException = classOf[SparkException].getCanonicalName
 
     val matcher = ctx.freshName("matcher")
     val source = ctx.freshName("source")
@@ -760,10 +757,8 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
           try {
             $matcher.appendReplacement($termResult, $termLastReplacement);
           } catch (Exception e) {
-            throw new $classNameSparkException(java.text.MessageFormat.format(
-              "Could not perform regexp_replace for " +
-              "`source = \\"{0}\\"`, `pattern = \\"{1}\\"`, `replacement = \\"{2}\\"` and " +
-              "`position = {3}`", $source, $regexp, $rep, $pos), e);
+            throw QueryExecutionErrors.invalidRegexpReplaceError($source, $regexp.toString(),
+              $rep.toString(), $pos, e);
           }
         }
         $matcher.appendTail($termResult);

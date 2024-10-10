@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkException
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.WholeStageCodegenExec
@@ -110,13 +110,14 @@ class CollationSQLRegexpSuite
           val df = sql(query)
           val plan = df.queryExecution.executedPlan
           assert(plan.isInstanceOf[WholeStageCodegenExec] == (codegenMode == "CODEGEN_ONLY"))
-          val exception = intercept[SparkException] {
+          val exception = intercept[SparkRuntimeException] {
             df.collect()
           }
+          assert(exception.getErrorClass == "INVALID_REGEXP_REPLACE")
           assert(exception.getMessage.contains("""Could not perform regexp_replace for """ +
             """`source = "first last"`, `pattern = "(?<first>[a-zA-Z]+) (?<last>[a-zA-Z]+)"`, """ +
-            """`replacement = "$3 $1"` and `position = 1`"""))
-          assert(exception.getMessage.contains("No group 3"))
+            """`replacement = "$3 $1"` and `position = 1`."""))
+          assert(exception.getCause.getMessage.contains("No group 3"))
         }
       }
     }

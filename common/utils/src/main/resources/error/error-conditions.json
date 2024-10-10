@@ -3189,6 +3189,12 @@
     ],
     "sqlState" : "42K09"
   },
+  "INVALID_REGEXP_REPLACE" : {
+    "message" : [
+      "Could not perform regexp_replace for `source = \"<source>\"`, `pattern = \"<pattern>\"`, `replacement = \"<replacement>\"` and `position = <position>`."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_VARIANT_CAST" : {
     "message" : [
       "The variant value `<value>` cannot be cast into `<dataType>`. Please use `try_variant_get` instead."
