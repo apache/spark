@@ -24,7 +24,7 @@ libraryDependencies += "com.puppycrawl.tools" % "checkstyle" % "10.17.0"
 // checkstyle uses guava 33.1.0-jre.
 libraryDependencies += "com.google.guava" % "guava" % "33.1.0-jre"
 
-addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "2.2.0")
+addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "2.3.0")
 
 addSbtPlugin("com.github.sbt" % "sbt-eclipse" % "6.2.0")
 
