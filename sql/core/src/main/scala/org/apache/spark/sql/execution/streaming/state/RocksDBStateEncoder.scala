@@ -247,7 +247,8 @@ class PrefixKeyScanStateEncoder(
     val remainingKeyDecoded = decodeToUnsafeRow(remainingKeyEncoded,
       numFields = keySchema.length - numColsPrefixKey)
 
-    restoreKeyProjection(joinedRowOnKey.withLeft(prefixKeyDecoded).withRight(remainingKeyDecoded))
+    val row = joinedRowOnKey.withLeft(prefixKeyDecoded).withRight(remainingKeyDecoded)
+    restoreKeyProjection(row)
   }
 
   private def extractPrefixKey(key: UnsafeRow): UnsafeRow = {

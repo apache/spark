@@ -82,6 +82,25 @@ trait ReadStateStore {
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRow]
 
   /**
+   * Get the current value of a non-null key.
+   * @return a non-null row if the key exists in the store, otherwise null.
+   */
+  def get(
+      key: Array[Byte],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Array[Byte]
+
+  /**
+   * Provides an iterator containing all values of a non-null key. If key does not exist,
+   * an empty iterator is returned. Implementations should make sure to return an empty
+   * iterator if the key does not exist.
+   *
+   * It is expected to throw exception if Spark calls this method without setting
+   * multipleValuesPerKey as true for the column family.
+   */
+  def valuesIterator(key: Array[Byte],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[Array[Byte]]
+
+  /**
    * Return an iterator containing all the key-value pairs which are matched with
    * the given prefix key.
    *
@@ -98,6 +117,25 @@ trait ReadStateStore {
 
   /** Return an iterator containing all the key-value pairs in the StateStore. */
   def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair]
+
+  /**
+   * Return an iterator containing all the key-value pairs which are matched with
+   * the given prefix key.
+   *
+   * The operator will provide numColsPrefixKey greater than 0 in StateStoreProvider.init method
+   * if the operator needs to leverage the "prefix scan" feature. The schema of the prefix key
+   * should be same with the leftmost `numColsPrefixKey` columns of the key schema.
+   *
+   * It is expected to throw exception if Spark calls this method without setting numColsPrefixKey
+   * to the greater than 0.
+   */
+  def prefixScan(
+      prefixKey: Array[Byte],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[ByteArrayPair]
+
+  /** Return an iterator containing all the key-value pairs in the StateStore. */
+  def byteArrayIter(
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[ByteArrayPair]
 
   /**
    * Clean up the resource.
@@ -152,6 +190,23 @@ trait StateStore extends ReadStateStore {
   def remove(
       key: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+
+  /**
+   * Put a new non-null value for a non-null key. Implementations must be aware that the UnsafeRows
+   * in the params can be reused, and must make copies of the data as needed for persistence.
+   */
+  def put(
+      key: Array[Byte],
+      value: Array[Byte],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+
+  /**
+   * Remove a single non-null key.
+   */
+  def remove(
+      key: Array[Byte],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+
 
   /**
    * Merges the provided value with existing values of a non-null key. If a existing
@@ -217,6 +272,48 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
 
   override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
     store.valuesIterator(key, colFamilyName)
+  }
+
+  /**
+   * Get the current value of a non-null key.
+   *
+   * @return a non-null row if the key exists in the store, otherwise null.
+   */
+  override def get(key: Array[Byte], colFamilyName: String): Array[Byte] = {
+    store.get(key, colFamilyName)
+  }
+
+  /**
+   * Provides an iterator containing all values of a non-null key. If key does not exist,
+   * an empty iterator is returned. Implementations should make sure to return an empty
+   * iterator if the key does not exist.
+   *
+   * It is expected to throw exception if Spark calls this method without setting
+   * multipleValuesPerKey as true for the column family.
+   */
+  override def valuesIterator(key: Array[Byte], colFamilyName: String): Iterator[Array[Byte]] = {
+    store.valuesIterator(key, colFamilyName)
+  }
+
+  /**
+   * Return an iterator containing all the key-value pairs which are matched with
+   * the given prefix key.
+   *
+   * The operator will provide numColsPrefixKey greater than 0 in StateStoreProvider.init method
+   * if the operator needs to leverage the "prefix scan" feature. The schema of the prefix key
+   * should be same with the leftmost `numColsPrefixKey` columns of the key schema.
+   *
+   * It is expected to throw exception if Spark calls this method without setting numColsPrefixKey
+   * to the greater than 0.
+   */
+  override def prefixScan(
+      prefixKey: Array[Byte], colFamilyName: String): Iterator[ByteArrayPair] = {
+    store.prefixScan(prefixKey, colFamilyName)
+  }
+
+  /** Return an iterator containing all the key-value pairs in the StateStore. */
+  override def byteArrayIter(colFamilyName: String): Iterator[ByteArrayPair] = {
+    store.byteArrayIter(colFamilyName)
   }
 }
 
