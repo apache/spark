@@ -322,11 +322,10 @@ class ArtifactManager(session: SparkSession) extends Logging {
     if (artifactPath.toFile.exists()) {
       FileUtils.copyDirectory(artifactPath.toFile, newArtifactManager.artifactPath.toFile)
     }
-    val oldBlockManager = session.sparkContext.env.blockManager
-    val newBlockManager = newSession.sparkContext.env.blockManager
+    val blockManager = session.sparkContext.env.blockManager
     val newBlockIds = cachedBlockIdList.asScala.map { blockId =>
       val newBlockId = blockId.copy(sessionUUID = newSession.sessionUUID)
-      copyBlock(blockId, newBlockId, oldBlockManager, newBlockManager)
+      copyBlock(blockId, newBlockId, blockManager)
     }
     newArtifactManager.cachedBlockIdList.addAll(newBlockIds.asJava)
     newArtifactManager.jarsList.addAll(jarsList)
@@ -417,12 +416,12 @@ object ArtifactManager extends Logging {
   private[artifact] def copyBlock(
       fromId: CacheId,
       toId: CacheId,
-      fromBlockManager: BlockManager,
-      toBlockManager: BlockManager): CacheId = {
-    fromBlockManager.getLocalBytes(fromId) match {
+      blockManager: BlockManager): CacheId = {
+    require(fromId != toId)
+    blockManager.getLocalBytes(fromId) match {
       case Some(blockData) =>
         Utils.tryWithSafeFinallyAndFailureCallbacks {
-          val updater = toBlockManager.ByteBufferBlockStoreUpdater(
+          val updater = blockManager.ByteBufferBlockStoreUpdater(
             blockId = toId,
             level = StorageLevel.MEMORY_AND_DISK_SER,
             classTag = implicitly[ClassTag[Array[Byte]]],
@@ -430,7 +429,7 @@ object ArtifactManager extends Logging {
             tellMaster = false)
           updater.save()
           toId
-        }(finallyBlock = { fromBlockManager.releaseLock(fromId); blockData.dispose() })
+        }(finallyBlock = { blockManager.releaseLock(fromId); blockData.dispose() })
       case None =>
         throw SparkException.internalError(s"Block $fromId not found in the block manager.")
     }

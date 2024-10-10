@@ -383,13 +383,6 @@ class ArtifactManagerSuite extends SharedSparkSession {
     }
   }
 
-  test("Cloning Spark session can choose to reuse artifact manager") {
-    val oldManager = spark.artifactManager
-    val newSession = spark.cloneSession(reuseArtifactManager = true)
-    val newManager = newSession.artifactManager
-    assert(oldManager === newManager)
-  }
-
   test("Cloning artifact manager will clone all artifacts") {
     withTempPath { dir =>
       val path = dir.toPath
