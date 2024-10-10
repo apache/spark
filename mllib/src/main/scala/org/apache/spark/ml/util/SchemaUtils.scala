@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.util
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.sql.catalyst.util.AttributeNameParser
@@ -214,7 +215,11 @@ private[spark] object SchemaUtils {
    */
   def getSchemaField(schema: StructType, colName: String): StructField = {
     val colSplits = AttributeNameParser.parseAttributeName(colName)
-    schema.findNestedField(colSplits, resolver = SQLConf.get.resolver).get._2
+    val fieldOpt = schema.findNestedField(colSplits, resolver = SQLConf.get.resolver)
+    if (fieldOpt.isEmpty) {
+      throw new SparkIllegalArgumentException("FIELD_NOT_FOUND")
+    }
+    fieldOpt.get._2
   }
 
   /**
