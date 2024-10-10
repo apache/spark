@@ -21,7 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Add, Alias, AttributeReference, IntegerLiteral, Literal, Multiply, NamedExpression, Remainder}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, ArrayCompact, AttributeReference, CreateArray, CreateStruct, IntegerLiteral, Literal, MapFromEntries, Multiply, NamedExpression, Remainder}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, LogicalPlan, OneRowRelation, Project}
@@ -312,5 +312,24 @@ class OptimizerSuite extends PlanTest {
       }.getMessage
       assert(message1.contains("not a valid aggregate expression"))
     }
+  }
+
+  test("array compact contains null") {
+    val optimizer = new SimpleTestOptimizer() {
+      override def defaultBatches: Seq[Batch] =
+        Batch("test", fixedPoint,
+          ReplaceExpressions) :: Nil
+    }
+
+    val array1 = ArrayCompact(CreateArray(Literal(1) :: Literal.apply(null) :: Nil, false))
+    val plan1 = Project(Alias(array1, "arr")() :: Nil, OneRowRelation()).analyze
+    val optimized1 = optimizer.execute(plan1)
+     assert(plan1.schema === optimized1.schema)
+
+    val struct = CreateStruct(Literal(1) :: Literal(2) :: Nil)
+    val array2 = ArrayCompact(CreateArray(struct :: Literal.apply(null) :: Nil, false))
+    val plan2 = Project(Alias(MapFromEntries(array2), "map")() :: Nil, OneRowRelation()).analyze
+    val optimized2 = optimizer.execute(plan2)
+    assert(plan2.schema === optimized2.schema)
   }
 }
