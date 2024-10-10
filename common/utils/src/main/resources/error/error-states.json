@@ -4913,6 +4913,12 @@
         "standard": "N",
         "usedBy": ["SQL Server"]
     },
+    "42S23": {
+        "description": "Partition transform expression not in 'partitionedBy'",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
     "44000": {
         "description": "with check option violation",
         "origin": "SQL/Foundation",
