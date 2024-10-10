@@ -1100,7 +1100,7 @@ object SparkSession extends api.BaseSparkSessionCompanion with Logging {
   private def applyExtensions(
       sparkContext: SparkContext,
       extensions: SparkSessionExtensions): SparkSessionExtensions = {
-    val extensionConfClassNames = sparkContext.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS)
+    val extensionConfClassNames = sparkContext.conf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS)
       .getOrElse(Seq.empty)
     extensionConfClassNames.foreach { extensionConfClassName =>
       try {

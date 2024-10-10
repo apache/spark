@@ -2537,6 +2537,11 @@
           "Interval string does not match second-nano format of ss.nnnnnnnnn."
         ]
       },
+      "TIMEZONE_INTERVAL_OUT_OF_RANGE" : {
+        "message" : [
+          "The interval value must be in the range of [-18, +18] hours with second precision."
+        ]
+      },
       "UNKNOWN_PARSING_ERROR" : {
         "message" : [
           "Unknown error when parsing <word>."
@@ -3824,6 +3829,12 @@
     ],
     "sqlState" : "42000"
   },
+  "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY" : {
+    "message" : [
+      "The expression <expression> must be inside 'partitionedBy'."
+    ],
+    "sqlState" : "42S23"
+  },
   "PATH_ALREADY_EXISTS" : {
     "message" : [
       "Path <outputPath> already exists. Set mode as \"overwrite\" to overwrite the existing path."
@@ -3995,6 +4006,18 @@
       "Not found an id for the rule name \"<ruleName>\". Please modify RuleIdCollection.scala if you are adding a new rule."
     ],
     "sqlState" : "22023"
+  },
+  "SCALAR_FUNCTION_NOT_COMPATIBLE" : {
+    "message" : [
+      "ScalarFunction <scalarFunc> not overrides method 'produceResult(InternalRow)' with custom implementation."
+    ],
+    "sqlState" : "42K0O"
+  },
+  "SCALAR_FUNCTION_NOT_FULLY_IMPLEMENTED" : {
+    "message" : [
+      "ScalarFunction <scalarFunc> not implements or overrides method 'produceResult(InternalRow)'."
+    ],
+    "sqlState" : "42K0P"
   },
   "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION" : {
     "message" : [
@@ -5683,11 +5706,6 @@
   "_LEGACY_ERROR_TEMP_0043" : {
     "message" : [
       "Expected format is 'RESET' or 'RESET key'. If you want to include special characters in key, please use quotes, e.g., RESET `key`."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0044" : {
-    "message" : [
-      "The interval value must be in the range of [-18, +18] hours with second precision."
     ]
   },
   "_LEGACY_ERROR_TEMP_0045" : {
@@ -7946,11 +7964,6 @@
       "<expr> is not currently supported"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3055" : {
-    "message" : [
-      "ScalarFunction <scalarFunc> neither implement magic method nor override 'produceResult'"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3056" : {
     "message" : [
       "Unexpected row-level read relations (allow multiple = <allowMultipleReads>): <other>"
@@ -8307,11 +8320,6 @@
   "_LEGACY_ERROR_TEMP_3145" : {
     "message" : [
       "Partitions truncate is not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3146" : {
-    "message" : [
-      "Cannot find a compatible ScalarFunction#produceResult"
     ]
   },
   "_LEGACY_ERROR_TEMP_3147" : {
