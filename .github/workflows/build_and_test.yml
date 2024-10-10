@@ -1112,6 +1112,10 @@ jobs:
         with:
           distribution: zulu
           java-version: ${{ inputs.java }}
+      - name: Install R
+        run: |
+          apt update
+          apt-get install r-base
       - name: Start Minikube
         uses: medyagh/setup-minikube@v0.0.18
         with:

@@ -30,6 +30,7 @@ import org.apache.spark.launcher.SparkLauncher
 
 private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
 
+
   import BasicTestsSuite._
   import KubernetesSuite.{k8sTestTag, localTestTag}
   import KubernetesSuite.{TIMEOUT, INTERVAL}
