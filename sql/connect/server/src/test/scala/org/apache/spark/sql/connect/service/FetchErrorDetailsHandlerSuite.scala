@@ -201,7 +201,7 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
     assert(response.getRootErrorIdx == 0)
 
     val sparkThrowableProto = response.getErrors(0).getSparkThrowable
-    assert(sparkThrowableProto.getErrorClass == testError.errorClass.get)
+    assert(sparkThrowableProto.getCondition == testError.getCondition)
     assert(sparkThrowableProto.getMessageParametersMap == testError.getMessageParameters)
     assert(sparkThrowableProto.getSqlState == testError.getSqlState)
   }

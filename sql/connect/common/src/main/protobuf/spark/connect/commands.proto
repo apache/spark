@@ -356,9 +356,12 @@ message StreamingQueryCommandResult {
     // StreamingQueryException's toString method
     optional string exception_message = 1;
     // (Optional) Exception error class as string
-    optional string error_class = 2;
+    // Use `condition` instead.
+    optional string error_class = 2 [deprecated = true];
     // (Optional) Exception stack trace as string
     optional string stack_trace = 3;
+    // (Optional) Exception error condition as string
+    optional string condition = 4;
   }
 
   message AwaitTerminationResult {
