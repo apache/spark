@@ -541,7 +541,7 @@ jobs:
       run: |
         Rscript -e "install.packages(c('knitr', 'rmarkdown', 'testthat', 'e1071', 'survival', 'arrow', 'xml2'), repos='https://cloud.r-project.org/')"
         Rscript -e "pkg_list <- as.data.frame(installed.packages()[,c(1, 3:4)]); pkg_list[is.na(pkg_list$Priority), 1:2, drop = FALSE]"
-        shell: cmd
+      shell: cmd
     # SparkR build does not need Python. However, it shows warnings when the Python version is too low during
     # the attempt to look up Python Data Sources for session initialization. The Windows 2019 runner
     # includes Python 3.7, which Spark does not support. Therefore, we simply install the proper Python
