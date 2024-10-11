@@ -16,8 +16,6 @@
  */
 package org.apache.spark.util
 
-import java.io.ObjectOutputStream
-
 /**
  * Construct to lazily initialize a variable.
  * This may be helpful for avoiding deadlocks in certain scenarios. For example,
@@ -27,17 +25,11 @@ import java.io.ObjectOutputStream
  *      the parent object.
  *   c) If thread 1 waits for thread 2 to join, a deadlock occurs.
  */
-@SerialVersionUID(7964587975756091988L)
 private[spark] class Lazy[T](initializer: => T) extends Serializable {
 
   private[this] lazy val value: T = initializer
 
   def apply(): T = {
     value
-  }
-
-  private def writeObject(stream: ObjectOutputStream): Unit = {
-    this.value // ensure value is initialized
-    stream.defaultWriteObject()
   }
 }
