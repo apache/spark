@@ -3118,7 +3118,6 @@ class SparkConnectPlanner(
             .newBuilder()
           exception_builder
             .setExceptionMessage(e.toString())
-            .setCondition(e.getCondition)
             .setErrorClass(e.getCondition)
 
           val stackTrace = Option(ExceptionUtils.getStackTrace(e))

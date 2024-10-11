@@ -298,7 +298,7 @@ private[client] object GrpcExceptionConverter {
       if (error.hasCauseIdx) Some(errorsToThrowable(error.getCauseIdx, errors)) else None
 
     val errorClass = if (error.hasSparkThrowable && error.getSparkThrowable.hasErrorClass) {
-      Some(error.getSparkThrowable.getCondition)
+      Some(error.getSparkThrowable.getErrorClass)
     } else None
 
     val messageParameters = if (error.hasSparkThrowable) {
@@ -351,21 +351,20 @@ private[client] object GrpcExceptionConverter {
     implicit val formats: Formats = DefaultFormats
     val classes =
       JsonMethods.parse(info.getMetadataOrDefault("classes", "[]")).extract[Array[String]]
-    val condition = info.getMetadataOrDefault("condition", null)
+    val errorClass = info.getMetadataOrDefault("errorClass", null)
     val builder = FetchErrorDetailsResponse.Error
       .newBuilder()
       .setMessage(message)
       .addAllErrorTypeHierarchy(classes.toImmutableArraySeq.asJava)
 
-    if (condition != null) {
+    if (errorClass != null) {
       val messageParameters = JsonMethods
         .parse(info.getMetadataOrDefault("messageParameters", "{}"))
         .extract[Map[String, String]]
       builder.setSparkThrowable(
         FetchErrorDetailsResponse.SparkThrowable
           .newBuilder()
-          .setCondition(condition)
-          .setErrorClass(condition)
+          .setErrorClass(errorClass)
           .putAllMessageParameters(messageParameters.asJava)
           .build())
     }

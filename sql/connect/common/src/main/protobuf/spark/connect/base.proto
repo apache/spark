@@ -1018,8 +1018,7 @@ message FetchErrorDetailsResponse {
   // SparkThrowable defines the schema for SparkThrowable exceptions.
   message SparkThrowable {
     // Succinct, human-readable, unique, and consistent representation of the error category.
-    // Use `condition` instead.
-    optional string error_class = 1 [deprecated = true];
+    optional string error_class = 1;
 
     // The message parameters for the error framework.
     map<string, string> message_parameters = 2;
@@ -1030,9 +1029,6 @@ message FetchErrorDetailsResponse {
     // Portable error identifier across SQL engines
     // If null, error class or SQLSTATE is not set.
     optional string sql_state = 4;
-
-    // Succinct, human-readable, unique, and consistent representation of the error category.
-    optional string condition = 5;
   }
 
   // Error defines the schema for the representing exception.

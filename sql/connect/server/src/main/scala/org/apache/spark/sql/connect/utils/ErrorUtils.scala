@@ -115,9 +115,7 @@ private[connect] object ErrorUtils extends Logging {
           val sparkThrowableBuilder = FetchErrorDetailsResponse.SparkThrowable
             .newBuilder()
           if (sparkThrowable.getCondition != null) {
-            sparkThrowableBuilder
-              .setCondition(sparkThrowable.getCondition)
-              .setErrorClass(sparkThrowable.getCondition)
+            sparkThrowableBuilder.setErrorClass(sparkThrowable.getCondition)
           }
           for (queryCtx <- sparkThrowable.getQueryContext) {
             val builder = FetchErrorDetailsResponse.QueryContext
