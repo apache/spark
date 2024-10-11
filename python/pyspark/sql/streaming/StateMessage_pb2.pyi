@@ -31,10 +31,6 @@ class Get(_message.Message):
     __slots__ = []
     def __init__(self) -> None: ...
 
-class GetInitialState(_message.Message):
-    __slots__ = []
-    def __init__(self) -> None: ...
-
 class ImplicitGroupingKeyRequest(_message.Message):
     __slots__ = ["removeImplicitKey", "setImplicitKey"]
     REMOVEIMPLICITKEY_FIELD_NUMBER: ClassVar[int]
@@ -152,12 +148,10 @@ class TTLConfig(_message.Message):
     def __init__(self, durationMs: Optional[int] = ...) -> None: ...
 
 class UtilsCallCommand(_message.Message):
-    __slots__ = ["getInitialState", "isFirstBatch"]
-    GETINITIALSTATE_FIELD_NUMBER: ClassVar[int]
+    __slots__ = ["isFirstBatch"]
     ISFIRSTBATCH_FIELD_NUMBER: ClassVar[int]
-    getInitialState: GetInitialState
     isFirstBatch: IsFirstBatch
-    def __init__(self, isFirstBatch: Optional[Union[IsFirstBatch, Mapping]] = ..., getInitialState: Optional[Union[GetInitialState, Mapping]] = ...) -> None: ...
+    def __init__(self, isFirstBatch: Optional[Union[IsFirstBatch, Mapping]] = ...) -> None: ...
 
 class ValueStateCall(_message.Message):
     __slots__ = ["clear", "exists", "get", "stateName", "valueStateUpdate"]

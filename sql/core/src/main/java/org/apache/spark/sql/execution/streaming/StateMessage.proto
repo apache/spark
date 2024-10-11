@@ -138,12 +138,8 @@ message TTLConfig {
 message UtilsCallCommand {
   oneof method {
     IsFirstBatch isFirstBatch = 1;
-    GetInitialState getInitialState = 2;
   }
 }
 
 message IsFirstBatch {
-}
-
-message GetInitialState {
 }

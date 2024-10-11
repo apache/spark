@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import sys
+import itertools
 from typing import Any, Iterator, List, Union, TYPE_CHECKING, cast
 import warnings
 
@@ -403,6 +404,9 @@ class PandasGroupedOpsMixin:
             The output mode of the stateful processor.
         timeMode : str
             The time mode semantics of the stateful processor for timers and TTL.
+        initialState: "GroupedData"
+            Optional. The grouped dataframe on given grouping key as initial states used for initialization
+            of state variables in the first batch.
 
         Examples
         --------
@@ -487,6 +491,10 @@ class PandasGroupedOpsMixin:
         from pyspark.sql.functions import pandas_udf
 
         assert isinstance(self, GroupedData)
+        if initialState is not None:
+            assert isinstance(initialState, GroupedData)
+        if isinstance(outputStructType, str):
+            outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
 
         def transformWithStateUDF(
             statefulProcessorApiClient: StatefulProcessorApiClient,
@@ -510,7 +518,8 @@ class PandasGroupedOpsMixin:
                 statefulProcessorApiClient: StatefulProcessorApiClient,
                 key: Any,
                 inputRows: Iterator["PandasDataFrameLike"],
-                initialStates: Iterator["PandasDataFrameLike"]
+                # for non first batch, initialStates will be None
+                initialStates: Iterator["PandasDataFrameLike"] = None
         ) -> Iterator["PandasDataFrameLike"]:
             handle = StatefulProcessorHandle(statefulProcessorApiClient)
 
@@ -518,56 +527,56 @@ class PandasGroupedOpsMixin:
                 statefulProcessor.init(handle)
                 # only process initial state if first batch
                 is_first_batch = statefulProcessorApiClient.is_first_batch()
-                if is_first_batch:
-                    initial_state_iter = initialStates
-                    # if we don't have initial state for the given key, iterator could be None
-                    if initial_state_iter is not None:
-                        for cur_initial_state in initial_state_iter:
-                            print(f"got initial state here for key: {key},"
-                                  f" initial state: {cur_initial_state}\n")
-                            if cur_initial_state.empty:
-                                print(f"got empty initial state here for key: {key},"
-                                      f" initial state: {cur_initial_state}\n")
-                            else:
-                                statefulProcessorApiClient.set_implicit_key(key)
-                                statefulProcessor.handleInitialState(key, cur_initial_state)
-                                statefulProcessorApiClient.remove_implicit_key()
+                if is_first_batch and initialStates is not None:
+                    seen_init_state_on_key = False
+                    for cur_initial_state in initialStates:
+                        if seen_init_state_on_key:
+                            raise Exception(f"TransformWithStateWithInitState: Cannot have more "
+                                            f"than one row in the initial states for the same key. "
+                                            f"Grouping key: {key}.")
+                        statefulProcessorApiClient.set_implicit_key(key)
+                        statefulProcessor.handleInitialState(key, cur_initial_state)
+                        seen_init_state_on_key = True
                 statefulProcessorApiClient.set_handle_state(
                     StatefulProcessorHandleState.INITIALIZED
                 )
 
-            # if we don't have state for the given key, iterator could be None
-            if inputRows is not None:
+            # if we don't have state for the given key but in initial state,
+            # iterator could be None
+            input_rows_empty = False
+            try:
+                first = next(inputRows)
+            except StopIteration:
+                input_rows_empty = True
+            else:
+                inputRows = itertools.chain([first], inputRows)
+
+            if not input_rows_empty:
                 statefulProcessorApiClient.set_implicit_key(key)
                 result = statefulProcessor.handleInputRows(key, inputRows)
+            else:
+                result = iter([])
 
             return result
-
-        if isinstance(outputStructType, str):
-            outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
 
         df = self._df
 
         if initialState is None:
             initial_state_java_obj = None
-
             udf = pandas_udf(
                 transformWithStateUDF,  # type: ignore
                 returnType=outputStructType,
                 functionType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
             )
-            udf_column = udf(*[df[col] for col in df.columns])
         else:
-            print(f"I am here, not empty initial state\n")
             initial_state_java_obj = initialState._jgd
-
             udf = pandas_udf(
                 transformWithStateWithInitStateUDF,  # type: ignore
                 returnType=outputStructType,
                 functionType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
             )
-            udf_column = udf(*[df[col] for col in df.columns])
 
+        udf_column = udf(*[df[col] for col in df.columns])
         jdf = self._jgd.transformWithStateInPandas(
             udf_column._jc,
             self.session._jsparkSession.parseDataType(outputStructType.json()),

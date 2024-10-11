@@ -1148,7 +1148,6 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         )
         self.arrow_max_records_per_batch = arrow_max_records_per_batch
         self.key_offsets = None
-        self.init_key_offsets = None
 
     def load_stream(self, stream):
         """
@@ -1163,12 +1162,63 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         def generate_data_batches(batches):
             """
             Deserialize ArrowRecordBatches and return a generator of pandas.Series list.
+            The deserialization logic assumes that Arrow RecordBatches contain the data with the
+            ordering that data chunks for same grouping key will appear sequentially.
+            This function must avoid materializing multiple Arrow RecordBatches into memory at the
+            same time. And data chunks from the same grouping key should appear sequentially.
+            """
+            for batch in batches:
+                data_pandas = [
+                    self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()
+                ]
+                key_series = [data_pandas[o] for o in self.key_offsets]
+                batch_key = tuple(s[0] for s in key_series)
+                yield (batch_key, data_pandas)
+
+        _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
+        data_batches = generate_data_batches(_batches)
+
+        for k, g in groupby(data_batches, key=lambda x: x[0]):
+            yield (k, g)
+
+    def dump_stream(self, iterator, stream):
+        """
+        Read through an iterator of (iterator of pandas DataFrame), serialize them to Arrow
+        RecordBatches, and write batches to stream.
+        """
+        result = [(b, t) for x in iterator for y, t in x for b in y]
+        super().dump_stream(result, stream)
+
+
+class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSerializer):
+    """
+    Serializer used by Python worker to evaluate UDF for
+    :meth:`pyspark.sql.GroupedData.transformWithStateInPandasInitStateSerializer`.
+
+    Parameters
+    ----------
+    Same as input parameters in TransformWithStateInPandasSerializer.
+    """
+
+    def __init__(self, timezone, safecheck, assign_cols_by_name, arrow_max_records_per_batch):
+        super(TransformWithStateInPandasInitStateSerializer, self).__init__(
+            timezone, safecheck, assign_cols_by_name, arrow_max_records_per_batch
+        )
+        self.init_key_offsets = None
+
+    def load_stream(self, stream):
+        import pyarrow as pa
+
+        def generate_data_batches(batches):
+            """
+            Deserialize ArrowRecordBatches and return a generator of pandas.Series list.
 
             The deserialization logic assumes that Arrow RecordBatches contain the data with the
             ordering that data chunks for same grouping key will appear sequentially.
 
-            This function must avoid materializing multiple Arrow RecordBatches into memory at the
-            same time. And data chunks from the same grouping key should appear sequentially.
+            See `TransformWithStateInPandasPythonBaseRunner` for arrow batch schema sent from JVM.
+            This function flatten the columns of input rows and initial state rows and feed them into
+            the data generator.
             """
             def flatten_columns(cur_batch, col_name):
                 state_column = cur_batch.column(cur_batch.schema.get_field_index(col_name))
@@ -1189,6 +1239,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
                 ]
                 key_series = [data_pandas[o] for o in self.key_offsets]
                 init_key_series = [init_data_pandas[o] for o in self.init_key_offsets]
+
                 if any(s.empty for s in key_series):
                     # If any row is empty, assign batch_key using init_key_series
                     batch_key = tuple(s[0] for s in init_key_series)
@@ -1202,11 +1253,3 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
 
         for k, g in groupby(data_batches, key=lambda x: x[0]):
             yield (k, g)
-
-    def dump_stream(self, iterator, stream):
-        """
-        Read through an iterator of (iterator of pandas DataFrame), serialize them to Arrow
-        RecordBatches, and write batches to stream.
-        """
-        result = [(b, t) for x in iterator for y, t in x for b in y]
-        super().dump_stream(result, stream)

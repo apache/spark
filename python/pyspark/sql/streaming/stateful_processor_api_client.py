@@ -17,7 +17,7 @@
 from enum import Enum
 import os
 import socket
-from typing import Any, List, Union, Optional, cast, Tuple, Iterator
+from typing import Any, List, Union, Optional, cast, Tuple
 
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
@@ -173,37 +173,6 @@ class StatefulProcessorApiClient:
         else:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error getting batch id: " f"{response_message[1]}")
-
-    def get_initial_state_iter(self) -> Iterator[Tuple[Tuple, "PandasDataFrameLike"]]:
-        from pandas import DataFrame
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
-
-        while True:
-            if len(self._init_state_list) == 0:
-                get_initial_state = stateMessage.GetInitialState()
-                request = stateMessage.UtilsCallCommand(getInitialState=get_initial_state)
-                stateful_processor_call = stateMessage.StatefulProcessorCall(utilsCall=request)
-                message = stateMessage.StateRequest(statefulProcessorCall=stateful_processor_call)
-
-                self._send_proto_message(message.SerializeToString())
-                response_message = self._receive_proto_message()
-                status = response_message[0]
-                if status == 1:
-                    break
-                elif status == 0:
-                    iterator = self._read_arrow_state()
-                    for batch in iterator:
-                        batch_df = batch.to_pandas()
-                        for i in range(batch.num_rows):
-                            deserialized_key = tuple(self.pickleSer.loads(batch_df.at[i, 'key']))
-                            initial_state = DataFrame([batch_df.at[i, 'initialState']])
-                            self._init_state_list.append([deserialized_key, initial_state])
-                else:
-                    raise PySparkRuntimeError(f"Error getting initial state: " f"{response_message[1]}")
-
-            pair = self._init_state_list[0]
-            self._init_state_list.pop(0)
-            yield pair
 
     def _send_proto_message(self, message: bytes) -> None:
         # Writing zero here to indicate message version. This allows us to evolve the message

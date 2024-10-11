@@ -30,15 +30,12 @@ import org.apache.arrow.vector.ipc.ArrowStreamWriter
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.api.python.PythonSQLUtils
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState, StateVariableType}
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateVariableRequest, UtilsCallCommand, ValueStateCall}
-// import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
 import org.apache.spark.sql.streaming.{ListState, TTLConfig, ValueState}
-import org.apache.spark.sql.types.{BinaryType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.util.Utils
 
 /**
  * This class is used to handle the state requests from the Python side. It runs on a separate
@@ -64,9 +61,7 @@ class TransformWithStateInPandasStateServer(
     arrowStreamWriterForTest: BaseStreamingArrowWriter = null,
     listStatesMapForTest : mutable.HashMap[String, ListStateInfo] = null,
     listStateIteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null,
-    hasInitialState: Boolean = false,
-    initialStateSchema: StructType = new StructType(),
-    initialStateDataIterator: Iterator[(InternalRow, Iterator[InternalRow])] = Iterator.empty)
+    hasInitialState: Boolean = false)
   extends Runnable with Logging {
   private val keyRowDeserializer: ExpressionEncoder.Deserializer[Row] =
     ExpressionEncoder(groupingKeySchema).resolveAndBind().createDeserializer()
@@ -93,11 +88,6 @@ class TransformWithStateInPandasStateServer(
   } else {
     new mutable.HashMap[String, Iterator[Row]]()
   }
-
-  private val initSeq: Seq[(InternalRow, Iterator[InternalRow])] =
-    initialStateDataIterator.toSeq
-
-  private val initDataIter: Iterator[(InternalRow, Iterator[InternalRow])] = initSeq.iterator
 
   def run(): Unit = {
     val listeningSocket = stateServerSocket.accept()
@@ -219,30 +209,6 @@ class TransformWithStateInPandasStateServer(
           sendResponse(1)
         } else {
           sendResponse(0)
-        }
-
-      case UtilsCallCommand.MethodCase.GETINITIALSTATE =>
-        if (!hasInitialState || initDataIter == null || !initDataIter.hasNext) {
-          sendResponse(1)
-        } else {
-          sendResponse(0)
-          val outputSchema = new StructType()
-            .add("key", BinaryType)
-            .add("initialState", initialStateSchema)
-          println(s"inside handle request, init state iterator: ")
-          initDataIter.foreach { i =>
-            println(s"one row in iterator, i: ${i._1.getString(0)}")
-          }
-
-          sendIteratorAsArrowBatches(initDataIter, outputSchema) { pair =>
-            val groupingKey = pair._1
-            println(s"sending another row of initial state here, " +
-              s"grouping key: ${groupingKey.getString(0)}")
-            val initStates = pair._2
-
-            InternalRow(
-              PythonSQLUtils.toPyRow(keyRowDeserializer.apply(groupingKey)), initStates.next())
-          }
         }
 
       case _ =>
@@ -441,47 +407,6 @@ class TransformWithStateInPandasStateServer(
           sendResponse(1, s"List state $stateName already exists")
         }
     }
-  }
-
-  private def sendIteratorAsArrowBatches[T](
-      iter: Iterator[T],
-      outputSchema: StructType,
-      arrowStreamWriterForTest: BaseStreamingArrowWriter = null)(func: T => InternalRow): Unit = {
-    outputStream.flush()
-    val arrowSchema = ArrowUtils.toArrowSchema(outputSchema, timeZoneId,
-      errorOnDuplicatedFieldNames, largeVarTypes)
-    val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-      s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
-    val root = VectorSchemaRoot.create(arrowSchema, allocator)
-    val writer = new ArrowStreamWriter(root, null, outputStream)
-    val arrowStreamWriter = if (arrowStreamWriterForTest != null) {
-      arrowStreamWriterForTest
-    } else {
-      new BaseStreamingArrowWriter(root, writer, arrowTransformWithStateInPandasMaxRecordsPerBatch)
-    }
-    // Only write a single batch in each GET request. Stops writing row if rowCount reaches
-    // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to handle a case
-    // when there are multiple state variables, user tries to access a different state variable
-    // while the current state variable is not exhausted yet.
-    var rowCount = 0
-    while (iter.hasNext && rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {
-      val data = iter.next()
-      val internalRow = func(data)
-      arrowStreamWriter.writeRow(internalRow)
-      rowCount += 1
-      println(s"after increment, rowcount: ${rowCount}")
-    }
-    arrowStreamWriter.finalizeCurrentArrowBatch()
-    Utils.tryWithSafeFinally {
-      // end writes footer to the output stream and doesn't clean any resources.
-      // It could throw exception if the output stream is closed, so it should be
-      // in the try block.
-      writer.end()
-    } {
-      root.close()
-      allocator.close()
-    }
-    println(s"safely close everything, return from send arrow batchess")
   }
 }
 

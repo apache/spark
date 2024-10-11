@@ -89,7 +89,6 @@ class TransformWithStateInPandasTestsMixin:
         )
         return df_final
 
-    """
     def _test_transform_with_state_in_pandas_basic(
         self, stateful_processor, check_results, single_batch=False, timeMode="None"
     ):
@@ -341,14 +340,13 @@ class TransformWithStateInPandasTestsMixin:
             self.assertTrue(q.exception() is None)
         finally:
             input_dir.cleanup()
-    """
 
     def _test_transform_with_state_init_state_in_pandas(
             self, stateful_processor, check_results
     ):
         input_path = tempfile.mkdtemp()
         self._prepare_test_resource1(input_path)
-        # self._prepare_test_resource3(input_path)
+        self._prepare_test_resource3(input_path)
 
         df = self._build_test_df(input_path)
 
@@ -362,8 +360,6 @@ class TransformWithStateInPandasTestsMixin:
                 StructField("value", StringType(), True),
             ]
         )
-
-        from pyspark.sql import GroupedData
 
         data = [("0", 789), ("3", 987)]
         initial_state = \
@@ -398,15 +394,13 @@ class TransformWithStateInPandasTestsMixin:
                 # for key 1, it did not appear in the initial state df;
                 # for key 3, it did not appear in the first batch of input keys
                 # so it won't be emitted
-                raise Exception(f"batch id : ${batch_id}, batch df: {batch_df.show()}")
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="0", value=str(789 + 123 + 46)),
                     Row(id="1", value=str(146 + 346)),
                 }
             else:
                 # for key 0, verify initial state was only processed once in the first batch;
-                # for key 3, verify init state was now processed
-                raise Exception(f"batch id: {batch_id}, batch df: {batch_df.show()}")
+                # for key 3, verify init state was processed and reflected in the accumulated value
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="0", value=str(789 + 123 + 46 + 67)),
                     Row(id="3", value=str(987 + 12)),
@@ -416,13 +410,14 @@ class TransformWithStateInPandasTestsMixin:
 
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
+    # this dict is the same as input initial state dataframe
+    dict = {("0",): 789, ("3",): 987}
 
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("value", IntegerType(), True)])
         self.value_state = handle.getValueState("value_state", state_schema)
 
     def handleInputRows(self, key, rows) -> Iterator[pd.DataFrame]:
-        print(f"enter handle input rows: {key}\n")
         exists = self.value_state.exists()
         if exists:
             value_row = self.value_state.get()
@@ -437,14 +432,13 @@ class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
             accumulated_value += value
 
         self.value_state.update((accumulated_value,))
-        print(f"done with handle input for key: {key}\n")
 
         yield pd.DataFrame({"id": key, "value": str(accumulated_value)})
 
     def handleInitialState(self, key, initialState) -> None:
-        initVal = initialState.at[0, "initVal"]
-        self.value_state.update((initVal,))
-        print(f"done with handle initial state for key: {key}\n")
+        init_val = initialState.at[0, "initVal"]
+        self.value_state.update((init_val,))
+        assert(self.dict[key] == init_val)
 
     def close(self) -> None:
         pass

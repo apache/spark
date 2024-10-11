@@ -171,7 +171,6 @@ case class TransformWithStateInPandasExec(
             storeConf = storeConf,
             hadoopConf = hadoopConfBroadcast.value.value
           )
-          println(s"I am here entering non-empty initState iter")
           processDataWithPartition(store, childDataIterator, initStateIterator)
       }
     }
@@ -206,9 +205,7 @@ case class TransformWithStateInPandasExec(
         pythonMetrics,
         jobArtifactUUID,
         groupingKeySchema,
-        hasInitialState,
-        initialStateSchema,
-        Iterator.empty
+        hasInitialState
       )
       executePython(data, output, runner)
     } else {
@@ -218,16 +215,9 @@ case class TransformWithStateInPandasExec(
       val initData =
         groupAndProject(initStateIterator, initialStateGroupingAttrs,
           initialState.output, initDedupAttributes)
+      // group input rows and initial state rows by the same grouping key
       val groupedData: Iterator[(InternalRow, Iterator[InternalRow], Iterator[InternalRow])] =
         new CoGroupedIterator(data, initData, groupingAttributes)
-      /*
-      println(s"goupedData here: ")
-      groupedData.foreach { p =>
-        println(s"grouped Data key: ${p._1.getString(0)}")
-        println(s"grouped Data input data: " +
-          s"${if (p._2.hasNext) {p._2.next().getInt(1)} else "empty"}, " +
-          s"init data: ${if (p._3.hasNext) {p._3.next().getInt(1)} else "empty"}")
-      } */
 
       val runner = new TransformWithStateInPandasPythonInitialStateRunner(
         chainedFunc,
@@ -241,9 +231,7 @@ case class TransformWithStateInPandasExec(
         pythonMetrics,
         jobArtifactUUID,
         groupingKeySchema,
-        hasInitialState,
-        initialStateSchema,
-        initData
+        hasInitialState
       )
       executePython(groupedData, output, runner)
     }

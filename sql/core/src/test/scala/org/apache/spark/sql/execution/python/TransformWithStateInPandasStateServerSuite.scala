@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.execution.streaming.{StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state.StateMessage
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, Exists, Get, GetInitialState, HandleState, IsFirstBatch, ListStateCall, ListStateGet, ListStatePut, SetHandleState, StateCallCommand, StatefulProcessorCall, UtilsCallCommand, ValueStateCall, ValueStateUpdate}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, Exists, Get, HandleState, IsFirstBatch, ListStateCall, ListStateGet, ListStatePut, SetHandleState, StateCallCommand, StatefulProcessorCall, UtilsCallCommand, ValueStateCall, ValueStateUpdate}
 import org.apache.spark.sql.streaming.{ListState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -87,8 +87,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
       statefulProcessorHandle, groupingKeySchema, "", false, false, 2,
       outputStream, valueStateMap, transformWithStateInPandasDeserializer, arrowStreamWriter,
       listStateMap, listStateIteratorMap,
-      hasInitialState = true, initialStateSchema = initialStateSchema,
-      initialStateDataIterator = initialStateDataIterator)
+      hasInitialState = true)
     when(transformWithStateInPandasDeserializer.readArrowBatches(any))
       .thenReturn(Seq(new GenericRowWithSchema(Array(1), stateSchema)))
   }
@@ -291,12 +290,5 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
       IsFirstBatch.newBuilder().build()).build()
     stateServer.handleStatefulProcessorUtilRequest(message)
     verify(outputStream).writeInt(0)
-  }
-
-  test("stateful processor - get initial state") {
-    val message = UtilsCallCommand.newBuilder().setGetInitialState(
-      GetInitialState.newBuilder().build()).build()
-    stateServer.handleStatefulProcessorUtilRequest(message)
-    verify(outputStream).writeInt(argThat((x: Int) => x > 0))
   }
 }

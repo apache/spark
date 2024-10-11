@@ -58,6 +58,7 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamGroupUDFSerializer,
     ApplyInPandasWithStateSerializer,
     TransformWithStateInPandasSerializer,
+    TransformWithStateInPandasInitStateSerializer
 )
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import (
@@ -511,8 +512,8 @@ def wrap_grouped_transform_with_state_pandas_init_state_udf(f, return_type, runn
         import pandas as pd
 
         state_values_gen, init_states_gen = itertools.tee(value_series_gen, 2)
-        state_values = (pd.concat(x, axis=1) for x, _ in state_values_gen)
-        init_states = (pd.concat(x, axis=1) for _, x in init_states_gen)
+        state_values = (df for x, _ in state_values_gen if not (df := pd.concat(x, axis=1)).empty)
+        init_states = (df for _, x in init_states_gen if not (df := pd.concat(x, axis=1)).empty)
 
         result_iter = f(stateful_processor_api_client, key, state_values, init_states)
 
@@ -1521,7 +1522,7 @@ def read_udfs(pickleSer, infile, eval_type):
             )
             arrow_max_records_per_batch = int(arrow_max_records_per_batch)
 
-            ser = TransformWithStateInPandasSerializer(
+            ser = TransformWithStateInPandasInitStateSerializer(
                 timezone, safecheck, _assign_cols_by_name, arrow_max_records_per_batch
             )
         elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
@@ -1717,13 +1718,16 @@ def read_udfs(pickleSer, infile, eval_type):
         arg_offsets, f = read_single_udf(
             pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
         )
+        # parsed offsets:
+        # [
+        #     [groupingKeyOffsets, dedupDataOffsets],
+        #     [initStateGroupingOffsets, dedupInitDataOffsets]
+        # ]
         parsed_offsets = extract_key_value_indexes(arg_offsets)
         ser.key_offsets = parsed_offsets[0][0]
         ser.init_key_offsets = parsed_offsets[1][0]
         stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
 
-        # Create function like this:
-        #   mapper a: f([a[0]], [a[0], a[1]])
         def mapper(a):
             key = a[0]
 
