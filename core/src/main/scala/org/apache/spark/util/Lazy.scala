@@ -24,6 +24,13 @@ package org.apache.spark.util
  *      (in our case, this was the logger). This causes scala to also try to grab a coarse lock on
  *      the parent object.
  *   c) If thread 1 waits for thread 2 to join, a deadlock occurs.
+ * The main difference between this and [[LazyTry]] is that this does not cache failures.
+ *
+ * @note
+ *   Scala 3 uses a different implementation of lazy vals which doesn't have this problem.
+ *   Please refer to <a
+ *   href="https://docs.scala-lang.org/scala3/reference/changed-features/lazy-vals-init.html">Lazy
+ *   Vals Initialization</a> for more details.
  */
 private[spark] class Lazy[T](initializer: => T) extends Serializable {
 
