@@ -4926,9 +4926,14 @@
           "Catalog <catalogName> does not support <operation>."
         ]
       },
+      "CLAUSE_WITH_PIPE_OPERATORS" : {
+        "message" : [
+          "The SQL pipe operator syntax using |> does not support <clauses>."
+        ]
+      },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
         "message" : [
-          "Combination of <clauses>."
+          "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY."
         ]
       },
       "COMMENT_NAMESPACE" : {
@@ -5004,6 +5009,11 @@
       "MULTIPLE_BUCKET_TRANSFORMS" : {
         "message" : [
           "Multiple bucket TRANSFORMs."
+        ]
+      },
+      "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS" : {
+        "message" : [
+          "Syntax error: the SQL pipe operator syntax using |> does not support <clauses>. Please separate the multiple result clauses into separate pipe operators and then retry the query again."
         ]
       },
       "MULTI_ACTION_ALTER" : {

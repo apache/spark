@@ -609,6 +609,12 @@ table t
 |> select y
 |> limit 2 offset 1;
 
+-- Offset is allowed without limit.
+table t
+|> where x = 1
+|> select y
+|> offset 1;
+
 -- LIMIT ALL and OFFSET 0 are equivalent to no LIMIT or OFFSET clause, respectively.
 table t
 |> limit all offset 0;
@@ -634,7 +640,9 @@ order by y;
 -- Sorting and repartitioning operators: negative tests.
 --------------------------------------------------------
 
--- Multiple order by clauses are not supported in the same pipe operator
+-- Multiple order by clauses are not supported in the same pipe operator.
+-- We add an extra "ORDER BY y" clause at the end in this test to show that the "ORDER BY x + y"
+-- clause was consumed end the of the final query, not as part of the pipe operator.
 table t
 |> order by x desc order by x + y
 order by y;
@@ -648,12 +656,6 @@ table t
 table t
 |> select 1 + 2 as result
 |> distribute by x;
-
--- OFFSET is not allowed without LIMIT.
-table t
-|> where x = 1
-|> select y
-|> offset 1;
 
 -- Combinations of multiple ordering and limit clauses are not supported.
 table t

@@ -1743,6 +1743,17 @@ struct<y:string>
 
 -- !query
 table t
+|> where x = 1
+|> select y
+|> offset 1
+-- !query schema
+struct<y:string>
+-- !query output
+
+
+
+-- !query
+table t
 |> limit all offset 0
 -- !query schema
 struct<x:int,y:string>
@@ -1862,27 +1873,16 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 -- !query
 table t
-|> where x = 1
-|> select y
-|> offset 1
--- !query schema
-struct<y:string>
--- !query output
-
-
-
--- !query
-table t
 |> order by x limit 1
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
+  "errorClass" : "UNSUPPORTED_FEATURE.MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "clauses" : "the ORDER BY and LIMIT clauses"
+    "clauses" : "the co-existence of the ORDER BY and LIMIT clauses"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1904,9 +1904,6 @@ org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
   "sqlState" : "0A000",
-  "messageParameters" : {
-    "clauses" : "ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY"
-  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1926,10 +1923,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
+  "errorClass" : "UNSUPPORTED_FEATURE.CLAUSE_WITH_PIPE_OPERATORS",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "clauses" : "WINDOW clauses within SQL pipe operators"
+    "clauses" : "the WINDOW clause"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1949,10 +1946,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
+  "errorClass" : "UNSUPPORTED_FEATURE.CLAUSE_WITH_PIPE_OPERATORS",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "clauses" : "WINDOW clauses within SQL pipe operators"
+    "clauses" : "the WINDOW clause"
   },
   "queryContext" : [ {
     "objectType" : "",

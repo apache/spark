@@ -1018,8 +1018,7 @@ class AstBuilder extends DataTypeAstBuilder
       // [EMPTY]
       query
     } else {
-      throw QueryParsingErrors.combinationQueryResultClausesUnsupportedError(
-        ctx, "ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY")
+      throw QueryParsingErrors.combinationQueryResultClausesUnsupportedError(ctx)
     }
 
     // WINDOWS
@@ -1027,8 +1026,8 @@ class AstBuilder extends DataTypeAstBuilder
       withWindowClause
     }
     if (forPipeOperators && windowClause != null) {
-      throw QueryParsingErrors.combinationQueryResultClausesUnsupportedError(
-        ctx, s"WINDOW clauses within SQL pipe operators")
+      throw QueryParsingErrors.clausesWithPipeOperatorsUnsupportedError(
+        ctx, s"the WINDOW clause")
     }
 
     // OFFSET
@@ -1036,8 +1035,8 @@ class AstBuilder extends DataTypeAstBuilder
     val offsetClause = "OFFSET"
     val withOffset = withWindow.optional(offset) {
       if (forPipeOperators && clause.nonEmpty) {
-        throw QueryParsingErrors.combinationQueryResultClausesUnsupportedError(
-          ctx, s"the $clause and $offsetClause clauses")
+        throw QueryParsingErrors.multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
+          ctx, s"the co-existence of the $clause and $offsetClause clauses")
       }
       clause = offsetClause
       Offset(typedVisit(offset), withWindow)
@@ -1048,8 +1047,8 @@ class AstBuilder extends DataTypeAstBuilder
     withOffset.optional(limit) {
       val limitClause = "LIMIT"
       if (forPipeOperators && clause.nonEmpty && clause != offsetClause) {
-        throw QueryParsingErrors.combinationQueryResultClausesUnsupportedError(
-          ctx, s"the $clause and $limitClause clauses")
+        throw QueryParsingErrors.multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
+          ctx, s"the co-existence of the $clause and $limitClause clauses")
       }
       clause = limitClause
       Limit(typedVisit(limit), withOffset)
