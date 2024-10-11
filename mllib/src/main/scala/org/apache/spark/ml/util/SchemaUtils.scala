@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.util
 
-import scala.collection.immutable
-
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.VectorUDT
