@@ -111,8 +111,8 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
           // Except is handled as LeftAnti by `ReplaceExceptWithAntiJoin` rule.
           case LeftOuter | LeftSemi | LeftAnti if isLeftEmpty => empty(p)
           case LeftSemi if isRightEmpty | isFalseCondition => empty(p)
-          case LeftAnti if isRightEmpty && canExecuteWithoutJoin(p.left) => p.left
-          case LeftAnti if isFalseCondition && canExecuteWithoutJoin(p.left) => p.left
+          case LeftAnti if (isRightEmpty | isFalseCondition) && canExecuteWithoutJoin(p.left) =>
+            p.left
           case FullOuter if isLeftEmpty && isRightEmpty => empty(p)
           case LeftOuter | FullOuter if isRightEmpty && canExecuteWithoutJoin(p.left) =>
             Project(p.left.output ++ nullValueProjectList(p.right), p.left)
