@@ -17,13 +17,14 @@
 
 package org.apache.spark.ml.util
 
+import scala.collection.immutable
+
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.sql.catalyst.util.AttributeNameParser
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-
 
 /**
  * Utils for handling schemas.
@@ -217,7 +218,13 @@ private[spark] object SchemaUtils {
     val colSplits = AttributeNameParser.parseAttributeName(colName)
     val fieldOpt = schema.findNestedField(colSplits, resolver = SQLConf.get.resolver)
     if (fieldOpt.isEmpty) {
-      throw new SparkIllegalArgumentException("FIELD_NOT_FOUND")
+      throw new SparkIllegalArgumentException(
+        errorClass = "FIELD_NOT_FOUND",
+        messageParameters = immutable.Map(
+          "fieldName" -> colName,
+          "fields" -> schema.simpleString
+        )
+      )
     }
     fieldOpt.get._2
   }
