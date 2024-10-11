@@ -230,7 +230,7 @@ class StreamingListenerTestsMixin:
 
             q = observed_ds.writeStream.format("noop").start()
 
-            while q.lastProgress is None or q.lastProgress.batchId == 0:
+            while q.lastProgress is None or q.lastProgress.progress.batchId == 0:
                 q.awaitTermination(0.5)
 
             time.sleep(5)
