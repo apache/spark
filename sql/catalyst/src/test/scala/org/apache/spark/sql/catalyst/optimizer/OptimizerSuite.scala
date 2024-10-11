@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, LogicalPlan, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, StructField, StructType}
 
 /**
  * A dummy optimizer rule for testing that decrements integer literals until 0.
@@ -314,7 +314,7 @@ class OptimizerSuite extends PlanTest {
     }
   }
 
-  test("SPARK-49924: Keep containsNull after replace ArrayCompact") {
+  test("SPARK-49924: Keep containsNull after ArrayCompact replacement") {
     val optimizer = new SimpleTestOptimizer() {
       override def defaultBatches: Seq[Batch] =
         Batch("test", fixedPoint,
@@ -324,12 +324,14 @@ class OptimizerSuite extends PlanTest {
     val array1 = ArrayCompact(CreateArray(Literal(1) :: Literal.apply(null) :: Nil, false))
     val plan1 = Project(Alias(array1, "arr")() :: Nil, OneRowRelation()).analyze
     val optimized1 = optimizer.execute(plan1)
-     assert(plan1.schema === optimized1.schema)
+     assert(optimized1.schema ===
+       StructType(StructField("arr", ArrayType(IntegerType, false), false) :: Nil))
 
     val struct = CreateStruct(Literal(1) :: Literal(2) :: Nil)
     val array2 = ArrayCompact(CreateArray(struct :: Literal.apply(null) :: Nil, false))
     val plan2 = Project(Alias(MapFromEntries(array2), "map")() :: Nil, OneRowRelation()).analyze
     val optimized2 = optimizer.execute(plan2)
-    assert(plan2.schema === optimized2.schema)
+    assert(optimized2.schema ===
+      StructType(StructField("map", MapType(IntegerType, IntegerType, false), false) :: Nil))
   }
 }
