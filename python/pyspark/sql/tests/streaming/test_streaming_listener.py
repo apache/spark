@@ -381,8 +381,7 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                     .start()
                 )
                 self.assertTrue(q.isActive)
-                while progress_event is None or progress_event.batchId == 0:
-                    q.awaitTermination(0.5)
+                q.awaitTermination(10)
                 q.stop()
 
                 # Make sure all events are empty
