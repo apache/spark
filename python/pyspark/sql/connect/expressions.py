@@ -340,7 +340,7 @@ class LiteralExpression(Expression):
             # right now, it's dedicated for pyspark.ml params like array<...>, array<array<...>>
             if len(value) == 0 or value[0] is None:
                 raise PySparkTypeError(
-                    errorClass="CANNOT_INFER_ARRAY_TYPE",
+                    errorClass="CANNOT_INFER_ARRAY_ELEMENT_TYPE",
                     messageParameters={},
                 )
             return ArrayType(LiteralExpression._infer_type(value[0]), True)
