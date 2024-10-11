@@ -18,14 +18,18 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.scalatest.Tag
 
+import org.apache.spark.{SparkContext, TaskContext}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.{CommitLog, MemoryStream}
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.OutputMode.Update
+import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.sql.types.StructType
 
 object CkptIdCollectingStateStoreWrapper {
@@ -187,6 +191,10 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
 
   val providerClassName = classOf[CkptIdCollectingStateStoreProviderWrapper].getCanonicalName
 
+  // Force test task retry number to be 2
+  protected override def createSparkSession: TestSparkSession = {
+    new TestSparkSession(new SparkContext("local[1, 2]", this.getClass.getSimpleName, sparkConf))
+  }
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -625,6 +633,195 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
       assert(checkpointInfoList.count(_.batchVersion == i) == numStateStores * 2)
     }
     validateBaseCheckpointInfo()
+  }
+
+
+  testWithCheckpointInfoTracked(s"checkpointFormatVersion2 validate ID - two jobs launched") {
+    withTempDir { checkpointDir =>
+      val inputData = MemoryStream[Int]
+      val aggregated =
+        inputData
+          .toDF()
+          .groupBy($"value")
+          .agg(count("*"))
+
+      val writer = (ds: DataFrame, batchId: Long) => {
+        ds.write.mode("append").saveAsTable("wei_test_t1")
+        ds.write.mode("append").saveAsTable("wei_test_t2")
+      }
+
+      val query = aggregated.writeStream
+        .foreachBatch(writer)
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .outputMode("update")
+        .start()
+
+      inputData.addData(1 to 100)
+      query.processAllAvailable()
+
+      inputData.addData(1 to 100)
+      query.processAllAvailable()
+
+      query.stop()
+
+      val checkpointInfoList = CkptIdCollectingStateStoreWrapper.getStateStoreCheckpointInfos
+
+      val pickedCheckpointInfoList = checkpointInfoList
+        .groupBy(x => (x.partitionId, x.batchVersion)).map(_._2.tail.head)
+
+      println("wei== pickedCheckpointInfoList: ")
+      pickedCheckpointInfoList.foreach(println)
+
+      println("wei== checkpointInfoList: ")
+      checkpointInfoList.foreach(println)
+
+      Seq(0, 1).foreach {
+        partitionId =>
+          val stateStoreCkptIds = pickedCheckpointInfoList
+            .filter(_.partitionId == partitionId).map(_.stateStoreCkptId)
+          val baseStateStoreCkptIds = pickedCheckpointInfoList
+            .filter(_.partitionId == partitionId).map(_.baseStateStoreCkptId)
+
+          // Verify lineage for each partition across batches. Below should satisfy because
+          // these ids are stored in the following manner:
+          // stateStoreCkptIds: id3, id2, id1
+          // baseStateStoreCkptIds:  id2, id1, None
+          // Below checks [id2, id1] are the same,
+          // which is the lineage for this partition across batches
+          assert(stateStoreCkptIds.drop(1).iterator
+            .sameElements(baseStateStoreCkptIds.dropRight(1)))
+      }
+
+      val versionToUniqueIdFromStateStore = Seq(1, 2).map {
+        batchVersion =>
+          val res = pickedCheckpointInfoList
+            .filter(_.batchVersion == batchVersion).map(_.stateStoreCkptId.get)
+
+          // batch Id is batchVersion - 1
+          batchVersion - 1 -> res.toArray
+      }.toMap
+
+      val commitLogPath = new Path(
+        new Path(checkpointDir.getAbsolutePath), "commits").toString
+
+      val commitLog = new CommitLog(spark, commitLogPath)
+      val metadata_ = commitLog.get(Some(0), Some(1)).map(_._2)
+
+      val versionToUniqueIdFromCommitLog = metadata_.zipWithIndex.map { case (metadata, idx) =>
+        // Use stateUniqueIds(0) because there is only one state operator
+        val res2 = metadata.stateUniqueIds(0).map { uniqueIds =>
+          uniqueIds
+        }
+        println("wei== res2")
+        res2.foreach(x => for (elem <- x) {
+          println(elem)
+        })
+        idx -> res2
+      }.toMap
+
+      versionToUniqueIdFromCommitLog.foreach {
+        case (version, uniqueIds) =>
+          versionToUniqueIdFromStateStore(version).sameElements(uniqueIds)
+      }
+    }
+  }
+
+  // This test verifies when there are task retries, the unique ids actually stored in
+  // the commit log is the same as those recorded by CkptIdCollectingStateStoreWrapper
+  testWithCheckpointInfoTracked(s"checkpointFormatVersion2 validate ID - task retry") {
+    withTempDir { checkpointDir =>
+      val inputData = MemoryStream[Int]
+      val aggregated =
+        inputData
+          .toDF()
+          .groupBy($"value")
+          .agg(count("*"))
+
+      val writer = (ds: DataFrame, batchId: Long) => {
+        val _ = ds.rdd.filter { x =>
+          val context = TaskContext.get()
+          // Retry in the first attempt
+          if (context.attemptNumber() == 0) {
+            throw new RuntimeException(s"fail the task at " +
+              s"partition ${context.partitionId()} batch Id: $batchId")
+          }
+          x.length >= 0
+        }.collect()
+      }
+
+      val query = aggregated.writeStream
+        .foreachBatch(writer)
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .outputMode("update")
+        .start()
+
+      inputData.addData(1 to 100)
+      query.processAllAvailable()
+
+      inputData.addData(1 to 100)
+      query.processAllAvailable()
+
+      query.stop()
+
+      val checkpointInfoList = CkptIdCollectingStateStoreWrapper.getStateStoreCheckpointInfos
+      // scalastyle:off line.size.limit
+      // Since every task is retried once, for each partition in each batch, we should have two
+      // state store checkpointInfo. Since these infos are appended sequentially, we can group them
+      // by partitionId and batchVersion, and pick the first one as they are the retried ones.
+      // e.g.
+      // [Picked] StateStoreCheckpointInfo[partitionId=1, batchVersion=2, stateStoreCkptId=Some(a9d5afec-0e8d-4473-b948-6c55513aa509), baseStateStoreCkptId=Some(061f7c53-b300-477a-a599-5387d55e315a)]
+      // [Picked] StateStoreCheckpointInfo[partitionId=0, batchVersion=2, stateStoreCkptId=Some(879cc517-6b85-4dae-abba-794bf2dbab82), baseStateStoreCkptId=Some(513726e7-2448-41a6-a874-92053c5cf86b)]
+      // StateStoreCheckpointInfo[partitionId=1, batchVersion=2, stateStoreCkptId=Some(7f4ad39f-d019-4ca2-8cf4-300379821cd6), baseStateStoreCkptId=Some(061f7c53-b300-477a-a599-5387d55e315a)]
+      // StateStoreCheckpointInfo[partitionId=0, batchVersion=2, stateStoreCkptId=Some(9dc215fe-54f9-4dc1-a59b-a8734f359e46), baseStateStoreCkptId=Some(513726e7-2448-41a6-a874-92053c5cf86b)]
+      // scalastyle:on line.size.limit
+      val pickedCheckpointInfoList = checkpointInfoList
+        .groupBy(x => (x.partitionId, x.batchVersion)).map(_._2.head)
+
+      Seq(0, 1).foreach {
+        partitionId =>
+          val stateStoreCkptIds = pickedCheckpointInfoList
+            .filter(_.partitionId == partitionId).map(_.stateStoreCkptId)
+          val baseStateStoreCkptIds = pickedCheckpointInfoList
+            .filter(_.partitionId == partitionId).map(_.baseStateStoreCkptId)
+
+          // Verify lineage for each partition across batches. Below should satisfy because
+          // these ids are stored in the following manner:
+          // stateStoreCkptIds: id3, id2, id1
+          // baseStateStoreCkptIds:  id2, id1, None
+          // Below checks [id2, id1] are the same,
+          // which is the lineage for this partition across batches
+          assert(stateStoreCkptIds.drop(1).iterator
+            .sameElements(baseStateStoreCkptIds.dropRight(1)))
+      }
+
+      val versionToUniqueIdFromStateStore = Seq(1, 2).map {
+        batchVersion =>
+          val res = pickedCheckpointInfoList
+            .filter(_.batchVersion == batchVersion).map(_.stateStoreCkptId.get)
+
+          // batch Id is batchVersion - 1
+          batchVersion - 1 -> res.toArray
+      }.toMap
+
+      val commitLogPath = new Path(
+        new Path(checkpointDir.getAbsolutePath), "commits").toString
+
+      val commitLog = new CommitLog(spark, commitLogPath)
+      val metadata_ = commitLog.get(Some(0), Some(1)).map(_._2)
+
+      val versionToUniqueIdFromCommitLog = metadata_.zipWithIndex.map { case (metadata, idx) =>
+        // Use stateUniqueIds(0) because there is only one state operator
+        val res2 = metadata.stateUniqueIds(0).map { uniqueIds =>
+            uniqueIds(0)
+        }
+        idx -> res2
+      }.toMap
+
+      versionToUniqueIdFromCommitLog.foreach {
+        case (version, uniqueIds) =>
+          versionToUniqueIdFromStateStore(version).sameElements(uniqueIds)
+      }
+    }
   }
 
   testWithCheckpointInfoTracked(s"checkpointFormatVersion2 validate ID") {

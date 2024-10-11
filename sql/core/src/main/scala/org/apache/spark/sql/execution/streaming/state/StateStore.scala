@@ -240,12 +240,18 @@ case class StateStoreMetrics(
 
 case class StateStoreCheckpointInfo(
     partitionId: Int,
+    // batchVersion is the version in StateStore, i.e. batchVersion = batchId + 1
     batchVersion: Long,
     // The checkpoint ID for a checkpoint at `batchVersion`. This is used to identify the checkpoint
     stateStoreCkptId: Option[String],
     // The checkpoint ID for `batchVersion` - 1, that is used to finish this batch. This is used
     // to validate the batch is processed based on the correct checkpoint.
-    baseStateStoreCkptId: Option[String])
+    baseStateStoreCkptId: Option[String]) {
+
+    override def toString(): String =
+      s"StateStoreCheckpointInfo[partitionId=$partitionId, batchVersion=$batchVersion, " +
+        s"stateStoreCkptId=$stateStoreCkptId, baseStateStoreCkptId=$baseStateStoreCkptId]"
+}
 
 object StateStoreMetrics {
   def combine(allMetrics: Seq[StateStoreMetrics]): StateStoreMetrics = {
