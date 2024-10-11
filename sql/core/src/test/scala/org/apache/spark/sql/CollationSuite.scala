@@ -1285,7 +1285,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       (1, ("a", Seq(("a", "a", "a")), "a")),
       (7, ("b", Seq(("b", "b", "B")), "b")),
       (6, ("b", Seq(("b", "b", "B")), "a")),
-      (5, ("b", Seq(("b", "b", "a")), "a")),
+      (5, ("b", Seq(("b", "b", "a")), "a"))
     )
     val tableName = "t"
     withTable(tableName) {
