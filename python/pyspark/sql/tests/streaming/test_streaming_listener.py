@@ -216,7 +216,6 @@ class StreamingListenerTestsMixin:
             def onQueryTerminated(self, event):
                 pass
 
-        q = None
         try:
             error_listener = MyErrorListener()
             self.spark.streams.addListener(error_listener)
@@ -239,12 +238,10 @@ class StreamingListenerTestsMixin:
             self.assertTrue(error_listener.num_error_rows > 0)
 
         finally:
-            if q is not None:
-                q.stop()
+            q.stop()
             self.spark.streams.removeListener(error_listener)
 
     def test_streaming_progress(self):
-        q = None
         try:
             # Test a fancier query with stateful operation and observed metrics
             df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
@@ -268,8 +265,7 @@ class StreamingListenerTestsMixin:
                 self.check_streaming_query_progress(p, True)
 
         finally:
-            if q is not None:
-                q.stop()
+            q.stop()
 
 
 class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
