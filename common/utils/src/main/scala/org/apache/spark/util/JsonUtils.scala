@@ -31,12 +31,21 @@ private[spark] trait JsonUtils {
     .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
 
   def toJsonString(block: JsonGenerator => Unit): String = {
-    val baos = new ByteArrayOutputStream()
-    val generator = mapper.createGenerator(baos, JsonEncoding.UTF8)
-    block(generator)
-    generator.close()
-    baos.close()
-    new String(baos.toByteArray, StandardCharsets.UTF_8)
+    var baos: ByteArrayOutputStream = null
+    var generator: JsonGenerator = null
+    try {
+      baos = new ByteArrayOutputStream()
+      generator = mapper.createGenerator(baos, JsonEncoding.UTF8)
+      block(generator)
+      new String(baos.toByteArray, StandardCharsets.UTF_8)
+    } finally {
+      if (generator != null) {
+        generator.close()
+      }
+      if (baos != null) {
+        baos.close()
+      }
+    }
   }
 }
 
