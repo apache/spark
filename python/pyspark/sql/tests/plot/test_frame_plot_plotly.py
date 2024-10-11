@@ -19,7 +19,7 @@ import unittest
 from datetime import datetime
 
 import pyspark.sql.plot  # noqa: F401
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_plotly, plotly_requirement_message
 
 
@@ -46,6 +46,22 @@ class DataFramePlotPlotlyTestsMixin:
             (9, 12, 62, datetime(2018, 4, 30)),
         ]
         columns = ["sales", "signups", "visits", "date"]
+        return self.spark.createDataFrame(data, columns)
+
+    @property
+    def sdf4(self):
+        data = [
+            ("A", 50, 55),
+            ("B", 55, 60),
+            ("C", 60, 65),
+            ("D", 65, 70),
+            ("E", 70, 75),
+            # outliers
+            ("F", 10, 15),
+            ("G", 85, 90),
+            ("H", 5, 150),
+        ]
+        columns = ["student", "math_score", "english_score"]
         return self.spark.createDataFrame(data, columns)
 
     def _check_fig_data(self, fig_data, **kwargs):
@@ -298,6 +314,65 @@ class DataFramePlotPlotlyTestsMixin:
             exception=pe.exception,
             errorClass="PLOT_NOT_NUMERIC_COLUMN",
             messageParameters={"arg_name": "y", "arg_type": "StringType()"},
+        )
+
+    def test_box_plot(self):
+        fig = self.sdf4.plot.box(column="math_score")
+        expected_fig_data = {
+            "boxpoints": "suspectedoutliers",
+            "lowerfence": (5,),
+            "mean": (50.0,),
+            "median": (55,),
+            "name": "math_score",
+            "notched": False,
+            "q1": (10,),
+            "q3": (65,),
+            "upperfence": (85,),
+            "x": [0],
+            "type": "box",
+        }
+        self._check_fig_data(fig["data"][0], **expected_fig_data)
+
+        fig = self.sdf4.plot(kind="box", column=["math_score", "english_score"])
+        self._check_fig_data(fig["data"][0], **expected_fig_data)
+        expected_fig_data = {
+            "boxpoints": "suspectedoutliers",
+            "lowerfence": (55,),
+            "mean": (72.5,),
+            "median": (65,),
+            "name": "english_score",
+            "notched": False,
+            "q1": (55,),
+            "q3": (75,),
+            "upperfence": (90,),
+            "x": [1],
+            "y": [[150, 15]],
+            "type": "box",
+        }
+        self._check_fig_data(fig["data"][1], **expected_fig_data)
+        with self.assertRaises(PySparkValueError) as pe:
+            self.sdf4.plot.box(column="math_score", boxpoints=True)
+        self.check_error(
+            exception=pe.exception,
+            errorClass="UNSUPPORTED_PLOT_BACKEND_PARAM",
+            messageParameters={
+                "backend": "plotly",
+                "param": "boxpoints",
+                "value": "True",
+                "supported_values": ", ".join(["suspectedoutliers", "False"]),
+            },
+        )
+        with self.assertRaises(PySparkValueError) as pe:
+            self.sdf4.plot.box(column="math_score", notched=True)
+        self.check_error(
+            exception=pe.exception,
+            errorClass="UNSUPPORTED_PLOT_BACKEND_PARAM",
+            messageParameters={
+                "backend": "plotly",
+                "param": "notched",
+                "value": "True",
+                "supported_values": ", ".join(["False"]),
+            },
         )
 
 
