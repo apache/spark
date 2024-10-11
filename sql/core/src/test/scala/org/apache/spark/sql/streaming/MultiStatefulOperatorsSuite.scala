@@ -908,7 +908,7 @@ class MultiStatefulOperatorsSuite
     // does not delay the state watermark in stream-stream join).
     // Before SPARK-49829, left side does not add the input to state store if it's going to evict
     // in this batch, which breaks the match between input from left side and input from right
-    // side "for this batch".
+    // side for this batch.
     testStream(joined)(
       MultiAddData(
         (inputStream1, Seq(1L, 2L, 3L, 4L, 5L)),
@@ -921,6 +921,7 @@ class MultiStatefulOperatorsSuite
         (inputStream2, Seq(15L, 16L, 17L, 18L, 19L))
       ),
       // watermark: 15 - 5 = 10 (windows for [0, 10) are completed)
+      // Before SPARK-49829, the test fails because this row is not produced.
       CheckNewAnswer((10L, 15L, 35L)),
       MultiAddData(
         (inputStream1, Seq(100L)),

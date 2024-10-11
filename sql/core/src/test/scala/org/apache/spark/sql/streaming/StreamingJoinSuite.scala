@@ -1630,7 +1630,9 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
           // Before Spark introduces multiple stateful operator, WM for late record was same as
           // WM for eviction, hence ("d", 1) was treated as late record.
           // With the multiple state operator, ("d", 1) is added in batch 1 but also evicted in
-          // batch 1. Before SPARK-49829, this wasn't producing unmatched row, and it is fixed.
+          // batch 1. Note that the eviction is happening with state watermark: for this join,
+          // state watermark = state eviction under join condition. Before SPARK-49829, this
+          // wasn't producing unmatched row, and it is fixed.
           AddData(memoryStream1, ("d", 1)),
           CheckNewAnswer(("a", 1), ("d", 1)),
           assertLeftRows(Seq()),
@@ -2152,6 +2154,9 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
         // just trigger a new batch with arbitrary data as the original test relies on no-data
         // batch, and we need to check with remaining unmatched outputs
         AddData(memoryStream1, (100L, 6)),
+        // Before SPARK-49829, the test fails because (23, 4, null, null) wasn't produced.
+        // (The assertion of state for left inputs & right inputs weren't included on the test
+        // before SPARK-49829.)
         CheckNewAnswer(Row(22, 3, null, 3), Row(23, 4, null, null))
       )
 
