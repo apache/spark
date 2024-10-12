@@ -3075,6 +3075,10 @@
                 reduce the cost of migration in subsequent versions.
               -->
               <arg>-Wconf:cat=deprecation&amp;msg=it will become a keyword in Scala 3:e</arg>
+              <!--
+                SPARK-49937 ban call the method `SparkThrowable#getErrorClass`
+              -->
+              <arg>-Wconf:cat=deprecation&amp;msg=method getErrorClass in trait SparkThrowable is deprecated:e</arg>
             </args>
             <jvmArgs>
               <jvmArg>-Xss128m</jvmArg>
