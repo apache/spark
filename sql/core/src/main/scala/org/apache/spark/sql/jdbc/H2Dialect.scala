@@ -197,7 +197,7 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
 
   override def classifyException(
       e: Throwable,
-      errorClass: String,
+      condition: String,
       messageParameters: Map[String, String],
       description: String,
       isRuntime: Boolean): Throwable with SparkThrowable = {
@@ -230,13 +230,13 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
             throw new NoSuchNamespaceException(errorClass = "SCHEMA_NOT_FOUND",
               messageParameters = Map("schemaName" -> quotedName))
           // INDEX_ALREADY_EXISTS_1
-          case 42111 if errorClass == "FAILED_JDBC.CREATE_INDEX" =>
+          case 42111 if condition == "FAILED_JDBC.CREATE_INDEX" =>
             val indexName = messageParameters("indexName")
             val tableName = messageParameters("tableName")
             throw new IndexAlreadyExistsException(
               indexName = indexName, tableName = tableName, cause = Some(e))
           // INDEX_NOT_FOUND_1
-          case 42112 if errorClass == "FAILED_JDBC.DROP_INDEX" =>
+          case 42112 if condition == "FAILED_JDBC.DROP_INDEX" =>
             val indexName = messageParameters("indexName")
             val tableName = messageParameters("tableName")
             throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
@@ -244,7 +244,7 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
         }
       case _ => // do nothing
     }
-    super.classifyException(e, errorClass, messageParameters, description, isRuntime)
+    super.classifyException(e, condition, messageParameters, description, isRuntime)
   }
 
   override def compileExpression(expr: Expression): Option[String] = {
