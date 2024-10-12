@@ -457,9 +457,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               errorClass = "UNBOUND_SQL_PARAMETER",
               messageParameters = Map("name" -> p.name))
 
-          case e if e.dataType == ImplicitStringType =>
-            throw new RuntimeException("ImplicitStringType is not supported " + e.toJSON)
-
           case _ =>
         })
 

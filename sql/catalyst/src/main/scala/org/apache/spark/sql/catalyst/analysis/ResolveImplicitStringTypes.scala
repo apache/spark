@@ -19,39 +19,53 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTableCommand, AlterViewAs, AlterViewSchemaBinding, ColumnDefinition, CreateFunction, CreateTable, CreateTableAsSelect, CreateView, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterTableCommand, AlterViewAs, AlterViewSchemaBinding, ColumnDefinition, CreateFunction, CreateTable, CreateTableAsSelect, CreateView, LogicalPlan, ReplaceColumns}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ImplicitStringType, StringType}
+import org.apache.spark.sql.types.{DataType, ImplicitStringType, StringType}
 
 object ResolveImplicitStringTypes extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan match {
+
+      // Implicit string type should be resolved to the collation of the object for DDL commands.
+      // However, this is not implemented yet. So, we will just use UTF8_BINARY for now.
       case _: CreateTable | _: CreateTableAsSelect | _: AlterTableCommand |
+           _: AddColumns | _: ReplaceColumns | _: AlterColumn |
            _: CreateView | _: AlterViewAs | _: AlterViewSchemaBinding | _: AlterViewSchemaBinding |
            _: CreateFunction =>
-        val res = replaceWith(plan, StringType)
+        plan
+
+      // Implicit string type should be resolved to the session collation for DML commands.
+      case _ if SQLConf.get.defaultStringType != StringType =>
+        val res = replaceWith(plan, SQLConf.get.defaultStringType)
         res
 
       case _ =>
-        val res = replaceWith(plan, SQLConf.get.defaultStringType)
-        res
+        plan
     }
   }
 
   private def replaceWith(plan: LogicalPlan, newType: StringType): LogicalPlan = {
     plan resolveOperators {
-      case l: LogicalPlan =>
-        l transformExpressions {
-          case columnDef: ColumnDefinition if columnDef.dataType == ImplicitStringType =>
+      case operator =>
+        operator transformExpressions {
+          case columnDef: ColumnDefinition if isImplicitStringType(columnDef.dataType) =>
             columnDef.copy(dataType = newType)
+
+          case cast: Cast if isImplicitStringType(cast.dataType) =>
+            cast.copy(dataType = newType)
 
           case Literal(value, ImplicitStringType) =>
             Literal(value, newType)
-
-          case cast: Cast if cast.dataType == ImplicitStringType =>
-            cast.copy(dataType = newType)
         }
+    }
+  }
+
+  private def isImplicitStringType(dataType: DataType): Boolean = {
+    dataType match {
+      case ImplicitStringType => true
+      case _ => false
     }
   }
 }
