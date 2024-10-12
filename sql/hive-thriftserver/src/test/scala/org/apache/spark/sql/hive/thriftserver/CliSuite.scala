@@ -735,7 +735,7 @@ class CliSuite extends SparkFunSuite {
         format = ErrorMessageFormat.MINIMAL,
         errorMessage =
           """{
-            |  "errorClass" : "DIVIDE_BY_ZERO",
+            |  "condition" : "DIVIDE_BY_ZERO",
             |  "sqlState" : "22012",
             |  "messageParameters" : {
             |    "config" : "\"spark.sql.ansi.enabled\""
@@ -753,7 +753,7 @@ class CliSuite extends SparkFunSuite {
         format = ErrorMessageFormat.STANDARD,
         errorMessage =
           """{
-            |  "errorClass" : "DIVIDE_BY_ZERO",
+            |  "condition" : "DIVIDE_BY_ZERO",
             |  "messageTemplate" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
             |  "sqlState" : "22012",
             |  "messageParameters" : {

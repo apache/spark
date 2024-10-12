@@ -314,7 +314,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     // scalastyle:off line.size.limit
     assert(SparkThrowableHelper.getMessage(e, MINIMAL) ===
       """{
-        |  "errorClass" : "DIVIDE_BY_ZERO",
+        |  "condition" : "DIVIDE_BY_ZERO",
         |  "sqlState" : "22012",
         |  "messageParameters" : {
         |    "config" : "CONFIG"
@@ -328,7 +328,7 @@ class SparkThrowableSuite extends SparkFunSuite {
         |}""".stripMargin)
     assert(SparkThrowableHelper.getMessage(e, STANDARD) ===
       """{
-        |  "errorClass" : "DIVIDE_BY_ZERO",
+        |  "condition" : "DIVIDE_BY_ZERO",
         |  "messageTemplate" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
         |  "sqlState" : "22012",
         |  "messageParameters" : {
@@ -348,7 +348,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       messageParameters = Map("saveMode" -> "UNSUPPORTED_MODE"))
     assert(SparkThrowableHelper.getMessage(e2, STANDARD) ===
       """{
-        |  "errorClass" : "UNSUPPORTED_SAVE_MODE.EXISTENT_PATH",
+        |  "condition" : "UNSUPPORTED_SAVE_MODE.EXISTENT_PATH",
         |  "messageTemplate" : "The save mode <saveMode> is not supported for: an existent path.",
         |  "sqlState" : "0A000",
         |  "messageParameters" : {
@@ -363,7 +363,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     val e3 = new LegacyException
     assert(SparkThrowableHelper.getMessage(e3, MINIMAL) ===
       """{
-        |  "errorClass" : "LEGACY",
+        |  "condition" : "LEGACY",
         |  "messageParameters" : {
         |    "message" : "Test message"
         |  }
@@ -392,7 +392,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     // scalastyle:off line.size.limit
     assert(SparkThrowableHelper.getMessage(e4, MINIMAL) ===
         """{
-          |  "errorClass" : "DIVIDE_BY_ZERO",
+          |  "condition" : "DIVIDE_BY_ZERO",
           |  "sqlState" : "22012",
           |  "messageParameters" : {
           |    "config" : "CONFIG"
@@ -404,7 +404,7 @@ class SparkThrowableSuite extends SparkFunSuite {
           |}""".stripMargin)
     assert(SparkThrowableHelper.getMessage(e4, STANDARD) ===
         """{
-          |  "errorClass" : "DIVIDE_BY_ZERO",
+          |  "condition" : "DIVIDE_BY_ZERO",
           |  "messageTemplate" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
           |  "sqlState" : "22012",
           |  "messageParameters" : {
