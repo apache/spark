@@ -6,7 +6,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_INDEX_OF_ZERO",
+  "condition" : "INVALID_INDEX_OF_ZERO",
   "sqlState" : "22003"
 }
 

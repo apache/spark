@@ -262,7 +262,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NOT_SUPPORTED_CHANGE_COLUMN",
+  "condition" : "NOT_SUPPORTED_CHANGE_COLUMN",
   "sqlState" : "0A000",
   "messageParameters" : {
     "newName" : "`c`",
@@ -614,7 +614,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1232",
+  "condition" : "_LEGACY_ERROR_TEMP_1232",
   "messageParameters" : {
     "partitionColumnNames" : "v2, c2",
     "specKeys" : "v2",

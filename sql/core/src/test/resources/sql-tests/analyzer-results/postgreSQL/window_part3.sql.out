@@ -65,7 +65,7 @@ insert into datetimes values
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
+  "condition" : "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
   "sqlState" : "42000",
   "messageParameters" : {
     "sqlExpr" : "\"CAST(11:00 BST AS TIMESTAMP)\""
@@ -234,7 +234,7 @@ from t1 where f1 = f2
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_WITHOUT_ORDER",
+  "condition" : "DATATYPE_MISMATCH.RANGE_FRAME_WITHOUT_ORDER",
   "sqlState" : "42K09",
   "messageParameters" : {
     "sqlExpr" : "\"(PARTITION BY f1 RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)\""
@@ -306,7 +306,7 @@ SELECT * FROM empsalary WHERE row_number() OVER (ORDER BY salary) < 10
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "condition" : "_LEGACY_ERROR_TEMP_1034",
   "messageParameters" : {
     "clauseName" : "WHERE"
   }
@@ -318,7 +318,7 @@ SELECT * FROM empsalary INNER JOIN tenk1 ON row_number() OVER (ORDER BY salary) 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "condition" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "invalidExprSqls" : "\"row_number() OVER (ORDER BY salary ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\""
@@ -338,7 +338,7 @@ SELECT rank() OVER (ORDER BY 1), count(*) FROM empsalary GROUP BY 1
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "condition" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "invalidExprSqls" : "\"RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\""
@@ -358,7 +358,7 @@ SELECT * FROM rank() OVER (ORDER BY random())
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'BY'",
@@ -372,7 +372,7 @@ SELECT * FROM empsalary WHERE (rank() OVER (ORDER BY random())) > 10
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "condition" : "_LEGACY_ERROR_TEMP_1034",
   "messageParameters" : {
     "clauseName" : "WHERE"
   }
@@ -384,7 +384,7 @@ SELECT * FROM empsalary WHERE rank() OVER (ORDER BY random())
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "condition" : "_LEGACY_ERROR_TEMP_1034",
   "messageParameters" : {
     "clauseName" : "WHERE"
   }
@@ -396,7 +396,7 @@ select rank() OVER (PARTITION BY four, ORDER BY ten) FROM tenk1
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'BY'",
@@ -410,7 +410,7 @@ SELECT range(1, 100) OVER () FROM empsalary
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_ROUTINE",
+  "condition" : "UNRESOLVED_ROUTINE",
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`range`",
@@ -431,7 +431,7 @@ SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "condition" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "0",
@@ -454,7 +454,7 @@ SELECT nth_value(four, 0) OVER (ORDER BY ten), ten, four FROM tenk1
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "condition" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "0L",

@@ -105,7 +105,7 @@ SHOW VIEWS IN wrongdb LIKE 'view_*'
 -- !query analysis
 org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 {
-  "errorClass" : "SCHEMA_NOT_FOUND",
+  "condition" : "SCHEMA_NOT_FOUND",
   "sqlState" : "42704",
   "messageParameters" : {
     "schemaName" : "`spark_catalog`.`wrongdb`"

@@ -171,7 +171,7 @@ SELECT cast(1 as tinyint) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -196,7 +196,7 @@ SELECT cast(1 as tinyint) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -221,7 +221,7 @@ SELECT cast(1 as tinyint) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as ti
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -246,7 +246,7 @@ SELECT cast(1 as tinyint) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -430,7 +430,7 @@ SELECT cast(1 as smallint) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -455,7 +455,7 @@ SELECT cast(1 as smallint) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -480,7 +480,7 @@ SELECT cast(1 as smallint) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -505,7 +505,7 @@ SELECT cast(1 as smallint) FROM t UNION SELECT cast('2017-12-11 09:30:00' as dat
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -689,7 +689,7 @@ SELECT cast(1 as int) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -714,7 +714,7 @@ SELECT cast(1 as int) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -739,7 +739,7 @@ SELECT cast(1 as int) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timest
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -764,7 +764,7 @@ SELECT cast(1 as int) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FR
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -949,7 +949,7 @@ SELECT cast(1 as bigint) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -974,7 +974,7 @@ SELECT cast(1 as bigint) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -999,7 +999,7 @@ SELECT cast(1 as bigint) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as tim
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -1024,7 +1024,7 @@ SELECT cast(1 as bigint) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -1209,7 +1209,7 @@ SELECT cast(1 as float) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -1234,7 +1234,7 @@ SELECT cast(1 as float) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -1259,7 +1259,7 @@ SELECT cast(1 as float) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as time
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -1284,7 +1284,7 @@ SELECT cast(1 as float) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -1468,7 +1468,7 @@ SELECT cast(1 as double) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -1493,7 +1493,7 @@ SELECT cast(1 as double) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -1518,7 +1518,7 @@ SELECT cast(1 as double) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as tim
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -1543,7 +1543,7 @@ SELECT cast(1 as double) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -1729,7 +1729,7 @@ SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -1754,7 +1754,7 @@ SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -1779,7 +1779,7 @@ SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast('2017-12-11 09:30:00.0
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -1804,7 +1804,7 @@ SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast('2017-12-11 09:30:00' 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -1988,7 +1988,7 @@ SELECT cast(1 as string) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2013,7 +2013,7 @@ SELECT cast(1 as string) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2078,7 +2078,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as tinyint) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2103,7 +2103,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as smallint) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2128,7 +2128,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as int) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2153,7 +2153,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as bigint) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2178,7 +2178,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2203,7 +2203,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as double) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2228,7 +2228,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2253,7 +2253,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2297,7 +2297,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2322,7 +2322,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2347,7 +2347,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast('2017-12-11 09:30:00' as dat
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2372,7 +2372,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as tinyint) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2397,7 +2397,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as smallint) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2422,7 +2422,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as int) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2447,7 +2447,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as bigint) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2472,7 +2472,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2497,7 +2497,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as double) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2522,7 +2522,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2547,7 +2547,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2572,7 +2572,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2616,7 +2616,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as ti
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2641,7 +2641,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2666,7 +2666,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2691,7 +2691,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2716,7 +2716,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2741,7 +2741,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2766,7 +2766,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2791,7 +2791,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2816,7 +2816,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2861,7 +2861,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast('2' a
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2886,7 +2886,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2950,7 +2950,7 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as tinyint
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -2975,7 +2975,7 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as smallin
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -3000,7 +3000,7 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as int) FR
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -3025,7 +3025,7 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as bigint)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -3050,7 +3050,7 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as float) 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -3075,7 +3075,7 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as double)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -3100,7 +3100,7 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as decimal
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -3145,7 +3145,7 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast('2' as binar
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -3170,7 +3170,7 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as boolean
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",

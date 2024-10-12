@@ -6,7 +6,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
@@ -24,7 +24,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
@@ -98,7 +98,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'a'",
@@ -138,7 +138,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'a'",
@@ -250,7 +250,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_INDEX_OF_ZERO",
+  "condition" : "INVALID_INDEX_OF_ZERO",
   "sqlState" : "22003"
 }
 
@@ -502,7 +502,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'invalid_length'",
@@ -526,7 +526,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'invalid_length'",
@@ -838,7 +838,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "condition" : "INVALID_PARAMETER_VALUE.CHARSET",
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "WINDOWS-1252",
@@ -856,7 +856,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "condition" : "INVALID_PARAMETER_VALUE.CHARSET",
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "WINDOWS-1252",
@@ -874,7 +874,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "condition" : "INVALID_PARAMETER_VALUE.CHARSET",
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "Windows-xxx",
@@ -892,7 +892,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "condition" : "INVALID_PARAMETER_VALUE.CHARSET",
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "Windows-xxx",
@@ -942,7 +942,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "MALFORMED_CHARACTER_CODING",
+  "condition" : "MALFORMED_CHARACTER_CODING",
   "sqlState" : "22000",
   "messageParameters" : {
     "charset" : "US-ASCII",
@@ -958,7 +958,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "MALFORMED_CHARACTER_CODING",
+  "condition" : "MALFORMED_CHARACTER_CODING",
   "sqlState" : "22000",
   "messageParameters" : {
     "charset" : "US-ASCII",
@@ -1014,7 +1014,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
@@ -1039,7 +1039,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "1",
@@ -1136,7 +1136,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "condition" : "INVALID_PARAMETER_VALUE.CHARSET",
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "Windows-xxx",
@@ -1154,7 +1154,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "condition" : "INVALID_PARAMETER_VALUE.CHARSET",
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "Windows-xxx",
@@ -1204,7 +1204,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "condition" : "INVALID_PARAMETER_VALUE.CHARSET",
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "WINDOWS-1252",
@@ -1222,7 +1222,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "condition" : "INVALID_PARAMETER_VALUE.CHARSET",
   "sqlState" : "22023",
   "messageParameters" : {
     "charset" : "WINDOWS-1252",
@@ -1272,7 +1272,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "MALFORMED_CHARACTER_CODING",
+  "condition" : "MALFORMED_CHARACTER_CODING",
   "sqlState" : "22000",
   "messageParameters" : {
     "charset" : "US-ASCII",
@@ -1288,7 +1288,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "MALFORMED_CHARACTER_CODING",
+  "condition" : "MALFORMED_CHARACTER_CODING",
   "sqlState" : "22000",
   "messageParameters" : {
     "charset" : "US-ASCII",
@@ -1664,7 +1664,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "condition" : "CONVERSION_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
@@ -1692,7 +1692,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "condition" : "CONVERSION_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
@@ -1710,7 +1710,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "condition" : "CONVERSION_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
@@ -1728,7 +1728,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "condition" : "CONVERSION_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
@@ -1746,7 +1746,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "condition" : "CONVERSION_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
@@ -1764,7 +1764,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "condition" : "CONVERSION_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
@@ -1782,7 +1782,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "condition" : "CONVERSION_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
@@ -1889,7 +1889,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "condition" : "CONVERSION_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'HEX'",
@@ -1907,7 +1907,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "condition" : "CONVERSION_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'HEX'",
@@ -1933,7 +1933,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "condition" : "CONVERSION_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'BASE64'",
@@ -1951,7 +1951,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "condition" : "CONVERSION_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "fmt" : "'HEX'",
@@ -2010,7 +2010,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.INVALID_ARG_VALUE",
+  "condition" : "DATATYPE_MISMATCH.INVALID_ARG_VALUE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputName" : "fmt",
@@ -2036,7 +2036,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.INVALID_ARG_VALUE",
+  "condition" : "DATATYPE_MISMATCH.INVALID_ARG_VALUE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputName" : "fmt",
@@ -2070,7 +2070,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "condition" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"fmtField\"",
@@ -2311,7 +2311,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_UTF8_STRING",
+  "condition" : "INVALID_UTF8_STRING",
   "sqlState" : "22029",
   "messageParameters" : {
     "str" : "\\x80"

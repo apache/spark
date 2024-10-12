@@ -258,7 +258,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
+  "condition" : "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
   "sqlState" : "51024",
   "messageParameters" : {
     "actualCols" : "[]",
@@ -316,7 +316,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
+  "condition" : "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
   "sqlState" : "51024",
   "messageParameters" : {
     "actualCols" : "[]",

@@ -60,7 +60,7 @@ select map_contains_key(map('1', 'a', '2', 'b'), 1)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.MAP_FUNCTION_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.MAP_FUNCTION_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "\"MAP\"",
@@ -84,7 +84,7 @@ select map_contains_key(map(1, 'a', 2, 'b'), '1')
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.MAP_FUNCTION_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.MAP_FUNCTION_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "\"MAP\"",

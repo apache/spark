@@ -312,7 +312,7 @@ PIVOT (
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1006",
+  "condition" : "_LEGACY_ERROR_TEMP_1006",
   "messageParameters" : {
     "sql" : "coursesales.earnings"
   }
@@ -330,7 +330,7 @@ PIVOT (
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1006",
+  "condition" : "_LEGACY_ERROR_TEMP_1006",
   "messageParameters" : {
     "sql" : "__auto_generated_subquery_name.year"
   }
@@ -348,7 +348,7 @@ PIVOT (
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`year`",
@@ -398,7 +398,7 @@ PIVOT (
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "NESTED_AGGREGATE_FUNCTION",
+  "condition" : "NESTED_AGGREGATE_FUNCTION",
   "sqlState" : "42607",
   "queryContext" : [ {
     "objectType" : "",
@@ -487,7 +487,7 @@ PIVOT (
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PIVOT_VALUE_DATA_TYPE_MISMATCH",
+  "condition" : "PIVOT_VALUE_DATA_TYPE_MISMATCH",
   "sqlState" : "42K09",
   "messageParameters" : {
     "pivotType" : "struct<course:string,year:int>",
@@ -506,7 +506,7 @@ PIVOT (
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`s`",
@@ -531,7 +531,7 @@ PIVOT (
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NON_LITERAL_PIVOT_VALUES",
+  "condition" : "NON_LITERAL_PIVOT_VALUES",
   "sqlState" : "42K08",
   "messageParameters" : {
     "expression" : "\"course\""
@@ -740,7 +740,7 @@ PIVOT (
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INCOMPARABLE_PIVOT_COLUMN",
+  "condition" : "INCOMPARABLE_PIVOT_COLUMN",
   "sqlState" : "42818",
   "messageParameters" : {
     "columnName" : "`m`"
@@ -761,7 +761,7 @@ PIVOT (
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INCOMPARABLE_PIVOT_COLUMN",
+  "condition" : "INCOMPARABLE_PIVOT_COLUMN",
   "sqlState" : "42818",
   "messageParameters" : {
     "columnName" : "`named_struct('course', __auto_generated_subquery_name`.`course, 'm', __auto_generated_subquery_name`.`m)`"

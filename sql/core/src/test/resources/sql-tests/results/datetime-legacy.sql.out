@@ -22,7 +22,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_TYPED_LITERAL",
+  "condition" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42604",
   "messageParameters" : {
     "value" : "'2020-01-01中文'",
@@ -69,7 +69,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_TYPED_LITERAL",
+  "condition" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42604",
   "messageParameters" : {
     "value" : "'015'",
@@ -92,7 +92,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_TYPED_LITERAL",
+  "condition" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42604",
   "messageParameters" : {
     "value" : "'2021-4294967297-11'",
@@ -131,7 +131,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "1",
@@ -334,7 +334,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
@@ -360,7 +360,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1.0\"",
@@ -386,7 +386,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"10.0\"",
@@ -420,7 +420,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
+  "condition" : "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "date_add"
@@ -499,7 +499,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
@@ -525,7 +525,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1.0\"",
@@ -551,7 +551,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"10.0\"",
@@ -585,7 +585,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
+  "condition" : "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "date_sub"
@@ -632,7 +632,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"int_str\"",
@@ -658,7 +658,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"int_str\"",
@@ -700,7 +700,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"10.0\"",
@@ -758,7 +758,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"2001-09-28\"",
@@ -816,7 +816,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"date_str\"",
@@ -842,7 +842,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
@@ -868,7 +868,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
@@ -1027,7 +1027,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`dateadd`",
@@ -1051,7 +1051,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`date_add`",
@@ -1155,7 +1155,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`date_diff`",
@@ -1179,7 +1179,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`datediff`",
@@ -1211,7 +1211,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_TYPED_LITERAL",
+  "condition" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42604",
   "messageParameters" : {
     "value" : "'2019-01-01中文'",
@@ -1234,7 +1234,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_TYPED_LITERAL",
+  "condition" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42604",
   "messageParameters" : {
     "value" : "'4294967297'",
@@ -1257,7 +1257,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_TYPED_LITERAL",
+  "condition" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42604",
   "messageParameters" : {
     "value" : "'2021-01-01T12:30:4294967297.123456'",
@@ -1830,7 +1830,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"2011-11-11 11:11:10\"",
@@ -1856,7 +1856,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"2011-11-11 11:11:11\"",
@@ -1906,7 +1906,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"str\"",
@@ -1932,7 +1932,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"str\"",
@@ -1958,7 +1958,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"TIMESTAMP\"",
@@ -1982,7 +1982,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"DOUBLE\"",
@@ -2006,7 +2006,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"TIMESTAMP\"",
@@ -2030,7 +2030,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"VOID\"",
@@ -2157,7 +2157,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`timestampadd`",
@@ -2181,7 +2181,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`timestampadd`",
@@ -2237,7 +2237,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`timestampdiff`",
@@ -2261,7 +2261,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`timestampdiff`",
@@ -2317,7 +2317,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`timediff`",
@@ -2341,7 +2341,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`timediff`",

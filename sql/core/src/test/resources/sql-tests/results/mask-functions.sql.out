@@ -46,7 +46,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
+  "condition" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "exprName" : "upperChar",
@@ -437,7 +437,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "condition" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"replaceArg\"",
@@ -462,7 +462,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "condition" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"replaceArg\"",
@@ -487,7 +487,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"replaceArg\"",
@@ -513,7 +513,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
+  "condition" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "exprName" : "digitChar",
@@ -536,7 +536,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
+  "condition" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "exprName" : "lowerChar",

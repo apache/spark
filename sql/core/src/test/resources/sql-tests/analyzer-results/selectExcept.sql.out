@@ -29,7 +29,7 @@ CREATE TABLE ids (id INT) USING CSV
 -- !query analysis
 org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 {
-  "errorClass" : "TABLE_OR_VIEW_ALREADY_EXISTS",
+  "condition" : "TABLE_OR_VIEW_ALREADY_EXISTS",
   "sqlState" : "42P07",
   "messageParameters" : {
     "relationName" : "`spark_catalog`.`default`.`ids`"
@@ -237,7 +237,7 @@ SELECT * EXCEPT name FROM tbl_view
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'name'",
@@ -251,7 +251,7 @@ SELECT * EXCEPT() name FROM tbl_view
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "')'",
@@ -265,7 +265,7 @@ SELECT * EXCEPT(invalid_column) FROM tbl_view
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`invalid_column`",
@@ -286,7 +286,7 @@ SELECT * EXCEPT(id, invalid_column) FROM tbl_view
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`invalid_column`",
@@ -307,7 +307,7 @@ SELECT * EXCEPT(id, id) FROM tbl_view
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "EXCEPT_OVERLAPPING_COLUMNS",
+  "condition" : "EXCEPT_OVERLAPPING_COLUMNS",
   "sqlState" : "42702",
   "messageParameters" : {
     "columns" : "id, id"
@@ -327,7 +327,7 @@ SELECT * EXCEPT(data.s2, data.s2.f2) FROM tbl_view
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "EXCEPT_OVERLAPPING_COLUMNS",
+  "condition" : "EXCEPT_OVERLAPPING_COLUMNS",
   "sqlState" : "42702",
   "messageParameters" : {
     "columns" : "data.s2, data.s2.f2"

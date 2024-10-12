@@ -446,7 +446,7 @@ window w as (order by f_numeric range between
 -- !query analysis
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'NaN'",

@@ -4,7 +4,7 @@ select concat_ws()
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
@@ -20,7 +20,7 @@ select format_string()
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
@@ -779,7 +779,7 @@ select decode()
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
@@ -802,7 +802,7 @@ select decode(encode('abc', 'utf-8'))
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "1",
@@ -1508,7 +1508,7 @@ select to_binary('abc', 1)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.INVALID_ARG_VALUE",
+  "condition" : "DATATYPE_MISMATCH.INVALID_ARG_VALUE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputName" : "fmt",
@@ -1532,7 +1532,7 @@ select to_binary('abc', 'invalidFormat')
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.INVALID_ARG_VALUE",
+  "condition" : "DATATYPE_MISMATCH.INVALID_ARG_VALUE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputName" : "fmt",
@@ -1564,7 +1564,7 @@ SELECT to_binary('abc', fmtField) FROM fmtTable
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "condition" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"fmtField\"",

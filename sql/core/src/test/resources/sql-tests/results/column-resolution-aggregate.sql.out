@@ -22,7 +22,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_AGGREGATION",
+  "condition" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"b\"",
@@ -47,7 +47,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_AGGREGATION",
+  "condition" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"a\"",
@@ -63,7 +63,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_AGGREGATION",
+  "condition" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"x\"",
@@ -79,7 +79,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_AGGREGATION",
+  "condition" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"b\"",
@@ -95,7 +95,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_GROUP_BY",
+  "condition" : "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_GROUP_BY",
   "sqlState" : "0A000"
 }
 
@@ -107,7 +107,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_GROUP_BY",
+  "condition" : "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_GROUP_BY",
   "sqlState" : "0A000"
 }
 

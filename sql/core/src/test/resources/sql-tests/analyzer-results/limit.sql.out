@@ -54,7 +54,7 @@ SELECT * FROM testdata LIMIT -1
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
+  "condition" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "expr" : "\"-1\"",
@@ -76,7 +76,7 @@ SELECT * FROM testData TABLESAMPLE (-1 ROWS)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
+  "condition" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "expr" : "\"-1\"",
@@ -108,7 +108,7 @@ SELECT * FROM testdata LIMIT CAST(NULL AS INT)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_NULL",
+  "condition" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_NULL",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "expr" : "\"CAST(NULL AS INT)\"",
@@ -129,7 +129,7 @@ SELECT * FROM testdata LIMIT key > 3
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_UNFOLDABLE",
+  "condition" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_UNFOLDABLE",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "expr" : "\"(key > 3)\"",
@@ -150,7 +150,7 @@ SELECT * FROM testdata LIMIT true
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
+  "condition" : "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "dataType" : "\"BOOLEAN\"",
@@ -165,7 +165,7 @@ SELECT * FROM testdata LIMIT 'a'
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
+  "condition" : "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "dataType" : "\"STRING\"",

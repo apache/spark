@@ -424,7 +424,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkException
 {
-  "errorClass" : "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+  "condition" : "SCALAR_SUBQUERY_TOO_MANY_ROWS",
   "sqlState" : "21000",
   "queryContext" : [ {
     "objectType" : "",

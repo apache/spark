@@ -32,7 +32,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "2",
@@ -65,7 +65,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CANNOT_LOAD_FUNCTION_CLASS",
+  "condition" : "CANNOT_LOAD_FUNCTION_CLASS",
   "sqlState" : "46103",
   "messageParameters" : {
     "className" : "test.non.existent.udaf",

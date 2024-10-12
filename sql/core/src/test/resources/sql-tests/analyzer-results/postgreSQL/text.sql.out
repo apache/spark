@@ -232,7 +232,7 @@ select format_string('%0$s', 'Hello')
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.ZERO_INDEX",
+  "condition" : "INVALID_PARAMETER_VALUE.ZERO_INDEX",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`format_string`",

@@ -414,7 +414,7 @@ INSERT INTO BOOLTBL2
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
+  "condition" : "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
   "sqlState" : "42000",
   "messageParameters" : {
     "sqlExpr" : "\"XXX\""

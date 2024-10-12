@@ -141,7 +141,7 @@ select * from int8_tbl limit (case when random() < 0.5 then bigint(null) end)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_UNFOLDABLE",
+  "condition" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_UNFOLDABLE",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "expr" : "\"CASE WHEN (_nondeterministic < 0.5) THEN NULL END\"",
@@ -162,7 +162,7 @@ select * from int8_tbl offset (case when random() < 0.5 then bigint(null) end)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_UNFOLDABLE",
+  "condition" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_UNFOLDABLE",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "expr" : "\"CASE WHEN (_nondeterministic < 0.5) THEN NULL END\"",

@@ -401,7 +401,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
+  "condition" : "_LEGACY_ERROR_TEMP_0064",
   "messageParameters" : {
     "msg" : "LINES TERMINATED BY only supports newline '\\n' right now: @"
   },
@@ -699,7 +699,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.TRANSFORM_DISTINCT_ALL",
+  "condition" : "UNSUPPORTED_FEATURE.TRANSFORM_DISTINCT_ALL",
   "sqlState" : "0A000",
   "queryContext" : [ {
     "objectType" : "",
@@ -721,7 +721,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.TRANSFORM_DISTINCT_ALL",
+  "condition" : "UNSUPPORTED_FEATURE.TRANSFORM_DISTINCT_ALL",
   "sqlState" : "0A000",
   "queryContext" : [ {
     "objectType" : "",
@@ -744,7 +744,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'AS'",
@@ -764,7 +764,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'b_1'",
@@ -784,7 +784,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'AS'",

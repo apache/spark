@@ -39,7 +39,7 @@ SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 45.678, 'CET')
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "7",

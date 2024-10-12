@@ -199,7 +199,7 @@ SELECT company FROM like_all_table WHERE company LIKE ALL ()
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
+  "condition" : "_LEGACY_ERROR_TEMP_0064",
   "messageParameters" : {
     "msg" : "Expected something between '(' and ')'."
   },

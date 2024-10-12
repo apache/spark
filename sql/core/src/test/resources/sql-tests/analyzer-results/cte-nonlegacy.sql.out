@@ -103,7 +103,7 @@ SELECT * FROM cte
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`cte`"
@@ -129,7 +129,7 @@ SELECT * FROM t2
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "condition" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
   "sqlState" : "42KD0",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
@@ -193,7 +193,7 @@ SELECT * FROM t2
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "condition" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
   "sqlState" : "42KD0",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
@@ -301,7 +301,7 @@ SELECT (
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "condition" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
   "sqlState" : "42KD0",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
@@ -322,7 +322,7 @@ SELECT (
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "condition" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
   "sqlState" : "42KD0",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
@@ -344,7 +344,7 @@ SELECT (
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "condition" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
   "sqlState" : "42KD0",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
@@ -364,7 +364,7 @@ WHERE c IN (
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "condition" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
   "sqlState" : "42KD0",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
@@ -413,7 +413,7 @@ SELECT * FROM t
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "condition" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
   "sqlState" : "42KD0",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
@@ -432,7 +432,7 @@ SELECT (
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "condition" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
   "sqlState" : "42KD0",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
@@ -557,7 +557,7 @@ SELECT * FROM (
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`cte_invisible_inner`"
@@ -590,7 +590,7 @@ SELECT * FROM (
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`cte_invisible_inner`"

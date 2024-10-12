@@ -318,7 +318,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_EXTRACT_FIELD",
+  "condition" : "INVALID_EXTRACT_FIELD",
   "sqlState" : "42601",
   "messageParameters" : {
     "expr" : "\"c\"",
@@ -341,7 +341,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_EXTRACT_FIELD",
+  "condition" : "INVALID_EXTRACT_FIELD",
   "sqlState" : "42601",
   "messageParameters" : {
     "expr" : "\"i\"",
@@ -364,7 +364,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_EXTRACT_FIELD",
+  "condition" : "INVALID_EXTRACT_FIELD",
   "sqlState" : "42601",
   "messageParameters" : {
     "expr" : "\"j\"",
@@ -691,7 +691,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_EXTRACT_FIELD",
+  "condition" : "INVALID_EXTRACT_FIELD",
   "sqlState" : "42601",
   "messageParameters" : {
     "expr" : "\"c\"",
@@ -714,7 +714,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "condition" : "NON_FOLDABLE_ARGUMENT",
   "sqlState" : "42K08",
   "messageParameters" : {
     "funcName" : "`date_part`",
@@ -746,7 +746,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "condition" : "NON_FOLDABLE_ARGUMENT",
   "sqlState" : "42K08",
   "messageParameters" : {
     "funcName" : "`date_part`",
@@ -970,7 +970,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_EXTRACT_FIELD",
+  "condition" : "INVALID_EXTRACT_FIELD",
   "sqlState" : "42601",
   "messageParameters" : {
     "expr" : "\"INTERVAL '2-1' YEAR TO MONTH\"",
@@ -993,7 +993,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_EXTRACT_FIELD",
+  "condition" : "INVALID_EXTRACT_FIELD",
   "sqlState" : "42601",
   "messageParameters" : {
     "expr" : "\"INTERVAL '2-1' YEAR TO MONTH\"",
@@ -1016,7 +1016,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_EXTRACT_FIELD",
+  "condition" : "INVALID_EXTRACT_FIELD",
   "sqlState" : "42601",
   "messageParameters" : {
     "expr" : "\"INTERVAL '2-1' YEAR TO MONTH\"",
@@ -1143,7 +1143,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_EXTRACT_FIELD",
+  "condition" : "INVALID_EXTRACT_FIELD",
   "sqlState" : "42601",
   "messageParameters" : {
     "expr" : "\"INTERVAL '123 12:34:56.789123' DAY TO SECOND\"",
@@ -1166,7 +1166,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_EXTRACT_FIELD",
+  "condition" : "INVALID_EXTRACT_FIELD",
   "sqlState" : "42601",
   "messageParameters" : {
     "expr" : "\"INTERVAL '123 12:34:56.789123' DAY TO SECOND\"",

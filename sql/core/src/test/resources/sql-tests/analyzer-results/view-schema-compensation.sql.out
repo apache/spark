@@ -161,7 +161,7 @@ SELECT * FROM v
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "sqlExpr" : "\"c1\"",
@@ -250,7 +250,7 @@ SELECT * FROM v
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
+  "condition" : "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
   "sqlState" : "51024",
   "messageParameters" : {
     "actualCols" : "[]",
@@ -286,7 +286,7 @@ SELECT * FROM v
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
+  "condition" : "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
   "sqlState" : "51024",
   "messageParameters" : {
     "actualCols" : "[]",
@@ -366,7 +366,7 @@ SELECT * FROM v
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CANNOT_UP_CAST_DATATYPE",
+  "condition" : "CANNOT_UP_CAST_DATATYPE",
   "sqlState" : "42846",
   "messageParameters" : {
     "details" : "The type path of the target object is:\n\nYou can either add an explicit cast to the input data or choose a higher precision type of the field in the target object",

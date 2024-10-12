@@ -54,7 +54,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_AGGREGATION",
+  "condition" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"data\"",
@@ -71,7 +71,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`FROM`"
@@ -279,7 +279,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -345,7 +345,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -404,7 +404,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -425,7 +425,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -598,7 +598,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -616,7 +616,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -634,7 +634,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -652,7 +652,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -670,7 +670,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`v7_temp`"
@@ -692,7 +692,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`v10_temp`"
@@ -714,7 +714,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`v11_temp`"
@@ -810,7 +810,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -861,7 +861,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -912,7 +912,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -963,7 +963,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -981,7 +981,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",

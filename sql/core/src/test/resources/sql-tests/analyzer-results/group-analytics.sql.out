@@ -116,7 +116,7 @@ SELECT course, year, SUM(earnings) FROM courseSales GROUP BY ROLLUP(course, year
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0051",
+  "condition" : "_LEGACY_ERROR_TEMP_0051",
   "messageParameters" : {
     "element" : "ROLLUP"
   },
@@ -165,7 +165,7 @@ SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year, 
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0051",
+  "condition" : "_LEGACY_ERROR_TEMP_0051",
   "messageParameters" : {
     "element" : "CUBE"
   },
@@ -332,7 +332,7 @@ SELECT course, year, GROUPING(course) FROM courseSales GROUP BY course, year
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "condition" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "sqlState" : "42K0E",
   "queryContext" : [ {
     "objectType" : "",
@@ -349,7 +349,7 @@ SELECT course, year, GROUPING_ID(course, year) FROM courseSales GROUP BY course,
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "condition" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "sqlState" : "42K0E",
   "queryContext" : [ {
     "objectType" : "",
@@ -399,7 +399,7 @@ SELECT course, year FROM courseSales GROUP BY course, year HAVING GROUPING(cours
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "condition" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "sqlState" : "42K0E"
 }
 
@@ -409,7 +409,7 @@ SELECT course, year FROM courseSales GROUP BY course, year HAVING GROUPING_ID(co
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "condition" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "sqlState" : "42K0E"
 }
 
@@ -469,7 +469,7 @@ SELECT course, year FROM courseSales GROUP BY course, year ORDER BY GROUPING(cou
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "condition" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "sqlState" : "42K0E"
 }
 
@@ -479,7 +479,7 @@ SELECT course, year FROM courseSales GROUP BY course, year ORDER BY GROUPING_ID(
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "condition" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "sqlState" : "42K0E"
 }
 

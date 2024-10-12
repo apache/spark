@@ -26,7 +26,7 @@ SELECT mydb1.t1 FROM t1 TABLESAMPLE (-1 PERCENT)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
+  "condition" : "_LEGACY_ERROR_TEMP_0064",
   "messageParameters" : {
     "msg" : "Sampling fraction (-0.01) must be on interval [0, 1]"
   },
@@ -45,7 +45,7 @@ SELECT mydb1.t1 FROM t1 TABLESAMPLE (101 PERCENT)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
+  "condition" : "_LEGACY_ERROR_TEMP_0064",
   "messageParameters" : {
     "msg" : "Sampling fraction (1.01) must be on interval [0, 1]"
   },

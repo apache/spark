@@ -18,7 +18,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
+  "condition" : "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
   "sqlState" : "42K0D",
   "messageParameters" : {
     "class" : "org.apache.spark.sql.catalyst.expressions.Upper"
@@ -40,7 +40,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
+  "condition" : "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
   "sqlState" : "42K0D",
   "messageParameters" : {
     "class" : "org.apache.spark.sql.catalyst.expressions.CeilExpressionBuilder$"

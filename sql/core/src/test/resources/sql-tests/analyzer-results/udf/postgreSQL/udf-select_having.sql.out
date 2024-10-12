@@ -147,7 +147,7 @@ SELECT udf(a) FROM test_having HAVING udf(min(a)) < udf(max(a))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_GROUP_BY",
+  "condition" : "MISSING_GROUP_BY",
   "sqlState" : "42803",
   "queryContext" : [ {
     "objectType" : "",
@@ -164,7 +164,7 @@ SELECT 1 AS one FROM test_having HAVING udf(a) > 1
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`a`",

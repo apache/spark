@@ -74,7 +74,7 @@ SELECT i + SUM(f) FROM stuff GROUP BY ALL
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_ALL_IN_GROUP_BY",
+  "condition" : "UNRESOLVED_ALL_IN_GROUP_BY",
   "sqlState" : "42803",
   "queryContext" : [ {
     "objectType" : "",
@@ -132,7 +132,7 @@ SELECT SUM(i) si FROM stuff GROUP BY ALL HAVING i > 2
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`i`",
@@ -153,7 +153,7 @@ SELECT SUM(i) si FROM stuff GROUP BY ALL ORDER BY i DESC
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`i`",

@@ -131,7 +131,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CANNOT_RESOLVE_STAR_EXPAND",
+  "condition" : "CANNOT_RESOLVE_STAR_EXPAND",
   "sqlState" : "42704",
   "messageParameters" : {
     "columns" : "`c1`, `c2`",
@@ -180,7 +180,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INCOMPATIBLE_JOIN_TYPES",
+  "condition" : "INCOMPATIBLE_JOIN_TYPES",
   "sqlState" : "42613",
   "messageParameters" : {
     "joinType1" : "LATERAL",
@@ -203,7 +203,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.LATERAL_JOIN_USING",
+  "condition" : "UNSUPPORTED_FEATURE.LATERAL_JOIN_USING",
   "sqlState" : "0A000",
   "queryContext" : [ {
     "objectType" : "",
@@ -320,7 +320,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`t2`.`c1`"
@@ -358,7 +358,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES",
+  "condition" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES",
   "sqlState" : "0A000",
   "messageParameters" : {
     "treeNode" : "LateralJoin lateral-subquery#x [c1#x && c2#x], Inner\n:  +- SubqueryAlias __auto_generated_subquery_name\n:     +- Project [(cast((outer(c1#x) + outer(c2#x)) as double) + rand(number)) AS c3#x]\n:        +- OneRowRelation\n+- SubqueryAlias spark_catalog.default.t1\n   +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])\n      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
@@ -380,7 +380,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES",
+  "condition" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES",
   "sqlState" : "0A000",
   "messageParameters" : {
     "treeNode" : "LateralJoin lateral-subquery#x [], Inner\n:  +- SubqueryAlias __auto_generated_subquery_name\n:     +- Project [rand(number) AS rand(number)#x]\n:        +- SubqueryAlias spark_catalog.default.t2\n:           +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])\n:              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n:                 +- LocalRelation [col1#x, col2#x]\n+- SubqueryAlias spark_catalog.default.t1\n   +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])\n      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
@@ -402,7 +402,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.LATERAL_JOIN_CONDITION_NON_DETERMINISTIC",
+  "condition" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.LATERAL_JOIN_CONDITION_NON_DETERMINISTIC",
   "sqlState" : "0A000",
   "messageParameters" : {
     "condition" : "((CAST(spark_catalog.default.t1.c1 AS DOUBLE) + rand(0)) = CAST(s.c1 AS DOUBLE))"
@@ -479,7 +479,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`t1`.`c1`"
@@ -501,7 +501,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`c2`"
@@ -541,7 +541,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`t1`.`c1`",
@@ -1194,7 +1194,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "condition" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "sqlExprs" : "\"(c1 - c1)\",\"(c1 - c1) AS `(c1 - outer(spark_catalog.default.t1.c1))`\""
@@ -1368,7 +1368,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "condition" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
   "sqlState" : "0A000",
   "messageParameters" : {
     "treeNode" : "Filter (c1#x > outer(c2#x))\n+- SubqueryAlias spark_catalog.default.t4\n   +- View (`spark_catalog`.`default`.`t4`, [c1#x, c2#x])\n      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
@@ -1779,7 +1779,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "condition" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"outer(spark_catalog.default.t1.c1)\"",

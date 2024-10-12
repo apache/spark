@@ -33,7 +33,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+  "condition" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
   "sqlState" : "42K09",
   "messageParameters" : {
     "hint" : "",
@@ -57,7 +57,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+  "condition" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
   "sqlState" : "42K09",
   "messageParameters" : {
     "hint" : "",
@@ -81,7 +81,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+  "condition" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
   "sqlState" : "42K09",
   "messageParameters" : {
     "hint" : "",
@@ -105,7 +105,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AVRO_NOT_LOADED_SQL_FUNCTIONS_UNUSABLE",
+  "condition" : "AVRO_NOT_LOADED_SQL_FUNCTIONS_UNUSABLE",
   "sqlState" : "22KD3",
   "messageParameters" : {
     "functionName" : "TO_AVRO"
@@ -120,7 +120,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AVRO_NOT_LOADED_SQL_FUNCTIONS_UNUSABLE",
+  "condition" : "AVRO_NOT_LOADED_SQL_FUNCTIONS_UNUSABLE",
   "sqlState" : "22KD3",
   "messageParameters" : {
     "functionName" : "FROM_AVRO"

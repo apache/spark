@@ -500,7 +500,7 @@ FROM (VALUES(1,1),(2,2),(3,(cast('nan' as int))),(4,3),(5,4)) t(a,b)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
+  "condition" : "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
   "sqlState" : "42000",
   "messageParameters" : {
     "sqlExpr" : "\"CAST(nan AS INT)\""

@@ -197,7 +197,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "condition" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "sqlExprs" : "\"xm[1]\",\"xm[1] AS `outer(spark_catalog.default.x.xm)[1]`\",\"(xm[1] - sum(ym[1])) AS `(outer(spark_catalog.default.x.xm)[1] - sum(ym[1]))`\""
@@ -243,7 +243,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE",
+  "condition" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "dataType" : "map",
@@ -274,7 +274,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE",
+  "condition" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "dataType" : "map",

@@ -88,7 +88,7 @@ SELECT interval '1 2:03' day to hour
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "condition" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03",
@@ -111,7 +111,7 @@ SELECT interval '1 2:03:04' day to hour
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "condition" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03:04",
@@ -141,7 +141,7 @@ SELECT interval '1 2:03:04' day to minute
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "condition" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03:04",
@@ -164,7 +164,7 @@ SELECT interval '1 2:03' day to second
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "condition" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03",
@@ -194,7 +194,7 @@ SELECT interval '1 2:03' hour to minute
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "condition" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03",
@@ -217,7 +217,7 @@ SELECT interval '1 2:03:04' hour to minute
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "condition" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03:04",
@@ -240,7 +240,7 @@ SELECT interval '1 2:03' hour to second
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "condition" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03",
@@ -263,7 +263,7 @@ SELECT interval '1 2:03:04' hour to second
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "condition" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03:04",
@@ -286,7 +286,7 @@ SELECT interval '1 2:03' minute to second
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "condition" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03",
@@ -309,7 +309,7 @@ SELECT interval '1 2:03:04' minute to second
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "condition" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
   "sqlState" : "22006",
   "messageParameters" : {
     "input" : "1 2:03:04",

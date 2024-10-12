@@ -191,7 +191,7 @@ SELECT * FROM v
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
+  "condition" : "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
   "sqlState" : "51024",
   "messageParameters" : {
     "actualCols" : "[]",
@@ -227,7 +227,7 @@ SELECT * FROM v
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
+  "condition" : "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
   "sqlState" : "51024",
   "messageParameters" : {
     "actualCols" : "[]",

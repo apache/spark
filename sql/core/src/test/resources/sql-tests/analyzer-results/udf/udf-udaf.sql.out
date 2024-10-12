@@ -35,7 +35,7 @@ SELECT default.myDoubleAvg(udf(int_col1), udf(3)) as my_avg from t1
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "2",
@@ -64,7 +64,7 @@ SELECT default.udaf1(udf(int_col1)) as udaf1, udf(default.udaf1(udf(int_col1))) 
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CANNOT_LOAD_FUNCTION_CLASS",
+  "condition" : "CANNOT_LOAD_FUNCTION_CLASS",
   "sqlState" : "46103",
   "messageParameters" : {
     "className" : "test.non.existent.udaf",

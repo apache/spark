@@ -79,7 +79,7 @@ select * from data order by 0
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
+  "condition" : "ORDER_BY_POS_OUT_OF_RANGE",
   "sqlState" : "42805",
   "messageParameters" : {
     "index" : "0",
@@ -100,7 +100,7 @@ select * from data order by -1
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
+  "condition" : "ORDER_BY_POS_OUT_OF_RANGE",
   "sqlState" : "42805",
   "messageParameters" : {
     "index" : "-1",
@@ -121,7 +121,7 @@ select * from data order by 3
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
+  "condition" : "ORDER_BY_POS_OUT_OF_RANGE",
   "sqlState" : "42805",
   "messageParameters" : {
     "index" : "3",

@@ -102,7 +102,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "condition" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "operation" : "DELETE",
@@ -118,7 +118,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkUnsupportedOperationException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2096",
+  "condition" : "_LEGACY_ERROR_TEMP_2096",
   "messageParameters" : {
     "ddl" : "UPDATE TABLE"
   }
@@ -133,7 +133,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkUnsupportedOperationException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2096",
+  "condition" : "_LEGACY_ERROR_TEMP_2096",
   "messageParameters" : {
     "ddl" : "MERGE INTO TABLE"
   }
@@ -283,7 +283,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "condition" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "operation" : "REPLACE TABLE",
@@ -420,7 +420,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NOT_A_PARTITIONED_TABLE",
+  "condition" : "NOT_A_PARTITIONED_TABLE",
   "sqlState" : "42809",
   "messageParameters" : {
     "operation" : "MSCK REPAIR TABLE",
@@ -714,7 +714,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'1'",
@@ -737,7 +737,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_EMPTY_STATEMENT",
+  "condition" : "PARSE_EMPTY_STATEMENT",
   "sqlState" : "42617",
   "queryContext" : [ {
     "objectType" : "",
@@ -756,7 +756,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NOT_A_CONSTANT_STRING.NULL",
+  "condition" : "NOT_A_CONSTANT_STRING.NULL",
   "sqlState" : "42601",
   "messageParameters" : {
     "expr" : "CAST(NULL AS STRING)",
@@ -779,7 +779,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NOT_A_CONSTANT_STRING.WRONG_TYPE",
+  "condition" : "NOT_A_CONSTANT_STRING.WRONG_TYPE",
   "sqlState" : "42601",
   "messageParameters" : {
     "dataType" : "int",
@@ -803,7 +803,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "condition" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
   "sqlState" : "42601",
   "messageParameters" : {
     "expr" : "substr('HELLO', 1, CAST((rand() + CAST(1 AS DOUBLE)) AS INT))",
@@ -826,7 +826,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_ROUTINE",
+  "condition" : "UNRESOLVED_ROUTINE",
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`IDENTIFIER`",
@@ -849,7 +849,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NOT_A_CONSTANT_STRING.WRONG_TYPE",
+  "condition" : "NOT_A_CONSTANT_STRING.WRONG_TYPE",
   "sqlState" : "42601",
   "messageParameters" : {
     "dataType" : "int",
@@ -873,7 +873,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
+  "condition" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
     "namespace" : "`a`.`b`",
@@ -889,7 +889,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
+  "condition" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
     "namespace" : "`a`.`b`",
@@ -905,7 +905,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
+  "condition" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
     "namespace" : "`a`.`b`",
@@ -921,7 +921,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
+  "condition" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
     "namespace" : "`a`.`b`",
@@ -937,7 +937,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
+  "condition" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
     "namespace" : "`a`.`b`.`c`",
@@ -953,7 +953,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NOT_A_CONSTANT_STRING.WRONG_TYPE",
+  "condition" : "NOT_A_CONSTANT_STRING.WRONG_TYPE",
   "sqlState" : "42601",
   "messageParameters" : {
     "dataType" : "int",
@@ -977,7 +977,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
+  "condition" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
   "sqlState" : "42601",
   "messageParameters" : {
     "identifier" : "`a`.`b`.`c`.`d`"
@@ -999,7 +999,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_DATABASE",
+  "condition" : "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_DATABASE",
   "sqlState" : "42000",
   "messageParameters" : {
     "database" : "`default`"
@@ -1021,7 +1021,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
+  "condition" : "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
   "sqlState" : "42000",
   "messageParameters" : {
     "name" : "`default`.`myDoubleAvg`",
@@ -1044,7 +1044,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
+  "condition" : "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
   "sqlState" : "428EK",
   "messageParameters" : {
     "actualName" : "`default`.`v`"
@@ -1175,7 +1175,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "''x.win''",
@@ -1191,7 +1191,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'('",
@@ -1207,7 +1207,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`t`",
@@ -1230,7 +1230,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "''a''",
@@ -1246,7 +1246,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "''a''",
@@ -1262,7 +1262,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
+  "condition" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
   "sqlState" : "42000",
   "messageParameters" : {
     "funcName" : "`s`.`IDENTIFIER`"
@@ -1284,7 +1284,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'.'",
@@ -1300,7 +1300,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'.'",
@@ -1316,7 +1316,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "''win''",
@@ -1332,7 +1332,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'WINDOW'",
@@ -1348,7 +1348,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "''v''",
@@ -1364,7 +1364,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'('",
@@ -1380,7 +1380,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'('",
@@ -1396,7 +1396,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'('",

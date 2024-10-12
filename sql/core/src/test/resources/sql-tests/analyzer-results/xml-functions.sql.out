@@ -18,7 +18,7 @@ select to_xml(array(named_struct('a', 1, 'b', 2)))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"array(named_struct(a, 1, b, 2))\"",
@@ -42,7 +42,7 @@ select to_xml(map('a', 1))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"map(a, 1)\"",
@@ -66,7 +66,7 @@ select to_xml(named_struct('a', 1, 'b', 2), named_struct('mode', 'PERMISSIVE'))
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_OPTIONS.NON_MAP_FUNCTION",
+  "condition" : "INVALID_OPTIONS.NON_MAP_FUNCTION",
   "sqlState" : "42K06",
   "queryContext" : [ {
     "objectType" : "",
@@ -83,7 +83,7 @@ select to_xml(named_struct('a', 1, 'b', 2), map('mode', 1))
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_OPTIONS.NON_STRING_TYPE",
+  "condition" : "INVALID_OPTIONS.NON_STRING_TYPE",
   "sqlState" : "42K06",
   "messageParameters" : {
     "mapType" : "\"MAP<STRING, INT>\""
@@ -103,7 +103,7 @@ select to_xml()
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
@@ -140,7 +140,7 @@ select from_xml('<p><a>1</a></p>', 1)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_SCHEMA.NON_STRING_LITERAL",
+  "condition" : "INVALID_SCHEMA.NON_STRING_LITERAL",
   "sqlState" : "42K07",
   "messageParameters" : {
     "inputSchema" : "\"1\""
@@ -160,7 +160,7 @@ select from_xml('<p><a>1</a></p>', 'a InvalidType')
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'InvalidType'",
@@ -181,7 +181,7 @@ select from_xml('<p><a>1</a></p>', 'a INT', named_struct('mode', 'PERMISSIVE'))
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_OPTIONS.NON_MAP_FUNCTION",
+  "condition" : "INVALID_OPTIONS.NON_MAP_FUNCTION",
   "sqlState" : "42K06",
   "queryContext" : [ {
     "objectType" : "",
@@ -198,7 +198,7 @@ select from_xml('<p><a>1</a></p>', 'a INT', map('mode', 1))
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_OPTIONS.NON_STRING_TYPE",
+  "condition" : "INVALID_OPTIONS.NON_STRING_TYPE",
   "sqlState" : "42K06",
   "messageParameters" : {
     "mapType" : "\"MAP<STRING, INT>\""
@@ -218,7 +218,7 @@ select from_xml()
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
@@ -340,7 +340,7 @@ select schema_of_xml(null)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
   "sqlState" : "42K09",
   "messageParameters" : {
     "exprName" : "xml",
@@ -369,7 +369,7 @@ SELECT schema_of_xml(xmlField) FROM xmlTable
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "condition" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"xmlField\"",

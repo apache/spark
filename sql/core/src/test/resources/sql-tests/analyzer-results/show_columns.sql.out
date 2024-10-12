@@ -68,7 +68,7 @@ SHOW COLUMNS IN badtable FROM showdb
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`showdb`.`badtable`"
@@ -94,7 +94,7 @@ SHOW COLUMNS IN showdb.showcolumn1 FROM baddb
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE",
+  "condition" : "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
     "namespaceA" : "`baddb`",
@@ -114,7 +114,7 @@ SHOW COLUMNS IN showdb.showcolumn3
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`showdb`.`showcolumn3`"
@@ -134,7 +134,7 @@ SHOW COLUMNS IN showcolumn3 FROM showdb
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`showdb`.`showcolumn3`"
@@ -154,7 +154,7 @@ SHOW COLUMNS IN showcolumn4
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`showcolumn4`"

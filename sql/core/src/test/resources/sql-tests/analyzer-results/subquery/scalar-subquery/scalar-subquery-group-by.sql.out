@@ -42,7 +42,7 @@ select * from x where (select count(*) from y where y1 = x1 group by x1) = 1
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "condition" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "sqlExprs" : "\"x1\""
@@ -62,7 +62,7 @@ select * from x where (select count(*) from y where y1 > x1 group by x1) = 1
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "condition" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "sqlExprs" : "\"x1\""
@@ -153,7 +153,7 @@ select * from x where (select count(*) from y where y1 > x1 group by y1) = 1
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_CORRELATED_COLUMNS_IN_GROUP_BY",
+  "condition" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_CORRELATED_COLUMNS_IN_GROUP_BY",
   "sqlState" : "0A000",
   "messageParameters" : {
     "value" : "y1"
@@ -173,7 +173,7 @@ select *, (select count(*) from y where y1 + y2 = x1 group by y1) from x
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_CORRELATED_COLUMNS_IN_GROUP_BY",
+  "condition" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_CORRELATED_COLUMNS_IN_GROUP_BY",
   "sqlState" : "0A000",
   "messageParameters" : {
     "value" : "y1"
@@ -193,7 +193,7 @@ select *, (select count(*) from y where x1 = y1 and y2 + 10 = x1 + 1 group by y2
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_CORRELATED_COLUMNS_IN_GROUP_BY",
+  "condition" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_CORRELATED_COLUMNS_IN_GROUP_BY",
   "sqlState" : "0A000",
   "messageParameters" : {
     "value" : "y2"
@@ -292,7 +292,7 @@ select *, (select count(*) from y left join (select * from z where z1 = x1) sub 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "condition" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
   "sqlState" : "0A000",
   "messageParameters" : {
     "treeNode" : "Filter (z1#x = outer(x1#x))\n+- SubqueryAlias z\n   +- View (`z`, [z1#x, z2#x])\n      +- Project [cast(col1#x as int) AS z1#x, cast(col2#x as int) AS z2#x]\n         +- LocalRelation [col1#x, col2#x]\n"

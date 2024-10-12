@@ -10,7 +10,7 @@ select timestamp '2019-01-01中文'
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_TYPED_LITERAL",
+  "condition" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42604",
   "messageParameters" : {
     "value" : "'2019-01-01中文'",
@@ -31,7 +31,7 @@ select timestamp'4294967297'
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_TYPED_LITERAL",
+  "condition" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42604",
   "messageParameters" : {
     "value" : "'4294967297'",
@@ -52,7 +52,7 @@ select timestamp'2021-01-01T12:30:4294967297.123456'
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_TYPED_LITERAL",
+  "condition" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42604",
   "messageParameters" : {
     "value" : "'2021-01-01T12:30:4294967297.123456'",
@@ -597,7 +597,7 @@ select timestamp'2011-11-11 11:11:11' + '1'
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"TIMESTAMP\"",
@@ -619,7 +619,7 @@ select '1' + timestamp'2011-11-11 11:11:11'
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"TIMESTAMP\"",
@@ -641,7 +641,7 @@ select timestamp'2011-11-11 11:11:11' + null
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"TIMESTAMP\"",
@@ -663,7 +663,7 @@ select null + timestamp'2011-11-11 11:11:11'
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"VOID\"",
@@ -770,7 +770,7 @@ select timestampadd('MONTH', -1, timestamp'2022-02-14 01:02:03')
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`timestampadd`",
@@ -792,7 +792,7 @@ select timestampadd('SECOND', -1, date'2022-02-15')
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`timestampadd`",
@@ -838,7 +838,7 @@ select timestampdiff('MINUTE', timestamp'2022-02-14 01:02:03', timestamp'2022-02
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`timestampdiff`",
@@ -860,7 +860,7 @@ select timestampdiff('YEAR', date'2022-02-15', date'2023-02-15')
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`timestampdiff`",
@@ -906,7 +906,7 @@ select timediff('MINUTE', timestamp'2023-02-14 01:02:03', timestamp'2023-02-14 0
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`timediff`",
@@ -928,7 +928,7 @@ select timediff('YEAR', date'2020-02-15', date'2023-02-15')
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`timediff`",

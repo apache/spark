@@ -142,7 +142,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'EXISTS'",
@@ -198,7 +198,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`var1`"
@@ -220,7 +220,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "VARIABLE_NOT_FOUND",
+  "condition" : "VARIABLE_NOT_FOUND",
   "sqlState" : "42883",
   "messageParameters" : {
     "variableName" : "`system`.`session`.`var1`"
@@ -251,7 +251,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'VARIABLE'",
@@ -267,7 +267,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'VARIABLE'",
@@ -443,7 +443,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "VARIABLE_NOT_FOUND",
+  "condition" : "VARIABLE_NOT_FOUND",
   "sqlState" : "42883",
   "messageParameters" : {
     "variableName" : "`system`.`session`.`var1`"
@@ -474,7 +474,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "VARIABLE_NOT_FOUND",
+  "condition" : "VARIABLE_NOT_FOUND",
   "sqlState" : "42883",
   "messageParameters" : {
     "variableName" : "`system`.`session`.`var1`"
@@ -505,7 +505,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "VARIABLE_NOT_FOUND",
+  "condition" : "VARIABLE_NOT_FOUND",
   "sqlState" : "42883",
   "messageParameters" : {
     "variableName" : "`system`.`session`.`var1`"
@@ -536,7 +536,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "VARIABLE_NOT_FOUND",
+  "condition" : "VARIABLE_NOT_FOUND",
   "sqlState" : "42883",
   "messageParameters" : {
     "variableName" : "`system`.`session`.`var1`"
@@ -576,7 +576,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_VARIABLE",
+  "condition" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
     "searchPath" : "`system`.`session`",
@@ -592,7 +592,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_VARIABLE",
+  "condition" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
     "searchPath" : "`system`.`session`",
@@ -608,7 +608,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_VARIABLE",
+  "condition" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
     "searchPath" : "`system`.`session`",
@@ -632,7 +632,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`var`"
@@ -654,7 +654,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`ses`.`var1`"
@@ -676,7 +676,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`b`.`sesson`.`var1`"
@@ -698,7 +698,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`builtn`.`session`.`var1`"
@@ -720,7 +720,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_VARIABLE",
+  "condition" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
     "searchPath" : "`SYSTEM`.`SESSION`",
@@ -736,7 +736,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_VARIABLE",
+  "condition" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
     "searchPath" : "`SYSTEM`.`SESSION`",
@@ -896,7 +896,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.VARIABLE_TYPE_OR_DEFAULT_REQUIRED",
+  "condition" : "INVALID_SQL_SYNTAX.VARIABLE_TYPE_OR_DEFAULT_REQUIRED",
   "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
@@ -923,7 +923,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
+  "condition" : "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
   "sqlState" : "42623",
   "messageParameters" : {
     "colName" : "`system`.`session`.`var1`",
@@ -940,7 +940,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'hello'",
@@ -964,7 +964,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "DIVIDE_BY_ZERO",
+  "condition" : "DIVIDE_BY_ZERO",
   "sqlState" : "22012",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\""
@@ -986,7 +986,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CAST_OVERFLOW",
+  "condition" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "sourceType" : "\"INT\"",
@@ -1099,7 +1099,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CAST_OVERFLOW",
+  "condition" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "sourceType" : "\"DOUBLE\"",
@@ -1124,7 +1124,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkException
 {
-  "errorClass" : "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+  "condition" : "SCALAR_SUBQUERY_TOO_MANY_ROWS",
   "sqlState" : "21000",
   "queryContext" : [ {
     "objectType" : "",
@@ -1143,7 +1143,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+  "condition" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
   "sqlState" : "42823",
   "messageParameters" : {
     "number" : "2"
@@ -1165,7 +1165,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'hello'",
@@ -1333,7 +1333,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DUPLICATE_ASSIGNMENTS",
+  "condition" : "DUPLICATE_ASSIGNMENTS",
   "sqlState" : "42701",
   "messageParameters" : {
     "nameList" : "`var1`"
@@ -1484,7 +1484,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SET_SYNTAX",
+  "condition" : "INVALID_SET_SYNTAX",
   "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
@@ -1503,7 +1503,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkException
 {
-  "errorClass" : "ROW_SUBQUERY_TOO_MANY_ROWS",
+  "condition" : "ROW_SUBQUERY_TOO_MANY_ROWS",
   "sqlState" : "21000"
 }
 
@@ -1515,7 +1515,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "condition" : "ASSIGNMENT_ARITY_MISMATCH",
   "sqlState" : "42802",
   "messageParameters" : {
     "numExpr" : "2",
@@ -1531,7 +1531,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "condition" : "ASSIGNMENT_ARITY_MISMATCH",
   "sqlState" : "42802",
   "messageParameters" : {
     "numExpr" : "4",
@@ -1547,7 +1547,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DUPLICATE_ASSIGNMENTS",
+  "condition" : "DUPLICATE_ASSIGNMENTS",
   "sqlState" : "42701",
   "messageParameters" : {
     "nameList" : "`var1`"
@@ -1786,7 +1786,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkException
 {
-  "errorClass" : "ROW_SUBQUERY_TOO_MANY_ROWS",
+  "condition" : "ROW_SUBQUERY_TOO_MANY_ROWS",
   "sqlState" : "21000"
 }
 
@@ -1814,7 +1814,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkException
 {
-  "errorClass" : "ROW_SUBQUERY_TOO_MANY_ROWS",
+  "condition" : "ROW_SUBQUERY_TOO_MANY_ROWS",
   "sqlState" : "21000"
 }
 
@@ -1834,7 +1834,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DEFAULT_PLACEMENT_INVALID",
+  "condition" : "DEFAULT_PLACEMENT_INVALID",
   "sqlState" : "42608"
 }
 
@@ -1854,7 +1854,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DEFAULT_PLACEMENT_INVALID",
+  "condition" : "DEFAULT_PLACEMENT_INVALID",
   "sqlState" : "42608"
 }
 
@@ -1866,7 +1866,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`session`.`default`"
@@ -1960,7 +1960,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
+  "condition" : "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
   "sqlState" : "0A000",
   "messageParameters" : {
     "variableName" : "`var1`"
@@ -1975,7 +1975,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
+  "condition" : "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
   "sqlState" : "0A000",
   "messageParameters" : {
     "variableName" : "`session`.`var1`"
@@ -1990,7 +1990,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
+  "condition" : "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
   "sqlState" : "0A000",
   "messageParameters" : {
     "variableName" : "`system`.`session`.`var1`"
@@ -2005,7 +2005,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
+  "condition" : "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
   "sqlState" : "0A000",
   "messageParameters" : {
     "variableName" : "`vAr1`"
@@ -2020,7 +2020,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
+  "condition" : "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
   "sqlState" : "0A000",
   "messageParameters" : {
     "variableName" : "`seSSion`.`var1`"
@@ -2035,7 +2035,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
+  "condition" : "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
   "sqlState" : "0A000",
   "messageParameters" : {
     "variableName" : "`sYStem`.`session`.`var1`"
@@ -2186,7 +2186,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'('",
@@ -2274,7 +2274,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",

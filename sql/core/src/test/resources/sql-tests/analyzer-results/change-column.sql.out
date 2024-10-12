@@ -16,7 +16,7 @@ ALTER TABLE test_change CHANGE a
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "condition" : "_LEGACY_ERROR_TEMP_0035",
   "messageParameters" : {
     "message" : "ALTER TABLE table CHANGE COLUMN requires a TYPE, a SET/DROP, a COMMENT, or a FIRST/AFTER"
   },
@@ -41,7 +41,7 @@ ALTER TABLE test_change RENAME COLUMN a TO a1
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "condition" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "operation" : "RENAME COLUMN",
@@ -61,7 +61,7 @@ ALTER TABLE test_change CHANGE a TYPE STRING
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NOT_SUPPORTED_CHANGE_COLUMN",
+  "condition" : "NOT_SUPPORTED_CHANGE_COLUMN",
   "sqlState" : "0A000",
   "messageParameters" : {
     "newName" : "`a`",
@@ -91,7 +91,7 @@ ALTER TABLE test_change CHANGE a AFTER b
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "condition" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "operation" : "ALTER COLUMN ... FIRST | AFTER",
@@ -105,7 +105,7 @@ ALTER TABLE test_change CHANGE b FIRST
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "condition" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "operation" : "ALTER COLUMN ... FIRST | AFTER",
@@ -167,7 +167,7 @@ ALTER TABLE test_change CHANGE invalid_col TYPE INT
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`invalid_col`",
@@ -214,7 +214,7 @@ ALTER TABLE temp_view CHANGE a TYPE INT
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+  "condition" : "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
   "sqlState" : "42809",
   "messageParameters" : {
     "operation" : "ALTER TABLE ... CHANGE COLUMN",
@@ -243,7 +243,7 @@ ALTER TABLE global_temp.global_temp_view CHANGE a TYPE INT
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+  "condition" : "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
   "sqlState" : "42809",
   "messageParameters" : {
     "operation" : "ALTER TABLE ... CHANGE COLUMN",

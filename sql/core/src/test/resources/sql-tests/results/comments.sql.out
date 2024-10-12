@@ -133,7 +133,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNCLOSED_BRACKETED_COMMENT",
+  "condition" : "UNCLOSED_BRACKETED_COMMENT",
   "sqlState" : "42601"
 }
 
@@ -154,6 +154,6 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNCLOSED_BRACKETED_COMMENT",
+  "condition" : "UNCLOSED_BRACKETED_COMMENT",
   "sqlState" : "42601"
 }

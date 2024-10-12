@@ -92,7 +92,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "(\"MAP<TINYINT, TINYINT>\" or \"MAP<ARRAY<STRING>, ARRAY<STRING>>\")",
@@ -118,7 +118,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "(\"MAP<BOOLEAN, BOOLEAN>\" or \"MAP<INT, INT>\")",
@@ -144,7 +144,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "(\"MAP<INT, INT>\" or \"MAP<STRUCT<col1: STRING NOT NULL, col2: INT NOT NULL>, STRUCT<col1: STRING NOT NULL, col2: INT NOT NULL>>\")",
@@ -170,7 +170,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "(\"MAP<STRUCT<col1: STRING NOT NULL, col2: INT NOT NULL>, STRUCT<col1: STRING NOT NULL, col2: INT NOT NULL>>\" or \"MAP<ARRAY<STRING>, ARRAY<STRING>>\")",
@@ -196,7 +196,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "(\"MAP<INT, INT>\" or \"MAP<ARRAY<STRING>, ARRAY<STRING>>\")",

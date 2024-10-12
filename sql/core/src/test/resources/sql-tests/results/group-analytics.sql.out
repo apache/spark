@@ -132,7 +132,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0051",
+  "condition" : "_LEGACY_ERROR_TEMP_0051",
   "messageParameters" : {
     "element" : "ROLLUP"
   },
@@ -201,7 +201,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0051",
+  "condition" : "_LEGACY_ERROR_TEMP_0051",
   "messageParameters" : {
     "element" : "CUBE"
   },
@@ -466,7 +466,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "condition" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "sqlState" : "42K0E",
   "queryContext" : [ {
     "objectType" : "",
@@ -485,7 +485,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "condition" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "sqlState" : "42K0E",
   "queryContext" : [ {
     "objectType" : "",
@@ -531,7 +531,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "condition" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "sqlState" : "42K0E"
 }
 
@@ -543,7 +543,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "condition" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "sqlState" : "42K0E"
 }
 
@@ -601,7 +601,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "condition" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "sqlState" : "42K0E"
 }
 
@@ -613,7 +613,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "condition" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "sqlState" : "42K0E"
 }
 

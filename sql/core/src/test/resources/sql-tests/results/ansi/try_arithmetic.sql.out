@@ -62,7 +62,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "condition" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
@@ -86,7 +86,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "condition" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
@@ -110,7 +110,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "DIVIDE_BY_ZERO",
+  "condition" : "DIVIDE_BY_ZERO",
   "sqlState" : "22012",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\""
@@ -228,7 +228,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"INTERVAL '2' YEAR\"",
@@ -294,7 +294,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "condition" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
@@ -318,7 +318,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "condition" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
@@ -342,7 +342,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "DIVIDE_BY_ZERO",
+  "condition" : "DIVIDE_BY_ZERO",
   "sqlState" : "22012",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\""
@@ -484,7 +484,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "condition" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
@@ -508,7 +508,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "condition" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
@@ -532,7 +532,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "DIVIDE_BY_ZERO",
+  "condition" : "DIVIDE_BY_ZERO",
   "sqlState" : "22012",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\""
@@ -642,7 +642,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "condition" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
@@ -666,7 +666,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "condition" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
@@ -690,7 +690,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "DIVIDE_BY_ZERO",
+  "condition" : "DIVIDE_BY_ZERO",
   "sqlState" : "22012",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\""

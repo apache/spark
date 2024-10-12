@@ -133,7 +133,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "condition" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "expression" : "\"explode(explode(array(1)))\""
@@ -155,7 +155,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "condition" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "expression" : "\"explode(explode(array(1)))\""
@@ -185,7 +185,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"functiontablesubqueryargumentexpression()\"",
@@ -211,7 +211,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNEXPECTED_POSITIONAL_ARGUMENT",
+  "condition" : "UNEXPECTED_POSITIONAL_ARGUMENT",
   "sqlState" : "4274K",
   "messageParameters" : {
     "parameterName" : "`lowerChar`",
@@ -234,7 +234,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+  "condition" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
   "sqlState" : "4274K",
   "messageParameters" : {
     "parameterName" : "`digitChar`",
@@ -257,7 +257,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.BOTH_POSITIONAL_AND_NAMED",
+  "condition" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.BOTH_POSITIONAL_AND_NAMED",
   "sqlState" : "4274K",
   "messageParameters" : {
     "parameterName" : "`str`",
@@ -280,7 +280,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "REQUIRED_PARAMETER_NOT_FOUND",
+  "condition" : "REQUIRED_PARAMETER_NOT_FOUND",
   "sqlState" : "4274K",
   "messageParameters" : {
     "index" : "0",
@@ -304,7 +304,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRECOGNIZED_PARAMETER_NAME",
+  "condition" : "UNRECOGNIZED_PARAMETER_NAME",
   "sqlState" : "4274K",
   "messageParameters" : {
     "argumentName" : "`cellular`",
@@ -328,7 +328,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NAMED_PARAMETERS_NOT_SUPPORTED",
+  "condition" : "NAMED_PARAMETERS_NOT_SUPPORTED",
   "sqlState" : "4274K",
   "messageParameters" : {
     "functionName" : "`encode`"
@@ -350,7 +350,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "6",

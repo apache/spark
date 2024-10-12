@@ -208,7 +208,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "condition" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "sqlState" : "42K0E",
   "queryContext" : [ {
     "objectType" : "",
@@ -227,7 +227,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "condition" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "sqlState" : "42K0E",
   "queryContext" : [ {
     "objectType" : "",
@@ -273,7 +273,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "condition" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "sqlState" : "42K0E"
 }
 
@@ -285,7 +285,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "condition" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "sqlState" : "42K0E"
 }
 
@@ -343,7 +343,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "condition" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "sqlState" : "42K0E"
 }
 
@@ -355,7 +355,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "condition" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "sqlState" : "42K0E"
 }
 

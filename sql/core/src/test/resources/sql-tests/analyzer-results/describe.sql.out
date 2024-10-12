@@ -133,7 +133,7 @@ DESC t PARTITION (c='Us', d=2)
 -- !query analysis
 org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 {
-  "errorClass" : "PARTITIONS_NOT_FOUND",
+  "condition" : "PARTITIONS_NOT_FOUND",
   "sqlState" : "428FT",
   "messageParameters" : {
     "partitionList" : "PARTITION (`c` = Us, `d` = 2)",
@@ -147,7 +147,7 @@ DESC t PARTITION (c='Us')
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1232",
+  "condition" : "_LEGACY_ERROR_TEMP_1232",
   "messageParameters" : {
     "partitionColumnNames" : "c, d",
     "specKeys" : "c",
@@ -161,7 +161,7 @@ DESC t PARTITION (c='Us', d)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE",
+  "condition" : "INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE",
   "sqlState" : "42000",
   "messageParameters" : {
     "partKey" : "`d`"
@@ -211,7 +211,7 @@ DESC temp_v PARTITION (c='Us', d=1)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "FORBIDDEN_OPERATION",
+  "condition" : "FORBIDDEN_OPERATION",
   "sqlState" : "42809",
   "messageParameters" : {
     "objectName" : "`temp_v`",
@@ -250,7 +250,7 @@ DESC v PARTITION (c='Us', d=1)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "FORBIDDEN_OPERATION",
+  "condition" : "FORBIDDEN_OPERATION",
   "sqlState" : "42809",
   "messageParameters" : {
     "objectName" : "`v`",
@@ -320,7 +320,7 @@ CREATE TABLE d (a STRING DEFAULT 'default-value', b INT DEFAULT 42) USING parque
 -- !query analysis
 org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 {
-  "errorClass" : "TABLE_OR_VIEW_ALREADY_EXISTS",
+  "condition" : "TABLE_OR_VIEW_ALREADY_EXISTS",
   "sqlState" : "42P07",
   "messageParameters" : {
     "relationName" : "`spark_catalog`.`default`.`d`"
@@ -357,7 +357,7 @@ CREATE TABLE e (a STRING DEFAULT CONCAT('a\n b\n ', 'c\n d'), b INT DEFAULT 42) 
 -- !query analysis
 org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 {
-  "errorClass" : "TABLE_OR_VIEW_ALREADY_EXISTS",
+  "condition" : "TABLE_OR_VIEW_ALREADY_EXISTS",
   "sqlState" : "42P07",
   "messageParameters" : {
     "relationName" : "`spark_catalog`.`default`.`e`"

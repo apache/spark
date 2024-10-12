@@ -81,7 +81,7 @@ SELECT CEIL(2.5, null)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "condition" : "NON_FOLDABLE_ARGUMENT",
   "sqlState" : "42K08",
   "messageParameters" : {
     "funcName" : "`ceil`",
@@ -103,7 +103,7 @@ SELECT CEIL(2.5, 'a')
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "condition" : "NON_FOLDABLE_ARGUMENT",
   "sqlState" : "42K08",
   "messageParameters" : {
     "funcName" : "`ceil`",
@@ -125,7 +125,7 @@ SELECT CEIL(2.5, 0, 0)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "3",
@@ -225,7 +225,7 @@ SELECT FLOOR(2.5, null)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "condition" : "NON_FOLDABLE_ARGUMENT",
   "sqlState" : "42K08",
   "messageParameters" : {
     "funcName" : "`floor`",
@@ -247,7 +247,7 @@ SELECT FLOOR(2.5, 'a')
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "condition" : "NON_FOLDABLE_ARGUMENT",
   "sqlState" : "42K08",
   "messageParameters" : {
     "funcName" : "`floor`",
@@ -269,7 +269,7 @@ SELECT FLOOR(2.5, 0, 0)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "3",
