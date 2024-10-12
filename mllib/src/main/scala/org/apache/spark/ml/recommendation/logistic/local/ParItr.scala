@@ -16,8 +16,8 @@
  */
 package org.apache.spark.ml.recommendation.logistic.local
 
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
+import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
 /**
  * @author ezamyatin
@@ -26,6 +26,8 @@ private[ml] object ParItr {
   def foreach[A](iterator: Iterator[A], cpus: Int, fn: A => Unit): Unit = {
     val inQueue = new LinkedBlockingQueue[A](cpus * 5)
     val totalCounter = new AtomicLong(0)
+    val error = new AtomicReference[Exception](null)
+
     val threads = Array.fill(cpus) {
       new Thread(() => {
         try {
@@ -35,37 +37,36 @@ private[ml] object ParItr {
           }
         } catch {
           case _: InterruptedException =>
+          case e: Exception => error.set(e)
         }
       })
     }
 
-    threads.foreach(_.start())
-
-    iterator.foreach(e => {
-      try {
-        inQueue.put(e)
-      } catch {
-        case ex: InterruptedException => throw new RuntimeException(ex)
-      }
-      totalCounter.incrementAndGet
-    })
-
-    while (totalCounter.get > 0) {
-      try {
-        Thread.sleep(1000)
-      } catch {
-        case ex: InterruptedException => throw new RuntimeException(ex)
-      }
-    }
-
     try {
+      threads.foreach(_.start())
+      iterator.foreach(e => {
+        var ok = false
+        while (!ok && error.get() == null) {
+          ok = inQueue.offer(e, 10, TimeUnit.SECONDS)
+        }
+        totalCounter.incrementAndGet
+      })
+
+      while (totalCounter.get > 0 && error.get() == null) {
+        try {
+          Thread.sleep(1000)
+        } catch {
+          case ex: InterruptedException => throw new RuntimeException(ex)
+        }
+      }
+    } finally {
       threads.foreach(_.interrupt())
       threads.foreach(_.join())
-    } catch {
-      case e: InterruptedException => throw new RuntimeException(e)
     }
 
-    assert(totalCounter.get == 0)
-    assert(!iterator.hasNext)
+    if (error.get() != null) {
+      throw error.get()
+    }
+
   }
 }

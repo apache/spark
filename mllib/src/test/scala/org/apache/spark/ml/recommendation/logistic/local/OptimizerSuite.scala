@@ -44,9 +44,21 @@ class OptimizerSuite extends MLTest with DefaultReadWriteTest with Logging {
     val random = new Random(238)
     val data = Array.fill(10000)(random.nextLong())
     val trueSum = data.sum
-    val accum = new AtomicLong(0L)
-    ParItr.foreach(data.iterator, 5, (x: Long) => accum.addAndGet(x))
-    assert(trueSum == accum.get())
+
+    withClue("Valid") {
+      val accum = new AtomicLong(0L)
+      ParItr.foreach(data.iterator, 5, (x: Long) => accum.addAndGet(x))
+      assert(accum.get() == trueSum)
+    }
+
+    withClue("Invalid: / by zero exception") {
+      val e = intercept[Exception] {
+        val accum = new AtomicLong(0L)
+        ParItr.foreach(data.iterator, 5, (x: Long) => accum.addAndGet(x / 0))
+      }
+      assert(e.getMessage.contains("/ by zero"))
+    }
+
   }
 
   test("LMF optimizer explicit") {
