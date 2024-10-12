@@ -968,54 +968,26 @@ case class SchemaOfJson(
   group = "json_funcs",
   since = "3.1.0"
 )
-case class LengthOfJsonArray(child: Expression) extends UnaryExpression
-  with CodegenFallback with ExpectsInputTypes {
+case class LengthOfJsonArray(child: Expression)
+  extends UnaryExpression
+  with ExpectsInputTypes
+  with RuntimeReplaceable {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCaseAccentSensitivity)
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
   override def prettyName: String = "json_array_length"
 
-  override def eval(input: InternalRow): Any = {
-    val json = child.eval(input).asInstanceOf[UTF8String]
-    // return null for null input
-    if (json == null) {
-      return null
-    }
-
-    try {
-      Utils.tryWithResource(CreateJacksonParser.utf8String(SharedFactory.jsonFactory, json)) {
-        parser => {
-          // return null if null array is encountered.
-          if (parser.nextToken() == null) {
-            return null
-          }
-          // Parse the array to compute its length.
-          parseCounter(parser, input)
-        }
-      }
-    } catch {
-      case _: JsonProcessingException | _: IOException => null
-    }
-  }
-
-  private def parseCounter(parser: JsonParser, input: InternalRow): Any = {
-    var length = 0
-    // Only JSON array are supported for this function.
-    if (parser.currentToken != JsonToken.START_ARRAY) {
-      return null
-    }
-    // Keep traversing until the end of JSON array
-    while(parser.nextToken() != JsonToken.END_ARRAY) {
-      length += 1
-      // skip all the child of inner object or array
-      parser.skipChildren()
-    }
-    length
-  }
-
   override protected def withNewChildInternal(newChild: Expression): LengthOfJsonArray =
     copy(child = newChild)
+
+  override def replacement: Expression = StaticInvoke(
+    classOf[JsonExpressionUtils],
+    dataType,
+    "lengthOfJsonArray",
+    Seq(child),
+    inputTypes
+  )
 }
 
 /**

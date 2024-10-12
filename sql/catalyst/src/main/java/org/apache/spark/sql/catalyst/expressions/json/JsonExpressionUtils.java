@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.catalyst.expressions.json;
 
 import java.io.IOException;
@@ -29,6 +30,34 @@ import org.apache.spark.sql.catalyst.util.GenericArrayData;
 import org.apache.spark.unsafe.types.UTF8String;
 
 public class JsonExpressionUtils {
+
+  public static Integer lengthOfJsonArray(UTF8String json) {
+    // return null for null input
+    if (json == null) {
+      return null;
+    }
+    try (JsonParser jsonParser =
+        CreateJacksonParser.utf8String(SharedFactory.jsonFactory(), json)) {
+      if (jsonParser.nextToken() == null) {
+        return null;
+      }
+      // Only JSON array are supported for this function.
+      if (jsonParser.currentToken() != JsonToken.START_ARRAY) {
+        return null;
+      }
+      // Parse the array to compute its length.
+      int length = 0;
+      // Keep traversing until the end of JSON array
+      while (jsonParser.nextToken() != JsonToken.END_ARRAY) {
+        length += 1;
+        // skip all the child of inner object or array
+        jsonParser.skipChildren();
+      }
+      return length;
+    } catch (IOException e) {
+      return null;
+    }
+  }
 
   public static GenericArrayData jsonObjectKeys(UTF8String json) {
     // return null for `NULL` input
