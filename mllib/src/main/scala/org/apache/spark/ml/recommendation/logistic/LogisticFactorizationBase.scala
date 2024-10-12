@@ -144,8 +144,9 @@ private[ml] abstract class LogisticFactorizationBase[T](
       .getOrElse{cacheAndCount(initialize(data))}
     cached += emb
 
-    var checkpointIter = 0
     val (startEpoch, startIter) = latest.getOrElse((0, 0))
+    var checkpointIter = startEpoch * numPartitions + startIter
+
     val partitionTable = sparkContext.broadcast(LogisticFactorizationBase
       .createPartitionTable(numPartitions, new Random(seed)))
 
