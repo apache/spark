@@ -245,8 +245,9 @@ object OptimizerSuite extends Logging {
       itemFactors.indices
         .sortBy(logits(user2i(u)))
         .zipWithIndex
-        .filter(_._1 == item2i(i))
-        .head._2.toDouble / itemFactors.length * w
+        .find(_._1 == item2i.getOrElse(i, -1))
+        .map(_._2).getOrElse(0)
+        .toDouble / itemFactors.length * w
     }.sum / data.map(_._4).sum
   }
 
