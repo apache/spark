@@ -35,7 +35,7 @@ import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.ExecuteHolder
 import org.apache.spark.sql.connect.utils.MetricGenerator
-import org.apache.spark.sql.execution.{DoNotCleanup, LocalTableScanExec, RemoveShuffleFiles, SkipMigration, SQLExecution}
+import org.apache.spark.sql.execution.{CollectLimitExec, CollectTailExec, DoNotCleanup, LocalTableScanExec, RemoveShuffleFiles, SkipMigration, SQLExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -138,6 +138,14 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
 
     dataframe.queryExecution.executedPlan match {
       case LocalTableScanExec(_, rows) =>
+        executePlan.eventsManager.postFinished(Some(rows.length))
+        var offset = 0L
+        converter(rows.iterator).foreach { case (bytes, count) =>
+          sendBatch(bytes, count, offset)
+          offset += count
+        }
+      case cle @ (_: CollectLimitExec | _: CollectTailExec) =>
+        val rows = cle.executeCollect()
         executePlan.eventsManager.postFinished(Some(rows.length))
         var offset = 0L
         converter(rows.iterator).foreach { case (bytes, count) =>
