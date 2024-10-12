@@ -61,6 +61,22 @@ class HadoopConfDriverFeatureStepSuite extends SparkFunSuite {
     assert(hadoopConfMap.getData().keySet().asScala === confFiles)
   }
 
+  test("SPARK-49938: use hadoop config map first when config map and dir are both defined") {
+    val confDir = Utils.createTempDir()
+    val confFiles = Set("core-site.xml", "hdfs-site.xml")
+
+    confFiles.foreach { f =>
+      Files.write("some data", new File(confDir, f), UTF_8)
+    }
+
+    val sparkConf = new SparkConfWithEnv(Map(ENV_HADOOP_CONF_DIR -> confDir.getAbsolutePath()))
+      .set(Config.KUBERNETES_HADOOP_CONF_CONFIG_MAP, "testConfigMap")
+    val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+    val step = new HadoopConfDriverFeatureStep(conf)
+    checkPod(step.configurePod(SparkPod.initialPod()))
+    assert(step.getAdditionalKubernetesResources().isEmpty)
+  }
+
   private def checkPod(pod: SparkPod): Unit = {
     assert(podHasVolume(pod.pod, HADOOP_CONF_VOLUME))
     assert(containerHasVolume(pod.container, HADOOP_CONF_VOLUME, HADOOP_CONF_DIR_PATH))
