@@ -40,15 +40,13 @@ import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
-import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
-import org.apache.spark.sql.{Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, SparkSession}
-import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
+import org.apache.spark.sql.{Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
-import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedTranspose}
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -79,9 +77,8 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal.{CatalogImpl, TypedAggUtils, UserDefinedFunctionUtils}
+import org.apache.spark.sql.internal.{CatalogImpl, MergeIntoWriterImpl, TypedAggUtils}
 import org.apache.spark.sql.internal.ExpressionUtils.column
-import org.apache.spark.sql.protobuf.{CatalystDataToProtobuf, ProtobufDataToCatalyst}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -205,6 +202,7 @@ class SparkConnectPlanner(
           transformCachedLocalRelation(rel.getCachedLocalRelation)
         case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
         case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
+        case proto.Relation.RelTypeCase.TRANSPOSE => transformTranspose(rel.getTranspose)
         case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
           transformRepartitionByExpression(rel.getRepartitionByExpression)
         case proto.Relation.RelTypeCase.MAP_PARTITIONS =>
@@ -1127,6 +1125,13 @@ class SparkConnectPlanner(
     UnresolvedHint(rel.getName, params, transformRelation(rel.getInput))
   }
 
+  private def transformTranspose(rel: proto.Transpose): LogicalPlan = {
+    val child = transformRelation(rel.getInput)
+    val indices = rel.getIndexColumnsList.asScala.map(transformExpression).toSeq
+
+    UnresolvedTranspose(indices = indices, child = child)
+  }
+
   private def transformUnpivot(rel: proto.Unpivot): LogicalPlan = {
     val ids = rel.getIdsList.asScala.toArray.map { expr =>
       column(transformExpression(expr))
@@ -1179,8 +1184,10 @@ class SparkConnectPlanner(
     if (input.isStreaming || executeHolderOpt.isEmpty) {
       CollectMetrics(name, metrics.map(_.named), transformRelation(rel.getInput), planId)
     } else {
+      // TODO this might be too complex for no good reason. It might
+      //  be easier to inspect the plan after it completes.
       val observation = Observation(name)
-      observation.register(session, planId)
+      session.observationManager.register(observation, planId)
       executeHolderOpt.get.addObservation(name, observation)
       CollectMetrics(name, metrics.map(_.named), transformRelation(rel.getInput), planId)
     }
@@ -1515,8 +1522,7 @@ class SparkConnectPlanner(
       case proto.Expression.ExprTypeCase.UNRESOLVED_ATTRIBUTE =>
         transformUnresolvedAttribute(exp.getUnresolvedAttribute)
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION =>
-        transformUnregisteredFunction(exp.getUnresolvedFunction)
-          .getOrElse(transformUnresolvedFunction(exp.getUnresolvedFunction))
+        transformUnresolvedFunction(exp.getUnresolvedFunction)
       case proto.Expression.ExprTypeCase.ALIAS => transformAlias(exp.getAlias)
       case proto.Expression.ExprTypeCase.EXPRESSION_STRING =>
         transformExpressionString(exp.getExpressionString)
@@ -1834,146 +1840,6 @@ class SparkConnectPlanner(
     }
 
     UnresolvedNamedLambdaVariable(variable.getNamePartsList.asScala.toSeq)
-  }
-
-  /**
-   * For some reason, not all functions are registered in 'FunctionRegistry'. For a unregistered
-   * function, we can still wrap it under the proto 'UnresolvedFunction', and then resolve it in
-   * this method.
-   */
-  private def transformUnregisteredFunction(
-      fun: proto.Expression.UnresolvedFunction): Option[Expression] = {
-    fun.getFunctionName match {
-      // Avro-specific functions
-      case "from_avro" if Seq(2, 3).contains(fun.getArgumentsCount) =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val jsonFormatSchema = extractString(children(1), "jsonFormatSchema")
-        var options = Map.empty[String, String]
-        if (fun.getArgumentsCount == 3) {
-          options = extractMapData(children(2), "Options")
-        }
-        Some(AvroDataToCatalyst(children.head, jsonFormatSchema, options))
-
-      case "to_avro" if Seq(1, 2).contains(fun.getArgumentsCount) =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        var jsonFormatSchema = Option.empty[String]
-        if (fun.getArgumentsCount == 2) {
-          jsonFormatSchema = Some(extractString(children(1), "jsonFormatSchema"))
-        }
-        Some(CatalystDataToAvro(children.head, jsonFormatSchema))
-
-      // ML-specific functions
-      case "vector_to_array" if fun.getArgumentsCount == 2 =>
-        val expr = transformExpression(fun.getArguments(0))
-        val dtype = extractString(transformExpression(fun.getArguments(1)), "dtype")
-        dtype match {
-          case "float64" =>
-            Some(transformUnregisteredUDF(MLFunctions.vectorToArrayUdf, Seq(expr)))
-          case "float32" =>
-            Some(transformUnregisteredUDF(MLFunctions.vectorToArrayFloatUdf, Seq(expr)))
-          case other =>
-            throw InvalidPlanInput(s"Unsupported dtype: $other. Valid values: float64, float32.")
-        }
-
-      case "array_to_vector" if fun.getArgumentsCount == 1 =>
-        val expr = transformExpression(fun.getArguments(0))
-        Some(transformUnregisteredUDF(MLFunctions.arrayToVectorUdf, Seq(expr)))
-
-      // Protobuf-specific functions
-      case "from_protobuf" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val (msgName, desc, options) = extractProtobufArgs(children.toSeq)
-        Some(ProtobufDataToCatalyst(children(0), msgName, desc, options))
-
-      case "to_protobuf" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val (msgName, desc, options) = extractProtobufArgs(children.toSeq)
-        Some(CatalystDataToProtobuf(children(0), msgName, desc, options))
-
-      case _ => None
-    }
-  }
-
-  /**
-   * There are some built-in yet not registered UDFs, for example, 'ml.function.array_to_vector'.
-   * This method is to convert them to ScalaUDF expressions.
-   */
-  private def transformUnregisteredUDF(
-      fun: org.apache.spark.sql.expressions.UserDefinedFunction,
-      exprs: Seq[Expression]): ScalaUDF = {
-    val f = fun.asInstanceOf[org.apache.spark.sql.expressions.SparkUserDefinedFunction]
-    UserDefinedFunctionUtils.toScalaUDF(f, exprs)
-  }
-
-  private def extractProtobufArgs(children: Seq[Expression]) = {
-    val msgName = extractString(children(1), "MessageClassName")
-    var desc = Option.empty[Array[Byte]]
-    var options = Map.empty[String, String]
-    if (children.length == 3) {
-      children(2) match {
-        case b: Literal => desc = Some(extractBinary(b, "binaryFileDescriptorSet"))
-        case o => options = extractMapData(o, "options")
-      }
-    } else if (children.length == 4) {
-      desc = Some(extractBinary(children(2), "binaryFileDescriptorSet"))
-      options = extractMapData(children(3), "options")
-    }
-    (msgName, desc, options)
-  }
-
-  private def extractBoolean(expr: Expression, field: String): Boolean = expr match {
-    case Literal(bool: Boolean, BooleanType) => bool
-    case other => throw InvalidPlanInput(s"$field should be a literal boolean, but got $other")
-  }
-
-  private def extractDouble(expr: Expression, field: String): Double = expr match {
-    case Literal(double: Double, DoubleType) => double
-    case other => throw InvalidPlanInput(s"$field should be a literal double, but got $other")
-  }
-
-  private def extractInteger(expr: Expression, field: String): Int = expr match {
-    case Literal(int: Int, IntegerType) => int
-    case other => throw InvalidPlanInput(s"$field should be a literal integer, but got $other")
-  }
-
-  private def extractLong(expr: Expression, field: String): Long = expr match {
-    case Literal(long: Long, LongType) => long
-    case other => throw InvalidPlanInput(s"$field should be a literal long, but got $other")
-  }
-
-  private def extractString(expr: Expression, field: String): String = expr match {
-    case Literal(s, StringType) if s != null => s.toString
-    case other => throw InvalidPlanInput(s"$field should be a literal string, but got $other")
-  }
-
-  private def extractBinary(expr: Expression, field: String): Array[Byte] = expr match {
-    case Literal(b: Array[Byte], BinaryType) if b != null => b
-    case other => throw InvalidPlanInput(s"$field should be a literal binary, but got $other")
-  }
-
-  @scala.annotation.tailrec
-  private def extractMapData(expr: Expression, field: String): Map[String, String] = expr match {
-    case map: CreateMap => ExprUtils.convertToMapData(map)
-    case UnresolvedFunction(Seq("map"), args, _, _, _, _, _) =>
-      extractMapData(CreateMap(args), field)
-    case other => throw InvalidPlanInput(s"$field should be created by map, but got $other")
-  }
-
-  // Extract the schema from a literal string representing a JSON-formatted schema
-  private def extractDataTypeFromJSON(exp: proto.Expression): Option[DataType] = {
-    exp.getExprTypeCase match {
-      case proto.Expression.ExprTypeCase.LITERAL =>
-        exp.getLiteral.getLiteralTypeCase match {
-          case proto.Expression.Literal.LiteralTypeCase.STRING =>
-            try {
-              Some(DataType.fromJson(exp.getLiteral.getString))
-            } catch {
-              case _: Exception => None
-            }
-          case _ => None
-        }
-      case _ => None
-    }
   }
 
   private def transformAlias(alias: proto.Expression.Alias): NamedExpression = {
@@ -2407,16 +2273,17 @@ class SparkConnectPlanner(
     if (fun.getArgumentsCount != 1) {
       throw InvalidPlanInput("reduce requires single child expression")
     }
-    val udf = fun.getArgumentsList.asScala.map(transformExpression) match {
-      case collection.Seq(f: ScalaUDF) =>
-        f
+    val udf = fun.getArgumentsList.asScala match {
+      case collection.Seq(e)
+          if e.hasCommonInlineUserDefinedFunction &&
+            e.getCommonInlineUserDefinedFunction.hasScalarScalaUdf =>
+        unpackUdf(e.getCommonInlineUserDefinedFunction)
       case other =>
         throw InvalidPlanInput(s"reduce should carry a scalar scala udf, but got $other")
     }
-    assert(udf.outputEncoder.isDefined)
-    val tEncoder = udf.outputEncoder.get // (T, T) => T
-    val reduce = ReduceAggregator(udf.function)(tEncoder).toColumn.expr
-    TypedAggUtils.withInputType(reduce, tEncoder, dataAttributes)
+    val encoder = udf.outputEncoder
+    val reduce = ReduceAggregator(udf.function)(encoder).toColumn.expr
+    TypedAggUtils.withInputType(reduce, encoderFor(encoder), dataAttributes)
   }
 
   private def transformExpressionWithTypedReduceExpression(
@@ -3141,10 +3008,13 @@ class SparkConnectPlanner(
       sessionHolder.streamingServersideListenerHolder.streamingQueryStartedEventCache.remove(
         query.runId.toString))
     queryStartedEvent.foreach {
-      logDebug(
-        s"[SessionId: $sessionId][UserId: $userId][operationId: " +
-          s"${executeHolder.operationId}][query id: ${query.id}][query runId: ${query.runId}] " +
-          s"Adding QueryStartedEvent to response")
+      logInfo(
+        log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
+          log"[UserId: ${MDC(LogKeys.USER_ID, userId)}] " +
+          log"[operationId: ${MDC(LogKeys.OPERATION_ID, executeHolder.operationId)}] " +
+          log"[query id: ${MDC(LogKeys.QUERY_ID, query.id)}]" +
+          log"[query runId: ${MDC(LogKeys.QUERY_RUN_ID, query.runId)}] " +
+          log"Adding QueryStartedEvent to response")
       e => resultBuilder.setQueryStartedEventJson(e.json)
     }
 
@@ -3248,7 +3118,7 @@ class SparkConnectPlanner(
             .newBuilder()
           exception_builder
             .setExceptionMessage(e.toString())
-            .setErrorClass(e.getErrorClass)
+            .setErrorClass(e.getCondition)
 
           val stackTrace = Option(ExceptionUtils.getStackTrace(e))
           stackTrace.foreach { s =>
@@ -3484,9 +3354,18 @@ class SparkConnectPlanner(
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
     val target = Dataset
       .ofRows(session, transformRelation(checkpointCommand.getRelation))
-    val checkpointed = target.checkpoint(
-      eager = checkpointCommand.getEager,
-      reliableCheckpoint = !checkpointCommand.getLocal)
+    val checkpointed = if (checkpointCommand.getLocal) {
+      if (checkpointCommand.hasStorageLevel) {
+        target.localCheckpoint(
+          eager = checkpointCommand.getEager,
+          storageLevel =
+            StorageLevelProtoConverter.toStorageLevel(checkpointCommand.getStorageLevel))
+      } else {
+        target.localCheckpoint(eager = checkpointCommand.getEager)
+      }
+    } else {
+      target.checkpoint(eager = checkpointCommand.getEager)
+    }
 
     val dfId = UUID.randomUUID().toString
     logInfo(log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")
@@ -3523,16 +3402,14 @@ class SparkConnectPlanner(
     val notMatchedBySourceActions = transformActions(cmd.getNotMatchedBySourceActionsList)
 
     val sourceDs = Dataset.ofRows(session, transformRelation(cmd.getSourceTablePlan))
-    var mergeInto = sourceDs
+    val mergeInto = sourceDs
       .mergeInto(cmd.getTargetTableName, column(transformExpression(cmd.getMergeCondition)))
-      .withNewMatchedActions(matchedActions: _*)
-      .withNewNotMatchedActions(notMatchedActions: _*)
-      .withNewNotMatchedBySourceActions(notMatchedBySourceActions: _*)
-
-    mergeInto = if (cmd.getWithSchemaEvolution) {
+      .asInstanceOf[MergeIntoWriterImpl[Row]]
+    mergeInto.matchedActions ++= matchedActions
+    mergeInto.notMatchedActions ++= notMatchedActions
+    mergeInto.notMatchedBySourceActions ++= notMatchedBySourceActions
+    if (cmd.getWithSchemaEvolution) {
       mergeInto.withSchemaEvolution()
-    } else {
-      mergeInto
     }
     mergeInto.merge()
     executeHolder.eventsManager.postFinished()

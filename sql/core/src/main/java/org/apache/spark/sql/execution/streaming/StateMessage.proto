@@ -46,6 +46,7 @@ message StatefulProcessorCall {
 message StateVariableRequest {
   oneof method {
     ValueStateCall valueStateCall = 1;
+    ListStateCall listStateCall = 2;
   }
 }
 
@@ -59,6 +60,7 @@ message ImplicitGroupingKeyRequest {
 message StateCallCommand {
   string stateName = 1;
   string schema = 2;
+  TTLConfig ttl = 3;
 }
 
 message ValueStateCall {
@@ -68,6 +70,18 @@ message ValueStateCall {
     Get get = 3;
     ValueStateUpdate valueStateUpdate = 4;
     Clear clear = 5;
+  }
+}
+
+message ListStateCall {
+  string stateName = 1;
+  oneof method {
+    Exists exists = 2;
+    ListStateGet listStateGet = 3;
+    ListStatePut listStatePut = 4;
+    AppendValue appendValue = 5;
+    AppendList appendList = 6;
+    Clear clear = 7;
   }
 }
 
@@ -91,6 +105,20 @@ message ValueStateUpdate {
 message Clear {
 }
 
+message ListStateGet {
+  string iteratorId = 1;
+}
+
+message ListStatePut {
+}
+
+message AppendValue {
+  bytes value = 1;
+}
+
+message AppendList {
+}
+
 enum HandleState {
   CREATED = 0;
   INITIALIZED = 1;
@@ -100,4 +128,8 @@ enum HandleState {
 
 message SetHandleState {
   HandleState state = 1;
+}
+
+message TTLConfig {
+  int32 durationMs = 1;
 }

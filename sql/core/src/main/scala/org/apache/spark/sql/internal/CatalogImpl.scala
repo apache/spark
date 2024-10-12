@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreateTable, LocalRelation, LogicalPlan, OptionList, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, UnresolvedTableSpec, View}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogManager, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, MultipartIdentifierHelper, NamespaceHelper, TransformHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -176,7 +177,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         try {
           Some(makeTable(catalogName +: ns :+ tableName))
         } catch {
-          case e: AnalysisException if e.getErrorClass == "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE" =>
+          case e: AnalysisException if e.getCondition == "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE" =>
             Some(new Table(
               name = tableName,
               catalog = catalogName,
@@ -188,7 +189,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         }
       }
     } catch {
-      case e: AnalysisException if e.getErrorClass == "TABLE_OR_VIEW_NOT_FOUND" => None
+      case e: AnalysisException if e.getCondition == "TABLE_OR_VIEW_NOT_FOUND" => None
     }
   }
 
@@ -202,7 +203,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         case _ => false
       }
     } catch {
-      case e: AnalysisException if e.getErrorClass == "TABLE_OR_VIEW_NOT_FOUND" => false
+      case e: AnalysisException if e.getCondition == "TABLE_OR_VIEW_NOT_FOUND" => false
     }
   }
 
@@ -322,7 +323,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         case _ => false
       }
     } catch {
-      case e: AnalysisException if e.getErrorClass == "UNRESOLVED_ROUTINE" => false
+      case e: AnalysisException if e.getCondition == "UNRESOLVED_ROUTINE" => false
     }
   }
 
@@ -671,12 +672,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     } else {
       CatalogTableType.MANAGED
     }
-    val location = if (storage.locationUri.isDefined) {
-      val locationStr = storage.locationUri.get.toString
-      Some(locationStr)
-    } else {
-      None
-    }
+
+    // The location in UnresolvedTableSpec should be the original user-provided path string.
+    val location = CaseInsensitiveMap(options).get("path")
 
     val newOptions = OptionList(options.map { case (key, value) =>
       (key, Literal(value).asInstanceOf[Expression])

@@ -45,24 +45,24 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer, tokenProviderKafka010, sqlKafka010, avro, protobuf) = Seq(
-    "catalyst", "sql", "hive", "hive-thriftserver", "token-provider-kafka-0-10", "sql-kafka-0-10", "avro", "protobuf"
-  ).map(ProjectRef(buildLocation, _))
+  val sqlProjects@Seq(sqlApi, catalyst, sql, hive, hiveThriftServer, tokenProviderKafka010, sqlKafka010, avro, protobuf) =
+    Seq("sql-api", "catalyst", "sql", "hive", "hive-thriftserver", "token-provider-kafka-0-10",
+      "sql-kafka-0-10", "avro", "protobuf").map(ProjectRef(buildLocation, _))
 
   val streamingProjects@Seq(streaming, streamingKafka010) =
     Seq("streaming", "streaming-kafka-0-10").map(ProjectRef(buildLocation, _))
 
-  val connectCommon = ProjectRef(buildLocation, "connect-common")
-  val connect = ProjectRef(buildLocation, "connect")
-  val connectClient = ProjectRef(buildLocation, "connect-client-jvm")
+  val connectProjects@Seq(connectCommon, connect, connectClient, connectShims) =
+    Seq("connect-common", "connect", "connect-client-jvm", "connect-shims")
+      .map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
-    commonUtils, sqlApi, variant, _*
+    commonUtils, variant, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
-    "tags", "sketch", "kvstore", "common-utils", "sql-api", "variant"
-  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connectCommon, connect, connectClient)
+    "tags", "sketch", "kvstore", "common-utils", "variant"
+  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ connectProjects
 
   val optionallyEnabledProjects@Seq(kubernetes, yarn,
     sparkGangliaLgpl, streamingKinesisAsl,
@@ -89,7 +89,7 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "3.25.3"
+  val protoVersion = "3.25.5"
   // GRPC version used for Spark Connect.
   val grpcVersion = "1.62.2"
 }
@@ -234,7 +234,11 @@ object SparkBuild extends PomBuild {
         // replace -Xfatal-warnings with fine-grained configuration, since 2.13.2
         // verbose warning on deprecation, error on all others
         // see `scalac -Wconf:help` for details
-        "-Wconf:cat=deprecation:wv,any:e",
+        // since 2.13.15, "-Wconf:cat=deprecation:wv,any:e" no longer takes effect and needs to
+        // be changed to "-Wconf:any:e", "-Wconf:cat=deprecation:wv",
+        // please refer to the details: https://github.com/scala/scala/pull/10708
+        "-Wconf:any:e",
+        "-Wconf:cat=deprecation:wv",
         // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
         "-Wunused:imports",
         "-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:e",
@@ -356,7 +360,7 @@ object SparkBuild extends PomBuild {
   /* Enable shared settings on all projects */
   (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
     .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
-      ExcludedDependencies.settings ++ Checkstyle.settings))
+      ExcludedDependencies.settings ++ Checkstyle.settings ++ ExcludeShims.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
@@ -365,7 +369,7 @@ object SparkBuild extends PomBuild {
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient,
-      variant
+      variant, connectShims
     ).contains(x)
   }
 
@@ -419,11 +423,6 @@ object SparkBuild extends PomBuild {
   enable(SparkProtobuf.settings)(protobuf)
 
   enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
-
-  if (!profiles.contains("volcano")) {
-    enable(Volcano.settings)(kubernetes)
-    enable(Volcano.settings)(kubernetesIntegrationTests)
-  }
 
   enable(KubernetesIntegrationTests.settings)(kubernetesIntegrationTests)
 
@@ -1056,7 +1055,7 @@ object KubernetesIntegrationTests {
  * Overrides to work around sbt's dependency resolution being different from Maven's.
  */
 object DependencyOverrides {
-  lazy val guavaVersion = sys.props.get("guava.version").getOrElse("14.0.1")
+  lazy val guavaVersion = sys.props.get("guava.version").getOrElse("33.1.0-jre")
   lazy val settings = Seq(
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
     dependencyOverrides += "xerces" % "xercesImpl" % "2.12.2",
@@ -1085,6 +1084,36 @@ object ExcludedDependencies {
       ExclusionRule(organization = "com.sun.jersey"),
       ExclusionRule(organization = "ch.qos.logback"),
       ExclusionRule("javax.ws.rs", "jsr311-api"))
+  )
+}
+
+/**
+ * This excludes the spark-connect-shims module from a module when it is not part of the connect
+ * client dependencies.
+ */
+object ExcludeShims {
+  val shimmedProjects = Set("spark-sql-api", "spark-connect-common", "spark-connect-client-jvm")
+  val classPathFilter = TaskKey[Classpath => Classpath]("filter for classpath")
+  lazy val settings = Seq(
+    classPathFilter := {
+      if (!shimmedProjects(moduleName.value)) {
+        cp => cp.filterNot(_.data.name.contains("spark-connect-shims"))
+      } else {
+        identity _
+      }
+    },
+    Compile / internalDependencyClasspath :=
+      classPathFilter.value((Compile / internalDependencyClasspath).value),
+    Compile / internalDependencyAsJars :=
+      classPathFilter.value((Compile / internalDependencyAsJars).value),
+    Runtime / internalDependencyClasspath :=
+      classPathFilter.value((Runtime / internalDependencyClasspath).value),
+    Runtime / internalDependencyAsJars :=
+      classPathFilter.value((Runtime / internalDependencyAsJars).value),
+    Test / internalDependencyClasspath :=
+      classPathFilter.value((Test / internalDependencyClasspath).value),
+    Test / internalDependencyAsJars :=
+      classPathFilter.value((Test / internalDependencyAsJars).value),
   )
 }
 
@@ -1207,7 +1236,7 @@ object YARN {
     genConfigProperties := {
       val file = (Compile / classDirectory).value / s"org/apache/spark/deploy/yarn/$propFileName"
       val isHadoopProvided = SbtPomKeys.effectivePom.value.getProperties.get(hadoopProvidedProp)
-      IO.write(file, s"$hadoopProvidedProp = $isHadoopProvided")
+      sbt.IO.write(file, s"$hadoopProvidedProp = $isHadoopProvided")
     },
     Compile / copyResources := (Def.taskDyn {
       val c = (Compile / copyResources).value
@@ -1322,13 +1351,6 @@ object SparkR {
   )
 }
 
-object Volcano {
-  // Exclude all volcano file for Compile and Test
-  lazy val settings = Seq(
-    unmanagedSources / excludeFilter := HiddenFileFilter || "*Volcano*.scala"
-  )
-}
-
 trait SharedUnidocSettings {
 
   import BuildCommons._
@@ -1364,6 +1386,7 @@ trait SharedUnidocSettings {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/kvstore")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalyst")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/connect/")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/classic/")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalog/v2/utils")))
@@ -1421,6 +1444,7 @@ trait SharedUnidocSettings {
         "-tag", "constructor:X",
         "-tag", "todo:X",
         "-tag", "groupname:X",
+        "-tag", "inheritdoc",
         "--ignore-source-errors", "-notree"
       )
     },
@@ -1462,10 +1486,12 @@ object SparkUnidoc extends SharedUnidocSettings {
   lazy val settings = baseSettings ++ Seq(
     (ScalaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf),
+        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient,
+        connectShims, protobuf),
     (JavaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf),
+        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient,
+        connectShims, protobuf),
   )
 }
 

@@ -97,7 +97,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         exception = intercept[SparkException] {
           Literal.default(errType)
         },
-        errorClass = "INTERNAL_ERROR",
+        condition = "INTERNAL_ERROR",
         parameters = Map("message" -> s"No default value for type: ${toSQLType(errType)}.")
       )
     })

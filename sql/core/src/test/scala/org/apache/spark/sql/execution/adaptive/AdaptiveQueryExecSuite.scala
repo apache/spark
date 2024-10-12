@@ -904,7 +904,7 @@ class AdaptiveQueryExecSuite
         val error = intercept[SparkException] {
           aggregated.count()
         }
-        assert(error.getErrorClass === "INVALID_BUCKET_FILE")
+        assert(error.getCondition === "INVALID_BUCKET_FILE")
         assert(error.getMessage contains "Invalid bucket file")
       }
     }
@@ -1082,7 +1082,7 @@ class AdaptiveQueryExecSuite
           val doExecute = PrivateMethod[Unit](Symbol("doExecute"))
           c.invokePrivate(doExecute())
         },
-        errorClass = "INTERNAL_ERROR",
+        condition = "INTERNAL_ERROR",
         parameters = Map("message" -> "operating on canonicalized plan"))
     }
   }
@@ -1605,6 +1605,43 @@ class AdaptiveQueryExecSuite
         assert(findTopLevelBaseJoin(plan).size == 2)
         assert(findTopLevelBaseJoin(adaptivePlan).isEmpty)
       }
+    }
+  }
+
+  test("SPARK-49460: NPE in EmptyRelationExec.cleanupResources") {
+    withTable("t1left", "t1right", "t1empty") {
+      spark.sql("create table t1left (a int, b int);")
+      spark.sql("insert into t1left values (1, 1), (2,2), (3,3);")
+      spark.sql("create table t1right (a int, b int);")
+      spark.sql("create table t1empty (a int, b int);")
+      spark.sql("insert into t1right values (2,20), (4, 40);")
+
+      spark.sql("""
+                  |with leftT as (
+                  |  with erp as (
+                  |    select
+                  |      *
+                  |    from
+                  |      t1left
+                  |      join t1empty on t1left.a = t1empty.a
+                  |      join t1right on t1left.a = t1right.a
+                  |  )
+                  |  SELECT
+                  |    CASE
+                  |      WHEN COUNT(*) = 0 THEN 4
+                  |      ELSE NULL
+                  |    END AS a
+                  |  FROM
+                  |    erp
+                  |  HAVING
+                  |    COUNT(*) = 0
+                  |)
+                  |select
+                  |  /*+ MERGEJOIN(t1right) */
+                  |  *
+                  |from
+                  |  leftT
+                  |  join t1right on leftT.a = t1right.a""".stripMargin).collect()
     }
   }
 

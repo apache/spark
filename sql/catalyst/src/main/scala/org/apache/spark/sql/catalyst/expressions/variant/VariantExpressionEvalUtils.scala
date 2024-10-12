@@ -31,7 +31,10 @@ import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
  */
 object VariantExpressionEvalUtils {
 
-  def parseJson(input: UTF8String, failOnError: Boolean = true): VariantVal = {
+  def parseJson(
+      input: UTF8String,
+      allowDuplicateKeys: Boolean = false,
+      failOnError: Boolean = true): VariantVal = {
     def parseJsonFailure(exception: Throwable): VariantVal = {
       if (failOnError) {
         throw exception
@@ -40,7 +43,7 @@ object VariantExpressionEvalUtils {
       }
     }
     try {
-      val v = VariantBuilder.parseJson(input.toString)
+      val v = VariantBuilder.parseJson(input.toString, allowDuplicateKeys)
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
       case _: VariantSizeLimitException =>
@@ -69,7 +72,9 @@ object VariantExpressionEvalUtils {
 
   /** Cast a Spark value from `dataType` into the variant type. */
   def castToVariant(input: Any, dataType: DataType): VariantVal = {
-    val builder = new VariantBuilder
+    // Enforce strict check because it is illegal for input struct/map/variant to contain duplicate
+    // keys.
+    val builder = new VariantBuilder(false)
     buildVariant(builder, input, dataType)
     val v = builder.result()
     new VariantVal(v.getValue, v.getMetadata)
@@ -121,7 +126,7 @@ object VariantExpressionEvalUtils {
           buildVariant(builder, element, elementType)
         }
         builder.finishWritingArray(start, offsets)
-      case MapType(StringType, valueType, _) =>
+      case MapType(_: StringType, valueType, _) =>
         val data = input.asInstanceOf[MapData]
         val keys = data.keyArray()
         val values = data.valueArray()

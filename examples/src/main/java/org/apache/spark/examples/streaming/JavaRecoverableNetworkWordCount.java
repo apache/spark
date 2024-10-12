@@ -23,6 +23,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 
+import com.google.common.io.FileWriteMode;
 import scala.Tuple2;
 
 import com.google.common.io.Files;
@@ -152,7 +153,8 @@ public final class JavaRecoverableNetworkWordCount {
       System.out.println(output);
       System.out.println("Dropped " + droppedWordsCounter.value() + " word(s) totally");
       System.out.println("Appending to " + outputFile.getAbsolutePath());
-      Files.append(output + "\n", outputFile, Charset.defaultCharset());
+      Files.asCharSink(outputFile, Charset.defaultCharset(), FileWriteMode.APPEND)
+        .write(output + "\n");
     });
 
     return ssc;

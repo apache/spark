@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicLong
 import ColumnNode._
 
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.catalyst.util.AttributeNameParser
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, Metadata}
 import org.apache.spark.util.SparkClassUtils
@@ -32,10 +33,12 @@ import org.apache.spark.util.SparkClassUtils
  * implementation specific form (e.g. Catalyst expressions, or Connect protobuf messages).
  *
  * This API is a mirror image of Connect's expression.proto. There are a couple of extensions to
- * make constructing nodes easier (e.g. [[CaseWhenOtherwise]]). We could not use the actual connect
- * protobuf messages because of classpath clashes (e.g. Guava & gRPC) and Maven shading issues.
+ * make constructing nodes easier (e.g. [[CaseWhenOtherwise]]). We could not use the actual
+ * connect protobuf messages because of classpath clashes (e.g. Guava & gRPC) and Maven shading
+ * issues.
  */
 private[sql] trait ColumnNode extends ColumnNodeLike {
+
   /**
    * Origin where the node was created.
    */
@@ -93,13 +96,17 @@ private[internal] object ColumnNode {
 /**
  * A literal column.
  *
- * @param value of the literal. This is the unconverted input value.
- * @param dataType of the literal. If none is provided the dataType is inferred.
+ * @param value
+ *   of the literal. This is the unconverted input value.
+ * @param dataType
+ *   of the literal. If none is provided the dataType is inferred.
  */
 private[sql] case class Literal(
     value: Any,
     dataType: Option[DataType] = None,
-    override val origin: Origin = CurrentOrigin.get) extends ColumnNode with DataTypeErrorsBase {
+    override val origin: Origin = CurrentOrigin.get)
+    extends ColumnNode
+    with DataTypeErrorsBase {
   override private[internal] def normalize(): Literal = copy(origin = NO_ORIGIN)
 
   override def sql: String = value match {
@@ -116,32 +123,63 @@ private[sql] case class Literal(
 /**
  * Reference to an attribute produced by one of the underlying DataFrames.
  *
- * @param unparsedIdentifier name of the attribute.
- * @param planId id of the plan (Dataframe) that produces the attribute.
- * @param isMetadataColumn whether this is a metadata column.
+ * @param nameParts
+ *   name of the attribute.
+ * @param planId
+ *   id of the plan (Dataframe) that produces the attribute.
+ * @param isMetadataColumn
+ *   whether this is a metadata column.
  */
 private[sql] case class UnresolvedAttribute(
-    unparsedIdentifier: String,
+    nameParts: Seq[String],
     planId: Option[Long] = None,
     isMetadataColumn: Boolean = false,
     override val origin: Origin = CurrentOrigin.get)
-  extends ColumnNode {
+    extends ColumnNode {
+
   override private[internal] def normalize(): UnresolvedAttribute =
     copy(planId = None, origin = NO_ORIGIN)
-  override def sql: String = unparsedIdentifier
+
+  override def sql: String = nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
+}
+
+private[sql] object UnresolvedAttribute {
+  def apply(
+      unparsedIdentifier: String,
+      planId: Option[Long],
+      isMetadataColumn: Boolean,
+      origin: Origin): UnresolvedAttribute = UnresolvedAttribute(
+    AttributeNameParser.parseAttributeName(unparsedIdentifier),
+    planId = planId,
+    isMetadataColumn = isMetadataColumn,
+    origin = origin)
+
+  def apply(
+      unparsedIdentifier: String,
+      planId: Option[Long],
+      isMetadataColumn: Boolean): UnresolvedAttribute =
+    apply(unparsedIdentifier, planId, isMetadataColumn, CurrentOrigin.get)
+
+  def apply(unparsedIdentifier: String, planId: Option[Long]): UnresolvedAttribute =
+    apply(unparsedIdentifier, planId, false, CurrentOrigin.get)
+
+  def apply(unparsedIdentifier: String): UnresolvedAttribute =
+    apply(unparsedIdentifier, None, false, CurrentOrigin.get)
 }
 
 /**
  * Reference to all columns in a namespace (global, a Dataframe, or a nested struct).
  *
- * @param unparsedTarget name of the namespace. None if the global namespace is supposed to be used.
- * @param planId id of the plan (Dataframe) that produces the attribute.
+ * @param unparsedTarget
+ *   name of the namespace. None if the global namespace is supposed to be used.
+ * @param planId
+ *   id of the plan (Dataframe) that produces the attribute.
  */
 private[sql] case class UnresolvedStar(
     unparsedTarget: Option[String],
     planId: Option[Long] = None,
     override val origin: Origin = CurrentOrigin.get)
-  extends ColumnNode {
+    extends ColumnNode {
   override private[internal] def normalize(): UnresolvedStar =
     copy(planId = None, origin = NO_ORIGIN)
   override def sql: String = unparsedTarget.map(_ + ".*").getOrElse("*")
@@ -151,10 +189,12 @@ private[sql] case class UnresolvedStar(
  * Call a function. This can either be a built-in function, a UDF, or a UDF registered in the
  * Catalog.
  *
- * @param functionName of the function to invoke.
- * @param arguments to pass into the function.
- * @param isDistinct (aggregate only) whether the input of the aggregate function should be
- *                   de-duplicated.
+ * @param functionName
+ *   of the function to invoke.
+ * @param arguments
+ *   to pass into the function.
+ * @param isDistinct
+ *   (aggregate only) whether the input of the aggregate function should be de-duplicated.
  */
 private[sql] case class UnresolvedFunction(
     functionName: String,
@@ -163,7 +203,7 @@ private[sql] case class UnresolvedFunction(
     isUserDefinedFunction: Boolean = false,
     isInternal: Boolean = false,
     override val origin: Origin = CurrentOrigin.get)
-  extends ColumnNode {
+    extends ColumnNode {
   override private[internal] def normalize(): UnresolvedFunction =
     copy(arguments = ColumnNode.normalize(arguments), origin = NO_ORIGIN)
 
@@ -173,11 +213,13 @@ private[sql] case class UnresolvedFunction(
 /**
  * Evaluate a SQL expression.
  *
- * @param expression text to execute.
+ * @param expression
+ *   text to execute.
  */
 private[sql] case class SqlExpression(
     expression: String,
-    override val origin: Origin = CurrentOrigin.get) extends ColumnNode {
+    override val origin: Origin = CurrentOrigin.get)
+    extends ColumnNode {
   override private[internal] def normalize(): SqlExpression = copy(origin = NO_ORIGIN)
   override def sql: String = expression
 }
@@ -185,15 +227,19 @@ private[sql] case class SqlExpression(
 /**
  * Name a column, and (optionally) modify its metadata.
  *
- * @param child to name
- * @param name to use
- * @param metadata (optional) metadata to add.
+ * @param child
+ *   to name
+ * @param name
+ *   to use
+ * @param metadata
+ *   (optional) metadata to add.
  */
 private[sql] case class Alias(
     child: ColumnNode,
     name: Seq[String],
     metadata: Option[Metadata] = None,
-    override val origin: Origin = CurrentOrigin.get) extends ColumnNode {
+    override val origin: Origin = CurrentOrigin.get)
+    extends ColumnNode {
   override private[internal] def normalize(): Alias =
     copy(child = child.normalize(), origin = NO_ORIGIN)
 
@@ -210,15 +256,19 @@ private[sql] case class Alias(
  * Cast the value of a Column to a different [[DataType]]. The behavior of the cast can be
  * influenced by the `evalMode`.
  *
- * @param child that produces the input value.
- * @param dataType to cast to.
- * @param evalMode (try/ansi/legacy) to use for the cast.
+ * @param child
+ *   that produces the input value.
+ * @param dataType
+ *   to cast to.
+ * @param evalMode
+ *   (try/ansi/legacy) to use for the cast.
  */
 private[sql] case class Cast(
     child: ColumnNode,
     dataType: DataType,
     evalMode: Option[Cast.EvalMode] = None,
-    override val origin: Origin = CurrentOrigin.get) extends ColumnNode {
+    override val origin: Origin = CurrentOrigin.get)
+    extends ColumnNode {
   override private[internal] def normalize(): Cast =
     copy(child = child.normalize(), origin = NO_ORIGIN)
 
@@ -237,13 +287,16 @@ private[sql] object Cast {
 /**
  * Reference to all columns in the global namespace in that match a regex.
  *
- * @param regex name of the namespace. None if the global namespace is supposed to be used.
- * @param planId id of the plan (Dataframe) that produces the attribute.
+ * @param regex
+ *   name of the namespace. None if the global namespace is supposed to be used.
+ * @param planId
+ *   id of the plan (Dataframe) that produces the attribute.
  */
 private[sql] case class UnresolvedRegex(
     regex: String,
     planId: Option[Long] = None,
-    override val origin: Origin = CurrentOrigin.get) extends ColumnNode {
+    override val origin: Origin = CurrentOrigin.get)
+    extends ColumnNode {
   override private[internal] def normalize(): UnresolvedRegex =
     copy(planId = None, origin = NO_ORIGIN)
   override def sql: String = regex
@@ -252,16 +305,19 @@ private[sql] case class UnresolvedRegex(
 /**
  * Sort the input column.
  *
- * @param child to sort.
- * @param sortDirection to sort in, either Ascending or Descending.
- * @param nullOrdering where to place nulls, either at the begin or the end.
+ * @param child
+ *   to sort.
+ * @param sortDirection
+ *   to sort in, either Ascending or Descending.
+ * @param nullOrdering
+ *   where to place nulls, either at the begin or the end.
  */
 private[sql] case class SortOrder(
     child: ColumnNode,
     sortDirection: SortOrder.SortDirection,
     nullOrdering: SortOrder.NullOrdering,
     override val origin: Origin = CurrentOrigin.get)
-  extends ColumnNode {
+    extends ColumnNode {
   override private[internal] def normalize(): SortOrder =
     copy(child = child.normalize(), origin = NO_ORIGIN)
 
@@ -280,14 +336,16 @@ private[sql] object SortOrder {
 /**
  * Evaluate a function within a window.
  *
- * @param windowFunction function to execute.
- * @param windowSpec of the window.
+ * @param windowFunction
+ *   function to execute.
+ * @param windowSpec
+ *   of the window.
  */
 private[sql] case class Window(
     windowFunction: ColumnNode,
     windowSpec: WindowSpec,
     override val origin: Origin = CurrentOrigin.get)
-  extends ColumnNode {
+    extends ColumnNode {
   override private[internal] def normalize(): Window = copy(
     windowFunction = windowFunction.normalize(),
     windowSpec = windowSpec.normalize(),
@@ -299,7 +357,8 @@ private[sql] case class Window(
 private[sql] case class WindowSpec(
     partitionColumns: Seq[ColumnNode],
     sortColumns: Seq[SortOrder],
-    frame: Option[WindowFrame] = None) extends ColumnNodeLike {
+    frame: Option[WindowFrame] = None)
+    extends ColumnNodeLike {
   override private[internal] def normalize(): WindowSpec = copy(
     partitionColumns = ColumnNode.normalize(partitionColumns),
     sortColumns = ColumnNode.normalize(sortColumns),
@@ -317,7 +376,7 @@ private[sql] case class WindowFrame(
     frameType: WindowFrame.FrameType,
     lower: WindowFrame.FrameBoundary,
     upper: WindowFrame.FrameBoundary)
-  extends ColumnNodeLike {
+    extends ColumnNodeLike {
   override private[internal] def normalize(): WindowFrame =
     copy(lower = lower.normalize(), upper = upper.normalize())
   override private[internal] def sql: String =
@@ -352,13 +411,16 @@ private[sql] object WindowFrame {
 /**
  * Lambda function to execute. This typically passed as an argument to a function.
  *
- * @param function to execute.
- * @param arguments the bound lambda variables.
+ * @param function
+ *   to execute.
+ * @param arguments
+ *   the bound lambda variables.
  */
 private[sql] case class LambdaFunction(
     function: ColumnNode,
     arguments: Seq[UnresolvedNamedLambdaVariable],
-    override val origin: Origin) extends ColumnNode {
+    override val origin: Origin)
+    extends ColumnNode {
 
   override private[internal] def normalize(): LambdaFunction = copy(
     function = function.normalize(),
@@ -382,11 +444,13 @@ object LambdaFunction {
 /**
  * Variable used in a [[LambdaFunction]].
  *
- * @param name of the variable.
+ * @param name
+ *   of the variable.
  */
 private[sql] case class UnresolvedNamedLambdaVariable(
     name: String,
-    override val origin: Origin = CurrentOrigin.get) extends ColumnNode {
+    override val origin: Origin = CurrentOrigin.get)
+    extends ColumnNode {
   override private[internal] def normalize(): UnresolvedNamedLambdaVariable =
     copy(origin = NO_ORIGIN)
 
@@ -413,21 +477,22 @@ object UnresolvedNamedLambdaVariable {
 }
 
 /**
- * Extract a value from a complex type. This can be a field from a struct, a value from a map,
- * or an element from an array.
+ * Extract a value from a complex type. This can be a field from a struct, a value from a map, or
+ * an element from an array.
  *
- * @param child that produces a complex value.
- * @param extraction that is used to access the complex type. This needs to be a string type for
- *                   structs and maps, and it needs to be an integer for arrays.
+ * @param child
+ *   that produces a complex value.
+ * @param extraction
+ *   that is used to access the complex type. This needs to be a string type for structs and maps,
+ *   and it needs to be an integer for arrays.
  */
 private[sql] case class UnresolvedExtractValue(
     child: ColumnNode,
     extraction: ColumnNode,
-    override val origin: Origin = CurrentOrigin.get) extends ColumnNode {
-  override private[internal] def normalize(): UnresolvedExtractValue = copy(
-    child = child.normalize(),
-    extraction = extraction.normalize(),
-    origin = NO_ORIGIN)
+    override val origin: Origin = CurrentOrigin.get)
+    extends ColumnNode {
+  override private[internal] def normalize(): UnresolvedExtractValue =
+    copy(child = child.normalize(), extraction = extraction.normalize(), origin = NO_ORIGIN)
 
   override def sql: String = s"${child.sql}[${extraction.sql}]"
 }
@@ -435,15 +500,19 @@ private[sql] case class UnresolvedExtractValue(
 /**
  * Update or drop the field of a struct.
  *
- * @param structExpression that will be updated.
- * @param fieldName name of the field to update.
- * @param valueExpression new value of the field. If this is None the field will be dropped.
+ * @param structExpression
+ *   that will be updated.
+ * @param fieldName
+ *   name of the field to update.
+ * @param valueExpression
+ *   new value of the field. If this is None the field will be dropped.
  */
 private[sql] case class UpdateFields(
     structExpression: ColumnNode,
     fieldName: String,
     valueExpression: Option[ColumnNode] = None,
-    override val origin: Origin = CurrentOrigin.get) extends ColumnNode {
+    override val origin: Origin = CurrentOrigin.get)
+    extends ColumnNode {
   override private[internal] def normalize(): UpdateFields = copy(
     structExpression = structExpression.normalize(),
     valueExpression = ColumnNode.normalize(valueExpression),
@@ -455,18 +524,20 @@ private[sql] case class UpdateFields(
 }
 
 /**
- * Evaluate one or more conditional branches. The value of the first branch for which the predicate
- * evalutes to true is returned. If none of the branches evaluate to true, the value of `otherwise`
- * is returned.
+ * Evaluate one or more conditional branches. The value of the first branch for which the
+ * predicate evalutes to true is returned. If none of the branches evaluate to true, the value of
+ * `otherwise` is returned.
  *
- * @param branches to evaluate. Each entry if a pair of condition and value.
- * @param otherwise (optional) to evaluate when none of the branches evaluate to true.
+ * @param branches
+ *   to evaluate. Each entry if a pair of condition and value.
+ * @param otherwise
+ *   (optional) to evaluate when none of the branches evaluate to true.
  */
 private[sql] case class CaseWhenOtherwise(
     branches: Seq[(ColumnNode, ColumnNode)],
     otherwise: Option[ColumnNode] = None,
     override val origin: Origin = CurrentOrigin.get)
-  extends ColumnNode {
+    extends ColumnNode {
   assert(branches.nonEmpty)
   override private[internal] def normalize(): CaseWhenOtherwise = copy(
     branches = branches.map(kv => (kv._1.normalize(), kv._2.normalize())),
@@ -483,15 +554,17 @@ private[sql] case class CaseWhenOtherwise(
 /**
  * Invoke an inline user defined function.
  *
- * @param function to invoke.
- * @param arguments to pass into the user defined function.
+ * @param function
+ *   to invoke.
+ * @param arguments
+ *   to pass into the user defined function.
  */
 private[sql] case class InvokeInlineUserDefinedFunction(
     function: UserDefinedFunctionLike,
     arguments: Seq[ColumnNode],
     isDistinct: Boolean = false,
     override val origin: Origin = CurrentOrigin.get)
-  extends ColumnNode {
+    extends ColumnNode {
   override private[internal] def normalize(): InvokeInlineUserDefinedFunction =
     copy(arguments = ColumnNode.normalize(arguments), origin = NO_ORIGIN)
 

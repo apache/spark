@@ -146,7 +146,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
         case GetColumnByOrdinal(ordinal, _) =>
           val attrCandidates = getAttrCandidates()
-          assert(ordinal >= 0 && ordinal < attrCandidates.length)
+          if (ordinal < 0 || ordinal >= attrCandidates.length) {
+            throw QueryCompilationErrors.ordinalOutOfBoundsError(
+              ordinal,
+              attrCandidates
+            )
+          }
           attrCandidates(ordinal)
 
         case GetViewColumnByNameAndOrdinal(
@@ -585,7 +590,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       }
       (resolved.map(r => (r, currentDepth)), true)
     } else {
-      resolveDataFrameColumnByPlanId(u, id, isMetadataAccess, p.children, currentDepth + 1)
+      val children = p match {
+        // treat Union node as the leaf node
+        case _: Union => Seq.empty[LogicalPlan]
+        case _ => p.children
+      }
+      resolveDataFrameColumnByPlanId(u, id, isMetadataAccess, children, currentDepth + 1)
     }
 
     // In self join case like:

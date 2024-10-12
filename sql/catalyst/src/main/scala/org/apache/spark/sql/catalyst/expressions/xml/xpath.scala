@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeWithCaseAccentSensitivity
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -42,7 +42,7 @@ abstract class XPathExtract
   override def nullable: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
+    Seq(StringTypeWithCaseAccentSensitivity, StringTypeWithCaseAccentSensitivity)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!path.foldable) {
@@ -50,7 +50,7 @@ abstract class XPathExtract
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> toSQLId("path"),
-          "inputType" -> toSQLType(StringTypeAnyCollation),
+          "inputType" -> toSQLType(StringTypeWithCaseAccentSensitivity),
           "inputExpr" -> toSQLExpr(path)
         )
       )
@@ -242,18 +242,20 @@ case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
     Examples:
       > SELECT _FUNC_('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>','a/b/text()');
        ["b1","b2","b3"]
+      > SELECT _FUNC_('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>','a/b');
+       [null,null,null]
   """,
   since = "2.0.0",
   group = "xml_funcs")
 // scalastyle:on line.size.limit
 case class XPathList(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath"
-  override def dataType: DataType = ArrayType(SQLConf.get.defaultStringType, containsNull = false)
+  override def dataType: DataType = ArrayType(SQLConf.get.defaultStringType)
 
   override def nullSafeEval(xml: Any, path: Any): Any = {
     val nodeList = xpathUtil.evalNodeList(xml.asInstanceOf[UTF8String].toString, pathString)
     if (nodeList ne null) {
-      val ret = new Array[UTF8String](nodeList.getLength)
+      val ret = new Array[AnyRef](nodeList.getLength)
       var i = 0
       while (i < nodeList.getLength) {
         ret(i) = UTF8String.fromString(nodeList.item(i).getNodeValue)

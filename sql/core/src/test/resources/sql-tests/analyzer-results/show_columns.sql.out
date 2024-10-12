@@ -94,10 +94,11 @@ SHOW COLUMNS IN showdb.showcolumn1 FROM baddb
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1057",
+  "errorClass" : "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE",
+  "sqlState" : "42K05",
   "messageParameters" : {
-    "dbA" : "baddb",
-    "dbB" : "showdb"
+    "namespaceA" : "`baddb`",
+    "namespaceB" : "`showdb`"
   }
 }
 

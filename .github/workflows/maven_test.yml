@@ -40,7 +40,7 @@ on:
         description: OS to run this build.
         required: false
         type: string
-        default: ubuntu-22.04
+        default: ubuntu-latest
       envs:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false

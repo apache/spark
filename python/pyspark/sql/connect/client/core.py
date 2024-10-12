@@ -993,20 +993,25 @@ class SparkConnectClient(object):
         ----------
         p : google.protobuf.message.Message
             Generic Message type
+        truncate: bool
+            Indicates whether to truncate the message
 
         Returns
         -------
         Single line string of the serialized proto message.
         """
         try:
-            p2 = self._truncate(p) if truncate else p
+            max_level = 8 if truncate else sys.maxsize
+            p2 = self._truncate(p, max_level) if truncate else p
             return text_format.MessageToString(p2, as_one_line=True)
         except RecursionError:
             return "<Truncated message due to recursion error>"
         except Exception:
             return "<Truncated message due to truncation error>"
 
-    def _truncate(self, p: google.protobuf.message.Message) -> google.protobuf.message.Message:
+    def _truncate(
+        self, p: google.protobuf.message.Message, allowed_recursion_depth: int
+    ) -> google.protobuf.message.Message:
         """
         Helper method to truncate the protobuf message.
         Refer to 'org.apache.spark.sql.connect.common.Abbreviator' in the server side.
@@ -1029,11 +1034,17 @@ class SparkConnectClient(object):
                 field_name = descriptor.name
 
                 if descriptor.type == descriptor.TYPE_MESSAGE:
-                    if descriptor.label == descriptor.LABEL_REPEATED:
+                    if allowed_recursion_depth == 0:
                         p2.ClearField(field_name)
-                        getattr(p2, field_name).extend([self._truncate(v) for v in value])
+                    elif descriptor.label == descriptor.LABEL_REPEATED:
+                        p2.ClearField(field_name)
+                        getattr(p2, field_name).extend(
+                            [self._truncate(v, allowed_recursion_depth - 1) for v in value]
+                        )
                     else:
-                        getattr(p2, field_name).CopyFrom(self._truncate(value))
+                        getattr(p2, field_name).CopyFrom(
+                            self._truncate(value, allowed_recursion_depth - 1)
+                        )
 
                 elif descriptor.type == descriptor.TYPE_STRING:
                     if descriptor.label == descriptor.LABEL_REPEATED:
@@ -1775,7 +1786,7 @@ class SparkConnectClient(object):
             req.user_context.user_id = self._user_id
 
         try:
-            return self._stub.FetchErrorDetails(req)
+            return self._stub.FetchErrorDetails(req, metadata=self._builder.metadata())
         except grpc.RpcError:
             return None
 

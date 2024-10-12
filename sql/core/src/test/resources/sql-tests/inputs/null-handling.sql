@@ -10,6 +10,8 @@ insert into t1 values(7,null,null);
 
 -- Adding anything to null gives null
 select a, b+c from t1;
+select b + 0 from t1 where a = 5;
+select -100 + b + 100 from t1 where a = 5;
 
 -- Multiplying null by zero gives null
 select a+10, b*0 from t1;
