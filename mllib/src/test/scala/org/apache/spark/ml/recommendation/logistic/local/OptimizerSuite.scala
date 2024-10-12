@@ -169,8 +169,8 @@ class OptimizerSuite extends MLTest with DefaultReadWriteTest with Logging {
     val epr = OptimizerSuite.epr(testData, opts.useBias, userFactors, itemFactors)
 
     logInfo(log"True test epr is ${MDC(EPR, trueEpr)}.")
-    logInfo(log"Random test epr is ${MDC(EPR, epr)}.")
-    logInfo(log"Actual test epr is ${MDC(EPR, rndEpr)}.")
+    logInfo(log"Random test epr is ${MDC(EPR, rndEpr)}.")
+    logInfo(log"Actual test epr is ${MDC(EPR, epr)}.")
 
     assert(0.95 < trueEpr)
     assert(0.45 < rndEpr && rndEpr < 0.55)
