@@ -18,13 +18,21 @@
 package org.apache.spark.ml.recommendation
 
 
+import java.io.File
+import java.util.Random
+
+import org.apache.commons.io.FileUtils
+
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.recommendation.logistic.local.OptimizerSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
+
+  val CHECKPOINT_PATH = "./.checkpoint/"
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -33,6 +41,7 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
 
   override def afterAll(): Unit = {
     super.afterAll()
+    FileUtils.deleteDirectory(new File(CHECKPOINT_PATH))
   }
 
   test("LMF validate input dataset") {
@@ -159,6 +168,49 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
         .setImplicitPrefs(false).setMaxIter(1).fit(df) }
       assert(e.getMessage.contains("The labelCol must be set in explicit mode."))
     }
+  }
+
+  test("LMF implicit feedback") {
+    val spark = this.spark
+    import spark.implicits._
+    val useBias = true
+    val (trueUserFactor, trueItemFactors, trainData, testData) =
+      OptimizerSuite.genData(4096, 32, 16, 5, useBias, true, new Random(239))
+    val trainDf = sc.parallelize(trainData.toSeq)
+      .toDF("user", "item", "label", "weight")
+
+    val result = new LMF()
+      .setUserCol("user")
+      .setItemCol("item")
+      .setWeightCol("weight")
+      .setImplicitPrefs(true)
+      .setFitIntercept(useBias)
+      .setVerbose(true)
+      .setSeed(239)
+      .setNumPartitions(10)
+      .setCheckpointInterval(25)
+      .setCheckpointPath(CHECKPOINT_PATH + "lmf_implicit")
+      .setParallelism(5)
+      .setMaxIter(100)
+      .setMinItemCount(1)
+      .setMinUserCount(1)
+      .setRank(5)
+      .setNegative(10)
+      .setRegParamU(1)
+      .setRegParamI(0.01)
+      .setPow(0)
+      .fit(trainDf)
+
+    val userFactors = result.userFactors.as[(Long, Array[Float], Float)]
+      .collect().map(e => e._1 -> (e._2 :+ e._3))
+    val itemFactors = result.itemFactors.as[(Long, Array[Float], Float)]
+      .collect().map(e => e._1 -> (e._2 :+ e._3))
+
+    val trueEpr = OptimizerSuite.epr(testData, useBias, trueUserFactor, trueItemFactors)
+    val epr = OptimizerSuite.epr(testData, true, userFactors, itemFactors)
+
+    assert(0.85 < trueEpr && trueEpr < 0.9)
+    assert(0.8 < epr && epr < 0.85)
   }
 }
 
