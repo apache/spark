@@ -35,8 +35,8 @@ private[spark] trait JsonUtils {
     tryWithResource(new ByteArrayOutputStream()) { baos =>
       tryWithResource(mapper.createGenerator(baos, JsonEncoding.UTF8)) { generator =>
         block(generator)
-        new String(baos.toByteArray, StandardCharsets.UTF_8)
       }
+      new String(baos.toByteArray, StandardCharsets.UTF_8)
     }
   }
 }
