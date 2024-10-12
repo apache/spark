@@ -1591,7 +1591,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       // If the projection list contains Stars, expand it.
       case p: Project if containsStar(p.projectList) =>
-        p.copy(projectList = buildExpandedProjectList(p.projectList, p.child))
+        val expanded = p.copy(projectList = buildExpandedProjectList(p.projectList, p.child))
+        if (expanded.projectList.size < p.projectList.size) {
+          checkTrailingCommaInSelect(expanded, starRemoved = true)
+        }
+        expanded
       // If the filter list contains Stars, expand it.
       case p: Filter if containsStar(Seq(p.condition)) =>
         p.copy(expandStarExpression(p.condition, p.child))
@@ -1600,7 +1604,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         if (a.groupingExpressions.exists(_.isInstanceOf[UnresolvedOrdinal])) {
           throw QueryCompilationErrors.starNotAllowedWhenGroupByOrdinalPositionUsedError()
         } else {
-          a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
+          val expanded = a.copy(aggregateExpressions =
+            buildExpandedProjectList(a.aggregateExpressions, a.child))
+          if (expanded.aggregateExpressions.size < a.aggregateExpressions.size) {
+            checkTrailingCommaInSelect(expanded, starRemoved = true)
+          }
+          expanded
         }
       case c: CollectMetrics if containsStar(c.metrics) =>
         c.copy(metrics = buildExpandedProjectList(c.metrics, c.child))

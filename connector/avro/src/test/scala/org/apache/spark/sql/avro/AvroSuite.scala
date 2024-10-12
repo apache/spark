@@ -891,7 +891,7 @@ abstract class AvroSuite
         val ex = intercept[SparkException] {
           spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString).collect()
         }
-        assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
+        assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
         checkError(
           exception = ex.getCause.asInstanceOf[AnalysisException],
           condition = "AVRO_INCOMPATIBLE_READ_TYPE",
@@ -969,7 +969,7 @@ abstract class AvroSuite
           val ex = intercept[SparkException] {
             spark.read.schema(s"a $sqlType").format("avro").load(path.toString).collect()
           }
-          assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
+          assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
           checkError(
             exception = ex.getCause.asInstanceOf[AnalysisException],
             condition = "AVRO_INCOMPATIBLE_READ_TYPE",
@@ -1006,7 +1006,7 @@ abstract class AvroSuite
           val ex = intercept[SparkException] {
             spark.read.schema(s"a $sqlType").format("avro").load(path.toString).collect()
           }
-          assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
+          assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
           checkError(
             exception = ex.getCause.asInstanceOf[AnalysisException],
             condition = "AVRO_INCOMPATIBLE_READ_TYPE",
@@ -1515,7 +1515,7 @@ abstract class AvroSuite
           .write.format("avro").option("avroSchema", avroSchema)
           .save(s"$tempDir/${UUID.randomUUID()}")
       }
-      assert(ex.getErrorClass == "TASK_WRITE_FAILED")
+      assert(ex.getCondition == "TASK_WRITE_FAILED")
       assert(ex.getCause.isInstanceOf[java.lang.NullPointerException])
       assert(ex.getCause.getMessage.contains(
         "null value for (non-nullable) string at test_schema.Name"))
@@ -2629,7 +2629,7 @@ abstract class AvroSuite
             val e = intercept[SparkException] {
               df.write.format("avro").option("avroSchema", avroSchema).save(path3_x)
             }
-            assert(e.getErrorClass == "TASK_WRITE_FAILED")
+            assert(e.getCondition == "TASK_WRITE_FAILED")
             assert(e.getCause.isInstanceOf[SparkUpgradeException])
           }
           checkDefaultLegacyRead(oldPath)
@@ -2884,7 +2884,7 @@ abstract class AvroSuite
           val e = intercept[SparkException] {
             df.write.format("avro").option("avroSchema", avroSchema).save(dir.getCanonicalPath)
           }
-          assert(e.getErrorClass == "TASK_WRITE_FAILED")
+          assert(e.getCondition == "TASK_WRITE_FAILED")
           val errMsg = e.getCause.asInstanceOf[SparkUpgradeException].getMessage
           assert(errMsg.contains("You may get a different result due to the upgrading"))
         }
@@ -2895,7 +2895,7 @@ abstract class AvroSuite
         val e = intercept[SparkException] {
           df.write.format("avro").save(dir.getCanonicalPath)
         }
-        assert(e.getErrorClass == "TASK_WRITE_FAILED")
+        assert(e.getCondition == "TASK_WRITE_FAILED")
         val errMsg = e.getCause.asInstanceOf[SparkUpgradeException].getMessage
         assert(errMsg.contains("You may get a different result due to the upgrading"))
       }
