@@ -19,9 +19,6 @@ package org.apache.spark.ml.recommendation.logistic.local
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
 
-/**
- * @author ezamyatin
- * */
 private[ml] object ParItr {
   def foreach[A](iterator: Iterator[A], cpus: Int, fn: A => Unit): Unit = {
     val inQueue = new LinkedBlockingQueue[A](cpus * 5)
