@@ -63,10 +63,14 @@ private[ml] object ParItr {
     } finally {
       threads.foreach(_.interrupt())
       threads.foreach{t =>
-        try {
-          t.join()
-        } catch {
-          case _: InterruptedException => t.join()
+        var ok = false
+        while (!ok) {
+          try {
+            t.join()
+            ok = true
+          } catch {
+            case _: InterruptedException =>
+          }
         }
       }
       Thread.interrupted()
