@@ -1621,7 +1621,7 @@ class PreemptedError() {
   // errors have the lowest priority.
   def set(error: Exception with SparkThrowable, priority: Option[Int] = None): Unit = {
     val calculatedPriority = priority.getOrElse {
-      error.getErrorClass match {
+      error.getCondition match {
         case c if c.startsWith("INTERNAL_ERROR") => 1
         case _ => 2
       }
