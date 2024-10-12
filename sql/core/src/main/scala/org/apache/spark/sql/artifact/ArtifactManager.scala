@@ -89,17 +89,14 @@ class ArtifactManager(session: SparkSession) extends Logging {
 
   private var initialContextResourcesCopied = false
 
-  /** Cached generated classloader for the system classloader, aka., AppClassLoader. */
-  private var classLoaderForSystemClassLoader: Option[ClassLoader] = None
-
   /**
    * The number of JARs for the last [[classloader]] call, and all generated class loaders.
    * Value of the HashMap is not used.
    */
   private val numberOfJarsAndCachedClassLoaders =
-    new ThreadLocal[(Int, mutable.WeakHashMap[ClassLoader, Boolean])] {
-      override def initialValue(): (Int, mutable.WeakHashMap[ClassLoader, Boolean]) =
-        (-1, new mutable.WeakHashMap[ClassLoader, Boolean]())
+    new ThreadLocal[(Int, mutable.WeakHashMap[ClassLoader, ClassLoader])] {
+      override def initialValue(): (Int, mutable.WeakHashMap[ClassLoader, ClassLoader]) =
+        (-1, new mutable.WeakHashMap[ClassLoader, ClassLoader]())
     }
 
   def withResources[T](f: => T): T = {
@@ -310,28 +307,21 @@ class ArtifactManager(session: SparkSession) extends Logging {
    */
   def classloader: ClassLoader = {
     val fallbackClassLoader = Utils.getContextOrSparkClassLoader
-    val urls = getAddedJars :+ classDir.toUri.toURL
-    val thread = Thread.currentThread().toString
     val (lastNumberOfJars, classLoaderMap) = numberOfJarsAndCachedClassLoaders.get()
     if (lastNumberOfJars != jarsList.size()) {
       // If the number of jars has changed, clear the cache and generate new class loaders.
-      classLoaderForSystemClassLoader = None
       numberOfJarsAndCachedClassLoaders.remove()
+      val urls = getAddedJars :+ classDir.toUri.toURL
       buildAndCacheClassLoader(fallbackClassLoader, urls)
     } else {
       if (classLoaderMap.contains(fallbackClassLoader)) {
         // If the fallback class loader is built by us, reuse it to avoid layering.
-        fallbackClassLoader
-      } else if (fallbackClassLoader == ClassLoader.getSystemClassLoader) {
-        // If the fallback class loader is the system class loader, build a new one and cache it.
-        classLoaderForSystemClassLoader.getOrElse {
-          val loader = buildAndCacheClassLoader(fallbackClassLoader, urls)
-          classLoaderForSystemClassLoader = Some(loader)
-          loader
-        }
+        classLoaderMap(fallbackClassLoader)
       } else {
+        val thread = Thread.currentThread().toString
         logWarning(s"Generating new class loader for classloader $fallbackClassLoader. $thread")
         // Otherwise build one new class loader.
+        val urls = getAddedJars :+ classDir.toUri.toURL
         buildAndCacheClassLoader(fallbackClassLoader, urls)
       }
     }
@@ -374,7 +364,8 @@ class ArtifactManager(session: SparkSession) extends Logging {
     logDebug(s"Using class loader: $loader, containing urls: $urls")
 
     val cache = numberOfJarsAndCachedClassLoaders.get()._2
-    cache += (loader -> true)
+    cache += (loader -> loader)
+    cache += (fallbackClassLoader -> loader)
     numberOfJarsAndCachedClassLoaders.set((jarsList.size(), cache))
     loader
   }
