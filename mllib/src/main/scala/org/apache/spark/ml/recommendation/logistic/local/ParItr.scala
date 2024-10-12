@@ -17,7 +17,7 @@
 package org.apache.spark.ml.recommendation.logistic.local
 
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
-import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
 
 /**
  * @author ezamyatin
@@ -27,14 +27,17 @@ private[ml] object ParItr {
     val inQueue = new LinkedBlockingQueue[A](cpus * 5)
     val totalCounter = new AtomicLong(0)
     val error = new AtomicReference[Exception](null)
+    val end = new AtomicBoolean(false)
+    val mainThread = Thread.currentThread()
 
     val threads = Array.fill(cpus) {
       new Thread(() => {
         try {
-          while (true) {
+          while (!end.get() || inQueue.size() > 0) {
             fn(inQueue.take)
             totalCounter.decrementAndGet
           }
+          mainThread.interrupt()
         } catch {
           case _: InterruptedException =>
           case e: Exception => error.set(e)
@@ -52,16 +55,23 @@ private[ml] object ParItr {
         totalCounter.incrementAndGet
       })
 
+      end.set(true)
       while (totalCounter.get > 0 && error.get() == null) {
         try {
           Thread.sleep(1000)
         } catch {
-          case ex: InterruptedException => throw new RuntimeException(ex)
+          case _: InterruptedException =>
         }
       }
     } finally {
       threads.foreach(_.interrupt())
-      threads.foreach(_.join())
+      threads.foreach{t =>
+        try {
+          t.join()
+        } catch {
+          case _: InterruptedException => t.join()
+        }
+      }
     }
 
     if (error.get() != null) {
