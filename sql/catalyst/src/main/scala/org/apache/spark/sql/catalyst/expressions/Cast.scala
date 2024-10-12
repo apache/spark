@@ -1026,7 +1026,7 @@ case class Cast(
         try doubleStr.toDouble catch {
           case _: NumberFormatException =>
             val d = Cast.processFloatingPointSpecialLiterals(doubleStr, false)
-            if(ansiEnabled && d == null) {
+            if (ansiEnabled && d == null) {
               throw QueryExecutionErrors.invalidInputInCastToNumberError(
                 DoubleType, s, getContextOrNull())
             } else {
@@ -1602,7 +1602,7 @@ case class Cast(
       val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       (c, evPrim, evNull) =>
         code"""$evPrim = $util.safeStringToInterval($c);
-           if(${evPrim} == null) {
+           if (${evPrim} == null) {
              ${evNull} = true;
            }
          """.stripMargin

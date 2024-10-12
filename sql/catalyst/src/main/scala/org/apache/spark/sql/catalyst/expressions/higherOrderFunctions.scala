@@ -1156,7 +1156,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
           val (bufferKey, indexes) = arrayBuffer(j)
           if (ordering.equiv(bufferKey, key)) {
             found = true
-            if(indexes(z).isEmpty) {
+            if (indexes(z).isEmpty) {
               indexes(z) = Some(i)
             }
           }

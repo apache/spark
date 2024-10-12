@@ -1516,7 +1516,7 @@ private[spark] class BlockManager(
       return true
     }
 
-    if(master.isRDDBlockVisible(blockId)) {
+    if (master.isRDDBlockVisible(blockId)) {
       // Cache the visibility status if block exists.
       blockInfoManager.tryMarkBlockAsVisible(blockId)
       true

@@ -77,7 +77,7 @@ abstract class StringRegexExpression extends BinaryExpression
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val regex = pattern(input2.asInstanceOf[UTF8String].toString)
-    if(regex == null) {
+    if (regex == null) {
       null
     } else {
       matches(regex, input1.asInstanceOf[UTF8String].toString)

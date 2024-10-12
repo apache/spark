@@ -45,7 +45,7 @@ class BitSet(numBits: Int) extends Serializable {
   def setUntil(bitIndex: Int): Unit = {
     val wordIndex = bitIndex >> 6 // divide by 64
     Arrays.fill(words, 0, wordIndex, -1)
-    if(wordIndex < words.length) {
+    if (wordIndex < words.length) {
       // Set the remaining bits (note that the mask could still be zero)
       val mask = ~(-1L << (bitIndex & 0x3f))
       words(wordIndex) |= mask
@@ -58,7 +58,7 @@ class BitSet(numBits: Int) extends Serializable {
   def clearUntil(bitIndex: Int): Unit = {
     val wordIndex = bitIndex >> 6 // divide by 64
     Arrays.fill(words, 0, wordIndex, 0)
-    if(wordIndex < words.length) {
+    if (wordIndex < words.length) {
       // Clear the remaining bits
       val mask = -1L << (bitIndex & 0x3f)
       words(wordIndex) &= mask
