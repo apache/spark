@@ -19,7 +19,7 @@ package org.apache.spark.sql.types
 
 import org.json4s.JsonAST.{JString, JValue}
 
-import org.apache.spark.annotation.Stable
+import org.apache.spark.annotation.{Evolving, Stable}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 
 /**
@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
  *   The id of collation for this StringType.
  */
 @Stable
-class StringType private (val collationId: Int) extends AtomicType with Serializable {
+class StringType private[sql] (val collationId: Int) extends AtomicType with Serializable {
 
   /**
    * Support for Binary Equality implies that strings are considered equal only if they are byte
@@ -106,3 +106,9 @@ case object StringType extends StringType(0) {
     new StringType(collationId)
   }
 }
+
+/**
+ * A.
+ */
+@Evolving
+case object ImplicitStringType extends StringType(0) {}

@@ -339,6 +339,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveRowLevelCommandAssignments ::
       MoveParameterizedQueriesDown ::
       BindParameters ::
+      ResolveImplicitStringTypes ::
       typeCoercionRules() ++
       Seq(
         ResolveWithCTE,
