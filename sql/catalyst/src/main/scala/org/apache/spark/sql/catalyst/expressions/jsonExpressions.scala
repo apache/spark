@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.io._
 
-import scala.collection.mutable.ArrayBuffer
 import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
@@ -31,6 +30,8 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
+import org.apache.spark.sql.catalyst.expressions.json.JsonExpressionUtils
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, TreePattern}
@@ -1040,50 +1041,23 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
   group = "json_funcs",
   since = "3.1.0"
 )
-case class JsonObjectKeys(child: Expression) extends UnaryExpression with CodegenFallback
-  with ExpectsInputTypes {
+case class JsonObjectKeys(child: Expression)
+  extends UnaryExpression
+  with ExpectsInputTypes
+  with RuntimeReplaceable {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCaseAccentSensitivity)
   override def dataType: DataType = ArrayType(SQLConf.get.defaultStringType)
   override def nullable: Boolean = true
   override def prettyName: String = "json_object_keys"
 
-  override def eval(input: InternalRow): Any = {
-    val json = child.eval(input).asInstanceOf[UTF8String]
-    // return null for `NULL` input
-    if(json == null) {
-      return null
-    }
-
-    try {
-      Utils.tryWithResource(CreateJacksonParser.utf8String(SharedFactory.jsonFactory, json)) {
-        parser => {
-          // return null if an empty string or any other valid JSON string is encountered
-          if (parser.nextToken() == null || parser.currentToken() != JsonToken.START_OBJECT) {
-            return null
-          }
-          // Parse the JSON string to get all the keys of outermost JSON object
-          getJsonKeys(parser, input)
-        }
-      }
-    } catch {
-      case _: JsonProcessingException | _: IOException => null
-    }
-  }
-
-  private def getJsonKeys(parser: JsonParser, input: InternalRow): GenericArrayData = {
-    val arrayBufferOfKeys = ArrayBuffer.empty[UTF8String]
-
-    // traverse until the end of input and ensure it returns valid key
-    while(parser.nextValue() != null && parser.currentName() != null) {
-      // add current fieldName to the ArrayBuffer
-      arrayBufferOfKeys += UTF8String.fromString(parser.currentName)
-
-      // skip all the children of inner object or array
-      parser.skipChildren()
-    }
-    new GenericArrayData(arrayBufferOfKeys.toArray[Any])
-  }
+  override def replacement: Expression = StaticInvoke(
+    classOf[JsonExpressionUtils],
+    dataType,
+    "jsonObjectKeys",
+    Seq(child),
+    inputTypes
+  )
 
   override protected def withNewChildInternal(newChild: Expression): JsonObjectKeys =
     copy(child = newChild)
