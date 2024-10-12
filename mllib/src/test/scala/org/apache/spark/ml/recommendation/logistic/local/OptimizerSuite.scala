@@ -61,7 +61,7 @@ class OptimizerSuite extends MLTest with DefaultReadWriteTest with Logging {
 
   }
 
-  test("LMF optimizer explicit") {
+  test("Optimizer explicit") {
     val random = new Random(239)
     val useBias = true
     val dim = 5
@@ -119,7 +119,7 @@ class OptimizerSuite extends MLTest with DefaultReadWriteTest with Logging {
     assert(0.8 < acc)
   }
 
-  test("LMF optimizer implicit") {
+  test("Optimizer implicit") {
     val random = new Random(240)
     val dim = 5
     val useBias = true
@@ -232,10 +232,10 @@ object OptimizerSuite extends Logging {
     1 / (1 + Math.exp(-x))
   }
 
-  private def epr(data: Iterable[(Long, Long, Float, Float)],
-                  useBias: Boolean,
-                  userFactors: Array[(Long, Array[Float])],
-                  itemFactors: Array[(Long, Array[Float])]) = {
+  private[recommendation] def epr(data: Iterable[(Long, Long, Float, Float)],
+                                  useBias: Boolean,
+                                  userFactors: Array[(Long, Array[Float])],
+                                  itemFactors: Array[(Long, Array[Float])]) = {
 
     val user2i = userFactors.map(_._1).zipWithIndex.toMap
     val item2i = itemFactors.map(_._1).zipWithIndex.toMap
@@ -250,10 +250,10 @@ object OptimizerSuite extends Logging {
     }.sum / data.map(_._4).sum
   }
 
-  private def accuracy(data: Iterable[(Long, Long, Float, Float)],
-                       useBias: Boolean,
-                       userFactors: Array[(Long, Array[Float])],
-                       itemFactors: Array[(Long, Array[Float])]) = {
+  private[recommendation] def accuracy(data: Iterable[(Long, Long, Float, Float)],
+                                       useBias: Boolean,
+                                       userFactors: Array[(Long, Array[Float])],
+                                       itemFactors: Array[(Long, Array[Float])]) = {
 
     val user2i = userFactors.map(_._1).zipWithIndex.toMap
     val item2i = itemFactors.map(_._1).zipWithIndex.toMap
@@ -269,14 +269,14 @@ object OptimizerSuite extends Logging {
     }.sum / data.map(_._4).sum
   }
 
-  private def genData(
-                       numUsers: Int,
-                       numItems: Int,
-                       numSamples: Int,
-                       rank: Int,
-                       useBias: Boolean,
-                       implicitPrefs: Boolean,
-                       random: Random) = {
+  private[recommendation] def genData(
+                                       numUsers: Int,
+                                       numItems: Int,
+                                       numSamples: Int,
+                                       rank: Int,
+                                       useBias: Boolean,
+                                       implicitPrefs: Boolean,
+                                       random: Random) = {
 
     val userFactors = genFactors(numUsers, rank, useBias, 5, random)
     val itemFactors = genFactors(numItems, rank, useBias, 5, random)
