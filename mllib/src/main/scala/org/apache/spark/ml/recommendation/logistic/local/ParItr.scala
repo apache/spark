@@ -69,6 +69,7 @@ private[ml] object ParItr {
           case _: InterruptedException => t.join()
         }
       }
+      Thread.interrupted()
     }
 
     if (error.get() != null) {
