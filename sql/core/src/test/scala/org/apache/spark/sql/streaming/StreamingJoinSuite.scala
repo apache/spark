@@ -234,8 +234,7 @@ abstract class StreamingJoinSuite
     // just make sure the query have no leftover data
     q.processAllAvailable()
 
-    // By default, it reads the state store from lastest committed batch.
-    // (Do we have a case where we have to look back on testing?)
+    // By default, it reads the state store from latest committed batch.
     val stateStoreDf = spark.read.format("statestore")
       .option(StateSourceOptions.JOIN_SIDE, joinSide)
       .option(StateSourceOptions.PATH, checkpointLoc)
