@@ -18,15 +18,14 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
-
-* Table of contents
+{% include rel_path_to_root.html %}
 
 # Asynchronous Progress Tracking
 ## What is it?
 
 Asynchronous progress tracking allows streaming queries to checkpoint progress asynchronously and in parallel to the actual data processing within a micro-batch, reducing latency associated with maintaining the offset log and commit log.
 
-![Async Progress Tracking](/img/async-progress.png)
+![Async Progress Tracking]({{ rel_path_to_root }}img/async-progress.png)
 
 ## How does it work?
 
