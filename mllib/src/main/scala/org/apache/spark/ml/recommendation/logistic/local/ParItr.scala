@@ -16,29 +16,27 @@
  */
 package org.apache.spark.ml.recommendation.logistic.local
 
-import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
+import java.util.concurrent.{CountDownLatch, LinkedBlockingQueue, TimeUnit}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 private[ml] object ParItr {
   def foreach[A](iterator: Iterator[A], cpus: Int, fn: A => Unit): Unit = {
     val inQueue = new LinkedBlockingQueue[A](cpus * 5)
-    val totalCounter = new AtomicLong(0)
     val error = new AtomicReference[Exception](null)
     val end = new AtomicBoolean(false)
-    val mainThread = Thread.currentThread()
+    val latch = new CountDownLatch(1)
 
     val threads = Array.fill(cpus) {
       new Thread(() => {
         try {
           while (!end.get() || inQueue.size() > 0) {
             fn(inQueue.take)
-            totalCounter.decrementAndGet
           }
         } catch {
           case _: InterruptedException =>
           case e: Exception => error.set(e)
         } finally {
-          mainThread.interrupt()
+          latch.countDown()
         }
       })
     }
@@ -48,31 +46,17 @@ private[ml] object ParItr {
       iterator.foreach(e => {
         var ok = false
         while (!ok && error.get() == null) {
-          ok = inQueue.offer(e, 10, TimeUnit.SECONDS)
+          ok = inQueue.offer(e, 1, TimeUnit.SECONDS)
         }
-        totalCounter.incrementAndGet
       })
 
       end.set(true)
-      while (totalCounter.get > 0 && error.get() == null) {
-        Thread.sleep(1000)
+      if (inQueue.size() > 0) {
+        latch.await()
       }
-    } catch {
-      case _: InterruptedException =>
     } finally {
       threads.foreach(_.interrupt())
-      threads.foreach{t =>
-        var ok = false
-        while (!ok) {
-          try {
-            t.join()
-            ok = true
-          } catch {
-            case _: InterruptedException =>
-          }
-        }
-      }
-      Thread.interrupted()
+      threads.foreach(_.join())
     }
 
     if (error.get() != null) {
