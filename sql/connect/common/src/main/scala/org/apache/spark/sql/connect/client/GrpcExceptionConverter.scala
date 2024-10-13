@@ -267,10 +267,9 @@ private[client] object GrpcExceptionConverter {
         params.cause.orNull)),
     errorConstructor(params =>
       new SparkException(
-        message = params.message,
         cause = params.cause.orNull,
-        errorClass = params.errorClass,
-        messageParameters = params.messageParameters,
+        errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3263"),
+        messageParameters = errorParamsToMessageParameters(params),
         context = params.queryContext)))
 
   /**
