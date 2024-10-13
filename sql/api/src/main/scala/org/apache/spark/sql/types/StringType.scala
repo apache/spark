@@ -111,4 +111,4 @@ case object StringType extends StringType(0) {
  * A.
  */
 @Evolving
-object ImplicitStringType extends StringType(0) {}
+object ImplicitStringType extends StringType(-2) {}

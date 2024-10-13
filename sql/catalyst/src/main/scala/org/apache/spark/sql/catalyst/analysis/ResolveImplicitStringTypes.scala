@@ -19,7 +19,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterTableCommand, AlterViewAs, AlterViewSchemaBinding, ColumnDefinition, CreateFunction, CreateTable, CreateTableAsSelect, CreateView, LogicalPlan, ReplaceColumns}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, AlterViewSchemaBinding, ColumnDefinition, CreateFunction, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, ImplicitStringType, StringType}
@@ -30,11 +30,20 @@ object ResolveImplicitStringTypes extends Rule[LogicalPlan] {
 
       // Implicit string type should be resolved to the collation of the object for DDL commands.
       // However, this is not implemented yet. So, we will just use UTF8_BINARY for now.
-      case _: CreateTable | _: CreateTableAsSelect | _: AlterTableCommand |
-           _: AddColumns | _: ReplaceColumns | _: AlterColumn |
+      case _: V2CreateTablePlan |
            _: CreateView | _: AlterViewAs | _: AlterViewSchemaBinding | _: AlterViewSchemaBinding |
            _: CreateFunction =>
-        plan
+        val res = replaceWith(plan, StringType)
+        res
+
+      case addCols: AddColumns if hasImplicitStringType(addCols.columnsToAdd) =>
+        addCols.copy(columnsToAdd = replaceColTypes(addCols.columnsToAdd, StringType))
+
+      case replaceCols: ReplaceColumns if hasImplicitStringType(replaceCols.columnsToAdd) =>
+        replaceCols.copy(columnsToAdd = replaceColTypes(replaceCols.columnsToAdd, StringType))
+
+      case a: AlterColumn if a.dataType.isDefined && isImplicitStringType(a.dataType.get) =>
+        a.copy(dataType = Some(StringType))
 
       // Implicit string type should be resolved to the session collation for DML commands.
       case _ if SQLConf.get.defaultStringType != StringType =>
@@ -42,7 +51,7 @@ object ResolveImplicitStringTypes extends Rule[LogicalPlan] {
         res
 
       case _ =>
-        plan
+        replaceWith(plan, StringType)
     }
   }
 
@@ -60,6 +69,20 @@ object ResolveImplicitStringTypes extends Rule[LogicalPlan] {
             Literal(value, newType)
         }
     }
+  }
+
+  private def replaceColTypes(
+      colTypes: Seq[QualifiedColType],
+      newType: StringType): Seq[QualifiedColType] = {
+    colTypes.map {
+      case col if isImplicitStringType(col.dataType) =>
+        col.copy(dataType = newType)
+      case col => col
+    }
+  }
+
+  private def hasImplicitStringType(colTypes: Seq[QualifiedColType]): Boolean = {
+    colTypes.exists(col => isImplicitStringType(col.dataType))
   }
 
   private def isImplicitStringType(dataType: DataType): Boolean = {

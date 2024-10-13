@@ -314,12 +314,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveProcedures ::
       BindProcedures ::
       ResolveTableSpec ::
+      ResolveImplicitStringTypes ::
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
+//      ResolveImplicitStringTypes ::
       ResolveOutputRelation ::
       new ResolveDataFrameDropColumns(catalogManager) ::
       new ResolveSetVariable(catalogManager) ::
@@ -339,7 +341,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveRowLevelCommandAssignments ::
       MoveParameterizedQueriesDown ::
       BindParameters ::
-      ResolveImplicitStringTypes ::
+//      ResolveImplicitStringTypes ::
       typeCoercionRules() ++
       Seq(
         ResolveWithCTE,
