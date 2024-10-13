@@ -405,9 +405,7 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                 q.stop()
                 self.spark.sparkContext._jsc.sc().listenerBus().waitUntilEmpty()
                 self.check_terminated_event(
-                  terminated_event,
-                  "ZeroDivisionError",
-                  "_LEGACY_ERROR_TEMP_3264"
+                    terminated_event, "ZeroDivisionError", "_LEGACY_ERROR_TEMP_3264"
                 )
 
             finally:
