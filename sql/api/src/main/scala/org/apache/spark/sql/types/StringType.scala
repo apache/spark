@@ -20,7 +20,7 @@ package org.apache.spark.sql.types
 import org.json4s.JsonAST.{JString, JValue}
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.catalyst.collation.CollationFactory
 
 /**
  * The data type representing `String` values. Please use the singleton `DataTypes.StringType`.

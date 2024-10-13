@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.math.{BigDecimal => JavaBigDecimal}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.collation.CollationFactory
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.types.{ArrayType, Decimal, DecimalType, IntegerType, MapType, StringType, StructField, StructType}
 

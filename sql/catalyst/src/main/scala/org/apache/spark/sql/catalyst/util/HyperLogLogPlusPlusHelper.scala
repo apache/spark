@@ -21,6 +21,7 @@ import java.lang.{Long => JLong}
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.collation.CollationFactory
 import org.apache.spark.sql.catalyst.expressions.XxHash64Function
 import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers.{DOUBLE_NORMALIZER, FLOAT_NORMALIZER}
 import org.apache.spark.sql.types._

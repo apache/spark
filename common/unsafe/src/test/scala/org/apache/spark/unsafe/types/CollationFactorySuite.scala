@@ -23,12 +23,12 @@ import scala.jdk.CollectionConverters.MapHasAsScala
 import com.ibm.icu.util.ULocale
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.util.CollationFactory.fetchCollation
+import org.apache.spark.sql.catalyst.collation.CollationFactory.fetchCollation
 // scalastyle:off
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.must.Matchers
 
-import org.apache.spark.sql.catalyst.util.CollationFactory._
+import org.apache.spark.sql.catalyst.collation.CollationFactory._
 import org.apache.spark.unsafe.types.UTF8String.{fromString => toUTF8}
 
 class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ignore funsuite

@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.benchmark
 import scala.concurrent.duration._
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
-import org.apache.spark.sql.catalyst.util.{CollationFactory, CollationSupport}
+import org.apache.spark.sql.catalyst.collation.CollationFactory
+import org.apache.spark.sql.catalyst.util.CollationSupport
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class CollationBenchmarkBase extends BenchmarkBase {

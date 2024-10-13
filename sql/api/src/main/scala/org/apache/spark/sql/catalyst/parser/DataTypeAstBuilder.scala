@@ -22,9 +22,9 @@ import scala.jdk.CollectionConverters._
 
 import org.antlr.v4.runtime.Token
 import org.antlr.v4.runtime.tree.ParseTree
+import org.apache.spark.sql.catalyst.collation.CollationFactory
 
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
-import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.{string, withOrigin}
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.internal.SqlApiConf

@@ -18,7 +18,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile, CollationFactory}
+import org.apache.spark.sql.catalyst.collation.CollationFactory
+import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 
 // scalastyle:off line.size.limit
 /**

@@ -25,7 +25,8 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.util.{CollationFactory, QuotingUtils, StringConcat}
+import org.apache.spark.sql.catalyst.collation.CollationFactory
+import org.apache.spark.sql.catalyst.util.{QuotingUtils, StringConcat}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.{CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY}
 import org.apache.spark.util.SparkSchemaUtils
 

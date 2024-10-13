@@ -20,7 +20,7 @@ package org.apache.spark.sql.connect.common
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.catalyst.collation.CollationFactory
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkClassUtils

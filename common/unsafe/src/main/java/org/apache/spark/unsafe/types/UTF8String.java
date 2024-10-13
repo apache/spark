@@ -33,7 +33,7 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.ibm.icu.lang.UCharacter;
 
-import org.apache.spark.sql.catalyst.util.CollationFactory;
+import org.apache.spark.sql.catalyst.collation.CollationFactory;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UTF8StringBuilder;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
