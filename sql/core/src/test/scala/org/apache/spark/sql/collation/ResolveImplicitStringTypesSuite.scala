@@ -175,6 +175,11 @@ class ResolveImplicitStringTypesSuite extends DatasourceV2SQLBase {
       checkAnswer(
         sql(s"SELECT COUNT(*) FROM $tableName WHERE c1"),
         Seq(Row(1)))
+
+      sql(s"INSERT INTO $tableName VALUES (array_contains(array('a'), 'A'))")
+      checkAnswer(
+        sql(s"SELECT COUNT(*) FROM $tableName WHERE c1"),
+        Seq(Row(2)))
     }
   }
 

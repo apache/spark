@@ -2047,13 +2047,38 @@ class AstBuilder extends DataTypeAstBuilder
       Seq.tabulate(rows.head.size)(i => s"col${i + 1}")
     }
 
-    val unresolvedTable = UnresolvedInlineTable(aliases, rows.toSeq)
-    val table = if (false && conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED)) {
+    val rowSeq = rows.toSeq
+    val unresolvedTable = UnresolvedInlineTable(aliases, rowSeq)
+    val table = if (canEagerlyEvaluateInlineTable(rowSeq)) {
       EvaluateUnresolvedInlineTable.evaluate(unresolvedTable)
     } else {
       unresolvedTable
     }
     table.optionalMap(ctx.tableAlias.strictIdentifier)(aliasPlan)
+  }
+
+  /**
+   * Determines if the inline table can be eagerly evaluated. Eager evaluation is not allowed
+   * if the session-level collation is set and there are string literals present in the expressions,
+   * because the result may depend on the collation of the input.
+   */
+  private def canEagerlyEvaluateInlineTable(rows: Seq[Seq[Expression]]): Boolean = {
+    val configSet = conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED)
+    val usingDefaultStringType = SQLConf.get.defaultStringType == StringType
+
+    configSet &&
+      (usingDefaultStringType || !rows.exists(_.exists(containsStringLiteral)))
+  }
+
+  private def containsStringLiteral(expression: Expression): Boolean = {
+    def inner(expr: Expression): Boolean = expr match {
+      case Literal(_, dataType) =>
+        dataType.existsRecursively(_.isInstanceOf[StringType])
+      case _ =>
+        expr.children.exists(inner)
+    }
+
+    expression.resolved && inner(expression)
   }
 
   /**
