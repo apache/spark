@@ -8707,6 +8707,21 @@
       "Doesn't support month or year interval: <interval>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3300" : {
+    "message" : [
+      "error while calling spill() on <consumerToSpill> : <message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3301" : {
+    "message" : [
+      "Not enough memory to grow pointer array"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3302" : {
+    "message" : [
+      "No enough memory for aggregation"
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"

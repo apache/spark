@@ -1112,7 +1112,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def cannotAcquireMemoryToBuildUnsafeHashedRelationError(): Throwable = {
     new SparkOutOfMemoryError(
-      "_LEGACY_ERROR_TEMP_2107")
+      "_LEGACY_ERROR_TEMP_2107",
+      new java.util.HashMap[String, String]())
   }
 
   def rowLargerThan256MUnsupportedError(): SparkUnsupportedOperationException = {
