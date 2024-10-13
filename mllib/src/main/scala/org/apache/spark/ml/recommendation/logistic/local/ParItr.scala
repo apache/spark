@@ -34,10 +34,11 @@ private[ml] object ParItr {
             fn(inQueue.take)
             totalCounter.decrementAndGet
           }
-          mainThread.interrupt()
         } catch {
           case _: InterruptedException =>
           case e: Exception => error.set(e)
+        } finally {
+          mainThread.interrupt()
         }
       })
     }
