@@ -234,6 +234,10 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.sparkproject.spark_protobuf.protobuf.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.protobuf.utils.SchemaConverters.*"),
 
+    // SPARK-XXXXX:
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkException.this"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkException.<init>$default$5"),
+
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&
           !cls.fullName.startsWith("org.sparkproject.dmg.pmml")
