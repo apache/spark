@@ -67,9 +67,9 @@ class OptimizerSuite extends MLTest with DefaultReadWriteTest with Logging {
     val dim = 5
     val (trueUserFactors, trueItemFactors, trainData, testData) =
       OptimizerSuite.genData(4096, 32, 16, dim,
-        false, useBias, random = random)
+        useBias, implicitPrefs = false, random = random)
 
-    val opts = Opts.explicitOpts(dim, useBias, 0.025f, 1f, 0.01f, verbose = false)
+    val opts = Opts.explicitOpts(dim, useBias, 0.025f, 1f, 0.001f, verbose = false)
     val userCounts = trainData.groupMapReduce(_._1)(_ => 1L)(_ + _)
     val itemCounts = trainData.groupMapReduce(_._2)(_ => 1L)(_ + _)
 
@@ -114,9 +114,9 @@ class OptimizerSuite extends MLTest with DefaultReadWriteTest with Logging {
     logInfo(log"Random test accuracy is ${MDC(ACCURACY, rndAcc)}.")
     logInfo(log"Actual test accuracy is ${MDC(ACCURACY, acc)}.")
 
-    assert(0.98 < trueAcc)
-    assert(0.49 < rndAcc && rndAcc < 0.51)
-    assert(0.8 < acc)
+    assert(0.78 < trueAcc && trueAcc < 0.82)
+    assert(0.48 < rndAcc && rndAcc < 0.52)
+    assert(0.68 < acc && acc < 0.72)
   }
 
   test("Optimizer implicit") {
@@ -125,9 +125,9 @@ class OptimizerSuite extends MLTest with DefaultReadWriteTest with Logging {
     val useBias = true
     val (trueUserFactors, trueItemFactors, trainData, testData) =
       OptimizerSuite.genData(4096, 32, 16, dim,
-        true, useBias, random = random)
+        useBias, implicitPrefs = true, random = random)
 
-    val opts = Opts.implicitOpts(dim, useBias, 10, 0f, 0.025f, 1f, 0.01f, 0.1f,
+    val opts = Opts.implicitOpts(dim, useBias, 10, 0f, 0.025f, 1f, 0.001f, 0.1f,
       verbose = false)
     val userCounts = trainData.groupMapReduce(_._1)(_ => 1L)(_ + _)
     val itemCounts = trainData.groupMapReduce(_._2)(_ => 1L)(_ + _)
@@ -172,9 +172,9 @@ class OptimizerSuite extends MLTest with DefaultReadWriteTest with Logging {
     logInfo(log"Random test epr is ${MDC(EPR, rndEpr)}.")
     logInfo(log"Actual test epr is ${MDC(EPR, epr)}.")
 
-    assert(0.95 < trueEpr)
-    assert(0.45 < rndEpr && rndEpr < 0.55)
-    assert(0.95 < epr)
+    assert(0.87 < trueEpr && trueEpr < 0.91)
+    assert(0.48 < rndEpr && rndEpr < 0.52)
+    assert(0.84 < epr && epr < 0.88)
   }
 
 }
@@ -279,8 +279,8 @@ object OptimizerSuite extends Logging {
                                        implicitPrefs: Boolean,
                                        random: Random) = {
 
-    val userFactors = genFactors(numUsers, rank, useBias, 5, random)
-    val itemFactors = genFactors(numItems, rank, useBias, 5, random)
+    val userFactors = genFactors(numUsers, rank, useBias, 1, random)
+    val itemFactors = genFactors(numItems, rank, useBias, 1, random)
 
     val logits = getLogits(userFactors, itemFactors, useBias)
     val trainData = ArrayBuffer.empty[(Long, Long, Float, Float)]
