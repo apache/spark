@@ -148,7 +148,8 @@ trait SQLQueryTestHelper extends Logging {
     try {
       result
     } catch {
-      case e: SparkThrowable with Throwable if e.getCondition != null =>
+      case e: SparkThrowable with Throwable
+        if e.getCondition != null && e.getCondition != "_LEGACY_ERROR_TEMP_3264" =>
         (emptySchema, Seq(e.getClass.getName, getMessage(e, format)))
       case a: AnalysisException =>
         // Do not output the logical plan tree which contains expression IDs.
@@ -160,7 +161,8 @@ trait SQLQueryTestHelper extends Logging {
         // information of stage, task ID, etc.
         // To make result matching simpler, here we match the cause of the exception if it exists.
         s.getCause match {
-          case e: SparkThrowable with Throwable if e.getCondition != null =>
+          case e: SparkThrowable with Throwable
+            if e.getCondition != null && e.getCondition != "_LEGACY_ERROR_TEMP_3264" =>
             (emptySchema, Seq(e.getClass.getName, getMessage(e, format)))
           case cause =>
             (emptySchema, Seq(cause.getClass.getName, cause.getMessage))
