@@ -910,14 +910,7 @@ class InternalFrame:
 
     @staticmethod
     def attach_distributed_column(sdf: PySparkDataFrame, column_name: str) -> PySparkDataFrame:
-        scols = [scol_for(sdf, column) for column in sdf.columns]
-        # Does not add an alias to avoid having some changes in protobuf definition for now.
-        # The alias is more for query strings in DataFrame.explain, and they are cosmetic changes.
-        if is_remote():
-            return sdf.select(F.monotonically_increasing_id().alias(column_name), *scols)
-        jvm = sdf.sparkSession._jvm
-        jcol = jvm.PythonSQLUtils.distributedIndex()
-        return sdf.select(PySparkColumn(jcol).alias(column_name), *scols)
+        return sdf.select(SF.distributed_id().alias(column_name), "*")
 
     @staticmethod
     def attach_distributed_sequence_column(
