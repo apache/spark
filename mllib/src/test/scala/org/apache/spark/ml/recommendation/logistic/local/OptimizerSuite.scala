@@ -56,6 +56,7 @@ class OptimizerSuite extends MLTest with DefaultReadWriteTest with Logging {
         val accum = new AtomicLong(0L)
         ParItr.foreach(data.iterator, 5, (x: Long) => accum.addAndGet(x / 0))
       }
+      assert(e.getMessage != null)
       assert(e.getMessage.contains("/ by zero"))
     }
 
