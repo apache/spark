@@ -55,12 +55,10 @@ private[ml] object ParItr {
 
       end.set(true)
       while (totalCounter.get > 0 && error.get() == null) {
-        try {
-          Thread.sleep(1000)
-        } catch {
-          case _: InterruptedException =>
-        }
+        Thread.sleep(1000)
       }
+    } catch {
+      case _: InterruptedException =>
     } finally {
       threads.foreach(_.interrupt())
       threads.foreach{t =>
