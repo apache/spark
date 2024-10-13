@@ -197,7 +197,7 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
       .setRank(5)
       .setNegative(10)
       .setRegParamU(1)
-      .setRegParamI(0.01)
+      .setRegParamI(0.001)
       .setPow(0)
       .fit(trainDf)
 
