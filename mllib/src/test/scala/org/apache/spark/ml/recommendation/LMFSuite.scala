@@ -175,7 +175,7 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
     import spark.implicits._
     val useBias = true
     val (trueUserFactor, trueItemFactors, trainData, testData) =
-      OptimizerSuite.genData(4096, 32, 16, 5, useBias, true, new Random(239))
+      OptimizerSuite.genData(4096, 32, 16, 5, useBias, implicitPrefs = true, new Random(239))
     val trainDf = sc.parallelize(trainData.toSeq)
       .toDF("user", "item", "label", "weight")
 
@@ -207,10 +207,54 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
       .collect().map(e => e._1 -> (e._2 :+ e._3))
 
     val trueEpr = OptimizerSuite.epr(testData, useBias, trueUserFactor, trueItemFactors)
-    val epr = OptimizerSuite.epr(testData, true, userFactors, itemFactors)
+    val epr = OptimizerSuite.epr(testData, useBias = true, userFactors, itemFactors)
 
     assert(0.85 < trueEpr && trueEpr < 0.9)
     assert(0.8 < epr && epr < 0.85)
+  }
+
+  test("LMF explicit feedback") {
+    val spark = this.spark
+    import spark.implicits._
+    val useBias = true
+    val (trueUserFactor, trueItemFactors, trainData, testData) =
+      OptimizerSuite.genData(4096, 32, 16, 5, useBias, implicitPrefs = false, new Random(239))
+    val trainDf = sc.parallelize(trainData.toSeq)
+      .toDF("user", "item", "label", "weight")
+
+    val result = new LMF()
+      .setUserCol("user")
+      .setItemCol("item")
+      .setWeightCol("weight")
+      .setLabelCol("label")
+      .setImplicitPrefs(false)
+      .setFitIntercept(useBias)
+      .setVerbose(true)
+      .setSeed(239)
+      .setNumPartitions(10)
+      .setCheckpointInterval(25)
+      .setCheckpointPath(CHECKPOINT_PATH + "lmf_explicit")
+      .setParallelism(5)
+      .setMaxIter(100)
+      .setMinItemCount(1)
+      .setMinUserCount(1)
+      .setRank(5)
+      .setNegative(10)
+      .setRegParamU(1)
+      .setRegParamI(0.001)
+      .setPow(0)
+      .fit(trainDf)
+
+    val userFactors = result.userFactors.as[(Long, Array[Float], Float)]
+      .collect().map(e => e._1 -> (e._2 :+ e._3))
+    val itemFactors = result.itemFactors.as[(Long, Array[Float], Float)]
+      .collect().map(e => e._1 -> (e._2 :+ e._3))
+
+    val trueAcc = OptimizerSuite.accuracy(testData, useBias, trueUserFactor, trueItemFactors)
+    val acc = OptimizerSuite.accuracy(testData, useBias = true, userFactors, itemFactors)
+
+    assert(0.78 < trueAcc && trueAcc < 0.82)
+    assert(0.68 < acc && acc < 0.72)
   }
 }
 
