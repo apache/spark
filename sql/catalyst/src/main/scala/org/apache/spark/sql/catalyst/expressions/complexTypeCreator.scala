@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.{InternalRow, collation}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, FunctionBuilder}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -591,13 +591,13 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
       inputString: Any,
       stringDelimiter: Any,
       keyValueDelimiter: Any): Any = {
-    val keyValues = collation.CollationAwareUTF8String.splitSQL(inputString.asInstanceOf[UTF8String],
+    val keyValues = CollationAwareUTF8String.splitSQL(inputString.asInstanceOf[UTF8String],
       stringDelimiter.asInstanceOf[UTF8String], -1, collationId)
     val keyValueDelimiterUTF8String = keyValueDelimiter.asInstanceOf[UTF8String]
 
     var i = 0
     while (i < keyValues.length) {
-      val keyValueArray = collation.CollationAwareUTF8String.splitSQL(
+      val keyValueArray = CollationAwareUTF8String.splitSQL(
         keyValues(i), keyValueDelimiterUTF8String, 2, collationId)
       val key = keyValueArray(0)
       val value = if (keyValueArray.length < 2) null else keyValueArray(1)
