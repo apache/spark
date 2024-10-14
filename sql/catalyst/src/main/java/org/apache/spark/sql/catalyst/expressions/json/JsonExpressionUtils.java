@@ -101,7 +101,7 @@ public class JsonExpressionUtils {
       JsonFactory jsonFactory,
       JSONOptions jsonOptions,
       JsonInferSchema jsonInferSchema,
-      UTF8String json) throws IOException {
+      UTF8String json) {
     DataType schema;
     try (JsonParser jsonParser = CreateJacksonParser.utf8String(jsonFactory, json)) {
       jsonParser.nextToken();
@@ -112,8 +112,8 @@ public class JsonExpressionUtils {
         schema = canonicalType.isDefined() ?
           canonicalType.get() : new StructType(new StructField[0]);
       } else if (inferSchema instanceof ArrayType at && at.elementType() instanceof StructType et) {
-        Option<DataType> canonicalType = jsonInferSchema.canonicalizeType(et, jsonOptions).
-          map(dt -> ArrayType.apply(dt, at.containsNull()));
+        Option<DataType> canonicalType = jsonInferSchema.canonicalizeType(et, jsonOptions)
+          .map(dt -> ArrayType.apply(dt, at.containsNull()));
         schema = canonicalType.isDefined() ? canonicalType.get() :
           ArrayType.apply(new StructType(new StructField[0]), at.containsNull());
       } else {
@@ -121,6 +121,8 @@ public class JsonExpressionUtils {
         schema = canonicalType.isDefined() ?
           canonicalType.get() : SQLConf.get().defaultStringType();
       }
+    } catch (IOException e) {
+      throw new RuntimeException(e);
     }
 
     return UTF8String.fromString(schema.sql());
