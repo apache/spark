@@ -103,7 +103,6 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     connection.prepareStatement("CREATE TABLE array_boolean (col boolean[])").executeUpdate()
     connection.prepareStatement("CREATE TABLE array_float (col real[])").executeUpdate()
     connection.prepareStatement("CREATE TABLE array_double (col float8[])").executeUpdate()
-    connection.prepareStatement("CREATE TABLE array_text (col text[])").executeUpdate()
     connection.prepareStatement("CREATE TABLE array_timestamp (col timestamp[])").executeUpdate()
     connection.prepareStatement("CREATE TABLE array_timestamptz (col timestamptz[])")
       .executeUpdate()
@@ -118,8 +117,6 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     connection.prepareStatement("INSERT INTO array_float VALUES (array[array[10.5]])")
       .executeUpdate()
     connection.prepareStatement("INSERT INTO array_double VALUES (array[array[10.1]])")
-      .executeUpdate()
-    connection.prepareStatement("INSERT INTO array_text VALUES (array[array['helo world']])")
       .executeUpdate()
     connection.prepareStatement("INSERT INTO array_timestamp VALUES (" +
       "array[array['2022-01-01 09:15'::timestamp]])").executeUpdate()
@@ -198,14 +195,6 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       val df = spark.read.format("jdbc")
         .option("url", jdbcUrl)
         .option("dbtable", "array_timestamptz")
-        .load()
-      df.collect()
-    }
-
-    intercept[SparkSQLException] {
-      val df = spark.read.format("jdbc")
-        .option("url", jdbcUrl)
-        .option("dbtable", "array_text")
         .load()
       df.collect()
     }
