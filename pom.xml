@@ -141,7 +141,7 @@
     <parquet.version>1.14.3</parquet.version>
     <orc.version>2.0.2</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>11.0.23</jetty.version>
+    <jetty.version>12.0.12</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
     <!-- SPARK-46938: Required by Hive / LibThrift libs -->
     <javaxservlet.version>4.0.1</javaxservlet.version>
