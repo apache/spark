@@ -1,0 +1,29 @@
+package org.apache.spark.sql.catalyst.json
+
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.catalyst.expressions.json.JsonExpressionUtils
+import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.scalatest.funsuite.AnyFunSuite
+
+class JsonObjectKeysSuite extends AnyFunSuite {
+
+  test("Test jsonObjectKeys with null and non-null keys") {
+    // JSON string that has a sequence where the parser will encounter null, then non-null keys
+    val jsonString = """{"key1":null, "key2":{"nestedKey1":"value1"}, "key3":"value2"}"""
+
+    val json = UTF8String.fromString(jsonString)
+
+    val result = JsonExpressionUtils.jsonObjectKeys(json)
+
+    val expectedKeys = Array(
+      UTF8String.fromString("key1"),
+      UTF8String.fromString("key2"),
+      UTF8String.fromString("key3")
+    )
+
+    assert(result != null, "Result should not be null")
+    assert(result.numElements() == expectedKeys.length, "Number of keys should match")
+    assert(result.array().sameElements(expectedKeys), "Keys should match expected values")
+  }
+}
+
