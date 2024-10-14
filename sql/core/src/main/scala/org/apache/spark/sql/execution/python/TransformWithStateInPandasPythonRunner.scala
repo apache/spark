@@ -112,7 +112,7 @@ class TransformWithStateInPandasPythonInitialStateRunner(
   with PythonArrowInput[GroupedInType] {
 
   override protected lazy val schema: StructType = new StructType()
-    .add("state", dataSchema)
+    .add("inputData", dataSchema)
     .add("initState", initStateSchema)
 
   private var pandasWriter: BaseStreamingArrowWriter = _

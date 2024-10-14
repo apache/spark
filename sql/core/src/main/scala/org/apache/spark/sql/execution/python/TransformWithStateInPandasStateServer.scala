@@ -169,10 +169,13 @@ class TransformWithStateInPandasStateServer(
         val requestedState = message.getSetHandleState.getState
         requestedState match {
           case HandleState.CREATED =>
+            logInfo(log"set handle state to Created")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CREATED)
           case HandleState.INITIALIZED =>
+            logInfo(log"set handle state to Initialized")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
           case HandleState.CLOSED =>
+            logInfo(log"set handle state to Closed")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
           case _ =>
         }

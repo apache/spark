@@ -404,7 +404,7 @@ class PandasGroupedOpsMixin:
             The output mode of the stateful processor.
         timeMode : str
             The time mode semantics of the stateful processor for timers and TTL.
-        initialState: "GroupedData"
+        initialState : :class:`pyspark.sql.GroupedData`
             Optional. The grouped dataframe on given grouping key as initial states used for initialization
             of state variables in the first batch.
 
@@ -515,34 +515,46 @@ class PandasGroupedOpsMixin:
             return result
 
         def transformWithStateWithInitStateUDF(
-                statefulProcessorApiClient: StatefulProcessorApiClient,
-                key: Any,
-                inputRows: Iterator["PandasDataFrameLike"],
-                # for non first batch, initialStates will be None
-                initialStates: Iterator["PandasDataFrameLike"] = None
+            statefulProcessorApiClient: StatefulProcessorApiClient,
+            key: Any,
+            inputRows: Iterator["PandasDataFrameLike"],
+            initialStates: Iterator["PandasDataFrameLike"] = None
         ) -> Iterator["PandasDataFrameLike"]:
+            """
+            UDF for TWS operator with non-empty initial states. Possible input combinations
+            of inputRows and initialStates iterator:
+            - Both `inputRows` and `initialStates` are non-empty: for the given key, both input rows
+              and initial states contains the grouping key.
+            - `InitialStates` is non-empty, while `initialStates` is empty. For the given key, only
+              initial states contains the key, and it is first batch.
+            - `initialStates` is empty, while `inputRows` is not empty. For the given key, only inputRows
+              contains the key, and it is first batch.
+            - `initialStates` is None, while `inputRows` is not empty. This is not first batch. `initialStates`
+              is initialized to the positional value as None.
+            """
             handle = StatefulProcessorHandle(statefulProcessorApiClient)
 
             if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:
                 statefulProcessor.init(handle)
-                # only process initial state if first batch
-                is_first_batch = statefulProcessorApiClient.is_first_batch()
-                if is_first_batch and initialStates is not None:
-                    seen_init_state_on_key = False
-                    for cur_initial_state in initialStates:
-                        if seen_init_state_on_key:
-                            raise Exception(f"TransformWithStateWithInitState: Cannot have more "
-                                            f"than one row in the initial states for the same key. "
-                                            f"Grouping key: {key}.")
-                        statefulProcessorApiClient.set_implicit_key(key)
-                        statefulProcessor.handleInitialState(key, cur_initial_state)
-                        seen_init_state_on_key = True
                 statefulProcessorApiClient.set_handle_state(
                     StatefulProcessorHandleState.INITIALIZED
                 )
 
-            # if we don't have state for the given key but in initial state,
-            # iterator could be None
+            # only process initial state if first batch
+            is_first_batch = statefulProcessorApiClient.is_first_batch()
+            if is_first_batch and initialStates is not None:
+                seen_init_state_on_key = False
+                for cur_initial_state in initialStates:
+                    if seen_init_state_on_key:
+                        raise Exception(f"TransformWithStateWithInitState: Cannot have more "
+                                        f"than one row in the initial states for the same key. "
+                                        f"Grouping key: {key}.")
+                    statefulProcessorApiClient.set_implicit_key(key)
+                    statefulProcessor.handleInitialState(key, cur_initial_state)
+                    seen_init_state_on_key = True
+
+            # if we don't have input rows for the given key but only have initial state
+            # for the grouping key, the inputRows iterator could be empty
             input_rows_empty = False
             try:
                 first = next(inputRows)

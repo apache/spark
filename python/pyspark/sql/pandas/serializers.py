@@ -1228,7 +1228,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                 return table_from_fields
 
             for batch in batches:
-                flatten_state_table = flatten_columns(batch, 'state')
+                flatten_state_table = flatten_columns(batch, 'inputData')
                 data_pandas = [
                     self.arrow_to_pandas(c) for c in flatten_state_table.itercolumns()
                 ]

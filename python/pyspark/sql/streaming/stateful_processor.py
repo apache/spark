@@ -236,7 +236,7 @@ class StatefulProcessor(ABC):
         ...
 
     def handleInitialState(
-            self, key: Any, initialState: "PandasDataFrameLike"
+        self, key: Any, initialState: "PandasDataFrameLike"
     ) -> None:
         """
         Optional to implement. Will act as no-op if not defined or no initial state input. Function
