@@ -131,6 +131,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UTF8_BINARY_RTRIM", "aaa", "aaa  ", true),
       CollationTestCase("UTF8_BINARY_RTRIM", "aaa  ", "aaa ", true),
       CollationTestCase("UTF8_BINARY_RTRIM", "aaa", " aaa ", false),
+      CollationTestCase("UTF8_BINARY_RTRIM", "    ", "  ", true),
       CollationTestCase("UTF8_LCASE", "aaa", "aaa", true),
       CollationTestCase("UTF8_LCASE", "aaa", "AAA", true),
       CollationTestCase("UTF8_LCASE", "aaa", "AaA", true),
@@ -142,6 +143,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UTF8_LCASE_RTRIM", "aaa", "AaA ", true),
       CollationTestCase("UTF8_LCASE_RTRIM", "aaa ", "AaA ", true),
       CollationTestCase("UTF8_LCASE_RTRIM", "aaa", " AaA ", false),
+      CollationTestCase("UTF8_LCASE_RTRIM", "    ", "  ", true),
       CollationTestCase("UNICODE", "aaa", "aaa", true),
       CollationTestCase("UNICODE", "aaa", "AAA", false),
       CollationTestCase("UNICODE", "aaa", "bbb", false),
@@ -150,6 +152,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UNICODE_RTRIM", "aaa", "aaa  ", true),
       CollationTestCase("UNICODE_RTRIM", "aaa  ", "aaa ", true),
       CollationTestCase("UNICODE_RTRIM", "aaa", " aaa ", false),
+      CollationTestCase("UNICODE_RTRIM", "    ", "  ", true),
       CollationTestCase("UNICODE_CI", "aaa", "aaa", true),
       CollationTestCase("UNICODE_CI", "aaa", "AAA", true),
       CollationTestCase("UNICODE_CI", "aaa", "bbb", false),
@@ -158,7 +161,8 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UNICODE_CI_RTRIM", "aaa", "AaA", true),
       CollationTestCase("UNICODE_CI_RTRIM", "aaa", "AaA ", true),
       CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "AaA ", true),
-      CollationTestCase("UNICODE_CI_RTRIM", "aaa", " AaA ", false)
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa", " AaA ", false),
+      CollationTestCase("UNICODE_RTRIM", "    ", "  ", true)
     )
 
     checks.foreach(testCase => {
@@ -184,6 +188,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UTF8_BINARY_RTRIM", "aaa ", "bbb ", -1),
       CollationTestCase("UTF8_BINARY_RTRIM", "aaa", "BBB" , 1),
       CollationTestCase("UTF8_BINARY_RTRIM", "aaa  ", "BBB " , 1),
+      CollationTestCase("UTF8_BINARY_RTRIM", "   ", " " , 0),
       CollationTestCase("UTF8_LCASE", "aaa", "aaa", 0),
       CollationTestCase("UTF8_LCASE", "aaa", "AAA", 0),
       CollationTestCase("UTF8_LCASE", "aaa", "AaA", 0),
@@ -196,6 +201,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UTF8_LCASE_RTRIM", "aaa  ", "bbb ", -1),
       CollationTestCase("UTF8_LCASE_RTRIM", "aaa ", "aa", 1),
       CollationTestCase("UTF8_LCASE_RTRIM", "aaa ", "aa  ", 1),
+      CollationTestCase("UTF8_LCASE_RTRIM", " ", "  ", 0),
       CollationTestCase("UNICODE", "aaa", "aaa", 0),
       CollationTestCase("UNICODE", "aaa", "AAA", -1),
       CollationTestCase("UNICODE", "aaa", "bbb", -1),
@@ -206,6 +212,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UNICODE_RTRIM", "aaa ", "bbb ", -1),
       CollationTestCase("UNICODE_RTRIM", "aaa", "BBB" , -1),
       CollationTestCase("UNICODE_RTRIM", "aaa  ", "BBB " , -1),
+      CollationTestCase("UNICODE_RTRIM", " ", "  ", 0),
       CollationTestCase("UNICODE_CI", "aaa", "aaa", 0),
       CollationTestCase("UNICODE_CI", "aaa", "AAA", 0),
       CollationTestCase("UNICODE_CI", "aaa", "bbb", -1),
@@ -214,7 +221,8 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UNICODE_CI_RTRIM", "aaa", "bbb ", -1),
       CollationTestCase("UNICODE_CI_RTRIM", "aaa  ", "bbb ", -1),
       CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "aa", 1),
-      CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "aa  ", 1)
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "aa  ", 1),
+      CollationTestCase("UNICODE_CI_RTRIM", " ", "   ", 0)
     )
 
     checks.foreach(testCase => {

@@ -961,7 +961,7 @@ public final class CollationFactory {
         Comparator<UTF8String> comparator;
         ToLongFunction<UTF8String> hashFunction;
 
-        if (spaceTrimming == SpaceTrimming.NONE){
+        if (spaceTrimming == SpaceTrimming.NONE) {
           hashFunction = s -> (long) collator.getCollationKey(
             s.toValidString()).hashCode();
           comparator = (s1, s2) ->
