@@ -142,7 +142,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       exception = intercept[SparkSQLFeatureNotSupportedException] {
         sql(s"ALTER TABLE $tbl ALTER COLUMN ID DROP NOT NULL")
       },
-      condition = "_LEGACY_ERROR_TEMP_2271")
+      condition = "UNSUPPORTED_FEATURE.UPDATE_COLUMN_NULLABILITY")
   }
 
   override def testCreateTableWithProperty(tbl: String): Unit = {

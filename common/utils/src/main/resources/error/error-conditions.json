@@ -2593,6 +2593,13 @@
     },
     "sqlState" : "42K0K"
   },
+  "INVALID_JAVA_IDENTIFIER_AS_FIELD_NAME" : {
+    "message" : [
+      "<fieldName> is not a valid identifier of Java and cannot be used as field name",
+      "<walkedTypePath>."
+    ],
+    "sqlState" : "46121"
+  },
   "INVALID_JOIN_TYPE_FOR_JOINWITH" : {
     "message" : [
       "Invalid join type in joinWith: <joinType>."
@@ -5186,6 +5193,11 @@
         "message" : [
           "TRIM specifier in the collation."
         ]
+      },
+      "UPDATE_COLUMN_NULLABILITY" : {
+        "message" : [
+          "Update column nullability for MySQL and MS SQL Server."
+        ]
       }
     },
     "sqlState" : "0A000"
@@ -6124,11 +6136,6 @@
   "_LEGACY_ERROR_TEMP_1135" : {
     "message" : [
       "<className> is not a valid Spark SQL Data Source."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1136" : {
-    "message" : [
-      "Cannot save interval data type into external storage."
     ]
   },
   "_LEGACY_ERROR_TEMP_1137" : {
@@ -7202,12 +7209,6 @@
       "cannot have circular references in class, but got the circular reference of class <t>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2140" : {
-    "message" : [
-      "`<fieldName>` is not a valid identifier of Java and cannot be used as field name",
-      "<walkedTypePath>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2144" : {
     "message" : [
       "Unable to find constructor for <tpe>. This could happen if <tpe> is an interface, or a trait without companion object constructor."
@@ -7694,11 +7695,6 @@
   "_LEGACY_ERROR_TEMP_2270" : {
     "message" : [
       "comment on table is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2271" : {
-    "message" : [
-      "UpdateColumnNullability is not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_2272" : {
