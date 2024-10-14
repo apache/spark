@@ -45,7 +45,11 @@ private[ml] object ParItr {
       threads.foreach(_.start())
       iterator.foreach(e => {
         var ok = false
-        while (!ok && error.get() == null) {
+        while (!ok) {
+          if (error.get() != null) {
+            throw error.get()
+          }
+
           ok = inQueue.offer(e, 1, TimeUnit.SECONDS)
         }
       })
@@ -54,14 +58,14 @@ private[ml] object ParItr {
       if (inQueue.size() > 0) {
         latch.await()
       }
+
+      if (error.get() != null) {
+        throw error.get()
+      }
+
     } finally {
       threads.foreach(_.interrupt())
       threads.foreach(_.join())
     }
-
-    if (error.get() != null) {
-      throw error.get()
-    }
-
   }
 }

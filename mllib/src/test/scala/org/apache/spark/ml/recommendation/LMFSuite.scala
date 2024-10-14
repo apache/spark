@@ -18,10 +18,7 @@
 package org.apache.spark.ml.recommendation
 
 
-import java.io.File
 import java.util.Random
-
-import org.apache.commons.io.FileUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.recommendation.logistic.local.OptimizerSuite
@@ -32,16 +29,12 @@ import org.apache.spark.sql.types._
 
 class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
 
-  val CHECKPOINT_PATH = "./.checkpoint/"
-
   override def beforeAll(): Unit = {
     super.beforeAll()
-    sc.setCheckpointDir(tempDir.getAbsolutePath)
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-    FileUtils.deleteDirectory(new File(CHECKPOINT_PATH))
   }
 
   test("LMF validate input dataset") {
@@ -189,7 +182,7 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
       .setSeed(239)
       .setNumPartitions(10)
       .setCheckpointInterval(25)
-      .setCheckpointPath(CHECKPOINT_PATH + "lmf_implicit")
+      .setCheckpointPath(tempDir.getAbsolutePath)
       .setParallelism(5)
       .setMaxIter(100)
       .setMinItemCount(1)
@@ -233,7 +226,7 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
       .setSeed(239)
       .setNumPartitions(10)
       .setCheckpointInterval(25)
-      .setCheckpointPath(CHECKPOINT_PATH + "lmf_explicit")
+      .setCheckpointPath(tempDir.getAbsolutePath)
       .setParallelism(5)
       .setMaxIter(100)
       .setMinItemCount(1)
