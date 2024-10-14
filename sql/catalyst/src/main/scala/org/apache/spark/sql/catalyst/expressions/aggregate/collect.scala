@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils, UnsafeRowUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.BoundedPriorityQueue
@@ -178,14 +178,15 @@ case class CollectSet(
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (!child.dataType.existsRecursively(_.isInstanceOf[MapType])) {
+    if (!child.dataType.existsRecursively(_.isInstanceOf[MapType]) &&
+        UnsafeRowUtils.isBinaryStable(child.dataType)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       DataTypeMismatch(
         errorSubClass = "UNSUPPORTED_INPUT_TYPE",
         messageParameters = Map(
           "functionName" -> toSQLId(prettyName),
-          "dataType" -> toSQLType(MapType)
+          "dataType" -> (s"${toSQLType(MapType)} " + "or \"COLLATED STRING\"")
         )
       )
     }

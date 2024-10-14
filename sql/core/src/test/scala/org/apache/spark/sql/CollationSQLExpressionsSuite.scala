@@ -2791,16 +2791,24 @@ class CollationSQLExpressionsSuite
     }
   }
 
-  test("collect_set supports collation") {
+  test("collect_set does not support collation") {
     val collation = "UNICODE"
     val query = s"SELECT collect_set(col) FROM VALUES ('a'), ('b'), ('a') AS tab(col);"
     withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      val result = sql(query).collect().head.getSeq[String](0).toSet
-      val expected = Set("a", "b")
-      assert(result == expected)
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), false)
-      assert(sql(query).schema.head.dataType == dataType)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(query)
+        },
+        condition = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
+        sqlState = Some("42K09"),
+        parameters = Map(
+          "functionName" -> "`collect_set`",
+          "dataType" -> "\"MAP\" or \"COLLATED STRING\"",
+          "sqlExpr" -> "\"collect_set(col)\""),
+        context = ExpectedContext(
+          fragment = "collect_set(col)",
+          start = 7,
+          stop = 22))
     }
   }
 
