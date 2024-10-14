@@ -23,7 +23,6 @@ import java.nio.ByteBuffer
 import java.nio.file.{CopyOption, Files, Path, Paths, StandardCopyOption}
 import java.util.concurrent.CopyOnWriteArrayList
 
-import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
@@ -88,13 +87,6 @@ class ArtifactManager(session: SparkSession) extends Logging {
   }
 
   private var initialContextResourcesCopied = false
-
-  /**
-   * The number of JARs for the last [[classloader]] call, and all generated class loaders.
-   * Value of the HashMap is not used.
-   */
-  private var numberOfJarsAndCachedClassLoaders =
-    (0, new mutable.WeakHashMap[ClassLoader, ClassLoader]())
 
   def withResources[T](f: => T): T = {
     def runWithState(f: => T): T = {
@@ -310,34 +302,10 @@ class ArtifactManager(session: SparkSession) extends Logging {
    * too many class loaders. Layering too much heavily impacts streaming performance.
    */
   def classloader: ClassLoader = {
-    val fallbackClassLoader = Utils.getContextOrSparkClassLoader
-    val (lastNumberOfJars, classLoaderMap) = numberOfJarsAndCachedClassLoaders
-    if (lastNumberOfJars != jarsList.size()) {
-      logWarning(s"Cleaning classloader cache")
-      // If the number of jars has changed, clear the cache and generate new class loaders.
-      numberOfJarsAndCachedClassLoaders =
-        (jarsList.size(), new mutable.WeakHashMap[ClassLoader, ClassLoader]())
-      val urls = getAddedJars :+ classDir.toUri.toURL
-      buildAndCacheClassLoader(fallbackClassLoader, urls)
-    } else {
-      if (classLoaderMap.contains(fallbackClassLoader)) {
-        // logWarning(s"Reusing new class loader for $fallbackClassLoader")
-        // new Exception().printStackTrace()
-        // If the fallback class loader is built by us, reuse it to avoid layering.
-        classLoaderMap(fallbackClassLoader)
-      } else {
-        val thread = Thread.currentThread().toString
-        logWarning(s"Generating new class loader for classloader $fallbackClassLoader. $thread")
-        // Otherwise build one new class loader.
-        val urls = getAddedJars :+ classDir.toUri.toURL
-        buildAndCacheClassLoader(fallbackClassLoader, urls)
-      }
-    }
-  }
-
-  def buildAndCacheClassLoader(fallbackClassLoader: ClassLoader, urls: Seq[URL]): ClassLoader = {
+    val urls = getAddedJars :+ classDir.toUri.toURL
     val prefixes = SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES)
     val userClasspathFirst = SparkEnv.get.conf.get(EXECUTOR_USER_CLASS_PATH_FIRST)
+    val fallbackClassLoader = Utils.getContextOrSparkClassLoader
     val loader = if (prefixes.nonEmpty) {
       // Two things you need to know about classloader for all of this to make sense:
       // 1. A classloader needs to be able to fully define a class.
@@ -370,10 +338,6 @@ class ArtifactManager(session: SparkSession) extends Logging {
     }
 
     logDebug(s"Using class loader: $loader, containing urls: $urls")
-
-    val cache = numberOfJarsAndCachedClassLoaders._2
-    cache += (loader -> loader)
-    cache += (fallbackClassLoader -> loader)
     loader
   }
 
@@ -449,8 +413,6 @@ class ArtifactManager(session: SparkSession) extends Logging {
     FileUtils.deleteDirectory(artifactPath.toFile)
 
     // Clean up internal trackers
-    numberOfJarsAndCachedClassLoaders =
-      (0, new mutable.WeakHashMap[ClassLoader, ClassLoader]())
     jarsList.clear()
     pythonIncludeList.clear()
     cachedBlockIdList.clear()
