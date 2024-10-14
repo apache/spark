@@ -97,7 +97,8 @@ object StringTypeWithCollation extends StringTypeWithCollation(false, true, true
       supportsTrimCollation: Boolean = false,
       supportsCaseSpecifier: Boolean = true,
       supportsAccentSpecifier: Boolean = true): StringTypeWithCollation = {
-    new StringTypeWithCollation(supportsTrimCollation)
+    new StringTypeWithCollation(
+      supportsTrimCollation, supportsCaseSpecifier, supportsAccentSpecifier)
   }
 }
 
