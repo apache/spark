@@ -44,7 +44,7 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSparkSession {
       spark.sql("select array(array(1, null, 3), array(4, 5, null), array(null, 8, 9)) as a")
         .write.parquet(f.getAbsolutePath)
       val df = spark.read.parquet(f.getAbsolutePath).selectExpr("transform(a, (x, i) -> x)")
-      checkAnswer(df, Row(Array(Array(1, null, 3), Array(4, 5, null), Array(null, 8, 9))))
+      checkAnswer(df, Row(Seq(Seq(1, null, 3), Seq(4, 5, null), Seq(null, 8, 9))))
     }
   }
 
