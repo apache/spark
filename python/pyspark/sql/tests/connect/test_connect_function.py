@@ -2078,6 +2078,46 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         cdf = self.connect.sql(query)
         sdf = self.spark.sql(query)
 
+        # test is_valid_utf8
+        self.assert_eq(
+            cdf.select(CF.is_valid_utf8(cdf.d)).toPandas(),
+            sdf.select(SF.is_valid_utf8(sdf.d)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.is_valid_utf8("abc")).toPandas(),
+            sdf.select(SF.is_valid_utf8("abc")).toPandas(),
+        )
+
+        # test make_valid_utf8
+        self.assert_eq(
+            cdf.select(CF.make_valid_utf8(cdf.d)).toPandas(),
+            sdf.select(SF.make_valid_utf8(sdf.d)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.make_valid_utf8("abc")).toPandas(),
+            sdf.select(SF.make_valid_utf8("abc")).toPandas(),
+        )
+
+        # test validate_utf8
+        self.assert_eq(
+            cdf.select(CF.validate_utf8(cdf.d)).toPandas(),
+            sdf.select(SF.validate_utf8(sdf.d)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.validate_utf8("abc")).toPandas(),
+            sdf.select(SF.validate_utf8("abc")).toPandas(),
+        )
+
+        # test try_validate_utf8
+        self.assert_eq(
+            cdf.select(CF.try_validate_utf8(cdf.d)).toPandas(),
+            sdf.select(SF.try_validate_utf8(sdf.d)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.try_validate_utf8("abc")).toPandas(),
+            sdf.select(SF.try_validate_utf8("abc")).toPandas(),
+        )
+
         self.assert_eq(
             cdf.select(CF.format_number(cdf.a, 2)).toPandas(),
             sdf.select(SF.format_number(sdf.a, 2)).toPandas(),
