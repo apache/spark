@@ -94,9 +94,9 @@
       "Could not get batch id from <obj_name>."
     ]
   },
-  "CANNOT_INFER_ARRAY_TYPE": {
+  "CANNOT_INFER_ARRAY_ELEMENT_TYPE": {
     "message": [
-      "Can not infer Array Type from a list with None as the first element."
+      "Can not infer the element data type, an non-empty list starting with an non-None value is required."
     ]
   },
   "CANNOT_INFER_EMPTY_SCHEMA": {

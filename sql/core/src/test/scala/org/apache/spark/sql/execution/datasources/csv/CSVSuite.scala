@@ -392,7 +392,7 @@ abstract class CSVSuite
         condition = "FAILED_READ_FILE.NO_HINT",
         parameters = Map("path" -> s".*$carsFile.*"))
       val e2 = e1.getCause.asInstanceOf[SparkException]
-      assert(e2.getErrorClass == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
+      assert(e2.getCondition == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
       checkError(
         exception = e2.getCause.asInstanceOf[SparkRuntimeException],
         condition = "MALFORMED_CSV_RECORD",
