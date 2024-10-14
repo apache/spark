@@ -359,22 +359,23 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
       val expectedMetadata: Array[Byte] = Array(VERSION, 3, 0, 1, 2, 3, 'a', 'b', 'c')
       assert(actual === new VariantVal(expectedValue, expectedMetadata))
     }
-    withSQLConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS.key -> "false") {
-      val df = Seq(json).toDF("j")
-        .selectExpr("from_json(j,'variant')")
-      val exception = intercept[SparkException] {
-        df.collect()
+    Seq("from_json(j, 'variant')", "parse_json(j)").foreach { expr =>
+      withSQLConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS.key -> "false") {
+        val df = Seq(json).toDF("j").selectExpr(expr)
+        val exception = intercept[SparkException] {
+          df.collect()
+        }
+        checkError(
+          exception = exception,
+          condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+          parameters = Map("badRecord" -> json, "failFastMode" -> "FAILFAST")
+        )
+        checkError(
+          exception = exception.getCause.asInstanceOf[SparkRuntimeException],
+          condition = "VARIANT_DUPLICATE_KEY",
+          parameters = Map("key" -> "a")
+        )
       }
-      checkError(
-        exception = exception,
-        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-        parameters = Map("badRecord" -> json, "failFastMode" -> "FAILFAST")
-      )
-      checkError(
-        exception = exception.getCause.asInstanceOf[SparkRuntimeException],
-        condition = "VARIANT_DUPLICATE_KEY",
-        parameters = Map("key" -> "a")
-      )
     }
   }
 }
