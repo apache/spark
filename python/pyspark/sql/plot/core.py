@@ -24,7 +24,7 @@ from pyspark.sql.utils import is_remote, require_minimum_plotly_version
 
 
 if TYPE_CHECKING:
-    from pyspark.sql import DataFrame
+    from pyspark.sql import DataFrame, Row
     from pyspark.sql._typing import ColumnOrName
     import pandas as pd
     from plotly.graph_objs import Figure
@@ -341,7 +341,9 @@ class PySparkPlotAccessor:
             )
         return self(kind="pie", x=x, y=y, **kwargs)
 
-    def box(self, column: Union[str, List[str]], precision: float = 0.01, **kwargs: Any):
+    def box(
+        self, column: Union[str, List[str]], precision: float = 0.01, **kwargs: Any
+    ) -> "Figure":
         """
         Make a box plot of the DataFrame columns.
 
@@ -366,35 +368,23 @@ class PySparkPlotAccessor:
         Returns
         -------
         :class:`plotly.graph_objs.Figure`
-            Return an custom object when ``backend!=plotly``.
-            Return an ndarray when ``subplots=True`` (matplotlib-only).
-
-        Notes
-        -----
-        There are behavior differences between pandas-on-Spark and pandas.
-
-        * pandas-on-Spark computes approximate statistics - expect differences between
-          pandas and pandas-on-Spark boxplots, especially regarding 1st and 3rd quartiles.
-        * The `whis` argument is only supported as a single number.
-        * pandas-on-Spark doesn't support the following argument(s) (matplotlib-only).
-
-          * `bootstrap` argument is not supported
-          * `autorange` argument is not supported
 
         Examples
         --------
-        Draw a box plot from a DataFrame with four columns of randomly
-        generated data.
-
-        For Series:
-
-        .. plotly::
-
-            >>> data = np.random.randn(25, 4)
-            >>> df = ps.DataFrame(data, columns=list('ABCD'))
-            >>> df['A'].plot.box()  # doctest: +SKIP
-
-        This is an unsupported function for DataFrame type
+        >>> data = [
+        ...     ("A", 50, 55),
+        ...     ("B", 55, 60),
+        ...     ("C", 60, 65),
+        ...     ("D", 65, 70),
+        ...     ("E", 70, 75),
+        ...     ("F", 10, 15),
+        ...     ("G", 85, 90),
+        ...     ("H", 5, 150),
+        ... ]
+        >>> columns = ["student", "math_score", "english_score"]
+        >>> df = spark.createDataFrame(data, columns)
+        >>> df.plot.box(column="math_score")  # doctest: +SKIP
+        >>> df.plot.box(column=["math_score", "english_score"])  # doctest: +SKIP
         """
         return self(kind="box", column=column, precision=precision, **kwargs)
 
@@ -403,7 +393,7 @@ class PySparkBoxPlotBase:
     @staticmethod
     def compute_box(
         sdf: "DataFrame", colnames: List[str], whis: float, precision: float, showfliers: bool
-    ):
+    ) -> Optional["Row"]:
         assert len(colnames) > 0
         formatted_colnames = ["`{}`".format(colname) for colname in colnames]
 
@@ -486,7 +476,9 @@ def _invoke_internal_function_over_columns(name: str, *cols: "ColumnOrName") -> 
         from pyspark import SparkContext
 
         sc = SparkContext._active_spark_context
-        return Column(sc._jvm.PythonSQLUtils.internalFn(name, _to_seq(sc, cols, _to_java_column)))
+        return Column(
+            sc._jvm.PythonSQLUtils.internalFn(name, _to_seq(sc, cols, _to_java_column))  # type: ignore
+        )
 
 
 def collect_top_k(col: Column, num: int, reverse: bool) -> Column:

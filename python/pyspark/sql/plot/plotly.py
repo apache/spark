@@ -94,10 +94,10 @@ def plot_box(data: "DataFrame", **kwargs: Any) -> "Figure":
         precision,
         boxpoints is not None,
     )
-    assert len(results) == len(colnames)
+    assert len(results) == len(colnames)  # type: ignore
 
     for i, colname in enumerate(colnames):
-        result = results[i]
+        result = results[i]  # type: ignore
 
         fig.add_trace(
             go.Box(
