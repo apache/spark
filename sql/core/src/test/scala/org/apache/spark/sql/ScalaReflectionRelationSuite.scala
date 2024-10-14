@@ -165,7 +165,7 @@ class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSparkSession
       },
       condition = "INVALID_JAVA_IDENTIFIER_AS_FIELD_NAME",
       parameters = Map(
-        "fieldName" -> "abstract",
+        "fieldName" -> "`abstract`",
         "walkedTypePath" -> "- root class: \"org.apache.spark.sql.InvalidInJava\""))
   }
 
@@ -176,7 +176,7 @@ class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSparkSession
       },
       condition = "INVALID_JAVA_IDENTIFIER_AS_FIELD_NAME",
       parameters = Map(
-        "fieldName" -> "0",
+        "fieldName" -> "`0`",
         "walkedTypePath" ->
           "- root class: \"org.apache.spark.sql.ScalaReflectionRelationSuite.InvalidInJava2\""))
   }

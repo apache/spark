@@ -2595,10 +2595,10 @@
   },
   "INVALID_JAVA_IDENTIFIER_AS_FIELD_NAME" : {
     "message" : [
-      "`<fieldName>` is not a valid identifier of Java and cannot be used as field name",
+      "<fieldName> is not a valid identifier of Java and cannot be used as field name",
       "<walkedTypePath>."
     ],
-    "sqlState" : "42601"
+    "sqlState" : "46121"
   },
   "INVALID_JOIN_TYPE_FOR_JOINWITH" : {
     "message" : [
