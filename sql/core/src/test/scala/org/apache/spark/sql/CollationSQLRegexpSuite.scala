@@ -113,7 +113,7 @@ class CollationSQLRegexpSuite
           val exception = intercept[SparkRuntimeException] {
             df.collect()
           }
-          assert(exception.getErrorClass == "INVALID_REGEXP_REPLACE")
+          assert(exception.getCondition == "INVALID_REGEXP_REPLACE")
           assert(exception.getMessage.contains("""Could not perform regexp_replace for """ +
             """`source = "first last"`, `pattern = "(?<first>[a-zA-Z]+) (?<last>[a-zA-Z]+)"`, """ +
             """`replacement = "$3 $1"` and `position = 1`."""))
