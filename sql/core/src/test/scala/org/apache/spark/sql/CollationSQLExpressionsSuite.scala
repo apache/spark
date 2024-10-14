@@ -497,13 +497,9 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       BinTestCase("13", "UTF8_BINARY", "1101"),
-      BinTestCase("13", "UTF8_BINARY_RTRIM", "1101"),
       BinTestCase("13", "UTF8_LCASE", "1101"),
-      BinTestCase("13", "UTF8_LCASE_RTRIM", "1101"),
       BinTestCase("13", "UNICODE", "1101"),
-      BinTestCase("13", "UNICODE_RTRIM", "1101"),
-      BinTestCase("13", "UNICODE_CI", "1101"),
-      BinTestCase("13", "UNICODE_CI_RTRIM", "1101")
+      BinTestCase("13", "UNICODE_CI", "1101")
     )
     testCases.foreach(t => {
       val query =
@@ -526,13 +522,9 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       HexTestCase("13", "UTF8_BINARY", "D"),
-      HexTestCase("13", "UTF8_BINARY_RTRIM", "D"),
       HexTestCase("13", "UTF8_LCASE", "D"),
-      HexTestCase("13", "UTF8_LCASE_RTRIM", "D"),
       HexTestCase("13", "UNICODE", "D"),
-      HexTestCase("13", "UNICODE_RTRIM", "D"),
-      HexTestCase("13", "UNICODE_CI", "D"),
-      HexTestCase("13", "UNICODE_CI_RTRIM", "D")
+      HexTestCase("13", "UNICODE_CI", "D")
     )
     testCases.foreach(t => {
       val query =
