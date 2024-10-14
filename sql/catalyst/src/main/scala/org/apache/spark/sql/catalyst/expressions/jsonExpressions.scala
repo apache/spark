@@ -878,7 +878,9 @@ case class StructsToJson(
 case class SchemaOfJson(
     child: Expression,
     options: Map[String, String])
-  extends UnaryExpression with CodegenFallback with QueryErrorsBase {
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -919,26 +921,20 @@ case class SchemaOfJson(
     }
   }
 
-  override def eval(v: InternalRow): Any = {
-    val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
-      parser.nextToken()
-      // To match with schema inference from JSON datasource.
-      jsonInferSchema.inferField(parser) match {
-        case st: StructType =>
-          jsonInferSchema.canonicalizeType(st, jsonOptions).getOrElse(StructType(Nil))
-        case at: ArrayType if at.elementType.isInstanceOf[StructType] =>
-          jsonInferSchema
-            .canonicalizeType(at.elementType, jsonOptions)
-            .map(ArrayType(_, containsNull = at.containsNull))
-            .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
-        case other: DataType =>
-          jsonInferSchema.canonicalizeType(other, jsonOptions).getOrElse(
-            SQLConf.get.defaultStringType)
-      }
-    }
+  @transient private lazy val jsonFactoryObjectType = ObjectType(classOf[JsonFactory])
+  @transient private lazy val jsonOptionsObjectType = ObjectType(classOf[JSONOptions])
+  @transient private lazy val jsonInferSchemaObjectType = ObjectType(classOf[JsonInferSchema])
 
-    UTF8String.fromString(dt.sql)
-  }
+  override def replacement: Expression = StaticInvoke(
+    classOf[JsonExpressionUtils],
+    dataType,
+    "schemaOfJson",
+    Seq(Literal(jsonFactory, jsonFactoryObjectType),
+      Literal(jsonOptions, jsonOptionsObjectType),
+      Literal(jsonInferSchema, jsonInferSchemaObjectType),
+      child),
+    Seq(jsonFactoryObjectType, jsonOptionsObjectType, jsonInferSchemaObjectType, child.dataType)
+  )
 
   override def prettyName: String = "schema_of_json"
 
