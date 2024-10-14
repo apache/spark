@@ -478,7 +478,7 @@ def _invoke_internal_function_over_columns(name: str, *cols: "ColumnOrName") -> 
         sc = SparkContext._active_spark_context
         return Column(
             sc._jvm.PythonSQLUtils.internalFn(  # type: ignore
-                name, _to_seq(sc, cols, _to_java_column)
+                name, _to_seq(sc, cols, _to_java_column)  # type: ignore
             )
         )
 
