@@ -106,7 +106,7 @@ object TextInputJsonDataSource extends JsonDataSource {
     }.getOrElse(CreateJacksonParser.internalRow(_: JsonFactory, _: InternalRow))
 
     SQLExecution.withSQLConfPropagated(json.sparkSession) {
-      new JsonInferSchema(parsedOptions).infer(rdd, rowParser, isReadFile = false)
+      new JsonInferSchema(parsedOptions).infer(rdd, rowParser)
     }
   }
 
@@ -164,7 +164,8 @@ object MultiLineJsonDataSource extends JsonDataSource {
       .getOrElse(createParser(_: JsonFactory, _: PortableDataStream))
 
     SQLExecution.withSQLConfPropagated(sparkSession) {
-      new JsonInferSchema(parsedOptions).infer[PortableDataStream](sampled, parser)
+      new JsonInferSchema(parsedOptions)
+        .infer[PortableDataStream](sampled, parser, isReadFile = true)
     }
   }
 
