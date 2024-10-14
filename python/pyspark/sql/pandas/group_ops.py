@@ -503,7 +503,11 @@ class PandasGroupedOpsMixin:
             statefulProcessorApiClient.set_implicit_key(key)
             result = statefulProcessor.handleInputRows(key, inputRows)
 
-            return result
+            try:
+                yield result
+            finally:
+                statefulProcessor.close()
+                statefulProcessorApiClient.remove_implicit_key()
 
         if isinstance(outputStructType, str):
             outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
