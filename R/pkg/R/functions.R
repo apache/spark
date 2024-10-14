@@ -1151,61 +1151,6 @@ setMethod("encode",
           })
 
 #' @details
-#' \code{is_valid_utf8}: Returns true if the input is a valid UTF-8 string, otherwise returns false.
-#'
-#' @rdname column_string_functions
-#' @aliases is_valid_utf8 is_valid_utf8,Column-method
-#' @note encode since 4.0.0
-setMethod("is_valid_utf8",
-          signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "is_valid_utf8", x@jc)
-            column(jc)
-          })
-
-#' @details
-#' \code{make_valid_utf8}: Returns a new string in which all invalid UTF-8 byte sequences, if any,
-#' are replaced by the Unicode replacement character (U+FFFD).
-#'
-#' @rdname column_string_functions
-#' @aliases make_valid_utf8 make_valid_utf8,Column-method
-#' @note encode since 4.0.0
-setMethod("make_valid_utf8",
-          signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "make_valid_utf8", x@jc)
-            column(jc)
-          })
-
-#' @details
-#' \code{validate_utf8}: Returns the input value if it corresponds to a valid UTF-8 string,
-#' or emits an error otherwise.
-#'
-#' @rdname column_string_functions
-#' @aliases validate_utf8 validate_utf8,Column-method
-#' @note encode since 4.0.0
-setMethod("validate_utf8",
-          signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "validate_utf8", x@jc)
-            column(jc)
-          })
-
-#' @details
-#' \code{try_validate_utf8}: Returns the input value if it corresponds to a valid UTF-8 string,
-#' or NULL otherwise.
-#'
-#' @rdname column_string_functions
-#' @aliases try_validate_utf8 try_validate_utf8,Column-method
-#' @note encode since 4.0.0
-setMethod("try_validate_utf8",
-          signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "try_validate_utf8", x@jc)
-            column(jc)
-          })
-
-#' @details
 #' \code{exp}: Computes the exponential of the given value.
 #'
 #' @rdname column_math_functions

@@ -1476,10 +1476,6 @@ test_that("column functions", {
   c33 <- width_bucket(lit(2.5), lit(2.0), lit(3.0), lit(10L))
   c34 <- collate(c, "UNICODE")
   c35 <- collation(c)
-  c36 <- is_valid_utf8(c)
-  c37 <- make_valid_utf8(c)
-  c38 <- validate_utf8(c)
-  c39 <- try_validate_utf8(c)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1524,26 +1520,6 @@ test_that("column functions", {
   expect_equal(result1, 3.93548387)
   result2 <- collect(select(df, alias(months_between(df[[1]], df[[2]], FALSE), "month")))[[1]]
   expect_equal(result2, 3.935483870967742)
-
-  # UTF-8 string is valid
-  df <- createDataFrame(list(list(a = "abc")), schema = c("a"))
-  result <- collect(select(df, alias(is_valid_utf8(df$a), "is_valid_utf8")))
-  expect_equal(result$is_valid_utf8, TRUE)
-
-  # UTF-8 string make valid
-  df <- createDataFrame(list(list(a = rawToChar(as.raw(-1))))), schema = c("a"))
-  result <- collect(select(df, alias(make_valid_utf8(df$a), "make_valid_utf8")))
-  expect_equal(result$make_valid_utf8, "�") # Unicode replacement character (U+FFFD)
-
-  # UTF-8 string validate
-  df <- createDataFrame(list(list(a = NULL)), schema = c("a"))
-  result <- collect(select(df, alias(validate_utf8(df$a), "validate_utf8")))
-  expect_equal(result$validate_utf8, NULL)
-
-  # UTF-8 string try validate
-  df <- createDataFrame(list(list(a = rawToChar(as.raw(-1)))), schema = c("a"))
-  result <- collect(select(df, alias(try_validate_utf8(df$a), "try_validate_utf8")))
-  expect_equal(result$try_validate_utf8, NULL)
 
   # Test array_contains(), array_max(), array_min(), array_position(), element_at() and reverse()
   df <- createDataFrame(list(list(list(1L, 2L, 3L)), list(list(6L, 5L, 4L))))
