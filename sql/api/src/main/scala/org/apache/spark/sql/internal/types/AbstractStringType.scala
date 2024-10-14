@@ -45,7 +45,7 @@ abstract class AbstractStringType(supportsTrimCollation: Boolean = false)
 /**
  * Used for expressions supporting only binary collation.
  */
-case class StringTypeBinary(supportsTrimCollation: Boolean = false)
+case class StringTypeBinary(supportsTrimCollation: Boolean)
     extends AbstractStringType(supportsTrimCollation) {
 
   override def acceptsStringType(other: StringType): Boolean =
@@ -61,7 +61,7 @@ object StringTypeBinary extends StringTypeBinary(false) {
 /**
  * Used for expressions supporting only binary and lowercase collation.
  */
-case class StringTypeBinaryLcase(supportsTrimCollation: Boolean = false)
+case class StringTypeBinaryLcase(supportsTrimCollation: Boolean)
     extends AbstractStringType(supportsTrimCollation) {
 
   override def acceptsStringType(other: StringType): Boolean =
@@ -81,9 +81,9 @@ object StringTypeBinaryLcase extends StringTypeBinaryLcase(false) {
  * Case and accent sensitivity specifiers are supported by default.
  */
 case class StringTypeWithCollation(
-    supportsTrimCollation: Boolean = false,
-    supportsCaseSpecifier: Boolean = true,
-    supportsAccentSpecifier: Boolean = true)
+    supportsTrimCollation: Boolean,
+    supportsCaseSpecifier: Boolean,
+    supportsAccentSpecifier: Boolean)
     extends AbstractStringType(supportsTrimCollation) {
 
   override def acceptsStringType(other: StringType): Boolean = {
@@ -106,7 +106,7 @@ object StringTypeWithCollation extends StringTypeWithCollation(false, true, true
  * Used for expressions supporting all possible collation types except
  * those that are case-sensitive but accent insensitive (CS_AI).
  */
-case class StringTypeNonCSAICollation(supportsTrimCollation: Boolean = false)
+case class StringTypeNonCSAICollation(supportsTrimCollation: Boolean)
     extends AbstractStringType(supportsTrimCollation) {
 
   override def acceptsStringType(other: StringType): Boolean =
