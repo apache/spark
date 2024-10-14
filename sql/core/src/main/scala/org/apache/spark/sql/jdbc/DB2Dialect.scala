@@ -22,8 +22,7 @@ import java.util.Locale
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -153,12 +152,12 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
   override def removeSchemaCommentQuery(schema: String): String = {
     s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS ''"
   }
-
   override def classifyException(
       e: Throwable,
       errorClass: String,
       messageParameters: Map[String, String],
-      description: String): AnalysisException = {
+      description: String,
+      isRuntime: Boolean): Throwable with SparkThrowable = {
     e match {
       case sqlException: SQLException =>
         sqlException.getSQLState match {
@@ -171,9 +170,10 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
           case "42710" if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
             val newTable = messageParameters("newName")
             throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
-          case _ => super.classifyException(e, errorClass, messageParameters, description)
+          case _ =>
+            super.classifyException(e, errorClass, messageParameters, description, isRuntime)
         }
-      case _ => super.classifyException(e, errorClass, messageParameters, description)
+      case _ => super.classifyException(e, errorClass, messageParameters, description, isRuntime)
     }
   }
 

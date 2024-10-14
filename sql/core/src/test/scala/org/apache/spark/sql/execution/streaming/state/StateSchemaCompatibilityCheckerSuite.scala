@@ -423,14 +423,14 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       // collation checks are also performed in this path. so we need to check for them explicitly.
       if (keyCollationChecks) {
         assert(ex.getMessage.contains("Binary inequality column is not supported"))
-        assert(ex.getErrorClass === "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY")
+        assert(ex.getCondition === "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY")
       } else {
         if (ignoreValueSchema) {
           // if value schema is ignored, the mismatch has to be on the key schema
-          assert(ex.getErrorClass === "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE")
+          assert(ex.getCondition === "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE")
         } else {
-          assert(ex.getErrorClass === "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE" ||
-            ex.getErrorClass === "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE")
+          assert(ex.getCondition === "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE" ||
+            ex.getCondition === "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE")
         }
         assert(ex.getMessage.contains("does not match existing"))
       }
