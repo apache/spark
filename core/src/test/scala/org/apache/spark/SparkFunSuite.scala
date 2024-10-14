@@ -343,7 +343,7 @@ abstract class SparkFunSuite
       parameters: Map[String, String] = Map.empty,
       matchPVals: Boolean = false,
       queryContext: Array[ExpectedContext] = Array.empty): Unit = {
-    assert(exception.getErrorClass === condition)
+    assert(exception.getCondition === condition)
     sqlState.foreach(state => assert(exception.getSqlState === state))
     val expectedParameters = exception.getMessageParameters.asScala
     if (matchPVals) {

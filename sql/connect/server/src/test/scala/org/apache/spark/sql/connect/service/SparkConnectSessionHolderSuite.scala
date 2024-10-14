@@ -399,7 +399,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   test("Test session plan cache - disabled") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     // Disable plan cache of the session
-    sessionHolder.session.conf.set(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED, false)
+    sessionHolder.session.conf.set(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED.key, false)
     val planner = new SparkConnectPlanner(sessionHolder)
 
     val query = buildRelation("select 1")
@@ -412,5 +412,14 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     // Even if we specify "cachePlan = true", the cache is still empty.
     planner.transformRelation(query, cachePlan = true)
     assertPlanCache(sessionHolder, Some(Set()))
+  }
+
+  test("Test duplicate operation IDs") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    sessionHolder.addOperationId("DUMMY")
+    val ex = intercept[IllegalStateException] {
+      sessionHolder.addOperationId("DUMMY")
+    }
+    assert(ex.getMessage.contains("already exists"))
   }
 }

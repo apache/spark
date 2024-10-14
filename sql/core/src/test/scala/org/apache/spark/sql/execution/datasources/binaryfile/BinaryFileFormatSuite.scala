@@ -346,7 +346,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
   }
 
   test("fail fast and do not attempt to read if a file is too big") {
-    assert(spark.conf.get(SOURCES_BINARY_FILE_MAX_LENGTH) === Int.MaxValue)
+    assert(sqlConf.getConf(SOURCES_BINARY_FILE_MAX_LENGTH) === Int.MaxValue)
     withTempPath { file =>
       val path = file.getPath
       val content = "123".getBytes
@@ -368,7 +368,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
           checkAnswer(readContent(), expected)
         }
       }
-      assert(caught.getErrorClass.startsWith("FAILED_READ_FILE"))
+      assert(caught.getCondition.startsWith("FAILED_READ_FILE"))
       assert(caught.getCause.getMessage.contains("exceeds the max length allowed"))
     }
   }

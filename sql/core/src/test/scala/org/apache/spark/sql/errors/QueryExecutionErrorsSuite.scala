@@ -35,11 +35,12 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoder, Kry
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NamedParameter, UnresolvedGenerator}
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Concat, CreateArray, EmptyRow, Expression, Flatten, Grouping, Literal, RowNumber, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Concat, CreateArray, EmptyRow, Expression, Flatten, Grouping, Literal, RowNumber, UnaryExpression, Years}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
 import org.apache.spark.sql.catalyst.rules.RuleIdCollection
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
@@ -292,7 +293,7 @@ class QueryExecutionErrorsSuite
         val e = intercept[SparkException] {
           df.write.parquet(dir.getCanonicalPath)
         }
-        assert(e.getErrorClass == "TASK_WRITE_FAILED")
+        assert(e.getCondition == "TASK_WRITE_FAILED")
 
         val format = "Parquet"
         val config = "\"" + SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key + "\""
@@ -311,7 +312,7 @@ class QueryExecutionErrorsSuite
         val ex = intercept[SparkException] {
           spark.read.schema("time timestamp_ntz").orc(file.getCanonicalPath).collect()
         }
-        assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
+        assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
         checkError(
           exception = ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
           condition = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
@@ -333,7 +334,7 @@ class QueryExecutionErrorsSuite
         val ex = intercept[SparkException] {
           spark.read.schema("time timestamp_ltz").orc(file.getCanonicalPath).collect()
         }
-        assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
+        assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
         checkError(
           exception = ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
           condition = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
@@ -381,7 +382,7 @@ class QueryExecutionErrorsSuite
     }
 
     val e2 = e1.getCause.asInstanceOf[SparkException]
-    assert(e2.getErrorClass == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
+    assert(e2.getCondition == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
 
     checkError(
       exception = e2.getCause.asInstanceOf[SparkRuntimeException],
@@ -734,8 +735,7 @@ class QueryExecutionErrorsSuite
           parameters = Map(
             "value" -> sourceValue,
             "sourceType" -> s""""${sourceType.sql}"""",
-            "targetType" -> s""""$it"""",
-            "ansiConfig" -> s""""${SQLConf.ANSI_ENABLED.key}""""),
+            "targetType" -> s""""$it""""),
           sqlState = "22003")
       }
     }
@@ -768,7 +768,40 @@ class QueryExecutionErrorsSuite
         parameters = Map(
           "value1" -> "127S",
           "symbol" -> "+",
-          "value2" -> "5S"),
+          "value2" -> "5S",
+          "functionName" -> "`try_add`"),
+        sqlState = "22003")
+    }
+  }
+
+  test("BINARY_ARITHMETIC_OVERFLOW: byte minus byte result overflow") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          sql(s"select -2Y - 127Y").collect()
+        },
+        condition = "BINARY_ARITHMETIC_OVERFLOW",
+        parameters = Map(
+          "value1" -> "-2S",
+          "symbol" -> "-",
+          "value2" -> "127S",
+          "functionName" -> "`try_subtract`"),
+        sqlState = "22003")
+    }
+  }
+
+  test("BINARY_ARITHMETIC_OVERFLOW: byte multiply byte result overflow") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          sql(s"select 127Y * 5Y").collect()
+        },
+        condition = "BINARY_ARITHMETIC_OVERFLOW",
+        parameters = Map(
+          "value1" -> "127S",
+          "symbol" -> "*",
+          "value2" -> "5S",
+          "functionName" -> "`try_multiply`"),
         sqlState = "22003")
     }
   }
@@ -888,7 +921,7 @@ class QueryExecutionErrorsSuite
     val e = intercept[StreamingQueryException] {
       query.awaitTermination()
     }
-    assert(e.getErrorClass === "STREAM_FAILED")
+    assert(e.getCondition === "STREAM_FAILED")
     assert(e.getCause.isInstanceOf[NullPointerException])
   }
 
@@ -972,6 +1005,17 @@ class QueryExecutionErrorsSuite
       condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "Cannot evaluate expression: namedparameter(foo)"),
       sqlState = "XX000")
+  }
+
+  test("PartitionTransformExpression error on eval") {
+    val expr = Years(Literal("foo"))
+    val e = intercept[SparkException] {
+      expr.eval()
+    }
+    checkError(
+      exception = e,
+      condition = "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY",
+      parameters = Map("expression" -> toSQLExpr(expr)))
   }
 
   test("INTERNAL_ERROR: Calling doGenCode on unresolved") {
@@ -1177,7 +1221,7 @@ class QueryExecutionErrorsSuite
     val enc: ExpressionEncoder[Row] = ExpressionEncoder(rowEnc)
     val deserializer = AttributeReference.apply("v", IntegerType)()
     implicit val im: ExpressionEncoder[Row] = new ExpressionEncoder[Row](
-      enc.objSerializer, deserializer, enc.clsTag)
+      rowEnc, enc.objSerializer, deserializer)
 
     checkError(
       exception = intercept[SparkRuntimeException] {

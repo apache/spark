@@ -48,8 +48,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       condition = "CAST_OVERFLOW",
       parameters = Map("value" -> "TIMESTAMP '9999-12-31 04:13:14.56789'",
         "sourceType" -> "\"TIMESTAMP\"",
-        "targetType" -> "\"INT\"",
-        "ansiConfig" -> ansiConf),
+        "targetType" -> "\"INT\""),
       sqlState = "22003")
   }
 
@@ -212,8 +211,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       parameters = Map(
         "expression" -> "'111111111111xe23'",
         "sourceType" -> "\"STRING\"",
-        "targetType" -> "\"DOUBLE\"",
-        "ansiConfig" -> ansiConf),
+        "targetType" -> "\"DOUBLE\""),
       context = ExpectedContext(
         fragment = "CAST('111111111111xe23' AS DOUBLE)",
         start = 7,
@@ -227,8 +225,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       parameters = Map(
         "expression" -> "'111111111111xe23'",
         "sourceType" -> "\"STRING\"",
-        "targetType" -> "\"DOUBLE\"",
-        "ansiConfig" -> ansiConf),
+        "targetType" -> "\"DOUBLE\""),
       context = ExpectedContext(
         fragment = "cast",
         callSitePattern = getCurrentClassCallSitePattern))
@@ -275,8 +272,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       condition = "CAST_OVERFLOW",
       parameters = Map("value" -> "1.2345678901234567E19D",
         "sourceType" -> "\"DOUBLE\"",
-        "targetType" -> ("\"TINYINT\""),
-        "ansiConfig" -> ansiConf)
+        "targetType" -> ("\"TINYINT\""))
     )
   }
 
@@ -294,8 +290,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         condition = "CAST_OVERFLOW",
         parameters = Map("value" -> "-1.2345678901234567E19D",
           "sourceType" -> "\"DOUBLE\"",
-          "targetType" -> "\"TINYINT\"",
-          "ansiConfig" -> ansiConf),
+          "targetType" -> "\"TINYINT\""),
         sqlState = "22003")
     }
   }
@@ -395,5 +390,15 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         sparkContext.removeSparkListener(listener)
       }
     }
+  }
+
+  test("SPARK-49773: INVALID_TIMEZONE for bad timezone") {
+    checkError(
+      exception = intercept[SparkDateTimeException] {
+        sql("select make_timestamp(1, 2, 28, 23, 1, 1, -100)").collect()
+      },
+      condition = "INVALID_TIMEZONE",
+      parameters = Map("timeZone" -> "-100")
+    )
   }
 }

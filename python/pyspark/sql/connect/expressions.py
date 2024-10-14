@@ -477,8 +477,30 @@ class LiteralExpression(Expression):
     def __repr__(self) -> str:
         if self._value is None:
             return "NULL"
-        else:
-            return f"{self._value}"
+        elif isinstance(self._dataType, DateType):
+            dt = DateType().fromInternal(self._value)
+            if dt is not None and isinstance(dt, datetime.date):
+                return dt.strftime("%Y-%m-%d")
+        elif isinstance(self._dataType, TimestampType):
+            ts = TimestampType().fromInternal(self._value)
+            if ts is not None and isinstance(ts, datetime.datetime):
+                return ts.strftime("%Y-%m-%d %H:%M:%S.%f")
+        elif isinstance(self._dataType, TimestampNTZType):
+            ts = TimestampNTZType().fromInternal(self._value)
+            if ts is not None and isinstance(ts, datetime.datetime):
+                return ts.strftime("%Y-%m-%d %H:%M:%S.%f")
+        elif isinstance(self._dataType, DayTimeIntervalType):
+            delta = DayTimeIntervalType().fromInternal(self._value)
+            if delta is not None and isinstance(delta, datetime.timedelta):
+                import pandas as pd
+
+                # Note: timedelta itself does not provide isoformat method.
+                # Both Pandas and java.time.Duration provide it, but the format
+                # is sightly different:
+                # java.time.Duration only applies HOURS, MINUTES, SECONDS units,
+                # while Pandas applies all supported units.
+                return pd.Timedelta(delta).isoformat()  # type: ignore[attr-defined]
+        return f"{self._value}"
 
 
 class ColumnReference(Expression):
@@ -787,7 +809,7 @@ class WithField(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"WithField({self._structExpr}, {self._fieldName}, {self._valueExpr})"
+        return f"update_field({self._structExpr}, {self._fieldName}, {self._valueExpr})"
 
 
 class DropField(Expression):
@@ -811,7 +833,7 @@ class DropField(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"DropField({self._structExpr}, {self._fieldName})"
+        return f"drop_field({self._structExpr}, {self._fieldName})"
 
 
 class UnresolvedExtractValue(Expression):
@@ -835,7 +857,7 @@ class UnresolvedExtractValue(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"UnresolvedExtractValue({str(self._child)}, {str(self._extraction)})"
+        return f"{self._child}['{self._extraction}']"
 
 
 class UnresolvedRegex(Expression):

@@ -129,7 +129,7 @@ class KubernetesSuite extends SparkFunSuite
         val tagFile = new File(path)
         require(tagFile.isFile,
           s"No file found for image tag at ${tagFile.getAbsolutePath}.")
-        Files.toString(tagFile, Charsets.UTF_8).trim
+        Files.asCharSource(tagFile, Charsets.UTF_8).read().trim
       }
       .orElse(sys.props.get(CONFIG_KEY_IMAGE_TAG))
       .getOrElse {

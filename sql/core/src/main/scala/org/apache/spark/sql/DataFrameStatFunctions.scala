@@ -23,6 +23,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.stat._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.util.ArrayImplicits._
@@ -34,7 +35,7 @@ import org.apache.spark.util.ArrayImplicits._
  */
 @Stable
 final class DataFrameStatFunctions private[sql](protected val df: DataFrame)
-  extends api.DataFrameStatFunctions[Dataset] {
+  extends api.DataFrameStatFunctions {
 
   /** @inheritdoc */
   def approxQuantile(

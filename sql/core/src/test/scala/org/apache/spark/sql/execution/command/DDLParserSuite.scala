@@ -402,13 +402,13 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("Invalid interval term should throw AnalysisException") {
     val sql1 = "select interval '42-32' year to month"
-    val value1 = "Error parsing interval year-month string: " +
-      "requirement failed: month 32 outside range [0, 11]"
     val fragment1 = "'42-32' year to month"
     checkError(
       exception = parseException(sql1),
-      condition = "_LEGACY_ERROR_TEMP_0063",
-      parameters = Map("msg" -> value1),
+      condition = "INVALID_INTERVAL_FORMAT.INTERVAL_PARSING",
+      parameters = Map(
+        "input" -> "42-32",
+        "interval" -> "year-month"),
       context = ExpectedContext(
         fragment = fragment1,
         start = 16,
@@ -688,7 +688,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     checkError(
       exception = parseException(sql1),
       condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "funcName" -> "`a`.`b`"),
+      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "name" -> "`a`.`b`"),
       context = ExpectedContext(
         fragment = sql1,
         start = 0,
@@ -698,7 +698,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     checkError(
       exception = parseException(sql2),
       condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "funcName" -> "`a`.`b`"),
+      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "name" -> "`a`.`b`"),
       context = ExpectedContext(
         fragment = sql2,
         start = 0,

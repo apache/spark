@@ -115,37 +115,35 @@ class RocksDB(
     tableFormatConfig.setPinL0FilterAndIndexBlocksInCache(true)
   }
 
-  private[state] val columnFamilyOptions = new ColumnFamilyOptions()
+  private[state] val rocksDbOptions = new Options() // options to open the RocksDB
+
+  rocksDbOptions.setCreateIfMissing(true)
 
   // Set RocksDB options around MemTable memory usage. By default, we let RocksDB
   // use its internal default values for these settings.
   if (conf.writeBufferSizeMB > 0L) {
-    columnFamilyOptions.setWriteBufferSize(conf.writeBufferSizeMB * 1024 * 1024)
+    rocksDbOptions.setWriteBufferSize(conf.writeBufferSizeMB * 1024 * 1024)
   }
 
   if (conf.maxWriteBufferNumber > 0L) {
-    columnFamilyOptions.setMaxWriteBufferNumber(conf.maxWriteBufferNumber)
+    rocksDbOptions.setMaxWriteBufferNumber(conf.maxWriteBufferNumber)
   }
 
-  columnFamilyOptions.setCompressionType(getCompressionType(conf.compression))
-  columnFamilyOptions.setMergeOperator(new StringAppendOperator())
+  rocksDbOptions.setCompressionType(getCompressionType(conf.compression))
 
-  private val dbOptions =
-    new Options(new DBOptions(), columnFamilyOptions) // options to open the RocksDB
-
-  dbOptions.setCreateIfMissing(true)
-  dbOptions.setTableFormatConfig(tableFormatConfig)
-  dbOptions.setMaxOpenFiles(conf.maxOpenFiles)
-  dbOptions.setAllowFAllocate(conf.allowFAllocate)
-  dbOptions.setMergeOperator(new StringAppendOperator())
+  rocksDbOptions.setTableFormatConfig(tableFormatConfig)
+  rocksDbOptions.setMaxOpenFiles(conf.maxOpenFiles)
+  rocksDbOptions.setAllowFAllocate(conf.allowFAllocate)
+  rocksDbOptions.setAvoidFlushDuringShutdown(true)
+  rocksDbOptions.setMergeOperator(new StringAppendOperator())
 
   if (conf.boundedMemoryUsage) {
-    dbOptions.setWriteBufferManager(writeBufferManager)
+    rocksDbOptions.setWriteBufferManager(writeBufferManager)
   }
 
   private val dbLogger = createLogger() // for forwarding RocksDB native logs to log4j
-  dbOptions.setStatistics(new Statistics())
-  private val nativeStats = dbOptions.statistics()
+  rocksDbOptions.setStatistics(new Statistics())
+  private val nativeStats = rocksDbOptions.statistics()
 
   private val workingDir = createTempDir("workingDir")
   private val fileManager = new RocksDBFileManager(dfsRootDir, createTempDir("fileManager"),
@@ -263,7 +261,7 @@ class RocksDB(
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)}")
     try {
       if (loadedVersion != version) {
-        closeDB()
+        closeDB(ignoreException = false)
         // deep copy is needed to avoid race condition
         // between maintenance and task threads
         fileManager.copyFileMapping()
@@ -646,15 +644,15 @@ class RocksDB(
           // is enabled.
           if (shouldForceSnapshot.get()) {
             uploadSnapshot()
+            shouldForceSnapshot.set(false)
+          }
+
+          // ensure that changelog files are always written
+          try {
+            assert(changelogWriter.isDefined)
+            changelogWriter.foreach(_.commit())
+          } finally {
             changelogWriter = None
-            changelogWriter.foreach(_.abort())
-          } else {
-            try {
-              assert(changelogWriter.isDefined)
-              changelogWriter.foreach(_.commit())
-            } finally {
-              changelogWriter = None
-            }
           }
         } else {
           assert(changelogWriter.isEmpty)
@@ -782,7 +780,7 @@ class RocksDB(
       readOptions.close()
       writeOptions.close()
       flushOptions.close()
-      dbOptions.close()
+      rocksDbOptions.close()
       dbLogger.close()
       synchronized {
         latestSnapshot.foreach(_.close())
@@ -941,24 +939,28 @@ class RocksDB(
 
   private def openDB(): Unit = {
     assert(db == null)
-    db = NativeRocksDB.open(dbOptions, workingDir.toString)
+    db = NativeRocksDB.open(rocksDbOptions, workingDir.toString)
     logInfo(log"Opened DB with conf ${MDC(LogKeys.CONFIG, conf)}")
   }
 
-  private def closeDB(): Unit = {
+  private def closeDB(ignoreException: Boolean = true): Unit = {
     if (db != null) {
-
       // Cancel and wait until all background work finishes
       db.cancelAllBackgroundWork(true)
-      // Close the DB instance
-      db.close()
+      if (ignoreException) {
+        // Close the DB instance
+        db.close()
+      } else {
+        // Close the DB instance and throw the exception if any
+        db.closeE()
+      }
       db = null
     }
   }
 
   /** Create a native RocksDB logger that forwards native logs to log4j with correct log levels. */
   private def createLogger(): Logger = {
-    val dbLogger = new Logger(dbOptions.infoLogLevel()) {
+    val dbLogger = new Logger(rocksDbOptions.infoLogLevel()) {
       override def log(infoLogLevel: InfoLogLevel, logMsg: String) = {
         // Map DB log level to log4j levels
         // Warn is mapped to info because RocksDB warn is too verbose
@@ -981,8 +983,8 @@ class RocksDB(
     dbLogger.setInfoLogLevel(dbLogLevel)
     // The log level set in dbLogger is effective and the one to dbOptions isn't applied to
     // customized logger. We still set it as it might show up in RocksDB config file or logging.
-    dbOptions.setInfoLogLevel(dbLogLevel)
-    dbOptions.setLogger(dbLogger)
+    rocksDbOptions.setInfoLogLevel(dbLogLevel)
+    rocksDbOptions.setLogger(dbLogger)
     logInfo(log"Set RocksDB native logging level to ${MDC(LogKeys.ROCKS_DB_LOG_LEVEL, dbLogLevel)}")
     dbLogger
   }

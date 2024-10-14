@@ -956,7 +956,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       val msg = intercept[SparkRuntimeException] {
         sql("INSERT INTO TABLE test_table SELECT 2, null")
       }
-      assert(msg.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
+      assert(msg.getCondition == "NOT_NULL_ASSERT_VIOLATION")
     }
   }
 
@@ -1998,7 +1998,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql(s"create table t(a string default 'abc') using parquet")
         },
-        condition = "_LEGACY_ERROR_TEMP_1345",
+        condition = "DEFAULT_UNSUPPORTED",
         parameters = Map("statementType" -> "CREATE TABLE", "dataSource" -> "parquet"))
       withTable("t") {
         sql(s"create table t(a string, b int) using parquet")
@@ -2006,7 +2006,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("alter table t add column s bigint default 42")
           },
-          condition = "_LEGACY_ERROR_TEMP_1345",
+          condition = "DEFAULT_UNSUPPORTED",
           parameters = Map(
             "statementType" -> "ALTER TABLE ADD COLUMNS",
             "dataSource" -> "parquet"))
@@ -2314,7 +2314,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
               // provider is now in the denylist.
               sql(s"alter table t1 add column (b string default 'abc')")
             },
-            condition = "_LEGACY_ERROR_TEMP_1346",
+            condition = "ADD_DEFAULT_UNSUPPORTED",
             parameters = Map(
               "statementType" -> "ALTER TABLE ADD COLUMNS",
               "dataSource" -> provider))

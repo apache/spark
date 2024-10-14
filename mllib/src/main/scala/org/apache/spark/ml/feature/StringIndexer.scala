@@ -127,7 +127,7 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
             validateAndTransformField(schema, inputColName, dtype, outputColName)
           )
         } catch {
-          case e: SparkIllegalArgumentException if e.getErrorClass == "FIELD_NOT_FOUND" =>
+          case e: SparkIllegalArgumentException if e.getCondition == "FIELD_NOT_FOUND" =>
             if (skipNonExistsCol) {
               None
             } else {

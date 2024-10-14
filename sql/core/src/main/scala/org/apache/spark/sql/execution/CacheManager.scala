@@ -474,7 +474,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     // Bucketed scan only has one time overhead but can have multi-times benefits in cache,
     // so we always do bucketed scan in a cached plan.
     var disableConfigs = Seq(SQLConf.AUTO_BUCKETED_SCAN_ENABLED)
-    if (!session.conf.get(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
+    if (!session.sessionState.conf.getConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
       // Allowing changing cached plan output partitioning might lead to regression as it introduces
       // extra shuffle
       disableConfigs =
