@@ -97,19 +97,20 @@ class ArtifactManager(session: SparkSession) extends Logging {
     (0, new mutable.WeakHashMap[ClassLoader, ClassLoader]())
 
   def withResources[T](f: => T): T = {
-    val sessionIsolated = session.conf.get("spark.session.isolate.artifacts", "true")
-    val replIsolated = session.conf.get("spark.repl.isolate.artifacts", "false")
-    if (sessionIsolated == "false" && replIsolated == "false") {
-      f
-    } else {
-      Utils.withContextClassLoader(classloader, retainChange = true) {
-        JobArtifactSet.withActiveJobArtifactState(state) {
-          // Copy over global initial resources to this session. Often used by spark-submit.
-          copyInitialContextResourcesIfNeeded()
-
-          f
-        }
+    def withState(f: => T): T = {
+      JobArtifactSet.withActiveJobArtifactState(state) {
+        // Copy over global initial resources to this session. Often used by spark-submit.
+        copyInitialContextResourcesIfNeeded()
+        f
       }
+    }
+
+    if (jarsList.size() > 0) {
+      Utils.withContextClassLoader(classloader, retainChange = true) {
+        withState(f)
+      }
+    } else {
+      withState(f)
     }
   }
 
