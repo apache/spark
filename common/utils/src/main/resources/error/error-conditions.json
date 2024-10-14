@@ -5183,7 +5183,7 @@
       },
       "UPDATE_COLUMN_NULLABILITY" : {
         "message" : [
-          "UpdateColumnNullability for MySQL and MS SQL Server."
+          "Update column nullability for MySQL and MS SQL Server."
         ]
       }
     },
