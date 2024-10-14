@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
-import java.util.regex.{Matcher, MatchResult, Pattern, PatternSyntaxException}
+import java.util.regex.{MatchResult, Matcher, Pattern, PatternSyntaxException}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -28,15 +28,15 @@ import org.apache.commons.text.StringEscapeUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.collation.CollationSupport
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LIKE_FAMLIY, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, TreePattern}
-import org.apache.spark.sql.catalyst.util.{CollationSupport, GenericArrayData, StringUtils}
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.internal.types.{
-  StringTypeBinaryLcase, StringTypeWithCaseAccentSensitivity}
+import org.apache.spark.sql.internal.types.{StringTypeBinaryLcase, StringTypeWithCaseAccentSensitivity}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -50,7 +50,8 @@ abstract class StringRegexExpression extends BinaryExpression
     Seq(StringTypeBinaryLcase, StringTypeWithCaseAccentSensitivity)
 
   final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
-  final lazy val collationRegexFlags: Int = CollationSupport.collationAwareRegexFlags(collationId)
+  final lazy val collationRegexFlags: Int =
+    CollationSupport.CollationAwareRegexp.collationAwareRegexFlags(collationId)
 
   // try cache foldable pattern
   private lazy val cache: Pattern = right match {
@@ -296,7 +297,8 @@ sealed abstract class MultiLikeBase
 
   override def inputTypes: Seq[AbstractDataType] = StringTypeBinaryLcase :: Nil
   final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
-  final lazy val collationRegexFlags: Int = CollationSupport.collationAwareRegexFlags(collationId)
+  final lazy val collationRegexFlags: Int =
+    CollationSupport.CollationAwareRegexp.collationAwareRegexFlags(collationId)
 
   override def nullable: Boolean = true
 
@@ -578,7 +580,8 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   def this(exp: Expression, regex: Expression) = this(exp, regex, Literal(-1))
 
   override def nullSafeEval(string: Any, regex: Any, limit: Any): Any = {
-    val pattern = CollationSupport.collationAwareRegex(regex.asInstanceOf[UTF8String], collationId)
+    val pattern = CollationSupport.CollationAwareRegexp.collationAwareRegex(
+      regex.asInstanceOf[UTF8String], collationId)
     val strings = string.asInstanceOf[UTF8String].split(pattern, limit.asInstanceOf[Int])
     new GenericArrayData(strings.asInstanceOf[Array[Any]])
   }
@@ -1192,7 +1195,8 @@ object RegExpUtils {
     val classNamePattern = classOf[Pattern].getCanonicalName
     val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
     val termPattern = ctx.addMutableState(classNamePattern, "pattern")
-    val collationRegexFlags = CollationSupport.collationAwareRegexFlags(collationId)
+    val collationRegexFlags =
+      CollationSupport.CollationAwareRegexp.collationAwareRegexFlags(collationId)
 
     s"""
        |if (!$regexp.equals($termLastRegex)) {
@@ -1213,7 +1217,9 @@ object RegExpUtils {
   {
     val r = p.asInstanceOf[UTF8String].clone()
     val pattern = try {
-      Pattern.compile(r.toString, CollationSupport.collationAwareRegexFlags(collationId))
+      Pattern.compile(
+        r.toString,
+        CollationSupport.CollationAwareRegexp.collationAwareRegexFlags(collationId))
     } catch {
       case e: PatternSyntaxException =>
         throw QueryExecutionErrors.invalidPatternError(prettyName, e.getPattern, e)

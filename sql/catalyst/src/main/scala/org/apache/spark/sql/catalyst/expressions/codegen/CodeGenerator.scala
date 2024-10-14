@@ -36,12 +36,12 @@ import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.collation.{CollationAwareUTF8String, CollationFactory}
+import org.apache.spark.sql.catalyst.collation.{CollationAwareUTF8String, CollationFactory, CollationSupport}
 import org.apache.spark.sql.catalyst.encoders.HashableWeakReference
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationSupport, MapData, SQLOrderingUtil, UnsafeRowUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, SQLOrderingUtil, UnsafeRowUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -1532,7 +1532,7 @@ object CodeGenerator extends Logging {
       classOf[InputMetrics].getName,
       classOf[CollationAwareUTF8String].getName,
       classOf[CollationFactory].getName,
-      classOf[CollationSupport].getName,
+      CollationSupport.getClass.getName.stripSuffix("$"),
       QueryExecutionErrors.getClass.getName.stripSuffix("$")
     )
     evaluator.setExtendedClass(classOf[GeneratedClass])
