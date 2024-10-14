@@ -82,7 +82,7 @@ class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
   def infer[T](
       json: RDD[T],
       createParser: (JsonFactory, T) => JsonParser,
-      isReadFile: Boolean = true): StructType = {
+      isReadFile: Boolean = false): StructType = {
     val parseMode = options.parseMode
     val columnNameOfCorruptRecord = options.columnNameOfCorruptRecord
 
