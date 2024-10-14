@@ -1341,7 +1341,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def parseModeUnsupportedError(funcName: String, mode: ParseMode): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1099",
+      errorClass = "PARSE_MODE_UNSUPPORTED",
       messageParameters = Map(
         "funcName" -> funcName,
         "mode" -> mode.name,

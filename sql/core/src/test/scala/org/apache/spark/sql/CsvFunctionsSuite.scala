@@ -352,7 +352,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           df.select(from_csv($"value", schema, Map("mode" -> "DROPMALFORMED"))).collect()
         },
-        condition = "_LEGACY_ERROR_TEMP_1099",
+        condition = "PARSE_MODE_UNSUPPORTED",
         parameters = Map(
           "funcName" -> "from_csv",
           "mode" -> "DROPMALFORMED",

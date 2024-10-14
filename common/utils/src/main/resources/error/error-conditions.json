@@ -3802,6 +3802,12 @@
     ],
     "sqlState" : "42617"
   },
+  "PARSE_MODE_UNSUPPORTED" : {
+    "message" : [
+      "<funcName>() doesn't support the <mode> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
+    ],
+    "sqlState" : "42601"
+  },
   "PARSE_SYNTAX_ERROR" : {
     "message" : [
       "Syntax error at or near <error><hint>."
@@ -6015,11 +6021,6 @@
       "DataType '<x>' is not supported by <className>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1099" : {
-    "message" : [
-      "<funcName>() doesn't support the <mode> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1103" : {
     "message" : [
       "Unsupported component type <clz> in arrays."
@@ -8095,11 +8096,6 @@
   "_LEGACY_ERROR_TEMP_3084" : {
     "message" : [
       "No handler for UDF/UDAF/UDTF '<clazz>': <e>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3085" : {
-    "message" : [
-      "from_avro() doesn't support the <name> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
     ]
   },
   "_LEGACY_ERROR_TEMP_3086" : {

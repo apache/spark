@@ -1315,7 +1315,7 @@ class XmlSuite
         spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'DROPMALFORMED'))""")
           .collect()
       },
-      condition = "_LEGACY_ERROR_TEMP_1099",
+      condition = "PARSE_MODE_UNSUPPORTED",
       parameters = Map(
         "funcName" -> "schema_of_xml",
         "mode" -> "DROPMALFORMED",
