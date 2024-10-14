@@ -234,7 +234,7 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.sparkproject.spark_protobuf.protobuf.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.protobuf.utils.SchemaConverters.*"),
 
-    // SPARK-XXXXX:
+    // SPARK-49953: Require an error class in SparkException
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkException.this"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkException.<init>$default$5"),
 
