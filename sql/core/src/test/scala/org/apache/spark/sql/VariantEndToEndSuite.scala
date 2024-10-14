@@ -359,6 +359,7 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
       val expectedMetadata: Array[Byte] = Array(VERSION, 3, 0, 1, 2, 3, 'a', 'b', 'c')
       assert(actual === new VariantVal(expectedValue, expectedMetadata))
     }
+    // Check whether the parse_json and from_json expressions throw the correct exception.
     Seq("from_json(j, 'variant')", "parse_json(j)").foreach { expr =>
       withSQLConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS.key -> "false") {
         val df = Seq(json).toDF("j").selectExpr(expr)
