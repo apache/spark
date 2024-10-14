@@ -40,7 +40,7 @@ class JsonObjectKeysSuite extends AnyFunSuite {
 
     assert(result != null, "Result should not be null")
     assert(result.numElements() == expectedKeys.length, "Number of keys should match")
-    assert(result.array().sameElements(expectedKeys), "Keys should match expected values")
+    assert(result.array().map(_.asInstanceOf[UTF8String]).sameElements(expectedKeys), "Keys should match expected values")
   }
 }
 
