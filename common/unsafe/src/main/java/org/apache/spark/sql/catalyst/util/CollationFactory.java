@@ -547,7 +547,7 @@ public final class CollationFactory {
           BiFunction<UTF8String, UTF8String, Boolean> equalsFunction;
           boolean supportsSpaceTrimming = spaceTrimming != SpaceTrimming.NONE;
 
-          if(spaceTrimming == SpaceTrimming.NONE) {
+          if (spaceTrimming == SpaceTrimming.NONE) {
             comparator = UTF8String::binaryCompare;
             hashFunction = s -> (long) s.hashCode();
             equalsFunction = UTF8String::equals;
@@ -575,7 +575,7 @@ public final class CollationFactory {
           Comparator<UTF8String> comparator;
           ToLongFunction<UTF8String> hashFunction;
 
-          if (spaceTrimming == SpaceTrimming.NONE ) {
+          if (spaceTrimming == SpaceTrimming.NONE) {
             comparator = CollationAwareUTF8String::compareLowerCase;
             hashFunction = s ->
               (long) CollationAwareUTF8String.lowerCaseCodePoints(s).hashCode();
