@@ -6137,11 +6137,6 @@
       "<className> is not a valid Spark SQL Data Source."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1136" : {
-    "message" : [
-      "Cannot save interval data type into external storage."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1137" : {
     "message" : [
       "Unable to resolve <name> given [<outputStr>]."
