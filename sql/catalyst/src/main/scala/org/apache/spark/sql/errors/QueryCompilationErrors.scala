@@ -1691,20 +1691,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("className" -> className))
   }
 
-  def cannotSaveIntervalIntoExternalStorageError(
-      format: String,
-      columnName: String,
-      columnType: String): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-      messageParameters = Map(
-        "format" -> format,
-        "columnName" -> columnName,
-        "columnType" -> columnType
-      )
-    )
-  }
-
   def cannotResolveAttributeError(name: String, outputStr: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1137",
