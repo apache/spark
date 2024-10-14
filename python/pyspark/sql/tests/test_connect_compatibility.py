@@ -17,6 +17,7 @@
 
 import unittest
 import inspect
+import functools
 
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -37,8 +38,9 @@ class ConnectCompatibilityTestsMixin:
         """Get public methods of a class."""
         return {
             name: method
-            for name, method in inspect.getmembers(cls, predicate=inspect.isfunction)
-            if not name.startswith("_")
+            for name, method in inspect.getmembers(cls)
+            if (inspect.isfunction(method) or isinstance(method, functools._lru_cache_wrapper))
+            and not name.startswith("_")
         }
 
     def _get_public_properties(self, cls):
@@ -46,7 +48,8 @@ class ConnectCompatibilityTestsMixin:
         return {
             name: member
             for name, member in inspect.getmembers(cls)
-            if isinstance(member, property) and not name.startswith("_")
+            if (isinstance(member, property) or isinstance(member, functools.cached_property))
+            and not name.startswith("_")
         }
 
     def _compare_method_signatures(self, classic_cls, connect_cls, cls_name):
@@ -70,7 +73,12 @@ class ConnectCompatibilityTestsMixin:
                 )
 
     def _compare_property_lists(
-        self, classic_cls, connect_cls, cls_name, expected_missing_properties
+        self,
+        classic_cls,
+        connect_cls,
+        cls_name,
+        expected_missing_connect_properties,
+        expected_missing_classic_properties,
     ):
         """Compare properties between classic and connect classes."""
         classic_properties = self._get_public_properties(classic_cls)
@@ -78,27 +86,50 @@ class ConnectCompatibilityTestsMixin:
 
         # Identify missing properties
         classic_only_properties = set(classic_properties.keys()) - set(connect_properties.keys())
+        connect_only_properties = set(connect_properties.keys()) - set(classic_properties.keys())
 
         # Compare the actual missing properties with the expected ones
         self.assertEqual(
             classic_only_properties,
-            expected_missing_properties,
+            expected_missing_connect_properties,
             f"{cls_name}: Unexpected missing properties in Connect: {classic_only_properties}",
         )
 
-    def _check_missing_methods(self, classic_cls, connect_cls, cls_name, expected_missing_methods):
+        # Reverse compatibility check
+        self.assertEqual(
+            connect_only_properties,
+            expected_missing_classic_properties,
+            f"{cls_name}: Unexpected missing properties in Classic: {connect_only_properties}",
+        )
+
+    def _check_missing_methods(
+        self,
+        classic_cls,
+        connect_cls,
+        cls_name,
+        expected_missing_connect_methods,
+        expected_missing_classic_methods,
+    ):
         """Check for expected missing methods between classic and connect classes."""
         classic_methods = self._get_public_methods(classic_cls)
         connect_methods = self._get_public_methods(connect_cls)
 
         # Identify missing methods
         classic_only_methods = set(classic_methods.keys()) - set(connect_methods.keys())
+        connect_only_methods = set(connect_methods.keys()) - set(classic_methods.keys())
 
         # Compare the actual missing methods with the expected ones
         self.assertEqual(
             classic_only_methods,
-            expected_missing_methods,
+            expected_missing_connect_methods,
             f"{cls_name}: Unexpected missing methods in Connect: {classic_only_methods}",
+        )
+
+        # Reverse compatibility check
+        self.assertEqual(
+            connect_only_methods,
+            expected_missing_classic_methods,
+            f"{cls_name}: Unexpected missing methods in Classic: {connect_only_methods}",
         )
 
     def check_compatibility(
@@ -106,16 +137,18 @@ class ConnectCompatibilityTestsMixin:
         classic_cls,
         connect_cls,
         cls_name,
-        expected_missing_properties,
-        expected_missing_methods,
+        expected_missing_connect_properties,
+        expected_missing_classic_properties,
+        expected_missing_connect_methods,
+        expected_missing_classic_methods,
     ):
         """
         Main method for checking compatibility between classic and connect.
 
         This method performs the following checks:
         - API signature comparison between classic and connect classes.
-        - Property comparison, identifying any missing properties in the connect class.
-        - Method comparison, identifying any missing methods in the connect class.
+        - Property comparison, identifying any missing properties between classic and connect.
+        - Method comparison, identifying any missing methods between classic and connect.
 
         Parameters
         ----------
@@ -125,63 +158,93 @@ class ConnectCompatibilityTestsMixin:
             The connect class to compare.
         cls_name : str
             The name of the class.
-        expected_missing_properties : set
+        expected_missing_connect_properties : set
             A set of properties expected to be missing in the connect class.
-        expected_missing_methods : set
+        expected_missing_classic_properties : set
+            A set of properties expected to be missing in the classic class.
+        expected_missing_connect_methods : set
             A set of methods expected to be missing in the connect class.
+        expected_missing_classic_methods : set
+            A set of methods expected to be missing in the classic class.
         """
         self._compare_method_signatures(classic_cls, connect_cls, cls_name)
         self._compare_property_lists(
-            classic_cls, connect_cls, cls_name, expected_missing_properties
+            classic_cls,
+            connect_cls,
+            cls_name,
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
         )
-        self._check_missing_methods(classic_cls, connect_cls, cls_name, expected_missing_methods)
+        self._check_missing_methods(
+            classic_cls,
+            connect_cls,
+            cls_name,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
 
     def test_dataframe_compatibility(self):
         """Test DataFrame compatibility between classic and connect."""
-        expected_missing_properties = {"sql_ctx", "isStreaming"}
-        expected_missing_methods = {"inputFiles", "isLocal", "semanticHash", "isEmpty"}
+        expected_missing_connect_properties = {"sql_ctx"}
+        expected_missing_classic_properties = {"is_cached"}
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = set()
         self.check_compatibility(
             ClassicDataFrame,
             ConnectDataFrame,
             "DataFrame",
-            expected_missing_properties,
-            expected_missing_methods,
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
         )
 
     def test_column_compatibility(self):
         """Test Column compatibility between classic and connect."""
-        expected_missing_properties = set()
-        expected_missing_methods = set()
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = {"to_plan"}
         self.check_compatibility(
             ClassicColumn,
             ConnectColumn,
             "Column",
-            expected_missing_properties,
-            expected_missing_methods,
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
         )
 
     def test_spark_session_compatibility(self):
         """Test SparkSession compatibility between classic and connect."""
-        expected_missing_properties = {"sparkContext", "version"}
-        expected_missing_methods = {"newSession"}
+        expected_missing_connect_properties = {"sparkContext"}
+        expected_missing_classic_properties = {"is_stopped", "session_id"}
+        expected_missing_connect_methods = {"newSession"}
+        expected_missing_classic_methods = set()
         self.check_compatibility(
             ClassicSparkSession,
             ConnectSparkSession,
             "SparkSession",
-            expected_missing_properties,
-            expected_missing_methods,
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
         )
 
     def test_catalog_compatibility(self):
         """Test Catalog compatibility between classic and connect."""
-        expected_missing_properties = set()
-        expected_missing_methods = set()
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = set()
         self.check_compatibility(
             ClassicCatalog,
             ConnectCatalog,
             "Catalog",
-            expected_missing_properties,
-            expected_missing_methods,
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
         )
 
 
