@@ -156,7 +156,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     // SPARK-39564: don't print out serde to avoid introducing complicated and error-prone
     // regex magic.
     .set("spark.test.noSerdeInExplain", "true")
-    .set("spark.session.isolate.artifacts", "false")
 
   // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
   // here we need to ignore it.

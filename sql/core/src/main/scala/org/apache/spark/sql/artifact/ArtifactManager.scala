@@ -97,7 +97,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
     (0, new mutable.WeakHashMap[ClassLoader, ClassLoader]())
 
   def withResources[T](f: => T): T = {
-    def withState(f: => T): T = {
+    def runWithState(f: => T): T = {
       JobArtifactSet.withActiveJobArtifactState(state) {
         // Copy over global initial resources to this session. Often used by spark-submit.
         copyInitialContextResourcesIfNeeded()
@@ -107,10 +107,10 @@ class ArtifactManager(session: SparkSession) extends Logging {
 
     if (jarsList.size() > 0) {
       Utils.withContextClassLoader(classloader, retainChange = true) {
-        withState(f)
+        runWithState(f)
       }
     } else {
-      withState(f)
+      runWithState(f)
     }
   }
 
