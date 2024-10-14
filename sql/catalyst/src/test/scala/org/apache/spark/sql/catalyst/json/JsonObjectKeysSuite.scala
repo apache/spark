@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.json
 
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.sql.catalyst.expressions.json.JsonExpressionUtils
-import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.scalatest.funsuite.AnyFunSuite
 
 class JsonObjectKeysSuite extends AnyFunSuite {
@@ -40,7 +39,7 @@ class JsonObjectKeysSuite extends AnyFunSuite {
 
     assert(result != null, "Result should not be null")
     assert(result.numElements() == expectedKeys.length, "Number of keys should match")
-    assert(result.array().map(_.asInstanceOf[UTF8String]).sameElements(expectedKeys), "Keys should match expected values")
+    assert(result.array(0).map(_.asInstanceOf[UTF8String]).sameElements(expectedKeys), "Keys should match expected values")
   }
 }
 
