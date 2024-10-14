@@ -1407,10 +1407,13 @@ class AstBuilder extends DataTypeAstBuilder
    * - INTERSECT [DISTINCT | ALL]
    */
   override def visitSetOperation(ctx: SetOperationContext): LogicalPlan = withOrigin(ctx) {
-    val left = plan(ctx.left)
-    val right = plan(ctx.right)
     val all = Option(ctx.setQuantifier()).exists(_.ALL != null)
-    ctx.operator.getType match {
+    visitSetOperationImpl(plan(ctx.left), plan(ctx.right), all, ctx.operator.getType)
+  }
+
+  private def visitSetOperationImpl(
+      left: LogicalPlan, right: LogicalPlan, all: Boolean, operatorType: Int): LogicalPlan = {
+    operatorType match {
       case SqlBaseParser.UNION if all =>
         Union(left, right)
       case SqlBaseParser.UNION =>
@@ -3253,7 +3256,7 @@ class AstBuilder extends DataTypeAstBuilder
     } catch {
       case e: SparkArithmeticException =>
         throw new ParseException(
-          errorClass = e.getErrorClass,
+          errorClass = e.getCondition,
           messageParameters = e.getMessageParameters.asScala.toMap,
           ctx)
     }
@@ -3549,7 +3552,7 @@ class AstBuilder extends DataTypeAstBuilder
         // Keep error class of SparkIllegalArgumentExceptions and enrich it with query context
         case se: SparkIllegalArgumentException =>
           val pe = new ParseException(
-            errorClass = se.getErrorClass,
+            errorClass = se.getCondition,
             messageParameters = se.getMessageParameters.asScala.toMap,
             ctx)
           pe.setStackTrace(se.getStackTrace)
@@ -5918,7 +5921,10 @@ class AstBuilder extends DataTypeAstBuilder
       withSample(c, left)
     }.getOrElse(Option(ctx.joinRelation()).map { c =>
       withJoinRelation(c, left)
-    }.get)))))
+    }.getOrElse(Option(ctx.operator).map { c =>
+      val all = Option(ctx.setQuantifier()).exists(_.ALL != null)
+      visitSetOperationImpl(left, plan(ctx.right), all, c.getType)
+    }.get))))))
   }
 
   /**
