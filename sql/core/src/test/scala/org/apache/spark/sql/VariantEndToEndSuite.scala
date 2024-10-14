@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.QueryTest.sameRows
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
@@ -362,12 +362,18 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     withSQLConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS.key -> "false") {
       val df = Seq(json).toDF("j")
         .selectExpr("from_json(j,'variant')")
+      val exception = intercept[SparkException] {
+        df.collect()
+      }
       checkError(
-        exception = intercept[SparkThrowable] {
-          df.collect()
-        },
+        exception = exception,
         condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map("badRecord" -> json, "failFastMode" -> "FAILFAST")
+      )
+      checkError(
+        exception = exception.getCause.asInstanceOf[SparkRuntimeException],
+        condition = "VARIANT_DUPLICATE_KEY",
+        parameters = Map("key" -> "a")
       )
     }
   }
