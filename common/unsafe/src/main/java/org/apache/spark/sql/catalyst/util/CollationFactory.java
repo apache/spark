@@ -154,11 +154,24 @@ public final class CollationFactory {
      */
     public final boolean supportsLowercaseEquality;
 
+
     /**
      * Support for Space Trimming implies that that based on specifier (for now only right trim)
      * leading, trailing or both spaces are removed from the input string before comparison.
      */
     public final boolean supportsSpaceTrimming;
+
+    /**
+     * Is Utf8 binary type as indicator if collation base type is UTF8 binary. Note currently only
+     * collations Utf8_Binary and Utf8_Binary_RTRIM are considered as Utf8 binary type.
+     */
+    public final boolean isUtf8BinaryType;
+
+    /**
+     * Is Utf8 lcase type as indicator if collation base type is UTF8 lcase. Note currently only
+     * collations Utf8_Lcase and Utf8_Lcase_RTRIM are considered as Utf8 Lcase type.
+     */
+    public final boolean isUtf8LcaseType;
 
     public Collation(
         String collationName,
@@ -168,9 +181,8 @@ public final class CollationFactory {
         String version,
         ToLongFunction<UTF8String> hashFunction,
         BiFunction<UTF8String, UTF8String, Boolean> equalsFunction,
-        boolean supportsBinaryEquality,
-        boolean supportsBinaryOrdering,
-        boolean supportsLowercaseEquality,
+        boolean isUtf8BinaryType,
+        boolean isUtf8LcaseType,
         boolean supportsSpaceTrimming) {
       this.collationName = collationName;
       this.provider = provider;
@@ -178,16 +190,15 @@ public final class CollationFactory {
       this.comparator = comparator;
       this.version = version;
       this.hashFunction = hashFunction;
-      this.supportsBinaryEquality = supportsBinaryEquality;
-      this.supportsBinaryOrdering = supportsBinaryOrdering;
-      this.supportsLowercaseEquality = supportsLowercaseEquality;
+      this.isUtf8BinaryType = isUtf8BinaryType;
+      this.isUtf8LcaseType = isUtf8LcaseType;
       this.equalsFunction = equalsFunction;
       this.supportsSpaceTrimming = supportsSpaceTrimming;
-
-      // De Morgan's Law to check supportsBinaryOrdering => supportsBinaryEquality
-      assert(!supportsBinaryOrdering || supportsBinaryEquality);
+      this.supportsBinaryEquality = !supportsSpaceTrimming && isUtf8BinaryType;
+      this.supportsBinaryOrdering = !supportsSpaceTrimming && isUtf8BinaryType;
+      this.supportsLowercaseEquality = !supportsSpaceTrimming && isUtf8LcaseType;
       // No Collation can simultaneously support binary equality and lowercase equality
-      assert(!supportsBinaryEquality || !supportsLowercaseEquality);
+      assert(!isUtf8BinaryType || !isUtf8LcaseType);
 
       assert(SUPPORTED_PROVIDERS.contains(provider));
     }
@@ -567,9 +578,8 @@ public final class CollationFactory {
             "1.0",
             hashFunction,
             equalsFunction,
-            /* supportsBinaryEquality = */ true,
-            /* supportsBinaryOrdering = */ true,
-            /* supportsLowercaseEquality = */ false,
+            /* isUtf8BinaryType = */ true,
+            /* isUtf8LcaseType = */ false,
             spaceTrimming != SpaceTrimming.NONE);
         } else {
           Comparator<UTF8String> comparator;
@@ -595,9 +605,8 @@ public final class CollationFactory {
             "1.0",
             hashFunction,
             (s1, s2) -> comparator.compare(s1, s2) == 0,
-            /* supportsBinaryEquality = */ false,
-            /* supportsBinaryOrdering = */ false,
-            /* supportsLowercaseEquality = */ true,
+            /* isUtf8BinaryType = */ false,
+            /* isUtf8LcaseType = */ true,
             spaceTrimming != SpaceTrimming.NONE);
         }
       }
@@ -982,9 +991,8 @@ public final class CollationFactory {
           ICU_COLLATOR_VERSION,
           hashFunction,
           (s1, s2) -> comparator.compare(s1, s2) == 0,
-          /* supportsBinaryEquality = */ false,
-          /* supportsBinaryOrdering = */ false,
-          /* supportsLowercaseEquality = */ false,
+          /* isUtf8BinaryType = */ false,
+          /* isUtf8LcaseType = */ false,
           spaceTrimming != SpaceTrimming.NONE);
       }
 
@@ -1191,9 +1199,9 @@ public final class CollationFactory {
     if (collation.supportsSpaceTrimming) {
       input = Collation.CollationSpec.applyTrimmingPolicy(input, collationId);
     }
-    if (collation.supportsBinaryEquality) {
+    if (collation.isUtf8BinaryType) {
       return input;
-    } else if (collation.supportsLowercaseEquality) {
+    } else if (collation.isUtf8LcaseType) {
       return CollationAwareUTF8String.lowerCaseCodePoints(input);
     } else {
       CollationKey collationKey = collation.collator.getCollationKey(
@@ -1207,9 +1215,9 @@ public final class CollationFactory {
     if (collation.supportsSpaceTrimming) {
       input = Collation.CollationSpec.applyTrimmingPolicy(input, collationId);
     }
-    if (collation.supportsBinaryEquality) {
+    if (collation.isUtf8BinaryType) {
       return input.getBytes();
-    } else if (collation.supportsLowercaseEquality) {
+    } else if (collation.isUtf8LcaseType) {
       return CollationAwareUTF8String.lowerCaseCodePoints(input).getBytes();
     } else {
       return collation.collator.getCollationKey(

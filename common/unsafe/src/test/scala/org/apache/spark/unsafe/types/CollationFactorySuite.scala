@@ -38,22 +38,22 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     assert(UTF8_BINARY_COLLATION_ID == 0)
     val utf8Binary = fetchCollation(UTF8_BINARY_COLLATION_ID)
     assert(utf8Binary.collationName == "UTF8_BINARY")
-    assert(utf8Binary.supportsBinaryEquality)
+    assert(utf8Binary.isUtf8BinaryType)
 
     assert(UTF8_LCASE_COLLATION_ID == 1)
     val utf8Lcase = fetchCollation(UTF8_LCASE_COLLATION_ID)
     assert(utf8Lcase.collationName == "UTF8_LCASE")
-    assert(!utf8Lcase.supportsBinaryEquality)
+    assert(!utf8Lcase.isUtf8BinaryType)
 
     assert(UNICODE_COLLATION_ID == (1 << 29))
     val unicode = fetchCollation(UNICODE_COLLATION_ID)
     assert(unicode.collationName == "UNICODE")
-    assert(!unicode.supportsBinaryEquality)
+    assert(!unicode.isUtf8BinaryType)
 
     assert(UNICODE_CI_COLLATION_ID == ((1 << 29) | (1 << 17)))
     val unicodeCi = fetchCollation(UNICODE_CI_COLLATION_ID)
     assert(unicodeCi.collationName == "UNICODE_CI")
-    assert(!unicodeCi.supportsBinaryEquality)
+    assert(!unicodeCi.isUtf8BinaryType)
   }
 
   test("UTF8_BINARY and ICU root locale collation names") {
