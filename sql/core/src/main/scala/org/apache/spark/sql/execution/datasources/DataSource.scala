@@ -515,8 +515,8 @@ case class DataSource(
         dataSource.createRelation(
           sparkSession.sqlContext, mode, caseInsensitiveOptions, Dataset.ofRows(sparkSession, data))
       case format: FileFormat =>
-        val dataTypesWithNames = outputColumns.map(attr => (attr.dataType, attr.name))
-        disallowWritingIntervals(dataTypesWithNames, format.toString, forbidAnsiIntervals = false)
+        disallowWritingIntervals(
+          outputColumns.toStructType.asNullable, format.toString, forbidAnsiIntervals = false)
         val cmd = planForWritingFileFormat(format, mode, data)
         val qe = sparkSession.sessionState.executePlan(cmd)
         qe.assertCommandExecuted()
@@ -541,8 +541,7 @@ case class DataSource(
         }
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
-        val dataTypesWithNames = data.schema.map(field => (field.dataType, field.name))
-        disallowWritingIntervals(dataTypesWithNames, format.toString, forbidAnsiIntervals = false)
+        disallowWritingIntervals(data.schema, format.toString, forbidAnsiIntervals = false)
         DataSource.validateSchema(data.schema, sparkSession.sessionState.conf)
         planForWritingFileFormat(format, mode, data)
       case _ => throw SparkException.internalError(
@@ -569,13 +568,13 @@ case class DataSource(
   }
 
   private def disallowWritingIntervals(
-      dataTypesWithNames: Seq[(DataType, String)],
+      outputColumns: Seq[StructField],
       format: String,
       forbidAnsiIntervals: Boolean): Unit = {
-    dataTypesWithNames.foreach { case (dataType, columnName) =>
-      TypeUtils.invokeOnceForInterval(dataType, forbidAnsiIntervals) {
-      throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError(
-        format, toSQLId(columnName), toSQLType(dataType)
+    outputColumns.foreach { field =>
+      TypeUtils.invokeOnceForInterval(field.dataType, forbidAnsiIntervals) {
+      throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(
+        format, field
       )}
     }
   }
