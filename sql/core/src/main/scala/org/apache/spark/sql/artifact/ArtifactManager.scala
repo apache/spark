@@ -298,7 +298,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
    * too many class loaders. Layering too much heavily impacts streaming performance.
    */
   def classloader: ClassLoader = cachedClassLoader.getOrElse {
-    val urls = getAddedJars :+ classDir.toUri.toURL
+    val urls = (getAddedJars :+ classDir.toUri.toURL).toArray
     val prefixes = SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES)
     val userClasspathFirst = SparkEnv.get.conf.get(EXECUTOR_USER_CLASS_PATH_FIRST)
     val fallbackClassLoader = session.sharedState.jarClassLoader
@@ -315,21 +315,16 @@ class ArtifactManager(session: SparkSession) extends Logging {
       // it delegates to.
       if (userClasspathFirst) {
         // USER -> SYSTEM -> STUB
-        new ChildFirstURLClassLoader(
-          urls.toArray,
-          StubClassLoader(fallbackClassLoader, prefixes))
+        new ChildFirstURLClassLoader(urls, StubClassLoader(fallbackClassLoader, prefixes))
       } else {
         // SYSTEM -> USER -> STUB
-        new ChildFirstURLClassLoader(
-          urls.toArray,
-          StubClassLoader(null, prefixes),
-          fallbackClassLoader)
+        new ChildFirstURLClassLoader(urls, StubClassLoader(null, prefixes), fallbackClassLoader)
       }
     } else {
       if (userClasspathFirst) {
-        new ChildFirstURLClassLoader(urls.toArray, fallbackClassLoader)
+        new ChildFirstURLClassLoader(urls, fallbackClassLoader)
       } else {
-        new URLClassLoader(Array.empty, fallbackClassLoader)
+        new URLClassLoader(urls, fallbackClassLoader)
       }
     }
 
