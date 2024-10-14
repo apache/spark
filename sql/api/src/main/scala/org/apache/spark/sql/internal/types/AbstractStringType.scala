@@ -86,8 +86,10 @@ case class StringTypeWithCollation(
     supportsAccentSpecifier: Boolean = true)
     extends AbstractStringType(supportsTrimCollation) {
 
-  override def acceptsStringType(other: StringType): Boolean =
-    true
+  override def acceptsStringType(other: StringType): Boolean = {
+    (supportsCaseSpecifier || !other.isCaseInsensitive) &&
+      (supportsAccentSpecifier || !other.isAccentInsensitive)
+  }
 }
 
 object StringTypeWithCollation extends StringTypeWithCollation(false, true, true) {
