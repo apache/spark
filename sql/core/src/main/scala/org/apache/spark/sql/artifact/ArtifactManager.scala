@@ -18,7 +18,7 @@
 package org.apache.spark.sql.artifact
 
 import java.io.File
-import java.net.{URI, URL, URLClassLoader}
+import java.net.{URI, URL}
 import java.nio.ByteBuffer
 import java.nio.file.{CopyOption, Files, Path, Paths, StandardCopyOption}
 import java.util.concurrent.CopyOnWriteArrayList
@@ -36,7 +36,7 @@ import org.apache.spark.sql.{Artifact, SparkSession}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.ArtifactUtils
 import org.apache.spark.storage.{BlockManager, CacheId, StorageLevel}
-import org.apache.spark.util.{ChildFirstURLClassLoader, StubClassLoader, Utils}
+import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, StubClassLoader, Utils}
 
 /**
  * This class handles the storage of artifacts as well as preparing the artifacts for use.
@@ -89,21 +89,13 @@ class ArtifactManager(session: SparkSession) extends Logging {
   private var initialContextResourcesCopied = false
 
   def withResources[T](f: => T): T = {
-    def runWithState(f: => T): T = {
-      JobArtifactSet.withActiveJobArtifactState(state) {
-        // Copy over global initial resources to this session. Often used by spark-submit.
-        copyInitialContextResourcesIfNeeded()
-        f
-      }
+    // Utils.withContextClassLoader(classloader, retainChange = true) {
+    JobArtifactSet.withActiveJobArtifactState(state) {
+      // Copy over global initial resources to this session. Often used by spark-submit.
+      copyInitialContextResourcesIfNeeded()
+      f
     }
-
-    if (jarsList.size() > 0) {
-      Utils.withContextClassLoader(classloader, retainChange = true) {
-        runWithState(f)
-      }
-    } else {
-      runWithState(f)
-    }
+    // }
   }
 
   /**
@@ -239,6 +231,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
         sparkContextRelativePaths.add(
           (SparkContextResourceType.JAR, normalizedRemoteRelativePath, fragment))
         jarsList.add(normalizedRemoteRelativePath)
+        classloader.addURL(normalizedRemoteRelativePath.toUri.toURL)
       } else if (normalizedRemoteRelativePath.startsWith(s"pyfiles${File.separator}")) {
         session.sparkContext.addFile(uri)
         sparkContextRelativePaths.add(
@@ -301,11 +294,10 @@ class ArtifactManager(session: SparkSession) extends Logging {
    * [[SparkSession.withActive]] is often layered. We have to do some check here to avoid layering
    * too many class loaders. Layering too much heavily impacts streaming performance.
    */
-  def classloader: ClassLoader = {
-    val urls = getAddedJars :+ classDir.toUri.toURL
+  val classloader: MutableURLClassLoader = {
     val prefixes = SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES)
     val userClasspathFirst = SparkEnv.get.conf.get(EXECUTOR_USER_CLASS_PATH_FIRST)
-    val fallbackClassLoader = Utils.getContextOrSparkClassLoader
+    val fallbackClassLoader = session.sharedState.jarClassLoader
     val loader = if (prefixes.nonEmpty) {
       // Two things you need to know about classloader for all of this to make sense:
       // 1. A classloader needs to be able to fully define a class.
@@ -320,24 +312,23 @@ class ArtifactManager(session: SparkSession) extends Logging {
       if (userClasspathFirst) {
         // USER -> SYSTEM -> STUB
         new ChildFirstURLClassLoader(
-          urls.toArray,
+          Array.empty,
           StubClassLoader(fallbackClassLoader, prefixes))
       } else {
         // SYSTEM -> USER -> STUB
         new ChildFirstURLClassLoader(
-          urls.toArray,
+          Array.empty,
           StubClassLoader(null, prefixes),
           fallbackClassLoader)
       }
     } else {
       if (userClasspathFirst) {
-        new ChildFirstURLClassLoader(urls.toArray, fallbackClassLoader)
+        new ChildFirstURLClassLoader(Array.empty, fallbackClassLoader)
       } else {
-        new URLClassLoader(urls.toArray, fallbackClassLoader)
+        new MutableURLClassLoader(Array.empty, fallbackClassLoader)
       }
     }
 
-    logDebug(s"Using class loader: $loader, containing urls: $urls")
     loader
   }
 

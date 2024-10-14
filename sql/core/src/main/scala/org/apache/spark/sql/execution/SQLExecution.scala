@@ -76,6 +76,7 @@ object SQLExecution extends Logging {
       name: Option[String] = None)(
       body: Either[Throwable, () => T]): T = queryExecution.sparkSession.withActive {
     val sparkSession = queryExecution.sparkSession
+    Thread.currentThread().setContextClassLoader(sparkSession.artifactManager.classloader)
     val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
     val executionId = SQLExecution.nextExecutionId
