@@ -3931,8 +3931,8 @@ object functions {
     Column.fn("make_valid_utf8", str)
 
   /**
-   * Returns the input value if it corresponds to a valid UTF-8 string, or emits an error
-   * otherwise.
+   * Returns the input value if it corresponds to a valid UTF-8 string, or emits a
+   * SparkIllegalArgumentException exception otherwise.
    *
    * @group string_funcs
    * @since 4.0.0
