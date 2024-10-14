@@ -860,7 +860,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
         precision: scalar, default = 0.01
             This argument is used by pandas-on-Spark to compute approximate statistics
             for building a boxplot. Use *smaller* values to get more precise
-            statistics (matplotlib-only).cccccbdvtdlhreffhieutnkglfeibhferhfctieuiiln
+            statistics.
         **kwds : optional
             Additional keyword arguments are documented in
             :meth:`pyspark.pandas.Series.plot`.
