@@ -27,7 +27,7 @@ from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
-    from pyspark.sql.connect._typing import DataTypeOrString
+    from pyspark.sql._typing import DataTypeOrString
 
 
 class CatalogMetadata(NamedTuple):
