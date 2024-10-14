@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.json
 
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.json.JsonExpressionUtils
-import org.scalatest.funsuite.AnyFunSuite
+import org.apache.spark.unsafe.types.UTF8String
 
-class JsonObjectKeysSuite extends AnyFunSuite {
+class JsonObjectKeysSuite extends SparkFunSuite {
 
   test("Test jsonObjectKeys with null and non-null keys") {
     // JSON string that has a sequence where the parser will encounter null, then non-null keys
@@ -39,7 +39,8 @@ class JsonObjectKeysSuite extends AnyFunSuite {
 
     assert(result != null, "Result should not be null")
     assert(result.numElements() == expectedKeys.length, "Number of keys should match")
-    assert(result.array(0).map(_.asInstanceOf[UTF8String]).sameElements(expectedKeys), "Keys should match expected values")
+    assert(result.array(0).map(_.asInstanceOf[UTF8String]).sameElements(expectedKeys),
+      "Keys should match expected values")
   }
 }
 
