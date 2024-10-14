@@ -841,7 +841,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
         elif isinstance(self.data, DataFrame):
             return self(kind="barh", x=x, y=y, **kwargs)
 
-    def box(self, **kwds):
+    def box(self, precision=0.01, **kwds):
         """
         Make a box plot of the DataFrame columns.
 
@@ -857,14 +857,13 @@ class PandasOnSparkPlotAccessor(PandasObject):
 
         Parameters
         ----------
-        **kwds : optional
-            Additional keyword arguments are documented in
-            :meth:`pyspark.pandas.Series.plot`.
-
         precision: scalar, default = 0.01
             This argument is used by pandas-on-Spark to compute approximate statistics
             for building a boxplot. Use *smaller* values to get more precise
-            statistics (matplotlib-only).
+            statistics (matplotlib-only).cccccbdvtdlhreffhieutnkglfeibhferhfctieuiiln
+        **kwds : optional
+            Additional keyword arguments are documented in
+            :meth:`pyspark.pandas.Series.plot`.
 
         Returns
         -------
@@ -902,7 +901,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
         from pyspark.pandas import DataFrame, Series
 
         if isinstance(self.data, (Series, DataFrame)):
-            return self(kind="box", **kwds)
+            return self(kind="box", precision=precision, **kwds)
 
     def hist(self, bins=10, **kwds):
         """
