@@ -939,7 +939,7 @@ class MicroBatchExecution(
       latestExecPlan: SparkPlan): Unit = {
     latestExecPlan.collect {
       case e: StateStoreWriter =>
-        assert(e.stateInfo.isDefined)
+        assert(e.stateInfo.isDefined, "StateInfo should not be empty in StateStoreWriter")
         updateStateStoreCkptIdForOperator(
           execCtx,
           e.stateInfo.get.operatorId,
@@ -954,7 +954,8 @@ class MicroBatchExecution(
   protected def markMicroBatchEnd(execCtx: MicroBatchExecutionContext): Unit = {
     val latestExecPlan = execCtx.executionPlan.executedPlan
     watermarkTracker.updateWatermark(latestExecPlan)
-    if (StatefulOperatorStateInfo.enableStateStoreCheckpointIds(sparkSession.sessionState.conf)) {
+    if (StatefulOperatorStateInfo.enableStateStoreCheckpointIds(
+      sparkSessionForStream.sessionState.conf)) {
       updateStateStoreCkptId(execCtx, latestExecPlan)
     }
     execCtx.reportTimeTaken("commitOffsets") {

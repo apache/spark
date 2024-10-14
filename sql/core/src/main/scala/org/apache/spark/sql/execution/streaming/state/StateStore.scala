@@ -239,14 +239,16 @@ case class StateStoreMetrics(
 /**
  * State store checkpoint information, used to pass checkpointing information from executors
  * to the driver after execution.
+ * @param stateStoreCkptId The checkpoint ID for a checkpoint at `batchVersion`. This is used to
+ *                         identify the checkpoint
+ * @param baseStateStoreCkptId The checkpoint ID for `batchVersion` - 1, that is used to finish this
+ *                             batch. This is used to validate the batch is processed based on the
+ *                             correct checkpoint.
  */
 case class StateStoreCheckpointInfo(
     partitionId: Int,
     batchVersion: Long,
-    // The checkpoint ID for a checkpoint at `batchVersion`. This is used to identify the checkpoint
     stateStoreCkptId: Option[String],
-    // The checkpoint ID for `batchVersion` - 1, that is used to finish this batch. This is used
-    // to validate the batch is processed based on the correct checkpoint.
     baseStateStoreCkptId: Option[String])
 
 object StateStoreMetrics {
