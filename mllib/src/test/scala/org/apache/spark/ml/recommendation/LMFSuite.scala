@@ -201,8 +201,8 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
     val trueEpr = OptimizerSuite.epr(testData, useBias, trueUserFactor, trueItemFactors)
     val epr = OptimizerSuite.epr(testData, useBias = true, userFactors, itemFactors)
 
-    assert(0.85 < trueEpr && trueEpr < 0.9)
-    assert(0.8 < epr && epr < 0.85)
+    assert(0.85 < trueEpr && trueEpr < 0.9) // ideal epr from ground truth user distribution
+    assert(0.8 < epr && epr < 0.85) // actual epr learned by the model
   }
 
   test("LMF explicit feedback") {
@@ -244,8 +244,8 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
     val trueAcc = OptimizerSuite.accuracy(testData, useBias, trueUserFactor, trueItemFactors)
     val acc = OptimizerSuite.accuracy(testData, useBias = true, userFactors, itemFactors)
 
-    assert(0.78 < trueAcc && trueAcc < 0.82)
-    assert(0.68 < acc && acc < 0.72)
+    assert(0.78 < trueAcc && trueAcc < 0.82) // ideal accuracy from ground truth user distribution
+    assert(0.68 < acc && acc < 0.72) // actual accuracy learned by the model
   }
 }
 
