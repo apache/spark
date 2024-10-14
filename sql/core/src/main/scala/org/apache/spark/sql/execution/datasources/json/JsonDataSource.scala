@@ -106,7 +106,7 @@ object TextInputJsonDataSource extends JsonDataSource {
     }.getOrElse(CreateJacksonParser.internalRow(_: JsonFactory, _: InternalRow))
 
     SQLExecution.withSQLConfPropagated(json.sparkSession) {
-      new JsonInferSchema(parsedOptions).infer(rdd, rowParser)
+      new JsonInferSchema(parsedOptions).infer(rdd, rowParser, isReadFile = false)
     }
   }
 
