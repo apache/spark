@@ -2907,6 +2907,12 @@
     ],
     "sqlState" : "42613"
   },
+  "INVALID_REGEXP_REPLACE" : {
+    "message" : [
+      "Could not perform regexp_replace for `source = \"<source>\"`, `pattern = \"<pattern>\"`, `replacement = \"<replacement>\"` and `position = <position>`."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_SAVE_MODE" : {
     "message" : [
       "The specified save mode <mode> is invalid. Valid save modes include \"append\", \"overwrite\", \"ignore\", \"error\", \"errorifexists\", and \"default\"."
@@ -3188,12 +3194,6 @@
       "Variable type must be string type but got <varType>."
     ],
     "sqlState" : "42K09"
-  },
-  "INVALID_REGEXP_REPLACE" : {
-    "message" : [
-      "Could not perform regexp_replace for `source = \"<source>\"`, `pattern = \"<pattern>\"`, `replacement = \"<replacement>\"` and `position = <position>`."
-    ],
-    "sqlState" : "22023"
   },
   "INVALID_VARIANT_CAST" : {
     "message" : [
