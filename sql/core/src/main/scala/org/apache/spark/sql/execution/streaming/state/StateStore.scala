@@ -190,7 +190,15 @@ trait StateStore extends ReadStateStore {
   /** Current metrics of the state store */
   def metrics: StateStoreMetrics
 
-  /** Return information on recently generated checkpoints */
+  /**
+   * Return information on recently generated checkpoints
+   * The information should only be usable when checkpoint format version 2 is used and
+   * underlying state store supports it.
+   * If it is not the case, the method can return a dummy result. The result eventually won't
+   * be sent to the driver, but not all the stateful operator is able to figure out whether
+   * the function should be called to now. They would anyway call it and pass it to
+   * StatefulOperator.setStateStoreCheckpointInfo(), where it will be ignored.
+   * */
   def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo
 
   /**
