@@ -19,7 +19,7 @@ package org.apache.spark.sql
 import java.net.URI
 import java.nio.file.{Files, Paths}
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
@@ -525,6 +525,8 @@ class SparkSession private[sql] (
     }
   }
 
+  override private[sql] def isUsable: Boolean = client.isSessionValid
+
   implicit class RichColumn(c: Column) {
     def expr: proto.Expression = toExpr(c)
     def typedExpr[T](e: Encoder[T]): proto.Expression = toTypedExpr(c, e)
@@ -533,7 +535,9 @@ class SparkSession private[sql] (
 
 // The minimal builder needed to create a spark session.
 // TODO: implements all methods mentioned in the scaladoc of [[SparkSession]]
-object SparkSession extends api.SparkSessionCompanion with Logging {
+object SparkSession extends api.BaseSparkSessionCompanion with Logging {
+  override private[sql] type Session = SparkSession
+
   private val MAX_CACHED_SESSIONS = 100
   private val planIdGenerator = new AtomicLong
   private var server: Option[Process] = None
@@ -548,29 +552,6 @@ object SparkSession extends api.SparkSessionCompanion with Logging {
     .build(new CacheLoader[Configuration, SparkSession] {
       override def load(c: Configuration): SparkSession = create(c)
     })
-
-  /** The active SparkSession for the current thread. */
-  private val activeThreadSession = new InheritableThreadLocal[SparkSession]
-
-  /** Reference to the root SparkSession. */
-  private val defaultSession = new AtomicReference[SparkSession]
-
-  /**
-   * Set the (global) default [[SparkSession]], and (thread-local) active [[SparkSession]] when
-   * they are not set yet or the associated [[SparkConnectClient]] is unusable.
-   */
-  private def setDefaultAndActiveSession(session: SparkSession): Unit = {
-    val currentDefault = defaultSession.getAcquire
-    if (currentDefault == null || !currentDefault.client.isSessionValid) {
-      // Update `defaultSession` if it is null or the contained session is not valid. There is a
-      // chance that the following `compareAndSet` fails if a new default session has just been set,
-      // but that does not matter since that event has happened after this method was invoked.
-      defaultSession.compareAndSet(currentDefault, session)
-    }
-    if (getActiveSession.isEmpty) {
-      setActiveSession(session)
-    }
-  }
 
   /**
    * Create a new Spark Connect server to connect locally.
@@ -622,17 +603,6 @@ object SparkSession extends api.SparkSessionCompanion with Logging {
    */
   private[sql] def create(configuration: Configuration): SparkSession = {
     new SparkSession(configuration.toSparkConnectClient, planIdGenerator)
-  }
-
-  /**
-   * Hook called when a session is closed.
-   */
-  private[sql] def onSessionClose(session: SparkSession): Unit = {
-    sessions.invalidate(session.client.configuration)
-    defaultSession.compareAndSet(session, null)
-    if (getActiveSession.contains(session)) {
-      clearActiveSession()
-    }
   }
 
   /**
@@ -781,71 +751,12 @@ object SparkSession extends api.SparkSessionCompanion with Logging {
     }
   }
 
-  /**
-   * Returns the default SparkSession. If the previously set default SparkSession becomes
-   * unusable, returns None.
-   *
-   * @since 3.5.0
-   */
-  def getDefaultSession: Option[SparkSession] =
-    Option(defaultSession.get()).filter(_.client.isSessionValid)
+  /** @inheritdoc */
+  override def getActiveSession: Option[SparkSession] = super.getActiveSession
 
-  /**
-   * Sets the default SparkSession.
-   *
-   * @since 3.5.0
-   */
-  def setDefaultSession(session: SparkSession): Unit = {
-    defaultSession.set(session)
-  }
+  /** @inheritdoc */
+  override def getDefaultSession: Option[SparkSession] = super.getDefaultSession
 
-  /**
-   * Clears the default SparkSession.
-   *
-   * @since 3.5.0
-   */
-  def clearDefaultSession(): Unit = {
-    defaultSession.set(null)
-  }
-
-  /**
-   * Returns the active SparkSession for the current thread. If the previously set active
-   * SparkSession becomes unusable, returns None.
-   *
-   * @since 3.5.0
-   */
-  def getActiveSession: Option[SparkSession] =
-    Option(activeThreadSession.get()).filter(_.client.isSessionValid)
-
-  /**
-   * Changes the SparkSession that will be returned in this thread and its children when
-   * SparkSession.getOrCreate() is called. This can be used to ensure that a given thread receives
-   * an isolated SparkSession.
-   *
-   * @since 3.5.0
-   */
-  def setActiveSession(session: SparkSession): Unit = {
-    activeThreadSession.set(session)
-  }
-
-  /**
-   * Clears the active SparkSession for current thread.
-   *
-   * @since 3.5.0
-   */
-  def clearActiveSession(): Unit = {
-    activeThreadSession.remove()
-  }
-
-  /**
-   * Returns the currently active SparkSession, otherwise the default one. If there is no default
-   * SparkSession, throws an exception.
-   *
-   * @since 3.5.0
-   */
-  def active: SparkSession = {
-    getActiveSession
-      .orElse(getDefaultSession)
-      .getOrElse(throw new IllegalStateException("No active or default Spark session found"))
-  }
+  /** @inheritdoc */
+  override def active: SparkSession = super.active
 }

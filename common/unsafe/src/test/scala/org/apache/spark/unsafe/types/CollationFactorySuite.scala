@@ -456,7 +456,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     val e = intercept[SparkException] {
       fetchCollation(collationName)
     }
-    assert(e.getErrorClass === "COLLATION_INVALID_NAME")
+    assert(e.getCondition === "COLLATION_INVALID_NAME")
     assert(e.getMessageParameters.asScala === Map(
       "collationName" -> collationName, "proposals" -> proposals))
   }

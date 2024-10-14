@@ -52,7 +52,7 @@ public final class SparkOutOfMemoryError extends OutOfMemoryError implements Spa
     }
 
     @Override
-    public String getErrorClass() {
+    public String getCondition() {
         return errorClass;
     }
 }

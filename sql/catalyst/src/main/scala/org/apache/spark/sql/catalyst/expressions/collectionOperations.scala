@@ -27,6 +27,7 @@ import org.apache.spark.SparkException.internalError
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.KnownNotContainsNull
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
@@ -5330,14 +5331,11 @@ case class ArrayCompact(child: Expression)
     child.dataType.asInstanceOf[ArrayType].elementType, true)
   lazy val lambda = LambdaFunction(isNotNull(lv), Seq(lv))
 
-  override lazy val replacement: Expression = ArrayFilter(child, lambda)
+  override lazy val replacement: Expression = KnownNotContainsNull(ArrayFilter(child, lambda))
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
   override def prettyName: String = "array_compact"
-
-  override def dataType: ArrayType =
-    child.dataType.asInstanceOf[ArrayType].copy(containsNull = false)
 
   override protected def withNewChildInternal(newChild: Expression): ArrayCompact =
     copy(child = newChild)
