@@ -839,4 +839,18 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       condition = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
       parameters = Map("methodName" -> "`writeTo`"))
   }
+
+  test("SPARK-49975: write should fail with legacy store assignment policy") {
+    withSQLConf((SQLConf.STORE_ASSIGNMENT_POLICY.key, "LEGACY")) {
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.range(10)
+            .writeTo("table_name")
+            .append()
+        },
+        condition = "_LEGACY_ERROR_TEMP_1000",
+        parameters = Map("configKey" -> "spark.sql.storeAssignmentPolicy")
+      )
+    }
+  }
 }

@@ -3661,20 +3661,23 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   object ResolveOutputRelation extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(COMMAND), ruleId) {
-      case v2Write: V2WriteCommand
-          if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved =>
+      case v2Write: V2WriteCommand =>
         validateStoreAssignmentPolicy()
-        TableOutputResolver.suitableForByNameCheck(v2Write.isByName,
-          expected = v2Write.table.output, queryOutput = v2Write.query.output)
-        val projection = TableOutputResolver.resolveOutputColumns(
-          v2Write.table.name, v2Write.table.output, v2Write.query, v2Write.isByName, conf)
-        if (projection != v2Write.query) {
-          val cleanedTable = v2Write.table match {
-            case r: DataSourceV2Relation =>
-              r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata))
-            case other => other
+        if (v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved) {
+          TableOutputResolver.suitableForByNameCheck(v2Write.isByName,
+            expected = v2Write.table.output, queryOutput = v2Write.query.output)
+          val projection = TableOutputResolver.resolveOutputColumns(
+            v2Write.table.name, v2Write.table.output, v2Write.query, v2Write.isByName, conf)
+          if (projection != v2Write.query) {
+            val cleanedTable = v2Write.table match {
+              case r: DataSourceV2Relation =>
+                r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata))
+              case other => other
+            }
+            v2Write.withNewQuery(projection).withNewTable(cleanedTable)
+          } else {
+            v2Write
           }
-          v2Write.withNewQuery(projection).withNewTable(cleanedTable)
         } else {
           v2Write
         }
