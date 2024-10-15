@@ -542,7 +542,8 @@ public class JavaDataFrameSuite {
   public void testTransform() {
     // SPARK-49961 - transform must have the correct type
     Dataset<Integer> ds = spark.createDataset(Arrays.asList(1,2), Encoders.INT());
-    Dataset<Integer> transformed = ds.transform((Dataset<Integer> d) -> ds.selectExpr("(value + 1) value").as(Encoders.INT()));
+    Dataset<Integer> transformed = ds.transform((Dataset<Integer> d) ->
+            ds.selectExpr("(value + 1) value").as(Encoders.INT()));
     Integer[] expected = {2, 3};
     Integer[] got = transformed.collectAsList().toArray(new Integer[0]);
     Arrays.sort(got);
