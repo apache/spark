@@ -149,12 +149,17 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
   test("unsupported mode") {
     val csvData = "---"
     val schema = StructType(StructField("a", DoubleType) :: Nil)
-    val exception = intercept[TestFailedException] {
-      checkEvaluation(
-        CsvToStructs(schema, Map("mode" -> DropMalformedMode.name), Literal(csvData), UTC_OPT),
-        InternalRow(null))
-    }.getCause
-    assert(exception.getMessage.contains("from_csv() doesn't support the DROPMALFORMED mode"))
+
+    checkError(
+      exception = intercept[TestFailedException] {
+        checkEvaluation(
+          CsvToStructs(schema, Map("mode" -> DropMalformedMode.name), Literal(csvData), UTC_OPT),
+          InternalRow(null))
+      }.getCause.asInstanceOf[AnalysisException],
+      condition = "PARSE_MODE_UNSUPPORTED",
+      parameters = Map(
+        "funcName" -> "from_csv",
+        "mode" -> "DROPMALFORMED"))
   }
 
   test("infer schema of CSV strings") {
