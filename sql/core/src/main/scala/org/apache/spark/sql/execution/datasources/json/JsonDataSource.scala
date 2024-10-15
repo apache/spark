@@ -164,7 +164,8 @@ object MultiLineJsonDataSource extends JsonDataSource {
       .getOrElse(createParser(_: JsonFactory, _: PortableDataStream))
 
     SQLExecution.withSQLConfPropagated(sparkSession) {
-      new JsonInferSchema(parsedOptions).infer[PortableDataStream](sampled, parser)
+      new JsonInferSchema(parsedOptions)
+        .infer[PortableDataStream](sampled, parser, isReadFile = true)
     }
   }
 

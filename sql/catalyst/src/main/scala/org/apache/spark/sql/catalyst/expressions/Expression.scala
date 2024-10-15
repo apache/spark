@@ -383,10 +383,10 @@ abstract class Expression extends TreeNode[Expression] {
 trait FoldableUnevaluable extends Expression {
   override def foldable: Boolean = true
 
-  final override def eval(input: InternalRow = null): Any =
+  override def eval(input: InternalRow = null): Any =
     throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
 
-  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
 
