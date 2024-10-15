@@ -254,7 +254,9 @@ object SparkBuild extends PomBuild {
         // reduce the cost of migration in subsequent versions.
         "-Wconf:cat=deprecation&msg=it will become a keyword in Scala 3:e",
         // SPARK-46938 to prevent enum scan on pmml-model, under spark-mllib module.
-        "-Wconf:cat=other&site=org.dmg.pmml.*:w"
+        "-Wconf:cat=other&site=org.dmg.pmml.*:w",
+        // SPARK-49937 ban call the method `SparkThrowable#getErrorClass`
+        "-Wconf:cat=deprecation&msg=method getErrorClass in trait SparkThrowable is deprecated:e"
       )
     }
   )

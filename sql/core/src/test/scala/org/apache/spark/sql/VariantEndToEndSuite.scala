@@ -18,7 +18,7 @@ package org.apache.spark.sql
 
 import java.io.File
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.QueryTest.sameRows
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
@@ -675,16 +675,24 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
       val expectedMetadata: Array[Byte] = Array(VERSION, 3, 0, 1, 2, 3, 'a', 'b', 'c')
       assert(actual === new VariantVal(expectedValue, expectedMetadata))
     }
-    withSQLConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS.key -> "false") {
-      val df = Seq(json).toDF("j")
-        .selectExpr("from_json(j,'variant')")
-      checkError(
-        exception = intercept[SparkThrowable] {
+    // Check whether the parse_json and from_json expressions throw the correct exception.
+    Seq("from_json(j, 'variant')", "parse_json(j)").foreach { expr =>
+      withSQLConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS.key -> "false") {
+        val df = Seq(json).toDF("j").selectExpr(expr)
+        val exception = intercept[SparkException] {
           df.collect()
-        },
-        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-        parameters = Map("badRecord" -> json, "failFastMode" -> "FAILFAST")
-      )
+        }
+        checkError(
+          exception = exception,
+          condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+          parameters = Map("badRecord" -> json, "failFastMode" -> "FAILFAST")
+        )
+        checkError(
+          exception = exception.getCause.asInstanceOf[SparkRuntimeException],
+          condition = "VARIANT_DUPLICATE_KEY",
+          parameters = Map("key" -> "a")
+        )
+      }
     }
   }
 }
