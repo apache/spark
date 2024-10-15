@@ -17,21 +17,23 @@
 package org.apache.spark.deploy.k8s
 
 import java.io.File
-
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 import io.fabric8.kubernetes.client.{ConfigBuilder, KubernetesClient, KubernetesClientBuilder}
 import io.fabric8.kubernetes.client.Config.KUBERNETES_REQUEST_RETRY_BACKOFFLIMIT_SYSTEM_PROPERTY
 import io.fabric8.kubernetes.client.Config.autoConfigure
+import io.fabric8.kubernetes.client.okhttp.OkHttpClientFactory
+import io.fabric8.kubernetes.client.utils.HttpClientUtils
 import io.fabric8.kubernetes.client.utils.Utils.getSystemPropertyOrEnvVar
-
+import okhttp3.{Dispatcher, OkHttpClient}
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.K8S_CONTEXT
 import org.apache.spark.internal.config.ConfigEntry
+import org.apache.spark.util.ThreadUtils
 
 /**
  * :: DeveloperApi ::
@@ -122,9 +124,20 @@ object SparkKubernetesClientFactory extends Logging {
     logDebug(
       "Kubernetes client config: " +
         new ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(config))
-    new KubernetesClientBuilder()
-      .withConfig(config)
-      .build()
+    val clientFactory = HttpClientUtils.getHttpClientFactory
+    val clientBuilder = new KubernetesClientBuilder().withConfig(config)
+    clientFactory match {
+      case _: OkHttpClientFactory =>
+        val dispatcher = new Dispatcher(
+          ThreadUtils.newDaemonCachedThreadPool("kubernetes-dispatcher"))
+        val factory = new OkHttpClientFactory() {
+          override def additionalConfig(builder: OkHttpClient.Builder): Unit = {
+            builder.dispatcher(dispatcher)
+          }
+        }
+        clientBuilder.withHttpClientFactory(factory).build()
+      case _ => clientBuilder.build()
+    }
   }
 
   private implicit class OptionConfigurableConfigBuilder(val configBuilder: ConfigBuilder)
