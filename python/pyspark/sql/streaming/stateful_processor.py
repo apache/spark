@@ -77,22 +77,22 @@ class TimerValues:
     .. versionadded:: 4.0.0
     """
     def __init__(
-            self,
-            current_processing_time_in_ms: int = -1,
-            current_watermark_in_ms: int = -1) -> None:
+        self,
+        current_processing_time_in_ms: int = -1,
+        current_watermark_in_ms: int = -1) -> None:
         self._current_processing_time_in_ms = current_processing_time_in_ms
         self._current_watermark_in_ms = current_watermark_in_ms
 
-    """
-    Get processing time for current batch, return timestamp in millisecond.
-    """
     def get_current_processing_time_in_ms(self) -> int:
+        """
+        Get processing time for current batch, return timestamp in millisecond.
+        """
         return self._current_processing_time_in_ms
 
-    """
-    Get watermark for current batch, return timestamp in millisecond.
-    """
     def get_current_watermark_in_ms(self) -> int:
+        """
+        Get watermark for current batch, return timestamp in millisecond.
+        """
         return self._current_watermark_in_ms
 
 
@@ -104,22 +104,22 @@ class ExpiredTimerInfo:
     .. versionadded:: 4.0.0
     """
     def __init__(
-            self,
-            is_valid: bool,
-            expiry_time_in_ms: int = -1) -> None:
+        self,
+        is_valid: bool,
+        expiry_time_in_ms: int = -1) -> None:
         self._is_valid = is_valid
         self._expiry_time_in_ms = expiry_time_in_ms
 
-    """
-    Whether the expiry info is valid.
-    """
     def is_valid(self) -> bool:
+        """
+        Whether the expiry info is valid.
+        """
         return self._is_valid
 
-    """
-    Get the timestamp for expired timer, return timestamp in millisecond.
-    """
     def get_expiry_time_in_ms(self) -> int:
+        """
+        Get the timestamp for expired timer, return timestamp in millisecond.
+        """
         return self._expiry_time_in_ms
 
 

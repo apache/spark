@@ -57,14 +57,14 @@ class TransformWithStateInPandasStateServer(
     errorOnDuplicatedFieldNames: Boolean,
     largeVarTypes: Boolean,
     arrowTransformWithStateInPandasMaxRecordsPerBatch: Int,
+    batchTimestampMs: Option[Long] = None,
+    eventTimeWatermarkForEviction: Option[Long] = None,
     outputStreamForTest: DataOutputStream = null,
     valueStateMapForTest: mutable.HashMap[String, ValueStateInfo] = null,
     deserializerForTest: TransformWithStateInPandasDeserializer = null,
     arrowStreamWriterForTest: BaseStreamingArrowWriter = null,
     listStatesMapForTest : mutable.HashMap[String, ListStateInfo] = null,
-    listStateIteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null,
-    batchTimestampMs: Option[Long] = None,
-    eventTimeWatermarkForEviction: Option[Long] = None)
+    listStateIteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null)
   extends Runnable with Logging {
 
   import PythonResponseWriterUtils._

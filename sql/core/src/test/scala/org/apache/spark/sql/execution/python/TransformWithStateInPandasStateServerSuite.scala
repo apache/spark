@@ -85,8 +85,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     eventTimeWatermarkForEviction = mock(classOf[Option[Long]])
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
       statefulProcessorHandle, groupingKeySchema, "", false, false, 2,
-      outputStream, valueStateMap, transformWithStateInPandasDeserializer, arrowStreamWriter,
-      listStateMap, listStateIteratorMap, batchTimestampMs, eventTimeWatermarkForEviction)
+      batchTimestampMs, eventTimeWatermarkForEviction, outputStream, valueStateMap,
+      transformWithStateInPandasDeserializer, arrowStreamWriter, listStateMap, listStateIteratorMap)
     when(transformWithStateInPandasDeserializer.readArrowBatches(any))
       .thenReturn(Seq(new GenericRowWithSchema(Array(1), stateSchema)))
   }

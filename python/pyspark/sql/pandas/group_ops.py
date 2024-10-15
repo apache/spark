@@ -528,12 +528,10 @@ class PandasGroupedOpsMixin:
             # only timer related rows will be emitted
             for expiry_list in expiry_list_iter:
                 for key_obj, expiry_timestamp in expiry_list:
-                    if (timeMode == "processingtime" and expiry_timestamp < batch_timestamp) or\
-                            (timeMode == "eventtime" and expiry_timestamp < watermark_timestamp):
-                        result_iter_list.append(statefulProcessor.handleInputRows(
-                            key_obj, iter([]),
-                            TimerValues(batch_timestamp, watermark_timestamp),
-                            ExpiredTimerInfo(True, expiry_timestamp)))
+                    result_iter_list.append(statefulProcessor.handleInputRows(
+                        key_obj, iter([]),
+                        TimerValues(batch_timestamp, watermark_timestamp),
+                        ExpiredTimerInfo(True, expiry_timestamp)))
             # TODO(SPARK-49603) set the handle state in the lazily initialized iterator
 
             result = itertools.chain(*result_iter_list)
