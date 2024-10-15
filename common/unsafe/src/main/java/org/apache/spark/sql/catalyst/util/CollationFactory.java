@@ -153,7 +153,6 @@ public final class CollationFactory {
      * expressions, as this particular collation is not supported by the external ICU library.
      */
     public final boolean supportsLowercaseEquality;
-
     /**
      * Support for Space Trimming implies that that based on specifier (for now only right trim)
      * leading, trailing or both spaces are removed from the input string before comparison.
@@ -197,7 +196,7 @@ public final class CollationFactory {
       this.supportsBinaryOrdering = !supportsSpaceTrimming && isUtf8BinaryType;
       this.supportsLowercaseEquality = !supportsSpaceTrimming && isUtf8LcaseType;
       // No Collation can simultaneously support binary equality and lowercase equality
-      assert(!isUtf8BinaryType || !isUtf8LcaseType);
+      assert(!supportsBinaryEquality || !supportsLowercaseEquality);
 
       assert(SUPPORTED_PROVIDERS.contains(provider));
     }

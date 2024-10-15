@@ -1363,9 +1363,9 @@ public class CollationAwareUTF8String {
 
   public static UTF8String[] splitSQL(final UTF8String input, final UTF8String delim,
       final int limit, final int collationId) {
-    if (CollationFactory.fetchCollation(collationId).isUtf8BinaryType) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return input.split(delim, limit);
-    } else if (CollationFactory.fetchCollation(collationId).isUtf8LcaseType) {
+    } else if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
       return lowercaseSplitSQL(input, delim, limit);
     } else {
       return icuSplitSQL(input, delim, limit, collationId);
