@@ -28,18 +28,17 @@ abstract class AbstractStringType(supportsTrimCollation: Boolean = false)
   override private[sql] def defaultConcreteType: DataType = SqlApiConf.get.defaultStringType
   override private[sql] def simpleString: String = "string"
 
-  override private[sql] def acceptsType(other: DataType): Boolean = {
-    other match {
-      case st: StringType =>
-        canUseTrimCollation(st) && acceptsStringType(st)
-      case _ =>
-        false
-    }
+  override private[sql] def acceptsType(other: DataType): Boolean = other match {
+    case st: StringType =>
+      canUseTrimCollation(st) && acceptsStringType(st)
+    case _ =>
+      false
   }
-  def acceptsStringType(other: StringType): Boolean
 
   private[sql] def canUseTrimCollation(other: StringType): Boolean =
     supportsTrimCollation || !other.usesTrimCollation
+
+  def acceptsStringType(other: StringType): Boolean
 }
 
 /**
@@ -75,8 +74,8 @@ object StringTypeBinaryLcase extends StringTypeBinaryLcase(false) {
 }
 
 /**
- * Used for expressions supporting collation types with optional
- * case, accent, and trim sensitivity specifiers.
+ * Used for expressions supporting collation types with optional case, accent, and trim
+ * sensitivity specifiers.
  *
  * Case and accent sensitivity specifiers are supported by default.
  */
@@ -88,7 +87,7 @@ case class StringTypeWithCollation(
 
   override def acceptsStringType(other: StringType): Boolean = {
     (supportsCaseSpecifier || !other.isCaseInsensitive) &&
-      (supportsAccentSpecifier || !other.isAccentInsensitive)
+    (supportsAccentSpecifier || !other.isAccentInsensitive)
   }
 }
 
@@ -98,13 +97,15 @@ object StringTypeWithCollation extends StringTypeWithCollation(false, true, true
       supportsCaseSpecifier: Boolean = true,
       supportsAccentSpecifier: Boolean = true): StringTypeWithCollation = {
     new StringTypeWithCollation(
-      supportsTrimCollation, supportsCaseSpecifier, supportsAccentSpecifier)
+      supportsTrimCollation,
+      supportsCaseSpecifier,
+      supportsAccentSpecifier)
   }
 }
 
 /**
- * Used for expressions supporting all possible collation types except
- * those that are case-sensitive but accent insensitive (CS_AI).
+ * Used for expressions supporting all possible collation types except those that are
+ * case-sensitive but accent insensitive (CS_AI).
  */
 case class StringTypeNonCSAICollation(supportsTrimCollation: Boolean)
     extends AbstractStringType(supportsTrimCollation) {
