@@ -201,10 +201,7 @@ private[ml] abstract class LogisticFactorizationBase[T](
           sg.optimize(sIt, numThread, remapInplace = true)
           if (verbose) {
             log.debug(
-              "LOSS: " + sg.loss.doubleValue() / sg.lossn.longValue() +
-                " (" + sg.loss.doubleValue() + " / " + sg.lossn.longValue() + ")" + "\t" +
-                sg.lossReg.doubleValue() / sg.lossnReg.longValue() +
-                " (" + sg.lossReg.doubleValue() + " / " + sg.lossnReg.longValue() + ")")
+              "LOSS: " + sg.loss.doubleValue() +"\t" + sg.lossReg.doubleValue())
           }
 
           sg.flush()

@@ -19,7 +19,6 @@ package org.apache.spark.ml.recommendation.logistic.local
 
 import java.util
 import java.util.concurrent.ThreadLocalRandom
-import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -225,8 +224,6 @@ private[ml] class Optimizer(private val opts: Opts,
 
   val loss: AtomicDouble = new AtomicDouble(0)
   val lossReg: AtomicDouble = new AtomicDouble(0)
-  val lossn: AtomicLong = new AtomicLong(0)
-  val lossnReg: AtomicLong = new AtomicLong(0)
 
   private def optimizeImplicitBatchRemapped(batch: LongPairMulti): Unit = {
     if (batch.left.length != batch.right.length || batch.label != null) {
@@ -327,8 +324,6 @@ private[ml] class Optimizer(private val opts: Opts,
 
     loss.addAndGet(lloss)
     lossReg.addAndGet(llossReg)
-    lossn.addAndGet(llossn)
-    lossnReg.addAndGet(llossnReg)
   }
 
   private def optimizeExplicitBatchRemapped(batch: LongPairMulti): Unit = {
@@ -402,8 +397,6 @@ private[ml] class Optimizer(private val opts: Opts,
 
     loss.addAndGet(lloss)
     lossReg.addAndGet(llossReg)
-    lossn.addAndGet(llossn)
-    lossnReg.addAndGet(llossnReg)
   }
 
   private def remap(pair: LongPairMulti, inplace: Boolean): LongPairMulti = {
