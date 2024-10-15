@@ -1401,17 +1401,17 @@
       },
       "GET_SCHEMA" : {
         "message" : [
-          "Fetching schema for external query or table has failed."
+          "Schema fetching for an external query or a table."
         ]
       },
       "SYNTAX_ERROR" : {
         "message" : [
-          "Query generated for external DBMS, during compile contains syntax error. Original query: <query>."
+          "Compilation of the query for an external DBMS: <query>."
         ]
       },
       "EXECUTE_QUERY" : {
         "message" : [
-          "Failed to execute jdbc query: <query>."
+          "Execution of the query: <query>."
         ]
       },
       "UNCLASSIFIED" : {
