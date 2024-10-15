@@ -229,7 +229,9 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
   final def getRegParamI: Double = $(regParamI)
 
   /**
-   * Param for the power parameter in the negative sampling formula.
+   * Param for the for skewness of the negative sampling distribution.
+   * The probability of sampling item as negative is c_i^pow / sum(c_j^pow for all j).
+   *
    * Default: 0.0
    * @group expertParam
    */
@@ -523,6 +525,31 @@ object LMFModel extends MLReadable[LMFModel] {
   }
 }
 
+
+/**
+ * Logistic Matrix Factorization (LMF).
+ * (the paper is available at https://web.stanford.edu/~rezab/nips2014workshop/submits/logmat.pdf)
+ *
+ * LMF attempts to estimate the most likely probability distribution for
+ * the binary outcome matrix `R` as the product of two lower-rank matrices, `X` and `Y`,
+ * i.e. `P(R | X * Yt)` is maximized. Typically these approximations are called 'factor' matrices.
+ * In the case of implicit feedback, the distribution of user behavior is described as a
+ * multinoulli distribution (softmax), in contrast to the standard approach where the
+ * unobserved samples of the matrix are treated as negative outcomes from a Bernoulli distribution.
+ *
+ * The general approach is iterative. During each iteration, both factor matrices are partitioned
+ * into n groups according to some hash function (the partitioning is different for each of the
+ * factor matrices). Ratings are also partitioned according to the partitioning of the factor
+ * matrices. Then, at a fixed first partitioning, n subiterations are performed, at each of which
+ * the i-th cyclic shift of the second partitioning is processed. Thus, at each subiterations,
+ * 1/n ratings end up on the same executors as the factors for them. Then, on each executor,
+ * in-memory optimization is performed for the ratings and factors on it. In the case of
+ * implicit feedback, negative samples are sampled from the number of factors on the executor,
+ * according to the paper “Distributed negative sampling for word embeddings” available at
+ * https://ojs.aaai.org/index.php/AAAI/article/view/10931/10790.
+ *
+ * @param uid
+ */
 @Since("4.0.0")
 class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] with LMFParams
   with DefaultParamsWritable {
