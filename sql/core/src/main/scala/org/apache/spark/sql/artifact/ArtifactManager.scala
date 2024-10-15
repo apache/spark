@@ -389,6 +389,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
       newArtifactManager.cachedBlockIdList.addAll(newBlockIds.asJava)
       newArtifactManager.jarsList.addAll(jarsList)
       newArtifactManager.pythonIncludeList.addAll(pythonIncludeList)
+      newArtifactManager.shouldApplyClassLoader = shouldApplyClassLoader
       newArtifactManager
     }
   }
@@ -399,6 +400,9 @@ class ArtifactManager(session: SparkSession) extends Logging {
   private[sql] def cleanUpResources(): Unit = {
     logDebug(
       s"Cleaning up resources for session with sessionUUID ${session.sessionUUID}")
+
+    if (SparkEnv.get == null) return
+    if (session.sparkContext.isStopped) return
 
     // Clean up added files
     val fileserver = SparkEnv.get.rpcEnv.fileServer
