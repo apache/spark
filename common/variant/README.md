@@ -362,8 +362,6 @@ The Decimal type contains a scale, but no precision. The implied precision of a 
 
 The *Logical Type* column indicates logical equivalence of physically encoded types. For example, a user expression operating on a string value containing "hello" should behave the same, whether it is encoded with the short string optimization, or long string encoding. Similarly, user expressions operating on an *int8* value of 1 should behave the same as a decimal16 with scale 2 and unscaled value 100.
 
-Type IDs 17 and 18 were originally reserved for a prototype feature (string-from-metadata) that was never implemented. These IDs are available for use by new types. Type IDs 19 and 20 were used to represent interval types for whom support has been temporarily disabled, and therefore, these type IDs should not be used by new types.
-
 # Field ID order and uniqueness
 
 For objects, field IDs and offsets must be listed in the order of the corresponding field names, sorted lexicographically. Note that the fields themselves are not required to follow this order. As a result, offsets will not necessarily be listed in ascending order.
