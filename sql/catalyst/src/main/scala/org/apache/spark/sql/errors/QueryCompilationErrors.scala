@@ -1344,9 +1344,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "PARSE_MODE_UNSUPPORTED",
       messageParameters = Map(
         "funcName" -> funcName,
-        "mode" -> mode.name,
-        "permissiveMode" -> PermissiveMode.name,
-        "failFastMode" -> FailFastMode.name))
+        "mode" -> mode.name))
   }
 
   def nonFoldableArgumentError(

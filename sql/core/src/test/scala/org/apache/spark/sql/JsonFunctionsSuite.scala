@@ -864,9 +864,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         condition = "PARSE_MODE_UNSUPPORTED",
         parameters = Map(
           "funcName" -> "from_json",
-          "mode" -> "DROPMALFORMED",
-          "permissiveMode" -> "PERMISSIVE",
-          "failFastMode" -> "FAILFAST"))
+          "mode" -> "DROPMALFORMED"))
     }
   }
 

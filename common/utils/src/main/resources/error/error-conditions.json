@@ -3811,7 +3811,7 @@
   },
   "PARSE_MODE_UNSUPPORTED" : {
     "message" : [
-      "<funcName>() doesn't support the <mode> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
+      "The function <funcName> doesn't support the <mode> mode. Acceptable modes are PERMISSIVE and FAILFAST."
     ],
     "sqlState" : "42601"
   },

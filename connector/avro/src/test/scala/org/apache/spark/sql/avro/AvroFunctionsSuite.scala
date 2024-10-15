@@ -116,9 +116,7 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
       condition = "PARSE_MODE_UNSUPPORTED",
       parameters = Map(
         "funcName" -> "from_avro",
-        "mode" -> "DROPMALFORMED",
-        "permissiveMode" -> "PERMISSIVE",
-        "failFastMode" -> "FAILFAST"))
+        "mode" -> "DROPMALFORMED"))
   }
 
   test("roundtrip in to_avro and from_avro - array with null") {

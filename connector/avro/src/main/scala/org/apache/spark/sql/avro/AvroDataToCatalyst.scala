@@ -81,7 +81,7 @@ private[sql] case class AvroDataToCatalyst(
     val mode = avroOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
       throw QueryCompilationErrors.parseModeUnsupportedError(
-        "from_avro", mode
+        prettyName, mode
       )
     }
     mode

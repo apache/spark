@@ -1318,9 +1318,7 @@ class XmlSuite
       condition = "PARSE_MODE_UNSUPPORTED",
       parameters = Map(
         "funcName" -> "schema_of_xml",
-        "mode" -> "DROPMALFORMED",
-        "permissiveMode" -> "PERMISSIVE",
-        "failFastMode" -> FailFastMode.name)
+        "mode" -> "DROPMALFORMED")
     )
   }
 
