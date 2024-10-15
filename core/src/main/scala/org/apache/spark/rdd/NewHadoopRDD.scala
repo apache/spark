@@ -244,7 +244,13 @@ class NewHadoopRDD[K, V](
         try {
           val _reader = format.createRecordReader(
             split.serializableHadoopSplit.value, hadoopAttemptContext)
-          _reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
+          try {
+            _reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
+          } catch {
+            case e: Throwable =>
+              _reader.close()
+              throw e
+          }
           _reader
         } catch {
           case e: FileNotFoundException if ignoreMissingFiles =>

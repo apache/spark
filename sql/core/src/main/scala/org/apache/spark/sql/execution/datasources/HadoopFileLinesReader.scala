@@ -60,8 +60,14 @@ class HadoopFileLinesReader(
       case _ => new LineRecordReader()
     }
 
-    reader.initialize(fileSplit, hadoopAttemptContext)
-    new RecordReaderIterator(reader)
+    try {
+      reader.initialize(fileSplit, hadoopAttemptContext)
+      new RecordReaderIterator(reader)
+    } catch {
+      case e: Throwable =>
+        reader.close()
+        throw e
+    }
   }
 
   override def hasNext: Boolean = _iterator.hasNext
