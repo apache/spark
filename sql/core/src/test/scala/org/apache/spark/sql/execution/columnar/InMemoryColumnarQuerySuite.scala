@@ -568,9 +568,10 @@ class InMemoryColumnarQuerySuite extends QueryTest
   }
 
   test("SPARK-39104: InMemoryRelation#isCachedColumnBuffersLoaded should be thread-safe") {
-    val plan = spark.range(1).queryExecution.executedPlan
+    val qe = spark.range(1).queryExecution
+    val plan = qe.executedPlan
     val serializer = new TestCachedBatchSerializer(true, 1)
-    val cachedRDDBuilder = CachedRDDBuilder(serializer, MEMORY_ONLY, plan, None)
+    val cachedRDDBuilder = CachedRDDBuilder(serializer, MEMORY_ONLY, plan, None, qe.normalized)
 
     @volatile var isCachedColumnBuffersLoaded = false
     @volatile var stopped = false
