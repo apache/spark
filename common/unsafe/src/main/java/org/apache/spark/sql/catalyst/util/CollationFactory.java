@@ -153,6 +153,7 @@ public final class CollationFactory {
      * expressions, as this particular collation is not supported by the external ICU library.
      */
     public final boolean supportsLowercaseEquality;
+
     /**
      * Support for Space Trimming implies that that based on specifier (for now only right trim)
      * leading, trailing or both spaces are removed from the input string before comparison.
