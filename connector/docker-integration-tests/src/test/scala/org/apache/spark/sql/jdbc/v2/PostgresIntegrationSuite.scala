@@ -128,75 +128,34 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
   }
 
   test("Test multi-dimensional column types") {
+    // This test is used to verify that the multi-dimensional
+    // column types are supported by the JDBC V2 data source.
+    // We do not verify any result output
+    //
     val df = spark.read.format("jdbc")
       .option("url", jdbcUrl)
       .option("dbtable", "array_test_table")
       .load()
     df.collect()
 
+    val array_tables = Seq("array_int", "array_bigint", "array_smallint",
+      "array_boolean", "array_float", "array_double", "array_timestamp",
+      "array_timestamptz")
 
-    intercept[SparkSQLException] {
-      val df = spark.read.format("jdbc")
-        .option("url", jdbcUrl)
-        .option("dbtable", "array_int")
-        .load()
-      df.collect()
-    }
-
-    intercept[SparkSQLException] {
-      val df = spark.read.format("jdbc")
-        .option("url", jdbcUrl)
-        .option("dbtable", "array_bigint")
-        .load()
-      df.collect()
-    }
-
-    intercept[SparkSQLException] {
-      val df = spark.read.format("jdbc")
-        .option("url", jdbcUrl)
-        .option("dbtable", "array_smallint")
-        .load()
-      df.collect()
-    }
-
-    intercept[SparkSQLException] {
-      val df = spark.read.format("jdbc")
-        .option("url", jdbcUrl)
-        .option("dbtable", "array_boolean")
-        .load()
-      df.collect()
-    }
-
-    intercept[SparkSQLException] {
-      val df = spark.read.format("jdbc")
-        .option("url", jdbcUrl)
-        .option("dbtable", "array_float")
-        .load()
-      df.collect()
-    }
-
-    intercept[SparkSQLException] {
-      val df = spark.read.format("jdbc")
-        .option("url", jdbcUrl)
-        .option("dbtable", "array_double")
-        .load()
-      df.collect()
-    }
-
-    intercept[SparkSQLException] {
-      val df = spark.read.format("jdbc")
-        .option("url", jdbcUrl)
-        .option("dbtable", "array_timestamp")
-        .load()
-      df.collect()
-    }
-
-    intercept[SparkSQLException] {
-      val df = spark.read.format("jdbc")
-        .option("url", jdbcUrl)
-        .option("dbtable", "array_timestamptz")
-        .load()
-      df.collect()
+    array_tables.foreach {
+      dbtable =>
+        checkError(
+          exception = intercept[SparkSQLException] {
+            val df = spark.read.format("jdbc")
+              .option("url", jdbcUrl)
+              .option("dbtable", dbtable)
+              .load()
+            df.collect()
+          },
+          condition = "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH",
+          parameters = Map("pos" -> "0", "type" -> "array"),
+          sqlState = Some("0A000")
+        )
     }
   }
 
