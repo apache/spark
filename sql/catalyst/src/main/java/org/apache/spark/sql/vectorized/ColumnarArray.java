@@ -56,7 +56,7 @@ public final class ColumnarArray extends ArrayData {
   private UnsafeArrayData setNullBits(UnsafeArrayData arrayData) {
     if (data.hasNull()) {
       for (int i = 0; i < length; i++) {
-        if (data.isNullAt(i)) {
+        if (data.isNullAt(offset + i)) {
           arrayData.setNullAt(i);
         }
       }
