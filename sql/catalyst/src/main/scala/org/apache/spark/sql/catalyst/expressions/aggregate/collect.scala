@@ -145,6 +145,7 @@ case class CollectList(
   """,
   group = "agg_funcs",
   since = "2.0.0")
+// TODO: Make CollectSet collation aware
 case class CollectSet(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
