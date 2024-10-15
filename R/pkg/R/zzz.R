@@ -20,9 +20,10 @@
   if (Sys.getenv("SPARKR_SUPPRESS_DEPRECATION_WARNING") == "") {
     packageStartupMessage(
       paste0(
-        "Warning: sparkR is deprecated in Apache Spark 4.0.0 and will be removed in a future release. ",
-        "To conitnue using spark in R, we recommend using sparklyr instead: ",
-        "https://spark.posit.co/"
+        "Warning: ",
+        "SparkR is deprecated in Apache Spark 4.0.0 and will be removed in a future release. ",
+        "To continue using Spark in R, we recommend using sparklyr instead: ",
+        "https://spark.posit.co/get-started/"
       )
     )
   }
