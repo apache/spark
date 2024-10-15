@@ -331,11 +331,9 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * @tparam T
    */
   def withSession[T](f: SparkSession => T): T = {
-    Utils.withContextClassLoader(artifactManager.classloader) {
-      artifactManager.withResources {
-        session.withActive {
-          f(session)
-        }
+    artifactManager.withResources {
+      session.withActive {
+        f(session)
       }
     }
   }

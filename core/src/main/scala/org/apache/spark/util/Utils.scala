@@ -181,20 +181,13 @@ private[spark] object Utils
    * If `retainChange` is `true` and `fn` changed the context class loader during execution,
    * the class loader will be not reverted to the original one when this method returns.
    */
-  def withContextClassLoader[T](
-      ctxClassLoader: ClassLoader,
-      retainChange: Boolean = false)(fn: => T): T = {
+  def withContextClassLoader[T](ctxClassLoader: ClassLoader)(fn: => T): T = {
     val oldClassLoader = Thread.currentThread().getContextClassLoader
-    var classLoaderAfterFn: ClassLoader = null
     try {
       Thread.currentThread().setContextClassLoader(ctxClassLoader)
-      val ret = fn
-      classLoaderAfterFn = Thread.currentThread().getContextClassLoader
-      ret
+      fn
     } finally {
-      if (!retainChange || classLoaderAfterFn == ctxClassLoader) {
-        Thread.currentThread().setContextClassLoader(oldClassLoader)
-      }
+      Thread.currentThread().setContextClassLoader(oldClassLoader)
     }
   }
 

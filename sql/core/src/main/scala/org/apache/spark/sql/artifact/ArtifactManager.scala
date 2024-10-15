@@ -72,29 +72,45 @@ class ArtifactManager(session: SparkSession) extends Logging {
     (ArtifactUtils.concatenatePaths(artifactPath, "classes"),
       s"$artifactURI${File.separator}classes${File.separator}")
 
+
+  private lazy val sessionIsolated =
+    session.conf.get("spark.session.isolate.artifacts", "true") == "true"
+  private lazy val replIsolated =
+    session.conf.get("spark.repl.isolate.artifacts", "false") == "true"
+
   protected[sql] lazy val state: JobArtifactState = {
-    val sessionIsolated = session.conf.get("spark.session.isolate.artifacts", "true")
-    val replIsolated = session.conf.get("spark.repl.isolate.artifacts", "false")
-    logInfo(s"Session isolation: $sessionIsolated, REPL isolation: $replIsolated." +
-      s" Session UUID: ${session.sessionUUID}, REPL class URI: $replClassURI.")
     (sessionIsolated, replIsolated) match {
-      case ("true", "true") => JobArtifactState(session.sessionUUID, Some(replClassURI))
-      case ("true", "false") => JobArtifactState(session.sessionUUID, None)
-      case ("false", "true") => throw SparkException.internalError(
+      case (true, true) => JobArtifactState(session.sessionUUID, Some(replClassURI))
+      case (true, false) => JobArtifactState(session.sessionUUID, None)
+      case (false, true) => throw SparkException.internalError(
         "To enable REPL isolation, session isolation must also be enabled.")
-      case ("false", "false") => null
+      case (false, false) => null
     }
   }
 
+  private var shouldApplyClassLoader = false
   private var cachedClassLoader: Option[ClassLoader] = None
 
   private var initialContextResourcesCopied = false
 
-  def withResources[T](f: => T): T = {
-    JobArtifactSet.withActiveJobArtifactState(state) {
-      // Copy over global initial resources to this session. Often used by spark-submit.
-      copyInitialContextResourcesIfNeeded()
+  private def withClassLoaderIfNeeded[T](f: => T): T = {
+    if (replIsolated || shouldApplyClassLoader) {
+      logWarning("shouldApplyClassLoader is true")
+      Utils.withContextClassLoader(classloader) {
+        f
+      }
+    } else {
       f
+    }
+  }
+
+  def withResources[T](f: => T): T = {
+    withClassLoaderIfNeeded {
+      JobArtifactSet.withActiveJobArtifactState(state) {
+        // Copy over global initial resources to this session. Often used by spark-submit.
+        copyInitialContextResourcesIfNeeded()
+        f
+      }
     }
   }
 
@@ -209,6 +225,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
         allowOverwrite = true,
         deleteSource = deleteStagedFile)
 
+      shouldApplyClassLoader = true
       cachedClassLoader = None
     } else {
       val target = ArtifactUtils.concatenatePaths(artifactPath, normalizedRemoteRelativePath)
@@ -234,6 +251,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
           (SparkContextResourceType.JAR, normalizedRemoteRelativePath, fragment))
         jarsList.add(normalizedRemoteRelativePath)
 
+        shouldApplyClassLoader = true
         cachedClassLoader = None
       } else if (normalizedRemoteRelativePath.startsWith(s"pyfiles${File.separator}")) {
         session.sparkContext.addFile(uri)
@@ -405,6 +423,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
     FileUtils.deleteDirectory(artifactPath.toFile)
 
     // Clean up internal trackers
+    cachedClassLoader = None
     jarsList.clear()
     pythonIncludeList.clear()
     cachedBlockIdList.clear()
