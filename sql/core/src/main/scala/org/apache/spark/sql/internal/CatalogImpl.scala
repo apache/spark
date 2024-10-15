@@ -177,7 +177,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         try {
           Some(makeTable(catalogName +: ns :+ tableName))
         } catch {
-          case e: AnalysisException if e.getErrorClass == "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE" =>
+          case e: AnalysisException if e.getCondition == "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE" =>
             Some(new Table(
               name = tableName,
               catalog = catalogName,
@@ -189,7 +189,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         }
       }
     } catch {
-      case e: AnalysisException if e.getErrorClass == "TABLE_OR_VIEW_NOT_FOUND" => None
+      case e: AnalysisException if e.getCondition == "TABLE_OR_VIEW_NOT_FOUND" => None
     }
   }
 
@@ -203,7 +203,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         case _ => false
       }
     } catch {
-      case e: AnalysisException if e.getErrorClass == "TABLE_OR_VIEW_NOT_FOUND" => false
+      case e: AnalysisException if e.getCondition == "TABLE_OR_VIEW_NOT_FOUND" => false
     }
   }
 
@@ -323,7 +323,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         case _ => false
       }
     } catch {
-      case e: AnalysisException if e.getErrorClass == "UNRESOLVED_ROUTINE" => false
+      case e: AnalysisException if e.getCondition == "UNRESOLVED_ROUTINE" => false
     }
   }
 

@@ -925,12 +925,12 @@ class SubquerySuite extends QueryTest
 
       withSQLConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
         val error = intercept[AnalysisException] { sql(query) }
-        assert(error.getErrorClass == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        assert(error.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
           "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
       }
       withSQLConf(SQLConf.DECORRELATE_SET_OPS_ENABLED.key -> "false") {
         val error = intercept[AnalysisException] { sql(query) }
-        assert(error.getErrorClass == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        assert(error.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
           "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
       }
 
@@ -1004,12 +1004,12 @@ class SubquerySuite extends QueryTest
 
           withSQLConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
             val error = intercept[AnalysisException] { sql(query) }
-            assert(error.getErrorClass == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+            assert(error.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
               "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
           }
           withSQLConf(SQLConf.DECORRELATE_SET_OPS_ENABLED.key -> "false") {
             val error = intercept[AnalysisException] { sql(query) }
-            assert(error.getErrorClass == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+            assert(error.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
               "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED")
           }
         }
@@ -2139,6 +2139,24 @@ class SubquerySuite extends QueryTest
             |)
             |""".stripMargin),
         correctAnswer)
+    }
+  }
+
+  test("SPARK-49819: Do not collapse projects with exist subqueries") {
+    withTempView("v") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("v")
+      checkAnswer(
+        sql("""
+              |SELECT m, CASE WHEN EXISTS (SELECT SUM(c2) FROM v WHERE c1 = m) THEN 1 ELSE 0 END
+              |FROM (SELECT MIN(c2) AS m FROM v)
+              |""".stripMargin),
+        Row(1, 1) :: Nil)
+      checkAnswer(
+        sql("""
+              |SELECT c, CASE WHEN EXISTS (SELECT SUM(c2) FROM v WHERE c1 = c) THEN 1 ELSE 0 END
+              |FROM (SELECT c1 AS c FROM v GROUP BY c1)
+              |""".stripMargin),
+        Row(0, 1) :: Row(1, 1) :: Nil)
     }
   }
 

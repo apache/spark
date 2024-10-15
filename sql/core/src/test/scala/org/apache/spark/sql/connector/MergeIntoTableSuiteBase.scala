@@ -1326,7 +1326,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
              | UPDATE SET s = named_struct('n_i', null, 'n_l', -1L)
              |""".stripMargin)
       }
-      assert(e1.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
+      assert(e1.getCondition == "NOT_NULL_ASSERT_VIOLATION")
 
       val e2 = intercept[SparkRuntimeException] {
         sql(
@@ -1337,7 +1337,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
              | UPDATE SET s = named_struct('n_i', null, 'n_l', -1L)
              |""".stripMargin)
       }
-      assert(e2.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
+      assert(e2.getCondition == "NOT_NULL_ASSERT_VIOLATION")
 
       val e3 = intercept[SparkRuntimeException] {
         sql(
@@ -1348,7 +1348,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
              | INSERT (pk, s, dep) VALUES (s.pk, named_struct('n_i', null, 'n_l', -1L), 'invalid')
              |""".stripMargin)
       }
-      assert(e3.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
+      assert(e3.getCondition == "NOT_NULL_ASSERT_VIOLATION")
     }
   }
 

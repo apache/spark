@@ -115,7 +115,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
       exception = intercept[SparkSQLFeatureNotSupportedException] {
         sql(s"ALTER TABLE $tbl ALTER COLUMN ID DROP NOT NULL")
       },
-      condition = "_LEGACY_ERROR_TEMP_2271")
+      condition = "UNSUPPORTED_FEATURE.UPDATE_COLUMN_NULLABILITY")
   }
 
   test("SPARK-47440: SQLServer does not support boolean expression in binary comparison") {

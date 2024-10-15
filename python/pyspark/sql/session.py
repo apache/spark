@@ -77,6 +77,7 @@ if TYPE_CHECKING:
     from pyspark.sql.udf import UDFRegistration
     from pyspark.sql.udtf import UDTFRegistration
     from pyspark.sql.datasource import DataSourceRegistration
+    from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 
     # Running MyPy type checks will always require pandas and
     # other dependencies so importing here is fine.
@@ -1641,7 +1642,7 @@ class SparkSession(SparkConversionMixin):
 
     def sql(
         self, sqlQuery: str, args: Optional[Union[Dict[str, Any], List]] = None, **kwargs: Any
-    ) -> DataFrame:
+    ) -> "ParentDataFrame":
         """Returns a :class:`DataFrame` representing the result of the given query.
         When ``kwargs`` is specified, this method formats the given string by using the Python
         standard formatter. The method binds named parameters to SQL literals or

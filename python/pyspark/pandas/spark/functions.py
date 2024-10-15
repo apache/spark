@@ -19,197 +19,76 @@ Additional Spark functions used in pandas-on-Spark.
 """
 from pyspark.sql import Column, functions as F
 from pyspark.sql.utils import is_remote
-from typing import Union
+from typing import Union, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pyspark.sql._typing import ColumnOrName
+
+
+def _invoke_internal_function_over_columns(name: str, *cols: "ColumnOrName") -> Column:
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
+
+        return _invoke_function_over_columns(name, *cols)
+
+    else:
+        from pyspark.sql.classic.column import _to_seq, _to_java_column
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.internalFn(name, _to_seq(sc, cols, _to_java_column)))
+
+
+def timestamp_ntz_to_long(col: Column) -> Column:
+    return _invoke_internal_function_over_columns("timestamp_ntz_to_long", col)
 
 
 def product(col: Column, dropna: bool) -> Column:
-    if is_remote():
-        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
-
-        return _invoke_function_over_columns(
-            "pandas_product",
-            col,
-            lit(dropna),
-        )
-
-    else:
-        from pyspark import SparkContext
-
-        sc = SparkContext._active_spark_context
-        return Column(sc._jvm.PythonSQLUtils.pandasProduct(col._jc, dropna))
+    return _invoke_internal_function_over_columns("pandas_product", col, F.lit(dropna))
 
 
 def stddev(col: Column, ddof: int) -> Column:
-    if is_remote():
-        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
-
-        return _invoke_function_over_columns(
-            "pandas_stddev",
-            col,
-            lit(ddof),
-        )
-
-    else:
-        from pyspark import SparkContext
-
-        sc = SparkContext._active_spark_context
-        return Column(sc._jvm.PythonSQLUtils.pandasStddev(col._jc, ddof))
+    return _invoke_internal_function_over_columns("pandas_stddev", col, F.lit(ddof))
 
 
 def var(col: Column, ddof: int) -> Column:
-    if is_remote():
-        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
-
-        return _invoke_function_over_columns(
-            "pandas_var",
-            col,
-            lit(ddof),
-        )
-
-    else:
-        from pyspark import SparkContext
-
-        sc = SparkContext._active_spark_context
-        return Column(sc._jvm.PythonSQLUtils.pandasVariance(col._jc, ddof))
+    return _invoke_internal_function_over_columns("pandas_var", col, F.lit(ddof))
 
 
 def skew(col: Column) -> Column:
-    if is_remote():
-        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
-
-        return _invoke_function_over_columns(
-            "pandas_skew",
-            col,
-        )
-
-    else:
-        from pyspark import SparkContext
-
-        sc = SparkContext._active_spark_context
-        return Column(sc._jvm.PythonSQLUtils.pandasSkewness(col._jc))
+    return _invoke_internal_function_over_columns("pandas_skew", col)
 
 
 def kurt(col: Column) -> Column:
-    if is_remote():
-        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
-
-        return _invoke_function_over_columns(
-            "pandas_kurt",
-            col,
-        )
-
-    else:
-        from pyspark import SparkContext
-
-        sc = SparkContext._active_spark_context
-        return Column(sc._jvm.PythonSQLUtils.pandasKurtosis(col._jc))
+    return _invoke_internal_function_over_columns("pandas_kurt", col)
 
 
 def mode(col: Column, dropna: bool) -> Column:
-    if is_remote():
-        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
-
-        return _invoke_function_over_columns(
-            "pandas_mode",
-            col,
-            lit(dropna),
-        )
-
-    else:
-        from pyspark import SparkContext
-
-        sc = SparkContext._active_spark_context
-        return Column(sc._jvm.PythonSQLUtils.pandasMode(col._jc, dropna))
+    return _invoke_internal_function_over_columns("pandas_mode", col, F.lit(dropna))
 
 
 def covar(col1: Column, col2: Column, ddof: int) -> Column:
-    if is_remote():
-        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
-
-        return _invoke_function_over_columns(
-            "pandas_covar",
-            col1,
-            col2,
-            lit(ddof),
-        )
-
-    else:
-        from pyspark import SparkContext
-
-        sc = SparkContext._active_spark_context
-        return Column(sc._jvm.PythonSQLUtils.pandasCovar(col1._jc, col2._jc, ddof))
+    return _invoke_internal_function_over_columns("pandas_covar", col1, col2, F.lit(ddof))
 
 
-def ewm(col: Column, alpha: float, ignore_na: bool) -> Column:
-    if is_remote():
-        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
-
-        return _invoke_function_over_columns(
-            "ewm",
-            col,
-            lit(alpha),
-            lit(ignore_na),
-        )
-
-    else:
-        from pyspark import SparkContext
-
-        sc = SparkContext._active_spark_context
-        return Column(sc._jvm.PythonSQLUtils.ewm(col._jc, alpha, ignore_na))
+def ewm(col: Column, alpha: float, ignorena: bool) -> Column:
+    return _invoke_internal_function_over_columns("ewm", col, F.lit(alpha), F.lit(ignorena))
 
 
 def null_index(col: Column) -> Column:
-    if is_remote():
-        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
-
-        return _invoke_function_over_columns(
-            "null_index",
-            col,
-        )
-
-    else:
-        from pyspark import SparkContext
-
-        sc = SparkContext._active_spark_context
-        return Column(sc._jvm.PythonSQLUtils.nullIndex(col._jc))
+    return _invoke_internal_function_over_columns("null_index", col)
 
 
 def distributed_sequence_id() -> Column:
-    if is_remote():
-        from pyspark.sql.connect.functions.builtin import _invoke_function
-
-        return _invoke_function("distributed_sequence_id")
-    else:
-        from pyspark import SparkContext
-
-        sc = SparkContext._active_spark_context
-        return Column(sc._jvm.PythonSQLUtils.distributed_sequence_id())
+    return _invoke_internal_function_over_columns("distributed_sequence_id")
 
 
 def collect_top_k(col: Column, num: int, reverse: bool) -> Column:
-    if is_remote():
-        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
-
-        return _invoke_function_over_columns("collect_top_k", col, F.lit(num), F.lit(reverse))
-
-    else:
-        from pyspark import SparkContext
-
-        sc = SparkContext._active_spark_context
-        return Column(sc._jvm.PythonSQLUtils.collect_top_k(col._jc, num, reverse))
+    return _invoke_internal_function_over_columns("collect_top_k", col, F.lit(num), F.lit(reverse))
 
 
-def binary_search(col: Column, value: Column) -> Column:
-    if is_remote():
-        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
-
-        return _invoke_function_over_columns("array_binary_search", col, value)
-
-    else:
-        from pyspark import SparkContext
-
-        sc = SparkContext._active_spark_context
-        return Column(sc._jvm.PythonSQLUtils.binary_search(col._jc, value._jc))
+def array_binary_search(col: Column, value: Column) -> Column:
+    return _invoke_internal_function_over_columns("array_binary_search", col, value)
 
 
 def make_interval(unit: str, e: Union[Column, int, float]) -> Column:

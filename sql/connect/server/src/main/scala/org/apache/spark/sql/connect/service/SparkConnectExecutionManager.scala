@@ -114,7 +114,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
         new ExecuteHolder(executeKey, request, sessionHolder)
       })
 
-    sessionHolder.addExecuteHolder(executeHolder)
+    sessionHolder.addOperationId(executeHolder.operationId)
 
     logInfo(log"ExecuteHolder ${MDC(LogKeys.EXECUTE_KEY, executeHolder.key)} is created.")
 
@@ -142,7 +142,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
 
     // Remove the execution from the map *after* putting it in abandonedTombstones.
     executions.remove(key)
-    executeHolder.sessionHolder.removeExecuteHolder(executeHolder.operationId)
+    executeHolder.sessionHolder.removeOperationId(executeHolder.operationId)
 
     updateLastExecutionTime()
 
