@@ -390,7 +390,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "condition" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
@@ -660,7 +660,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "condition" : "DIVIDE_BY_ZERO",
+  "errorClass" : "DIVIDE_BY_ZERO",
   "sqlState" : "22012",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\""
@@ -682,7 +682,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "condition" : "DIVIDE_BY_ZERO",
+  "errorClass" : "DIVIDE_BY_ZERO",
   "sqlState" : "22012",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\""
@@ -704,7 +704,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "condition" : "DIVIDE_BY_ZERO",
+  "errorClass" : "DIVIDE_BY_ZERO",
   "sqlState" : "22012",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\""
@@ -734,7 +734,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "condition" : "CAST_OVERFLOW",
+  "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "sourceType" : "\"BIGINT\"",
@@ -759,7 +759,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "condition" : "CAST_OVERFLOW",
+  "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "sourceType" : "\"BIGINT\"",
@@ -804,7 +804,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "condition" : "CAST_OVERFLOW",
+  "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "sourceType" : "\"DOUBLE\"",
@@ -850,7 +850,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "condition" : "FAILED_FUNCTION_CALL",
+  "errorClass" : "FAILED_FUNCTION_CALL",
   "sqlState" : "38000",
   "messageParameters" : {
     "funcName" : "`range`"
@@ -892,7 +892,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "condition" : "CAST_OVERFLOW",
+  "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "sourceType" : "\"BIGINT\"",
@@ -909,7 +909,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "condition" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
@@ -949,7 +949,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "condition" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
@@ -989,7 +989,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "condition" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
