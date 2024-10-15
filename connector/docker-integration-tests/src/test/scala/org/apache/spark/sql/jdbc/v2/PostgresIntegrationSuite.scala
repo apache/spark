@@ -138,24 +138,30 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       .load()
     df.collect()
 
-    val array_tables = Seq("array_int", "array_bigint", "array_smallint",
-      "array_boolean", "array_float", "array_double", "array_timestamp",
-      "array_timestamptz")
+    val array_tables = Array(
+      ("array_int", "\"ARRAY<INT>\""),
+      ("array_bigint", "\"ARRAY<BIGINT>\""),
+      ("array_smallint", "\"ARRAY<SMALLINT>\""),
+      ("array_boolean", "\"ARRAY<BOOLEAN>\""),
+      ("array_float", "\"ARRAY<FLOAT>\""),
+      ("array_double", "\"ARRAY<DOUBLE>\""),
+      ("array_timestamp", "\"ARRAY<TIMESTAMP>\""),
+      ("array_timestamptz", "\"ARRAY<TIMESTAMP>\"")
+    )
 
-    array_tables.foreach {
-      dbtable =>
-        checkError(
-          exception = intercept[SparkSQLException] {
-            val df = spark.read.format("jdbc")
-              .option("url", jdbcUrl)
-              .option("dbtable", dbtable)
-              .load()
-            df.collect()
-          },
-          condition = "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH",
-          parameters = Map("pos" -> "0", "type" -> "array"),
-          sqlState = Some("0A000")
-        )
+    array_tables.foreach { case (dbtable, arrayType) =>
+      checkError(
+        exception = intercept[SparkSQLException] {
+          val df = spark.read.format("jdbc")
+            .option("url", jdbcUrl)
+            .option("dbtable", dbtable)
+            .load()
+          df.collect()
+        },
+        condition = "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH",
+        parameters = Map("pos" -> "0", "type" -> arrayType),
+        sqlState = Some("0A000")
+      )
     }
   }
 
