@@ -32,6 +32,8 @@ def plot_pyspark(data: "DataFrame", kind: str, **kwargs: Any) -> "Figure":
         return plot_pie(data, **kwargs)
     if kind == "box":
         return plot_box(data, **kwargs)
+    if kind == "kde" or kind == "density":
+        return plot_kde(data, **kwargs)
 
     return plotly.plot(PySparkPlotAccessor.plot_data_map[kind](data), kind, **kwargs)
 
@@ -118,3 +120,12 @@ def plot_box(data: "DataFrame", **kwargs: Any) -> "Figure":
 
     fig["layout"]["yaxis"]["title"] = "value"
     return fig
+
+
+def plot_kde(data: "DataFrame", **kwargs: Any) -> "Figure":
+    if "color" not in kwargs:
+        kwargs["color"] = "names"  # why
+
+    # KdePlotBase.prepare_kde_data(data)
+    ind = KdePlotBase.get_ind(data, kwargs.pop("ind", None))
+    bw_method = kwargs.pop("bw_method", None)

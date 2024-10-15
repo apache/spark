@@ -15,12 +15,15 @@
 # limitations under the License.
 #
 
+import numpy as np
+
 from typing import Any, TYPE_CHECKING, List, Optional, Union
 from types import ModuleType
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.sql import Column, functions as F
 from pyspark.sql.types import NumericType
 from pyspark.sql.utils import is_remote, require_minimum_plotly_version
+from pandas.core.dtypes.inference import is_integer
 
 
 if TYPE_CHECKING:
@@ -387,6 +390,77 @@ class PySparkPlotAccessor:
         >>> df.plot.box(column=["math_score", "english_score"])  # doctest: +SKIP
         """
         return self(kind="box", column=column, precision=precision, **kwargs)
+
+    def kde(
+            self,
+            bw_method: Any = None,
+            ind: Union[np.ndarray, int, None] = None,
+            **kwargs: Any,
+    ) -> "Figure":
+        """
+        Generate Kernel Density Estimate plot using Gaussian kernels.
+
+        In statistics, kernel density estimation (KDE) is a non-parametric way to
+        estimate the probability density function (PDF) of a random variable. This
+        function uses Gaussian kernels and includes automatic bandwidth determination.
+
+        Parameters
+        ----------
+        bw_method : scalar
+            The method used to calculate the estimator bandwidth.
+            See KernelDensity in PySpark for more information.
+        ind : NumPy array or integer, optional
+            Evaluation points for the estimated PDF. If None (default),
+            1000 equally spaced points are used. If `ind` is a NumPy array, the
+            KDE is evaluated at the points passed. If `ind` is an integer,
+            `ind` number of equally spaced points are used.
+        **kwargs : optional
+            Additional keyword arguments.
+
+        Returns
+        -------
+        :class:`plotly.graph_objs.Figure`
+
+        Examples
+        --------
+        """
+        return self(kind="kde", bw_method=bw_method, ind=ind, **kwargs)
+
+
+class KdePlotBase(NumericPlotBase):
+    @staticmethod
+    def prepare_kde_data(data):
+        _, numeric_data = NumericPlotBase.prepare_numeric_data(data)
+        return numeric_data
+
+    @staticmethod
+    def get_ind(sdf, ind):
+        def calc_min_max():
+            if len(sdf.columns) > 1:
+                min_col = F.least(*map(F.min, sdf))
+                max_col = F.greatest(*map(F.max, sdf))
+            else:
+                min_col = F.min(sdf.columns[-1])
+                max_col = F.max(sdf.columns[-1])
+            return sdf.select(min_col, max_col).first()
+
+        if ind is None:
+            min_val, max_val = calc_min_max()
+            sample_range = max_val - min_val
+            ind = np.linspace(
+                min_val - 0.5 * sample_range,
+                max_val + 0.5 * sample_range,
+                1000,
+                )
+        elif is_integer(ind):
+            min_val, max_val = calc_min_max()
+            sample_range = max_val - min_val
+            ind = np.linspace(
+                min_val - 0.5 * sample_range,
+                max_val + 0.5 * sample_range,
+                ind,
+                )
+        return ind
 
 
 class PySparkBoxPlotBase:
