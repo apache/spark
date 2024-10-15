@@ -24,7 +24,6 @@ import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
-import scala.jdk.CollectionConverters.CollectionHasAsScala
 import scala.util.{Failure, Success, Try}
 
 import com.google.common.cache.{Cache, CacheBuilder}
@@ -40,8 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Expre
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, StringUtils}
-import org.apache.spark.sql.catalyst.util.CollationFactory.CollationMeta
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -199,7 +197,7 @@ class SessionCatalog(
     }
   }
 
-  private val tableRelationCache: Cache[FullQualifiedTableName, LogicalPlan] = {
+  private val tableRelationCache: Cache[QualifiedTableName, LogicalPlan] = {
     var builder = CacheBuilder.newBuilder()
       .maximumSize(cacheSize)
 
@@ -207,33 +205,33 @@ class SessionCatalog(
       builder = builder.expireAfterWrite(cacheTTL, TimeUnit.SECONDS)
     }
 
-    builder.build[FullQualifiedTableName, LogicalPlan]()
+    builder.build[QualifiedTableName, LogicalPlan]()
   }
 
   /** This method provides a way to get a cached plan. */
-  def getCachedPlan(t: FullQualifiedTableName, c: Callable[LogicalPlan]): LogicalPlan = {
+  def getCachedPlan(t: QualifiedTableName, c: Callable[LogicalPlan]): LogicalPlan = {
     tableRelationCache.get(t, c)
   }
 
   /** This method provides a way to get a cached plan if the key exists. */
-  def getCachedTable(key: FullQualifiedTableName): LogicalPlan = {
+  def getCachedTable(key: QualifiedTableName): LogicalPlan = {
     tableRelationCache.getIfPresent(key)
   }
 
   /** This method provides a way to cache a plan. */
-  def cacheTable(t: FullQualifiedTableName, l: LogicalPlan): Unit = {
+  def cacheTable(t: QualifiedTableName, l: LogicalPlan): Unit = {
     tableRelationCache.put(t, l)
   }
 
   /** This method provides a way to invalidate a cached plan. */
-  def invalidateCachedTable(key: FullQualifiedTableName): Unit = {
+  def invalidateCachedTable(key: QualifiedTableName): Unit = {
     tableRelationCache.invalidate(key)
   }
 
   /** This method discards any cached table relation plans for the given table identifier. */
   def invalidateCachedTable(name: TableIdentifier): Unit = {
     val qualified = qualifyIdentifier(name)
-    invalidateCachedTable(FullQualifiedTableName(
+    invalidateCachedTable(QualifiedTableName(
       qualified.catalog.get, qualified.database.get, qualified.table))
   }
 
@@ -303,7 +301,7 @@ class SessionCatalog(
     }
     if (cascade && databaseExists(dbName)) {
       listTables(dbName).foreach { t =>
-        invalidateCachedTable(FullQualifiedTableName(SESSION_CATALOG_NAME, dbName, t.table))
+        invalidateCachedTable(QualifiedTableName(SESSION_CATALOG_NAME, dbName, t.table))
       }
     }
     externalCatalog.dropDatabase(dbName, ignoreIfNotExists, cascade)
@@ -1185,7 +1183,7 @@ class SessionCatalog(
   def refreshTable(name: TableIdentifier): Unit = synchronized {
     getLocalOrGlobalTempView(name).map(_.refresh()).getOrElse {
       val qualifiedIdent = qualifyIdentifier(name)
-      val qualifiedTableName = FullQualifiedTableName(
+      val qualifiedTableName = QualifiedTableName(
         qualifiedIdent.catalog.get, qualifiedIdent.database.get, qualifiedIdent.table)
       tableRelationCache.invalidate(qualifiedTableName)
     }
@@ -1899,17 +1897,6 @@ class SessionCatalog(
   def listTemporaryFunctions(): Seq[FunctionIdentifier] = {
     (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
       .filter(isTemporaryFunction)
-  }
-
-  /**
-   * List all built-in collations with the given pattern.
-   */
-  def listCollations(pattern: Option[String]): Seq[CollationMeta] = {
-    val collationIdentifiers = CollationFactory.listCollations().asScala.toSeq
-    val filteredCollationNames = StringUtils.filterPattern(
-      collationIdentifiers.map(_.getName), pattern.getOrElse("*")).toSet
-    collationIdentifiers.filter(ident => filteredCollationNames.contains(ident.getName)).map(
-      CollationFactory.loadCollationMeta)
   }
 
   // -----------------

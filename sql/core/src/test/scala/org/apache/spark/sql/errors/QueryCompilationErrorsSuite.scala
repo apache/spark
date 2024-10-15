@@ -868,6 +868,39 @@ class QueryCompilationErrorsSuite
         "inputTypes" -> "[\"INT\", \"STRING\", \"STRING\"]"))
   }
 
+  test("SPARK-49666: the trim collation feature is off without collate builder call") {
+    withSQLConf(SQLConf.TRIM_COLLATION_ENABLED.key -> "false") {
+      Seq(
+        "CREATE TABLE t(col STRING COLLATE EN_RTRIM_CI) USING parquet",
+        "CREATE TABLE t(col STRING COLLATE UTF8_LCASE_RTRIM) USING parquet",
+        "SELECT 'aaa' COLLATE UNICODE_LTRIM_CI"
+      ).foreach { sqlText =>
+        checkError(
+          exception = intercept[AnalysisException](sql(sqlText)),
+          condition = "UNSUPPORTED_FEATURE.TRIM_COLLATION"
+        )
+      }
+    }
+  }
+
+  test("SPARK-49666: the trim collation feature is off with collate builder call") {
+    withSQLConf(SQLConf.TRIM_COLLATION_ENABLED.key -> "false") {
+      Seq(
+        "SELECT collate('aaa', 'UNICODE_RTRIM')",
+        "SELECT collate('aaa', 'UTF8_BINARY_RTRIM')",
+        "SELECT collate('aaa', 'EN_AI_RTRIM')"
+      ).foreach { sqlText =>
+        checkError(
+          exception = intercept[AnalysisException](sql(sqlText)),
+          condition = "UNSUPPORTED_FEATURE.TRIM_COLLATION",
+          parameters = Map.empty,
+          context =
+            ExpectedContext(fragment = sqlText.substring(7), start = 7, stop = sqlText.length - 1)
+        )
+      }
+    }
+  }
+
   test("UNSUPPORTED_CALL: call the unsupported method update()") {
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
@@ -941,11 +974,67 @@ class QueryCompilationErrorsSuite
         cmd.run(spark)
       },
       condition = "DATA_SOURCE_EXTERNAL_ERROR",
-      sqlState = "KD00F",
+      sqlState = "KD010",
       parameters = Map.empty
     )
   }
 
+  test("SPARK-49895: trailing comma in select statement") {
+    withTable("t1") {
+      sql(s"CREATE TABLE t1 (c1 INT, c2 INT) USING PARQUET")
+
+      val queries = Seq(
+        "SELECT *? FROM t1",
+        "SELECT c1? FROM t1",
+        "SELECT c1? FROM t1 WHERE c1 = 1",
+        "SELECT c1? FROM t1 GROUP BY c1",
+        "SELECT *, RANK() OVER (ORDER BY c1)? FROM t1",
+        "SELECT c1? FROM t1 ORDER BY c1",
+        "WITH cte AS (SELECT c1? FROM t1) SELECT * FROM cte",
+        "WITH cte AS (SELECT c1 FROM t1) SELECT *? FROM cte",
+        "SELECT * FROM (SELECT c1? FROM t1)")
+
+      queries.foreach { query =>
+        val queryWithoutTrailingComma = query.replaceAll("\\?", "")
+        val queryWithTrailingComma = query.replaceAll("\\?", ",")
+
+        sql(queryWithoutTrailingComma)
+        print(queryWithTrailingComma)
+        val exception = intercept[AnalysisException] {
+          sql(queryWithTrailingComma)
+        }
+        assert(exception.getErrorClass === "TRAILING_COMMA_IN_SELECT")
+      }
+
+      val unresolvedColumnErrors = Seq(
+        "SELECT c3 FROM t1",
+        "SELECT from FROM t1",
+        "SELECT from FROM (SELECT 'a' as c1)",
+        "SELECT from AS col FROM t1",
+        "SELECT from AS from FROM t1",
+        "SELECT from from FROM t1")
+      unresolvedColumnErrors.foreach { query =>
+        val exception = intercept[AnalysisException] {
+          sql(query)
+        }
+        assert(exception.getErrorClass === "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+      }
+
+      // sanity checks
+      withTable("from") {
+        sql(s"CREATE TABLE from (from INT) USING PARQUET")
+
+        sql(s"SELECT from FROM from")
+        sql(s"SELECT from as from FROM from")
+        sql(s"SELECT from from FROM from from")
+        sql(s"SELECT c1, from FROM VALUES(1, 2) AS T(c1, from)")
+
+        intercept[ParseException] {
+          sql("SELECT 1,")
+        }
+      }
+    }
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(

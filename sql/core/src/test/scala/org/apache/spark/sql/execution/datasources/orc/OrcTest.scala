@@ -63,7 +63,7 @@ trait OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfter
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    originalConfORCImplementation = spark.conf.get(ORC_IMPLEMENTATION)
+    originalConfORCImplementation = spark.sessionState.conf.getConf(ORC_IMPLEMENTATION)
     spark.conf.set(ORC_IMPLEMENTATION.key, orcImp)
   }
 

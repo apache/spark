@@ -44,10 +44,9 @@ import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, Row, SparkSession}
-import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedTranspose}
-import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -1523,8 +1522,7 @@ class SparkConnectPlanner(
       case proto.Expression.ExprTypeCase.UNRESOLVED_ATTRIBUTE =>
         transformUnresolvedAttribute(exp.getUnresolvedAttribute)
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION =>
-        transformUnregisteredFunction(exp.getUnresolvedFunction)
-          .getOrElse(transformUnresolvedFunction(exp.getUnresolvedFunction))
+        transformUnresolvedFunction(exp.getUnresolvedFunction)
       case proto.Expression.ExprTypeCase.ALIAS => transformAlias(exp.getAlias)
       case proto.Expression.ExprTypeCase.EXPRESSION_STRING =>
         transformExpressionString(exp.getExpressionString)
@@ -1842,49 +1840,6 @@ class SparkConnectPlanner(
     }
 
     UnresolvedNamedLambdaVariable(variable.getNamePartsList.asScala.toSeq)
-  }
-
-  /**
-   * For some reason, not all functions are registered in 'FunctionRegistry'. For a unregistered
-   * function, we can still wrap it under the proto 'UnresolvedFunction', and then resolve it in
-   * this method.
-   */
-  private def transformUnregisteredFunction(
-      fun: proto.Expression.UnresolvedFunction): Option[Expression] = {
-    fun.getFunctionName match {
-      // Avro-specific functions
-      case "from_avro" if Seq(2, 3).contains(fun.getArgumentsCount) =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val jsonFormatSchema = extractString(children(1), "jsonFormatSchema")
-        var options = Map.empty[String, String]
-        if (fun.getArgumentsCount == 3) {
-          options = extractMapData(children(2), "Options")
-        }
-        Some(AvroDataToCatalyst(children.head, jsonFormatSchema, options))
-
-      case "to_avro" if Seq(1, 2).contains(fun.getArgumentsCount) =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        var jsonFormatSchema = Option.empty[String]
-        if (fun.getArgumentsCount == 2) {
-          jsonFormatSchema = Some(extractString(children(1), "jsonFormatSchema"))
-        }
-        Some(CatalystDataToAvro(children.head, jsonFormatSchema))
-
-      case _ => None
-    }
-  }
-
-  private def extractString(expr: Expression, field: String): String = expr match {
-    case Literal(s, StringType) if s != null => s.toString
-    case other => throw InvalidPlanInput(s"$field should be a literal string, but got $other")
-  }
-
-  @scala.annotation.tailrec
-  private def extractMapData(expr: Expression, field: String): Map[String, String] = expr match {
-    case map: CreateMap => ExprUtils.convertToMapData(map)
-    case UnresolvedFunction(Seq("map"), args, _, _, _, _, _) =>
-      extractMapData(CreateMap(args), field)
-    case other => throw InvalidPlanInput(s"$field should be created by map, but got $other")
   }
 
   private def transformAlias(alias: proto.Expression.Alias): NamedExpression = {
@@ -2318,16 +2273,17 @@ class SparkConnectPlanner(
     if (fun.getArgumentsCount != 1) {
       throw InvalidPlanInput("reduce requires single child expression")
     }
-    val udf = fun.getArgumentsList.asScala.map(transformExpression) match {
-      case collection.Seq(f: ScalaUDF) =>
-        f
+    val udf = fun.getArgumentsList.asScala match {
+      case collection.Seq(e)
+          if e.hasCommonInlineUserDefinedFunction &&
+            e.getCommonInlineUserDefinedFunction.hasScalarScalaUdf =>
+        unpackUdf(e.getCommonInlineUserDefinedFunction)
       case other =>
         throw InvalidPlanInput(s"reduce should carry a scalar scala udf, but got $other")
     }
-    assert(udf.outputEncoder.isDefined)
-    val tEncoder = udf.outputEncoder.get // (T, T) => T
-    val reduce = ReduceAggregator(udf.function)(tEncoder).toColumn.expr
-    TypedAggUtils.withInputType(reduce, tEncoder, dataAttributes)
+    val encoder = udf.outputEncoder
+    val reduce = ReduceAggregator(udf.function)(encoder).toColumn.expr
+    TypedAggUtils.withInputType(reduce, encoderFor(encoder), dataAttributes)
   }
 
   private def transformExpressionWithTypedReduceExpression(
@@ -3398,9 +3354,18 @@ class SparkConnectPlanner(
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
     val target = Dataset
       .ofRows(session, transformRelation(checkpointCommand.getRelation))
-    val checkpointed = target.checkpoint(
-      eager = checkpointCommand.getEager,
-      reliableCheckpoint = !checkpointCommand.getLocal)
+    val checkpointed = if (checkpointCommand.getLocal) {
+      if (checkpointCommand.hasStorageLevel) {
+        target.localCheckpoint(
+          eager = checkpointCommand.getEager,
+          storageLevel =
+            StorageLevelProtoConverter.toStorageLevel(checkpointCommand.getStorageLevel))
+      } else {
+        target.localCheckpoint(eager = checkpointCommand.getEager)
+      }
+    } else {
+      target.checkpoint(eager = checkpointCommand.getEager)
+    }
 
     val dfId = UUID.randomUUID().toString
     logInfo(log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")

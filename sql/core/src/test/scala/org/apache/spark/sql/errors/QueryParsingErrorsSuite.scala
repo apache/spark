@@ -334,7 +334,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       sqlState = "42000",
       parameters = Map(
         "statement" -> "CREATE TEMPORARY FUNCTION",
-        "funcName" -> "`ns`.`db`.`func`"),
+        "name" -> "`ns`.`db`.`func`"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
@@ -367,7 +367,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       sqlState = "42000",
       parameters = Map(
         "statement" -> "DROP TEMPORARY FUNCTION",
-        "funcName" -> "`db`.`func`"),
+        "name" -> "`db`.`func`"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,

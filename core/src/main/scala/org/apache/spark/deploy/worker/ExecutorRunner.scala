@@ -191,7 +191,7 @@ private[deploy] class ExecutorRunner(
       stdoutAppender = FileAppender(process.getInputStream, stdout, conf, true)
 
       val stderr = new File(executorDir, "stderr")
-      Files.write(header, stderr, StandardCharsets.UTF_8)
+      Files.asCharSink(stderr, StandardCharsets.UTF_8).write(header)
       stderrAppender = FileAppender(process.getErrorStream, stderr, conf, true)
 
       state = ExecutorState.RUNNING

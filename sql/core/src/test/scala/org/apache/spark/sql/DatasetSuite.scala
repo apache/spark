@@ -1849,6 +1849,26 @@ class DatasetSuite extends QueryTest
     }
   }
 
+  test("Dataset().localCheckpoint() lazy with StorageLevel") {
+    val df = spark.range(10).repartition($"id" % 2)
+    val checkpointedDf = df.localCheckpoint(eager = false, StorageLevel.DISK_ONLY)
+    val checkpointedPlan = checkpointedDf.queryExecution.analyzed
+    val rdd = checkpointedPlan.asInstanceOf[LogicalRDD].rdd
+    assert(rdd.getStorageLevel == StorageLevel.DISK_ONLY)
+    assert(!rdd.isCheckpointed)
+    checkpointedDf.collect()
+    assert(rdd.isCheckpointed)
+  }
+
+  test("Dataset().localCheckpoint() eager with StorageLevel") {
+    val df = spark.range(10).repartition($"id" % 2)
+    val checkpointedDf = df.localCheckpoint(eager = true, StorageLevel.DISK_ONLY)
+    val checkpointedPlan = checkpointedDf.queryExecution.analyzed
+    val rdd = checkpointedPlan.asInstanceOf[LogicalRDD].rdd
+    assert(rdd.isCheckpointed)
+    assert(rdd.getStorageLevel == StorageLevel.DISK_ONLY)
+  }
+
   test("identity map for primitive arrays") {
     val arrayByte = Array(1.toByte, 2.toByte, 3.toByte)
     val arrayInt = Array(1, 2, 3)

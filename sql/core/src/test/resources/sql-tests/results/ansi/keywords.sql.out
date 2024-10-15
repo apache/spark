@@ -32,6 +32,7 @@ BUCKETS	false
 BY	false
 BYTE	false
 CACHE	false
+CALL	true
 CALLED	false
 CASCADE	false
 CASE	true
@@ -48,7 +49,6 @@ CLUSTERED	false
 CODEGEN	false
 COLLATE	true
 COLLATION	true
-COLLATIONS	true
 COLLECTION	false
 COLUMN	true
 COLUMNS	false
@@ -142,6 +142,7 @@ HAVING	true
 HOUR	false
 HOURS	false
 IDENTIFIER	false
+IDENTITY	false
 IF	false
 IGNORE	false
 ILIKE	false
@@ -149,6 +150,7 @@ IMMEDIATE	false
 IMPORT	false
 IN	true
 INCLUDE	false
+INCREMENT	false
 INDEX	false
 INDEXES	false
 INNER	true
@@ -185,6 +187,7 @@ LOCK	false
 LOCKS	false
 LOGICAL	false
 LONG	false
+LOOP	false
 MACRO	false
 MAP	false
 MATCHED	false
@@ -377,12 +380,12 @@ ANY
 AS
 AUTHORIZATION
 BOTH
+CALL
 CASE
 CAST
 CHECK
 COLLATE
 COLLATION
-COLLATIONS
 COLUMN
 CONSTRAINT
 CREATE

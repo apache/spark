@@ -17,6 +17,8 @@
 
 # mypy: disable-error-code="empty-body"
 
+import sys
+import random
 from typing import (
     Any,
     Callable,
@@ -39,10 +41,10 @@ from pyspark.resource import ResourceProfile
 from pyspark.sql.column import Column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.merge import MergeIntoWriter
-from pyspark.sql.plot import PySparkPlotAccessor
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import StructType, Row
 from pyspark.sql.utils import dispatch_df_method
+
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -66,6 +68,7 @@ if TYPE_CHECKING:
         ArrowMapIterFunction,
         DataFrameLike as PandasDataFrameLike,
     )
+    from pyspark.sql.plot import PySparkPlotAccessor
     from pyspark.sql.metrics import ExecutionInfo
 
 
@@ -1014,7 +1017,9 @@ class DataFrame:
         """
         ...
 
-    def localCheckpoint(self, eager: bool = True) -> "DataFrame":
+    def localCheckpoint(
+        self, eager: bool = True, storageLevel: Optional[StorageLevel] = None
+    ) -> "DataFrame":
         """Returns a locally checkpointed version of this :class:`DataFrame`. Checkpointing can
         be used to truncate the logical plan of this :class:`DataFrame`, which is especially
         useful in iterative algorithms where the plan may grow exponentially. Local checkpoints
@@ -1025,11 +1030,16 @@ class DataFrame:
 
         .. versionchanged:: 4.0.0
             Supports Spark Connect.
+            Added storageLevel parameter.
 
         Parameters
         ----------
         eager : bool, optional, default True
             Whether to checkpoint this :class:`DataFrame` immediately.
+
+        storageLevel : :class:`StorageLevel`, optional, default None
+            The StorageLevel with which the checkpoint will be stored.
+            If not specified, default for RDD local checkpoints.
 
         Returns
         -------
@@ -2039,6 +2049,46 @@ class DataFrame:
         """
         ...
 
+    def _preapare_args_for_sample(
+        self,
+        withReplacement: Optional[Union[float, bool]] = None,
+        fraction: Optional[Union[int, float]] = None,
+        seed: Optional[int] = None,
+    ) -> Tuple[bool, float, int]:
+        from pyspark.errors import PySparkTypeError
+
+        if isinstance(withReplacement, bool) and isinstance(fraction, float):
+            # For the cases below:
+            #   sample(True, 0.5 [, seed])
+            #   sample(True, fraction=0.5 [, seed])
+            #   sample(withReplacement=False, fraction=0.5 [, seed])
+            _seed = int(seed) if seed is not None else random.randint(0, sys.maxsize)
+            return withReplacement, fraction, _seed
+
+        elif withReplacement is None and isinstance(fraction, float):
+            # For the case below:
+            #   sample(faction=0.5 [, seed])
+            _seed = int(seed) if seed is not None else random.randint(0, sys.maxsize)
+            return False, fraction, _seed
+
+        elif isinstance(withReplacement, float):
+            # For the case below:
+            #   sample(0.5 [, seed])
+            _seed = int(fraction) if fraction is not None else random.randint(0, sys.maxsize)
+            _fraction = float(withReplacement)
+            return False, _fraction, _seed
+
+        else:
+            argtypes = [type(arg).__name__ for arg in [withReplacement, fraction, seed]]
+            raise PySparkTypeError(
+                errorClass="NOT_BOOL_OR_FLOAT_OR_INT",
+                messageParameters={
+                    "arg_name": "withReplacement (optional), "
+                    + "fraction (required) and seed (optional)",
+                    "arg_type": ", ".join(argtypes),
+                },
+            )
+
     @dispatch_df_method
     def sampleBy(
         self, col: "ColumnOrName", fractions: Dict[Any, float], seed: Optional[int] = None
@@ -2890,6 +2940,62 @@ class DataFrame:
         """
         ...
 
+    def _preapare_cols_for_sort(
+        self,
+        _to_col: Callable[[str], Column],
+        cols: Sequence[Union[int, str, Column, List[Union[int, str, Column]]]],
+        kwargs: Dict[str, Any],
+    ) -> Sequence[Column]:
+        from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkIndexError
+
+        if not cols:
+            raise PySparkValueError(
+                errorClass="CANNOT_BE_EMPTY", messageParameters={"item": "cols"}
+            )
+
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
+
+        _cols: List[Column] = []
+        for c in cols:
+            if isinstance(c, int) and not isinstance(c, bool):
+                # ordinal is 1-based
+                if c > 0:
+                    _cols.append(self[c - 1])
+                # negative ordinal means sort by desc
+                elif c < 0:
+                    _cols.append(self[-c - 1].desc())
+                else:
+                    raise PySparkIndexError(
+                        errorClass="ZERO_INDEX",
+                        messageParameters={},
+                    )
+            elif isinstance(c, Column):
+                _cols.append(c)
+            elif isinstance(c, str):
+                _cols.append(_to_col(c))
+            else:
+                raise PySparkTypeError(
+                    errorClass="NOT_COLUMN_OR_INT_OR_STR",
+                    messageParameters={
+                        "arg_name": "col",
+                        "arg_type": type(c).__name__,
+                    },
+                )
+
+        ascending = kwargs.get("ascending", True)
+        if isinstance(ascending, (bool, int)):
+            if not ascending:
+                _cols = [c.desc() for c in _cols]
+        elif isinstance(ascending, list):
+            _cols = [c if asc else c.desc() for asc, c in zip(ascending, _cols)]
+        else:
+            raise PySparkTypeError(
+                errorClass="NOT_COLUMN_OR_INT_OR_STR",
+                messageParameters={"arg_name": "ascending", "arg_type": type(ascending).__name__},
+            )
+        return _cols
+
     orderBy = sort
 
     @dispatch_df_method
@@ -3350,7 +3456,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def filter(self, condition: "ColumnOrName") -> "DataFrame":
+    def filter(self, condition: Union[Column, str]) -> "DataFrame":
         """Filters rows using the given condition.
 
         :func:`where` is an alias for :func:`filter`.
@@ -5901,7 +6007,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def where(self, condition: "ColumnOrName") -> "DataFrame":
+    def where(self, condition: Union[Column, str]) -> "DataFrame":
         """
         :func:`where` is an alias for :func:`filter`.
 
@@ -6396,7 +6502,7 @@ class DataFrame:
         ...
 
     @property
-    def plot(self) -> PySparkPlotAccessor:
+    def plot(self) -> "PySparkPlotAccessor":
         """
         Returns a :class:`PySparkPlotAccessor` for plotting functions.
 
