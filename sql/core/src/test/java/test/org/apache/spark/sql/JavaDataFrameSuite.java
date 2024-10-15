@@ -24,6 +24,7 @@ import java.util.*;
 import java.math.BigInteger;
 import java.math.BigDecimal;
 
+import org.apache.spark.sql.*;
 import scala.collection.Seq;
 import scala.jdk.javaapi.CollectionConverters;
 
@@ -33,10 +34,6 @@ import org.junit.jupiter.api.*;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.Column;
-import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.expressions.UserDefinedFunction;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.*;
@@ -539,5 +536,16 @@ public class JavaDataFrameSuite {
     String[] expected = spark.table("testData").collectAsList().stream()
       .map(row -> row.get(0).toString() + row.getString(1)).toArray(String[]::new);
     Assertions.assertArrayEquals(expected, result);
+  }
+
+  @Test
+  public void testTransform() {
+    // SPARK-49961 - transform must have the correct type
+    Dataset<Integer> ds = spark.createDataset(Arrays.asList(1,2), Encoders.INT());
+    Dataset<Integer> transformed = ds.transform((Dataset<Integer> d) -> ds.selectExpr("(value + 1) value").as(Encoders.INT()));
+    Integer[] expected = {2, 3};
+    Integer[] got = transformed.collectAsList().toArray(new Integer[0]);
+    Arrays.sort(got);
+    Assertions.assertArrayEquals(expected, got);
   }
 }

@@ -2241,4 +2241,8 @@ class Dataset[T] private[sql](
   private[sql] def toArrowBatchRdd: RDD[Array[Byte]] = {
     toArrowBatchRdd(queryExecution.executedPlan)
   }
+
+  /** @inheritdoc */
+  // SPARK-44961 - needed to allow Java usage
+  override def transform[U](t: DS[T] => DS[U]): DS[U] = t(this.asInstanceOf[DS[T]])
 }
