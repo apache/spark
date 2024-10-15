@@ -376,45 +376,45 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     // Top level intervals
     assert(intercept[AnalysisException] {
       sql("select interval '1' month::variant as v")
-    }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
     assert(intercept[AnalysisException] {
       sql("select interval '1' day::variant as v")
-    }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
     // struct<interval>
     assert(intercept[AnalysisException] {
       sql("select named_struct('i', interval '1' month)::variant as v")
-    }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
     assert(intercept[AnalysisException] {
       sql("select named_struct('i', interval '1' day)::variant as v")
-    }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
     // struct<struct<interval>>
     assert(intercept[AnalysisException] {
       sql("select struct(named_struct('i', interval '1' month))::variant as v")
-    }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
     assert(intercept[AnalysisException] {
       sql("select struct(named_struct('i', interval '1' day))::variant as v")
-    }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
     // array<interval>
     assert(intercept[AnalysisException] {
       sql("select array(interval '1' month)::variant as v")
-    }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
     assert(intercept[AnalysisException] {
       sql("select array(interval '1' day)::variant as v")
-    }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
     // map<string, interval>
     assert(intercept[AnalysisException] {
       sql("select map('i', interval '1' month)::variant as v")
-    }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
     assert(intercept[AnalysisException] {
       sql("select map('i', interval '1' day)::variant as v")
-    }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
     // map<string, struct<interval>>
     assert(intercept[AnalysisException] {
       sql("select map('i', struct(interval '1' month))::variant as v")
-    }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
     assert(intercept[AnalysisException] {
       sql("select map('i', struct(interval '1' day))::variant as v")
-    }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
     val tableName = "_v"
     withTable(tableName) {
       sql(s"create table $tableName (" +
@@ -431,7 +431,7 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
       (1 to 10).foreach { i =>
         assert(intercept[AnalysisException] {
           sql(s"select i$i::variant from $tableName")
-        }.getErrorClass == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+        }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
       }
     }
   }
