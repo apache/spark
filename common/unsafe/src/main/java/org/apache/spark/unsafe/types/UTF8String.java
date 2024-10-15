@@ -1488,13 +1488,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       int newLimit = limit > numChars() || limit <= 0 ? numChars() : limit;
       byte[] input = getBytes();
       int byteIndex = 0;
-      int charIndex = 0;
       UTF8String[] result = new UTF8String[newLimit];
-      while (charIndex < newLimit) {
+      for (int i = 0; i < newLimit - 1; i++) {
         int currCharNumBytes = numBytesForFirstByte(input[byteIndex]);
-        result[charIndex++] = UTF8String.fromBytes(input, byteIndex, currCharNumBytes);
+        result[i] = UTF8String.fromBytes(input, byteIndex, currCharNumBytes);
         byteIndex += currCharNumBytes;
       }
+      result[newLimit - 1] = UTF8String.fromBytes(input, byteIndex, numBytes() - byteIndex);
       return result;
     }
     return split(pattern.toString(), limit);

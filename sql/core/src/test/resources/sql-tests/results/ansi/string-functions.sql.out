@@ -180,6 +180,22 @@ struct<split(hello, , -1):array<string>>
 
 
 -- !query
+SELECT split('hello', '', 1)
+-- !query schema
+struct<split(hello, , 1):array<string>>
+-- !query output
+["hello"]
+
+
+-- !query
+SELECT split('hello', '', 3)
+-- !query schema
+struct<split(hello, , 3):array<string>>
+-- !query output
+["h","e","llo"]
+
+
+-- !query
 SELECT split('', '')
 -- !query schema
 struct<split(, , -1):array<string>>
