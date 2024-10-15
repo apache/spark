@@ -1511,7 +1511,7 @@ abstract class CSVSuite
             .collect()
         },
         condition = "UNSUPPORTED_DATA_TYPE_FOR_CORRUPTED_RECORD",
-        parameters = Map("columnName" -> columnNameOfCorruptRecord)
+        parameters = Map("columnName" -> toSQLId(columnNameOfCorruptRecord))
       )
     }
   }

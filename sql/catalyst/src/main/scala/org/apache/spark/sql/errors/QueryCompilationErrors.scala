@@ -1330,7 +1330,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def invalidFieldTypeForCorruptRecordError(columnName: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_DATA_TYPE_FOR_CORRUPTED_RECORD",
-      messageParameters = Map("columnName" -> columnName))
+      messageParameters = Map("columnName" -> toSQLId(columnName)))
   }
 
   def dataTypeUnsupportedByClassError(x: DataType, className: String): Throwable = {

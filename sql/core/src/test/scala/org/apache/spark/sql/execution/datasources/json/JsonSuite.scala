@@ -2118,7 +2118,7 @@ abstract class JsonSuite
           .json(corruptRecords)
       },
       condition = "UNSUPPORTED_DATA_TYPE_FOR_CORRUPTED_RECORD",
-      parameters = Map("columnName" -> columnNameOfCorruptRecord)
+      parameters = Map("columnName" -> toSQLId(columnNameOfCorruptRecord))
     )
 
     // We use `PERMISSIVE` mode by default if invalid string is given.
@@ -2135,7 +2135,7 @@ abstract class JsonSuite
             .collect()
         },
         condition = "UNSUPPORTED_DATA_TYPE_FOR_CORRUPTED_RECORD",
-        parameters = Map("columnName" -> columnNameOfCorruptRecord)
+        parameters = Map("columnName" -> toSQLId(columnNameOfCorruptRecord))
       )
     }
   }
