@@ -1028,6 +1028,12 @@
           "cannot find a static method <methodName> that matches the argument types in <className>."
         ]
       },
+      "UNSUPPORTED_CASE_WHEN_CLAUSE" : {
+        "message" : [
+          "The CASE WHEN clause of type <clause> is not supported."
+        ],
+        "sqlState" : "42601"
+      },
       "UNSUPPORTED_INPUT_TYPE" : {
         "message" : [
           "The input of <functionName> can't be <dataType> type data."

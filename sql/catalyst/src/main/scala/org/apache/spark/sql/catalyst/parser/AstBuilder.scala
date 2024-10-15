@@ -2932,6 +2932,10 @@ class AstBuilder extends DataTypeAstBuilder
     val branches = ctx.whenClause.asScala.map { wCtx =>
       (expression(wCtx.condition), expression(wCtx.result))
     }
+    branches.foreach(
+      branch => if (branch._1.isInstanceOf[LambdaFunction]) throw new ParseException(
+        "UNSUPPORTED_CASE_WHEN_CLAUSE", Map("clause" -> "LambdaFunction"), ctx)
+    )
     CaseWhen(branches.toSeq, Option(ctx.elseExpression).map(expression))
   }
 

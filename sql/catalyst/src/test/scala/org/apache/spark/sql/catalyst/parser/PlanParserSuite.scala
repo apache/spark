@@ -1973,4 +1973,18 @@ class PlanParserSuite extends AnalysisTest {
     assert(unresolvedRelation2.options == CaseInsensitiveStringMap.empty)
     assert(unresolvedRelation2.isStreaming)
   }
+
+  test("SPARK-49976: Disable lambda functions as case when clauses") {
+    val query = "select (case when a->b = true then 1 else 0 end)"
+    checkError(
+      exception = parseException(query),
+      condition = "UNSUPPORTED_CASE_WHEN_CLAUSE",
+      sqlState = Some("42601"),
+      parameters = Map("clause" -> "LambdaFunction"),
+      context = ExpectedContext(
+        fragment = "case when a->b = true then 1 else 0 end",
+        start = 8,
+        stop = 46)
+    )
+  }
 }
