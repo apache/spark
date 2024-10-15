@@ -83,7 +83,8 @@ object ExprUtils extends QueryErrorsBase {
     schema.getFieldIndex(columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
       val f = schema(corruptFieldIndex)
       if (!f.dataType.isInstanceOf[StringType] || !f.nullable) {
-        throw QueryCompilationErrors.invalidFieldTypeForCorruptRecordError()
+        throw QueryCompilationErrors.invalidFieldTypeForCorruptRecordError(
+          columnNameOfCorruptRecord)
       }
     }
   }

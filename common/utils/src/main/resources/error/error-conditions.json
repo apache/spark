@@ -4852,6 +4852,11 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_DATA_TYPE_FOR_CORRUPTED_RECORD" : {
+    "message" : [
+      "The field <columnName> for corrupt records must be string type and nullable."
+    ]
+  },
   "UNSUPPORTED_DATA_TYPE_FOR_ENCODER" : {
     "message" : [
       "Cannot create encoder for <dataType>. Please use a different output data type for your UDF or DataFrame."
@@ -6021,11 +6026,6 @@
   "_LEGACY_ERROR_TEMP_1090" : {
     "message" : [
       "Column statistics serialization is not supported for column <colName> of data type: <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1097" : {
-    "message" : [
-      "The field for corrupt records must be string type and nullable."
     ]
   },
   "_LEGACY_ERROR_TEMP_1098" : {

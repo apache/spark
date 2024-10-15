@@ -1327,10 +1327,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def invalidFieldTypeForCorruptRecordError(): Throwable = {
+  def invalidFieldTypeForCorruptRecordError(columnName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1097",
-      messageParameters = Map.empty)
+      errorClass = "UNSUPPORTED_DATA_TYPE_FOR_CORRUPTED_RECORD",
+      messageParameters = Map("columnName" -> columnName))
   }
 
   def dataTypeUnsupportedByClassError(x: DataType, className: String): Throwable = {

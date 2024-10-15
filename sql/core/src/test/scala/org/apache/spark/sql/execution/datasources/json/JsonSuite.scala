@@ -2117,8 +2117,8 @@ abstract class JsonSuite
           .schema(schema)
           .json(corruptRecords)
       },
-      condition = "_LEGACY_ERROR_TEMP_1097",
-      parameters = Map.empty
+      condition = "UNSUPPORTED_DATA_TYPE_FOR_CORRUPTED_RECORD",
+      parameters = Map("columnName" -> columnNameOfCorruptRecord)
     )
 
     // We use `PERMISSIVE` mode by default if invalid string is given.
@@ -2134,8 +2134,8 @@ abstract class JsonSuite
             .json(path)
             .collect()
         },
-        condition = "_LEGACY_ERROR_TEMP_1097",
-        parameters = Map.empty
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_CORRUPTED_RECORD",
+        parameters = Map("columnName" -> columnNameOfCorruptRecord)
       )
     }
   }
