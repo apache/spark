@@ -154,7 +154,6 @@ public final class CollationFactory {
      */
     public final boolean supportsLowercaseEquality;
 
-
     /**
      * Support for Space Trimming implies that that based on specifier (for now only right trim)
      * leading, trailing or both spaces are removed from the input string before comparison.

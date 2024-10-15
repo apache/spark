@@ -1122,6 +1122,212 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("Check order by on table with collated string column") {
+    val tableName = "t"
+    Seq(
+      // (collationName, data, expResult)
+      (
+        "", // non-collated
+        Seq((5, "bbb"), (3, "a"), (1, "A"), (4, "aaaa"), (6, "cc"), (2, "BbB")),
+        Seq(1, 2, 3, 4, 5, 6)
+      ),
+      (
+        "UTF8_BINARY",
+        Seq((5, "bbb"), (3, "a"), (1, "A"), (4, "aaaa"), (6, "cc"), (2, "BbB")),
+        Seq(1, 2, 3, 4, 5, 6)
+      ),
+      (
+        "UTF8_LCASE",
+        Seq((2, "bbb"), (1, "a"), (1, "A"), (1, "aaaa"), (3, "cc"), (2, "BbB")),
+        Seq(1, 1, 1, 2, 2, 3)
+      ),
+      (
+        "UNICODE",
+        Seq((4, "bbb"), (1, "a"), (2, "A"), (3, "aaaa"), (6, "cc"), (5, "BbB")),
+        Seq(1, 2, 3, 4, 5, 6)
+      ),
+      (
+        "UNICODE_CI",
+        Seq((2, "bbb"), (1, "a"), (1, "A"), (1, "aaaa"), (3, "cc"), (2, "BbB")),
+        Seq(1, 1, 1, 2, 2, 3)
+      )
+    ).foreach {
+      case (collationName, data, expResult) =>
+        val collationSetup = if (collationName.isEmpty) "" else "collate " + collationName
+        withTable(tableName) {
+          sql(s"create table $tableName (c1 integer, c2 string $collationSetup)")
+          data.foreach {
+            case (c1, c2) =>
+              sql(s"insert into $tableName values ($c1, '$c2')")
+          }
+          checkAnswer(sql(s"select c1 from $tableName order by c2"), expResult.map(Row(_)))
+        }
+    }
+  }
+
+  test("Check order by on StructType") {
+    Seq(
+      // (collationName, data, expResult)
+      (
+        "", // non-collated
+        Seq((5, "b", "A"), (3, "aa", "A"), (6, "b", "B"), (2, "A", "c"), (1, "A", "D"),
+          (4, "aa", "B")),
+        Seq(1, 2, 3, 4, 5, 6)
+      ),
+      (
+        "UTF8_BINARY",
+        Seq((5, "b", "A"), (3, "aa", "A"), (6, "b", "B"), (2, "A", "c"), (1, "A", "D"),
+          (4, "aa", "B")),
+        Seq(1, 2, 3, 4, 5, 6)
+      ),
+      (
+        "UTF8_LCASE",
+        Seq((3, "A", "C"), (2, "A", "b"), (2, "a", "b"), (4, "B", "c"), (1, "a", "a"),
+          (5, "b", "d")),
+        Seq(1, 2, 2, 3, 4, 5)
+      ),
+      (
+        "UNICODE",
+        Seq((4, "A", "C"), (3, "A", "b"), (2, "a", "b"), (5, "b", "c"), (1, "a", "a"),
+          (6, "b", "d")),
+        Seq(1, 2, 3, 4, 5, 6)
+      ),
+      (
+        "UNICODE_CI",
+        Seq((3, "A", "C"), (2, "A", "b"), (2, "a", "b"), (4, "B", "c"), (1, "a", "a"),
+          (5, "b", "d")),
+        Seq(1, 2, 2, 3, 4, 5)
+      )
+    ).foreach {
+      case (collationName, data, expResult) =>
+        val collationSetup = if (collationName.isEmpty) "" else "collate " + collationName
+        val tableName = "t"
+        withTable(tableName) {
+          sql(s"create table $tableName (c1 integer, c2 struct<" +
+            s"s1: string $collationSetup," +
+            s"s2: string $collationSetup>)")
+          data.foreach {
+            case (c1, s1, s2) =>
+              sql(s"insert into $tableName values ($c1, struct('$s1', '$s2'))")
+          }
+          checkAnswer(sql(s"select c1 from $tableName order by c2"), expResult.map(Row(_)))
+        }
+    }
+  }
+
+  test("Check order by on StructType with few collated fields") {
+    val data = Seq(
+      (2, "b", "a", "a", "a", "a"),
+      (4, "b", "b", "B", "a", "a"),
+      (1, "a", "a", "a", "a", "a"),
+      (6, "b", "b", "b", "B", "B"),
+      (3, "b", "b", "a", "a", "a"),
+      (5, "b", "b", "b", "B", "a"))
+    val tableName = "t"
+    withTable(tableName) {
+      sql(s"create table $tableName (c1 integer, c2 struct<" +
+        s"s1: string, " +
+        s"s2: string collate UTF8_BINARY, " +
+        s"s3: string collate UTF8_LCASE, " +
+        s"s4: string collate UNICODE, " +
+        s"s5: string collate UNICODE_CI>)")
+      data.foreach {
+        case (order, s1, s2, s3, s4, s5) =>
+          sql(s"insert into $tableName values ($order, struct('$s1', '$s2', '$s3', '$s4', '$s5'))")
+      }
+      val expResult = Seq(1, 2, 3, 4, 5, 6)
+      checkAnswer(sql(s"select c1 from $tableName order by c2"), expResult.map(Row(_)))
+    }
+  }
+
+  test("Check order by on ArrayType with collated strings") {
+    Seq(
+      // (collationName, order, data)
+      (
+        "",
+        Seq((3, Seq("b", "Aa", "c")), (2, Seq("A", "b")), (1, Seq("A")), (2, Seq("A", "b"))),
+        Seq(1, 2, 2, 3)
+      ),
+      (
+        "UTF8_BINARY",
+        Seq((3, Seq("b", "Aa", "c")), (2, Seq("A", "b")), (1, Seq("A")), (2, Seq("A", "b"))),
+        Seq(1, 2, 2, 3)
+      ),
+      (
+        "UTF8_LCASE",
+        Seq((4, Seq("B", "a")), (4, Seq("b", "A")), (2, Seq("aa")), (1, Seq("A")),
+          (5, Seq("b", "e")), (3, Seq("b"))),
+        Seq(1, 2, 3, 4, 4, 5)
+      ),
+      (
+        "UNICODE",
+        Seq((5, Seq("b", "C")), (4, Seq("b", "AA")), (1, Seq("a")), (4, Seq("b", "AA")),
+          (3, Seq("b")), (2, Seq("A", "a"))),
+        Seq(1, 2, 3, 4, 4, 5)
+      ),
+      (
+        "UNICODE_CI",
+        Seq((4, Seq("B", "a")), (4, Seq("b", "A")), (2, Seq("aa")), (1, Seq("A")),
+          (5, Seq("b", "e")), (3, Seq("b"))),
+        Seq(1, 2, 3, 4, 4, 5)
+      )
+    ).foreach {
+      case (collationName, dataWithOrder, expResult) =>
+        val collationSetup = if (collationName.isEmpty) "" else "collate " + collationName
+        val tableName1 = "t1"
+        val tableName2 = "t2"
+        withTable(tableName1, tableName2) {
+          sql(s"create table $tableName1 (c1 integer, c2 array<string $collationSetup>)")
+          sql(s"create table $tableName2 (c1 integer," +
+            s" c2 struct<f1: array<string $collationSetup>>)")
+          dataWithOrder.foreach {
+            case (order, data) =>
+              val arrayData = data.map(d => s"'$d'").mkString(", ")
+              sql(s"insert into $tableName1 values ($order, array($arrayData))")
+              sql(s"insert into $tableName2 values ($order, struct(array($arrayData)))")
+          }
+          checkAnswer(sql(s"select c1 from $tableName1 order by c2"), expResult.map(Row(_)))
+          checkAnswer(sql(s"select c1 from $tableName2 order by c2"), expResult.map(Row(_)))
+        }
+    }
+  }
+
+  test("Check order by on StructType with different types containing collated strings") {
+    val data = Seq(
+      (5, ("b", Seq(("b", "B", "a"), ("a", "a", "a")), "a")),
+      (2, ("b", Seq(("a", "a", "a")), "a")),
+      (2, ("b", Seq(("a", "a", "a")), "a")),
+      (4, ("b", Seq(("b", "a", "a")), "a")),
+      (3, ("b", Seq(("a", "a", "a"), ("a", "a", "a")), "a")),
+      (5, ("b", Seq(("b", "B", "a")), "a")),
+      (4, ("b", Seq(("b", "a", "a")), "a")),
+      (6, ("b", Seq(("b", "b", "B")), "A")),
+      (5, ("b", Seq(("b", "b", "a")), "a")),
+      (1, ("a", Seq(("a", "a", "a")), "a")),
+      (7, ("b", Seq(("b", "b", "B")), "b")),
+      (6, ("b", Seq(("b", "b", "B")), "a")),
+      (5, ("b", Seq(("b", "b", "a")), "a"))
+    )
+    val tableName = "t"
+    withTable(tableName) {
+      sql(s"create table $tableName " +
+        s"(c1 integer," +
+        s"c2 string," +
+        s"c3 array<struct<f1: string collate UTF8_BINARY," +
+        s"f2 string collate UTF8_LCASE," +
+        s"f3 string collate UNICODE>>," +
+        s"c4 string collate UNICODE_CI)")
+      data.foreach {
+        case (c1, (c2, c3, c4)) =>
+          val c3String = c3.map { case (f1, f2, f3) => s"struct('$f1', '$f2', '$f3')"}
+            .mkString(", ")
+          sql(s"insert into $tableName values ($c1, '$c2', array($c3String), '$c4')")
+      }
+      val expResult = Seq(1, 2, 2, 3, 4, 4, 5, 5, 5, 5, 6, 6, 7)
+      checkAnswer(sql(s"select c1 from $tableName order by c2, c3, c4"), expResult.map(Row(_)))
+    }
+  }
+
   for (collation <- Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI",
     "UNICODE_CI_RTRIM", "")) {
     for (codeGen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {

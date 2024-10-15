@@ -669,6 +669,16 @@
     ],
     "sqlState" : "40000"
   },
+  "CONFLICTING_DIRECTORY_STRUCTURES" : {
+    "message" : [
+      "Conflicting directory structures detected.",
+      "Suspicious paths:",
+      "<discoveredBasePaths>",
+      "If provided paths are partition directories, please set \"basePath\" in the options of the data source to specify the root directory of the table.",
+      "If there are multiple root directories, please load them separately and then union them."
+    ],
+    "sqlState" : "KD009"
+  },
   "CONFLICTING_PARTITION_COLUMN_NAMES" : {
     "message" : [
       "Conflicting partition column names detected:",
@@ -1201,6 +1211,12 @@
       "Failed to parse an empty string for data type <dataType>."
     ],
     "sqlState" : "42604"
+  },
+  "EMPTY_SCHEMA_NOT_SUPPORTED_FOR_DATASOURCE" : {
+    "message" : [
+      "The <format> datasource does not support writing empty or nested empty schemas. Please make sure the data schema has at least one or more column(s)."
+    ],
+    "sqlState" : "0A000"
   },
   "ENCODER_NOT_FOUND" : {
     "message" : [
@@ -2527,6 +2543,11 @@
           "Interval string does not match second-nano format of ss.nnnnnnnnn."
         ]
       },
+      "TIMEZONE_INTERVAL_OUT_OF_RANGE" : {
+        "message" : [
+          "The interval value must be in the range of [-18, +18] hours with second precision."
+        ]
+      },
       "UNKNOWN_PARSING_ERROR" : {
         "message" : [
           "Unknown error when parsing <word>."
@@ -2577,6 +2598,13 @@
       }
     },
     "sqlState" : "42K0K"
+  },
+  "INVALID_JAVA_IDENTIFIER_AS_FIELD_NAME" : {
+    "message" : [
+      "<fieldName> is not a valid identifier of Java and cannot be used as field name",
+      "<walkedTypePath>."
+    ],
+    "sqlState" : "46121"
   },
   "INVALID_JOIN_TYPE_FOR_JOINWITH" : {
     "message" : [
@@ -3814,6 +3842,12 @@
     ],
     "sqlState" : "42000"
   },
+  "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY" : {
+    "message" : [
+      "The expression <expression> must be inside 'partitionedBy'."
+    ],
+    "sqlState" : "42S23"
+  },
   "PATH_ALREADY_EXISTS" : {
     "message" : [
       "Path <outputPath> already exists. Set mode as \"overwrite\" to overwrite the existing path."
@@ -3985,6 +4019,18 @@
       "Not found an id for the rule name \"<ruleName>\". Please modify RuleIdCollection.scala if you are adding a new rule."
     ],
     "sqlState" : "22023"
+  },
+  "SCALAR_FUNCTION_NOT_COMPATIBLE" : {
+    "message" : [
+      "ScalarFunction <scalarFunc> not overrides method 'produceResult(InternalRow)' with custom implementation."
+    ],
+    "sqlState" : "42K0O"
+  },
+  "SCALAR_FUNCTION_NOT_FULLY_IMPLEMENTED" : {
+    "message" : [
+      "ScalarFunction <scalarFunc> not implements or overrides method 'produceResult(InternalRow)'."
+    ],
+    "sqlState" : "42K0P"
   },
   "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION" : {
     "message" : [
@@ -4486,6 +4532,12 @@
       "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>."
     ],
     "sqlState" : "428EK"
+  },
+  "TRAILING_COMMA_IN_SELECT" : {
+    "message" : [
+      "Trailing comma detected in SELECT clause. Remove the trailing comma before the FROM clause."
+    ],
+    "sqlState" : "42601"
   },
   "TRANSPOSE_EXCEED_ROW_LIMIT" : {
     "message" : [
@@ -5141,6 +5193,11 @@
         "message" : [
           "TRIM specifier in the collation."
         ]
+      },
+      "UPDATE_COLUMN_NULLABILITY" : {
+        "message" : [
+          "Update column nullability for MySQL and MS SQL Server."
+        ]
       }
     },
     "sqlState" : "0A000"
@@ -5669,11 +5726,6 @@
       "Expected format is 'RESET' or 'RESET key'. If you want to include special characters in key, please use quotes, e.g., RESET `key`."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0044" : {
-    "message" : [
-      "The interval value must be in the range of [-18, +18] hours with second precision."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0045" : {
     "message" : [
       "Invalid time zone displacement value."
@@ -6091,11 +6143,6 @@
       "<className> is not a valid Spark SQL Data Source."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1136" : {
-    "message" : [
-      "Cannot save interval data type into external storage."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1137" : {
     "message" : [
       "Unable to resolve <name> given [<outputStr>]."
@@ -6119,11 +6166,6 @@
   "_LEGACY_ERROR_TEMP_1141" : {
     "message" : [
       "Multiple sources found for <provider> (<sourceNames>), please specify the fully qualified class name."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1142" : {
-    "message" : [
-      "Datasource does not support writing empty or nested empty schemas. Please make sure the data schema has at least one or more column(s)."
     ]
   },
   "_LEGACY_ERROR_TEMP_1143" : {
@@ -6680,11 +6722,6 @@
       "The pivot column <pivotColumn> has more than <maxValues> distinct values, this could indicate an error. If this was intended, set <config> to at least the number of distinct values of the pivot column."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1325" : {
-    "message" : [
-      "Cannot modify the value of a static config: <key>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1327" : {
     "message" : [
       "Command execution is not supported in runner <runner>."
@@ -7034,7 +7071,7 @@
   },
   "_LEGACY_ERROR_TEMP_2097" : {
     "message" : [
-      "Could not execute broadcast in <timeout> secs. You can increase the timeout for broadcasts via <broadcastTimeout> or disable broadcast join by setting <autoBroadcastJoinThreshold> to -1."
+      "Could not execute broadcast in <timeout> secs. You can increase the timeout for broadcasts via <broadcastTimeout> or disable broadcast join by setting <autoBroadcastJoinThreshold> to -1 or remove the broadcast hint if it exists in your code."
     ]
   },
   "_LEGACY_ERROR_TEMP_2098" : {
@@ -7170,12 +7207,6 @@
   "_LEGACY_ERROR_TEMP_2139" : {
     "message" : [
       "cannot have circular references in class, but got the circular reference of class <t>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2140" : {
-    "message" : [
-      "`<fieldName>` is not a valid identifier of Java and cannot be used as field name",
-      "<walkedTypePath>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2144" : {
@@ -7666,11 +7697,6 @@
       "comment on table is not supported."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2271" : {
-    "message" : [
-      "UpdateColumnNullability is not supported."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2272" : {
     "message" : [
       "Rename column is only supported for MySQL version 8.0 and above."
@@ -7933,11 +7959,6 @@
   "_LEGACY_ERROR_TEMP_3054" : {
     "message" : [
       "<expr> is not currently supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3055" : {
-    "message" : [
-      "ScalarFunction <scalarFunc> neither implement magic method nor override 'produceResult'"
     ]
   },
   "_LEGACY_ERROR_TEMP_3056" : {
@@ -8296,11 +8317,6 @@
   "_LEGACY_ERROR_TEMP_3145" : {
     "message" : [
       "Partitions truncate is not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3146" : {
-    "message" : [
-      "Cannot find a compatible ScalarFunction#produceResult"
     ]
   },
   "_LEGACY_ERROR_TEMP_3147" : {
