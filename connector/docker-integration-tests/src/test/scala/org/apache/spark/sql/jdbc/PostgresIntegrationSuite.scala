@@ -578,7 +578,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     Seq("NaN", "infinity", "-infinity").foreach { v =>
       val df = toDF(s"SELECT '$v'::numeric c1")
       val e = intercept[SparkException](df.collect())
-      checkError(e, null)
+      assert(e.getCondition == "_LEGACY_ERROR_TEMP_3264")
       val cause = e.getCause.asInstanceOf[SQLException]
       assert(cause.getMessage.contains("Bad value for type BigDecimal"))
       assert(cause.getSQLState === "22003")
