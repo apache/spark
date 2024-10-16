@@ -309,10 +309,6 @@ class ArtifactManager(session: SparkSession) extends Logging {
 
   /**
    * Returns a [[ClassLoader]] for session-specific jar/class file resources.
-   *
-   * Generating class loader is slow, and often [[withResources]] is layered multiple times since
-   * [[SparkSession.withActive]] is often layered. We have to do some check here to avoid layering
-   * too many class loaders. Layering too much heavily impacts streaming performance.
    */
   def classloader: ClassLoader = {
     val urls = (getAddedJars :+ classDir.toUri.toURL).toArray
@@ -370,11 +366,11 @@ class ArtifactManager(session: SparkSession) extends Logging {
               FilenameUtils.separatorsToUnix(relativePath.toString))
           }"
           resourceType match {
-            case org.apache.spark.sql.artifact.ArtifactManager.SparkContextResourceType.JAR =>
+            case SparkContextResourceType.JAR =>
               sparkContext.addJar(uri)
-            case org.apache.spark.sql.artifact.ArtifactManager.SparkContextResourceType.FILE =>
+            case SparkContextResourceType.FILE =>
               sparkContext.addFile(uri)
-            case org.apache.spark.sql.artifact.ArtifactManager.SparkContextResourceType.ARCHIVE =>
+            case SparkContextResourceType.ARCHIVE =>
               val canonicalUri =
                 fragment.map(Utils.getUriBuilder(new URI(uri)).fragment).getOrElse(new URI(uri))
               sparkContext.addArchive(canonicalUri.toString)
@@ -478,7 +474,7 @@ object ArtifactManager extends Logging {
     val JAR, FILE, ARCHIVE = Value
   }
 
-  private[artifact] def copyBlock(
+  private def copyBlock(
       fromId: CacheId,
       toId: CacheId,
       blockManager: BlockManager): CacheId = {
