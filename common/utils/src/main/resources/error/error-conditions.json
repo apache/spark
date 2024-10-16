@@ -2909,7 +2909,7 @@
   },
   "INVALID_REGEXP_REPLACE" : {
     "message" : [
-      "Could not perform regexp_replace for `source = \"<source>\"`, `pattern = \"<pattern>\"`, `replacement = \"<replacement>\"` and `position = <position>`."
+      "Could not perform regexp_replace for source = \"<source>\", pattern = \"<pattern>\", replacement = \"<replacement>\" and position = <position>."
     ],
     "sqlState" : "22023"
   },
