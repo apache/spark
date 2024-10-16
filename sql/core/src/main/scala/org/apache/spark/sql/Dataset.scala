@@ -1963,6 +1963,9 @@ class Dataset[T] private[sql](
       encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
     super.groupByKey(func, encoder).asInstanceOf[KeyValueGroupedDataset[K, T]]
 
+  /** @inheritdoc */
+  override def transform[U](t: DS[T] => DS[U]): Dataset[U] = t(this.asInstanceOf[DS[T]])
+
   ////////////////////////////////////////////////////////////////////////////
   // For Python API
   ////////////////////////////////////////////////////////////////////////////
@@ -2241,8 +2244,4 @@ class Dataset[T] private[sql](
   private[sql] def toArrowBatchRdd: RDD[Array[Byte]] = {
     toArrowBatchRdd(queryExecution.executedPlan)
   }
-
-  /** @inheritdoc */
-  // SPARK-44961 - needed to allow Java usage
-  override def transform[U](t: DS[T] => DS[U]): DS[U] = t(this.asInstanceOf[DS[T]])
 }

@@ -2595,7 +2595,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def transform[U](t: DS[T] => DS[U]): DS[U] = t(this.asInstanceOf[DS[T]])
+  def transform[U](t: DS[T] => DS[U]): Dataset[U] = t(this.asInstanceOf[DS[T]])
 
   /**
    * (Scala-specific) Returns a new Dataset that contains the result of applying `func` to each
