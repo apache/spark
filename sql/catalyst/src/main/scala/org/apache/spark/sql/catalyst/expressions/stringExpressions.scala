@@ -82,10 +82,12 @@ case class ConcatWs(children: Seq[Expression])
   /** The 1st child (separator) is str, and rest are either str or array of str. */
   override def inputTypes: Seq[AbstractDataType] = {
     val arrayOrStr =
-      TypeCollection(AbstractArrayType(StringTypeWithCaseAccentSensitivity),
-      StringTypeWithCaseAccentSensitivity
+      TypeCollection(AbstractArrayType(
+        StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true)),
+        StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true)
       )
-    StringTypeWithCaseAccentSensitivity +: Seq.fill(children.size - 1)(arrayOrStr)
+    StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true) +:
+      Seq.fill(children.size - 1)(arrayOrStr)
   }
 
   override def dataType: DataType = children.head.dataType
@@ -436,7 +438,8 @@ trait String2StringExpression extends ImplicitCastInputTypes {
   def convert(v: UTF8String): UTF8String
 
   override def dataType: DataType = child.dataType
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCaseAccentSensitivity)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true))
 
   protected override def nullSafeEval(input: Any): Any =
     convert(input.asInstanceOf[UTF8String])
@@ -518,7 +521,8 @@ abstract class StringPredicate extends BinaryExpression
   def compare(l: UTF8String, r: UTF8String): Boolean
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity, StringTypeWithCaseAccentSensitivity)
+    Seq(StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true),
+      StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true))
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any =
     compare(input1.asInstanceOf[UTF8String], input2.asInstanceOf[UTF8String])
@@ -613,7 +617,8 @@ case class Contains(left: Expression, right: Expression) extends StringPredicate
       CollationSupport.Contains.genCode(c1, c2, collationId))
   }
   override def inputTypes : Seq[AbstractDataType] =
-    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation)
+    Seq(StringTypeNonCSAICollation(supportsTrimCollation = true),
+      StringTypeNonCSAICollation(supportsTrimCollation = true))
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
 }
@@ -657,7 +662,11 @@ case class StartsWith(left: Expression, right: Expression) extends StringPredica
   }
 
   override def inputTypes : Seq[AbstractDataType] =
-    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation, StringTypeNonCSAICollation)
+    Seq(
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      StringTypeNonCSAICollation(supportsTrimCollation = true)
+    )
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
@@ -2086,7 +2095,8 @@ case class InitCap(child: Expression)
   // Flag to indicate whether to use ICU instead of JVM case mappings for UTF8_BINARY collation.
   private final lazy val useICU = SQLConf.get.getConf(SQLConf.ICU_CASE_MAPPINGS_ENABLED)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCaseAccentSensitivity)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true))
   override def dataType: DataType = child.dataType
 
   override def nullSafeEval(string: Any): Any = {

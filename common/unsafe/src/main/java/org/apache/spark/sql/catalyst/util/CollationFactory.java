@@ -1193,6 +1193,10 @@ public final class CollationFactory {
     return Collation.CollationSpecICU.ICULocaleNames;
   }
 
+  public static UTF8String applyTrimmingPolicy(UTF8String input, int collationId) {
+    return Collation.CollationSpec.applyTrimmingPolicy(input, collationId);
+  }
+
   public static UTF8String getCollationKey(UTF8String input, int collationId) {
     Collation collation = fetchCollation(collationId);
     if (collation.supportsSpaceTrimming) {
