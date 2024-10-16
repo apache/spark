@@ -1456,25 +1456,15 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         |select map('a' collate utf8_lcase, 1, 'b' collate utf8_lcase, 2)
         |['A' collate utf8_lcase]
         |""".stripMargin), Seq(Row(1)))
-    val ctx = "map('aaa' collate utf8_lcase, 1, 'AAA' collate utf8_lcase, 2)['AaA']"
-    val query = s"select $ctx"
-    checkError(
-      exception = intercept[AnalysisException](sql(query)),
-      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-      parameters = Map(
-        "sqlExpr" -> "\"map(collate(aaa, utf8_lcase), 1, collate(AAA, utf8_lcase), 2)[AaA]\"",
-        "paramIndex" -> "second",
-        "inputSql" -> "\"AaA\"",
-        "inputType" -> toSQLType(StringType),
-        "requiredType" -> toSQLType(StringType(
-          CollationFactory.collationNameToId("UTF8_LCASE")))
-      ),
-      context = ExpectedContext(
-        fragment = ctx,
-        start = query.length - ctx.length,
-        stop = query.length - 1
-      )
-    )
+    checkAnswer(sql(
+      """
+        |select map('a' collate utf8_lcase, 1, 'b' collate utf8_lcase, 2)
+        |['A' collate utf8_lcase]
+        |""".stripMargin), Seq(Row(1)))
+    checkAnswer(sql(
+      """
+        |select map('a' collate utf8_lcase, 1, 'b' collate utf8_lcase, 2)['A']
+        |""".stripMargin), Seq(Row(1)))
   }
 
   test("window aggregates should respect collation") {
