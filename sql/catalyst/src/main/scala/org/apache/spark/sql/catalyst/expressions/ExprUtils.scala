@@ -84,7 +84,7 @@ object ExprUtils extends QueryErrorsBase {
       val f = schema(corruptFieldIndex)
       if (!f.dataType.isInstanceOf[StringType] || !f.nullable) {
         throw QueryCompilationErrors.invalidFieldTypeForCorruptRecordError(
-          columnNameOfCorruptRecord)
+          columnNameOfCorruptRecord, f.dataType)
       }
     }
   }

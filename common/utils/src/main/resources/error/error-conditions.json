@@ -2138,6 +2138,12 @@
     },
     "sqlState" : "22022"
   },
+  "INVALID_CORRUPT_RECORD_TYPE" : {
+    "message" : [
+      "The column <columnName> for corrupt records must have the nullable STRING type, but got <actualType>."
+    ],
+    "sqlState" : "42804"
+  },
   "INVALID_CURSOR" : {
     "message" : [
       "The cursor is invalid."
@@ -4851,11 +4857,6 @@
       "The <format> datasource doesn't support the column <columnName> of the type <columnType>."
     ],
     "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_DATA_TYPE_FOR_CORRUPTED_RECORD" : {
-    "message" : [
-      "The field <columnName> for corrupt records must be string type and nullable."
-    ]
   },
   "UNSUPPORTED_DATA_TYPE_FOR_ENCODER" : {
     "message" : [

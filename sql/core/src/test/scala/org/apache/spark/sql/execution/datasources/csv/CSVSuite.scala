@@ -1510,8 +1510,9 @@ abstract class CSVSuite
             .csv(testFile(valueMalformedFile))
             .collect()
         },
-        condition = "UNSUPPORTED_DATA_TYPE_FOR_CORRUPTED_RECORD",
-        parameters = Map("columnName" -> toSQLId(columnNameOfCorruptRecord))
+        condition = "INVALID_CORRUPT_RECORD_TYPE",
+        parameters = Map(
+          "columnName" -> toSQLId(columnNameOfCorruptRecord), "actualType" -> "\"INT\"")
       )
     }
   }
