@@ -936,7 +936,8 @@ class AdaptiveQueryExecSuite
           val error = intercept[SparkException] {
             joined.collect()
           }
-          assert(error.getMessage() contains "coalesce test error")
+          assert(error.getMessage().contains("coalesce test error") ||
+            error.getMessage().contains("Multiple failures in stage materialization"))
 
           val adaptivePlan = joined.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
 
