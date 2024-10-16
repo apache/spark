@@ -89,7 +89,6 @@ class ArtifactManager(session: SparkSession) extends Logging {
   }
 
   private var shouldApplyClassLoader = false
-  private var cachedClassLoader: Option[ClassLoader] = None
 
   private var initialContextResourcesCopied = false
 
@@ -226,7 +225,6 @@ class ArtifactManager(session: SparkSession) extends Logging {
         deleteSource = deleteStagedFile)
 
       shouldApplyClassLoader = true
-      cachedClassLoader = None
     } else {
       val target = ArtifactUtils.concatenatePaths(artifactPath, normalizedRemoteRelativePath)
       // Disallow overwriting with modified version
@@ -252,7 +250,6 @@ class ArtifactManager(session: SparkSession) extends Logging {
         jarsList.add(normalizedRemoteRelativePath)
 
         shouldApplyClassLoader = true
-        cachedClassLoader = None
       } else if (normalizedRemoteRelativePath.startsWith(s"pyfiles${File.separator}")) {
         session.sparkContext.addFile(uri)
         sparkContextRelativePaths.add(
@@ -315,7 +312,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
    * [[SparkSession.withActive]] is often layered. We have to do some check here to avoid layering
    * too many class loaders. Layering too much heavily impacts streaming performance.
    */
-  def classloader: ClassLoader = cachedClassLoader.getOrElse {
+  def classloader: ClassLoader = {
     val urls = (getAddedJars :+ classDir.toUri.toURL).toArray
     val prefixes = SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES)
     val userClasspathFirst = SparkEnv.get.conf.get(EXECUTOR_USER_CLASS_PATH_FIRST)
@@ -347,7 +344,6 @@ class ArtifactManager(session: SparkSession) extends Logging {
     }
 
     logDebug(s"Using class loader: $loader, containing urls: $urls")
-    cachedClassLoader = Some(loader)
     loader
   }
 
@@ -401,9 +397,6 @@ class ArtifactManager(session: SparkSession) extends Logging {
     logDebug(
       s"Cleaning up resources for session with sessionUUID ${session.sessionUUID}")
 
-    if (SparkEnv.get == null) return
-    if (session.sparkContext.isStopped) return
-
     // Clean up added files
     val fileserver = SparkEnv.get.rpcEnv.fileServer
     val sparkContext = session.sparkContext
@@ -427,7 +420,6 @@ class ArtifactManager(session: SparkSession) extends Logging {
     FileUtils.deleteDirectory(artifactPath.toFile)
 
     // Clean up internal trackers
-    cachedClassLoader = None
     jarsList.clear()
     pythonIncludeList.clear()
     cachedBlockIdList.clear()

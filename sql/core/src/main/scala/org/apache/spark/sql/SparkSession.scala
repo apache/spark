@@ -751,7 +751,6 @@ class SparkSession private(
    * @since 2.1.0
    */
   override def close(): Unit = {
-    artifactManager.cleanUpResources()
     sparkContext.stop()
   }
 
