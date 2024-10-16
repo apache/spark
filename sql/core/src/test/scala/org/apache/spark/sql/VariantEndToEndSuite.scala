@@ -380,7 +380,7 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-48994: Disable support for interval types in the variant spec") {
+  test("SPARK-49985: Disable support for interval types in the variant spec") {
     // Top level intervals
     assert(intercept[AnalysisException] {
       sql("select interval '1' month::variant as v")
