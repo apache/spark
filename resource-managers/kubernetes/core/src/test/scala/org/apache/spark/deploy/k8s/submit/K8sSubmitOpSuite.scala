@@ -18,7 +18,9 @@ package org.apache.spark.deploy.k8s.submit
 
 import java.io.PrintStream
 import java.util.Arrays
+
 import scala.jdk.CollectionConverters._
+
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.{KubernetesClient, PropagationPolicyConfigurable}
 import io.fabric8.kubernetes.client.dsl.{Deletable, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, PodResource}
@@ -26,6 +28,7 @@ import io.fabric8.kubernetes.client.okhttp.OkHttpClientImpl
 import org.mockito.{ArgumentMatchers, Mock, MockitoAnnotations}
 import org.mockito.Mockito.{times, verify, when}
 import org.scalatest.BeforeAndAfter
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_SUBMIT_GRACE_PERIOD
 import org.apache.spark.deploy.k8s.Constants.{SPARK_APP_ID_LABEL, SPARK_POD_DRIVER_ROLE, SPARK_ROLE_LABEL}
@@ -61,8 +64,8 @@ class K8sSubmitOpSuite extends SparkFunSuite with BeforeAndAfter {
   private var deletable: PropagationPolicyConfigurable[_ <: Deletable] = _
 
   @Mock
-  private var deletableList
-      : NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable[HasMetadata] = _
+  private var deletableList:
+    NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable[HasMetadata] = _
 
   @Mock
   private var err: PrintStream = _
@@ -146,19 +149,19 @@ class K8sSubmitOpSuite extends SparkFunSuite with BeforeAndAfter {
   private def buildDriverPod(podName: String, id: String): Pod = {
     new PodBuilder()
       .withNewMetadata()
-      .withName(podName)
-      .withNamespace(namespace)
-      .addToLabels(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)
-      .addToLabels(SPARK_ROLE_LABEL, SPARK_POD_DRIVER_ROLE)
-      .withUid(s"driver-pod-$id")
+        .withName(podName)
+        .withNamespace(namespace)
+        .addToLabels(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)
+        .addToLabels(SPARK_ROLE_LABEL, SPARK_POD_DRIVER_ROLE)
+        .withUid(s"driver-pod-$id")
       .endMetadata()
       .withNewSpec()
-      .withServiceAccountName(s"test$id")
-      .withVolumes()
-      .withNodeName(s"testNode$id")
+        .withServiceAccountName(s"test$id")
+        .withVolumes()
+        .withNodeName(s"testNode$id")
       .endSpec()
       .withNewStatus()
-      .withPhase("Running")
+        .withPhase("Running")
       .endStatus()
       .build()
   }

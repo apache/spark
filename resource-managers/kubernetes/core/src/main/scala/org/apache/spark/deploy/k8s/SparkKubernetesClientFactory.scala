@@ -27,7 +27,8 @@ import io.fabric8.kubernetes.client.Config.autoConfigure
 import io.fabric8.kubernetes.client.okhttp.OkHttpClientFactory
 import io.fabric8.kubernetes.client.utils.HttpClientUtils
 import io.fabric8.kubernetes.client.utils.Utils.getSystemPropertyOrEnvVar
-import okhttp3.{Dispatcher, OkHttpClient}
+import okhttp3.Dispatcher
+import okhttp3.OkHttpClient
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
@@ -62,8 +63,7 @@ object SparkKubernetesClientFactory extends Logging {
       defaultServiceAccountCaCert: Option[File]): KubernetesClient = {
     val oauthTokenFileConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_FILE_CONF_SUFFIX"
     val oauthTokenConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_CONF_SUFFIX"
-    val oauthTokenFile = sparkConf
-      .getOption(oauthTokenFileConf)
+    val oauthTokenFile = sparkConf.getOption(oauthTokenFileConf)
       .map(new File(_))
     val oauthTokenValue = sparkConf.getOption(oauthTokenConf)
     KubernetesUtils.requireNandDefined(
@@ -84,14 +84,12 @@ object SparkKubernetesClientFactory extends Logging {
 
     // Allow for specifying a context used to auto-configure from the users K8S config file
     val kubeContext = sparkConf.get(KUBERNETES_CONTEXT).filter(_.nonEmpty)
-    logInfo(
-      log"Auto-configuring K8S client using " +
+    logInfo(log"Auto-configuring K8S client using " +
         log"${MDC(K8S_CONTEXT, kubeContext.map("context " + _).getOrElse("current context"))}" +
         log" from users K8S config file")
 
     // if backoff limit is not set then set it to 3
-    if (getSystemPropertyOrEnvVar(
-        KUBERNETES_REQUEST_RETRY_BACKOFFLIMIT_SYSTEM_PROPERTY) == null) {
+    if (getSystemPropertyOrEnvVar(KUBERNETES_REQUEST_RETRY_BACKOFFLIMIT_SYSTEM_PROPERTY) == null) {
       System.setProperty(KUBERNETES_REQUEST_RETRY_BACKOFFLIMIT_SYSTEM_PROPERTY, "3")
     }
 
@@ -107,24 +105,23 @@ object SparkKubernetesClientFactory extends Logging {
       .withOption(oauthTokenValue) { (token, configBuilder) =>
         configBuilder.withOauthToken(token)
       }
-      .withOption(oauthTokenFile) { (file, configBuilder) =>
-        configBuilder.withOauthToken(Files.asCharSource(file, Charsets.UTF_8).read())
+      .withOption(oauthTokenFile) {
+        (file, configBuilder) => configBuilder.withOauthToken(Files.asCharSource(file, Charsets.UTF_8).read())
       }
-      .withOption(caCertFile) { (file, configBuilder) =>
-        configBuilder.withCaCertFile(file)
+      .withOption(caCertFile) {
+        (file, configBuilder) => configBuilder.withCaCertFile(file)
       }
-      .withOption(clientKeyFile) { (file, configBuilder) =>
-        configBuilder.withClientKeyFile(file)
+      .withOption(clientKeyFile) {
+        (file, configBuilder) => configBuilder.withClientKeyFile(file)
       }
-      .withOption(clientCertFile) { (file, configBuilder) =>
-        configBuilder.withClientCertFile(file)
+      .withOption(clientCertFile) {
+        (file, configBuilder) => configBuilder.withClientCertFile(file)
       }
-      .withOption(namespace) { (ns, configBuilder) =>
-        configBuilder.withNamespace(ns)
+      .withOption(namespace) {
+        (ns, configBuilder) => configBuilder.withNamespace(ns)
       }
       .build()
-    logDebug(
-      "Kubernetes client config: " +
+    logDebug("Kubernetes client config: " +
         new ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(config))
     val clientFactory = HttpClientUtils.getHttpClientFactory
     val clientBuilder = new KubernetesClientBuilder().withConfig(config)
@@ -143,15 +140,14 @@ object SparkKubernetesClientFactory extends Logging {
   }
 
   private implicit class OptionConfigurableConfigBuilder(val configBuilder: ConfigBuilder)
-      extends AnyVal {
+    extends AnyVal {
 
-    def withOption[T](option: Option[T])(
+    def withOption[T]
+        (option: Option[T])(
         configurator: ((T, ConfigBuilder) => ConfigBuilder)): ConfigBuilder = {
-      option
-        .map { opt =>
+      option.map { opt =>
           configurator(opt, configBuilder)
-        }
-        .getOrElse(configBuilder)
+        }.getOrElse(configBuilder)
     }
   }
 
@@ -163,7 +159,7 @@ object SparkKubernetesClientFactory extends Logging {
     protected case class Val(
         requestTimeoutEntry: ConfigEntry[Int],
         connectionTimeoutEntry: ConfigEntry[Int])
-        extends super.Val {
+      extends super.Val {
       def requestTimeout(conf: SparkConf): Int = conf.get(requestTimeoutEntry)
       def connectionTimeout(conf: SparkConf): Int = conf.get(connectionTimeoutEntry)
     }
