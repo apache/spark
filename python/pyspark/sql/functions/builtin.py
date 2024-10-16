@@ -11224,7 +11224,7 @@ def is_valid_utf8(str: "ColumnOrName") -> Column:
     |                   true|
     +-----------------------+
     """
-    return _invoke_function("is_valid_utf8", str)
+    return _invoke_function_over_columns("is_valid_utf8", str)
 
 
 @_try_remote_functions
@@ -11255,7 +11255,7 @@ def make_valid_utf8(str: "ColumnOrName") -> Column:
     |                 SparkSQL|
     +-------------------------+
     """
-    return _invoke_function("make_valid_utf8", str)
+    return _invoke_function_over_columns("make_valid_utf8", str)
 
 
 @_try_remote_functions
@@ -11285,7 +11285,7 @@ def validate_utf8(str: "ColumnOrName") -> Column:
     |               SparkSQL|
     +-----------------------+
     """
-    return _invoke_function("validate_utf8", str)
+    return _invoke_function_over_columns("validate_utf8", str)
 
 
 @_try_remote_functions
@@ -11315,7 +11315,7 @@ def try_validate_utf8(str: "ColumnOrName") -> Column:
     |                   SparkSQL|
     +---------------------------+
     """
-    return _invoke_function("try_validate_utf8", str)
+    return _invoke_function_over_columns("try_validate_utf8", str)
 
 
 @_try_remote_functions
