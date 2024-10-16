@@ -101,7 +101,7 @@ class StringType private[sql] (private val _collationId: Int) extends AtomicType
  * @since 1.3.0
  */
 @Stable
-case object StringType extends StringType(CollationFactory.DEFAULT_COLLATION_ID) {
+case object StringType extends StringType(0) {
   private[spark] def apply(collationId: Int): StringType = new StringType(collationId)
 
   def apply(collation: String): StringType = {
@@ -118,7 +118,7 @@ case object StringType extends StringType(CollationFactory.DEFAULT_COLLATION_ID)
  * we can still differentiate it from a regular string type, because in some places default string
  * is not the one with the session collation (e.g. in DDL commands).
  */
-private[spark] class DefaultStringType extends StringType(0) {
+private[spark] class DefaultStringType extends StringType(CollationFactory.DEFAULT_COLLATION_ID) {
   override def collationId: Int = SqlApiConf.get.defaultStringType.collationId
 }
 
