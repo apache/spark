@@ -870,7 +870,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def cannotRemoveReservedPropertyError(property: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "CANNOT_REMOVE_REVERSED_PROPERTY",
+      errorClass = "CANNOT_REMOVE_RESERVED_PROPERTY",
       messageParameters = Map("property" -> property))
   }
 
