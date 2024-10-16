@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, NamedTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DefaultStringType, MapType, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkSchemaUtils
 
@@ -302,6 +302,13 @@ private[spark] object SchemaUtils {
       case st: StringType => !st.isUTF8BinaryCollation
       case _ => false
     }
+  }
+
+  /**
+   * Checks if a given data type has a default string type.
+   */
+  def hasDefaultStringType(dataType: DataType): Boolean = {
+    dataType.existsRecursively(_.isInstanceOf[DefaultStringType])
   }
 
   /**

@@ -564,11 +564,6 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       conf: SQLConf,
       colName: String): Expression = {
 
-    // this can avoid unneeded casts
-//    if (expr.dataType == expectedType) {
-//      return expr
-//    }
-
     conf.storeAssignmentPolicy match {
       case StoreAssignmentPolicy.ANSI =>
         val cast = Cast(expr, expectedType, Option(conf.sessionLocalTimeZone), ansiEnabled = true)

@@ -19,18 +19,21 @@ package org.apache.spark.sql.types
 
 import org.json4s.JsonAST.{JString, JValue}
 
-import org.apache.spark.annotation.{Evolving, Stable}
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.internal.SqlApiConf
 
 /**
  * The data type representing `String` values. Please use the singleton `DataTypes.StringType`.
  *
  * @since 1.3.0
- * @param collationId
+ * @param _collationId
  *   The id of collation for this StringType.
  */
 @Stable
-class StringType private[sql] (val collationId: Int) extends AtomicType with Serializable {
+class StringType private[sql] (private val _collationId: Int) extends AtomicType with Serializable {
+
+  def collationId: Int = _collationId
 
   /**
    * Support for Binary Equality implies that strings are considered equal only if they are byte
@@ -108,7 +111,18 @@ case object StringType extends StringType(0) {
 }
 
 /**
- * A.
+ * The result type of literals, column definitions without explicit collation, casts to string
+ * and some expressions that produce strings but whose output type is not based on the types of its
+ * children.
+ * Idea is to have this behave like a string with the default collation of the session, but that
+ * we can still differentiate it from a regular string type, because in some places default string
+ * is not the one with the session collation (e.g. in DDL commands).
  */
-@Evolving
-object ImplicitStringType extends StringType(-2) {}
+private[spark] class DefaultStringType extends StringType(0) {
+  override def collationId: Int = SqlApiConf.get.defaultStringType.collationId
+}
+
+private[spark] case object DefaultStringType extends DefaultStringType {
+  def apply(): DefaultStringType = new DefaultStringType()
+}
+

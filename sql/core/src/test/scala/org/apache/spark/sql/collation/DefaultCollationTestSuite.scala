@@ -20,10 +20,12 @@ package org.apache.spark.sql.collation
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.DatasourceV2SQLBase
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.util.Utils
 
-class ResolveImplicitStringTypesSuite extends DatasourceV2SQLBase {
+class DefaultCollationTestSuite extends DatasourceV2SQLBase {
+  
+  val dataSource: String = "parquet"
 
   def withSessionCollationAndTable(collation: String, tableName: String)(f: => Unit): Unit = {
     withTable(tableName) {
@@ -34,11 +36,8 @@ class ResolveImplicitStringTypesSuite extends DatasourceV2SQLBase {
   }
 
   def withSessionCollation(collation: String)(f: => Unit): Unit = {
-    sql(s"SET COLLATION $collation")
-    Utils.tryWithSafeFinally {
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
       f
-    } {
-      sql(s"SET COLLATION UTF8_BINARY")
     }
   }
 
@@ -48,24 +47,34 @@ class ResolveImplicitStringTypesSuite extends DatasourceV2SQLBase {
   }
 
   // region DDL tests
+
   test("create/alter table") {
     val tableName = "testcat.tbl"
     withSessionCollationAndTable("UTF8_LCASE", tableName) {
       // create table with implicit collation
-      sql(s"CREATE TABLE $tableName (c1 STRING) USING parquet")
+      sql(s"CREATE TABLE $tableName (c1 STRING) USING $dataSource")
       assertTableColumnCollation(tableName, "c1", "UTF8_BINARY")
 
       // alter table add column with implicit collation
       sql(s"ALTER TABLE $tableName ADD COLUMN c2 STRING")
       assertTableColumnCollation(tableName, "c2", "UTF8_BINARY")
 
-      // alter table change column with explicit collation
-//      sql(s"ALTER TABLE $tableName ALTER COLUMN c2 TYPE STRING COLLATE UTF8_LCASE")
-//      assertTableColumnCollation(tableName, "c2", "UTF8_LCASE")
+      // TODO: alter table change column with explicit collation when we add alter support
 
-      // alter table change column with implicit collation
-//      sql(s"ALTER TABLE $tableName ALTER COLUMN c2 TYPE STRING")
-      assertTableColumnCollation(tableName, "c2", "UTF8_BINARY")
+      // TODO: alter table change column with default collation when we add alter support
+    }
+  }
+
+  test("create table with explicit collation") {
+    val tableName = "testcat.tbl_explicit_collation"
+    withSessionCollationAndTable("UTF8_LCASE", tableName) {
+      sql(s"CREATE TABLE $tableName (c1 STRING COLLATE UTF8_LCASE) USING $dataSource")
+      assertTableColumnCollation(tableName, "c1", "UTF8_LCASE")
+    }
+
+    withSessionCollationAndTable("UTF8_LCASE", tableName) {
+      sql(s"CREATE TABLE $tableName (c1 STRING COLLATE UNICODE) USING $dataSource")
+      assertTableColumnCollation(tableName, "c1", "UNICODE")
     }
   }
 
@@ -74,34 +83,48 @@ class ResolveImplicitStringTypesSuite extends DatasourceV2SQLBase {
 
     // literals in select do not pick up session collation
     withSessionCollationAndTable("UTF8_LCASE", tableName) {
-      sql(s"CREATE TABLE $tableName USING parquet AS SELECT 'a' AS c1")
+      sql(s"CREATE TABLE $tableName USING $dataSource AS SELECT 'a' AS c1")
       assertTableColumnCollation(tableName, "c1", "UTF8_BINARY")
+    }
+
+    // literals in inline table do not pick up session collation
+    withSessionCollationAndTable("UTF8_LCASE", tableName) {
+      sql(s"""
+           |CREATE TABLE $tableName USING $dataSource AS
+           |SELECT c1, c1 = 'A' as c2 FROM VALUES ('a'), ('A') AS vals(c1)
+           |""".stripMargin)
+      assertTableColumnCollation(tableName, "c1", "UTF8_BINARY")
+      checkAnswer(
+        sql(s"SELECT COUNT(*) FROM $tableName WHERE c2"),
+        Seq(Row(1)))
     }
 
     // cast in select does not pick up session collation
     withSessionCollationAndTable("UTF8_LCASE", tableName) {
-      sql(s"CREATE TABLE $tableName USING parquet AS SELECT cast('a' AS STRING) AS c1")
+      sql(s"CREATE TABLE $tableName USING $dataSource AS SELECT cast('a' AS STRING) AS c1")
       assertTableColumnCollation(tableName, "c1", "UTF8_BINARY")
     }
   }
 
-  // TODO: does not work
-//  test("create/alter view") {
-//    val viewName = "view_test"
-//    withSessionCollation("UTF8_LCASE") {
-//      withTempView(viewName) {
-//        sql(s"CREATE TEMP VIEW $viewName AS SELECT 'a' AS c1")
-//        checkAnswer(
-//          sql(s"SELECT COLLATION(c1) FROM $viewName"),
-//          Seq(Row("UTF8_BINARY"))
-//        )
-//      }
-//    }
-//  }
+  test("add column") {
+    val tableName = "testcat.tbl_add_col"
+    withSessionCollationAndTable("UTF8_LCASE", tableName) {
+      sql(s"CREATE TABLE $tableName (c1 STRING COLLATE UTF8_LCASE) USING $dataSource")
+      assertTableColumnCollation(tableName, "c1", "UTF8_LCASE")
+
+      sql(s"ALTER TABLE $tableName ADD COLUMN c2 STRING")
+      assertTableColumnCollation(tableName, "c2", "UTF8_BINARY")
+
+      sql(s"ALTER TABLE $tableName ADD COLUMN c3 STRING COLLATE UNICODE")
+      assertTableColumnCollation(tableName, "c3", "UNICODE")
+    }
+  }
+
   // endregion
 
   // region DML tests
-  test("basic") {
+
+  test("literals with default collation") {
     withSessionCollation("UTF8_LCASE") {
 
       // literal without collation
@@ -109,16 +132,62 @@ class ResolveImplicitStringTypesSuite extends DatasourceV2SQLBase {
         sql("SELECT COLLATION('a')"),
         Seq(Row("UTF8_LCASE")))
 
-      // literal with explicit collation
+      checkAnswer(
+        sql("SELECT COLLATION(map('a', 'b')['a'])"),
+        Seq(Row("UTF8_LCASE")))
+
+      checkAnswer(
+        sql("SELECT COLLATION(array('a')[0])"),
+        Seq(Row("UTF8_LCASE")))
+
+      checkAnswer(
+        sql("SELECT COLLATION(struct('a' as c)['c'])"),
+        Seq(Row("UTF8_LCASE")))
+    }
+  }
+
+  test("literals with explicit collation") {
+    withSessionCollation("UTF8_LCASE") {
       checkAnswer(
         sql("SELECT COLLATION('a' collate unicode)"),
         Seq(Row("UNICODE")))
 
-      // cast is aware of session collation
       checkAnswer(
-        sql("SELECT COLLATION(cast('a' as STRING))"),
+        sql("SELECT COLLATION(map('a', 'b' collate unicode)['a'])"),
+        Seq(Row("UNICODE")))
+
+      checkAnswer(
+        sql("SELECT COLLATION(array('a' collate unicode)[0])"),
+        Seq(Row("UNICODE")))
+
+      checkAnswer(
+        sql("SELECT COLLATION(struct('a' collate unicode as c)['c'])"),
+        Seq(Row("UNICODE")))
+    }
+  }
+
+  test("cast is aware of session collation") {
+    withSessionCollation("UTF8_LCASE") {
+      checkAnswer(
+        sql("SELECT COLLATION(cast('a' collate unicode as STRING))"),
         Seq(Row("UTF8_LCASE")))
 
+      checkAnswer(
+        sql("SELECT COLLATION(cast(map('a', 'b' collate unicode) as MAP<STRING, STRING>)['a'])"),
+        Seq(Row("UTF8_LCASE")))
+
+      checkAnswer(
+        sql("SELECT COLLATION(cast(array('a' collate unicode) as ARRAY<STRING>)[0])"),
+        Seq(Row("UTF8_LCASE")))
+
+      checkAnswer(
+        sql("SELECT COLLATION(cast(struct('a' collate unicode as c) as STRUCT<c: STRING>)['c'])"),
+        Seq(Row("UTF8_LCASE")))
+    }
+  }
+
+  test("expressions in where are aware of session collation") {
+    withSessionCollation("UTF8_LCASE") {
       // expression in where is aware of session collation
       checkAnswer(
         sql("SELECT 1 WHERE 'a' = 'A'"),
@@ -133,15 +202,15 @@ class ResolveImplicitStringTypesSuite extends DatasourceV2SQLBase {
   test("having group by is aware of session collation") {
     val tableName = "testcat.tbl_grp_by"
     withSessionCollationAndTable("UTF8_LCASE", tableName) {
-      sql(s"CREATE TABLE $tableName (c1 STRING) USING parquet")
+      sql(s"CREATE TABLE $tableName (c1 STRING) USING $dataSource")
       sql(s"INSERT INTO $tableName VALUES ('a'), ('A')")
 
-      // having clause uses session collation
+      // having clause uses session (default) collation
       checkAnswer(
         sql(s"SELECT COUNT(*) FROM $tableName GROUP BY c1 HAVING 'a' = 'A'"),
         Seq(Row(1), Row(1)))
 
-      // having clause uses column collation
+      // having clause uses column (implicit) collation
       checkAnswer(
         sql(s"SELECT COUNT(*) FROM $tableName GROUP BY c1 HAVING c1 = 'A'"),
         Seq(Row(1)))
@@ -152,7 +221,7 @@ class ResolveImplicitStringTypesSuite extends DatasourceV2SQLBase {
     // scalastyle:off nonascii
     val tableName = "testcat.tbl_min_max"
     withSessionCollationAndTable("UNICODE", tableName) {
-      sql(s"CREATE TABLE $tableName (c1 STRING) USING parquet")
+      sql(s"CREATE TABLE $tableName (c1 STRING) USING $dataSource")
       sql(s"INSERT INTO $tableName VALUES ('1'), ('½')")
 
       checkAnswer(
@@ -169,7 +238,7 @@ class ResolveImplicitStringTypesSuite extends DatasourceV2SQLBase {
   test("literals in insert inherit session level collation") {
     val tableName = "testcat.tbl_insert"
     withSessionCollationAndTable("UTF8_LCASE", tableName) {
-      sql(s"CREATE TABLE $tableName (c1 BOOLEAN) USING parquet")
+      sql(s"CREATE TABLE $tableName (c1 BOOLEAN) USING $dataSource")
       sql(s"INSERT INTO $tableName VALUES ('a' = 'A')")
 
       checkAnswer(
@@ -183,40 +252,17 @@ class ResolveImplicitStringTypesSuite extends DatasourceV2SQLBase {
     }
   }
 
-//  test("update behavior") {
-//    val tableName = "testcat.tbl_update"
-//    withTableAndSessionCollation("UTF8_LCASE", tableName) {
-//      sql(s"CREATE TABLE $tableName (c1 STRING, c2 INT) USING parquet")
-//      sql(s"INSERT INTO $tableName VALUES ('a', 0), ('A', 0)")
-//
-//      sql(s"UPDATE $tableName SET c1 = 2 WHERE 'a' = 'A'")
-//      checkAnswer(
-//        sql(s"SELECT SUM(c2) FROM $tableName"),
-//        Seq(Row(4)))
-//
-//      sql(s"UPDATE $tableName SET c1 = 2 WHERE c1 = 'A'")
-//      checkAnswer(
-//        sql(s"SELECT SUM(c2) FROM $tableName"),
-//        Seq(Row(2)))
-//    }
-//  }
+  test("delete behavior") {
+    val tableName = "testcat.tbl_delete"
+    withSessionCollationAndTable("UTF8_LCASE", tableName) {
+      sql(s"CREATE TABLE $tableName (c1 STRING) USING $dataSource")
+      sql(s"INSERT INTO $tableName VALUES ('a'), ('A')")
 
-//  test("delete behavior") {
-//    val tableName = "testcat.tbl_delete"
-//    withTableAndSessionCollation("UTF8_LCASE", tableName) {
-//      sql(s"CREATE TABLE $tableName (c1 STRING) USING parquet")
-//      sql(s"INSERT INTO $tableName VALUES ('a'), ('A')")
-//
-//      sql(s"DELETE FROM $tableName WHERE c1 = 'A'")
-//      checkAnswer(
-//        sql(s"SELECT COUNT(*) FROM $tableName"),
-//        Seq(Row(1)))
-//
-//      sql(s"DELETE FROM $tableName WHERE 'a' = 'A'")
-//      checkAnswer(
-//        sql(s"SELECT COUNT(*) FROM $tableName"),
-//        Seq(Row(0)))
-//    }
-//  }
+      sql(s"DELETE FROM $tableName WHERE 'a' = 'A'")
+      checkAnswer(
+        sql(s"SELECT COUNT(*) FROM $tableName"),
+        Seq(Row(0)))
+    }
+  }
   // endregion
 }

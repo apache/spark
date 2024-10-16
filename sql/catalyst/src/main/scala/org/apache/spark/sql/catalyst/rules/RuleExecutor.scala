@@ -233,21 +233,16 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
               planChangeLogger.logRule(rule.ruleName, plan, result)
               // Run the plan changes validation after each rule.
               if (Utils.isTesting || enableValidation) {
-                try {
-                  validatePlanChanges(plan, result) match {
-                    case Some(msg) =>
-                      throw new SparkException(
-                        errorClass = "PLAN_VALIDATION_FAILED_RULE_IN_BATCH",
-                        messageParameters = Map(
-                          "rule" -> rule.ruleName,
-                          "batch" -> batch.name,
-                          "reason" -> msg),
-                        cause = null)
-                    case _ =>
-                  }
-                } catch {
-                  case  a: Throwable =>
-                    throw new RuntimeException("asdf")
+                validatePlanChanges(plan, result) match {
+                  case Some(msg) =>
+                    throw new SparkException(
+                      errorClass = "PLAN_VALIDATION_FAILED_RULE_IN_BATCH",
+                      messageParameters = Map(
+                        "rule" -> rule.ruleName,
+                        "batch" -> batch.name,
+                        "reason" -> msg),
+                      cause = null)
+                  case _ =>
                 }
               }
             }
