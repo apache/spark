@@ -215,7 +215,7 @@ class TargetEncoder @Since("4.0.0") (@Since("4.0.0") override val uid: String)
                   if (value < 0.0 || value != value.toInt) throw new SparkException(
                     s"Values from column ${inputFeatures(feature)} must be indices, " +
                       s"but got $value.")
-                  else Some(value)
+                  else Some(value) // non-null category
                 }
               }
               val (class_count, class_stat) = agg(feature).getOrElse(category, (0.0, 0.0))
@@ -224,16 +224,19 @@ class TargetEncoder @Since("4.0.0") (@Since("4.0.0") override val uid: String)
               $(targetType) match {
                 case TargetEncoder.TARGET_BINARY => // counting
                   if (label == 1.0) {
+                    // positive => increment both counters for current & unseen categories
                     agg(feature) +
                       (category -> (1 + class_count, 1 + class_stat)) +
                       (TargetEncoder.UNSEEN_CATEGORY -> (1 + global_count, 1 + global_stat))
                   } else if (label == 0.0) {
+                    // negative => increment only global counter for current & unseen categories
                     agg(feature) +
                       (category -> (1 + class_count, class_stat)) +
                       (TargetEncoder.UNSEEN_CATEGORY -> (1 + global_count, global_stat))
                   } else throw new SparkException(
                     s"Values from column ${getLabelCol} must be binary (0,1) but got $label.")
                 case TargetEncoder.TARGET_CONTINUOUS => // incremental mean
+                  // increment counter and iterate on mean for current & unseen categories
                   agg(feature) +
                     (category -> (1 + class_count,
                       class_stat + ((label - class_stat) / (1 + class_count)))) +
@@ -266,11 +269,13 @@ class TargetEncoder @Since("4.0.0") (@Since("4.0.0") override val uid: String)
           val (global_count, global_stat) = stat.get(TargetEncoder.UNSEEN_CATEGORY).get
           feature -> stat.map {
             case (cat, (class_count, class_stat)) => cat -> {
-              val weight = class_count / (class_count + $(smoothing))
+              val weight = class_count / (class_count + $(smoothing)) // smoothing weight
               $(targetType) match {
                 case TargetEncoder.TARGET_BINARY =>
+                  // calculate conditional probabilities and blend
                   weight * (class_stat/ class_count) + (1 - weight) * (global_stat / global_count)
                 case TargetEncoder.TARGET_CONTINUOUS =>
+                  // blend means
                   weight * class_stat + (1 - weight) * global_stat
               }
             }
