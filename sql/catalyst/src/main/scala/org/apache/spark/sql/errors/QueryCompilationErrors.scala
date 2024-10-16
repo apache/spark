@@ -3646,11 +3646,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def implicitCollationMismatchError(explicitTypes: Seq[String]): Throwable = {
+  def implicitCollationMismatchError(implicitTypes: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "COLLATION_MISMATCH.IMPLICIT",
       messageParameters = Map(
-        "explicitTypes" -> explicitTypes.map(toSQLId).mkString(", ")
+        "implicitTypes" -> implicitTypes.map(toSQLId).mkString(", ")
       )
     )
   }
