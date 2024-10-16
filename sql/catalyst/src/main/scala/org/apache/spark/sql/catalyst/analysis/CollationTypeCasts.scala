@@ -191,7 +191,9 @@ object CollationTypeCasts extends TypeCoercionRule {
           .distinct
 
         if (implicitTypes.length > 1) {
-          throw QueryCompilationErrors.implicitCollationMismatchError()
+          throw QueryCompilationErrors.implicitCollationMismatchError(
+            explicitTypes.map(t => StringType(t).typeName)
+          )
         }
         else {
           implicitTypes.headOption.map(StringType(_)).getOrElse(SQLConf.get.defaultStringType)
