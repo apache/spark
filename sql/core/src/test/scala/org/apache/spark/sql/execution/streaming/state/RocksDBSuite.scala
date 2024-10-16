@@ -2242,7 +2242,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   testWithChangelogCheckpointingEnabled(s"simulate ForEachBatch") {
     // In ForEachBatch, often batches are executed twice. We simulate this case.
-    // The test was accidentally fixed by SPARK-48931 (https://github.com/apache/spark/pull/47393)
     val remoteDir = Utils.createTempDir().toString
     val conf = dbConf.copy(minDeltasForSnapshot = 3, compactOnCommit = false)
     new File(remoteDir).delete() // to make sure that the directory gets created
