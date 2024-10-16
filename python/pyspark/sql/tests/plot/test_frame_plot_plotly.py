@@ -405,7 +405,7 @@ class DataFramePlotPlotlyTestsMixin:
             "type": "scatter",
         }
         self._check_fig_data(fig["data"][1], **expected_fig_data)
-        self.assertEqual(fig["data"][0]["x"], fig["data"][1]["x"])
+        self.assertEqual(list(fig["data"][0]["x"]), list(fig["data"][1]["x"]))
 
 
 class DataFramePlotPlotlyTests(DataFramePlotPlotlyTestsMixin, ReusedSQLTestCase):
