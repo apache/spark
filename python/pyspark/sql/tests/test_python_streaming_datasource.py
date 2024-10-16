@@ -142,19 +142,75 @@ class BasePythonStreamingDataSourceTestsMixin:
         self.spark.dataSource.register(self._get_test_data_source())
         df = self.spark.readStream.format("TestDataSource").load()
 
-        current_batch_id = -1
-
         def check_batch(df, batch_id):
-            nonlocal current_batch_id
-            current_batch_id = batch_id
             assertDataFrameEqual(df, [Row(batch_id * 2), Row(batch_id * 2 + 1)])
 
         q = df.writeStream.foreachBatch(check_batch).start()
-        while current_batch_id < 10:
+        while len(q.recentProgress) < 10:
             time.sleep(0.2)
         q.stop()
         q.awaitTermination()
         self.assertIsNone(q.exception(), "No exception has to be propagated.")
+
+    def test_stream_reader_pyarrow(self):
+        import pyarrow as pa
+
+        class TestStreamReader(DataSourceStreamReader):
+            def initialOffset(self):
+                return {"offset": 0}
+
+            def latestOffset(self):
+                return {"offset": 2}
+
+            def partitions(self, start, end):
+                # hardcoded number of partitions
+                num_part = 1
+                return [InputPartition(i) for i in range(num_part)]
+
+            def read(self, partition):
+                keys = pa.array([1, 2, 3, 4, 5], type=pa.int32())
+                values = pa.array(["one", "two", "three", "four", "five"], type=pa.string())
+                schema = pa.schema([("key", pa.int32()), ("value", pa.string())])
+                record_batch = pa.RecordBatch.from_arrays([keys, values], schema=schema)
+                yield record_batch
+
+        class TestDataSourcePyarrow(DataSource):
+            @classmethod
+            def name(cls):
+                return "testdatasourcepyarrow"
+
+            def schema(self):
+                return "key int, value string"
+
+            def streamReader(self, schema):
+                return TestStreamReader()
+
+        self.spark.dataSource.register(TestDataSourcePyarrow)
+        df = self.spark.readStream.format("testdatasourcepyarrow").load()
+
+        output_dir = tempfile.TemporaryDirectory(prefix="test_data_stream_write_output")
+        checkpoint_dir = tempfile.TemporaryDirectory(prefix="test_data_stream_write_checkpoint")
+
+        q = (
+            df.writeStream.format("json")
+            .option("checkpointLocation", checkpoint_dir.name)
+            .start(output_dir.name)
+        )
+        while not q.recentProgress:
+            time.sleep(0.2)
+        q.stop()
+        q.awaitTermination()
+
+        expected_data = [
+            Row(key=1, value="one"),
+            Row(key=2, value="two"),
+            Row(key=3, value="three"),
+            Row(key=4, value="four"),
+            Row(key=5, value="five"),
+        ]
+        df = self.spark.read.json(output_dir.name)
+
+        assertDataFrameEqual(df, expected_data)
 
     def test_simple_stream_reader(self):
         class SimpleStreamReader(SimpleDataSourceStreamReader):

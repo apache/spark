@@ -21,7 +21,6 @@ import unittest
 import os
 
 from pyspark.util import is_remote_only
-from pyspark.errors.exceptions.connect import SparkConnectGrpcException
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 from pyspark.testing.utils import SPARK_HOME
@@ -30,6 +29,7 @@ from pyspark.sql.functions import udf, assert_true, lit
 if should_test_connect:
     from pyspark.sql.connect.client.artifact import ArtifactManager
     from pyspark.sql.connect.client import DefaultChannelBuilder
+    from pyspark.errors.exceptions.connect import SparkConnectGrpcException
 
 
 class ArtifactTestsMixin:
@@ -425,32 +425,3 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
                 self.artifact_manager.add_artifacts(
                     os.path.join(d, "not_existing"), file=True, pyfile=False, archive=False
                 )
-
-
-class LocalClusterArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
-    @classmethod
-    def conf(cls):
-        return (
-            super().conf().set("spark.driver.memory", "512M").set("spark.executor.memory", "512M")
-        )
-
-    @classmethod
-    def root(cls):
-        # In local cluster, we can mimic the production usage.
-        return "."
-
-    @classmethod
-    def master(cls):
-        return os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local-cluster[2,2,512]")
-
-
-if __name__ == "__main__":
-    from pyspark.sql.tests.connect.client.test_artifact import *  # noqa: F401
-
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)

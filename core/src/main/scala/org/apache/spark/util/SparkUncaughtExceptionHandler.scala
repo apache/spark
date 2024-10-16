@@ -17,6 +17,7 @@
 
 package org.apache.spark.util
 
+import org.apache.spark.executor.{ExecutorExitCode, KilledByTaskReaperException}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.THREAD
 
@@ -56,6 +57,8 @@ private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: 
             // SPARK-24294: This is defensive code, in case that SparkFatalException is
             // misused and uncaught.
             System.exit(SparkExitCode.OOM)
+          case _: KilledByTaskReaperException if exitOnUncaughtException =>
+            System.exit(ExecutorExitCode.KILLED_BY_TASK_REAPER)
           case _ if exitOnUncaughtException =>
             System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
           case _ =>

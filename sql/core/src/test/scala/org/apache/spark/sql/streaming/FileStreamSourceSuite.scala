@@ -262,7 +262,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    spark.conf.set(SQLConf.ORC_IMPLEMENTATION, "native")
+    spark.conf.set(SQLConf.ORC_IMPLEMENTATION.key, "native")
   }
 
   override def afterAll(): Unit = {
@@ -419,7 +419,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
             createFileStreamSourceAndGetSchema(
               format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
           },
-          errorClass = "UNABLE_TO_INFER_SCHEMA",
+          condition = "UNABLE_TO_INFER_SCHEMA",
           parameters = Map("format" -> "JSON")
         )
       }
@@ -1504,7 +1504,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
     // This is to avoid running a spark job to list of files in parallel
     // by the InMemoryFileIndex.
-    spark.conf.set(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD, numFiles * 2)
+    spark.conf.set(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key, numFiles * 2)
 
     withTempDirs { case (root, tmp) =>
       val src = new File(root, "a=1")
@@ -2442,6 +2442,71 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         val offsetBatch = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
           .asInstanceOf[FileStreamSourceOffset]
         assert(5 === offsetBatch.logOffset)
+        assert(3 === CountListingLocalFileSystem.pathToNumListStatusCalled
+          .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
+      }
+    }
+  }
+
+  test("SPARK-48802: Ensure maxCachedFiles set to 0 forces each batch to list files") {
+    withCountListingLocalFileSystemAsLocalFileSystem {
+      withThreeTempDirs { case (src, meta, tmp) =>
+        val options = Map("latestFirst" -> "false", "maxFilesPerTrigger" -> "10",
+          "maxCachedFiles" -> "0")
+        val scheme = CountListingLocalFileSystem.scheme
+        val source = new FileStreamSource(spark, s"$scheme:///${src.getCanonicalPath}/*/*", "text",
+          StructType(Nil), Seq.empty, meta.getCanonicalPath, options)
+        val _metadataLog = PrivateMethod[FileStreamSourceLog](Symbol("metadataLog"))
+        val metadataLog = source invokePrivate _metadataLog()
+
+        def verifyBatch(
+            offset: FileStreamSourceOffset,
+            expectedBatchId: Long,
+            inputFiles: Seq[File],
+            expectedFileOffset: Int,
+            expectedFilesInBatch: Int,
+            expectedListingCount: Int): Unit = {
+          val batchId = offset.logOffset
+          assert(batchId === expectedBatchId)
+
+          val files = metadataLog.get(batchId).getOrElse(Array.empty[FileEntry])
+          assert(files.forall(_.batchId == batchId))
+
+          val actualInputFiles = files.map { p => p.sparkPath.toUri.getPath }
+          val expectedInputFiles = inputFiles.slice(
+            expectedFileOffset,
+            expectedFileOffset + expectedFilesInBatch
+            )
+            .map(_.getCanonicalPath)
+          assert(actualInputFiles === expectedInputFiles)
+
+          assert(expectedListingCount === CountListingLocalFileSystem.pathToNumListStatusCalled
+            .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
+        }
+
+        CountListingLocalFileSystem.resetCount()
+
+        // provide 20 files in src, with sequential "last modified" to guarantee ordering
+        val inputFiles = (0 to 19).map { idx =>
+          val f = createFile(idx.toString, new File(src, idx.toString), tmp)
+          f.setLastModified(idx * 10000)
+          f
+        }
+
+        // each batch should perform a listing since maxCachedFiles is set to 0
+        val offsetBatch0 = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
+          .asInstanceOf[FileStreamSourceOffset]
+        verifyBatch(offsetBatch0, expectedBatchId = 0, inputFiles,
+          expectedFileOffset = 0, expectedFilesInBatch = 10, expectedListingCount = 1)
+        val offsetBatch1 = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
+            .asInstanceOf[FileStreamSourceOffset]
+        verifyBatch(offsetBatch1, expectedBatchId = 1, inputFiles,
+          expectedFileOffset = 10, expectedFilesInBatch = 10, expectedListingCount = 2)
+
+        // validate no remaining files and another listing is performed
+        val offsetBatch = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
+          .asInstanceOf[FileStreamSourceOffset]
+        assert(1 === offsetBatch.logOffset)
         assert(3 === CountListingLocalFileSystem.pathToNumListStatusCalled
           .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
       }

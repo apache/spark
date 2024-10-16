@@ -21,8 +21,10 @@ import java.nio.file.{Files, Paths}
 
 import scala.util.Properties
 
+import com.google.protobuf.ByteString
+
+import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.common.ProtoDataTypes
-import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
 import org.apache.spark.sql.test.{ConnectFunSuite, RemoteSparkSession}
 
 class UDFClassLoadingE2ESuite extends ConnectFunSuite with RemoteSparkSession {
@@ -39,14 +41,17 @@ class UDFClassLoadingE2ESuite extends ConnectFunSuite with RemoteSparkSession {
     new File(s"src/test/resources/udf$scalaVersion.jar").toURI.toURL
 
   private def registerUdf(session: SparkSession): Unit = {
-    val udf = ScalarUserDefinedFunction(
-      serializedUdfPacket = udfByteArray,
-      inputTypes = Seq(ProtoDataTypes.IntegerType),
-      outputType = ProtoDataTypes.IntegerType,
-      name = Some("dummyUdf"),
-      nullable = true,
-      deterministic = true)
-    session.registerUdf(udf.toProto)
+    val builder = proto.CommonInlineUserDefinedFunction
+      .newBuilder()
+      .setDeterministic(true)
+      .setFunctionName("dummyUdf")
+    builder.getScalarScalaUdfBuilder
+      .setPayload(ByteString.copyFrom(udfByteArray))
+      .addInputTypes(ProtoDataTypes.IntegerType)
+      .setOutputType(ProtoDataTypes.IntegerType)
+      .setNullable(true)
+      .setAggregate(false)
+    session.registerUdf(builder.build())
   }
 
   test("update class loader after stubbing: new session") {

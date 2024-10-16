@@ -208,6 +208,7 @@ class Catalog:
                 nullable=table[3][i].as_py(),
                 isPartition=table[4][i].as_py(),
                 isBucket=table[5][i].as_py(),
+                isCluster=table[6][i].as_py(),
             )
             for i in range(table.num_rows)
         ]
@@ -253,8 +254,8 @@ class Catalog:
     ) -> DataFrame:
         if schema is not None and not isinstance(schema, StructType):
             raise PySparkTypeError(
-                error_class="NOT_STRUCT",
-                message_parameters={
+                errorClass="NOT_STRUCT",
+                messageParameters={
                     "arg_name": "schema",
                     "arg_type": type(schema).__name__,
                 },

@@ -27,7 +27,7 @@ license: |
 ## Apache Maven
 
 The Maven-based build is the build of reference for Apache Spark.
-Building Spark using Maven requires Maven 3.9.6 and Java 17/21.
+Building Spark using Maven requires Maven 3.9.9 and Java 17/21.
 Spark requires Scala 2.13; support for Scala 2.12 was removed in Spark 4.0.0.
 
 ### Setting up Maven's Memory Usage
@@ -112,10 +112,6 @@ For instance, you can build the Spark Streaming module using:
     ./build/mvn -pl :spark-streaming_{{site.SCALA_BINARY_VERSION}} clean install
 
 where `spark-streaming_{{site.SCALA_BINARY_VERSION}}` is the `artifactId` as defined in `streaming/pom.xml` file.
-
-## Building with Spark Connect support
-
-    ./build/mvn -Pconnect -DskipTests clean package
 
 ## Building with JVM Profile support
 
@@ -246,7 +242,7 @@ The run-tests script also can be limited to a specific Python version or a speci
 
     ./python/run-tests --python-executables=python --modules=pyspark-sql
 
-## Running R Tests
+## Running R Tests (deprecated)
 
 To run the SparkR tests you will need to install the [knitr](https://cran.r-project.org/package=knitr), [rmarkdown](https://cran.r-project.org/package=rmarkdown), [testthat](https://cran.r-project.org/package=testthat), [e1071](https://cran.r-project.org/package=e1071) and [survival](https://cran.r-project.org/package=survival) packages first:
 

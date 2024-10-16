@@ -18,6 +18,7 @@
 package org.apache.spark.sql.types
 
 import com.fasterxml.jackson.core.JsonParseException
+import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
@@ -160,7 +161,7 @@ class DataTypeSuite extends SparkFunSuite {
       exception = intercept[SparkException] {
         left.merge(right)
       },
-      errorClass = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
+      condition = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
       parameters = Map("left" -> "\"FLOAT\"", "right" -> "\"BIGINT\""
       )
     )
@@ -298,21 +299,21 @@ class DataTypeSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         DataType.fromJson(""""abcd"""")
       },
-      errorClass = "INVALID_JSON_DATA_TYPE",
+      condition = "INVALID_JSON_DATA_TYPE",
       parameters = Map("invalidType" -> "abcd"))
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         DataType.fromJson("""{"abcd":"a"}""")
       },
-      errorClass = "INVALID_JSON_DATA_TYPE",
+      condition = "INVALID_JSON_DATA_TYPE",
       parameters = Map("invalidType" -> """{"abcd":"a"}"""))
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         DataType.fromJson("""{"fields": [{"a":123}], "type": "struct"}""")
       },
-      errorClass = "INVALID_JSON_DATA_TYPE",
+      condition = "INVALID_JSON_DATA_TYPE",
       parameters = Map("invalidType" -> """{"a":123}"""))
 
     // Malformed JSON string
@@ -689,6 +690,115 @@ class DataTypeSuite extends SparkFunSuite {
     false,
     caseSensitive = true)
 
+  def checkEqualsIgnoreCompatibleCollation(
+      from: DataType,
+      to: DataType,
+      expected: Boolean): Unit = {
+    val testName = s"equalsIgnoreCompatibleCollation: (from: $from, to: $to)"
+
+    test(testName) {
+      assert(DataType.equalsIgnoreCompatibleCollation(from, to) === expected)
+    }
+  }
+
+  // Simple types.
+  checkEqualsIgnoreCompatibleCollation(IntegerType, IntegerType, expected = true)
+  checkEqualsIgnoreCompatibleCollation(BooleanType, BooleanType, expected = true)
+  checkEqualsIgnoreCompatibleCollation(StringType, StringType, expected = true)
+  checkEqualsIgnoreCompatibleCollation(IntegerType, BooleanType, expected = false)
+  checkEqualsIgnoreCompatibleCollation(BooleanType, IntegerType, expected = false)
+  checkEqualsIgnoreCompatibleCollation(StringType, BooleanType, expected = false)
+  checkEqualsIgnoreCompatibleCollation(BooleanType, StringType, expected = false)
+  checkEqualsIgnoreCompatibleCollation(StringType, IntegerType, expected = false)
+  checkEqualsIgnoreCompatibleCollation(IntegerType, StringType, expected = false)
+  // Collated `StringType`.
+  checkEqualsIgnoreCompatibleCollation(StringType, StringType("UTF8_LCASE"),
+    expected = true)
+  checkEqualsIgnoreCompatibleCollation(
+    StringType("UTF8_BINARY"), StringType("UTF8_LCASE"), expected = true)
+  // Complex types.
+  checkEqualsIgnoreCompatibleCollation(
+    ArrayType(StringType),
+    ArrayType(StringType("UTF8_LCASE")),
+    expected = true
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    ArrayType(StringType),
+    ArrayType(ArrayType(StringType("UTF8_LCASE"))),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    ArrayType(ArrayType(StringType)),
+    ArrayType(ArrayType(StringType("UTF8_LCASE"))),
+    expected = true
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    MapType(StringType, StringType),
+    MapType(StringType, StringType("UTF8_LCASE")),
+    expected = true
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    MapType(StringType("UTF8_LCASE"), StringType),
+    MapType(StringType, StringType),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    MapType(StringType("UTF8_LCASE"), ArrayType(StringType)),
+    MapType(StringType("UTF8_LCASE"), ArrayType(StringType("UTF8_LCASE"))),
+    expected = true
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    MapType(ArrayType(StringType), IntegerType),
+    MapType(ArrayType(StringType("UTF8_LCASE")), IntegerType),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    MapType(ArrayType(StringType("UTF8_LCASE")), IntegerType),
+    MapType(ArrayType(StringType("UTF8_LCASE")), IntegerType),
+    expected = true
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    StructType(StructField("a", StringType) :: Nil),
+    StructType(StructField("a", StringType("UTF8_LCASE")) :: Nil),
+    expected = true
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    StructType(StructField("a", ArrayType(StringType)) :: Nil),
+    StructType(StructField("a", ArrayType(StringType("UTF8_LCASE"))) :: Nil),
+    expected = true
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    StructType(StructField("a", MapType(StringType, IntegerType)) :: Nil),
+    StructType(StructField("a", MapType(StringType("UTF8_LCASE"), IntegerType)) :: Nil),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    StructType(StructField("a", StringType) :: Nil),
+    StructType(StructField("b", StringType("UTF8_LCASE")) :: Nil),
+    expected = false
+  )
+  // Null compatibility checks.
+  checkEqualsIgnoreCompatibleCollation(
+    ArrayType(StringType, containsNull = true),
+    ArrayType(StringType, containsNull = false),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    ArrayType(StringType, containsNull = true),
+    ArrayType(StringType("UTF8_LCASE"), containsNull = false),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    MapType(StringType, StringType, valueContainsNull = true),
+    MapType(StringType, StringType, valueContainsNull = false),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    StructType(StructField("a", StringType) :: Nil),
+    StructType(StructField("a", StringType, nullable = false) :: Nil),
+    expected = false
+  )
+
   test("SPARK-25031: MapType should produce current formatted string for complex types") {
     val keyType: DataType = StructType(Seq(
       StructField("a", DataTypes.IntegerType),
@@ -790,7 +900,7 @@ class DataTypeSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         DataType.fromJson(json)
       },
-      errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+      condition = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
       parameters = Map("jsonType" -> "integer")
     )
   }
@@ -824,7 +934,7 @@ class DataTypeSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         DataType.fromJson(json)
       },
-      errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+      condition = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
       parameters = Map("jsonType" -> "integer")
     )
   }
@@ -858,7 +968,7 @@ class DataTypeSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         DataType.fromJson(json)
       },
-      errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+      condition = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
       parameters = Map("jsonType" -> "map")
     )
   }
@@ -887,8 +997,61 @@ class DataTypeSuite extends SparkFunSuite {
       exception = intercept[SparkException] {
         DataType.fromJson(json)
       },
-      errorClass = "COLLATION_INVALID_PROVIDER",
+      condition = "COLLATION_INVALID_PROVIDER",
       parameters = Map("provider" -> "badProvider", "supportedProviders" -> "spark, icu")
     )
+  }
+
+  test("parse array type with collation metadata") {
+    val unicodeCollationId = CollationFactory.collationNameToId("UNICODE")
+    val arrayJson =
+      s"""
+         |{
+         |  "type": "array",
+         |  "elementType": "string",
+         |  "containsNull": true
+         |}
+         |""".stripMargin
+
+    val collationsMap = Map("element" -> "UNICODE")
+
+    // Parse without collations map
+    assert(DataType.parseDataType(JsonMethods.parse(arrayJson)) === ArrayType(StringType))
+
+    val parsedWithCollations = DataType.parseDataType(
+        JsonMethods.parse(arrayJson), collationsMap = collationsMap)
+    assert(parsedWithCollations === ArrayType(StringType(unicodeCollationId)))
+  }
+
+  test("parse map type with collation metadata") {
+    val unicodeCollationId = CollationFactory.collationNameToId("UNICODE")
+    val mapJson =
+      s"""
+         |{
+         |  "type": "map",
+         |  "keyType": "string",
+         |  "valueType": "string",
+         |  "valueContainsNull": true
+         |}
+         |""".stripMargin
+
+    val collationsMap = Map("key" -> "UNICODE", "value" -> "UNICODE")
+
+    // Parse without collations map
+    assert(DataType.parseDataType(JsonMethods.parse(mapJson)) === MapType(StringType, StringType))
+
+    val parsedWithCollations = DataType.parseDataType(
+      JsonMethods.parse(mapJson), collationsMap = collationsMap)
+    assert(parsedWithCollations ===
+      MapType(StringType(unicodeCollationId), StringType(unicodeCollationId)))
+  }
+
+  test("SPARK-48680: Add CharType and VarcharType to DataTypes JAVA API") {
+    assert(DataTypes.createCharType(1) === CharType(1))
+    assert(DataTypes.createVarcharType(100) === VarcharType(100))
+    val exception = intercept[IllegalArgumentException] {
+      DataTypes.createVarcharType(-1)
+    }
+    assert(exception.getMessage.contains("The length of varchar type cannot be negative."))
   }
 }

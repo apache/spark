@@ -125,7 +125,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("substr('abcd', 2, 3, 4)")
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> toSQLId("substr"),
         "expectedNum" -> "[2, 3]",
@@ -146,7 +146,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
         spark.udf.register("foo", (_: String).length)
         df.selectExpr("foo(2, 3, 4)")
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> toSQLId("foo"),
         "expectedNum" -> "1",
@@ -166,7 +166,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         spark.emptyDataFrame.selectExpr(sqlText)
       },
-      errorClass = "UNRESOLVED_ROUTINE",
+      condition = "UNRESOLVED_ROUTINE",
       parameters = Map(
         "routineName" -> "`a_function_that_does_not_exist`",
         "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
@@ -772,10 +772,11 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception =
         intercept[AnalysisException](df.select(myUdf(Column("col")))),
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`b`",
-        "proposal" -> "`a`"))
+        "proposal" -> "`a`"),
+      context = ExpectedContext("apply", ".*"))
   }
 
   test("wrong order of input fields for case class") {
@@ -820,14 +821,14 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val e1 = intercept[SparkException] {
       Seq("20").toDF("col").select(udf(f1).apply(Column("col"))).collect()
     }
-    assert(e1.getErrorClass == "FAILED_EXECUTE_UDF")
+    assert(e1.getCondition == "FAILED_EXECUTE_UDF")
     assert(e1.getCause.getStackTrace.head.toString.contains(
       "UDFSuite$MalformedClassObject$MalformedNonPrimitiveFunction"))
 
     val e2 = intercept[SparkException] {
       Seq(20).toDF("col").select(udf(f2).apply(Column("col"))).collect()
     }
-    assert(e2.getErrorClass == "FAILED_EXECUTE_UDF")
+    assert(e2.getCondition == "FAILED_EXECUTE_UDF")
     assert(e2.getCause.getStackTrace.head.toString.contains(
       "UDFSuite$MalformedClassObject$MalformedPrimitiveFunction"))
   }
@@ -937,7 +938,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val e = intercept[SparkException] {
       input.select(overflowFunc($"dateTime")).collect()
     }
-    assert(e.getErrorClass == "FAILED_EXECUTE_UDF")
+    assert(e.getCondition == "FAILED_EXECUTE_UDF")
     assert(e.getCause.isInstanceOf[java.lang.ArithmeticException])
   }
 
@@ -1052,7 +1053,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val e = intercept[SparkException] {
       input.select(overflowFunc($"d")).collect()
     }
-    assert(e.getErrorClass == "FAILED_EXECUTE_UDF")
+    assert(e.getCondition == "FAILED_EXECUTE_UDF")
     assert(e.getCause.isInstanceOf[java.lang.ArithmeticException])
   }
 
@@ -1100,7 +1101,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val e = intercept[SparkException] {
       input.select(overflowFunc($"p")).collect()
     }
-    assert(e.getErrorClass == "FAILED_EXECUTE_UDF")
+    assert(e.getCondition == "FAILED_EXECUTE_UDF")
     assert(e.getCause.isInstanceOf[java.lang.ArithmeticException])
   }
 
@@ -1205,10 +1206,17 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       )
       checkError(
         intercept[AnalysisException](spark.range(1).select(f())),
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
         sqlState = "0A000",
         parameters = Map("dataType" -> s"\"${dt.sql}\"")
       )
     }
+  }
+
+  test("SPARK-47927: ScalaUDF null handling") {
+    val f = udf[Int, Int](_ + 1)
+    val df = Seq(Some(1), None).toDF("c")
+      .select(f($"c").as("f"), f($"f"))
+    checkAnswer(df, Seq(Row(2, 3), Row(null, null)))
   }
 }

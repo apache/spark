@@ -48,6 +48,13 @@ try:
 except Exception as e:
     test_not_compiled_message = str(e)
 
+plotly_requirement_message = None
+try:
+    import plotly
+except ImportError as e:
+    plotly_requirement_message = str(e)
+have_plotly = plotly_requirement_message is None
+
 from pyspark.sql import SparkSession
 from pyspark.sql.types import ArrayType, DoubleType, UserDefinedType, Row
 from pyspark.testing.utils import ReusedPySparkTestCase, PySparkErrorTestUtils
@@ -246,6 +253,29 @@ class SQLTestUtils:
         finally:
             for f in functions:
                 self.spark.sql("DROP FUNCTION IF EXISTS %s" % f)
+
+    @contextmanager
+    def temp_env(self, pairs):
+        assert isinstance(pairs, dict), "pairs should be a dictionary."
+
+        keys = pairs.keys()
+        new_values = pairs.values()
+        old_values = [os.environ.get(key, None) for key in keys]
+        for key, new_value in zip(keys, new_values):
+            if new_value is None:
+                if key in os.environ:
+                    del os.environ[key]
+            else:
+                os.environ[key] = new_value
+        try:
+            yield
+        finally:
+            for key, old_value in zip(keys, old_values):
+                if old_value is None:
+                    if key in os.environ:
+                        del os.environ[key]
+                else:
+                    os.environ[key] = old_value
 
     @staticmethod
     def assert_close(a, b):

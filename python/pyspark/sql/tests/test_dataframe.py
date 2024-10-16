@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import glob
+import os
 import pydoc
 import shutil
 import tempfile
@@ -37,7 +39,9 @@ from pyspark.errors import (
     AnalysisException,
     IllegalArgumentException,
     PySparkTypeError,
+    PySparkValueError,
 )
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pyarrow,
@@ -45,6 +49,7 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
+from pyspark.testing.utils import SPARK_HOME
 
 
 class DataFrameTestsMixin:
@@ -61,8 +66,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_STR",
-            message_parameters={"arg_name": "tableName", "arg_type": "NoneType"},
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "tableName", "arg_type": "NoneType"},
         )
 
     def test_dataframe_star(self):
@@ -113,7 +118,6 @@ class DataFrameTestsMixin:
 
         self.assertEqual(df3.select(count(df3["*"])).columns, ["count(1)"])
         self.assertEqual(df3.select(count(col("*"))).columns, ["count(1)"])
-        self.assertEqual(df3.select(count(col("s.*"))).columns, ["count(1)"])
 
     def test_self_join(self):
         df1 = self.spark.range(10).withColumn("a", lit(0))
@@ -129,6 +133,20 @@ class DataFrameTestsMixin:
         df3 = df2.join(df, df2.b == df.b)
         self.assertTrue(df3.columns, ["aa", "b", "a", "b"])
         self.assertTrue(df3.count() == 2)
+
+    def test_self_join_III(self):
+        df1 = self.spark.range(10).withColumn("value", lit(1))
+        df2 = df1.union(df1)
+        df3 = df1.join(df2, df1.id == df2.id, "left")
+        self.assertTrue(df3.columns, ["id", "value", "id", "value"])
+        self.assertTrue(df3.count() == 20)
+
+    def test_self_join_IV(self):
+        df1 = self.spark.range(10).withColumn("value", lit(1))
+        df2 = df1.withColumn("value", lit(2)).union(df1.withColumn("value", lit(3)))
+        df3 = df1.join(df2, df1.id == df2.id, "right")
+        self.assertTrue(df3.columns, ["id", "value", "id", "value"])
+        self.assertTrue(df3.count() == 20)
 
     def test_duplicated_column_names(self):
         df = self.spark.createDataFrame([(1, 2)], ["c", "c"])
@@ -216,8 +234,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_DICT",
-            message_parameters={"arg_name": "colsMap", "arg_type": "tuple"},
+            errorClass="NOT_DICT",
+            messageParameters={"arg_name": "colsMap", "arg_type": "tuple"},
         )
 
     def test_with_columns_renamed_with_duplicated_names(self):
@@ -267,8 +285,27 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_LIST_OR_TUPLE",
-            message_parameters={"arg_name": "subset", "arg_type": "str"},
+            errorClass="NOT_LIST_OR_TUPLE",
+            messageParameters={"arg_name": "subset", "arg_type": "str"},
+        )
+
+        # Should raise proper error when taking non-string values
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.dropDuplicates([None]).show()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "subset", "arg_type": "NoneType"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.dropDuplicates([1]).show()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "subset", "arg_type": "int"},
         )
 
     def test_drop_duplicates_with_ambiguous_reference(self):
@@ -415,8 +452,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_BOOL_OR_FLOAT_OR_INT",
-            message_parameters={
+            errorClass="NOT_BOOL_OR_FLOAT_OR_INT",
+            messageParameters={
                 "arg_name": "withReplacement (optional), fraction (required) and seed (optional)",
                 "arg_type": "NoneType, NoneType, NoneType",
             },
@@ -448,8 +485,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_LIST_OF_STR",
-            message_parameters={"arg_name": "cols", "arg_type": "NoneType"},
+            errorClass="NOT_LIST_OF_STR",
+            messageParameters={"arg_name": "cols", "arg_type": "NoneType"},
         )
 
     def test_toDF_with_schema_string(self):
@@ -472,14 +509,16 @@ class DataFrameTestsMixin:
 
         # number of fields must match.
         self.assertRaisesRegex(
-            Exception, "FIELD_STRUCT_LENGTH_MISMATCH", lambda: rdd.toDF("key: int").collect()
+            Exception,
+            "FIELD_STRUCT_LENGTH_MISMATCH",
+            lambda: rdd.coalesce(1).toDF("key: int").collect(),
         )
 
         # field types mismatch will cause exception at runtime.
         self.assertRaisesRegex(
             Exception,
             "FIELD_DATA_TYPE_UNACCEPTABLE",
-            lambda: rdd.toDF("key: float, value: string").collect(),
+            lambda: rdd.coalesce(1).toDF("key: float, value: string").collect(),
         )
 
         # flat schema values will be wrapped into row.
@@ -531,7 +570,7 @@ class DataFrameTestsMixin:
     def test_invalid_join_method(self):
         df1 = self.spark.createDataFrame([("Alice", 5), ("Bob", 8)], ["name", "age"])
         df2 = self.spark.createDataFrame([("Alice", 80), ("Bob", 90)], ["name", "height"])
-        self.assertRaises(IllegalArgumentException, lambda: df1.join(df2, how="invalid-join-type"))
+        self.assertRaises(AnalysisException, lambda: df1.join(df2, how="invalid-join-type"))
 
     # Cartesian products require cross join syntax
     def test_require_cross(self):
@@ -637,8 +676,7 @@ class DataFrameTestsMixin:
                     |+---+-----+
                     ||  1|    1|
                     |+---+-----+
-                    |only showing top 1 row
-                    |"""
+                    |only showing top 1 row"""
                     self.assertEqual(re.sub(pattern, "", expected3), df.__repr__())
 
         # test when eager evaluation is enabled and _repr_html_ will be called
@@ -685,8 +723,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_DATAFRAME",
-            message_parameters={"arg_name": "other", "arg_type": "int"},
+            errorClass="NOT_DATAFRAME",
+            messageParameters={"arg_name": "other", "arg_type": "int"},
         )
 
     def test_input_files(self):
@@ -721,8 +759,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_INT",
-            message_parameters={"arg_name": "n", "arg_type": "bool"},
+            errorClass="NOT_INT",
+            messageParameters={"arg_name": "n", "arg_type": "bool"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -730,8 +768,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_BOOL",
-            message_parameters={"arg_name": "vertical", "arg_type": "str"},
+            errorClass="NOT_BOOL",
+            messageParameters={"arg_name": "vertical", "arg_type": "str"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -739,9 +777,92 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_BOOL",
-            message_parameters={"arg_name": "truncate", "arg_type": "str"},
+            errorClass="NOT_BOOL",
+            messageParameters={"arg_name": "truncate", "arg_type": "str"},
         )
+
+    def test_df_merge_into(self):
+        filename_pattern = (
+            "sql/catalyst/target/scala-*/test-classes/org/apache/spark/sql/connector/catalog/"
+            "InMemoryRowLevelOperationTableCatalog.class"
+        )
+        if not bool(glob.glob(os.path.join(SPARK_HOME, filename_pattern))):
+            raise unittest.SkipTest(
+                "org.apache.spark.sql.connector.catalog.InMemoryRowLevelOperationTableCatalog' "
+                "is not available. Will skip the related tests"
+            )
+
+        try:
+            # InMemoryRowLevelOperationTableCatalog is a test catalog that is included in the
+            # catalyst-test package. If Spark complains that it can't find this class, make sure
+            # the catalyst-test JAR does exist in "SPARK_HOME/assembly/target/scala-x.xx/jars"
+            # directory. If not, build it with `build/sbt test:assembly` and copy it over.
+            self.spark.conf.set(
+                "spark.sql.catalog.testcat",
+                "org.apache.spark.sql.connector.catalog.InMemoryRowLevelOperationTableCatalog",
+            )
+            with self.table("testcat.ns1.target"):
+
+                def reset_target_table():
+                    self.spark.createDataFrame(
+                        [(1, "Alice"), (2, "Bob")], ["id", "name"]
+                    ).write.mode("overwrite").saveAsTable("testcat.ns1.target")
+
+                source = self.spark.createDataFrame(
+                    [(1, "Charlie"), (3, "David")], ["id", "name"]
+                )  # type: DataFrame
+
+                from pyspark.sql.functions import col
+
+                # Match -> update, NotMatch -> insert, NotMatchedBySource -> delete
+                reset_target_table()
+                # fmt: off
+                source.mergeInto("testcat.ns1.target", source.id == col("target.id")) \
+                    .whenMatched(source.id == 1).update({"name": source.name}) \
+                    .whenNotMatched().insert({"id": source.id, "name": source.name}) \
+                    .whenNotMatchedBySource().delete() \
+                    .merge()
+                # fmt: on
+                self.assertEqual(
+                    self.spark.table("testcat.ns1.target").orderBy("id").collect(),
+                    [Row(id=1, name="Charlie"), Row(id=3, name="David")],
+                )
+
+                # Match -> updateAll, NotMatch -> insertAll, NotMatchedBySource -> update
+                reset_target_table()
+                # fmt: off
+                source.mergeInto("testcat.ns1.target", source.id == col("target.id")) \
+                    .whenMatched(source.id == 1).updateAll() \
+                    .whenNotMatched(source.id == 3).insertAll() \
+                    .whenNotMatchedBySource(col("target.id") == lit(2)) \
+                      .update({"name": lit("not_matched")}) \
+                    .merge()
+                # fmt: on
+                self.assertEqual(
+                    self.spark.table("testcat.ns1.target").orderBy("id").collect(),
+                    [
+                        Row(id=1, name="Charlie"),
+                        Row(id=2, name="not_matched"),
+                        Row(id=3, name="David"),
+                    ],
+                )
+
+                # Match -> delete, NotMatchedBySource -> delete
+                reset_target_table()
+                # fmt: off
+                self.spark.createDataFrame([(1, "AliceJr")], ["id", "name"]) \
+                    .write.mode("append").saveAsTable("testcat.ns1.target")
+                source.mergeInto("testcat.ns1.target", source.id == col("target.id")) \
+                    .whenMatched(col("target.name") != lit("AliceJr")).delete() \
+                    .whenNotMatchedBySource().delete() \
+                    .merge()
+                # fmt: on
+                self.assertEqual(
+                    self.spark.table("testcat.ns1.target").orderBy("id").collect(),
+                    [Row(id=1, name="AliceJr")],
+                )
+        finally:
+            self.spark.conf.unset("spark.sql.catalog.testcat")
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -799,8 +920,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_STR",
-            message_parameters={"arg_name": "colName", "arg_type": "int"},
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "colName", "arg_type": "int"},
         )
 
     def test_where(self):
@@ -809,8 +930,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "condition", "arg_type": "int"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "condition", "arg_type": "int"},
         )
 
     def test_duplicate_field_names(self):
@@ -844,14 +965,96 @@ class DataFrameTestsMixin:
     def test_isinstance_dataframe(self):
         self.assertIsInstance(self.spark.range(1), DataFrame)
 
-    def test_checkpoint_dataframe(self):
+    def test_local_checkpoint_dataframe(self):
         with io.StringIO() as buf, redirect_stdout(buf):
             self.spark.range(1).localCheckpoint().explain()
             self.assertIn("ExistingRDD", buf.getvalue())
 
+    def test_local_checkpoint_dataframe_with_storage_level(self):
+        # We don't have a way to reach into the server and assert the storage level server side, but
+        # this test should cover for unexpected errors in the API.
+        df = self.spark.range(10).localCheckpoint(eager=True, storageLevel=StorageLevel.DISK_ONLY)
+        df.collect()
+
+    def test_transpose(self):
+        df = self.spark.createDataFrame([{"a": "x", "b": "y", "c": "z"}])
+
+        # default index column
+        transposed_df = df.transpose()
+        expected_schema = StructType(
+            [StructField("key", StringType(), False), StructField("x", StringType(), True)]
+        )
+        expected_data = [Row(key="b", x="y"), Row(key="c", x="z")]
+        expected_df = self.spark.createDataFrame(expected_data, schema=expected_schema)
+        assertDataFrameEqual(transposed_df, expected_df, checkRowOrder=True)
+
+        # specified index column
+        transposed_df = df.transpose("c")
+        expected_schema = StructType(
+            [StructField("key", StringType(), False), StructField("z", StringType(), True)]
+        )
+        expected_data = [Row(key="a", z="x"), Row(key="b", z="y")]
+        expected_df = self.spark.createDataFrame(expected_data, schema=expected_schema)
+        assertDataFrameEqual(transposed_df, expected_df, checkRowOrder=True)
+
+        # enforce transpose max values
+        with self.sql_conf({"spark.sql.transposeMaxValues": 0}):
+            with self.assertRaises(AnalysisException) as pe:
+                df.transpose().collect()
+            self.check_error(
+                exception=pe.exception,
+                errorClass="TRANSPOSE_EXCEED_ROW_LIMIT",
+                messageParameters={"maxValues": "0", "config": "spark.sql.transposeMaxValues"},
+            )
+
+        # enforce ascending order based on index column values for transposed columns
+        df = self.spark.createDataFrame([{"a": "z"}, {"a": "y"}, {"a": "x"}])
+        transposed_df = df.transpose()
+        expected_schema = StructType(
+            [
+                StructField("key", StringType(), False),
+                StructField("x", StringType(), True),
+                StructField("y", StringType(), True),
+                StructField("z", StringType(), True),
+            ]
+        )  # z, y, x -> x, y, z
+        expected_df = self.spark.createDataFrame([], schema=expected_schema)
+        assertDataFrameEqual(transposed_df, expected_df, checkRowOrder=True)
+
+        # enforce AtomicType Attribute for index column values
+        df = self.spark.createDataFrame([{"a": ["x", "x"], "b": "y", "c": "z"}])
+        with self.assertRaises(AnalysisException) as pe:
+            df.transpose().collect()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="TRANSPOSE_INVALID_INDEX_COLUMN",
+            messageParameters={
+                "reason": "Index column must be of atomic type, "
+                "but found: ArrayType(StringType,true)"
+            },
+        )
+
+        # enforce least common type for non-index columns
+        df = self.spark.createDataFrame([{"a": "x", "b": "y", "c": 1}])
+        with self.assertRaises(AnalysisException) as pe:
+            df.transpose().collect()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="TRANSPOSE_NO_LEAST_COMMON_TYPE",
+            messageParameters={"dt1": "STRING", "dt2": "BIGINT"},
+        )
+
 
 class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
-    pass
+    def test_query_execution_unsupported_in_classic(self):
+        with self.assertRaises(PySparkValueError) as pe:
+            self.spark.range(1).executionInfo
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="CLASSIC_OPERATION_NOT_SUPPORTED_ON_DF",
+            messageParameters={"member": "queryExecution"},
+        )
 
 
 if __name__ == "__main__":

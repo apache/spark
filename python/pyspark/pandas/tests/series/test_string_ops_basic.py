@@ -38,7 +38,7 @@ class SeriesStringOpsMixin:
                 "\nleading-whitespace",
                 "trailing-Whitespace    \t",
                 None,
-                np.NaN,
+                np.nan,
             ]
         )
 

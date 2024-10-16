@@ -31,7 +31,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys.{NUM_RETRY, WRITE_AHEAD_LOG_INFO}
 import org.apache.spark.util.{CompletionIterator, ThreadUtils}
 import org.apache.spark.util.ArrayImplicits._
@@ -137,7 +137,8 @@ private[streaming] class FileBasedWriteAheadLog(
    */
   def readAll(): JIterator[ByteBuffer] = synchronized {
     val logFilesToRead = pastLogs.map{ _.path} ++ currentLogPath
-    logInfo("Reading from the logs:\n" + logFilesToRead.mkString("\n"))
+    logInfo(log"Reading from the logs:\n" +
+      log"${MDC(LogKeys.PATHS, logFilesToRead.mkString("\n"))}")
     def readFile(file: String): Iterator[ByteBuffer] = {
       logDebug(s"Creating log reader with $file")
       val reader = new FileBasedWriteAheadLogReader(file, hadoopConf)
@@ -170,8 +171,11 @@ private[streaming] class FileBasedWriteAheadLog(
       pastLogs --= expiredLogs
       expiredLogs
     }
-    logInfo(s"Attempting to clear ${oldLogFiles.size} old log files in $logDirectory " +
-      s"older than $threshTime: ${oldLogFiles.map { _.path }.mkString("\n")}")
+    logInfo(log"Attempting to clear ${MDC(LogKeys.NUM_RECORDS_READ, oldLogFiles.size)} " +
+      log"old log files in " +
+      log"${MDC(LogKeys.PATH, logDirectory)} older than " +
+      log"${MDC(LogKeys.THRESHOLD, threshTime)}: " +
+      log"${MDC(LogKeys.FILES, oldLogFiles.map(_.path).mkString("\n"))}")
 
     def deleteFile(walInfo: LogInfo): Unit = {
       try {
@@ -184,7 +188,8 @@ private[streaming] class FileBasedWriteAheadLog(
           logWarning(log"Error clearing write ahead log file " +
             log"${MDC(WRITE_AHEAD_LOG_INFO, walInfo)}", ex)
       }
-      logInfo(s"Cleared log files in $logDirectory older than $threshTime")
+      logInfo(log"Cleared log files in ${MDC(LogKeys.PATH, logDirectory)} older than " +
+        log"${MDC(LogKeys.THRESH_TIME, threshTime)}")
     }
     oldLogFiles.foreach { logInfo =>
       if (!executionContext.isShutdown) {
@@ -252,7 +257,9 @@ private[streaming] class FileBasedWriteAheadLog(
           fileSystem.listStatus(logDirectoryPath).map { _.getPath }.toImmutableArraySeq)
         pastLogs.clear()
         pastLogs ++= logFileInfo
-        logInfo(s"Recovered ${logFileInfo.size} write ahead log files from $logDirectory")
+        logInfo(log"Recovered ${MDC(LogKeys.NUM_FILES, logFileInfo.size)} " +
+          log"write ahead log files from " +
+          log"${MDC(LogKeys.PATH, logDirectory)}")
         logDebug(s"Recovered files are:\n${logFileInfo.map(_.path).mkString("\n")}")
       }
     } catch {

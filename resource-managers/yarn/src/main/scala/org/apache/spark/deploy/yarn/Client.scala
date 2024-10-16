@@ -960,14 +960,13 @@ private[spark] class Client(
   /**
    * Set up the environment for launching our ApplicationMaster container.
    */
-  private def setupLaunchEnv(
+  private[yarn] def setupLaunchEnv(
       stagingDirPath: Path,
       pySparkArchives: Seq[String]): HashMap[String, String] = {
     logInfo("Setting up the launch environment for our AM container")
     val env = new HashMap[String, String]()
     populateClasspath(args, hadoopConf, sparkConf, env, sparkConf.get(DRIVER_CLASS_PATH))
     env("SPARK_YARN_STAGING_DIR") = stagingDirPath.toString
-    env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
     env("SPARK_PREFER_IPV6") = Utils.preferIPv6.toString
 
     // Pick up any environment variables for the AM provided through spark.yarn.appMasterEnv.*
@@ -976,6 +975,10 @@ private[spark] class Client(
       .filter { case (k, v) => k.startsWith(amEnvPrefix) }
       .map { case (k, v) => (k.substring(amEnvPrefix.length), v) }
       .foreach { case (k, v) => YarnSparkHadoopUtil.addPathToEnvironment(env, k, v) }
+
+    if (!env.contains("SPARK_USER")) {
+      env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
+    }
 
     // If pyFiles contains any .py files, we need to add LOCALIZED_PYTHON_DIR to the PYTHONPATH
     // of the container processes too. Add all non-.py files directly to PYTHONPATH.
@@ -1211,11 +1214,11 @@ private[spark] class Client(
             cleanupStagingDir()
             return YarnAppReport(YarnApplicationState.KILLED, FinalApplicationStatus.KILLED, None)
           case NonFatal(e) if !e.isInstanceOf[InterruptedIOException] =>
-            val msg = s"Failed to contact YARN for application $appId."
+            val msg = log"Failed to contact YARN for application ${MDC(LogKeys.APP_ID, appId)}."
             logError(msg, e)
             // Don't necessarily clean up staging dir because status is unknown
             return YarnAppReport(YarnApplicationState.FAILED, FinalApplicationStatus.FAILED,
-              Some(msg))
+              Some(msg.message))
         }
       val state = report.getYarnApplicationState
       reportsSinceLastLog += 1
@@ -1385,7 +1388,7 @@ private[spark] class Client(
       val YarnAppReport(appState, finalState, diags) = monitorApplication()
       if (appState == YarnApplicationState.FAILED || finalState == FinalApplicationStatus.FAILED) {
         diags.foreach { err =>
-          logError(s"Application diagnostics message: $err")
+          logError(log"Application diagnostics message: ${MDC(LogKeys.ERROR, err)}")
         }
         throw new SparkException(s"Application $appId finished with failed status")
       }

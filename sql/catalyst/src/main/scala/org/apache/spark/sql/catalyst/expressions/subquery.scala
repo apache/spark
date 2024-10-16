@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, HintInfo, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -249,6 +249,129 @@ object SubExprUtils extends PredicateHelper {
       }
     }
   }
+
+  /**
+   * Matches an equality 'expr = func(outer)', where 'func(outer)' depends on outer rows or
+   * is a constant.
+   * A scalar subquery is allowed to group-by on 'expr', as they are guaranteed to have exactly
+   * one value for every outer row.
+   * Positive examples:
+   *   - x + 1 = outer(a)
+   *   - cast(x as date) = outer(b)
+   *   - y + z = 100
+   *   - y / 10 = outer(b) + outer(c)
+   * In all of these examples, the left side of the equality will be returned.
+   *
+   * Negative examples:
+   *    - x < outer(b)
+   *    - x = y
+   * In all of these examples, None will be returned.
+   * @param expr
+   * @return
+   */
+  private def getEquivalentToOuter(expr: Expression): Option[Expression] = {
+    val allowConstants =
+      SQLConf.get.getConf(SQLConf.SCALAR_SUBQUERY_ALLOW_GROUP_BY_COLUMN_EQUAL_TO_CONSTANT)
+
+    expr match {
+      case EqualTo(left, x)
+        if ((allowConstants || containsOuter(x)) &&
+          !x.exists(_.isInstanceOf[Attribute])) => Some(left)
+      case EqualTo(x, right)
+        if ((allowConstants || containsOuter(x)) &&
+          !x.exists(_.isInstanceOf[Attribute])) => Some(right)
+      case _ => None
+    }
+  }
+
+  /**
+   * Returns the inner query expressions that are guaranteed to have a single value for each
+   * outer row. Therefore, a scalar subquery is allowed to group-by on these expressions.
+   * We can derive these from correlated equality predicates, though we need to take care about
+   * propagating this through operators like OUTER JOIN or UNION.
+   *
+   * Positive examples:
+   * - x = outer(a) AND y = outer(b)
+   * - x = 1
+   * - x = outer(a) + 1
+   * - cast(x as date) = current_date() + outer(b)
+   *
+   * Negative examples:
+   * - x <= outer(a)
+   * - x + y = outer(a)
+   * - x = outer(a) OR y = outer(b)
+   * - y + outer(b) = 1 (this and similar expressions could be supported, but very carefully)
+   * - An equality under the right side of a LEFT OUTER JOIN, e.g.
+   *   select *, (select count(*) from y left join
+   *     (select * from z where z1 = x1) sub on y2 = z2 group by z1) from x;
+   * - An equality under UNION e.g.
+   *   select *, (select count(*) from
+   *     (select * from y where y1 = x1 union all select * from y) group by y1) from x;
+   */
+  def getCorrelatedEquivalentInnerExpressions(plan: LogicalPlan): ExpressionSet = {
+    plan match {
+      case Filter(cond, child) =>
+        val equivalentExprs = ExpressionSet(splitConjunctivePredicates(cond)
+          .filter(
+            SQLConf.get.getConf(SQLConf.SCALAR_SUBQUERY_ALLOW_GROUP_BY_COLUMN_EQUAL_TO_CONSTANT)
+            || containsOuter(_))
+          .flatMap(getEquivalentToOuter))
+        equivalentExprs ++ getCorrelatedEquivalentInnerExpressions(child)
+
+      case Join(left, right, joinType, _, _) =>
+         joinType match {
+          case _: InnerLike =>
+            ExpressionSet(plan.children.flatMap(
+              child => getCorrelatedEquivalentInnerExpressions(child)))
+          case LeftOuter => getCorrelatedEquivalentInnerExpressions(left)
+          case RightOuter => getCorrelatedEquivalentInnerExpressions(right)
+          case FullOuter => ExpressionSet().empty
+          case LeftSemi => getCorrelatedEquivalentInnerExpressions(left)
+          case LeftAnti => getCorrelatedEquivalentInnerExpressions(left)
+          case _ => ExpressionSet().empty
+        }
+
+      case _: Union => ExpressionSet().empty
+      case Except(left, _, _) => getCorrelatedEquivalentInnerExpressions(left)
+
+      case
+        _: Aggregate |
+        _: Distinct |
+        _: Intersect |
+        _: GlobalLimit |
+        _: LocalLimit |
+        _: Offset |
+        _: Project |
+        _: Repartition |
+        _: RepartitionByExpression |
+        _: RebalancePartitions |
+        _: Sample |
+        _: Sort |
+        _: Window |
+        _: Tail |
+        _: WithCTE |
+        _: Range |
+        _: SubqueryAlias =>
+        ExpressionSet(plan.children.flatMap(child =>
+          getCorrelatedEquivalentInnerExpressions(child)))
+
+      case _ => ExpressionSet().empty
+    }
+  }
+
+  // Returns grouping expressions of 'aggNode' of a scalar subquery that do not have equivalent
+  // columns in the outer query (bound by equality predicates like 'col = outer(c)').
+  // We use it to analyze whether a scalar subquery is guaranteed to return at most 1 row.
+  def nonEquivalentGroupbyCols(query: LogicalPlan, aggNode: Aggregate): ExpressionSet = {
+    val correlatedEquivalentExprs = getCorrelatedEquivalentInnerExpressions(query)
+    // Grouping expressions, except outer refs and constant expressions - grouping by an
+    // outer ref or a constant is always ok
+    val groupByExprs =
+    ExpressionSet(aggNode.groupingExpressions.filter(x => !x.isInstanceOf[OuterReference] &&
+      x.references.nonEmpty))
+    val nonEquivalentGroupByExprs = groupByExprs -- correlatedEquivalentExprs
+    nonEquivalentGroupByExprs
+  }
 }
 
 /**
@@ -262,6 +385,11 @@ object SubExprUtils extends PredicateHelper {
  * case the subquery yields no row at all on empty input to the GROUP BY, which evaluates to NULL.
  * It is set in PullupCorrelatedPredicates to true/false, before it is set its value is None.
  * See constructLeftJoins in RewriteCorrelatedScalarSubquery for more details.
+ *
+ * 'needSingleJoin' is set to true if we can't guarantee that the correlated scalar subquery
+ * returns at most 1 row. For such subqueries we use a modification of an outer join called
+ * LeftSingle join. This value is set in PullupCorrelatedPredicates and used in
+ * RewriteCorrelatedScalarSubquery.
  */
 case class ScalarSubquery(
     plan: LogicalPlan,
@@ -269,7 +397,8 @@ case class ScalarSubquery(
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty,
     hint: Option[HintInfo] = None,
-    mayHaveCountBug: Option[Boolean] = None)
+    mayHaveCountBug: Option[Boolean] = None,
+    needSingleJoin: Option[Boolean] = None)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
   override def dataType: DataType = {
     if (!plan.schema.fields.nonEmpty) {

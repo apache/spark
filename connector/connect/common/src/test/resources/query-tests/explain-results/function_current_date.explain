@@ -1,2 +1,0 @@
-Project [current_date(Some(America/Los_Angeles)) AS current_date()#0]
-+- LocalRelation <empty>, [d#0, t#0, s#0, x#0L, wt#0]

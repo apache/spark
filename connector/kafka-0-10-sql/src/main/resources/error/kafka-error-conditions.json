@@ -23,6 +23,13 @@
       "latest offset: <latestOffset>, end offset: <endOffset>"
     ]
   },
+  "KAFKA_START_OFFSET_DOES_NOT_MATCH_ASSIGNED" : {
+    "message" : [
+      "Partitions specified for Kafka start offsets don't match what are assigned. Maybe topic partitions are created ",
+      "or deleted while the query is running. Use -1 for latest, -2 for earliest.",
+      "Specified: <specifiedPartitions> Assigned: <assignedPartitions>"
+    ]
+  },
   "KAFKA_DATA_LOSS" : {
     "message" : [
       "Some data may have been lost because they are not available in Kafka any more;",

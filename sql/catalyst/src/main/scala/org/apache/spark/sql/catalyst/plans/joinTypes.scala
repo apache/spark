@@ -19,10 +19,22 @@ package org.apache.spark.sql.catalyst.plans
 
 import java.util.Locale
 
-import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
+import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
 object JoinType {
+
+  val supported = Seq(
+    "inner",
+    "outer", "full", "fullouter", "full_outer",
+    "leftouter", "left", "left_outer",
+    "rightouter", "right", "right_outer",
+    "leftsemi", "left_semi", "semi",
+    "leftanti", "left_anti", "anti",
+    "cross"
+  )
+
   def apply(typ: String): JoinType = typ.toLowerCase(Locale.ROOT).replace("_", "") match {
     case "inner" => Inner
     case "outer" | "full" | "fullouter" => FullOuter
@@ -32,20 +44,12 @@ object JoinType {
     case "leftanti" | "anti" => LeftAnti
     case "cross" => Cross
     case _ =>
-      val supported = Seq(
-        "inner",
-        "outer", "full", "fullouter", "full_outer",
-        "leftouter", "left", "left_outer",
-        "rightouter", "right", "right_outer",
-        "leftsemi", "left_semi", "semi",
-        "leftanti", "left_anti", "anti",
-        "cross")
-
-      throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3216",
+      throw new AnalysisException(
+        errorClass = "UNSUPPORTED_JOIN_TYPE",
         messageParameters = Map(
           "typ" -> typ,
-          "supported" -> supported.mkString("'", "', '", "'")))
+          "supported" -> supported.mkString("'", "', '", "'"))
+      )
   }
 }
 
@@ -91,6 +95,10 @@ case object LeftAnti extends JoinType {
   override def sql: String = "LEFT ANTI"
 }
 
+case object LeftSingle extends JoinType {
+  override def sql: String = "LEFT SINGLE"
+}
+
 case class ExistenceJoin(exists: Attribute) extends JoinType {
   override def sql: String = {
     // This join type is only used in the end of optimizer and physical plans, we will not
@@ -129,15 +137,16 @@ object LeftSemiOrAnti {
 
 object AsOfJoinDirection {
 
+  val supported = Seq("forward", "backward", "nearest")
+
   def apply(direction: String): AsOfJoinDirection = {
     direction.toLowerCase(Locale.ROOT) match {
       case "forward" => Forward
       case "backward" => Backward
       case "nearest" => Nearest
       case _ =>
-        val supported = Seq("forward", "backward", "nearest")
-        throw new SparkIllegalArgumentException(
-          errorClass = "_LEGACY_ERROR_TEMP_3217",
+        throw new AnalysisException(
+          errorClass = "AS_OF_JOIN.UNSUPPORTED_DIRECTION",
           messageParameters = Map(
             "direction" -> direction,
             "supported" -> supported.mkString("'", "', '", "'")))

@@ -95,7 +95,7 @@ private[parquet] class ParquetPrimitiveConverter(val updater: ParentContainerUpd
   override def addLong(value: Long): Unit = updater.setLong(value)
   override def addFloat(value: Float): Unit = updater.setFloat(value)
   override def addDouble(value: Double): Unit = updater.setDouble(value)
-  override def addBinary(value: Binary): Unit = updater.set(value.getBytes)
+  override def addBinary(value: Binary): Unit = updater.set(value.getBytesUnsafe)
 }
 
 /**
@@ -562,7 +562,7 @@ private[parquet] class ParquetRowConverter(
 
     override def setDictionary(dictionary: Dictionary): Unit = {
       this.expandedDictionary = Array.tabulate(dictionary.getMaxId + 1) { i =>
-        UTF8String.fromBytes(dictionary.decodeToBinary(i).getBytes)
+        UTF8String.fromBytes(dictionary.decodeToBinary(i).getBytesUnsafe)
       }
     }
 
@@ -622,7 +622,7 @@ private[parquet] class ParquetRowConverter(
         Decimal(unscaled, precision, scale)
       } else {
         // Otherwise, resorts to an unscaled `BigInteger` instead.
-        Decimal(new BigDecimal(new BigInteger(value.getBytes), scale), precision, scale)
+        Decimal(new BigDecimal(new BigInteger(value.getBytesUnsafe), scale), precision, scale)
       }
     }
   }
@@ -857,20 +857,18 @@ private[parquet] class ParquetRowConverter(
     private[this] val converters = {
       if (parquetType.getFieldCount() != 2) {
         // We may allow more than two children in the future, so consider this unsupported.
-        throw QueryCompilationErrors.
-          parquetTypeUnsupportedYetError("variant column must contain exactly two fields")
+        throw QueryCompilationErrors.invalidVariantWrongNumFieldsError()
       }
       val valueAndMetadata = Seq("value", "metadata").map { colName =>
         val idx = (0 until parquetType.getFieldCount())
             .find(parquetType.getFieldName(_) == colName)
         if (idx.isEmpty) {
-          throw QueryCompilationErrors.illegalParquetTypeError(s"variant missing $colName field")
+          throw QueryCompilationErrors.invalidVariantMissingFieldError(colName)
         }
         val child = parquetType.getType(idx.get)
         if (!child.isPrimitive || child.getRepetition != Type.Repetition.REQUIRED ||
             child.asPrimitiveType().getPrimitiveTypeName != BINARY) {
-          throw QueryCompilationErrors.illegalParquetTypeError(
-            s"variant column must be a non-nullable binary")
+          throw QueryCompilationErrors.invalidVariantNullableOrNotBinaryFieldError(colName)
         }
         child
       }

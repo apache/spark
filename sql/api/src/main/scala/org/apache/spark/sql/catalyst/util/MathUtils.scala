@@ -89,10 +89,7 @@ object MathUtils {
 
   def floorMod(a: Long, b: Long): Long = withOverflow(Math.floorMod(a, b))
 
-  def withOverflow[A](
-      f: => A,
-      hint: String = "",
-      context: QueryContext = null): A = {
+  def withOverflow[A](f: => A, hint: String = "", context: QueryContext = null): A = {
     try {
       f
     } catch {

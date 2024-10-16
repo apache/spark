@@ -28,7 +28,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange, V1Table}
@@ -1039,7 +1039,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
     assert(catalog.namespaceExists(testNs) === false)
 
-    val exc = intercept[NoSuchDatabaseException] {
+    val exc = intercept[NoSuchNamespaceException] {
       catalog.createTable(testIdent, columns, emptyTrans, emptyProps)
     }
 
@@ -1156,7 +1156,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
     assert(catalog.namespaceExists(testNs) === false)
 
-    val exc = intercept[NoSuchDatabaseException] {
+    val exc = intercept[NoSuchNamespaceException] {
       catalog.alterNamespace(testNs, NamespaceChange.setProperty("property", "value"))
     }
 
@@ -1173,7 +1173,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
         exception = intercept[SparkUnsupportedOperationException] {
           catalog.alterNamespace(testNs, NamespaceChange.removeProperty(p))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_2069",
+        condition = "CANNOT_REMOVE_RESERVED_PROPERTY",
         parameters = Map("property" -> p))
 
     }
@@ -1184,7 +1184,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     val testIdent: IdentifierHelper = Identifier.of(Array("a", "b"), "c")
     checkError(
       exception = intercept[AnalysisException](testIdent.asTableIdentifier),
-      errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+      condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
       parameters = Map("identifier" -> "`a`.`b`.`c`")
     )
   }
@@ -1193,7 +1193,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     val testIdent: MultipartIdentifierHelper = Seq("a", "b", "c")
     checkError(
       exception = intercept[AnalysisException](testIdent.asFunctionIdentifier),
-      errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+      condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
       parameters = Map("identifier" -> "`a`.`b`.`c`")
     )
   }

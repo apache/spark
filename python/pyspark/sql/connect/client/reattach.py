@@ -24,7 +24,7 @@ import warnings
 import uuid
 from collections.abc import Generator
 from typing import Optional, Any, Iterator, Iterable, Tuple, Callable, cast, Type, ClassVar
-from multiprocessing.pool import ThreadPool
+from concurrent.futures import ThreadPoolExecutor
 import os
 
 import grpc
@@ -58,7 +58,19 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
     # Lock to manage the pool
     _lock: ClassVar[RLock] = RLock()
-    _release_thread_pool: Optional[ThreadPool] = ThreadPool(os.cpu_count() if os.cpu_count() else 8)
+    _release_thread_pool_instance: Optional[ThreadPoolExecutor] = None
+
+    @classmethod  # type: ignore[misc]
+    @property
+    def _release_thread_pool(cls) -> ThreadPoolExecutor:
+        # Perform a first check outside the critical path.
+        if cls._release_thread_pool_instance is not None:
+            return cls._release_thread_pool_instance
+        with cls._lock:
+            if cls._release_thread_pool_instance is None:
+                max_workers = os.cpu_count() or 8
+                cls._release_thread_pool_instance = ThreadPoolExecutor(max_workers=max_workers)
+            return cls._release_thread_pool_instance
 
     @classmethod
     def shutdown(cls: Type["ExecutePlanResponseReattachableIterator"]) -> None:
@@ -67,19 +79,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
         outstanding calls are closed.
         """
         with cls._lock:
-            if cls._release_thread_pool is not None:
-                cls._release_thread_pool.close()
-                cls._release_thread_pool.join()
-                cls._release_thread_pool = None
-
-    @classmethod
-    def _initialize_pool_if_necessary(cls: Type["ExecutePlanResponseReattachableIterator"]) -> None:
-        """
-        If the processing pool for the release calls is None, initialize the pool exactly once.
-        """
-        with cls._lock:
-            if cls._release_thread_pool is None:
-                cls._release_thread_pool = ThreadPool(os.cpu_count() if os.cpu_count() else 8)
+            if cls._release_thread_pool_instance is not None:
+                cls._release_thread_pool.shutdown()  # type: ignore[attr-defined]
+                cls._release_thread_pool_instance = None
 
     def __init__(
         self,
@@ -88,7 +90,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         retrying: Callable[[], Retrying],
         metadata: Iterable[Tuple[str, str]],
     ):
-        ExecutePlanResponseReattachableIterator._initialize_pool_if_necessary()
+        self._release_thread_pool  # Trigger initialization
         self._request = request
         self._retrying = retrying
         if request.operation_id:
@@ -206,8 +208,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
             except Exception as e:
                 warnings.warn(f"ReleaseExecute failed with exception: {e}.")
 
-        if ExecutePlanResponseReattachableIterator._release_thread_pool is not None:
-            ExecutePlanResponseReattachableIterator._release_thread_pool.apply_async(target)
+        with self._lock:
+            if self._release_thread_pool_instance is not None:
+                self._release_thread_pool.submit(target)
 
     def _release_all(self) -> None:
         """
@@ -230,8 +233,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
             except Exception as e:
                 warnings.warn(f"ReleaseExecute failed with exception: {e}.")
 
-        if ExecutePlanResponseReattachableIterator._release_thread_pool is not None:
-            ExecutePlanResponseReattachableIterator._release_thread_pool.apply_async(target)
+        with self._lock:
+            if self._release_thread_pool_instance is not None:
+                self._release_thread_pool.submit(target)
         self._result_complete = True
 
     def _call_iter(self, iter_fun: Callable) -> Any:
@@ -260,8 +264,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
             ):
                 if self._last_returned_response_id is not None:
                     raise PySparkRuntimeError(
-                        error_class="RESPONSE_ALREADY_RECEIVED",
-                        message_parameters={},
+                        errorClass="RESPONSE_ALREADY_RECEIVED",
+                        messageParameters={},
                     )
                 # Try a new ExecutePlan, and throw upstream for retry.
                 self._iterator = iter(
@@ -278,8 +282,14 @@ class ExecutePlanResponseReattachableIterator(Generator):
             raise e
 
     def _create_reattach_execute_request(self) -> pb2.ReattachExecuteRequest:
+        server_side_session_id = (
+            None
+            if not self._initial_request.client_observed_server_side_session_id
+            else self._initial_request.client_observed_server_side_session_id
+        )
         reattach = pb2.ReattachExecuteRequest(
             session_id=self._initial_request.session_id,
+            client_observed_server_side_session_id=server_side_session_id,
             user_context=self._initial_request.user_context,
             operation_id=self._initial_request.operation_id,
         )

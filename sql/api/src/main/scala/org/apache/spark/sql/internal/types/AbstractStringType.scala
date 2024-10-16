@@ -21,33 +21,79 @@ import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
 
 /**
- * StringTypeCollated is an abstract class for StringType with collation support.
+ * AbstractStringType is an abstract class for StringType with collation support. As every type of
+ * collation can support trim specifier this class is parametrized with it.
  */
-abstract class AbstractStringType extends AbstractDataType {
+abstract class AbstractStringType(private[sql] val supportsTrimCollation: Boolean = false)
+    extends AbstractDataType {
   override private[sql] def defaultConcreteType: DataType = SqlApiConf.get.defaultStringType
   override private[sql] def simpleString: String = "string"
+  private[sql] def canUseTrimCollation(other: DataType): Boolean =
+    supportsTrimCollation || !other.asInstanceOf[StringType].usesTrimCollation
 }
 
 /**
  * Use StringTypeBinary for expressions supporting only binary collation.
  */
-case object StringTypeBinary extends AbstractStringType {
+case class StringTypeBinary(override val supportsTrimCollation: Boolean = false)
+    extends AbstractStringType(supportsTrimCollation) {
   override private[sql] def acceptsType(other: DataType): Boolean =
-    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].supportsBinaryEquality
+    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].supportsBinaryEquality &&
+      canUseTrimCollation(other)
+}
+
+object StringTypeBinary extends StringTypeBinary(false) {
+  def apply(supportsTrimCollation: Boolean): StringTypeBinary = {
+    new StringTypeBinary(supportsTrimCollation)
+  }
 }
 
 /**
  * Use StringTypeBinaryLcase for expressions supporting only binary and lowercase collation.
  */
-case object StringTypeBinaryLcase extends AbstractStringType {
+case class StringTypeBinaryLcase(override val supportsTrimCollation: Boolean = false)
+    extends AbstractStringType(supportsTrimCollation) {
   override private[sql] def acceptsType(other: DataType): Boolean =
     other.isInstanceOf[StringType] && (other.asInstanceOf[StringType].supportsBinaryEquality ||
-      other.asInstanceOf[StringType].isUTF8BinaryLcaseCollation)
+      other.asInstanceOf[StringType].isUTF8LcaseCollation) && canUseTrimCollation(other)
+}
+
+object StringTypeBinaryLcase extends StringTypeBinaryLcase(false) {
+  def apply(supportsTrimCollation: Boolean): StringTypeBinaryLcase = {
+    new StringTypeBinaryLcase(supportsTrimCollation)
+  }
 }
 
 /**
- * Use StringTypeAnyCollation for expressions supporting all possible collation types.
+ * Use StringTypeWithCaseAccentSensitivity for expressions supporting all collation types (binary
+ * and ICU) but limited to using case and accent sensitivity specifiers.
  */
-case object StringTypeAnyCollation extends AbstractStringType {
-  override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[StringType]
+case class StringTypeWithCaseAccentSensitivity(
+    override val supportsTrimCollation: Boolean = false)
+    extends AbstractStringType(supportsTrimCollation) {
+  override private[sql] def acceptsType(other: DataType): Boolean =
+    other.isInstanceOf[StringType] && canUseTrimCollation(other)
+}
+
+object StringTypeWithCaseAccentSensitivity extends StringTypeWithCaseAccentSensitivity(false) {
+  def apply(supportsTrimCollation: Boolean): StringTypeWithCaseAccentSensitivity = {
+    new StringTypeWithCaseAccentSensitivity(supportsTrimCollation)
+  }
+}
+
+/**
+ * Use StringTypeNonCSAICollation for expressions supporting all possible collation types except
+ * CS_AI collation types.
+ */
+case class StringTypeNonCSAICollation(override val supportsTrimCollation: Boolean = false)
+    extends AbstractStringType(supportsTrimCollation) {
+  override private[sql] def acceptsType(other: DataType): Boolean =
+    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].isNonCSAI &&
+      canUseTrimCollation(other)
+}
+
+object StringTypeNonCSAICollation extends StringTypeNonCSAICollation(false) {
+  def apply(supportsTrimCollation: Boolean): StringTypeNonCSAICollation = {
+    new StringTypeNonCSAICollation(supportsTrimCollation)
+  }
 }

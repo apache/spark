@@ -174,7 +174,7 @@ alter view char_view as select * from char_tbl2
 AlterViewAsCommand `spark_catalog`.`default`.`char_view`, select * from char_tbl2, true
    +- Project [c#x, v#x]
       +- SubqueryAlias spark_catalog.default.char_tbl2
-         +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c#x, 5, true, false, true) AS c#x, v#x]
+         +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c#x, 5)) AS c#x, v#x]
             +- Relation spark_catalog.default.char_tbl2[c#x,v#x] parquet
 
 
@@ -261,6 +261,18 @@ org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 desc formatted char_part
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_part`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+alter table char_part change column c1 comment 'char comment'
+-- !query analysis
+AlterTableChangeColumnCommand `spark_catalog`.`default`.`char_part`, c1, StructField(c1,CharType(5),true)
+
+
+-- !query
+alter table char_part change column v1 comment 'varchar comment'
+-- !query analysis
+AlterTableChangeColumnCommand `spark_catalog`.`default`.`char_part`, v1, StructField(v1,VarcharType(6),true)
 
 
 -- !query
@@ -364,7 +376,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`char_tbl4`, false
 insert into char_tbl4 select c, c, v, c from str_view
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/char_tbl4, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/char_tbl4], Append, `spark_catalog`.`default`.`char_tbl4`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/char_tbl4), [c7, c8, v, s]
-+- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, charTypeWriteSideCheck, cast(c#x as string), 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, charTypeWriteSideCheck, cast(c#x as string), 8, true, false, true) AS c8#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, varcharTypeWriteSideCheck, cast(v#x as string), 6, true, false, true) AS v#x, cast(c#x as string) AS s#x]
++- Project [static_invoke(CharVarcharCodegenUtils.charTypeWriteSideCheck(cast(c#x as string), 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.charTypeWriteSideCheck(cast(c#x as string), 8)) AS c8#x, static_invoke(CharVarcharCodegenUtils.varcharTypeWriteSideCheck(cast(v#x as string), 6)) AS v#x, cast(c#x as string) AS s#x]
    +- Project [c#x, c#x, v#x, c#x]
       +- SubqueryAlias str_view
          +- View (`str_view`, [c#x, v#x])
@@ -379,7 +391,7 @@ select c7, c8, v, s from char_tbl4
 -- !query analysis
 Project [c7#x, c8#x, v#x, s#x]
 +- SubqueryAlias spark_catalog.default.char_tbl4
-   +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+   +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
       +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -389,7 +401,7 @@ select c7, c8, v, s from char_tbl4 where c7 = c8
 Project [c7#x, c8#x, v#x, s#x]
 +- Filter (rpad(c7#x, 8,  ) = c8#x)
    +- SubqueryAlias spark_catalog.default.char_tbl4
-      +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+      +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
          +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -399,7 +411,7 @@ select c7, c8, v, s from char_tbl4 where c7 = v
 Project [c7#x, c8#x, v#x, s#x]
 +- Filter (c7#x = v#x)
    +- SubqueryAlias spark_catalog.default.char_tbl4
-      +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+      +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
          +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -409,7 +421,7 @@ select c7, c8, v, s from char_tbl4 where c7 = s
 Project [c7#x, c8#x, v#x, s#x]
 +- Filter (c7#x = s#x)
    +- SubqueryAlias spark_catalog.default.char_tbl4
-      +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+      +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
          +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -419,7 +431,7 @@ select c7, c8, v, s from char_tbl4 where c7 = 'NetEase               '
 Project [c7#x, c8#x, v#x, s#x]
 +- Filter (rpad(c7#x, 22,  ) = NetEase               )
    +- SubqueryAlias spark_catalog.default.char_tbl4
-      +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+      +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
          +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -429,7 +441,7 @@ select c7, c8, v, s from char_tbl4 where v = 'Spark '
 Project [c7#x, c8#x, v#x, s#x]
 +- Filter (v#x = Spark )
    +- SubqueryAlias spark_catalog.default.char_tbl4
-      +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+      +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
          +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -439,7 +451,7 @@ select c7, c8, v, s from char_tbl4 order by c7
 Sort [c7#x ASC NULLS FIRST], true
 +- Project [c7#x, c8#x, v#x, s#x]
    +- SubqueryAlias spark_catalog.default.char_tbl4
-      +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+      +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
          +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -449,7 +461,7 @@ select c7, c8, v, s from char_tbl4 order by v
 Sort [v#x ASC NULLS FIRST], true
 +- Project [c7#x, c8#x, v#x, s#x]
    +- SubqueryAlias spark_catalog.default.char_tbl4
-      +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+      +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
          +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -458,7 +470,7 @@ select ascii(c7), ascii(c8), ascii(v), ascii(s) from char_tbl4
 -- !query analysis
 Project [ascii(c7#x) AS ascii(c7)#x, ascii(c8#x) AS ascii(c8)#x, ascii(v#x) AS ascii(v)#x, ascii(s#x) AS ascii(s)#x]
 +- SubqueryAlias spark_catalog.default.char_tbl4
-   +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+   +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
       +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -467,7 +479,7 @@ select base64(c7), base64(c8), base64(v), ascii(s) from char_tbl4
 -- !query analysis
 Project [base64(cast(c7#x as binary)) AS base64(c7)#x, base64(cast(c8#x as binary)) AS base64(c8)#x, base64(cast(v#x as binary)) AS base64(v)#x, ascii(s#x) AS ascii(s)#x]
 +- SubqueryAlias spark_catalog.default.char_tbl4
-   +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+   +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
       +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -476,7 +488,7 @@ select bit_length(c7), bit_length(c8), bit_length(v), bit_length(s) from char_tb
 -- !query analysis
 Project [bit_length(c7#x) AS bit_length(c7)#x, bit_length(c8#x) AS bit_length(c8)#x, bit_length(v#x) AS bit_length(v)#x, bit_length(s#x) AS bit_length(s)#x]
 +- SubqueryAlias spark_catalog.default.char_tbl4
-   +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+   +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
       +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -485,7 +497,7 @@ select char_length(c7), char_length(c8), char_length(v), char_length(s) from cha
 -- !query analysis
 Project [char_length(c7#x) AS char_length(c7)#x, char_length(c8#x) AS char_length(c8)#x, char_length(v#x) AS char_length(v)#x, char_length(s#x) AS char_length(s)#x]
 +- SubqueryAlias spark_catalog.default.char_tbl4
-   +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+   +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
       +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -494,7 +506,7 @@ select octet_length(c7), octet_length(c8), octet_length(v), octet_length(s) from
 -- !query analysis
 Project [octet_length(c7#x) AS octet_length(c7)#x, octet_length(c8#x) AS octet_length(c8)#x, octet_length(v#x) AS octet_length(v)#x, octet_length(s#x) AS octet_length(s)#x]
 +- SubqueryAlias spark_catalog.default.char_tbl4
-   +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+   +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
       +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -503,7 +515,7 @@ select concat_ws('|', c7, c8), concat_ws('|', c7, v), concat_ws('|', c7, s), con
 -- !query analysis
 Project [concat_ws(|, c7#x, c8#x) AS concat_ws(|, c7, c8)#x, concat_ws(|, c7#x, v#x) AS concat_ws(|, c7, v)#x, concat_ws(|, c7#x, s#x) AS concat_ws(|, c7, s)#x, concat_ws(|, v#x, s#x) AS concat_ws(|, v, s)#x]
 +- SubqueryAlias spark_catalog.default.char_tbl4
-   +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+   +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
       +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -512,7 +524,7 @@ select concat(c7, c8), concat(c7, v), concat(c7, s), concat(v, s) from char_tbl4
 -- !query analysis
 Project [concat(c7#x, c8#x) AS concat(c7, c8)#x, concat(c7#x, v#x) AS concat(c7, v)#x, concat(c7#x, s#x) AS concat(c7, s)#x, concat(v#x, s#x) AS concat(v, s)#x]
 +- SubqueryAlias spark_catalog.default.char_tbl4
-   +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+   +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
       +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -521,7 +533,7 @@ select like(c7, 'Ne     _'), like(c8, 'Ne     _') from char_tbl4
 -- !query analysis
 Project [c7#x LIKE Ne     _ AS c7 LIKE Ne     _#x, c8#x LIKE Ne     _ AS c8 LIKE Ne     _#x]
 +- SubqueryAlias spark_catalog.default.char_tbl4
-   +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+   +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
       +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -530,7 +542,7 @@ select like(v, 'Spark_') from char_tbl4
 -- !query analysis
 Project [v#x LIKE Spark_ AS v LIKE Spark_#x]
 +- SubqueryAlias spark_catalog.default.char_tbl4
-   +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+   +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
       +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -540,7 +552,7 @@ select c7 = c8, upper(c7) = upper(c8), lower(c7) = lower(c8) from char_tbl4 wher
 Project [(rpad(c7#x, 8,  ) = c8#x) AS (c7 = c8)#x, (upper(c7#x) = upper(c8#x)) AS (upper(c7) = upper(c8))#x, (lower(c7#x) = lower(c8#x)) AS (lower(c7) = lower(c8))#x]
 +- Filter (s#x = NetEase)
    +- SubqueryAlias spark_catalog.default.char_tbl4
-      +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+      +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
          +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -550,7 +562,7 @@ select c7 = s, upper(c7) = upper(s), lower(c7) = lower(s) from char_tbl4 where s
 Project [(c7#x = s#x) AS (c7 = s)#x, (upper(c7#x) = upper(s#x)) AS (upper(c7) = upper(s))#x, (lower(c7#x) = lower(s#x)) AS (lower(c7) = lower(s))#x]
 +- Filter (s#x = NetEase)
    +- SubqueryAlias spark_catalog.default.char_tbl4
-      +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+      +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
          +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -560,7 +572,7 @@ select c7 = 'NetEase', upper(c7) = upper('NetEase'), lower(c7) = lower('NetEase'
 Project [(c7#x = NetEase) AS (c7 = NetEase)#x, (upper(c7#x) = upper(NetEase)) AS (upper(c7) = upper(NetEase))#x, (lower(c7#x) = lower(NetEase)) AS (lower(c7) = lower(NetEase))#x]
 +- Filter (s#x = NetEase)
    +- SubqueryAlias spark_catalog.default.char_tbl4
-      +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+      +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
          +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -569,7 +581,7 @@ select printf('Hey, %s%s%s%s', c7, c8, v, s) from char_tbl4
 -- !query analysis
 Project [printf(Hey, %s%s%s%s, c7#x, c8#x, v#x, s#x) AS printf(Hey, %s%s%s%s, c7, c8, v, s)#x]
 +- SubqueryAlias spark_catalog.default.char_tbl4
-   +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+   +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
       +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -578,7 +590,7 @@ select repeat(c7, 2), repeat(c8, 2), repeat(v, 2), repeat(s, 2) from char_tbl4
 -- !query analysis
 Project [repeat(c7#x, 2) AS repeat(c7, 2)#x, repeat(c8#x, 2) AS repeat(c8, 2)#x, repeat(v#x, 2) AS repeat(v, 2)#x, repeat(s#x, 2) AS repeat(s, 2)#x]
 +- SubqueryAlias spark_catalog.default.char_tbl4
-   +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+   +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
       +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -587,7 +599,7 @@ select replace(c7, 'Net', 'Apache'), replace(c8, 'Net', 'Apache'), replace(v, 'S
 -- !query analysis
 Project [replace(c7#x, Net, Apache) AS replace(c7, Net, Apache)#x, replace(c8#x, Net, Apache) AS replace(c8, Net, Apache)#x, replace(v#x, Spark, Kyuubi) AS replace(v, Spark, Kyuubi)#x, replace(s#x, Net, Apache) AS replace(s, Net, Apache)#x]
 +- SubqueryAlias spark_catalog.default.char_tbl4
-   +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+   +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
       +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -596,7 +608,7 @@ select rpad(c7, 10), rpad(c8, 5), rpad(v, 5), rpad(s, 5)  from char_tbl4
 -- !query analysis
 Project [rpad(c7#x, 10,  ) AS rpad(c7, 10,  )#x, rpad(c8#x, 5,  ) AS rpad(c8, 5,  )#x, rpad(v#x, 5,  ) AS rpad(v, 5,  )#x, rpad(s#x, 5,  ) AS rpad(s, 5,  )#x]
 +- SubqueryAlias spark_catalog.default.char_tbl4
-   +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+   +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
       +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -605,7 +617,7 @@ select rtrim(c7), rtrim(c8), rtrim(v), rtrim(s) from char_tbl4
 -- !query analysis
 Project [rtrim(c7#x, None) AS rtrim(c7)#x, rtrim(c8#x, None) AS rtrim(c8)#x, rtrim(v#x, None) AS rtrim(v)#x, rtrim(s#x, None) AS rtrim(s)#x]
 +- SubqueryAlias spark_catalog.default.char_tbl4
-   +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+   +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
       +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -614,7 +626,7 @@ select split(c7, 'e'), split(c8, 'e'), split(v, 'a'), split(s, 'e') from char_tb
 -- !query analysis
 Project [split(c7#x, e, -1) AS split(c7, e, -1)#x, split(c8#x, e, -1) AS split(c8, e, -1)#x, split(v#x, a, -1) AS split(v, a, -1)#x, split(s#x, e, -1) AS split(s, e, -1)#x]
 +- SubqueryAlias spark_catalog.default.char_tbl4
-   +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+   +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
       +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -623,7 +635,7 @@ select substring(c7, 2), substring(c8, 2), substring(v, 3), substring(s, 2) from
 -- !query analysis
 Project [substring(c7#x, 2, 2147483647) AS substring(c7, 2, 2147483647)#x, substring(c8#x, 2, 2147483647) AS substring(c8, 2, 2147483647)#x, substring(v#x, 3, 2147483647) AS substring(v, 3, 2147483647)#x, substring(s#x, 2, 2147483647) AS substring(s, 2, 2147483647)#x]
 +- SubqueryAlias spark_catalog.default.char_tbl4
-   +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+   +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
       +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -632,7 +644,7 @@ select left(c7, 2), left(c8, 2), left(v, 3), left(s, 2) from char_tbl4
 -- !query analysis
 Project [left(c7#x, 2) AS left(c7, 2)#x, left(c8#x, 2) AS left(c8, 2)#x, left(v#x, 3) AS left(v, 3)#x, left(s#x, 2) AS left(s, 2)#x]
 +- SubqueryAlias spark_catalog.default.char_tbl4
-   +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+   +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
       +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -641,7 +653,7 @@ select right(c7, 2), right(c8, 2), right(v, 3), right(s, 2) from char_tbl4
 -- !query analysis
 Project [right(c7#x, 2) AS right(c7, 2)#x, right(c8#x, 2) AS right(c8, 2)#x, right(v#x, 3) AS right(v, 3)#x, right(s#x, 2) AS right(s, 2)#x]
 +- SubqueryAlias spark_catalog.default.char_tbl4
-   +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+   +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
       +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -652,7 +664,7 @@ GlobalLimit 1
 +- LocalLimit 1
    +- Project [typeof(c7#x) AS typeof(c7)#x, typeof(c8#x) AS typeof(c8)#x, typeof(v#x) AS typeof(v)#x, typeof(s#x) AS typeof(s)#x]
       +- SubqueryAlias spark_catalog.default.char_tbl4
-         +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+         +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
             +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -661,7 +673,7 @@ select cast(c7 as char(1)), cast(c8 as char(10)), cast(v as char(1)), cast(v as 
 -- !query analysis
 Project [cast(c7#x as string) AS c7#x, cast(c8#x as string) AS c8#x, cast(v#x as string) AS v#x, cast(v#x as string) AS v#x, cast(s#x as string) AS s#x]
 +- SubqueryAlias spark_catalog.default.char_tbl4
-   +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c7#x, 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, readSidePadding, c8#x, 8, true, false, true) AS c8#x, v#x, s#x]
+   +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
       +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet
 
 
@@ -710,19 +722,19 @@ Project [chr(cast(167 as bigint)) AS chr(167)#x, chr(cast(247 as bigint)) AS chr
 -- !query
 SELECT to_varchar(78.12, '$99.99')
 -- !query analysis
-Project [to_char(78.12, $99.99) AS to_char(78.12, $99.99)#x]
+Project [to_varchar(78.12, $99.99) AS to_varchar(78.12, $99.99)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT to_varchar(111.11, '99.9')
 -- !query analysis
-Project [to_char(111.11, 99.9) AS to_char(111.11, 99.9)#x]
+Project [to_varchar(111.11, 99.9) AS to_varchar(111.11, 99.9)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT to_varchar(12454.8, '99,999.9S')
 -- !query analysis
-Project [to_char(12454.8, 99,999.9S) AS to_char(12454.8, 99,999.9S)#x]
+Project [to_varchar(12454.8, 99,999.9S) AS to_varchar(12454.8, 99,999.9S)#x]
 +- OneRowRelation

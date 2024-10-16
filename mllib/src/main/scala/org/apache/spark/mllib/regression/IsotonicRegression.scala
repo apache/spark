@@ -188,7 +188,7 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
           ("isotonic" -> isotonic)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(metadataPath(path))
 
       spark.createDataFrame(
         boundaries.toImmutableArraySeq.zip(predictions).map { case (b, p) => Data(b, p) }

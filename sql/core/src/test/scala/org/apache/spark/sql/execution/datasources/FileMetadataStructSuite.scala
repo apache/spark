@@ -243,7 +243,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select("name", METADATA_FILE_NAME).collect()
       },
-      errorClass = "FIELD_NOT_FOUND",
+      condition = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"),
       context =
         ExpectedContext(fragment = "select", callSitePattern = getCurrentClassCallSitePattern))
@@ -309,7 +309,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.metadataColumn("foo")
       },
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map("objectName" -> "`foo`", "proposal" -> "`_metadata`"))
 
     // Name exists, but does not reference a metadata column
@@ -317,7 +317,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.metadataColumn("name")
       },
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map("objectName" -> "`name`", "proposal" -> "`_metadata`"))
   }
 
@@ -525,7 +525,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
             exception = intercept[AnalysisException] {
               df.select("name", "_metadata.file_name").collect()
             },
-            errorClass = "FIELD_NOT_FOUND",
+            condition = "FIELD_NOT_FOUND",
             parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"),
             context = ExpectedContext(
               fragment = "select",
@@ -535,7 +535,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
             exception = intercept[AnalysisException] {
               df.select("name", "_METADATA.file_NAME").collect()
             },
-            errorClass = "FIELD_NOT_FOUND",
+            condition = "FIELD_NOT_FOUND",
             parameters = Map("fieldName" -> "`file_NAME`", "fields" -> "`id`, `university`"),
             context = ExpectedContext(
               fragment = "select",

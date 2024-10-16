@@ -263,6 +263,16 @@ The UDF IDs can be seen in the query plan, for example, ``add1(...)#2L`` in ``Ar
     +- ArrowEvalPython [add1(id#0L)#2L], [pythonUDF0#11L], 200
        +- *(1) Range (0, 10, step=1, splits=16)
 
+We can render the result with an arbitrary renderer function as shown below.
+
+.. code-block:: python
+
+    def do_render(codemap):
+        # Your custom rendering logic
+        ...
+
+    spark.profile.render(id=2, type="memory", renderer=do_render)
+
 We can clear the result memory profile as shown below.
 
 .. code-block:: python
@@ -357,6 +367,25 @@ The UDF IDs can be seen in the query plan, for example, ``add1(...)#2L`` in ``Ar
     *(2) Project [pythonUDF0#11L AS add1(id)#3L]
     +- ArrowEvalPython [add1(id#0L)#2L], [pythonUDF0#11L], 200
        +- *(1) Range (0, 10, step=1, splits=16)
+
+We can render the result with a preregistered renderer as shown below.
+
+.. code-block:: python
+
+    >>> spark.profile.render(id=2, type="perf")  # renderer="flameprof" by default
+
+.. image:: ../../../../docs/img/pyspark-udf-profile.png
+    :alt: PySpark UDF profile
+
+Or with an arbitrary renderer function as shown below.
+
+.. code-block:: python
+
+    >>> def do_render(stats):
+    ...     # Your custom rendering logic
+    ...     ...
+    ...
+    >>> spark.profile.render(id=2, type="perf", renderer=do_render)
 
 We can clear the result performance profile as shown below.
 

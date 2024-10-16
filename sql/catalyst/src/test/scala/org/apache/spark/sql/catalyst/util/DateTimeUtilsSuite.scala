@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
@@ -542,7 +542,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkError(
       exception = intercept[SparkIllegalArgumentException](
         dateAddInterval(input, new CalendarInterval(36, 47, 1))),
-      errorClass = "_LEGACY_ERROR_TEMP_2000",
+      condition = "_LEGACY_ERROR_TEMP_2000",
       parameters = Map(
         "message" -> "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date",
         "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
@@ -896,13 +896,13 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         getDayOfWeekFromString(UTF8String.fromString("xx"))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3209",
+      condition = "ILLEGAL_DAY_OF_WEEK",
       parameters = Map("string" -> "xx"))
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         getDayOfWeekFromString(UTF8String.fromString("\"quote"))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3209",
+      condition = "ILLEGAL_DAY_OF_WEEK",
       parameters = Map("string" -> "\"quote"))
   }
 
@@ -1040,11 +1040,14 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
 
     checkError(
-      exception = intercept[SparkException] {
+      exception = intercept[SparkIllegalArgumentException] {
         timestampAdd("SECS", 1, date(1969, 1, 1, 0, 0, 0, 1, getZoneId("UTC")), getZoneId("UTC"))
       },
-      errorClass = "INTERNAL_ERROR",
-      parameters = Map("message" -> "Got the unexpected unit 'SECS'."))
+      condition = "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+      parameters = Map(
+        "functionName" -> "`TIMESTAMPADD`",
+        "parameter" -> "`unit`",
+        "invalidValue" -> "'SECS'"))
   }
 
   test("SPARK-38284: difference between two timestamps in units") {
@@ -1092,14 +1095,17 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
 
     checkError(
-      exception = intercept[SparkException] {
+      exception = intercept[SparkIllegalArgumentException] {
         timestampDiff(
           "SECS",
           date(1969, 1, 1, 0, 0, 0, 1, getZoneId("UTC")),
           date(2022, 1, 1, 0, 0, 0, 1, getZoneId("UTC")),
           getZoneId("UTC"))
       },
-      errorClass = "INTERNAL_ERROR",
-      parameters = Map("message" -> "Got the unexpected unit 'SECS'."))
+      condition = "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+      parameters =
+        Map("functionName" -> "`TIMESTAMPDIFF`",
+          "parameter" -> "`unit`",
+          "invalidValue" -> "'SECS'"))
   }
 }

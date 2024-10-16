@@ -123,7 +123,7 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
   val checks: Seq[Seq[CollationCheck]] = Seq(
     Seq(
       CaseSensitiveCollationCheck("tpcds_utf8", "UTF8_BINARY", "lower"),
-      CaseInsensitiveCollationCheck("tpcds_utf8_random", "UTF8_BINARY_LCASE", randomizeCase)
+      CaseInsensitiveCollationCheck("tpcds_utf8_random", "UTF8_LCASE", randomizeCase)
     ),
     Seq(
       CaseSensitiveCollationCheck("tpcds_unicode", "UNICODE", "lower"),

@@ -668,7 +668,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         exception = intercept[AnalysisException] {
           sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS fakeColumn")
         },
-        errorClass = "COLUMN_NOT_FOUND",
+        condition = "COLUMN_NOT_FOUND",
         parameters = Map(
           "colName" -> "`fakeColumn`",
           "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""
@@ -1603,7 +1603,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         Seq(tbl, ext_tbl).foreach { tblName =>
           sql(s"INSERT INTO $tblName VALUES (1, 'a', '2019-12-13')")
 
-          val expectedSize = 657
+          val expectedSize = 690
           // analyze table
           sql(s"ANALYZE TABLE $tblName COMPUTE STATISTICS NOSCAN")
           var tableStats = getTableStats(tblName)
@@ -1706,7 +1706,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         exception = intercept[AnalysisException] {
           sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS value")
         },
-        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNSUPPORTED_COLUMN_TYPE",
+        condition = "UNSUPPORTED_FEATURE.ANALYZE_UNSUPPORTED_COLUMN_TYPE",
         parameters = Map(
           "columnType" -> "\"MAP<STRING, STRING>\"",
           "columnName" -> "`value`",

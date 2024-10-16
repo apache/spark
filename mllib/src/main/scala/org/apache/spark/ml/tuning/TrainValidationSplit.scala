@@ -216,7 +216,7 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
     ValidatorParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit =
-      ValidatorParams.saveImpl(path, instance, sc)
+      ValidatorParams.saveImpl(path, instance, sparkSession)
   }
 
   private class TrainValidationSplitReader extends MLReader[TrainValidationSplit] {
@@ -228,7 +228,7 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
       implicit val format = DefaultFormats
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =
-        ValidatorParams.loadImpl(path, sc, className)
+        ValidatorParams.loadImpl(path, sparkSession, className)
       val tvs = new TrainValidationSplit(metadata.uid)
         .setEstimator(estimator)
         .setEvaluator(evaluator)
@@ -368,7 +368,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
       import org.json4s.JsonDSL._
       val extraMetadata = ("validationMetrics" -> instance.validationMetrics.toImmutableArraySeq) ~
         ("persistSubModels" -> persistSubModels)
-      ValidatorParams.saveImpl(path, instance, sc, Some(extraMetadata))
+      ValidatorParams.saveImpl(path, instance, sparkSession, Some(extraMetadata))
       val bestModelPath = new Path(path, "bestModel").toString
       instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
       if (persistSubModels) {
@@ -393,9 +393,9 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
       implicit val format = DefaultFormats
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =
-        ValidatorParams.loadImpl(path, sc, className)
+        ValidatorParams.loadImpl(path, sparkSession, className)
       val bestModelPath = new Path(path, "bestModel").toString
-      val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sc)
+      val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sparkSession)
       val validationMetrics = (metadata.metadata \ "validationMetrics").extract[Seq[Double]].toArray
       val persistSubModels = (metadata.metadata \ "persistSubModels")
         .extractOrElse[Boolean](false)
@@ -406,7 +406,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
         for (paramIndex <- estimatorParamMaps.indices) {
           val modelPath = new Path(subModelsPath, paramIndex.toString).toString
           _subModels(paramIndex) =
-            DefaultParamsReader.loadParamsInstance(modelPath, sc)
+            DefaultParamsReader.loadParamsInstance(modelPath, sparkSession)
         }
         Some(_subModels)
       } else None

@@ -1,2 +1,0 @@
-Project [array_sort(e#0, lambdafunction((lambda x#0 - lambda y#0), lambda x#0, lambda y#0, false), false) AS array_sort(e, lambdafunction((namedlambdavariable() - namedlambdavariable()), namedlambdavariable(), namedlambdavariable()))#0]
-+- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

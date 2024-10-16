@@ -269,8 +269,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         }
 
+        def canMerge(joinType: JoinType): Boolean = joinType match {
+          case LeftSingle => false
+          case _ => true
+        }
+
         def createSortMergeJoin() = {
-          if (RowOrdering.isOrderable(leftKeys)) {
+          if (canMerge(joinType) && RowOrdering.isOrderable(leftKeys)) {
             Some(Seq(joins.SortMergeJoinExec(
               leftKeys, rightKeys, joinType, nonEquiCond, planLater(left), planLater(right))))
           } else {
@@ -297,7 +302,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               // This join could be very slow or OOM
               // Build the smaller side unless the join requires a particular build side
               // (e.g. NO_BROADCAST_AND_REPLICATION hint)
-              val requiredBuildSide = getBroadcastNestedLoopJoinBuildSide(hint)
+              val requiredBuildSide = getBroadcastNestedLoopJoinBuildSide(hint, joinType)
               val buildSide = requiredBuildSide.getOrElse(getSmallerSide(left, right))
               Seq(joins.BroadcastNestedLoopJoinExec(
                 planLater(left), planLater(right), buildSide, joinType, j.condition))
@@ -390,7 +395,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               // This join could be very slow or OOM
               // Build the desired side unless the join requires a particular build side
               // (e.g. NO_BROADCAST_AND_REPLICATION hint)
-              val requiredBuildSide = getBroadcastNestedLoopJoinBuildSide(hint)
+              val requiredBuildSide = getBroadcastNestedLoopJoinBuildSide(hint, joinType)
               val buildSide = requiredBuildSide.getOrElse(desiredBuildSide)
               Seq(joins.BroadcastNestedLoopJoinExec(
                 planLater(left), planLater(right), buildSide, joinType, condition))
@@ -778,6 +783,29 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
+   * Strategy to convert [[TransformWithStateInPandas]] logical operator to physical operator
+   * in streaming plans.
+   */
+  object TransformWithStateInPandasStrategy extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case TransformWithStateInPandas(
+        func, groupingAttributes, outputAttrs, outputMode, timeMode, child) =>
+        val execPlan = TransformWithStateInPandasExec(
+          func, groupingAttributes, outputAttrs, outputMode, timeMode,
+          stateInfo = None,
+          batchTimestampMs = None,
+          eventTimeWatermarkForLateEvents = None,
+          eventTimeWatermarkForEviction = None,
+          planLater(child)
+        )
+
+        execPlan :: Nil
+      case _ =>
+        Nil
+    }
+  }
+
+  /**
    * Strategy to convert [[FlatMapGroupsInPandasWithState]] logical operator to physical operator
    * in streaming plans. Conversion for batch plans is handled by [[BasicOperators]].
    */
@@ -959,6 +987,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.SampleExec(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data, _) =>
         LocalTableScanExec(output, data) :: Nil
+      case logical.EmptyRelation(l) => EmptyRelationExec(l) :: Nil
       case CommandResult(output, _, plan, data) => CommandResultExec(output, plan, data) :: Nil
       // We should match the combination of limit and offset first, to get the optimal physical
       // plan, instead of planning limit and offset separately.
@@ -1017,6 +1046,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case WriteFiles(child, fileFormat, partitionColumns, bucket, options, staticPartitions) =>
         WriteFilesExec(planLater(child), fileFormat, partitionColumns, bucket, options,
           staticPartitions) :: Nil
+      case MultiResult(children) =>
+        MultiResultExec(children.map(planLater)) :: Nil
       case _ => Nil
     }
   }

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLId, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreePattern, UNARY_POSITIVE}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreePattern}
 import org.apache.spark.sql.catalyst.types.{PhysicalDecimalType, PhysicalFractionalType, PhysicalIntegerType, PhysicalIntegralType, PhysicalLongType}
 import org.apache.spark.sql.catalyst.util.{IntervalMathUtils, IntervalUtils, MathUtils, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -114,7 +114,7 @@ case class UnaryMinus(
   since = "1.5.0",
   group = "math_funcs")
 case class UnaryPositive(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends RuntimeReplaceable with ImplicitCastInputTypes with NullIntolerant {
 
   override def prettyName: String = "positive"
 
@@ -122,17 +122,15 @@ case class UnaryPositive(child: Expression)
 
   override def dataType: DataType = child.dataType
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNARY_POSITIVE)
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    defineCodeGen(ctx, ev, c => c)
-
-  protected override def nullSafeEval(input: Any): Any = input
-
   override def sql: String = s"(+ ${child.sql})"
 
-  override protected def withNewChildInternal(newChild: Expression): UnaryPositive =
-    copy(child = newChild)
+  override lazy val replacement: Expression = child
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): UnaryPositive =
+    copy(newChildren.head)
+
+  override def children: Seq[Expression] = child :: Nil
 }
 
 /**
@@ -296,12 +294,18 @@ abstract class BinaryArithmetic extends BinaryOperator
     case ByteType | ShortType =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         val tmpResult = ctx.freshName("tmpResult")
+        val try_suggestion = symbol match {
+          case "+" => "try_add"
+          case "-" => "try_subtract"
+          case "*" => "try_multiply"
+          case _ => "unknown_function"
+        }
         val overflowCheck = if (failOnError) {
           val javaType = CodeGenerator.boxedType(dataType)
           s"""
              |if ($tmpResult < $javaType.MIN_VALUE || $tmpResult > $javaType.MAX_VALUE) {
              |  throw QueryExecutionErrors.binaryArithmeticCauseOverflowError(
-             |  $eval1, "$symbol", $eval2);
+             |  $eval1, "$symbol", $eval2, "$try_suggestion");
              |}
            """.stripMargin
         } else {
@@ -906,7 +910,7 @@ case class Remainder(
 
   override def inputType: AbstractDataType = NumericType
 
-  // `try_remainder` has exactly the same behavior as the legacy divide, so here it only executes
+  // `try_mod` has exactly the same behavior as the legacy divide, so here it only executes
   // the error code path when `evalMode` is `ANSI`.
   protected override def failOnError: Boolean = evalMode == EvalMode.ANSI
 

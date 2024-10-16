@@ -26,9 +26,12 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch,
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.util.CharsetProvider
+import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeWithCaseAccentSensitivity
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -155,7 +158,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[AnalysisException] {
         Elt(Seq.empty).checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`elt`",
         "expectedNum" -> "> 1",
@@ -166,7 +169,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[AnalysisException] {
         Elt(Seq(Literal(1))).checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`elt`",
         "expectedNum" -> "> 1",
@@ -356,6 +359,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
     checkEvaluation(
       SubstringIndex(Literal("www||apache||org"), Literal( "||"), Literal(2)), "www||apache")
+    checkEvaluation(SubstringIndex(
+      Literal("www.apache.org"), Literal("."), Literal.create(null, IntegerType)), null)
   }
 
   test("SPARK-40213: ascii for Latin-1 Supplement characters") {
@@ -465,6 +470,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val b = $"b".binary.at(0)
     val bytes = Array[Byte](1, 2, 3, 4)
 
+    assert(!Base64(Literal(bytes)).nullable)
+    assert(Base64(Literal.create(null, BinaryType)).nullable)
+    assert(Base64(Literal(bytes).castNullable()).nullable)
+    assert(!UnBase64(Literal("AQIDBA==")).nullable)
+    assert(UnBase64(Literal.create(null, StringType)).nullable)
+    assert(UnBase64(Literal("AQIDBA==").castNullable()).nullable)
+
     checkEvaluation(Base64(Literal(bytes)), "AQIDBA==", create_row("abdef"))
     checkEvaluation(Base64(UnBase64(Literal("AQIDBA=="))), "AQIDBA==", create_row("abdef"))
     checkEvaluation(Base64(UnBase64(Literal(""))), "", create_row("abdef"))
@@ -505,8 +517,25 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringDecode(b, Literal.create(null, StringType)), null, create_row(null))
 
     // Test escaping of charset
-    GenerateUnsafeProjection.generate(Encode(a, Literal("\"quote")) :: Nil)
-    GenerateUnsafeProjection.generate(StringDecode(b, Literal("\"quote")) :: Nil)
+    GenerateUnsafeProjection.generate(Encode(a, Literal("\"quote")).replacement :: Nil)
+    GenerateUnsafeProjection.generate(StringDecode(b, Literal("\"quote")).replacement :: Nil)
+  }
+
+  test("SPARK-47307: base64 encoding without chunking") {
+    val longString = "a" * 58
+    val encoded = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQ=="
+    withSQLConf(SQLConf.CHUNK_BASE64_STRING_ENABLED.key -> "false") {
+      checkEvaluation(Base64(Literal(longString.getBytes)), encoded)
+    }
+    val chunkEncoded =
+      s"YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh\r\nYQ=="
+    withSQLConf(SQLConf.CHUNK_BASE64_STRING_ENABLED.key -> "true") {
+      checkEvaluation(Base64(Literal(longString.getBytes)), chunkEncoded)
+    }
+
+    // check if unbase64 works well for chunked and non-chunked encoded strings
+    checkEvaluation(StringDecode(UnBase64(Literal(encoded)), Literal("utf-8")), longString)
+    checkEvaluation(StringDecode(UnBase64(Literal(chunkEncoded)), Literal("utf-8")), longString)
   }
 
   test("initcap unit test") {
@@ -1437,7 +1466,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> toSQLId("fmt"),
-          "inputType" -> toSQLType(StringTypeAnyCollation),
+          "inputType" -> toSQLType(StringTypeWithCaseAccentSensitivity),
           "inputExpr" -> toSQLExpr(wrongFmt)
         )
       )
@@ -1479,7 +1508,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
       checkErrorInExpression[SparkIllegalArgumentException](
         toNumberExpr,
-        errorClass = "INVALID_FORMAT.MISMATCH_INPUT",
+        condition = "INVALID_FORMAT.MISMATCH_INPUT",
         parameters = Map(
           "inputType" -> "\"STRING\"",
           "input" -> str,
@@ -1884,7 +1913,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[AnalysisException] {
         ParseUrl(Seq(Literal("1"))).checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`parse_url`",
         "expectedNum" -> "[2, 3]",
@@ -1896,7 +1925,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         ParseUrl(Seq(Literal("1"), Literal("2"), Literal("3"),
           Literal("4"))).checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`parse_url`",
         "expectedNum" -> "[2, 3]",
@@ -1961,7 +1990,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(
-      Sentences(Literal("\"quote"), Literal("\"quote"), Literal("\"quote")) :: Nil)
+      Sentences(Literal("\"quote"), Literal("\"quote"), Literal("\"quote")).replacement :: Nil)
   }
 
   test("SPARK-33386: elt ArrayIndexOutOfBoundsException") {
@@ -2011,7 +2040,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[AnalysisException] {
         expr1.checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`elt`",
         "expectedNum" -> "> 1",
@@ -2049,5 +2078,23 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         )
       )
     )
+  }
+
+  test("SPARK-48712: Check whether input is valid utf-8 string or not before entering fast path") {
+    val str = UTF8String.fromBytes(Array[Byte](-1, -2, -3, -4))
+    assert(!str.isValid, "please use a string that is not valid UTF-8 for testing")
+    val expected = Array[Byte](-17, -65, -67, -17, -65, -67, -17, -65, -67, -17, -65, -67)
+    val bytes = Encode.encode(str, UTF8String.fromString("UTF-8"), false, false)
+    assert(bytes === expected)
+    checkEvaluation(Encode(Literal(str), Literal("UTF-8")), expected)
+    checkEvaluation(Encode(Literal(UTF8String.EMPTY_UTF8), Literal("UTF-8")), Array.emptyByteArray)
+    checkErrorInExpression[SparkIllegalArgumentException](
+      Encode(Literal(UTF8String.EMPTY_UTF8), Literal("UTF-12345")),
+      condition = "INVALID_PARAMETER_VALUE.CHARSET",
+      parameters = Map(
+        "charset" -> "UTF-12345",
+        "functionName" -> toSQLId("encode"),
+        "parameter" -> toSQLId("charset"),
+        "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", ")))
   }
 }

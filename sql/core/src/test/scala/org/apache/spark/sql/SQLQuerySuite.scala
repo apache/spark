@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.File
-import java.net.{MalformedURLException, URL}
+import java.net.{MalformedURLException, URI}
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
 import java.util.Locale
@@ -31,7 +31,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.spark.{AccumulatorSuite, SPARK_DOC_ROOT, SparkArithmeticException, SparkDateTimeException, SparkException, SparkNumberFormatException, SparkRuntimeException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{GenericRow, Hex}
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRow, Hex}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
@@ -43,7 +43,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate._
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -100,7 +100,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     val sqlText = "describe functioN abcadf"
     checkError(
       exception = intercept[AnalysisException](sql(sqlText)),
-      errorClass = "UNRESOLVED_ROUTINE",
+      condition = "UNRESOLVED_ROUTINE",
       parameters = Map(
         "routineName" -> "`abcadf`",
         "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
@@ -111,10 +111,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-34678: describe functions for table-valued functions") {
+    sql("describe function range").show(false)
     checkKeywordsExist(sql("describe function range"),
       "Function: range",
       "Class: org.apache.spark.sql.catalyst.plans.logical.Range",
-      "range(end: long)"
+      "range(start[, end[, step[, numSlices]]])",
+      "range(end)",
+      "Returns a table of values within a specified range."
     )
   }
 
@@ -1430,6 +1433,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("SPARK-49200: Fix null type non-codegen ordering exception") {
+    withSQLConf(
+        SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString,
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.EliminateSorts") {
+      checkAnswer(
+        sql("SELECT * FROM range(3) ORDER BY array(null)"),
+        Seq(Row(0), Row(1), Row(2)))
+    }
+  }
+
   test("SPARK-8837: use keyword in column name") {
     withTempView("t") {
       val df = Seq(1 -> "a").toDF("count", "sort")
@@ -1648,7 +1662,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       exception = intercept[AnalysisException] {
         sql("select * from json.invalid_file")
       },
-      errorClass = "PATH_NOT_FOUND",
+      condition = "PATH_NOT_FOUND",
       parameters = Map("path" -> "file:/.*invalid_file"),
       matchPVals = true
     )
@@ -1657,7 +1671,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       exception = intercept[AnalysisException] {
         sql(s"select id from `org.apache.spark.sql.hive.orc`.`file_path`")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1138"
+      condition = "_LEGACY_ERROR_TEMP_1138"
     )
 
     e = intercept[AnalysisException] {
@@ -1822,7 +1836,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           exception = intercept[AnalysisException]{
             sql("SELECT abc.* FROM nestedStructTable")
           },
-          errorClass = "CANNOT_RESOLVE_STAR_EXPAND",
+          condition = "CANNOT_RESOLVE_STAR_EXPAND",
           parameters = Map("targetString" -> "`abc`", "columns" -> "`record`"),
           context = ExpectedContext(fragment = "abc.*", start = 7, stop = 11))
       }
@@ -1857,7 +1871,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         exception = intercept[AnalysisException]{
           sql("select a.* from testData2")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1050",
+        condition = "_LEGACY_ERROR_TEMP_1050",
         sqlState = None,
         parameters = Map("attributes" -> "(ArrayBuffer|List)\\(a\\)"),
         matchPVals = true,
@@ -1911,7 +1925,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         exception = intercept[AnalysisException] {
           sql("SELECT a.* FROM temp_table_no_cols a")
         },
-        errorClass = "CANNOT_RESOLVE_STAR_EXPAND",
+        condition = "CANNOT_RESOLVE_STAR_EXPAND",
         parameters = Map("targetString" -> "`a`", "columns" -> ""),
         context = ExpectedContext(fragment = "a.*", start = 7, stop = 9))
 
@@ -1919,7 +1933,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         exception = intercept[AnalysisException] {
           dfNoCols.select($"b.*")
         },
-        errorClass = "CANNOT_RESOLVE_STAR_EXPAND",
+        condition = "CANNOT_RESOLVE_STAR_EXPAND",
         parameters = Map("targetString" -> "`b`", "columns" -> ""),
         context = ExpectedContext(
           fragment = "$",
@@ -2557,20 +2571,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq(1 -> "a").toDF("i", "j").write.parquet(path.getCanonicalPath)
 
       val newSession = spark.newSession()
+      val newSqlConf = newSession.sessionState.conf
       val originalValue = newSession.sessionState.conf.runSQLonFile
 
       try {
-        newSession.conf.set(SQLConf.RUN_SQL_ON_FILES, false)
+        newSqlConf.setConf(SQLConf.RUN_SQL_ON_FILES, false)
         intercept[AnalysisException] {
           newSession.sql(s"SELECT i, j FROM parquet.`${path.getCanonicalPath}`")
         }
 
-        newSession.conf.set(SQLConf.RUN_SQL_ON_FILES, true)
+        newSqlConf.setConf(SQLConf.RUN_SQL_ON_FILES, true)
         checkAnswer(
           newSession.sql(s"SELECT i, j FROM parquet.`${path.getCanonicalPath}`"),
           Row(1, "a"))
       } finally {
-        newSession.conf.set(SQLConf.RUN_SQL_ON_FILES, originalValue)
+        newSqlConf.setConf(SQLConf.RUN_SQL_ON_FILES, originalValue)
       }
     }
   }
@@ -2654,10 +2669,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     val jarFromInvalidFs = "fffs://doesnotmatter/test.jar"
 
     // if 'hdfs' is not supported, MalformedURLException will be thrown
-    new URL(jarFromHdfs)
+    new URI(jarFromHdfs).toURL
 
     intercept[MalformedURLException] {
-      new URL(jarFromInvalidFs)
+      new URI(jarFromInvalidFs).toURL
     }
   }
 
@@ -2666,7 +2681,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       exception = intercept[AnalysisException] {
         sql("SELECT nvl(1, 2, 3)")
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> toSQLId("nvl"),
         "expectedNum" -> "2",
@@ -2727,7 +2742,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         exception = intercept[AnalysisException] {
           sql("SELECT struct(1 a) EXCEPT (SELECT struct(2 A))")
         },
-        errorClass = "INCOMPATIBLE_COLUMN_TYPE",
+        condition = "INCOMPATIBLE_COLUMN_TYPE",
         parameters = Map(
           "tableOrdinalNumber" -> "second",
           "columnOrdinalNumber" -> "first",
@@ -2750,7 +2765,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           exception = intercept[AnalysisException] {
             sql(query)
           },
-          errorClass = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+          condition = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
           sqlState = None,
           parameters = Map(
             "sqlExpr" -> "\"(c = C)\"",
@@ -3062,7 +3077,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             checkAnswer(sql("select s.I from t group by s.i"), Nil)
           }
         },
-        errorClass = "FIELD_NOT_FOUND",
+        condition = "FIELD_NOT_FOUND",
         parameters = Map("fieldName" -> "`I`", "fields" -> "`i`"),
         context = ExpectedContext(
           fragment = "s.I",
@@ -3773,7 +3788,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         exception = intercept[AnalysisException] {
           sql("SELECT s LIKE 'm%@ca' ESCAPE '%' FROM df").collect()
         },
-        errorClass = "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+        condition = "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
         parameters = Map(
           "format" -> toSQLValue("m%@ca", StringType),
           "char" -> toSQLValue("@", StringType)))
@@ -3790,7 +3805,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         exception = intercept[AnalysisException] {
           sql("SELECT a LIKE 'jialiuping%' ESCAPE '%' FROM df").collect()
         },
-        errorClass = "INVALID_FORMAT.ESC_AT_THE_END",
+        condition = "INVALID_FORMAT.ESC_AT_THE_END",
         parameters = Map("format" -> toSQLValue("jialiuping%", StringType)))
     }
   }
@@ -3890,7 +3905,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             exception = intercept[AnalysisException] {
               sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
             },
-            errorClass = "CANNOT_LOAD_FUNCTION_CLASS",
+            condition = "CANNOT_LOAD_FUNCTION_CLASS",
             parameters = Map(
               "className" -> "org.apache.spark.examples.sql.Spark33084",
               "functionName" -> "`test_udf`"
@@ -3985,7 +4000,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         }
         checkError(
           exception = e,
-          errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+          condition = "INVALID_TEMP_OBJ_REFERENCE",
           parameters = Map(
             "obj" -> "VIEW",
             "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$testViewName`",
@@ -4004,7 +4019,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         }
         checkError(
           exception = e2,
-          errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+          condition = "INVALID_TEMP_OBJ_REFERENCE",
           parameters = Map(
             "obj" -> "VIEW",
             "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$testViewName`",
@@ -4855,6 +4870,76 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         |LocalTableScan [x#N, y#N]
         |"""
     )
+  }
+
+  test("SPARK-36680: Files hint options should be put into resolveDataSource function") {
+    val df1 = spark.range(100).toDF()
+    withTempPath { f =>
+      df1.write.json(f.getCanonicalPath)
+      val df2 = sql(
+        s"""
+           |SELECT id
+           |FROM json.`${f.getCanonicalPath}`
+           |WITH (`key1` = 1, `key2` = 2)
+        """.stripMargin
+      )
+      checkAnswer(df2, df1)
+      val relations = df2.queryExecution.analyzed.collect {
+        case LogicalRelation(fs: HadoopFsRelation, _, _, _) => fs
+      }
+      assert(relations.size == 1)
+      assert(relations.head.options == Map("key1" -> "1", "key2" -> "2"))
+    }
+  }
+
+  test(
+    "SPARK-49250: CheckAnalysis for UnresolvedWindowExpression must produce " +
+    "MISSING_WINDOW_SPECIFICATION error"
+  ) {
+    for (sqlText <- Seq(
+      "SELECT SUM(col1) OVER(unspecified_window) FROM VALUES (1)",
+      "SELECT SUM(col1) OVER(unspecified_window) FROM VALUES (1) GROUP BY col1",
+      "SELECT (SUM(col1) OVER(unspecified_window) / 1) FROM VALUES (1)"
+    )) {
+      checkError(
+        exception = intercept[AnalysisException](
+          sql(sqlText)
+        ),
+        condition = "MISSING_WINDOW_SPECIFICATION",
+        parameters = Map(
+          "windowName" -> "unspecified_window",
+          "docroot" -> SPARK_DOC_ROOT
+        )
+      )
+    }
+  }
+
+  test("SPARK-49659: Unsupported scalar subqueries in VALUES") {
+    checkError(
+      exception = intercept[AnalysisException](
+        sql("SELECT * FROM VALUES ((SELECT 1) + (SELECT 2))")
+      ),
+      condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.SCALAR_SUBQUERY_IN_VALUES",
+      parameters = Map(),
+      context = ExpectedContext(
+        fragment = "VALUES ((SELECT 1) + (SELECT 2))",
+        start = 14,
+        stop = 45
+      )
+    )
+  }
+
+  test("SPARK-49743: OptimizeCsvJsonExpr does not change schema when pruning struct") {
+    val df = sql("""
+        | SELECT
+        |    from_json('[{"a": '||id||', "b": '|| (2*id) ||'}]', 'array<struct<a: INT, b: INT>>').a,
+        |    from_json('[{"a": '||id||', "b": '|| (2*id) ||'}]', 'array<struct<a: INT, b: INT>>').A
+        | FROM
+        |    range(3) as t
+        |""".stripMargin)
+    val expectedAnswer = Seq(
+      Row(Array(0), Array(0)), Row(Array(1), Array(1)), Row(Array(2), Array(2)))
+    checkAnswer(df, expectedAnswer)
   }
 }
 

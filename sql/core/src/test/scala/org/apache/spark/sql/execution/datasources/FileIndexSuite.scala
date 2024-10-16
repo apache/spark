@@ -31,7 +31,7 @@ import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -112,7 +112,7 @@ class FileIndexSuite extends SharedSparkSession {
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        val msg = intercept[AssertionError] {
+        val msg = intercept[SparkRuntimeException] {
           val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
           fileIndex.partitionSpec()
         }.getMessage
@@ -137,7 +137,7 @@ class FileIndexSuite extends SharedSparkSession {
           exception = intercept[SparkRuntimeException] {
             fileIndex.partitionSpec()
           },
-          errorClass = "_LEGACY_ERROR_TEMP_2058",
+          condition = "_LEGACY_ERROR_TEMP_2058",
           parameters = Map("value" -> "foo", "dataType" -> "IntegerType", "columnName" -> "a")
         )
       }
@@ -547,6 +547,66 @@ class FileIndexSuite extends SharedSparkSession {
     assert(fileIndex.leafFileStatuses.toSeq == statuses)
   }
 
+  test("SPARK-48649: Ignore invalid partitions") {
+    // Table:
+    // id   part_col
+    //  1          1
+    //  2          2
+    val df = spark.range(1, 3, 1, 2).toDF("id")
+      .withColumn("part_col", col("id"))
+
+    withTempPath { directoryPath =>
+      df.write
+        .mode("overwrite")
+        .format("parquet")
+        .partitionBy("part_col")
+        .save(directoryPath.getCanonicalPath)
+
+      // Rename one of the folders.
+      new File(directoryPath, "part_col=1").renameTo(new File(directoryPath, "undefined"))
+
+      // By default, we expect the invalid path assertion to trigger.
+      val ex = intercept[SparkRuntimeException] {
+        spark.read
+          .format("parquet")
+          .load(directoryPath.getCanonicalPath)
+          .collect()
+      }
+      assert(ex.getMessage.contains("Conflicting directory structures detected"))
+
+      // With the config enabled, we should only read the valid partition.
+      withSQLConf(SQLConf.IGNORE_INVALID_PARTITION_PATHS.key -> "true") {
+        assert(
+          spark.read
+            .format("parquet")
+            .load(directoryPath.getCanonicalPath)
+            .collect() === Seq(Row(2, 2)))
+      }
+
+      // Data source option override takes precedence.
+      withSQLConf(SQLConf.IGNORE_INVALID_PARTITION_PATHS.key -> "true") {
+        val ex = intercept[SparkRuntimeException] {
+          spark.read
+            .format("parquet")
+            .option(FileIndexOptions.IGNORE_INVALID_PARTITION_PATHS, "false")
+            .load(directoryPath.getCanonicalPath)
+            .collect()
+        }
+        assert(ex.getMessage.contains("Conflicting directory structures detected"))
+      }
+
+      // Data source option override takes precedence.
+      withSQLConf(SQLConf.IGNORE_INVALID_PARTITION_PATHS.key -> "false") {
+        assert(
+          spark.read
+            .format("parquet")
+            .option(FileIndexOptions.IGNORE_INVALID_PARTITION_PATHS, "true")
+            .load(directoryPath.getCanonicalPath)
+            .collect() === Seq(Row(2, 2)))
+      }
+    }
+  }
+
   test("expire FileStatusCache if TTL is configured") {
     val previousValue = SQLConf.get.getConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS)
     try {
@@ -585,9 +645,10 @@ class FileIndexSuite extends SharedSparkSession {
   }
 
   test("SPARK-40667: validate FileIndex Options") {
-    assert(FileIndexOptions.getAllOptions.size == 7)
+    assert(FileIndexOptions.getAllOptions.size == 8)
     // Please add validation on any new FileIndex options here
     assert(FileIndexOptions.isValidOption("ignoreMissingFiles"))
+    assert(FileIndexOptions.isValidOption("ignoreInvalidPartitionPaths"))
     assert(FileIndexOptions.isValidOption("timeZone"))
     assert(FileIndexOptions.isValidOption("recursiveFileLookup"))
     assert(FileIndexOptions.isValidOption("basePath"))

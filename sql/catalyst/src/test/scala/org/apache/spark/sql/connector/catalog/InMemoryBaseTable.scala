@@ -194,6 +194,10 @@ abstract class InMemoryBaseTable(
           case (v, t) =>
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
+      case ClusterByTransform(columnNames) =>
+        columnNames.map { colName =>
+          extractor(colName.fieldNames, cleanedSchema, row)._1
+        }
     }.toImmutableArraySeq
   }
 

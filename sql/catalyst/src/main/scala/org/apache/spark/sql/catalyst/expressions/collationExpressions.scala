@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeWithCaseAccentSensitivity
 import org.apache.spark.sql.types._
 
 // scalastyle:off line.contains.tab
@@ -36,24 +36,14 @@ import org.apache.spark.sql.types._
   """,
   examples = """
     Examples:
-      > SET spark.sql.collation.enabled=true;
-      spark.sql.collation.enabled	true
-      > SELECT COLLATION('Spark SQL' _FUNC_ UTF8_BINARY_LCASE);
-      UTF8_BINARY_LCASE
-      > SET spark.sql.collation.enabled=false;
-      spark.sql.collation.enabled	false
+      > SELECT COLLATION('Spark SQL' _FUNC_ UTF8_LCASE);
+      UTF8_LCASE
   """,
   since = "4.0.0",
   group = "string_funcs")
 // scalastyle:on line.contains.tab
 object CollateExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
-    // We need to throw collationNotEnabledError before unexpectedNullError
-    // and nonFoldableArgumentError, as we do not want user to see misleading
-    // messages that collation is enabled
-    if (!SQLConf.get.collationEnabled) {
-      throw QueryCompilationErrors.collationNotEnabledError()
-    }
     expressions match {
       case Seq(e: Expression, collationExpr: Expression) =>
         (collationExpr.dataType, collationExpr.foldable) match {
@@ -62,6 +52,10 @@ object CollateExpressionBuilder extends ExpressionBuilder {
             if (evalCollation == null) {
               throw QueryCompilationErrors.unexpectedNullError("collation", collationExpr)
             } else {
+              if (!SQLConf.get.trimCollationEnabled &&
+                evalCollation.toString.toUpperCase().contains("TRIM")) {
+                throw QueryCompilationErrors.trimCollationNotEnabledError()
+              }
               Collate(e, evalCollation.toString)
             }
           case (_: StringType, false) => throw QueryCompilationErrors.nonFoldableArgumentError(
@@ -83,7 +77,8 @@ case class Collate(child: Expression, collationName: String)
   extends UnaryExpression with ExpectsInputTypes {
   private val collationId = CollationFactory.collationNameToId(collationName)
   override def dataType: DataType = StringType(collationId)
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCaseAccentSensitivity(/* supportsTrimCollation = */ true))
 
   override protected def withNewChildInternal(
     newChild: Expression): Expression = copy(newChild)
@@ -92,6 +87,10 @@ case class Collate(child: Expression, collationName: String)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     defineCodeGen(ctx, ev, (in) => in)
+
+  override def sql: String = s"$prettyName(${child.sql}, $collationName)"
+
+  override def toString: String = s"$prettyName($child, $collationName)"
 }
 
 // scalastyle:off line.contains.tab
@@ -103,12 +102,8 @@ case class Collate(child: Expression, collationName: String)
   """,
   examples = """
     Examples:
-      > SET spark.sql.collation.enabled=true;
-      spark.sql.collation.enabled	true
       > SELECT _FUNC_('Spark SQL');
       UTF8_BINARY
-      > SET spark.sql.collation.enabled=false;
-      spark.sql.collation.enabled	false
   """,
   since = "4.0.0",
   group = "string_funcs")
@@ -116,10 +111,11 @@ case class Collate(child: Expression, collationName: String)
 case class Collation(child: Expression)
   extends UnaryExpression with RuntimeReplaceable with ExpectsInputTypes {
   override protected def withNewChildInternal(newChild: Expression): Collation = copy(newChild)
-  override def replacement: Expression = {
+  override lazy val replacement: Expression = {
     val collationId = child.dataType.asInstanceOf[StringType].collationId
     val collationName = CollationFactory.fetchCollation(collationId).collationName
     Literal.create(collationName, SQLConf.get.defaultStringType)
   }
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCaseAccentSensitivity(/* supportsTrimCollation = */ true))
 }

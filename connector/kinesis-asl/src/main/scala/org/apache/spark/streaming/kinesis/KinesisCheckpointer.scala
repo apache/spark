@@ -103,7 +103,7 @@ private[kinesis] class KinesisCheckpointer(
       }
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Failed to checkpoint shardId $shardId to DynamoDB.", e)
+        logWarning(log"Failed to checkpoint shardId ${MDC(SHARD_ID, shardId)} to DynamoDB.", e)
     }
   }
 

@@ -22,8 +22,8 @@ cannot contain arbitrary characters. Configuration parameter are passed in the
 style of the HTTP URL Path Parameter Syntax. This is similar to the JDBC connection
 strings. The path component must be empty. All parameters are interpreted **case sensitive**.
 
-```shell
-sc://hostname:port/;param1=value;param2=value
+```text
+sc://host:port/;param1=value;param2=value
 ```
 
 <table>
@@ -34,7 +34,7 @@ sc://hostname:port/;param1=value;param2=value
     <td>Examples</td>
   </tr>
   <tr>
-    <td>hostname</td>
+    <td>host</td>
     <td>String</td>
     <td>
       The hostname of the endpoint for Spark Connect. Since the endpoint
@@ -49,8 +49,8 @@ sc://hostname:port/;param1=value;param2=value
   </tr>
   <tr>
     <td>port</td>
-<td>Numeric</td>
-    <td>The portname to be used when connecting to the GRPC endpoint. The
+    <td>Numeric</td>
+    <td>The port to be used when connecting to the GRPC endpoint. The
     default values is: <b>15002</b>. Any valid port number can be used.</td>
     <td><pre>15002</pre><pre>443</pre></td>
   </tr>
@@ -75,7 +75,7 @@ sc://hostname:port/;param1=value;param2=value
     <td>user_id</td>
     <td>String</td>
     <td>User ID to automatically set in the Spark Connect UserContext message.
-    This is necssary for the appropriate Spark Session management. This is an
+    This is necessary for the appropriate Spark Session management. This is an
     *optional* parameter and depending on the deployment this parameter might
     be automatically injected using other means.</td>
     <td>
@@ -99,8 +99,15 @@ sc://hostname:port/;param1=value;param2=value
     allows to provide this session ID to allow sharing Spark Sessions for the same users
     for example across multiple languages. The value must be provided in a valid UUID 
     string format.<br/>
-    <i>Default: A UUID generated randomly.</td>
+    <i>Default: </i><pre>A UUID generated randomly</pre></td>
     <td><pre>session_id=550e8400-e29b-41d4-a716-446655440000</pre></td>
+  </tr>
+  <tr>
+    <td>grpc_max_message_size</td>
+    <td>Numeric</td>
+    <td>Maximum message size allowed for gRPC messages in bytes.<br/>
+    <i>Default: </i><pre> 128 * 1024 * 1024</pre></td>
+    <td><pre>grpc_max_message_size=134217728</pre></td>
   </tr>
 </table>
 

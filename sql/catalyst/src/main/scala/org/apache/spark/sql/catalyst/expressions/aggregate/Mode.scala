@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, UnresolvedWithinGroup}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, ExpressionDescription, ImplicitCastInputTypes, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.Cast.toSQLExpr
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, GenericArrayData, MapData, UnsafeRowUtils}
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, MapType, StringType, StructField, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
 
 case class Mode(
@@ -70,10 +74,85 @@ case class Mode(
     buffer
   }
 
+  private def getCollationAwareBuffer(
+      childDataType: DataType,
+      buffer: OpenHashMap[AnyRef, Long]): Iterable[(AnyRef, Long)] = {
+    def groupAndReduceBuffer(groupingFunction: AnyRef => _): Iterable[(AnyRef, Long)] = {
+      buffer.groupMapReduce(t =>
+        groupingFunction(t._1))(x => x)((x, y) => (x._1, x._2 + y._2)).values
+    }
+    def determineBufferingFunction(
+        childDataType: DataType): Option[AnyRef => _] = {
+      childDataType match {
+        case _ if UnsafeRowUtils.isBinaryStable(child.dataType) => None
+        case _ => Some(collationAwareTransform(_, childDataType))
+      }
+    }
+    determineBufferingFunction(childDataType).map(groupAndReduceBuffer).getOrElse(buffer)
+  }
+
+  protected[sql] def collationAwareTransform(data: AnyRef, dataType: DataType): AnyRef = {
+    dataType match {
+      case _ if UnsafeRowUtils.isBinaryStable(dataType) => data
+      case st: StructType =>
+        processStructTypeWithBuffer(data.asInstanceOf[InternalRow].toSeq(st).zip(st.fields))
+      case at: ArrayType => processArrayTypeWithBuffer(at, data.asInstanceOf[ArrayData])
+      case mt: MapType => processMapTypeWithBuffer(mt, data.asInstanceOf[MapData])
+      case st: StringType =>
+        CollationFactory.getCollationKey(data.asInstanceOf[UTF8String], st.collationId)
+      case _ =>
+        throw new SparkIllegalArgumentException(
+          errorClass = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.BAD_INPUTS",
+          messageParameters = Map(
+            "expression" -> toSQLExpr(this),
+            "functionName" -> toSQLType(prettyName),
+            "dataType" -> toSQLType(child.dataType))
+        )
+    }
+  }
+
+  private def processStructTypeWithBuffer(
+      tuples: Seq[(Any, StructField)]): Seq[Any] = {
+    tuples.map(t => collationAwareTransform(t._1.asInstanceOf[AnyRef], t._2.dataType))
+  }
+
+  private def processArrayTypeWithBuffer(
+      a: ArrayType,
+      data: ArrayData): Seq[Any] = {
+    (0 until data.numElements()).map(i =>
+      collationAwareTransform(data.get(i, a.elementType), a.elementType))
+  }
+
+  private def processMapTypeWithBuffer(mt: MapType, data: MapData): Map[Any, Any] = {
+    val transformedKeys = (0 until data.numElements()).map { i =>
+      collationAwareTransform(data.keyArray().get(i, mt.keyType), mt.keyType)
+    }
+    val transformedValues = (0 until data.numElements()).map { i =>
+      collationAwareTransform(data.valueArray().get(i, mt.valueType), mt.valueType)
+    }
+    transformedKeys.zip(transformedValues).toMap
+  }
+
   override def eval(buffer: OpenHashMap[AnyRef, Long]): Any = {
     if (buffer.isEmpty) {
       return null
     }
+    /*
+      * The Mode class uses special collation awareness logic
+      *  to handle string data types with various collations.
+      *
+      * For string types that don't support binary equality,
+      * we create a new map where the keys are the collation keys of the original strings.
+      *
+      * Keys from the original map are aggregated based on the corresponding collation keys.
+      *  The groupMapReduce method groups the entries by collation key and maps each group
+      *  to a single value (the sum of the counts), and finally reduces the groups to a single map.
+      *
+      * The new map is then used in the rest of the Mode evaluation logic.
+      *
+      * It is expected to work for all simple and complex types with collated fields.
+      */
+    val collationAwareBuffer = getCollationAwareBuffer(child.dataType, buffer)
 
     reverseOpt.map { reverse =>
       val defaultKeyOrdering = if (reverse) {
@@ -82,8 +161,8 @@ case class Mode(
         PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]]
       }
       val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
-      buffer.maxBy { case (key, count) => (count, key) }(ordering)
-    }.getOrElse(buffer.maxBy(_._2))._1
+      collationAwareBuffer.maxBy { case (key, count) => (count, key) }(ordering)
+    }.getOrElse(collationAwareBuffer.maxBy(_._2))._1
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Mode =
@@ -128,6 +207,7 @@ case class Mode(
     copy(child = newChild)
 }
 
+// TODO: SPARK-48701: PandasMode (all collations)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
@@ -205,6 +285,9 @@ case class PandasMode(
   with ImplicitCastInputTypes with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, true, 0, 0)
+
+  def this(child: Expression, ignoreNA: Expression) =
+    this(child, PandasAggregate.expressionToIgnoreNA(ignoreNA, "pandas_mode"))
 
   // Returns empty array for empty inputs
   override def nullable: Boolean = false

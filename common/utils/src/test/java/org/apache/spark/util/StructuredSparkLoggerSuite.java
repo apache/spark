@@ -70,6 +70,17 @@ public class StructuredSparkLoggerSuite extends SparkLoggerSuiteBase {
   }
 
   @Override
+  String expectedPatternForBasicMsgWithEscapeChar(Level level) {
+    return compactAndToRegexPattern(level, """
+      {
+        "ts": "<timestamp>",
+        "level": "<level>",
+        "msg": "This is a log message\\\\nThis is a new line \\\\t other msg",
+        "logger": "<className>"
+      }""");
+  }
+
+  @Override
   String expectedPatternForBasicMsgWithException(Level level) {
     return compactAndToRegexPattern(level, """
       {

@@ -51,7 +51,7 @@ object HiveResult extends SQLConfHelper {
   def getBinaryFormatter: BinaryFormatter = {
     if (conf.getConf(SQLConf.BINARY_OUTPUT_STYLE).isEmpty) {
       // Keep the legacy behavior for compatibility.
-      conf.setConf(SQLConf.BINARY_OUTPUT_STYLE, Some("UTF8"))
+      conf.setConf(SQLConf.BINARY_OUTPUT_STYLE, Some("UTF-8"))
     }
     ToStringBase.getBinaryFormatter(_).toString
   }

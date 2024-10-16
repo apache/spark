@@ -27,7 +27,7 @@ import org.apache.arrow.vector.ipc.ArrowStreamReader
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.api.python.{PythonFunction, PythonWorker, PythonWorkerFactory, PythonWorkerUtils, SpecialLengths}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys.PYTHON_EXEC
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
@@ -214,7 +214,8 @@ class PythonStreamingSourceRunner(
    * Stop the python worker process and invoke stop() on stream reader.
    */
   def stop(): Unit = {
-    logInfo(s"Stopping streaming runner for module: $workerModule.")
+    logInfo(log"Stopping streaming runner for module: " +
+      log"${MDC(LogKeys.MODULE_NAME, workerModule)}.")
     try {
       pythonWorkerFactory.foreach { factory =>
         pythonWorker.foreach { worker =>
@@ -232,7 +233,17 @@ class PythonStreamingSourceRunner(
     s"stream reader for $pythonExec", 0, Long.MaxValue)
 
   def readArrowRecordBatches(): Iterator[InternalRow] = {
-    assert(dataIn.readInt() == SpecialLengths.START_ARROW_STREAM)
+    val status = dataIn.readInt()
+    status match {
+      case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
+        val msg = PythonWorkerUtils.readUTF(dataIn)
+        throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+        action = "prefetchArrowBatches", msg)
+      case SpecialLengths.START_ARROW_STREAM =>
+      case _ =>
+        throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+          action = "prefetchArrowBatches", s"unknown status code $status")
+    }
     val reader = new ArrowStreamReader(dataIn, allocator)
     val root = reader.getVectorSchemaRoot()
     // When input is empty schema can't be read.

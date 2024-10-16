@@ -27,7 +27,7 @@ import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkRuntimeException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
@@ -111,8 +111,9 @@ abstract class ParquetPartitionDiscoverySuite
       "hdfs://host:9000/path/a=10/b=20",
       "hdfs://host:9000/path/a=10.5/b=hello")
 
-    var exception = intercept[AssertionError] {
-      parsePartitions(paths.map(new Path(_)), true, Set.empty[Path], None, true, true, timeZoneId)
+    var exception = intercept[SparkRuntimeException] {
+      parsePartitions(
+        paths.map(new Path(_)), true, Set.empty[Path], None, true, true, timeZoneId, false)
     }
     assert(exception.getMessage().contains("Conflicting directory structures detected"))
 
@@ -129,7 +130,8 @@ abstract class ParquetPartitionDiscoverySuite
       None,
       true,
       true,
-      timeZoneId)
+      timeZoneId,
+      false)
 
     // Valid
     paths = Seq(
@@ -145,7 +147,8 @@ abstract class ParquetPartitionDiscoverySuite
       None,
       true,
       true,
-      timeZoneId)
+      timeZoneId,
+      false)
 
     // Valid
     paths = Seq(
@@ -161,7 +164,8 @@ abstract class ParquetPartitionDiscoverySuite
       None,
       true,
       true,
-      timeZoneId)
+      timeZoneId,
+      false)
 
     // Invalid
     paths = Seq(
@@ -169,7 +173,7 @@ abstract class ParquetPartitionDiscoverySuite
       "hdfs://host:9000/path/a=10/b=20",
       "hdfs://host:9000/path/path1")
 
-    exception = intercept[AssertionError] {
+    exception = intercept[SparkRuntimeException] {
       parsePartitions(
         paths.map(new Path(_)),
         true,
@@ -177,7 +181,8 @@ abstract class ParquetPartitionDiscoverySuite
         None,
         true,
         true,
-        timeZoneId)
+        timeZoneId,
+        false)
     }
     assert(exception.getMessage().contains("Conflicting directory structures detected"))
 
@@ -192,7 +197,7 @@ abstract class ParquetPartitionDiscoverySuite
       "hdfs://host:9000/tmp/tables/nonPartitionedTable1",
       "hdfs://host:9000/tmp/tables/nonPartitionedTable2")
 
-    exception = intercept[AssertionError] {
+    exception = intercept[SparkRuntimeException] {
       parsePartitions(
         paths.map(new Path(_)),
         true,
@@ -200,7 +205,8 @@ abstract class ParquetPartitionDiscoverySuite
         None,
         true,
         true,
-        timeZoneId)
+        timeZoneId,
+        false)
     }
     assert(exception.getMessage().contains("Conflicting directory structures detected"))
   }
@@ -296,7 +302,8 @@ abstract class ParquetPartitionDiscoverySuite
           None,
           true,
           true,
-          timeZoneId)
+          timeZoneId,
+          false)
       assert(actualSpec.partitionColumns === spec.partitionColumns)
       assert(actualSpec.partitions.length === spec.partitions.length)
       actualSpec.partitions.zip(spec.partitions).foreach { case (actual, expected) =>
@@ -427,7 +434,7 @@ abstract class ParquetPartitionDiscoverySuite
     def check(paths: Seq[String], spec: PartitionSpec): Unit = {
       val actualSpec =
         parsePartitions(paths.map(new Path(_)), false, Set.empty[Path], None,
-          true, true, timeZoneId)
+          true, true, timeZoneId, false)
       assert(actualSpec === spec)
     }
 
@@ -871,7 +878,7 @@ abstract class ParquetPartitionDiscoverySuite
 
       checkAnswer(twoPartitionsDF, df.filter("b != 3"))
 
-      intercept[AssertionError] {
+      intercept[SparkRuntimeException] {
         spark
           .read
           .parquet(
@@ -951,54 +958,58 @@ abstract class ParquetPartitionDiscoverySuite
     }
   }
 
-  test("listConflictingPartitionColumns") {
-    def makeExpectedMessage(colNameLists: Seq[String], paths: Seq[String]): String = {
-      val conflictingColNameLists = colNameLists.zipWithIndex.map { case (list, index) =>
-        s"\tPartition column name list #$index: $list"
-      }.mkString("\n", "\n", "\n")
-
-      // scalastyle:off
-      s"""Conflicting partition column names detected:
-         |$conflictingColNameLists
-         |For partitioned table directories, data files should only live in leaf directories.
-         |And directories at the same level should have the same partition column name.
-         |Please check the following directories for unexpected files or inconsistent partition column names:
-         |${paths.map("\t" + _).mkString("\n", "\n", "")}
-       """.stripMargin.trim
-      // scalastyle:on
-    }
-
-    assert(
-      listConflictingPartitionColumns(
+  test("conflictingPartitionColumnsError") {
+    checkError(
+      exception = conflictingPartitionColumnsError(
         Seq(
           (new Path("file:/tmp/foo/a=1"),
             PartitionValues(Seq("a"), Seq(TypedPartValue("1", IntegerType)))),
           (new Path("file:/tmp/foo/b=1"),
-            PartitionValues(Seq("b"), Seq(TypedPartValue("1", IntegerType)))))).trim ===
-        makeExpectedMessage(Seq("a", "b"), Seq("file:/tmp/foo/a=1", "file:/tmp/foo/b=1")))
+            PartitionValues(Seq("b"), Seq(TypedPartValue("1", IntegerType))))
+        )
+      ),
+      condition = "CONFLICTING_PARTITION_COLUMN_NAMES",
+      parameters = Map(
+        "distinctPartColLists" ->
+          "\n\tPartition column name list #0: a\n\tPartition column name list #1: b\n",
+        "suspiciousPaths" -> "\n\tfile:/tmp/foo/a=1\n\tfile:/tmp/foo/b=1"
+      )
+    )
 
-    assert(
-      listConflictingPartitionColumns(
+    checkError(
+      exception = conflictingPartitionColumnsError(
         Seq(
           (new Path("file:/tmp/foo/a=1/_temporary"),
             PartitionValues(Seq("a"), Seq(TypedPartValue("1", IntegerType)))),
           (new Path("file:/tmp/foo/a=1"),
-            PartitionValues(Seq("a"), Seq(TypedPartValue("1", IntegerType)))))).trim ===
-        makeExpectedMessage(
-          Seq("a"),
-          Seq("file:/tmp/foo/a=1/_temporary", "file:/tmp/foo/a=1")))
+            PartitionValues(Seq("a"), Seq(TypedPartValue("1", IntegerType))))
+        )
+      ),
+      condition = "CONFLICTING_PARTITION_COLUMN_NAMES",
+      parameters = Map(
+        "distinctPartColLists" ->
+          "\n\tPartition column name list #0: a\n",
+        "suspiciousPaths" -> "\n\tfile:/tmp/foo/a=1/_temporary\n\tfile:/tmp/foo/a=1"
+      )
+    )
 
-    assert(
-      listConflictingPartitionColumns(
+    checkError(
+      exception = conflictingPartitionColumnsError(
         Seq(
           (new Path("file:/tmp/foo/a=1"),
             PartitionValues(Seq("a"), Seq(TypedPartValue("1", IntegerType)))),
           (new Path("file:/tmp/foo/a=1/b=foo"),
             PartitionValues(Seq("a", "b"),
-              Seq(TypedPartValue("1", IntegerType), TypedPartValue("foo", StringType)))))).trim ===
-        makeExpectedMessage(
-          Seq("a", "a, b"),
-          Seq("file:/tmp/foo/a=1", "file:/tmp/foo/a=1/b=foo")))
+              Seq(TypedPartValue("1", IntegerType), TypedPartValue("foo", StringType))))
+        )
+      ),
+      condition = "CONFLICTING_PARTITION_COLUMN_NAMES",
+      parameters = Map(
+        "distinctPartColLists" ->
+          "\n\tPartition column name list #0: a\n\tPartition column name list #1: a, b\n",
+        "suspiciousPaths" -> "\n\tfile:/tmp/foo/a=1\n\tfile:/tmp/foo/a=1/b=foo"
+      )
+    )
   }
 
   test("Parallel partition discovery") {
@@ -1136,6 +1147,44 @@ abstract class ParquetPartitionDiscoverySuite
         .schema("a INT, b BYTE, c SHORT, d FLOAT")
         .parquet(dir.getCanonicalPath)
       checkAnswer(res, Seq(Row(1, 2, 3, 4.0f)))
+    }
+  }
+
+  test("SPARK-49163: Attempt to create table based on broken parquet partition data") {
+    withTempDir { dir =>
+      val data = Seq[(String, String, String)](("a", "b", "c"))
+      data
+        .toDF("col1", "col2", "col3")
+        .write
+        .mode("overwrite")
+        .partitionBy("col1", "col2")
+        .parquet(dir.getCanonicalPath)
+
+      // Structure of parquet table in filesystem:
+      // <base>
+      // +- col1=a
+      //    +- col2=b
+      //       |- part-00000.parquet
+
+      val partition = new File(dir, "col1=a")
+      val dummyData = new File(partition, "dummy")
+      dummyData.createNewFile()
+
+      // Structure of parquet table in filesystem is now corrupt:
+      // <base>
+      // +- col1=a
+      //    |- dummy
+      //    +- col2=b
+      //       |- part-00000.parquet
+
+      val exception = intercept[SparkRuntimeException] {
+        spark.read.parquet(dir.toString)
+      }
+      val msg = exception.getMessage
+      assert(exception.getCondition === "CONFLICTING_PARTITION_COLUMN_NAMES")
+      // Partitions inside the error message can be presented in any order
+      assert("Partition column name list #[0-1]: col1".r.findFirstIn(msg).isDefined)
+      assert("Partition column name list #[0-1]: col1, col2".r.findFirstIn(msg).isDefined)
     }
   }
 }

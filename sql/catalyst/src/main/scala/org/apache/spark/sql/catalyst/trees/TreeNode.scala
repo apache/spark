@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.trees
 
-import java.util.UUID
+import java.util.{IdentityHashMap, UUID}
 
+import scala.annotation.nowarn
 import scala.collection.{mutable, Map}
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -120,7 +121,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    * ineffective for subsequent apply calls on this tree because query plan structures are
    * immutable.
    */
-  private val ineffectiveRules: BitSet = new BitSet(RuleIdCollection.NumRules)
+  private[this] var _ineffectiveRules: BitSet = null
+  private def ineffectiveRules: BitSet = {
+    if (_ineffectiveRules eq null) {
+      _ineffectiveRules = new BitSet(RuleIdCollection.NumRules)
+    }
+    _ineffectiveRules
+  }
+  private def isIneffectiveRulesEmpty = _ineffectiveRules eq null
 
   /**
    * @return a sequence of tree pattern enums in a TreeNode T. It does not include propagated
@@ -149,7 +157,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    *         UnknownId, it returns false.
    */
   protected def isRuleIneffective(ruleId : RuleId): Boolean = {
-    if (ruleId eq UnknownRuleId) {
+    if (isIneffectiveRulesEmpty || (ruleId eq UnknownRuleId)) {
       return false
     }
     ineffectiveRules.get(ruleId.id)
@@ -371,12 +379,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       case nonChild: AnyRef => nonChild
       case null => null
     }
+    @nowarn("cat=deprecation")
     val newArgs = mapProductIterator {
       case s: StructType => s // Don't convert struct types to some other type of Seq[StructField]
       // Handle Seq[TreeNode] in TreeNode parameters.
-      case s: LazyList[_] =>
-        // LazyList is lazy so we need to force materialization
+      case s: Stream[_] =>
+        // Stream is lazy so we need to force materialization
         s.map(mapChild).force
+      case l: LazyList[_] =>
+        // LazyList is lazy so we need to force materialization
+        l.map(mapChild).force
       case s: Seq[_] =>
         s.map(mapChild)
       case m: Map[_, _] =>
@@ -794,6 +806,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       case other => other
     }
 
+    @nowarn("cat=deprecation")
     val newArgs = mapProductIterator {
       case arg: TreeNode[_] if containsChild(arg) =>
         arg.asInstanceOf[BaseType].clone()
@@ -806,7 +819,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
         case (_, other) => other
       }
       case d: DataType => d // Avoid unpacking Structs
-      case args: LazyList[_] => args.map(mapChild).force // Force materialization on stream
+      case args: Stream[_] => args.map(mapChild).force // Force materialization on stream
+      case args: LazyList[_] => args.map(mapChild).force // Force materialization on LazyList
       case args: Iterable[_] => args.map(mapChild)
       case nonChild: AnyRef => nonChild
       case null => null
@@ -827,7 +841,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    */
   protected def stringArgs: Iterator[Any] = productIterator
 
-  private lazy val allChildren: Set[TreeNode[_]] = (children ++ innerChildren).toSet[TreeNode[_]]
+  private lazy val allChildren: IdentityHashMap[TreeNode[_], Any] = {
+    val set = new IdentityHashMap[TreeNode[_], Any]()
+    (children ++ innerChildren).foreach {
+      set.put(_, null)
+    }
+    set
+  }
 
   private def redactMapString[K, V](map: Map[K, V], maxFields: Int): List[String] = {
     // For security reason, redact the map value if the key is in certain patterns
@@ -854,11 +874,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
 
   /** Returns a string representing the arguments to this node, minus any children */
   def argString(maxFields: Int): String = stringArgs.flatMap {
-    case tn: TreeNode[_] if allChildren.contains(tn) => Nil
-    case Some(tn: TreeNode[_]) if allChildren.contains(tn) => Nil
+    case tn: TreeNode[_] if allChildren.containsKey(tn) => Nil
+    case Some(tn: TreeNode[_]) if allChildren.containsKey(tn) => Nil
     case Some(tn: TreeNode[_]) => tn.simpleString(maxFields) :: Nil
     case tn: TreeNode[_] => tn.simpleString(maxFields) :: Nil
-    case seq: Seq[Any] if seq.toSet.subsetOf(allChildren.asInstanceOf[Set[Any]]) => Nil
+    case seq: Seq[Any] if seq.forall(allChildren.containsKey) => Nil
     case iter: Iterable[_] if iter.isEmpty => Nil
     case array: Array[_] if array.isEmpty => Nil
     case xs @ (_: Seq[_] | _: Set[_] | _: Array[_]) =>

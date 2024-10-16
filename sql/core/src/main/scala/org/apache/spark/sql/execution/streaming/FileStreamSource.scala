@@ -168,7 +168,7 @@ class FileStreamSource(
    * there is no race here, so the cost of `synchronized` should be rare.
    */
   private def fetchMaxOffset(limit: ReadLimit): FileStreamSourceOffset = synchronized {
-    val newFiles = if (unreadFiles != null) {
+    val newFiles = if (unreadFiles != null && unreadFiles.nonEmpty) {
       logDebug(s"Reading from unread files - ${unreadFiles.size} files are available.")
       unreadFiles
     } else {
@@ -227,13 +227,16 @@ class FileStreamSource(
       case _: ReadAllAvailable => (newFiles, null)
     }
 
-    if (unselectedFiles != null && unselectedFiles.nonEmpty) {
+    // need to ensure that if maxCachedFiles is set to 0 that the next batch will be forced to
+    // list files again
+    if (unselectedFiles != null && unselectedFiles.nonEmpty && maxCachedFiles > 0) {
       logTrace(s"Taking first $maxCachedFiles unread files.")
       unreadFiles = unselectedFiles.take(maxCachedFiles)
       logTrace(s"${unreadFiles.size} unread files are available for further batches.")
     } else {
       unreadFiles = null
-      logTrace(s"No unread file is available for further batches.")
+      logTrace(s"No unread file is available for further batches or maxCachedFiles has been set " +
+        s" to 0 to disable caching.")
     }
 
     batchFiles.foreach { case NewFileEntry(p, _, timestamp) =>

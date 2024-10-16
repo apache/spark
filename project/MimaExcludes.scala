@@ -96,8 +96,111 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.python.WriteInputFormatTestDataGenerator"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.python.WriteInputFormatTestDataGenerator$"),
     // SPARK-47764: Cleanup shuffle dependencies based on ShuffleCleanupMode
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.shuffle.MigratableResolver.addShuffleToSkip")
-  )
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.shuffle.MigratableResolver.addShuffleToSkip"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.SQLContext#implicits._sqlContext"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.SQLImplicits._sqlContext"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.SQLImplicits.session"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.SparkSession#implicits._sqlContext"),
+    // SPARK-48761: Add clusterBy() to CreateTableWriter.
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.CreateTableWriter.clusterBy"),
+    // SPARK-48900: Add `reason` string to all job / stage / job group cancellation calls
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.scheduler.JobWaiter.cancel"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.FutureAction.cancel"),
+    // SPARK-48901: Add clusterBy() to DataStreamWriter.
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.DataStreamWriter.clusterBy"),
+    // SPARK-49027: A shared Column API
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ColumnName"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.TypedColumn"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.functions"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.functions$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.Aggregator"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.MutableAggregationBuffer"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.UserDefinedAggregateFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.UserDefinedFunction"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.Window"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.Window$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.WindowSpec"),
+
+    // SPARK-49423: Consolidate Observation in sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Observation"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Observation$"),
+
+    // SPARK-49425: Create a shared DataFrameWriter interface.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrameWriter"),
+
+    // SPARK-49284: Shared Catalog interface.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.catalog.CatalogMetadata"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.catalog.Column"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.catalog.Database"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.catalog.Function"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.catalog.Table"),
+
+    // SPARK-49426: Shared DataFrameWriterV2
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CreateTableWriter"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrameWriterV2"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WriteConfigMethods"),
+
+    // SPARK-49424: Shared Encoders
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders$"),
+
+    // SPARK-49413: Create a shared RuntimeConfig interface.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RuntimeConfig"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RuntimeConfig$"),
+
+    // SPARK-49287: Shared Streaming interfaces
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.scheduler.SparkListenerEvent"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ForeachWriter"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.SourceProgress"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.SourceProgress$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StateOperatorProgress"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StateOperatorProgress$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener$Event"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener$QueryIdleEvent"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener$QueryProgressEvent"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener$QueryStartedEvent"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryListener$QueryTerminatedEvent"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryStatus"),
+
+    // SPARK-49415: Shared SQLImplicits.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DatasetHolder"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DatasetHolder$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.LowPrioritySQLImplicits"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.SQLContext$implicits$"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.SQLImplicits"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.SQLImplicits.StringToColumn"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.SQLImplicits.this"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLImplicits$StringToColumn"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.SparkSession$implicits$"),
+    ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.sql.SQLImplicits.session"),
+
+    // SPARK-49282: Shared SparkSessionBuilder
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.SparkSession$Builder"),
+
+    // SPARK-49286: Avro/Protobuf functions in sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.functions"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.functions$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.protobuf.functions"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.protobuf.functions$"),
+
+    // SPARK-49434: Move aggregators to sql/api
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.javalang.typed"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.scalalang.typed"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.scalalang.typed$"),
+
+    // SPARK-49418: Consolidate thread local handling in sql/api
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.SparkSession.setActiveSession"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.SparkSession.setDefaultSession"),
+    ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.sql.api.SparkSessionCompanion.clearActiveSession"),
+    ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.sql.api.SparkSessionCompanion.clearDefaultSession"),
+
+    // SPARK-49748: Add getCondition and deprecate getErrorClass in SparkThrowable
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.SparkThrowable.getCondition"),
+  ) ++ loggingExcludes("org.apache.spark.sql.DataFrameReader") ++
+    loggingExcludes("org.apache.spark.sql.streaming.DataStreamReader") ++
+    loggingExcludes("org.apache.spark.sql.SparkSession#Builder")
 
   // Default exclude rules
   lazy val defaultExcludes = Seq(
@@ -115,6 +218,8 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.execution.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.internal.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.errors.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.classic.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.connect.*"),
     // DSv2 catalog and expression APIs are unstable yet. We should enable this back.
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.catalog.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.expressions.*"),
@@ -135,6 +240,26 @@ object MimaExcludes {
       case _ => true
     }
   )
+
+  private def loggingExcludes(fqn: String) = {
+    Seq(
+      ProblemFilters.exclude[MissingTypesProblem](fqn),
+      missingMethod(fqn, "logName"),
+      missingMethod(fqn, "log"),
+      missingMethod(fqn, "logInfo"),
+      missingMethod(fqn, "logDebug"),
+      missingMethod(fqn, "logTrace"),
+      missingMethod(fqn, "logWarning"),
+      missingMethod(fqn, "logError"),
+      missingMethod(fqn, "isTraceEnabled"),
+      missingMethod(fqn, "initializeLogIfNecessary"),
+      missingMethod(fqn, "initializeLogIfNecessary$default$2"),
+      missingMethod(fqn, "initializeForcefully"))
+  }
+
+  private def missingMethod(names: String*) = {
+    ProblemFilters.exclude[DirectMissingMethodProblem](names.mkString("."))
+  }
 
   def excludes(version: String): Seq[Problem => Boolean] = version match {
     case v if v.startsWith("4.0") => v40excludes

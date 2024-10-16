@@ -290,7 +290,7 @@ public abstract class Operation {
       if (operationLog == null) {
         LOG.error("Operation [ {} ] logging is enabled, " +
           "but its OperationLog object cannot be found.",
-          MDC.of(LogKeys.OPERATION_HANDLE_IDENTIFIER$.MODULE$, opHandle.getHandleIdentifier()));
+          MDC.of(LogKeys.OPERATION_HANDLE_ID$.MODULE$, opHandle.getHandleIdentifier()));
       } else {
         operationLog.close();
       }

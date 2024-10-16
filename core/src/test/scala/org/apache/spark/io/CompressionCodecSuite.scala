@@ -18,6 +18,7 @@
 package org.apache.spark.io
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.util.Locale
 
 import com.google.common.io.ByteStreams
 
@@ -131,7 +132,7 @@ class CompressionCodecSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         CompressionCodec.createCodec(conf, "foobar")
       },
-      errorClass = "CODEC_NOT_AVAILABLE.WITH_CONF_SUGGESTION",
+      condition = "CODEC_NOT_AVAILABLE.WITH_CONF_SUGGESTION",
       parameters = Map(
         "codecName" -> "foobar",
         "configKey" -> "\"spark.io.compression.codec\"",
@@ -159,5 +160,19 @@ class CompressionCodecSuite extends SparkFunSuite {
     val decompressed: Array[Byte] = new Array[Byte](128)
     ByteStreams.readFully(concatenatedBytes, decompressed)
     assert(decompressed.toSeq === (0 to 127))
+  }
+
+  test("SPARK-48506: CompressionCodec getShortName is case insensitive for short names") {
+    CompressionCodec.shortCompressionCodecNames.foreach { case (shortName, codecClass) =>
+      assert(CompressionCodec.getShortName(shortName) === shortName)
+      assert(CompressionCodec.getShortName(shortName.toUpperCase(Locale.ROOT)) === shortName)
+      assert(CompressionCodec.getShortName(codecClass) === shortName)
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          CompressionCodec.getShortName(codecClass.toUpperCase(Locale.ROOT))
+        },
+        condition = "CODEC_SHORT_NAME_NOT_FOUND",
+        parameters = Map("codecName" -> codecClass.toUpperCase(Locale.ROOT)))
+    }
   }
 }

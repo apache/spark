@@ -126,7 +126,9 @@ from pyspark.sql.types import *
 |**FloatType**|float<br/>**Note:** Numbers will be converted to 4-byte single-precision floating point numbers at runtime.|FloatType()|
 |**DoubleType**|float|DoubleType()|
 |**DecimalType**|decimal.Decimal|DecimalType()|
-|**StringType**|string|StringType()|
+|**StringType**|str|StringType()|
+|**CharType(length)**|str|CharType(length)|
+|**VarcharType(length)**|str|VarcharType(length)|
 |**BinaryType**|bytearray|BinaryType()|
 |**BooleanType**|bool|BooleanType()|
 |**TimestampType**|datetime.datetime|TimestampType()|
@@ -157,6 +159,8 @@ You can access them by doing
 |**DoubleType**|Double|DoubleType|
 |**DecimalType**|java.math.BigDecimal|DecimalType|
 |**StringType**|String|StringType|
+|**CharType(length)**|String|CharType(length)|
+|**VarcharType(length)**|String|VarcharType(length)|
 |**BinaryType**|Array[Byte]|BinaryType|
 |**BooleanType**|Boolean|BooleanType|
 |**TimestampType**|java.time.Instant or java.sql.Timestamp|TimestampType|
@@ -188,6 +192,8 @@ please use factory methods provided in
 |**DoubleType**|double or Double|DataTypes.DoubleType|
 |**DecimalType**|java.math.BigDecimal|DataTypes.createDecimalType()<br/>DataTypes.createDecimalType(*precision*, *scale*).|
 |**StringType**|String|DataTypes.StringType|
+|**CharType(length)**|String|DataTypes.createCharType(length)|
+|**VarcharType(length)**|String|DataTypes.createVarcharType(length)|
 |**BinaryType**|byte[]|DataTypes.BinaryType|
 |**BooleanType**|boolean or Boolean|DataTypes.BooleanType|
 |**TimestampType**|java.time.Instant or java.sql.Timestamp|DataTypes.TimestampType|
@@ -242,6 +248,8 @@ The following table shows the type names as well as aliases used in Spark SQL pa
 |**TimestampType**|TIMESTAMP, TIMESTAMP_LTZ|
 |**TimestampNTZType**|TIMESTAMP_NTZ|
 |**StringType**|STRING|
+|**CharType(length)**|CHAR(length)|
+|**VarcharType(length)**|VARCHAR(length)|
 |**BinaryType**|BINARY|
 |**DecimalType**|DECIMAL, DEC, NUMERIC|
 |**YearMonthIntervalType**|INTERVAL YEAR, INTERVAL YEAR TO MONTH, INTERVAL MONTH|

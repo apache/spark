@@ -26,7 +26,8 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.api.java.UDF2
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder}
-import org.apache.spark.sql.functions.{col, struct, udf}
+import org.apache.spark.sql.expressions.Aggregator
+import org.apache.spark.sql.functions.{col, struct, udaf, udf}
 import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.types.IntegerType
 
@@ -314,11 +315,18 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest with RemoteSparkSession 
       "c")
   }
 
-  test("(deprecated) scala UDF with dataType") {
+  // TODO re-enable this after we hooked SqlApiConf into the session confs.
+  ignore("(deprecated) scala UDF with dataType") {
     val session: SparkSession = spark
     import session.implicits._
     val fn = udf(((i: Long) => (i + 1).toInt), IntegerType)
     checkDataset(session.range(2).select(fn($"id")).as[Int], 1, 2)
+  }
+
+  test("(deprecated) scala UDF with dataType should fail") {
+    intercept[AnalysisException] {
+      udf(((i: Long) => (i + 1).toInt), IntegerType)
+    }
   }
 
   test("java UDF") {
@@ -346,4 +354,111 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest with RemoteSparkSession 
     val result = df.select(f($"id")).as[Long].head()
     assert(result == 1L)
   }
+
+  test("UDAF custom Aggregator - primitive types") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val agg = new Aggregator[Long, Long, Long] {
+      override def zero: Long = 0L
+      override def reduce(b: Long, a: Long): Long = b + a
+      override def merge(b1: Long, b2: Long): Long = b1 + b2
+      override def finish(reduction: Long): Long = reduction
+      override def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+      override def outputEncoder: Encoder[Long] = Encoders.scalaLong
+    }
+    spark.udf.register("agg", udaf(agg))
+    val result = spark.range(10).selectExpr("agg(id)").as[Long].head()
+    assert(result == 45)
+  }
+
+  test("UDAF custom Aggregator - case class as input types") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val agg = new CompleteUdafTestInputAggregator()
+    spark.udf.register("agg", udaf(agg))
+    val result = spark
+      .range(10)
+      .withColumn("extra", col("id") * 2)
+      .as[UdafTestInput]
+      .selectExpr("agg(id, extra)")
+      .as[Long]
+      .head()
+    assert(result == 135) // 45 + 90
+  }
+
+  test("UDAF custom Aggregator - toColumn") {
+    val encoder = Encoders.product[UdafTestInput]
+    val aggCol = new CompleteUdafTestInputAggregator().toColumn
+    val ds = spark.range(10).withColumn("extra", col("id") * 2).as(encoder)
+    assert(ds.select(aggCol).head() == 135) // 45 + 90
+  }
+
+  test("UDAF custom Aggregator - multiple extends - toColumn") {
+    val encoder = Encoders.product[UdafTestInput]
+    val aggCol = new CompleteGrandChildUdafTestInputAggregator().toColumn
+    val ds = spark.range(10).withColumn("extra", col("id") * 2).as(encoder)
+    assert(ds.select(aggCol).head() == 540) // (45 + 90) * 4
+  }
+
+  test("UDAF custom aggregator - with rows - toColumn") {
+    val ds = spark.range(10).withColumn("extra", col("id") * 2)
+    assert(ds.select(RowAggregator.toColumn).head() == 405)
+    assert(ds.agg(RowAggregator.toColumn).head().getLong(0) == 405)
+  }
+}
+
+case class UdafTestInput(id: Long, extra: Long)
+
+// An Aggregator that takes [[UdafTestInput]] as input.
+final class CompleteUdafTestInputAggregator
+    extends Aggregator[UdafTestInput, (Long, Long), Long] {
+  override def zero: (Long, Long) = (0L, 0L)
+  override def reduce(b: (Long, Long), a: UdafTestInput): (Long, Long) =
+    (b._1 + a.id, b._2 + a.extra)
+  override def merge(b1: (Long, Long), b2: (Long, Long)): (Long, Long) =
+    (b1._1 + b2._1, b1._2 + b2._2)
+  override def finish(reduction: (Long, Long)): Long = reduction._1 + reduction._2
+  override def bufferEncoder: Encoder[(Long, Long)] =
+    Encoders.tuple(Encoders.scalaLong, Encoders.scalaLong)
+  override def outputEncoder: Encoder[Long] = Encoders.scalaLong
+}
+
+// Same as [[CompleteUdafTestInputAggregator]] but the input type is not defined.
+abstract class IncompleteUdafTestInputAggregator[T] extends Aggregator[T, (Long, Long), Long] {
+  override def zero: (Long, Long) = (0L, 0L)
+  override def reduce(b: (Long, Long), a: T): (Long, Long) // Incomplete!
+  override def merge(b1: (Long, Long), b2: (Long, Long)): (Long, Long) =
+    (b1._1 + b2._1, b1._2 + b2._2)
+  override def finish(reduction: (Long, Long)): Long = reduction._1 + reduction._2
+  override def bufferEncoder: Encoder[(Long, Long)] =
+    Encoders.tuple(Encoders.scalaLong, Encoders.scalaLong)
+  override def outputEncoder: Encoder[Long] = Encoders.scalaLong
+}
+
+// A layer over [[IncompleteUdafTestInputAggregator]] but the input type is still not defined.
+abstract class IncompleteChildUdafTestInputAggregator[T]
+    extends IncompleteUdafTestInputAggregator[T] {
+  override def finish(reduction: (Long, Long)): Long = (reduction._1 + reduction._2) * 2
+}
+
+// Another layer that finally defines the input type.
+final class CompleteGrandChildUdafTestInputAggregator
+    extends IncompleteChildUdafTestInputAggregator[UdafTestInput] {
+  override def reduce(b: (Long, Long), a: UdafTestInput): (Long, Long) =
+    (b._1 + a.id, b._2 + a.extra)
+  override def finish(reduction: (Long, Long)): Long = (reduction._1 + reduction._2) * 4
+}
+
+object RowAggregator extends Aggregator[Row, (Long, Long), Long] {
+  override def zero: (Long, Long) = (0, 0)
+  override def reduce(b: (Long, Long), a: Row): (Long, Long) = {
+    (b._1 + a.getLong(0), b._2 + a.getLong(1))
+  }
+  override def merge(b1: (Long, Long), b2: (Long, Long)): (Long, Long) = {
+    (b1._1 + b2._1, b1._2 + b2._2)
+  }
+  override def finish(r: (Long, Long)): Long = (r._1 + r._2) * 3
+  override def bufferEncoder: Encoder[(Long, Long)] =
+    Encoders.tuple(Encoders.scalaLong, Encoders.scalaLong)
+  override def outputEncoder: Encoder[Long] = Encoders.scalaLong
 }

@@ -1,2 +1,0 @@
-Aggregate [collect_list(a#0, 0, 0) AS collect_list(a)#0]
-+- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

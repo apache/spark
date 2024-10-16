@@ -101,7 +101,7 @@ class GroupedData:
 
     def __repr__(self) -> str:
         # the expressions are not resolved here,
-        # so the string representation can be different from vanilla PySpark.
+        # so the string representation can be different from classic PySpark.
         grouping_str = ", ".join(str(e._expr) for e in self._grouping_cols)
         grouping_str = f"grouping expressions: [{grouping_str}]"
 
@@ -172,8 +172,8 @@ class GroupedData:
             invalid_cols = [c for c in cols if c not in numerical_cols]
             if len(invalid_cols) > 0:
                 raise PySparkTypeError(
-                    error_class="NOT_NUMERIC_COLUMNS",
-                    message_parameters={"invalid_columns": str(invalid_cols)},
+                    errorClass="NOT_NUMERIC_COLUMNS",
+                    messageParameters={"invalid_columns": str(invalid_cols)},
                 )
             agg_cols = cols
         else:
@@ -224,32 +224,32 @@ class GroupedData:
         if self._group_type != "groupby":
             if self._group_type == "pivot":
                 raise PySparkNotImplementedError(
-                    error_class="UNSUPPORTED_OPERATION",
-                    message_parameters={"operation": "Repeated PIVOT operation"},
+                    errorClass="UNSUPPORTED_OPERATION",
+                    messageParameters={"operation": "Repeated PIVOT operation"},
                 )
             else:
                 raise PySparkNotImplementedError(
-                    error_class="UNSUPPORTED_OPERATION",
-                    message_parameters={"operation": f"PIVOT after {self._group_type.upper()}"},
+                    errorClass="UNSUPPORTED_OPERATION",
+                    messageParameters={"operation": f"PIVOT after {self._group_type.upper()}"},
                 )
 
         if not isinstance(pivot_col, str):
             raise PySparkTypeError(
-                error_class="NOT_STR",
-                message_parameters={"arg_name": "pivot_col", "arg_type": type(pivot_col).__name__},
+                errorClass="NOT_STR",
+                messageParameters={"arg_name": "pivot_col", "arg_type": type(pivot_col).__name__},
             )
 
         if values is not None:
             if not isinstance(values, list):
                 raise PySparkTypeError(
-                    error_class="NOT_LIST",
-                    message_parameters={"arg_name": "values", "arg_type": type(values).__name__},
+                    errorClass="NOT_LIST",
+                    messageParameters={"arg_name": "values", "arg_type": type(values).__name__},
                 )
             for v in values:
                 if not isinstance(v, (bool, float, int, str)):
                     raise PySparkTypeError(
-                        error_class="NOT_BOOL_OR_FLOAT_OR_INT_OR_STR",
-                        message_parameters={"arg_name": "value", "arg_type": type(v).__name__},
+                        errorClass="NOT_BOOL_OR_FLOAT_OR_INT_OR_STR",
+                        messageParameters={"arg_name": "value", "arg_type": type(v).__name__},
                     )
 
         return GroupedData(
@@ -273,8 +273,8 @@ class GroupedData:
             )
         ):
             raise PySparkTypeError(
-                error_class="INVALID_UDF_EVAL_TYPE",
-                message_parameters={"eval_type": "SQL_GROUPED_MAP_PANDAS_UDF"},
+                errorClass="INVALID_UDF_EVAL_TYPE",
+                messageParameters={"eval_type": "SQL_GROUPED_MAP_PANDAS_UDF"},
             )
 
         warnings.warn(
@@ -301,7 +301,7 @@ class GroupedData:
             evalType=PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         )
 
-        return DataFrame(
+        res = DataFrame(
             plan.GroupMap(
                 child=self._df._plan,
                 grouping_cols=self._grouping_cols,
@@ -310,6 +310,9 @@ class GroupedData:
             ),
             session=self._df._session,
         )
+        if isinstance(schema, StructType):
+            res._cached_schema = schema
+        return res
 
     applyInPandas.__doc__ = PySparkGroupedData.applyInPandas.__doc__
 
@@ -370,7 +373,7 @@ class GroupedData:
             evalType=PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
         )
 
-        return DataFrame(
+        res = DataFrame(
             plan.GroupMap(
                 child=self._df._plan,
                 grouping_cols=self._grouping_cols,
@@ -379,6 +382,9 @@ class GroupedData:
             ),
             session=self._df._session,
         )
+        if isinstance(schema, StructType):
+            res._cached_schema = schema
+        return res
 
     applyInArrow.__doc__ = PySparkGroupedData.applyInArrow.__doc__
 
@@ -410,7 +416,7 @@ class PandasCogroupedOps:
             evalType=PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         )
 
-        return DataFrame(
+        res = DataFrame(
             plan.CoGroupMap(
                 input=self._gd1._df._plan,
                 input_grouping_cols=self._gd1._grouping_cols,
@@ -420,6 +426,9 @@ class PandasCogroupedOps:
             ),
             session=self._gd1._df._session,
         )
+        if isinstance(schema, StructType):
+            res._cached_schema = schema
+        return res
 
     applyInPandas.__doc__ = PySparkPandasCogroupedOps.applyInPandas.__doc__
 
@@ -436,7 +445,7 @@ class PandasCogroupedOps:
             evalType=PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
         )
 
-        return DataFrame(
+        res = DataFrame(
             plan.CoGroupMap(
                 input=self._gd1._df._plan,
                 input_grouping_cols=self._gd1._grouping_cols,
@@ -446,6 +455,9 @@ class PandasCogroupedOps:
             ),
             session=self._gd1._df._session,
         )
+        if isinstance(schema, StructType):
+            res._cached_schema = schema
+        return res
 
     applyInArrow.__doc__ = PySparkPandasCogroupedOps.applyInArrow.__doc__
 

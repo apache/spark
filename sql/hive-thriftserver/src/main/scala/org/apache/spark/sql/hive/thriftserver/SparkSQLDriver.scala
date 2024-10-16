@@ -29,14 +29,14 @@ import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.COMMAND
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.CommandResult
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
 
 
-private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlContext)
+private[hive] class SparkSQLDriver(val sparkSession: SparkSession = SparkSQLEnv.sparkSession)
   extends Driver
   with Logging {
 
@@ -62,11 +62,11 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
 
   override def run(command: String): CommandProcessorResponse = {
     try {
-      val substitutorCommand = SQLConf.withExistingConf(context.sparkSession.sessionState.conf) {
+      val substitutorCommand = SQLConf.withExistingConf(sparkSession.sessionState.conf) {
         new VariableSubstitution().substitute(command)
       }
-      context.sparkContext.setJobDescription(substitutorCommand)
-      val execution = context.sessionState.executePlan(context.sql(command).logicalPlan)
+      sparkSession.sparkContext.setJobDescription(substitutorCommand)
+      val execution = sparkSession.sessionState.executePlan(sparkSession.sql(command).logicalPlan)
       // The SQL command has been executed above via `executePlan`, therefore we don't need to
       // wrap it again with a new execution ID when getting Hive result.
       execution.logical match {

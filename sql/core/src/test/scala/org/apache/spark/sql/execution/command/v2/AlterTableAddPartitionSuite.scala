@@ -43,7 +43,7 @@ class AlterTableAddPartitionSuite
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
+        condition = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
         parameters = Map("name" -> tableName),
         context = ExpectedContext(
           fragment = t,
@@ -105,7 +105,7 @@ class AlterTableAddPartitionSuite
         checkCachedRelation("v1", Seq(Row(0, 0), Row(0, 1), Row(1, 2)))
       }
 
-      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+      val v2 = s"${spark.sharedState.globalTempDB}.v2"
       withGlobalTempView(v2) {
         sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
         cacheRelation(v2)
@@ -126,7 +126,7 @@ class AlterTableAddPartitionSuite
           " PARTITION (id=2) LOCATION 'loc1'")
       }
       checkError(e,
-        errorClass = "PARTITIONS_ALREADY_EXIST",
+        condition = "PARTITIONS_ALREADY_EXIST",
         parameters = Map("partitionList" -> "PARTITION (`id` = 2)",
         "tableName" -> "`test_catalog`.`ns`.`tbl`"))
 
@@ -146,9 +146,8 @@ class AlterTableAddPartitionSuite
             exception = intercept[SparkNumberFormatException] {
               sql(s"ALTER TABLE $t ADD PARTITION (p='aaa')")
             },
-            errorClass = "CAST_INVALID_INPUT",
+            condition = "CAST_INVALID_INPUT",
             parameters = Map(
-              "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
               "expression" -> "'aaa'",
               "sourceType" -> "\"STRING\"",
               "targetType" -> "\"INT\""),

@@ -1710,3 +1710,59 @@ Project [t0a#x, t0b#x]
       +- View (`t0`, [t0a#x, t0b#x])
          +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
             +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select *
+from range(1, 3) t1
+where (select t2.id c
+       from range (1, 2) t2 where t1.id = t2.id
+      ) between 1 and 2
+-- !query analysis
+Project [id#xL]
++- Filter between(scalar-subquery#x [id#xL], 1, 2)
+   :  +- Project [id#xL AS c#xL]
+   :     +- Filter (outer(id#xL) = id#xL)
+   :        +- SubqueryAlias t2
+   :           +- Range (1, 2, step=1)
+   +- SubqueryAlias t1
+      +- Range (1, 3, step=1)
+
+
+-- !query
+SELECT *
+FROM t1
+WHERE (SELECT max(t2c)
+       FROM t2 WHERE t1b = t2b
+      ) between 1 and 2
+-- !query analysis
+Project [t1a#x, t1b#x, t1c#x]
++- Filter between(scalar-subquery#x [t1b#x], 1, 2)
+   :  +- Aggregate [max(t2c#x) AS max(t2c)#x]
+   :     +- Filter (outer(t1b#x) = t2b#x)
+   :        +- SubqueryAlias t2
+   :           +- View (`t2`, [t2a#x, t2b#x, t2c#x])
+   :              +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+   :                 +- LocalRelation [col1#x, col2#x, col3#x]
+   +- SubqueryAlias t1
+      +- View (`t1`, [t1a#x, t1b#x, t1c#x])
+         +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+            +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT * FROM t0 WHERE t0a = (SELECT distinct(t1c) FROM t1 WHERE t1a = t0a)
+-- !query analysis
+Project [t0a#x, t0b#x]
++- Filter (t0a#x = scalar-subquery#x [t0a#x])
+   :  +- Distinct
+   :     +- Project [t1c#x]
+   :        +- Filter (t1a#x = outer(t0a#x))
+   :           +- SubqueryAlias t1
+   :              +- View (`t1`, [t1a#x, t1b#x, t1c#x])
+   :                 +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+   :                    +- LocalRelation [col1#x, col2#x, col3#x]
+   +- SubqueryAlias t0
+      +- View (`t0`, [t0a#x, t0b#x])
+         +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+            +- LocalRelation [col1#x, col2#x]

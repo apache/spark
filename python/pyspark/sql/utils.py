@@ -14,12 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from enum import Enum
 import inspect
 import functools
 import os
 from typing import (
     Any,
     Callable,
+    Dict,
     Optional,
     List,
     Sequence,
@@ -27,7 +29,6 @@ from typing import (
     cast,
     TypeVar,
     Union,
-    Type,
 )
 
 # For backward compatibility.
@@ -40,6 +41,7 @@ from pyspark.errors import (  # noqa: F401
     PythonException,
     UnknownException,
     SparkUpgradeException,
+    PySparkImportError,
     PySparkNotImplementedError,
     PySparkRuntimeError,
 )
@@ -53,11 +55,11 @@ if TYPE_CHECKING:
         JavaClass,
         JavaGateway,
         JavaObject,
+        JVMView,
     )
     from pyspark import SparkContext
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
-    from pyspark.sql.window import Window
     from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 
 has_numpy: bool = False
@@ -72,7 +74,7 @@ except ImportError:
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
-def toJArray(gateway: "JavaGateway", jtype: "JavaClass", arr: Sequence[Any]) -> "JavaArray":
+def to_java_array(gateway: "JavaGateway", jtype: "JavaClass", arr: Sequence[Any]) -> "JavaArray":
     """
     Convert python list to java type array
 
@@ -91,6 +93,14 @@ def toJArray(gateway: "JavaGateway", jtype: "JavaClass", arr: Sequence[Any]) -> 
     return jarray
 
 
+def to_scala_map(jvm: "JVMView", dic: Dict) -> "JavaObject":
+    """
+    Convert a dict into a Scala Map.
+    """
+    assert jvm is not None
+    return jvm.PythonUtils.toScalaMap(dic)
+
+
 def require_test_compiled() -> None:
     """Raise Exception if test classes are not compiled"""
     import os
@@ -101,9 +111,25 @@ def require_test_compiled() -> None:
 
     if len(paths) == 0:
         raise PySparkRuntimeError(
-            error_class="TEST_CLASS_NOT_COMPILED",
-            message_parameters={"test_class_path": test_class_path},
+            errorClass="TEST_CLASS_NOT_COMPILED",
+            messageParameters={"test_class_path": test_class_path},
         )
+
+
+def require_minimum_plotly_version() -> None:
+    """Raise ImportError if plotly is not installed"""
+    minimum_plotly_version = "4.8"
+
+    try:
+        import plotly  # noqa: F401
+    except ImportError as error:
+        raise PySparkImportError(
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={
+                "package_name": "plotly",
+                "minimum_version": str(minimum_plotly_version),
+            },
+        ) from error
 
 
 class ForeachBatchFunction:
@@ -183,6 +209,11 @@ def to_str(value: Any) -> Optional[str]:
         return value
     else:
         return str(value)
+
+
+def enum_to_value(value: Any) -> Any:
+    """Convert an Enum to its value if it is not None."""
+    return enum_to_value(value.value) if value is not None and isinstance(value, Enum) else value
 
 
 def is_timestamp_ntz_preferred() -> bool:
@@ -290,36 +321,6 @@ def try_remote_protobuf_functions(f: FuncT) -> FuncT:
     return cast(FuncT, wrapped)
 
 
-def try_remote_window(f: FuncT) -> FuncT:
-    """Mark API supported from Spark Connect."""
-
-    @functools.wraps(f)
-    def wrapped(*args: Any, **kwargs: Any) -> Any:
-        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            from pyspark.sql.connect.window import Window
-
-            return getattr(Window, f.__name__)(*args, **kwargs)
-        else:
-            return f(*args, **kwargs)
-
-    return cast(FuncT, wrapped)
-
-
-def try_remote_windowspec(f: FuncT) -> FuncT:
-    """Mark API supported from Spark Connect."""
-
-    @functools.wraps(f)
-    def wrapped(*args: Any, **kwargs: Any) -> Any:
-        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            from pyspark.sql.connect.window import WindowSpec
-
-            return getattr(WindowSpec, f.__name__)(*args, **kwargs)
-        else:
-            return f(*args, **kwargs)
-
-    return cast(FuncT, wrapped)
-
-
 def get_active_spark_context() -> "SparkContext":
     """Raise RuntimeError if SparkContext is not initialized,
     otherwise, returns the active SparkContext."""
@@ -328,8 +329,8 @@ def get_active_spark_context() -> "SparkContext":
     sc = SparkContext._active_spark_context
     if sc is None or sc._jvm is None:
         raise PySparkRuntimeError(
-            error_class="SESSION_OR_CONTEXT_NOT_EXISTS",
-            message_parameters={},
+            errorClass="SESSION_OR_CONTEXT_NOT_EXISTS",
+            messageParameters={},
         )
     return sc
 
@@ -352,7 +353,7 @@ def try_remote_session_classmethod(f: FuncT) -> FuncT:
 
 def dispatch_df_method(f: FuncT) -> FuncT:
     """
-    For the usecases of direct DataFrame.union(df, ...), it checks if self
+    For the use cases of direct DataFrame.method(df, ...), it checks if self
     is a Connect DataFrame or Classic DataFrame, and dispatches.
     """
 
@@ -370,8 +371,8 @@ def dispatch_df_method(f: FuncT) -> FuncT:
                 return getattr(ClassicDataFrame, f.__name__)(*args, **kwargs)
 
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": f"DataFrame.{f.__name__}"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": f"DataFrame.{f.__name__}"},
         )
 
     return cast(FuncT, wrapped)
@@ -379,8 +380,8 @@ def dispatch_df_method(f: FuncT) -> FuncT:
 
 def dispatch_col_method(f: FuncT) -> FuncT:
     """
-    For the usecases of direct Column.method(col, ...), it checks if self
-    is a Connect DataFrame or Classic DataFrame, and dispatches.
+    For the use cases of direct Column.method(col, ...), it checks if self
+    is a Connect Column or Classic Column, and dispatches.
     """
 
     @functools.wraps(f)
@@ -397,9 +398,30 @@ def dispatch_col_method(f: FuncT) -> FuncT:
                 return getattr(ClassicColumn, f.__name__)(*args, **kwargs)
 
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": f"DataFrame.{f.__name__}"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": f"Column.{f.__name__}"},
         )
+
+    return cast(FuncT, wrapped)
+
+
+def dispatch_window_method(f: FuncT) -> FuncT:
+    """
+    For use cases of direct Window.method(col, ...), this function dispatches
+    the call to either ConnectWindow or ClassicWindow based on the execution
+    environment.
+    """
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.sql.connect.window import Window as ConnectWindow
+
+            return getattr(ConnectWindow, f.__name__)(*args, **kwargs)
+        else:
+            from pyspark.sql.classic.window import Window as ClassicWindow
+
+            return getattr(ClassicWindow, f.__name__)(*args, **kwargs)
 
     return cast(FuncT, wrapped)
 
@@ -420,17 +442,6 @@ def pyspark_column_op(
         fillna = None
     # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
     return result.fillna(fillna) if fillna is not None else result
-
-
-def get_window_class() -> Type["Window"]:
-    from pyspark.sql.window import Window as PySparkWindow
-
-    if is_remote():
-        from pyspark.sql.connect.window import Window as ConnectWindow
-
-        return ConnectWindow  # type: ignore[return-value]
-    else:
-        return PySparkWindow
 
 
 def get_lit_sql_str(val: str) -> str:

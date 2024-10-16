@@ -1,0 +1,42 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "aggregate": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "groupType": "GROUP_TYPE_GROUPBY",
+    "groupingExpressions": [{
+      "unresolvedAttribute": {
+        "unparsedIdentifier": "id"
+      }
+    }],
+    "aggregateExpressions": [{
+      "unresolvedFunction": {
+        "functionName": "max",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "a",
+            "planId": "0"
+          }
+        }]
+      }
+    }, {
+      "unresolvedFunction": {
+        "functionName": "max",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "b",
+            "planId": "0"
+          }
+        }]
+      }
+    }]
+  }
+}

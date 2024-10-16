@@ -518,3 +518,17 @@ SELECT * FROM t0 WHERE t0a <
   FROM  t1 LEFT JOIN t2 ON (t1a = t0a AND t2b = t0b))
 );
 
+select *
+from range(1, 3) t1
+where (select t2.id c
+       from range (1, 2) t2 where t1.id = t2.id
+      ) between 1 and 2;
+
+SELECT *
+FROM t1
+WHERE (SELECT max(t2c)
+       FROM t2 WHERE t1b = t2b
+      ) between 1 and 2;
+
+
+SELECT * FROM t0 WHERE t0a = (SELECT distinct(t1c) FROM t1 WHERE t1a = t0a);

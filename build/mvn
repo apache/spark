@@ -58,7 +58,7 @@ install_app() {
   local local_checksum="${local_tarball}.${checksum_suffix}"
   local remote_checksum="https://archive.apache.org/dist/${url_path}.${checksum_suffix}"
 
-  local curl_opts="--silent --show-error -L"
+  local curl_opts="--retry 3 --silent --show-error -L"
   local wget_opts="--no-verbose"
 
   if [ ! -f "$binary" ]; then
@@ -115,6 +115,10 @@ function version { echo "$@" | awk -F. '{ printf("%03d%03d%03d\n", $1,$2,$3); }'
 # install maven under the build/ folder if needed.
 install_mvn() {
   local MVN_VERSION=`grep "<maven.version>" "${_DIR}/../pom.xml" | head -n1 | awk -F '[<>]' '{print $3}'`
+  MVN_BIN="${_DIR}/apache-maven-${MVN_VERSION}/bin/mvn"
+  if [ -f "$MVN_BIN" ]; then
+    return
+  fi
   MVN_BIN="$(command -v mvn)"
   if [ "$MVN_BIN" ]; then
     local MVN_DETECTED_VERSION="$(mvn --version | head -n1 | awk '{print $3}')"

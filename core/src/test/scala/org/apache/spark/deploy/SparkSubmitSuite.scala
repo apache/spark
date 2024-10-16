@@ -1107,15 +1107,34 @@ class SparkSubmitSuite
         "--master", "local",
         unusedJar.toString)
       val appArgs = new SparkSubmitArguments(args, env = Map("SPARK_CONF_DIR" -> path))
-      assert(appArgs.propertiesFile != null)
-      assert(appArgs.propertiesFile.startsWith(path))
       appArgs.executorMemory should be ("3g")
     }
   }
 
-  test("SPARK-48392: Allow both spark-defaults.conf and properties file") {
-    forConfDir(Map("spark.executor.memory" -> "3g")) { path =>
-      withPropertyFile("spark-conf.properties", Map("spark.executor.cores" -> "16")) { propsFile =>
+  test("SPARK-48392: load spark-defaults.conf when --load-spark-defaults is set") {
+    forConfDir(Map("spark.executor.memory" -> "3g", "spark.driver.memory" -> "3g")) { path =>
+      withPropertyFile("spark-conf.properties",
+          Map("spark.executor.cores" -> "16", "spark.driver.memory" -> "4g")) { propsFile =>
+        val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+        val args = Seq(
+          "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
+          "--name", "testApp",
+          "--master", "local",
+          "--properties-file", propsFile,
+          "--load-spark-defaults",
+          unusedJar.toString)
+        val appArgs = new SparkSubmitArguments(args, env = Map("SPARK_CONF_DIR" -> path))
+        appArgs.executorCores should be("16")
+        appArgs.executorMemory should be("3g")
+        appArgs.driverMemory should be("4g")
+      }
+    }
+  }
+
+  test("SPARK-48392: should skip spark-defaults.conf when --load-spark-defaults is not set") {
+    forConfDir(Map("spark.executor.memory" -> "3g", "spark.driver.memory" -> "3g")) { path =>
+      withPropertyFile("spark-conf.properties",
+        Map("spark.executor.cores" -> "16", "spark.driver.memory" -> "4g")) { propsFile =>
         val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
         val args = Seq(
           "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
@@ -1124,8 +1143,9 @@ class SparkSubmitSuite
           "--properties-file", propsFile,
           unusedJar.toString)
         val appArgs = new SparkSubmitArguments(args, env = Map("SPARK_CONF_DIR" -> path))
-        appArgs.executorMemory should be("3g")
         appArgs.executorCores should be("16")
+        appArgs.driverMemory should be("4g")
+        appArgs.executorMemory should be(null)
       }
     }
   }
@@ -1781,6 +1801,23 @@ class SparkSubmitSuite
     val appArgs = new SparkSubmitArguments(clArgs)
     val (_, classpath, _, _) = submit.prepareSubmitEnvironment(appArgs)
     assert(classpath.contains("."))
+  }
+
+  // Requires Python dependencies for Spark Connect. Should be enabled by default.
+  ignore("Spark Connect application submission (Python)") {
+    val pyFile = File.createTempFile("remote_test", ".py")
+    pyFile.deleteOnExit()
+    val content =
+      "from pyspark.sql import SparkSession;" +
+        "spark = SparkSession.builder.getOrCreate();" +
+        "assert 'connect' in str(type(spark));" +
+        "assert spark.range(1).first()[0] == 0"
+    FileUtils.write(pyFile, content, StandardCharsets.UTF_8)
+    val args = Seq(
+      "--name", "testPyApp",
+      "--remote", "local",
+      pyFile.getAbsolutePath)
+    runSparkSubmit(args)
   }
 }
 

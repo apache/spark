@@ -31,8 +31,11 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
     def test_createDataFrame_fallback_enabled(self):
         super().test_createDataFrame_fallback_enabled()
 
-    def test_createDataFrame_with_map_type(self):
-        self.check_createDataFrame_with_map_type(True)
+    def test_createDataFrame_pandas_with_map_type(self):
+        self.check_createDataFrame_pandas_with_map_type(True)
+
+    def test_createDataFrame_pandas_with_struct_type(self):
+        self.check_createDataFrame_pandas_with_struct_type(True)
 
     def test_createDataFrame_with_ndarray(self):
         self.check_createDataFrame_with_ndarray(True)
@@ -69,6 +72,9 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
     def test_create_data_frame_to_pandas_day_time_internal(self):
         self.check_create_data_frame_to_pandas_day_time_internal(True)
 
+    def test_createDataFrame_pandas_respect_session_timezone(self):
+        self.check_createDataFrame_pandas_respect_session_timezone(True)
+
     def test_toPandas_respect_session_timezone(self):
         self.check_toPandas_respect_session_timezone(True)
 
@@ -89,11 +95,11 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
     def test_toPandas_with_map_type_nulls(self):
         self.check_toPandas_with_map_type_nulls(True)
 
-    def test_createDataFrame_with_array_type(self):
-        self.check_createDataFrame_with_array_type(True)
+    def test_createDataFrame_pandas_with_array_type(self):
+        self.check_createDataFrame_pandas_with_array_type(True)
 
-    def test_createDataFrame_with_int_col_names(self):
-        self.check_createDataFrame_with_int_col_names(True)
+    def test_createDataFrame_pandas_with_int_col_names(self):
+        self.check_createDataFrame_pandas_with_int_col_names(True)
 
     def test_timestamp_nat(self):
         self.check_timestamp_nat(True)
@@ -104,14 +110,17 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
     def test_toPandas_duplicate_field_names(self):
         self.check_toPandas_duplicate_field_names(True)
 
-    def test_createDataFrame_duplicate_field_names(self):
-        self.check_createDataFrame_duplicate_field_names(True)
+    def test_createDataFrame_pandas_duplicate_field_names(self):
+        self.check_createDataFrame_pandas_duplicate_field_names(True)
+
+    def test_toPandas_empty_rows(self):
+        self.check_toPandas_empty_rows(True)
 
     def test_toPandas_empty_columns(self):
         self.check_toPandas_empty_columns(True)
 
-    def test_createDataFrame_nested_timestamp(self):
-        self.check_createDataFrame_nested_timestamp(True)
+    def test_createDataFrame_pandas_nested_timestamp(self):
+        self.check_createDataFrame_pandas_nested_timestamp(True)
 
     def test_toPandas_nested_timestamp(self):
         self.check_toPandas_nested_timestamp(True)

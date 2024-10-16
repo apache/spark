@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -741,13 +741,15 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param errorClass The error class assigned in the case of an unclassified `e`
    * @param messageParameters The message parameters of `errorClass`
    * @param description The error description
-   * @return `AnalysisException` or its sub-class.
+   * @param isRuntime Whether the exception is a runtime exception or not.
+   * @return `SparkThrowable + Throwable` or its sub-class.
    */
   def classifyException(
       e: Throwable,
       errorClass: String,
       messageParameters: Map[String, String],
-      description: String): AnalysisException = {
+      description: String,
+      isRuntime: Boolean): Throwable with SparkThrowable = {
     classifyException(description, e)
   }
 
@@ -839,6 +841,31 @@ abstract class JdbcDialect extends Serializable with Logging {
       rsmd: ResultSetMetaData,
       columnIdx: Int,
       metadata: MetadataBuilder): Unit = {}
+}
+
+/**
+ * Make the `classifyException` method throw out the original exception
+ */
+trait NoLegacyJDBCError extends JdbcDialect {
+
+  override def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      description: String,
+      isRuntime: Boolean): Throwable with SparkThrowable = {
+    if (isRuntime) {
+      new SparkRuntimeException(
+        errorClass = errorClass,
+        messageParameters = messageParameters,
+        cause = e)
+    } else {
+      new AnalysisException(
+        errorClass = errorClass,
+        messageParameters = messageParameters,
+        cause = Some(e))
+    }
+  }
 }
 
 /**

@@ -19,7 +19,6 @@ package org.apache.spark
 
 import java.net.URL
 
-import scala.collection.immutable.Map
 import scala.jdk.CollectionConverters._
 
 import com.fasterxml.jackson.annotation.JsonIgnore
@@ -43,12 +42,16 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
   private[spark] val errorInfoMap =
     jsonFileURLs.map(ErrorClassesJsonReader.readAsMap).reduce(_ ++ _)
 
-  def getErrorMessage(errorClass: String, messageParameters: Map[String, String]): String = {
+  def getErrorMessage(errorClass: String, messageParameters: Map[String, Any]): String = {
     val messageTemplate = getMessageTemplate(errorClass)
-    val sub = new StringSubstitutor(messageParameters.asJava)
+    val sanitizedParameters = messageParameters.map {
+      case (key, null) => key -> "null"
+      case (key, value) => key -> value
+    }
+    val sub = new StringSubstitutor(sanitizedParameters.asJava)
     sub.setEnableUndefinedVariableException(true)
     sub.setDisableSubstitutionInValues(true)
-    try {
+    val errorMessage = try {
       sub.replace(ErrorClassesJsonReader.TEMPLATE_REGEX.replaceAllIn(
         messageTemplate, "\\$\\{$1\\}"))
     } catch {
@@ -57,6 +60,17 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
           s"MessageTemplate: $messageTemplate, " +
           s"Parameters: $messageParameters", i)
     }
+    if (util.SparkEnvUtils.isTesting) {
+      val placeHoldersNum = ErrorClassesJsonReader.TEMPLATE_REGEX.findAllIn(messageTemplate).length
+      if (placeHoldersNum < sanitizedParameters.size) {
+        throw SparkException.internalError(
+          s"Found unused message parameters of the error class '$errorClass'. " +
+          s"Its error message format has $placeHoldersNum placeholders, " +
+          s"but the passed message parameters map has ${sanitizedParameters.size} items. " +
+          "Consider to add placeholders to the error format or remove unused message parameters.")
+      }
+    }
+    errorMessage
   }
 
   def getMessageParameters(errorClass: String): Seq[String] = {
