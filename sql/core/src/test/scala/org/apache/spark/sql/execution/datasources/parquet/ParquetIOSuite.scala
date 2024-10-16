@@ -1586,7 +1586,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
-  test("basename") {
+  test("SPARK-49991: Respect 'mapreduce.output.basename' to generate file names") {
     withTempPath { dir =>
       withSQLConf("mapreduce.output.basename" -> "apachespark") {
         spark.range(1).coalesce(1).write.parquet(dir.getCanonicalPath)
