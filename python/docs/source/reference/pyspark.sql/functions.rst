@@ -583,6 +583,7 @@ URL Functions
     :toctree: api/
 
     parse_url
+    try_parse_url
     url_decode
     url_encode
     try_url_decode

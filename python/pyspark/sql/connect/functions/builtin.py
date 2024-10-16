@@ -2788,6 +2788,18 @@ def parse_url(
 parse_url.__doc__ = pysparkfuncs.parse_url.__doc__
 
 
+def try_parse_url(
+    url: "ColumnOrName", partToExtract: "ColumnOrName", key: Optional["ColumnOrName"] = None
+) -> Column:
+    if key is not None:
+        return _invoke_function_over_columns("try_parse_url", url, partToExtract, key)
+    else:
+        return _invoke_function_over_columns("try_parse_url", url, partToExtract)
+
+
+try_parse_url.__doc__ = pysparkfuncs.try_parse_url.__doc__
+
+
 def printf(format: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     return _invoke_function("printf", _to_col(format), *[_to_col(c) for c in cols])
 

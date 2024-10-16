@@ -129,7 +129,7 @@ case class UrlDecode(child: Expression, failOnError: Boolean = true)
 case class TryUrlDecode(expr: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
 
-  def this(expr: Expression) = this(expr, UrlDecode(expr, false))
+  def this(expr: Expression) = this(expr, UrlDecode(expr, failOnError = false))
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(replacement = newChild)
@@ -167,6 +167,36 @@ object ParseUrl {
   private val USERINFO = UTF8String.fromString("USERINFO")
   private val REGEXPREFIX = "(&|^)"
   private val REGEXSUBFIX = "=([^&]*)"
+}
+
+/**
+ * Extracts a part from a URL
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(url, partToExtract[, key]) - Extracts a part from a URL.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'HOST');
+       spark.apache.org
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY');
+       query=1
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY', 'query');
+       1
+  """,
+  since = "4.0.0",
+  group = "url_funcs")
+case class TryParseUrl(params: Seq[Expression], replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+  def this(children: Seq[Expression]) = this(children, ParseUrl(children, failOnError = false))
+  def this() = this(Seq.empty)
+
+  override def prettyName: String = "try_parse_url"
+
+  override def parameters: Seq[Expression] = params
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(replacement = newChild)
+  }
 }
 
 /**
@@ -237,7 +267,7 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
       new URI(url.toString)
     } catch {
       case e: URISyntaxException if failOnError =>
-        throw QueryExecutionErrors.invalidUrlError(url, e)
+        throw QueryExecutionErrors.invalidUrlError(url, e, suggestedFunc = "try_parse_url")
       case _: URISyntaxException => null
     }
   }
