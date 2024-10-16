@@ -418,8 +418,7 @@ case class RandStr(
           bytes.update(i, ('A' + num - 36).toByte)
       }
     }
-    val result: UTF8String = UTF8String.fromBytes(bytes.toArray)
-    result
+    UTF8String.fromBytes(bytes)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -427,23 +426,25 @@ case class RandStr(
     val rngTerm = ctx.addMutableState(className, "rng")
     ctx.addPartitionInitializationStatement(
       s"$rngTerm = new $className(${seed}L + partitionIndex);")
+    val bytesTerm = ctx.freshName("bytes")
+    val i = ctx.freshName("i")
+    val v = ctx.freshName("v")
     val eval = length.genCode(ctx)
     ev.copy(code =
       code"""
         |${eval.code}
-        |int length = (int)(${eval.value});
-        |char[] chars = new char[length];
-        |for (int i = 0; i < length; i++) {
-        |  int v = Math.abs($rngTerm.nextInt() % 62);
-        |  if (v < 10) {
-        |    chars[i] = (char)('0' + v);
-        |  } else if (v < 36) {
-        |    chars[i] = (char)('a' + (v - 10));
+        |byte[] $bytesTerm = new byte[(int)(${eval.value})];
+        |for (int $i = 0; $i < $bytesTerm.length; $i++) {
+        |  int $v = Math.abs($rngTerm.nextInt() % 62);
+        |  if ($v < 10) {
+        |    $bytesTerm[$i] = (byte)('0' + $v);
+        |  } else if ($v < 36) {
+        |    $bytesTerm[$i] = (byte)('a' + ($v - 10));
         |  } else {
-        |    chars[i] = (char)('A' + (v - 36));
+        |    $bytesTerm[$i] = (byte)('A' + ($v - 36));
         |  }
         |}
-        |UTF8String ${ev.value} = UTF8String.fromString(new String(chars));
+        |UTF8String ${ev.value} = UTF8String.fromBytes($bytesTerm);
         |boolean ${ev.isNull} = false;
         |""".stripMargin,
       isNull = FalseLiteral)
@@ -456,4 +457,3 @@ object RandStr {
   def apply(length: Expression, seedExpression: Expression): RandStr =
     RandStr(length, seedExpression, hideSeed = false)
 }
-
