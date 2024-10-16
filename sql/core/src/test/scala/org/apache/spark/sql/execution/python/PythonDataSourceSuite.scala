@@ -330,7 +330,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
     val err = intercept[AnalysisException] {
       spark.read.format(dataSourceName).schema(schema).load().collect()
     }
-    assert(err.getErrorClass == "PYTHON_DATA_SOURCE_ERROR")
+    assert(err.getCondition == "PYTHON_DATA_SOURCE_ERROR")
     assert(err.getMessage.contains("PySparkNotImplementedError"))
   }
 
@@ -350,7 +350,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
     val err = intercept[AnalysisException] {
       spark.read.format(dataSourceName).schema(schema).load().collect()
     }
-    assert(err.getErrorClass == "PYTHON_DATA_SOURCE_ERROR")
+    assert(err.getCondition == "PYTHON_DATA_SOURCE_ERROR")
     assert(err.getMessage.contains("error creating reader"))
   }
 
@@ -369,7 +369,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
     val err = intercept[AnalysisException] {
       spark.read.format(dataSourceName).schema(schema).load().collect()
     }
-    assert(err.getErrorClass == "PYTHON_DATA_SOURCE_ERROR")
+    assert(err.getCondition == "PYTHON_DATA_SOURCE_ERROR")
     assert(err.getMessage.contains("DATA_SOURCE_TYPE_MISMATCH"))
     assert(err.getMessage.contains("PySparkAssertionError"))
   }
@@ -480,7 +480,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
       spark.dataSource.registerPython(dataSourceName, dataSource)
       val err = intercept[AnalysisException](
         spark.read.format(dataSourceName).load().collect())
-      assert(err.getErrorClass == "PYTHON_DATA_SOURCE_ERROR")
+      assert(err.getCondition == "PYTHON_DATA_SOURCE_ERROR")
       assert(err.getMessage.contains("partitions"))
     }
   }
