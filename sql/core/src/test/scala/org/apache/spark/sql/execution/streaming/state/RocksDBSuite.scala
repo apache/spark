@@ -901,7 +901,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       val rocksDBFileMapping = new RocksDBFileMapping()
       val fileManager_ = new RocksDBFileManager(
         dfsRootDir, Utils.createTempDir(), new Configuration)
-      val rocksDBFileMapping_ = new RocksDBFileMapping()
       val sstDir = s"$dfsRootDir/SSTs"
       def numRemoteSSTFiles: Int = listFiles(sstDir).length
       val logDir = s"$dfsRootDir/logs"
@@ -1044,11 +1043,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       val fileManager = new RocksDBFileManager(
         dfsRootDir, Utils.createTempDir(), new Configuration)
       val sstDir = s"$dfsRootDir/SSTs"
-      def numRemoteSSTFiles: Int = {
-        val files = listFiles(sstDir)
-        logWarning(s"SST files on DFS: $files")
-        files.length
-      }
+      def numRemoteSSTFiles: Int = listFiles(sstDir).length
       val logDir = s"$dfsRootDir/logs"
       def numRemoteLogFiles: Int = listFiles(logDir).length
       val fileMapping = new RocksDBFileMapping
@@ -1825,9 +1820,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       withTempDir { dir =>
         val conf = dbConf.copy(minDeltasForSnapshot = 0) // create snapshot every commit
         val hadoopConf = new Configuration()
-        if (fm.isDefined) {
-          hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fm.get)
-        }
+        fm.foreach(value =>
+          hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, value))
         val remoteDir = dir.getCanonicalPath
         withDB(remoteDir, conf = conf, hadoopConf = hadoopConf) { db =>
           db.load(0)

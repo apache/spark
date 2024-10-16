@@ -650,9 +650,7 @@ class RocksDB(
             assert(changelogWriter.isDefined)
             changelogWriter.foreach(_.commit())
             if (!isUploaded) {
-              snapshot.foreach(s => {
-                snapshotsToUploadQueue.offer(s)
-              })
+              snapshot.foreach(snapshotsToUploadQueue.offer)
             }
           } finally {
             changelogWriter = None
@@ -893,6 +891,7 @@ class RocksDB(
     def isAcquiredByDifferentThread = acquiredThreadInfo != null &&
       acquiredThreadInfo.threadRef.get.isDefined &&
       newAcquiredThreadInfo.threadRef.get.get.getId != acquiredThreadInfo.threadRef.get.get.getId
+
     while (isAcquiredByDifferentThread && timeWaitedMs < conf.lockAcquireTimeoutMs) {
       acquireLock.wait(10)
     }
@@ -1079,7 +1078,7 @@ class RocksDBFileMapping {
       if (dfsFileCommitVersion >= currentVersion ||
         snapshotsPendingUpload.contains(versionSnapshotInfo)) {
         // the mapped dfs file cannot be used, delete from mapping
-        localFileMappings.remove(localFileName)
+        remove(localFileName)
         None
       } else {
         Some(dfsFile)
@@ -1149,6 +1148,7 @@ class ByteArrayPair(var key: Array[Byte] = null, var value: Array[Byte] = null) 
     this
   }
 }
+
 
 /**
  * Configurations for optimizing RocksDB
