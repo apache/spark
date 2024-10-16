@@ -16,14 +16,46 @@
  */
 package org.apache.spark.sql.catalyst.expressions.json
 
+import com.fasterxml.jackson.core.JsonFactory
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
-import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JsonInferSchema, JSONOptions}
 import org.apache.spark.sql.catalyst.util.{FailFastMode, FailureSafeParser, PermissiveMode}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
+
+object JsonExpressionEvalUtils {
+
+  def schemaOfJson(
+      jsonFactory: JsonFactory,
+      jsonOptions: JSONOptions,
+      jsonInferSchema: JsonInferSchema,
+      json: UTF8String): UTF8String = {
+    val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
+      parser.nextToken()
+      // To match with schema inference from JSON datasource.
+      jsonInferSchema.inferField(parser) match {
+        case st: StructType =>
+          jsonInferSchema.canonicalizeType(st, jsonOptions).getOrElse(StructType(Nil))
+        case at: ArrayType if at.elementType.isInstanceOf[StructType] =>
+          jsonInferSchema
+            .canonicalizeType(at.elementType, jsonOptions)
+            .map(ArrayType(_, containsNull = at.containsNull))
+            .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
+        case other: DataType =>
+          jsonInferSchema.canonicalizeType(other, jsonOptions).getOrElse(
+            SQLConf.get.defaultStringType)
+      }
+    }
+
+    UTF8String.fromString(dt.sql)
+  }
+}
 
 class JsonToStructsEvaluator(
     options: Map[String, String],

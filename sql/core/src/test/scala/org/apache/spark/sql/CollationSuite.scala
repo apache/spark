@@ -1333,7 +1333,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     for (codeGen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
       val collationSetup = if (collation.isEmpty) "" else " COLLATE " + collation
       val supportsBinaryEquality = collation.isEmpty || collation == "UNICODE" ||
-        CollationFactory.fetchCollation(collation).supportsBinaryEquality
+        CollationFactory.fetchCollation(collation).isUtf8BinaryType
 
       test(s"Group by on map containing$collationSetup strings ($codeGen)") {
         val tableName = "t"
@@ -1558,7 +1558,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         )
 
         // Only if collation doesn't support binary equality, collation key should be injected.
-        if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
+        if (!CollationFactory.fetchCollation(t.collation).isUtf8BinaryType) {
           assert(collectFirst(queryPlan) {
             case b: HashJoin => b.leftKeys.head
           }.head.isInstanceOf[CollationKey])
@@ -1615,7 +1615,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         )
 
         // Only if collation doesn't support binary equality, collation key should be injected.
-        if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
+        if (!CollationFactory.fetchCollation(t.collation).isUtf8BinaryType) {
           assert(collectFirst(queryPlan) {
             case b: BroadcastHashJoinExec => b.leftKeys.head
           }.head.asInstanceOf[ArrayTransform].function.asInstanceOf[LambdaFunction].
@@ -1676,7 +1676,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         )
 
         // Only if collation doesn't support binary equality, collation key should be injected.
-        if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
+        if (!CollationFactory.fetchCollation(t.collation).isUtf8BinaryType) {
           assert(collectFirst(queryPlan) {
             case b: BroadcastHashJoinExec => b.leftKeys.head
           }.head.asInstanceOf[ArrayTransform].function.
@@ -1735,7 +1735,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         )
 
         // Only if collation doesn't support binary equality, collation key should be injected.
-        if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
+        if (!CollationFactory.fetchCollation(t.collation).isUtf8BinaryType) {
           assert(queryPlan.toString().contains("collationkey"))
         } else {
           assert(!queryPlan.toString().contains("collationkey"))
@@ -1794,7 +1794,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         )
 
         // Only if collation doesn't support binary equality, collation key should be injected.
-        if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
+        if (!CollationFactory.fetchCollation(t.collation).isUtf8BinaryType) {
           assert(queryPlan.toString().contains("collationkey"))
         } else {
           assert(!queryPlan.toString().contains("collationkey"))

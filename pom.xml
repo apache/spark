@@ -119,7 +119,7 @@
     <maven.version>3.9.9</maven.version>
     <exec-maven-plugin.version>3.2.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
-    <asm.version>9.7</asm.version>
+    <asm.version>9.7.1</asm.version>
     <slf4j.version>2.0.16</slf4j.version>
     <log4j.version>2.24.1</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
@@ -491,7 +491,7 @@
       <dependency>
         <groupId>org.apache.xbean</groupId>
         <artifactId>xbean-asm9-shaded</artifactId>
-        <version>4.25</version>
+        <version>4.26</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -1114,11 +1114,6 @@
         <groupId>org.glassfish.jersey</groupId>
         <artifactId>jersey-client</artifactId>
         <version>${jersey.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>javax.ws.rs</groupId>
-        <artifactId>javax.ws.rs-api</artifactId>
-        <version>2.0.1</version>
       </dependency>
       <dependency>
         <groupId>javax.xml.bind</groupId>
