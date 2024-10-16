@@ -1072,20 +1072,9 @@ object DependencyOverrides {
 object ExcludedDependencies {
   lazy val settings = Seq(
     libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") },
-    // SPARK-33705: Due to sbt compiler issues, it brings exclusions defined in maven pom back to
-    // the classpath directly and assemble test scope artifacts to assembly/target/scala-xx/jars,
-    // which is also will be added to the classpath of some unit tests that will build a subprocess
-    // to run `spark-submit`, e.g. HiveThriftServer2Test.
-    //
-    // These artifacts are for the jersey-1 API but Spark use jersey-2 ones, so it cause test
-    // flakiness w/ jar conflicts issues.
-    //
-    // Also jersey-1 is only used by yarn module(see resource-managers/yarn/pom.xml) for testing
-    // purpose only. Here we exclude them from the whole project scope and add them w/ yarn only.
     excludeDependencies ++= Seq(
-      ExclusionRule(organization = "com.sun.jersey"),
       ExclusionRule(organization = "ch.qos.logback"),
-      ExclusionRule("javax.ws.rs", "jsr311-api"))
+      ExclusionRule("javax.servlet", "javax.servlet-api"))
   )
 }
 
@@ -1229,10 +1218,6 @@ object YARN {
   val hadoopProvidedProp = "spark.yarn.isHadoopProvided"
 
   lazy val settings = Seq(
-    excludeDependencies --= Seq(
-      ExclusionRule(organization = "com.sun.jersey"),
-      ExclusionRule("javax.servlet", "javax.servlet-api"),
-      ExclusionRule("javax.ws.rs", "jsr311-api")),
     Compile / unmanagedResources :=
       (Compile / unmanagedResources).value.filter(!_.getName.endsWith(s"$propFileName")),
     genConfigProperties := {
