@@ -181,7 +181,7 @@ class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
       createDataset().collect()
       // codegen cache should work for Datasets of same type.
       val count3 = getCodegenCount()
-      assert((count2 to (count2 + 5)) contains count3) // allow some variance
+      assert(count3 == count2)
     }
 
     withClue("array type") {

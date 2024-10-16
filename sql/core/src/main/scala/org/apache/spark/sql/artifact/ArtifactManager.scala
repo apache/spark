@@ -22,6 +22,7 @@ import java.net.{URI, URL, URLClassLoader}
 import java.nio.ByteBuffer
 import java.nio.file.{CopyOption, Files, Path, Paths, StandardCopyOption}
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -88,28 +89,29 @@ class ArtifactManager(session: SparkSession) extends Logging {
     }
   }
 
-  private var shouldApplyClassLoader = false
+  private val shouldApplyClassLoader = new AtomicBoolean(false)
 
   private var initialContextResourcesCopied = false
 
   private def withClassLoaderIfNeeded[T](f: => T): T = {
-    if (replIsolated || shouldApplyClassLoader) {
-      logWarning("shouldApplyClassLoader is true")
+    val log = s" classloader for session ${session.sessionUUID} because " +
+      s"replIsolated=$replIsolated and shouldApplyClassLoader=${shouldApplyClassLoader.get()}."
+    if (replIsolated || shouldApplyClassLoader.get()) {
+      logDebug(s"Applying $log")
       Utils.withContextClassLoader(classloader) {
         f
       }
     } else {
+      logDebug(s"Not applying $log")
       f
     }
   }
 
-  def withResources[T](f: => T): T = {
-    withClassLoaderIfNeeded {
-      JobArtifactSet.withActiveJobArtifactState(state) {
-        // Copy over global initial resources to this session. Often used by spark-submit.
-        copyInitialContextResourcesIfNeeded()
-        f
-      }
+  def withResources[T](f: => T): T = withClassLoaderIfNeeded {
+    JobArtifactSet.withActiveJobArtifactState(state) {
+      // Copy over global initial resources to this session. Often used by spark-submit.
+      copyInitialContextResourcesIfNeeded()
+      f
     }
   }
 
@@ -224,7 +226,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
         allowOverwrite = true,
         deleteSource = deleteStagedFile)
 
-      shouldApplyClassLoader = true
+      shouldApplyClassLoader.set(true)
     } else {
       val target = ArtifactUtils.concatenatePaths(artifactPath, normalizedRemoteRelativePath)
       // Disallow overwriting with modified version
@@ -249,7 +251,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
           (SparkContextResourceType.JAR, normalizedRemoteRelativePath, fragment))
         jarsList.add(normalizedRemoteRelativePath)
 
-        shouldApplyClassLoader = true
+        shouldApplyClassLoader.set(true)
       } else if (normalizedRemoteRelativePath.startsWith(s"pyfiles${File.separator}")) {
         session.sparkContext.addFile(uri)
         sparkContextRelativePaths.add(
@@ -385,7 +387,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
       newArtifactManager.cachedBlockIdList.addAll(newBlockIds.asJava)
       newArtifactManager.jarsList.addAll(jarsList)
       newArtifactManager.pythonIncludeList.addAll(pythonIncludeList)
-      newArtifactManager.shouldApplyClassLoader = shouldApplyClassLoader
+      newArtifactManager.shouldApplyClassLoader.set(shouldApplyClassLoader.get())
       newArtifactManager
     }
   }

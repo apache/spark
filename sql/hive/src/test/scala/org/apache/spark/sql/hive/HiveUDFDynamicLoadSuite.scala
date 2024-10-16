@@ -140,17 +140,6 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
     )
   ).toImmutableArraySeq
 
-
-  private def assertClassLoaderContains(cl: ClassLoader, target: ClassLoader): Unit = {
-    var found = false
-    var current = cl
-    while (current != null && !found) {
-      found = current eq target
-      current = current.getParent
-    }
-    assert(found, s"$cl should contain $target")
-  }
-
   udfTestInfos.foreach { udfInfo =>
     // The test jars are built from below commit:
     // https://github.com/HeartSaVioR/hive/commit/12f3f036b6efd0299cd1d457c0c0a65e0fd7e5f2
@@ -168,15 +157,15 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
 
           sql(s"CREATE FUNCTION ${udfInfo.funcName} AS '${udfInfo.className}' USING JAR '$jarUrl'")
 
-          assertClassLoaderContains(Thread.currentThread().getContextClassLoader, sparkClassLoader)
+          assert(Thread.currentThread().getContextClassLoader eq sparkClassLoader)
 
           // JAR will be loaded at first usage, and it will change the current thread's
           // context classloader to jar classloader in sharedState.
           // See SessionState.addJar for details.
           udfInfo.fnVerifyQuery()
 
-          assertClassLoaderContains(
-            Thread.currentThread().getContextClassLoader,
+          assert(Thread.currentThread().getContextClassLoader ne sparkClassLoader)
+          assert(Thread.currentThread().getContextClassLoader eq
             spark.sharedState.jarClassLoader)
 
           val udfExpr = udfInfo.fnCreateHiveUDFExpression()
