@@ -84,7 +84,7 @@ class FunctionsTestsMixin:
 
         # Functions that we expect to be missing in python until they are added to pyspark
         expected_missing_in_py = set(
-            ["is_valid_utf8", "make_valid_utf8", "is_valid_utf8", "try_validate_utf8"]
+            ["is_valid_utf8", "make_valid_utf8", "validate_utf8", "try_validate_utf8"]
         )
 
         self.assertEqual(
