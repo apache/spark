@@ -21,7 +21,7 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
-import org.apache.spark.sql.execution.streaming.state.{PrefixKeyScanStateEncoderSpec, StateStore, StateStoreErrors}
+import org.apache.spark.sql.execution.streaming.state.{AvroSerde, PrefixKeyScanStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.{MapState, TTLConfig}
 import org.apache.spark.util.NextIterator
 
@@ -46,12 +46,13 @@ class MapStateImplWithTTL[K, V](
     userKeyEnc: Encoder[K],
     valEncoder: Encoder[V],
     ttlConfig: TTLConfig,
-    batchTimestampMs: Long)
+    batchTimestampMs: Long,
+    avroSerde: Option[AvroSerde])
   extends CompositeKeyTTLStateImpl[K](stateName, store,
     keyExprEnc, userKeyEnc, batchTimestampMs)
   with MapState[K, V] with Logging {
 
-  private val stateTypesEncoder = new CompositeKeyStateEncoder(
+  private val stateTypesEncoder = new CompositeKeyUnsafeRowEncoder(
     keyExprEnc, userKeyEnc, valEncoder, stateName, hasTtl = true)
 
   private val ttlExpirationMs =

@@ -104,7 +104,8 @@ case class TransformWithStateExec(
    * @return a new instance of the driver processor handle
    */
   private def getDriverProcessorHandle(): DriverStatefulProcessorHandleImpl = {
-    val driverProcessorHandle = new DriverStatefulProcessorHandleImpl(timeMode, keyEncoder)
+    val driverProcessorHandle = new DriverStatefulProcessorHandleImpl(
+      timeMode, keyEncoder, initializeAvroSerde = useAvroEncoding)
     driverProcessorHandle.setHandleState(StatefulProcessorHandleState.PRE_INIT)
     statefulProcessor.setHandle(driverProcessorHandle)
     statefulProcessor.init(outputMode, timeMode)
@@ -562,17 +563,18 @@ case class TransformWithStateExec(
       }
     } else {
       if (isStreaming) {
-        child.execute().mapPartitionsWithStateStore[InternalRow](
+        child.execute().mapPartitionsWithStateStoreWithSchemas[InternalRow](
           getStateInfo,
           keyEncoder.schema,
           DUMMY_VALUE_ROW_SCHEMA,
           NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
           session.sessionState,
           Some(session.streams.stateStoreCoordinator),
-          useColumnFamilies = true
+          useColumnFamilies = true,
+          columnFamilySchemas = getColFamilySchemas()
         ) {
-          case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
-            processData(store, singleIterator)
+          case (store: StateStore, singleIterator: Iterator[InternalRow], columnFamilySchemas) =>
+            processData(store, singleIterator, columnFamilySchemas)
         }
       } else {
         // If the query is running in batch mode, we need to create a new StateStore and instantiate
@@ -582,7 +584,7 @@ case class TransformWithStateExec(
         child.execute().mapPartitionsWithIndex[InternalRow](
           (i: Int, iter: Iterator[InternalRow]) => {
             initNewStateStoreAndProcessData(i, hadoopConfBroadcast) { store =>
-              processData(store, iter)
+              processData(store, iter, Map.empty)
             }
           }
         )
@@ -634,13 +636,17 @@ case class TransformWithStateExec(
    * Process the data in the partition using the state store and the stateful processor.
    * @param store The state store to use
    * @param singleIterator The iterator of rows to process
+   * @param schemas The column family schemas used by this stateful processor
    * @return An iterator of rows that are the result of processing the input rows
    */
-  private def processData(store: StateStore, singleIterator: Iterator[InternalRow]):
+  private def processData(
+      store: StateStore,
+      singleIterator: Iterator[InternalRow],
+      schemas: Map[String, StateStoreColFamilySchema]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, timeMode,
-      isStreaming, batchTimestampMs, metrics)
+      isStreaming, batchTimestampMs, metrics, schemas)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)

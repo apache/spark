@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
+import org.apache.spark.sql.execution.streaming.state.{AvroSerde, NoPrefixKeyStateEncoderSpec, StateStore}
 import org.apache.spark.sql.streaming.ValueState
 
 /**
@@ -35,10 +35,12 @@ class ValueStateImpl[S](
     store: StateStore,
     stateName: String,
     keyExprEnc: ExpressionEncoder[Any],
-    valEncoder: Encoder[S])
+    valEncoder: Encoder[S],
+    avroSerde: Option[AvroSerde])
   extends ValueState[S] with Logging {
 
-  private val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder, stateName)
+  private val stateTypesEncoder = new AvroTypesEncoder[S](
+    keyExprEnc, valEncoder, stateName, hasTtl = false, avroSerde.get)
 
   initialize()
 

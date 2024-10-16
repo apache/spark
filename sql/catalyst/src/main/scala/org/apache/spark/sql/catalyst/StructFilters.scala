@@ -36,7 +36,9 @@ import org.apache.spark.util.ArrayImplicits._
  *                      the fields of the provided schema.
  * @param schema The required schema of records from datasource files.
  */
-abstract class StructFilters(pushedFilters: Seq[sources.Filter], schema: StructType) {
+abstract class StructFilters(
+    pushedFilters: Seq[sources.Filter],
+    schema: StructType) extends Serializable {
 
   protected val filters = StructFilters.pushedFilters(pushedFilters.toArray, schema)
 

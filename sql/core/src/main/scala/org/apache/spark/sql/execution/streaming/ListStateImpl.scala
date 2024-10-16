@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
+import org.apache.spark.sql.execution.streaming.state.{AvroSerde, NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.ListState
 
 /**
@@ -36,10 +36,11 @@ class ListStateImpl[S](
      store: StateStore,
      stateName: String,
      keyExprEnc: ExpressionEncoder[Any],
-     valEncoder: Encoder[S])
+     valEncoder: Encoder[S],
+     avroSerde: Option[AvroSerde])
   extends ListState[S] with Logging {
 
-  private val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder, stateName)
+  private val stateTypesEncoder = UnsafeRowTypesEncoder(keyExprEnc, valEncoder, stateName)
 
   store.createColFamilyIfAbsent(stateName, keyExprEnc.schema, valEncoder.schema,
     NoPrefixKeyStateEncoderSpec(keyExprEnc.schema), useMultipleValuesPerKey = true)

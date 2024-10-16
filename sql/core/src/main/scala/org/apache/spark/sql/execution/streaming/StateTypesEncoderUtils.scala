@@ -17,12 +17,18 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.io.ByteArrayOutputStream
+
+import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter}
+import org.apache.avro.io.{DecoderFactory, EncoderFactory}
+
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.core.avro.SchemaConverters
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
-import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
+import org.apache.spark.sql.execution.streaming.state.{AvroSerde, StateStoreErrors}
 import org.apache.spark.sql.types._
 
 /**
@@ -59,6 +65,14 @@ object TransformWithStateKeyValueRowSchemaUtils {
   }
 }
 
+trait StateTypesEncoder[V, S] {
+  def encodeGroupingKey(): S
+
+  def encodeValue(value: V): S
+
+  def decodeValue(row: S): V
+}
+
 /**
  * Helper class providing APIs to encode the grouping key, and user provided values
  * to Spark [[UnsafeRow]].
@@ -73,11 +87,11 @@ object TransformWithStateKeyValueRowSchemaUtils {
  * @param stateName - name of logical state partition
  * @tparam V - value type
  */
-class StateTypesEncoder[V](
+class UnsafeRowTypesEncoder[V](
     keyEncoder: ExpressionEncoder[Any],
     valEncoder: Encoder[V],
     stateName: String,
-    hasTtl: Boolean) {
+    hasTtl: Boolean) extends StateTypesEncoder[V, UnsafeRow] {
 
   /** Variables reused for value conversions between spark sql and object */
   private val keySerializer = keyEncoder.createSerializer()
@@ -143,23 +157,108 @@ class StateTypesEncoder[V](
   }
 }
 
-object StateTypesEncoder {
+
+object UnsafeRowTypesEncoder {
   def apply[V](
       keyEncoder: ExpressionEncoder[Any],
       valEncoder: Encoder[V],
       stateName: String,
-      hasTtl: Boolean = false): StateTypesEncoder[V] = {
-    new StateTypesEncoder[V](keyEncoder, valEncoder, stateName, hasTtl)
+      hasTtl: Boolean = false): UnsafeRowTypesEncoder[V] = {
+    new UnsafeRowTypesEncoder[V](keyEncoder, valEncoder, stateName, hasTtl)
   }
 }
 
-class CompositeKeyStateEncoder[K, V](
+/**
+ * Helper class providing APIs to encode the grouping key, and user provided values
+ * to Spark [[UnsafeRow]].
+ *
+ * CAUTION: StateTypesEncoder class instance is *not* thread-safe.
+ * This class reuses the keyProjection and valueProjection for encoding grouping
+ * key and state value respectively. As UnsafeProjection is not thread safe, this
+ * class is also not thread safe.
+ *
+ * @param keyEncoder - SQL encoder for the grouping key, key type is implicit
+ * @param valEncoder - SQL encoder for value of type `S`
+ * @param stateName - name of logical state partition
+ * @tparam V - value type
+ */
+class AvroTypesEncoder[V](
+    keyEncoder: ExpressionEncoder[Any],
+    valEncoder: Encoder[V],
+    stateName: String,
+    hasTtl: Boolean,
+    avroSerde: AvroSerde) extends StateTypesEncoder[V, Array[Byte]] {
+
+  val out = new ByteArrayOutputStream
+
+  /** Variables reused for value conversions between spark sql and object */
+  private val keySerializer = keyEncoder.createSerializer()
+  private val valExpressionEnc = encoderFor(valEncoder)
+  private val objToRowSerializer = valExpressionEnc.createSerializer()
+  private val rowToObjDeserializer = valExpressionEnc.resolveAndBind().createDeserializer()
+  // This variable is only used when has Ttl is true
+  private val valueTTLProjection =
+    UnsafeProjection.create(getValueSchemaWithTTL(valEncoder.schema, true))
+
+  val keySchema = keyEncoder.schema
+  private val keyAvroType = SchemaConverters.toAvroType(keySchema)
+
+  // case class -> dataType
+  private val valSchema: StructType = valEncoder.schema
+  // dataType -> avroType
+  private val valueAvroType = SchemaConverters.toAvroType(valSchema)
+
+  override def encodeGroupingKey(): Array[Byte] = {
+    val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
+    if (keyOption.isEmpty) {
+      throw StateStoreErrors.implicitKeyNotFound(stateName)
+    }
+
+    val keyRow = keySerializer.apply(keyOption.get).copy().asInstanceOf[UnsafeRow]
+    val avroData = avroSerde.keySerializer.serialize(keyRow)
+
+    out.reset()
+    val encoder = EncoderFactory.get().directBinaryEncoder(out, null)
+    val writer = new GenericDatumWriter[Any](keyAvroType)
+
+    writer.write(avroData, encoder)
+    encoder.flush()
+    out.toByteArray
+  }
+
+  override def encodeValue(value: V): Array[Byte] = {
+    val objRow: InternalRow = objToRowSerializer.apply(value).copy() // V -> InternalRow
+    val avroData = avroSerde.valueSerializer.serialize(objRow) // InternalRow -> GenericDataRecord
+    out.reset()
+
+    val encoder = EncoderFactory.get().directBinaryEncoder(out, null)
+    val writer = new GenericDatumWriter[Any](
+      valueAvroType) // Defining Avro writer for this struct type
+
+    writer.write(avroData, encoder) // GenericDataRecord -> bytes
+    encoder.flush()
+    out.toByteArray
+  }
+
+  override def decodeValue(row: Array[Byte]): V = {
+    val reader = new GenericDatumReader[Any](valueAvroType)
+    val decoder = DecoderFactory.get().binaryDecoder(row, 0, row.length, null)
+    val genericData = reader.read(null, decoder) // bytes -> GenericDataRecord
+    val internalRow = avroSerde.valueDeserializer.deserialize(
+      genericData).orNull.asInstanceOf[InternalRow] // GenericDataRecord -> InternalRow
+    if (hasTtl) {
+      rowToObjDeserializer.apply(internalRow.getStruct(0, valEncoder.schema.length))
+    } else rowToObjDeserializer.apply(internalRow)
+  }
+}
+
+class CompositeKeyUnsafeRowEncoder[K, V](
     keyEncoder: ExpressionEncoder[Any],
     userKeyEnc: Encoder[K],
     valEncoder: Encoder[V],
     stateName: String,
     hasTtl: Boolean = false)
-  extends StateTypesEncoder[V](keyEncoder, valEncoder, stateName, hasTtl) {
+  extends UnsafeRowTypesEncoder[V](keyEncoder, valEncoder, stateName, hasTtl) {
   import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 
   /** Encoders */

@@ -45,7 +45,7 @@ private[sql] class AvroSerializer(
     rootAvroType: Schema,
     nullable: Boolean,
     positionalFieldMatch: Boolean,
-    datetimeRebaseMode: LegacyBehaviorPolicy.Value) extends Logging {
+    datetimeRebaseMode: LegacyBehaviorPolicy.Value) extends Logging with Serializable {
 
   def this(rootCatalystType: DataType, rootAvroType: Schema, nullable: Boolean) = {
     this(rootCatalystType, rootAvroType, nullable, positionalFieldMatch = false,

@@ -343,11 +343,11 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def remove(key: Array[Byte], colFamilyName: String): Unit = {
-
+      rocksDB.remove(key)
     }
 
     override def get(key: Array[Byte], colFamilyName: String): Array[Byte] = {
-      throw new Exception
+      rocksDB.get(key)
     }
 
     override def valuesIterator(key: Array[Byte], colFamilyName: String): Iterator[Array[Byte]] = {
@@ -356,7 +356,7 @@ private[sql] class RocksDBStateStoreProvider
 
     override def prefixScan(
         prefixKey: Array[Byte], colFamilyName: String): Iterator[ByteArrayPair] = {
-      throw new Exception
+      throw new UnsupportedOperationException("Operation is currently not supported")
     }
 
     override def byteArrayIter(colFamilyName: String): Iterator[ByteArrayPair] = {

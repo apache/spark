@@ -635,7 +635,7 @@ object DataSource extends Logging {
           conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "hive" =>
         "org.apache.spark.sql.hive.orc.OrcFileFormat"
       case "com.databricks.spark.avro" if conf.replaceDatabricksSparkAvroEnabled =>
-        "org.apache.spark.sql.avro.AvroFileFormat"
+        "org.apache.spark.sql.core.avro.AvroFileFormat"
       case name => name
     }
     val provider2 = s"$provider1.DefaultSource"
@@ -658,7 +658,7 @@ object DataSource extends Logging {
                   throw QueryCompilationErrors.orcNotUsedWithHiveEnabledError()
                 } else if (provider1.toLowerCase(Locale.ROOT) == "avro" ||
                   provider1 == "com.databricks.spark.avro" ||
-                  provider1 == "org.apache.spark.sql.avro") {
+                  provider1 == "org.apache.spark.sql.core.avro") {
                   throw QueryCompilationErrors.failedToFindAvroDataSourceError(provider1)
                 } else if (provider1.toLowerCase(Locale.ROOT) == "kafka") {
                   throw QueryCompilationErrors.failedToFindKafkaDataSourceError(provider1)

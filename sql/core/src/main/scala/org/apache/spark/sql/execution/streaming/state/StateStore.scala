@@ -87,7 +87,7 @@ trait ReadStateStore {
    */
   def get(
       key: Array[Byte],
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Array[Byte]
+      colFamilyName: String): Array[Byte]
 
   /**
    * Provides an iterator containing all values of a non-null key. If key does not exist,
@@ -98,7 +98,7 @@ trait ReadStateStore {
    * multipleValuesPerKey as true for the column family.
    */
   def valuesIterator(key: Array[Byte],
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[Array[Byte]]
+      colFamilyName: String): Iterator[Array[Byte]]
 
   /**
    * Return an iterator containing all the key-value pairs which are matched with
@@ -131,7 +131,7 @@ trait ReadStateStore {
    */
   def prefixScan(
       prefixKey: Array[Byte],
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[ByteArrayPair]
+      colFamilyName: String): Iterator[ByteArrayPair]
 
   /** Return an iterator containing all the key-value pairs in the StateStore. */
   def byteArrayIter(
@@ -198,14 +198,14 @@ trait StateStore extends ReadStateStore {
   def put(
       key: Array[Byte],
       value: Array[Byte],
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+      colFamilyName: String): Unit
 
   /**
    * Remove a single non-null key.
    */
   def remove(
       key: Array[Byte],
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+      colFamilyName: String): Unit
 
 
   /**
