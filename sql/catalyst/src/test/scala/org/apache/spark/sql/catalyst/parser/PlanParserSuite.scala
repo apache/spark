@@ -1978,9 +1978,9 @@ class PlanParserSuite extends AnalysisTest {
     val query = "select (case when a->b = true then 1 else 0 end)"
     checkError(
       exception = parseException(query),
-      condition = "UNSUPPORTED_CASE_WHEN_CLAUSE",
-      sqlState = Some("42601"),
-      parameters = Map("clause" -> "LambdaFunction"),
+      condition = "INVALID_LAMBDA_USAGE",
+      sqlState = Some("42K0E"),
+      parameters = Map("lambdaExpr" -> "lambdafunction((b = true), a)"),
       context = ExpectedContext(
         fragment = "case when a->b = true then 1 else 0 end",
         start = 8,

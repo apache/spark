@@ -2937,11 +2937,11 @@ class AstBuilder extends DataTypeAstBuilder
         branch._1 match {
           case _: LambdaFunction =>
             throw new ParseException(
-              "UNSUPPORTED_CASE_WHEN_CLAUSE",
-              Map("clause" -> "LambdaFunction"),
+              "INVALID_LAMBDA_USAGE",
+              Map("lambdaExpr" -> branch._1.sql),
               ctx
             )
-          case _ => _
+          case _ =>
         }
     )
     CaseWhen(branches.toSeq, Option(ctx.elseExpression).map(expression))

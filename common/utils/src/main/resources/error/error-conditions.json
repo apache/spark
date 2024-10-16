@@ -1028,12 +1028,6 @@
           "cannot find a static method <methodName> that matches the argument types in <className>."
         ]
       },
-      "UNSUPPORTED_CASE_WHEN_CLAUSE" : {
-        "message" : [
-          "The CASE WHEN clause of type <clause> is not supported."
-        ],
-        "sqlState" : "42601"
-      },
       "UNSUPPORTED_INPUT_TYPE" : {
         "message" : [
           "The input of <functionName> can't be <dataType> type data."
@@ -2688,6 +2682,12 @@
       }
     },
     "sqlState" : "42K0D"
+  },
+  "INVALID_LAMBDA_USAGE" : {
+    "message" : [
+      "The lambda function <lambdaExpr> cannot be used in this context. Lambda functions must be passed as arguments to functions defined to accept them, such as array_sort."
+    ],
+    "sqlState" : "42K0E"
   },
   "INVALID_LATERAL_JOIN_TYPE" : {
     "message" : [
