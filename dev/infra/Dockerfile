@@ -152,6 +152,6 @@ RUN python3.13 -m pip install lxml numpy>=2.1 && \
     python3.13 -m pip cache purge
 
 # Remove unused installation packages to free up disk space
-RUN apt-get remove --purge -y 'humanity-icon-theme' 'nodejs-doc' || true
+RUN apt-get remove --purge -y 'humanity-icon-theme' 'nodejs-doc'
 RUN apt-get autoremove --purge -y
 RUN apt-get clean
