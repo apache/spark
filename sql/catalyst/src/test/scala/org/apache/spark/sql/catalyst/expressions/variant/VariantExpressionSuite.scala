@@ -45,12 +45,14 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("to_json malformed") {
-    def check(value: Array[Byte], metadata: Array[Byte],
-              errorClass: String = "MALFORMED_VARIANT"): Unit = {
+    def check(
+        value: Array[Byte],
+        metadata: Array[Byte],
+        condition: String = "MALFORMED_VARIANT"): Unit = {
       checkErrorInExpression[SparkRuntimeException](
         ResolveTimeZone.resolveTimeZones(
           StructsToJson(Map.empty, Literal(new VariantVal(value, metadata)))),
-        errorClass
+        condition
       )
     }
 
@@ -949,12 +951,24 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
   }
 
-  test("cast to variant") {
-    def check[T : TypeTag](input: T, expectedJson: String): Unit = {
-      val cast = Cast(Literal.create(input), VariantType, evalMode = EvalMode.ANSI)
-      checkEvaluation(StructsToJson(Map.empty, cast), expectedJson)
+  test("cast to variant/to_variant_object") {
+    def check[T : TypeTag](input: T, expectedJson: String,
+                           toVariantObject: Boolean = false): Unit = {
+      val expr =
+        if (toVariantObject) ToVariantObject(Literal.create(input))
+        else Cast(Literal.create(input), VariantType, evalMode = EvalMode.ANSI)
+      checkEvaluation(StructsToJson(Map.empty, expr), expectedJson)
     }
 
+    def checkFailure[T: TypeTag](input: T, toVariantObject: Boolean = false): Unit = {
+      val expr =
+        if (toVariantObject) ToVariantObject(Literal.create(input))
+        else Cast(Literal.create(input), VariantType, evalMode = EvalMode.ANSI)
+      val resolvedExpr = ResolveTimeZone.resolveTimeZones(expr)
+      assert(!resolvedExpr.resolved)
+    }
+
+    // cast to variant - success cases
     check(null.asInstanceOf[String], null)
     // The following tests cover all allowed scalar types.
     for (input <- Seq[Any](false, true, 0.toByte, 1.toShort, 2, 3L, 4.0F, 5.0D)) {
@@ -1023,17 +1037,52 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     check(Array(null, "a", "b", "c"), """[null,"a","b","c"]""")
-    check(Map("z" -> 1, "y" -> 2, "x" -> 3), """{"x":3,"y":2,"z":1}""")
     check(Array(parseJson("""{"a": 1,"b": [1, 2, 3]}"""),
       parseJson("""{"c": true,"d": {"e": "str"}}""")),
       """[{"a":1,"b":[1,2,3]},{"c":true,"d":{"e":"str"}}]""")
-    val struct = Literal.create(
+
+    // cast to variant - failure cases - struct and map types
+    val mp = Map("z" -> 1, "y" -> 2, "x" -> 3)
+    val arrayMp = Array(Map("z" -> 1, "y" -> 2, "x" -> 3))
+    val arrayArrayMp = Array(Array(Map("z" -> 1, "y" -> 2, "x" -> 3)))
+    checkFailure(mp)
+    checkFailure(arrayMp)
+    checkFailure(arrayArrayMp)
+    val struct = Literal.create(create_row(1),
+      StructType(Array(StructField("a", IntegerType))))
+    checkFailure(struct)
+    val arrayStruct = Literal.create(
+      Array(create_row(1)),
+      ArrayType(StructType(Array(StructField("a", IntegerType)))))
+    checkFailure(arrayStruct)
+
+    // to_variant_object - success cases - nested types
+    check(Array(1, 2, 3), "[1,2,3]", toVariantObject = true)
+    check(mp, """{"x":3,"y":2,"z":1}""", toVariantObject = true)
+    check(arrayMp, """[{"x":3,"y":2,"z":1}]""", toVariantObject = true)
+    check(arrayArrayMp, """[[{"x":3,"y":2,"z":1}]]""", toVariantObject = true)
+    check(struct, """{"a":1}""", toVariantObject = true)
+    check(arrayStruct, """[{"a":1}]""", toVariantObject = true)
+    val complexStruct = Literal.create(
       Row(
         Seq("123", "true", "f"),
         Map("a" -> "123", "b" -> "true", "c" -> "f"),
+        Map("a" -> Row(132)),
         Row(0)),
-      StructType.fromDDL("c ARRAY<STRING>,b MAP<STRING, STRING>,a STRUCT<i: INT>"))
-    check(struct, """{"a":{"i":0},"b":{"a":"123","b":"true","c":"f"},"c":["123","true","f"]}""")
+      StructType.fromDDL("c ARRAY<STRING>,b MAP<STRING, STRING>,d MAP<STRING, STRUCT<i: INT>>," +
+        "a STRUCT<i: INT>"))
+    check(complexStruct,
+      """{"a":{"i":0},"b":{"a":"123","b":"true","c":"f"},"c":["123","true","f"],""" +
+      """"d":{"a":{"i":132}}}""",
+      toVariantObject = true)
+    check(ymArrLit, """["INTERVAL '0' MONTH","INTERVAL""" +
+      """ '2147483647' MONTH","INTERVAL '-2147483647' MONTH"]""", toVariantObject = true)
+
+    // to_variant_object - failure cases - non-nested types or map with non-string key
+    checkFailure(1, toVariantObject = true)
+    checkFailure(true, toVariantObject = true)
+    checkFailure(Literal.create(Literal.create(Period.ofMonths(0))), toVariantObject = true)
+    checkFailure(Map(1 -> 1), toVariantObject = true)
   }
 
   test("schema_of_variant - unknown type") {
@@ -1092,7 +1141,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val results = mutable.HashMap.empty[(Literal, Literal), String]
     for (i <- inputs) {
-      val inputType = if (i.value == null) "VOID" else i.dataType.sql
+      val inputType = if (i.value == null) "VOID" else SchemaOfVariant.printSchema(i.dataType)
       results.put((nul, i), inputType)
       results.put((i, i), inputType)
     }
@@ -1106,14 +1155,24 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     results.put((timestamp, timestampNtz), "TIMESTAMP")
     results.put((float, decimal), "DOUBLE")
     results.put((array1, array2), "ARRAY<DOUBLE>")
-    results.put((struct1, struct2), "STRUCT<a: VARIANT, b: BIGINT>")
+    results.put((struct1, struct2), "OBJECT<a: VARIANT, b: BIGINT>")
     results.put((dtInterval1, dtInterval2), "INTERVAL DAY TO SECOND")
     results.put((ymInterval1, ymInterval2), "INTERVAL YEAR TO MONTH")
 
     for (i1 <- inputs) {
       for (i2 <- inputs) {
         val expected = results.getOrElse((i1, i2), results.getOrElse((i2, i1), "VARIANT"))
-        val array = CreateArray(Seq(Cast(i1, VariantType), Cast(i2, VariantType)))
+        val elem1 =
+          if (i1.dataType.isInstanceOf[ArrayType] || i1.dataType.isInstanceOf[MapType] ||
+            i1.dataType.isInstanceOf[StructType]) {
+            ToVariantObject(i1)
+          } else Cast(i1, VariantType)
+        val elem2 =
+          if (i2.dataType.isInstanceOf[ArrayType] || i2.dataType.isInstanceOf[MapType] ||
+            i2.dataType.isInstanceOf[StructType]) {
+            ToVariantObject(i2)
+          } else Cast(i2, VariantType)
+        val array = CreateArray(Seq(elem1, elem2))
         checkEvaluation(SchemaOfVariant(Cast(array, VariantType)).replacement, s"ARRAY<$expected>")
       }
     }

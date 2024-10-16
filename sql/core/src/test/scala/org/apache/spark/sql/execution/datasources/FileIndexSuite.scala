@@ -137,7 +137,7 @@ class FileIndexSuite extends SharedSparkSession {
           exception = intercept[SparkRuntimeException] {
             fileIndex.partitionSpec()
           },
-          errorClass = "_LEGACY_ERROR_TEMP_2058",
+          condition = "_LEGACY_ERROR_TEMP_2058",
           parameters = Map("value" -> "foo", "dataType" -> "IntegerType", "columnName" -> "a")
         )
       }
@@ -566,7 +566,7 @@ class FileIndexSuite extends SharedSparkSession {
       new File(directoryPath, "part_col=1").renameTo(new File(directoryPath, "undefined"))
 
       // By default, we expect the invalid path assertion to trigger.
-      val ex = intercept[AssertionError] {
+      val ex = intercept[SparkRuntimeException] {
         spark.read
           .format("parquet")
           .load(directoryPath.getCanonicalPath)
@@ -585,7 +585,7 @@ class FileIndexSuite extends SharedSparkSession {
 
       // Data source option override takes precedence.
       withSQLConf(SQLConf.IGNORE_INVALID_PARTITION_PATHS.key -> "true") {
-        val ex = intercept[AssertionError] {
+        val ex = intercept[SparkRuntimeException] {
           spark.read
             .format("parquet")
             .option(FileIndexOptions.IGNORE_INVALID_PARTITION_PATHS, "false")

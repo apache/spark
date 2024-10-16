@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.util;
 
 import com.ibm.icu.lang.UCharacter;
+import com.ibm.icu.lang.UProperty;
 import com.ibm.icu.text.BreakIterator;
 import com.ibm.icu.text.Collator;
 import com.ibm.icu.text.RuleBasedCollator;
@@ -47,6 +48,16 @@ public class CollationAwareUTF8String {
    * string in a target string.
    */
   private static final int MATCH_NOT_FOUND = -1;
+
+  /**
+   * `COMBINED_ASCII_SMALL_I_COMBINING_DOT` is an internal representation of the combined
+   * lowercase code point for ASCII lowercase letter i with an additional combining dot character
+   * (U+0307). This integer value is not a valid code point itself, but rather an artificial code
+   * point marker used to represent the two lowercase characters that are the result of converting
+   * the uppercase Turkish dotted letter I with a combining dot character (U+0130) to lowercase.
+   */
+  private static final int COMBINED_ASCII_SMALL_I_COMBINING_DOT =
+    SpecialCodePointConstants.ASCII_SMALL_I << 16 | SpecialCodePointConstants.COMBINING_DOT;
 
   /**
    * Returns whether the target string starts with the specified prefix, starting from the
@@ -98,16 +109,16 @@ public class CollationAwareUTF8String {
     }
     // Compare the characters in the target and pattern strings.
     int matchLength = 0, codePointBuffer = -1, targetCodePoint, patternCodePoint;
-    while (targetIterator.hasNext() && patternIterator.hasNext()) {
+    while ((targetIterator.hasNext() || codePointBuffer != -1) && patternIterator.hasNext()) {
       if (codePointBuffer != -1) {
         targetCodePoint = codePointBuffer;
         codePointBuffer = -1;
       } else {
         // Use buffered lowercase code point iteration to handle one-to-many case mappings.
         targetCodePoint = getLowercaseCodePoint(targetIterator.next());
-        if (targetCodePoint == CODE_POINT_COMBINED_LOWERCASE_I_DOT) {
-          targetCodePoint = CODE_POINT_LOWERCASE_I;
-          codePointBuffer = CODE_POINT_COMBINING_DOT;
+        if (targetCodePoint == COMBINED_ASCII_SMALL_I_COMBINING_DOT) {
+          targetCodePoint = SpecialCodePointConstants.ASCII_SMALL_I;
+          codePointBuffer = SpecialCodePointConstants.COMBINING_DOT;
         }
         ++matchLength;
       }
@@ -200,16 +211,16 @@ public class CollationAwareUTF8String {
     }
     // Compare the characters in the target and pattern strings.
     int matchLength = 0, codePointBuffer = -1, targetCodePoint, patternCodePoint;
-    while (targetIterator.hasNext() && patternIterator.hasNext()) {
+    while ((targetIterator.hasNext() || codePointBuffer != -1) && patternIterator.hasNext()) {
       if (codePointBuffer != -1) {
         targetCodePoint = codePointBuffer;
         codePointBuffer = -1;
       } else {
         // Use buffered lowercase code point iteration to handle one-to-many case mappings.
         targetCodePoint = getLowercaseCodePoint(targetIterator.next());
-        if (targetCodePoint == CODE_POINT_COMBINED_LOWERCASE_I_DOT) {
-          targetCodePoint = CODE_POINT_COMBINING_DOT;
-          codePointBuffer = CODE_POINT_LOWERCASE_I;
+        if (targetCodePoint == COMBINED_ASCII_SMALL_I_COMBINING_DOT) {
+          targetCodePoint = SpecialCodePointConstants.COMBINING_DOT;
+          codePointBuffer = SpecialCodePointConstants.ASCII_SMALL_I;
         }
         ++matchLength;
       }
@@ -461,27 +472,15 @@ public class CollationAwareUTF8String {
    */
   private static void appendLowercaseCodePoint(final int codePoint, final StringBuilder sb) {
     int lowercaseCodePoint = getLowercaseCodePoint(codePoint);
-    if (lowercaseCodePoint == CODE_POINT_COMBINED_LOWERCASE_I_DOT) {
+    if (lowercaseCodePoint == COMBINED_ASCII_SMALL_I_COMBINING_DOT) {
       // Latin capital letter I with dot above is mapped to 2 lowercase characters.
-      sb.appendCodePoint(0x0069);
-      sb.appendCodePoint(0x0307);
+      sb.appendCodePoint(SpecialCodePointConstants.ASCII_SMALL_I);
+      sb.appendCodePoint(SpecialCodePointConstants.COMBINING_DOT);
     } else {
       // All other characters should follow context-unaware ICU single-code point case mapping.
       sb.appendCodePoint(lowercaseCodePoint);
     }
   }
-
-  /**
-   * `CODE_POINT_COMBINED_LOWERCASE_I_DOT` is an internal representation of the combined lowercase
-   * code point for ASCII lowercase letter i with an additional combining dot character (U+0307).
-   * This integer value is not a valid code point itself, but rather an artificial code point
-   * marker used to represent the two lowercase characters that are the result of converting the
-   * uppercase Turkish dotted letter I with a combining dot character (U+0130) to lowercase.
-   */
-  private static final int CODE_POINT_LOWERCASE_I = 0x69;
-  private static final int CODE_POINT_COMBINING_DOT = 0x307;
-  private static final int CODE_POINT_COMBINED_LOWERCASE_I_DOT =
-    CODE_POINT_LOWERCASE_I << 16 | CODE_POINT_COMBINING_DOT;
 
   /**
    * Returns the lowercase version of the provided code point, with special handling for
@@ -490,15 +489,15 @@ public class CollationAwareUTF8String {
    * the position in the string relative to other characters in lowercase).
    */
   private static int getLowercaseCodePoint(final int codePoint) {
-    if (codePoint == 0x0130) {
+    if (codePoint == SpecialCodePointConstants.CAPITAL_I_WITH_DOT_ABOVE) {
       // Latin capital letter I with dot above is mapped to 2 lowercase characters.
-      return CODE_POINT_COMBINED_LOWERCASE_I_DOT;
+      return COMBINED_ASCII_SMALL_I_COMBINING_DOT;
     }
-    else if (codePoint == 0x03C2) {
+    else if (codePoint == SpecialCodePointConstants.GREEK_FINAL_SIGMA) {
       // Greek final and non-final letter sigma should be mapped the same. This is achieved by
       // mapping Greek small final sigma (U+03C2) to Greek small non-final sigma (U+03C3). Capital
       // letter sigma (U+03A3) is mapped to small non-final sigma (U+03C3) in the `else` branch.
-      return 0x03C3;
+      return SpecialCodePointConstants.GREEK_SMALL_SIGMA;
     }
     else {
       // All other characters should follow context-unaware ICU single-code point case mapping.
@@ -548,6 +547,152 @@ public class CollationAwareUTF8String {
       .collator.getLocale(ULocale.ACTUAL_LOCALE);
     return UTF8String.fromString(UCharacter.toTitleCase(locale, target.toValidString(),
       BreakIterator.getWordInstance(locale)));
+  }
+
+  /**
+   * This 'HashMap' is introduced as a performance speedup. Since title-casing a codepoint can
+   * result in more than a single codepoint, for correctness, we would use
+   * 'UCharacter.toTitleCase(String)' which returns a 'String'. If we use
+   * 'UCharacter.toTitleCase(int)' (the version of the same function which converts a single
+   * codepoint to its title-case codepoint), it would be faster than the previously mentioned
+   * version, but the problem here is that we don't handle when title-casing a codepoint yields more
+   * than 1 codepoint. Since there are only 48 codepoints that are mapped to more than 1 codepoint
+   * when title-cased, they are precalculated here, so that the faster function for title-casing
+   * could be used in combination with this 'HashMap' in the method 'appendCodepointToTitleCase'.
+   */
+  private static final HashMap<Integer, String> codepointOneToManyTitleCaseLookupTable =
+    new HashMap<>(){{
+    StringBuilder sb = new StringBuilder();
+    for (int i = Character.MIN_CODE_POINT; i <= Character.MAX_CODE_POINT; ++i) {
+      sb.appendCodePoint(i);
+      String titleCase = UCharacter.toTitleCase(sb.toString(), null);
+      if (titleCase.codePointCount(0, titleCase.length()) > 1) {
+        put(i, titleCase);
+      }
+      sb.setLength(0);
+    }
+  }};
+
+  /**
+   * Title-casing a string using ICU case mappings. Iterates over the string and title-cases
+   * the first character in each word, and lowercases every other character. Handles lowercasing
+   * capital Greek letter sigma ('Σ') separately, taking into account if it should be a small final
+   * Greek sigma ('ς') or small non-final Greek sigma ('σ'). Words are separated by ASCII
+   * space(\u0020).
+   *
+   * @param source UTF8String to be title cased
+   * @return title cased source
+   */
+  public static UTF8String toTitleCaseICU(UTF8String source) {
+    // In the default UTF8String implementation, `toLowerCase` method implicitly does UTF8String
+    // validation (replacing invalid UTF-8 byte sequences with Unicode replacement character
+    // U+FFFD), but now we have to do the validation manually.
+    source = source.makeValid();
+
+    // Building the title cased source with 'sb'.
+    UTF8StringBuilder sb = new UTF8StringBuilder();
+
+    // 'isNewWord' is true if the current character is the beginning of a word, false otherwise.
+    boolean isNewWord = true;
+    // We are maintaining if the current character is preceded by a cased letter.
+    // This is used when lowercasing capital Greek letter sigma ('Σ'), to figure out if it should be
+    // lowercased into σ or ς.
+    boolean precededByCasedLetter = false;
+
+    // 'offset' is a byte offset in source's byte array pointing to the beginning of the character
+    // that we need to process next.
+    int offset = 0;
+    int len = source.numBytes();
+
+    while (offset < len) {
+      // We will actually call 'codePointFrom()' 2 times for each character in the worst case (once
+      // here, and once in 'followedByCasedLetter'). Example of a string where we call it 2 times
+      // for almost every character is 'ΣΣΣΣΣ' (a string consisting only of Greek capital sigma)
+      // and 'Σ`````' (a string consisting of a Greek capital sigma, followed by case-ignorable
+      // characters).
+      int codepoint = source.codePointFrom(offset);
+      // Appending the correctly cased character onto 'sb'.
+      appendTitleCasedCodepoint(sb, codepoint, isNewWord, precededByCasedLetter, source, offset);
+      // Updating 'isNewWord', 'precededByCasedLetter' and 'offset' to be ready for the next
+      // character that we will process.
+      isNewWord = (codepoint == SpecialCodePointConstants.ASCII_SPACE);
+      if (!UCharacter.hasBinaryProperty(codepoint, UProperty.CASE_IGNORABLE)) {
+        precededByCasedLetter = UCharacter.hasBinaryProperty(codepoint, UProperty.CASED);
+      }
+      offset += UTF8String.numBytesForFirstByte(source.getByte(offset));
+    }
+    return sb.build();
+  }
+
+  private static void appendTitleCasedCodepoint(
+      UTF8StringBuilder sb,
+      int codepoint,
+      boolean isAfterAsciiSpace,
+      boolean precededByCasedLetter,
+      UTF8String source,
+      int offset) {
+    if (isAfterAsciiSpace) {
+      // Title-casing a character if it is in the beginning of a new word.
+      appendCodepointToTitleCase(sb, codepoint);
+      return;
+    }
+    if (codepoint == SpecialCodePointConstants.GREEK_CAPITAL_SIGMA) {
+      // Handling capital Greek letter sigma ('Σ').
+      appendLowerCasedGreekCapitalSigma(sb, precededByCasedLetter, source, offset);
+      return;
+    }
+    // If it's not the beginning of a word, or a capital Greek letter sigma ('Σ'), we lowercase the
+    // character. We specially handle 'CAPITAL_I_WITH_DOT_ABOVE'.
+    if (codepoint == SpecialCodePointConstants.CAPITAL_I_WITH_DOT_ABOVE) {
+      sb.appendCodePoint(SpecialCodePointConstants.ASCII_SMALL_I);
+      sb.appendCodePoint(SpecialCodePointConstants.COMBINING_DOT);
+      return;
+    }
+    sb.appendCodePoint(UCharacter.toLowerCase(codepoint));
+  }
+
+  private static void appendLowerCasedGreekCapitalSigma(
+      UTF8StringBuilder sb,
+      boolean precededByCasedLetter,
+      UTF8String source,
+      int offset) {
+    int codepoint = (!followedByCasedLetter(source, offset) && precededByCasedLetter)
+      ? SpecialCodePointConstants.GREEK_FINAL_SIGMA
+      : SpecialCodePointConstants.GREEK_SMALL_SIGMA;
+    sb.appendCodePoint(codepoint);
+  }
+
+  /**
+   * Checks if the character beginning at 'offset'(in 'sources' byte array) is followed by a cased
+   * letter.
+   */
+  private static boolean followedByCasedLetter(UTF8String source, int offset) {
+    // Moving the offset one character forward, so we could start the linear search from there.
+    offset += UTF8String.numBytesForFirstByte(source.getByte(offset));
+    int len = source.numBytes();
+
+    while (offset < len) {
+      int codepoint = source.codePointFrom(offset);
+
+      if (UCharacter.hasBinaryProperty(codepoint, UProperty.CASE_IGNORABLE)) {
+        offset += UTF8String.numBytesForFirstByte(source.getByte(offset));
+        continue;
+      }
+      return UCharacter.hasBinaryProperty(codepoint, UProperty.CASED);
+    }
+    return false;
+  }
+
+  /**
+   * Appends title-case of a single character to a 'StringBuilder' using the ICU root locale rules.
+   */
+  private static void appendCodepointToTitleCase(UTF8StringBuilder sb, int codepoint) {
+    String toTitleCase = codepointOneToManyTitleCaseLookupTable.get(codepoint);
+    if (toTitleCase == null) {
+      sb.appendCodePoint(UCharacter.toTitleCase(codepoint));
+    } else {
+      sb.append(toTitleCase);
+    }
   }
 
   /*
@@ -843,11 +988,11 @@ public class CollationAwareUTF8String {
       }
       // Special handling for letter i (U+0069) followed by a combining dot (U+0307). By ensuring
       // that `CODE_POINT_LOWERCASE_I` is buffered, we guarantee finding a max-length match.
-      if (lowercaseDict.containsKey(CODE_POINT_COMBINED_LOWERCASE_I_DOT) &&
-          codePoint == CODE_POINT_LOWERCASE_I && inputIter.hasNext()) {
+      if (lowercaseDict.containsKey(COMBINED_ASCII_SMALL_I_COMBINING_DOT)
+          && codePoint == SpecialCodePointConstants.ASCII_SMALL_I && inputIter.hasNext()) {
         int nextCodePoint = inputIter.next();
-        if (nextCodePoint == CODE_POINT_COMBINING_DOT) {
-          codePoint = CODE_POINT_COMBINED_LOWERCASE_I_DOT;
+        if (nextCodePoint == SpecialCodePointConstants.COMBINING_DOT) {
+          codePoint = COMBINED_ASCII_SMALL_I_COMBINING_DOT;
         } else {
           codePointBuffer = nextCodePoint;
         }
@@ -1007,11 +1152,11 @@ public class CollationAwareUTF8String {
         codePoint = getLowercaseCodePoint(srcIter.next());
       }
       // Special handling for Turkish dotted uppercase letter I.
-      if (codePoint == CODE_POINT_LOWERCASE_I && srcIter.hasNext() &&
-          trimChars.contains(CODE_POINT_COMBINED_LOWERCASE_I_DOT)) {
+      if (codePoint == SpecialCodePointConstants.ASCII_SMALL_I && srcIter.hasNext() &&
+          trimChars.contains(COMBINED_ASCII_SMALL_I_COMBINING_DOT)) {
         codePointBuffer = codePoint;
         codePoint = getLowercaseCodePoint(srcIter.next());
-        if (codePoint == CODE_POINT_COMBINING_DOT) {
+        if (codePoint == SpecialCodePointConstants.COMBINING_DOT) {
           searchIndex += 2;
           codePointBuffer = -1;
         } else if (trimChars.contains(codePointBuffer)) {
@@ -1125,11 +1270,11 @@ public class CollationAwareUTF8String {
         codePoint = getLowercaseCodePoint(srcIter.next());
       }
       // Special handling for Turkish dotted uppercase letter I.
-      if (codePoint == CODE_POINT_COMBINING_DOT && srcIter.hasNext() &&
-          trimChars.contains(CODE_POINT_COMBINED_LOWERCASE_I_DOT)) {
+      if (codePoint == SpecialCodePointConstants.COMBINING_DOT && srcIter.hasNext() &&
+          trimChars.contains(COMBINED_ASCII_SMALL_I_COMBINING_DOT)) {
         codePointBuffer = codePoint;
         codePoint = getLowercaseCodePoint(srcIter.next());
-        if (codePoint == CODE_POINT_LOWERCASE_I) {
+        if (codePoint == SpecialCodePointConstants.ASCII_SMALL_I) {
           searchIndex -= 2;
           codePointBuffer = -1;
         } else if (trimChars.contains(codePointBuffer)) {
@@ -1218,9 +1363,9 @@ public class CollationAwareUTF8String {
 
   public static UTF8String[] splitSQL(final UTF8String input, final UTF8String delim,
       final int limit, final int collationId) {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+    if (CollationFactory.fetchCollation(collationId).isUtf8BinaryType) {
       return input.split(delim, limit);
-    } else if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
+    } else if (CollationFactory.fetchCollation(collationId).isUtf8LcaseType) {
       return lowercaseSplitSQL(input, delim, limit);
     } else {
       return icuSplitSQL(input, delim, limit, collationId);

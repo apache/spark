@@ -23,7 +23,6 @@ import java.sql.Timestamp
 import org.apache.commons.io.FileUtils
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.SparkException
 import org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction
 import org.apache.spark.sql.{DataFrame, Encoder}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -635,6 +634,72 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     )
   }
 
+  testWithAllStateVersions("[SPARK-49474] flatMapGroupsWithState - user NPE is classified") {
+    // Throws NPE
+    val stateFunc = (_: String, _: Iterator[String], _: GroupState[RunningCount]) => {
+      throw new NullPointerException()
+      // Need to return an iterator for compilation to get types
+      Iterator(1)
+    }
+
+    val inputData = MemoryStream[String]
+    val result =
+      inputData.toDS()
+        .groupByKey(x => x)
+        .flatMapGroupsWithState(Update, GroupStateTimeout.NoTimeout)(stateFunc)
+
+    testStream(result, Update)(
+      AddData(inputData, "a"),
+      ExpectFailure[FlatMapGroupsWithStateUserFuncException]()
+    )
+  }
+
+  testWithAllStateVersions(
+    "[SPARK-49474] flatMapGroupsWithState - null user iterator error is classified") {
+    // Returns null, will throw NPE when method is called on it
+    val stateFunc = (_: String, _: Iterator[String], _: GroupState[RunningCount]) => {
+      null.asInstanceOf[Iterator[Int]]
+    }
+
+    val inputData = MemoryStream[String]
+    val result =
+      inputData.toDS()
+        .groupByKey(x => x)
+        .flatMapGroupsWithState(Update, GroupStateTimeout.NoTimeout)(stateFunc)
+
+    testStream(result, Update)(
+      AddData(inputData, "a"),
+      ExpectFailure[FlatMapGroupsWithStateUserFuncException]()
+    )
+  }
+
+  testWithAllStateVersions(
+    "[SPARK-49474] flatMapGroupsWithState - NPE from user iterator is classified") {
+    // Returns iterator that throws NPE when next is called
+    val stateFunc = (_: String, _: Iterator[String], _: GroupState[RunningCount]) => {
+      new Iterator[Int] {
+        override def hasNext: Boolean = {
+          true
+        }
+
+        override def next(): Int = {
+          throw new NullPointerException()
+        }
+      }
+    }
+
+    val inputData = MemoryStream[String]
+    val result =
+      inputData.toDS()
+        .groupByKey(x => x)
+        .flatMapGroupsWithState(Update, GroupStateTimeout.NoTimeout)(stateFunc)
+
+    testStream(result, Update)(
+      AddData(inputData, "a"),
+      ExpectFailure[FlatMapGroupsWithStateUserFuncException]()
+    )
+  }
+
   test("mapGroupsWithState - streaming") {
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
@@ -816,7 +881,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       CheckNewAnswer(("a", 2L)),
       setFailInTask(true),
       AddData(inputData, "a"),
-      ExpectFailure[SparkException](),   // task should fail but should not increment count
+      // task should fail but should not increment count
+      ExpectFailure[FlatMapGroupsWithStateUserFuncException](),
       setFailInTask(false),
       StartStream(),
       CheckNewAnswer(("a", 3L))     // task should not fail, and should show correct count
@@ -1097,7 +1163,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       func: (Int, Iterator[Int], GroupState[Int]) => Iterator[Int],
       timeoutType: GroupStateTimeout = GroupStateTimeout.NoTimeout,
       batchTimestampMs: Long = NO_TIMESTAMP): FlatMapGroupsWithStateExec = {
-    val stateFormatVersion = spark.conf.get(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
+    val stateFormatVersion = sqlConf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
     val emptyRdd = spark.sparkContext.emptyRDD[InternalRow]
     MemoryStream[Int]
       .toDS()

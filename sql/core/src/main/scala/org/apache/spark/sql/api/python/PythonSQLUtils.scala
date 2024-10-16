@@ -29,14 +29,13 @@ import org.apache.spark.internal.LogKeys.CLASS_LOADER
 import org.apache.spark.security.SocketAuthServer
 import org.apache.spark.sql.{internal, Column, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.python.EvaluatePython
-import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -69,7 +68,10 @@ private[sql] object PythonSQLUtils extends Logging {
 
   // This is needed when generating SQL documentation for built-in functions.
   def listBuiltinFunctionInfos(): Array[ExpressionInfo] = {
-    FunctionRegistry.functionSet.flatMap(f => FunctionRegistry.builtin.lookupFunction(f)).toArray
+    (FunctionRegistry.functionSet.flatMap(f => FunctionRegistry.builtin.lookupFunction(f)) ++
+      TableFunctionRegistry.functionSet.flatMap(
+        f => TableFunctionRegistry.builtin.lookupFunction(f))).
+      groupBy(_.getName).map(v => v._2.head).toArray
   }
 
   private def listAllSQLConfigs(): Seq[(String, String, String, String)] = {
@@ -141,38 +143,6 @@ private[sql] object PythonSQLUtils extends Logging {
     }
   }
 
-  def castTimestampNTZToLong(c: Column): Column =
-    Column.internalFn("timestamp_ntz_to_long", c)
-
-  def ewm(e: Column, alpha: Double, ignoreNA: Boolean): Column =
-    Column.internalFn("ewm", e, lit(alpha), lit(ignoreNA))
-
-  def nullIndex(e: Column): Column = Column.internalFn("null_index", e)
-
-  def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
-    Column.internalFn("collect_top_k", e, lit(num), lit(reverse))
-
-  def pandasProduct(e: Column, ignoreNA: Boolean): Column =
-    Column.internalFn("pandas_product", e, lit(ignoreNA))
-
-  def pandasStddev(e: Column, ddof: Int): Column =
-    Column.internalFn("pandas_stddev", e, lit(ddof))
-
-  def pandasVariance(e: Column, ddof: Int): Column =
-    Column.internalFn("pandas_var", e, lit(ddof))
-
-  def pandasSkewness(e: Column): Column =
-    Column.internalFn("pandas_skew", e)
-
-  def pandasKurtosis(e: Column): Column =
-    Column.internalFn("pandas_kurt", e)
-
-  def pandasMode(e: Column, ignoreNA: Boolean): Column =
-    Column.internalFn("pandas_mode", e, lit(ignoreNA))
-
-  def pandasCovar(col1: Column, col2: Column, ddof: Int): Column =
-    Column.internalFn("pandas_covar", col1, col2, lit(ddof))
-
   def unresolvedNamedLambdaVariable(name: String): Column =
     Column(internal.UnresolvedNamedLambdaVariable.apply(name))
 
@@ -192,6 +162,9 @@ private[sql] object PythonSQLUtils extends Logging {
 
   @scala.annotation.varargs
   def fn(name: String, arguments: Column*): Column = Column.fn(name, arguments: _*)
+
+  @scala.annotation.varargs
+  def internalFn(name: String, inputs: Column*): Column = Column.internalFn(name, inputs: _*)
 }
 
 /**

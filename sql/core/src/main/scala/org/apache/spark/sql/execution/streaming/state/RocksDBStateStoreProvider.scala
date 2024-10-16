@@ -389,7 +389,7 @@ private[sql] class RocksDBStateStoreProvider
       new RocksDBStateStore(version)
     }
     catch {
-      case e: SparkException if e.getErrorClass.contains("CANNOT_LOAD_STATE_STORE") =>
+      case e: SparkException if e.getCondition.contains("CANNOT_LOAD_STATE_STORE") =>
         throw e
       case e: OutOfMemoryError =>
         throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
@@ -409,7 +409,7 @@ private[sql] class RocksDBStateStoreProvider
       new RocksDBStateStore(version)
     }
     catch {
-      case e: SparkException if e.getErrorClass.contains("CANNOT_LOAD_STATE_STORE") =>
+      case e: SparkException if e.getCondition.contains("CANNOT_LOAD_STATE_STORE") =>
         throw e
       case e: OutOfMemoryError =>
         throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
@@ -498,7 +498,10 @@ private[sql] class RocksDBStateStoreProvider
     }
   }
 
-  override def getStateStoreChangeDataReader(startVersion: Long, endVersion: Long):
+  override def getStateStoreChangeDataReader(
+      startVersion: Long,
+      endVersion: Long,
+      colFamilyNameOpt: Option[String] = None):
     StateStoreChangeDataReader = {
     val statePath = stateStoreId.storeCheckpointLocation()
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
@@ -508,7 +511,8 @@ private[sql] class RocksDBStateStoreProvider
       startVersion,
       endVersion,
       CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec),
-      keyValueEncoderMap)
+      keyValueEncoderMap,
+      colFamilyNameOpt)
   }
 
   /**
@@ -567,7 +571,7 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     // if the column family is not internal and uses reserved characters, throw an exception
-    if (!isInternal && colFamilyName.charAt(0) == '_') {
+    if (!isInternal && colFamilyName.charAt(0) == '$') {
       throw StateStoreErrors.cannotCreateColumnFamilyWithReservedChars(colFamilyName)
     }
   }
@@ -676,27 +680,70 @@ class RocksDBStateStoreChangeDataReader(
     endVersion: Long,
     compressionCodec: CompressionCodec,
     keyValueEncoderMap:
-      ConcurrentHashMap[String, (RocksDBKeyStateEncoder, RocksDBValueStateEncoder)])
+      ConcurrentHashMap[String, (RocksDBKeyStateEncoder, RocksDBValueStateEncoder)],
+    colFamilyNameOpt: Option[String] = None)
   extends StateStoreChangeDataReader(
-    fm, stateLocation, startVersion, endVersion, compressionCodec) {
+    fm, stateLocation, startVersion, endVersion, compressionCodec, colFamilyNameOpt) {
 
   override protected var changelogSuffix: String = "changelog"
 
-  override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
-    val reader = currentChangelogReader()
-    if (reader == null) {
-      return null
-    }
-    val (recordType, keyArray, valueArray) = reader.next()
-    // Todo: does not support multiple virtual column families
-    val (rocksDBKeyStateEncoder, rocksDBValueStateEncoder) =
-      keyValueEncoderMap.get(StateStore.DEFAULT_COL_FAMILY_NAME)
-    val keyRow = rocksDBKeyStateEncoder.decodeKey(keyArray)
-    if (valueArray == null) {
-      (recordType, keyRow, null, currentChangelogVersion - 1)
+  private def getColFamilyIdBytes: Option[Array[Byte]] = {
+    if (colFamilyNameOpt.isDefined) {
+      val colFamilyName = colFamilyNameOpt.get
+      if (!keyValueEncoderMap.containsKey(colFamilyName)) {
+        throw new IllegalStateException(
+          s"Column family $colFamilyName not found in the key value encoder map")
+      }
+      Some(keyValueEncoderMap.get(colFamilyName)._1.getColumnFamilyIdBytes())
     } else {
-      val valueRow = rocksDBValueStateEncoder.decodeValue(valueArray)
-      (recordType, keyRow, valueRow, currentChangelogVersion - 1)
+      None
+    }
+  }
+
+  private val colFamilyIdBytesOpt: Option[Array[Byte]] = getColFamilyIdBytes
+
+  override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
+    var currRecord: (RecordType.Value, Array[Byte], Array[Byte]) = null
+    val currEncoder: (RocksDBKeyStateEncoder, RocksDBValueStateEncoder) =
+      keyValueEncoderMap.get(colFamilyNameOpt
+        .getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME))
+
+    if (colFamilyIdBytesOpt.isDefined) {
+      // If we are reading records for a particular column family, the corresponding vcf id
+      // will be encoded in the key byte array. We need to extract that and compare for the
+      // expected column family id. If it matches, we return the record. If not, we move to
+      // the next record. Note that this has be handled across multiple changelog files and we
+      // rely on the currentChangelogReader to move to the next changelog file when needed.
+      while (currRecord == null) {
+        val reader = currentChangelogReader()
+        if (reader == null) {
+          return null
+        }
+
+        val nextRecord = reader.next()
+        val colFamilyIdBytes: Array[Byte] = colFamilyIdBytesOpt.get
+        val endIndex = colFamilyIdBytes.size
+        // Function checks for byte arrays being equal
+        // from index 0 to endIndex - 1 (both inclusive)
+        if (java.util.Arrays.equals(nextRecord._2, 0, endIndex,
+          colFamilyIdBytes, 0, endIndex)) {
+          currRecord = nextRecord
+        }
+      }
+    } else {
+      val reader = currentChangelogReader()
+      if (reader == null) {
+        return null
+      }
+      currRecord = reader.next()
+    }
+
+    val keyRow = currEncoder._1.decodeKey(currRecord._2)
+    if (currRecord._3 == null) {
+      (currRecord._1, keyRow, null, currentChangelogVersion - 1)
+    } else {
+      val valueRow = currEncoder._2.decodeValue(currRecord._3)
+      (currRecord._1, keyRow, valueRow, currentChangelogVersion - 1)
     }
   }
 }

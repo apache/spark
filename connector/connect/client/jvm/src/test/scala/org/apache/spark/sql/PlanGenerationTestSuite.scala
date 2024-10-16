@@ -37,6 +37,7 @@ import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
@@ -550,6 +551,14 @@ class PlanGenerationTestSuite
       ids = Array(fn.col("id"), fn.col("a")),
       variableColumnName = "name",
       valueColumnName = "value")
+  }
+
+  test("transpose index_column") {
+    simple.transpose(indexColumn = fn.col("id"))
+  }
+
+  test("transpose no_index_column") {
+    simple.transpose()
   }
 
   test("offset") {
@@ -1801,7 +1810,11 @@ class PlanGenerationTestSuite
     fn.sentences(fn.col("g"))
   }
 
-  functionTest("sentences with locale") {
+  functionTest("sentences with language") {
+    fn.sentences(fn.col("g"), lit("en"))
+  }
+
+  functionTest("sentences with language and country") {
     fn.sentences(fn.col("g"), lit("en"), lit("US"))
   }
 

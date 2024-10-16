@@ -27,6 +27,7 @@ import scala.annotation.tailrec
 import scala.collection.Map
 import scala.collection.mutable
 import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
+import scala.concurrent.Promise
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
@@ -173,7 +174,7 @@ private[spark] class DAGScheduler(
   // `NUM_CANCELLED_JOB_GROUPS_TO_TRACK` stored. On a new job submission, if its job group is in
   // this set, the job will be immediately cancelled.
   private[scheduler] val cancelledJobGroups =
-    new LimitedSizeFIFOSet[String](sc.getConf.get(config.NUM_CANCELLED_JOB_GROUPS_TO_TRACK))
+    new LimitedSizeFIFOSet[String](sc.conf.get(config.NUM_CANCELLED_JOB_GROUPS_TO_TRACK))
 
   /**
    * Contains the locations that each RDD's partitions are cached on.  This map's keys are RDD ids
@@ -223,9 +224,9 @@ private[spark] class DAGScheduler(
   private val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
 
   /** If enabled, FetchFailed will not cause stage retry, in order to surface the problem. */
-  private val disallowStageRetryForTest = sc.getConf.get(TEST_NO_STAGE_RETRY)
+  private val disallowStageRetryForTest = sc.conf.get(TEST_NO_STAGE_RETRY)
 
-  private val shouldMergeResourceProfiles = sc.getConf.get(config.RESOURCE_PROFILE_MERGE_CONFLICTS)
+  private val shouldMergeResourceProfiles = sc.conf.get(config.RESOURCE_PROFILE_MERGE_CONFLICTS)
 
   /**
    * Whether to unregister all the outputs on the host in condition that we receive a FetchFailure,
@@ -233,19 +234,19 @@ private[spark] class DAGScheduler(
    * executor(instead of the host) on a FetchFailure.
    */
   private[scheduler] val unRegisterOutputOnHostOnFetchFailure =
-    sc.getConf.get(config.UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE)
+    sc.conf.get(config.UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE)
 
   /**
    * Number of consecutive stage attempts allowed before a stage is aborted.
    */
   private[scheduler] val maxConsecutiveStageAttempts =
-    sc.getConf.get(config.STAGE_MAX_CONSECUTIVE_ATTEMPTS)
+    sc.conf.get(config.STAGE_MAX_CONSECUTIVE_ATTEMPTS)
 
   /**
    * Max stage attempts allowed before a stage is aborted.
    */
   private[scheduler] val maxStageAttempts: Int = {
-    Math.max(maxConsecutiveStageAttempts, sc.getConf.get(config.STAGE_MAX_ATTEMPTS))
+    Math.max(maxConsecutiveStageAttempts, sc.conf.get(config.STAGE_MAX_ATTEMPTS))
   }
 
   /**
@@ -253,7 +254,7 @@ private[spark] class DAGScheduler(
    * count spark.stage.maxConsecutiveAttempts
    */
   private[scheduler] val ignoreDecommissionFetchFailure =
-    sc.getConf.get(config.STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE)
+    sc.conf.get(config.STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE)
 
   /**
    * Number of max concurrent tasks check failures for each barrier job.
@@ -263,14 +264,14 @@ private[spark] class DAGScheduler(
   /**
    * Time in seconds to wait between a max concurrent tasks check failure and the next check.
    */
-  private val timeIntervalNumTasksCheck = sc.getConf
+  private val timeIntervalNumTasksCheck = sc.conf
     .get(config.BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL)
 
   /**
    * Max number of max concurrent tasks check failures allowed for a job before fail the job
    * submission.
    */
-  private val maxFailureNumTasksCheck = sc.getConf
+  private val maxFailureNumTasksCheck = sc.conf
     .get(config.BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES)
 
   private val messageScheduler =
@@ -285,26 +286,26 @@ private[spark] class DAGScheduler(
 
   taskScheduler.setDAGScheduler(this)
 
-  private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(sc.getConf, isDriver = true)
+  private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(sc.conf, isDriver = true)
 
   private val blockManagerMasterDriverHeartbeatTimeout =
-    sc.getConf.get(config.STORAGE_BLOCKMANAGER_MASTER_DRIVER_HEARTBEAT_TIMEOUT).millis
+    sc.conf.get(config.STORAGE_BLOCKMANAGER_MASTER_DRIVER_HEARTBEAT_TIMEOUT).millis
 
   private val shuffleMergeResultsTimeoutSec =
-    sc.getConf.get(config.PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT)
+    sc.conf.get(config.PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT)
 
   private val shuffleMergeFinalizeWaitSec =
-    sc.getConf.get(config.PUSH_BASED_SHUFFLE_MERGE_FINALIZE_TIMEOUT)
+    sc.conf.get(config.PUSH_BASED_SHUFFLE_MERGE_FINALIZE_TIMEOUT)
 
   private val shuffleMergeWaitMinSizeThreshold =
-    sc.getConf.get(config.PUSH_BASED_SHUFFLE_SIZE_MIN_SHUFFLE_SIZE_TO_WAIT)
+    sc.conf.get(config.PUSH_BASED_SHUFFLE_SIZE_MIN_SHUFFLE_SIZE_TO_WAIT)
 
-  private val shufflePushMinRatio = sc.getConf.get(config.PUSH_BASED_SHUFFLE_MIN_PUSH_RATIO)
+  private val shufflePushMinRatio = sc.conf.get(config.PUSH_BASED_SHUFFLE_MIN_PUSH_RATIO)
 
   private val shuffleMergeFinalizeNumThreads =
-    sc.getConf.get(config.PUSH_BASED_SHUFFLE_MERGE_FINALIZE_THREADS)
+    sc.conf.get(config.PUSH_BASED_SHUFFLE_MERGE_FINALIZE_THREADS)
 
-  private val shuffleFinalizeRpcThreads = sc.getConf.get(config.PUSH_SHUFFLE_FINALIZE_RPC_THREADS)
+  private val shuffleFinalizeRpcThreads = sc.conf.get(config.PUSH_SHUFFLE_FINALIZE_RPC_THREADS)
 
   // Since SparkEnv gets initialized after DAGScheduler, externalShuffleClient needs to be
   // initialized lazily
@@ -327,11 +328,10 @@ private[spark] class DAGScheduler(
     ThreadUtils.newDaemonFixedThreadPool(shuffleFinalizeRpcThreads, "shuffle-merge-finalize-rpc")
 
   /** Whether rdd cache visibility tracking is enabled. */
-  private val trackingCacheVisibility: Boolean =
-    sc.getConf.get(RDD_CACHE_VISIBILITY_TRACKING_ENABLED)
+  private val trackingCacheVisibility: Boolean = sc.conf.get(RDD_CACHE_VISIBILITY_TRACKING_ENABLED)
 
   /** Whether to abort a stage after canceling all of its tasks. */
-  private val legacyAbortStageAfterKillTasks = sc.getConf.get(LEGACY_ABORT_STAGE_AFTER_KILL_TASKS)
+  private val legacyAbortStageAfterKillTasks = sc.conf.get(LEGACY_ABORT_STAGE_AFTER_KILL_TASKS)
 
   /**
    * Called by the TaskSetManager to report task's starting.
@@ -556,7 +556,7 @@ private[spark] class DAGScheduler(
    * TODO SPARK-24942 Improve cluster resource management with jobs containing barrier stage
    */
   private def checkBarrierStageWithDynamicAllocation(rdd: RDD[_]): Unit = {
-    if (rdd.isBarrier() && Utils.isDynamicAllocationEnabled(sc.getConf)) {
+    if (rdd.isBarrier() && Utils.isDynamicAllocationEnabled(sc.conf)) {
       throw SparkCoreErrors.barrierStageWithDynamicAllocationError()
     }
   }
@@ -1116,11 +1116,18 @@ private[spark] class DAGScheduler(
 
   /**
    * Cancel all jobs with a given tag.
+   *
+   * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
+   * @param reason reason for cancellation.
+   * @param cancelledJobs a promise to be completed with operation IDs being cancelled.
    */
-  def cancelJobsWithTag(tag: String, reason: Option[String]): Unit = {
+  def cancelJobsWithTag(
+      tag: String,
+      reason: Option[String],
+      cancelledJobs: Option[Promise[Seq[ActiveJob]]]): Unit = {
     SparkContext.throwIfInvalidTag(tag)
     logInfo(log"Asked to cancel jobs with tag ${MDC(TAG, tag)}")
-    eventProcessLoop.post(JobTagCancelled(tag, reason))
+    eventProcessLoop.post(JobTagCancelled(tag, reason, cancelledJobs))
   }
 
   /**
@@ -1234,17 +1241,22 @@ private[spark] class DAGScheduler(
     jobIds.foreach(handleJobCancellation(_, Option(updatedReason)))
   }
 
-  private[scheduler] def handleJobTagCancelled(tag: String, reason: Option[String]): Unit = {
-    // Cancel all jobs belonging that have this tag.
+  private[scheduler] def handleJobTagCancelled(
+      tag: String,
+      reason: Option[String],
+      cancelledJobs: Option[Promise[Seq[ActiveJob]]]): Unit = {
+    // Cancel all jobs that have all provided tags.
     // First finds all active jobs with this group id, and then kill stages for them.
-    val jobIds = activeJobs.filter { activeJob =>
+    val jobsToBeCancelled = activeJobs.filter { activeJob =>
       Option(activeJob.properties).exists { properties =>
         Option(properties.getProperty(SparkContext.SPARK_JOB_TAGS)).getOrElse("")
           .split(SparkContext.SPARK_JOB_TAGS_SEP).filter(!_.isEmpty).toSet.contains(tag)
       }
-    }.map(_.jobId)
-    val updatedReason = reason.getOrElse("part of cancelled job tag %s".format(tag))
-    jobIds.foreach(handleJobCancellation(_, Option(updatedReason)))
+    }
+    val updatedReason =
+      reason.getOrElse("part of cancelled job tags %s".format(tag))
+    jobsToBeCancelled.map(_.jobId).foreach(handleJobCancellation(_, Option(updatedReason)))
+    cancelledJobs.map(_.success(jobsToBeCancelled.toSeq))
   }
 
   private[scheduler] def handleBeginEvent(task: Task[_], taskInfo: TaskInfo): Unit = {
@@ -2150,7 +2162,7 @@ private[spark] class DAGScheduler(
                   case mapStage: ShuffleMapStage =>
                     val numMissingPartitions = mapStage.findMissingPartitions().length
                     if (numMissingPartitions < mapStage.numTasks) {
-                      if (sc.getConf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
+                      if (sc.conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
                         val reason = "A shuffle map stage with indeterminate output was failed " +
                           "and retried. However, Spark can only do this while using the new " +
                           "shuffle block fetching protocol. Please check the config " +
@@ -2880,8 +2892,8 @@ private[spark] class DAGScheduler(
       val finalException = exception.collect {
         // If the error is user-facing (defines error class and is not internal error), we don't
         // wrap it with "Job aborted" and expose this error to the end users directly.
-        case st: Exception with SparkThrowable if st.getErrorClass != null &&
-            !SparkThrowableHelper.isInternalError(st.getErrorClass) =>
+        case st: Exception with SparkThrowable if st.getCondition != null &&
+            !SparkThrowableHelper.isInternalError(st.getCondition) =>
           st
       }.getOrElse {
         new SparkException(s"Job aborted due to stage failure: $reason", cause = exception.orNull)
@@ -3113,8 +3125,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case JobGroupCancelled(groupId, cancelFutureJobs, reason) =>
       dagScheduler.handleJobGroupCancelled(groupId, cancelFutureJobs, reason)
 
-    case JobTagCancelled(tag, reason) =>
-      dagScheduler.handleJobTagCancelled(tag, reason)
+    case JobTagCancelled(tag, reason, cancelledJobs) =>
+      dagScheduler.handleJobTagCancelled(tag, reason, cancelledJobs)
 
     case AllJobsCancelled =>
       dagScheduler.doCancelAllJobs()

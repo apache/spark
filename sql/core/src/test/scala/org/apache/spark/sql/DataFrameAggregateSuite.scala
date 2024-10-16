@@ -645,10 +645,10 @@ class DataFrameAggregateSuite extends QueryTest
     }
     checkError(
       exception = error,
-      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
       parameters = Map(
         "functionName" -> "`collect_set`",
-        "dataType" -> "\"MAP\"",
+        "dataType" -> "\"MAP\" or \"COLLATED STRING\"",
         "sqlExpr" -> "\"collect_set(b)\""
       ),
       context = ExpectedContext(
@@ -725,7 +725,7 @@ class DataFrameAggregateSuite extends QueryTest
       exception = intercept[AnalysisException] {
         testData.groupBy(sum($"key")).count()
       },
-      errorClass = "GROUP_BY_AGGREGATE",
+      condition = "GROUP_BY_AGGREGATE",
       parameters = Map("sqlExpr" -> "sum(key)"),
       context = ExpectedContext(fragment = "sum", callSitePattern = getCurrentClassCallSitePattern)
     )
@@ -985,7 +985,7 @@ class DataFrameAggregateSuite extends QueryTest
       }
       checkError(
         exception = error,
-        errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+        condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
         sqlState = None,
         parameters = Map(
           "functionName" -> "`max_by`",
@@ -1055,7 +1055,7 @@ class DataFrameAggregateSuite extends QueryTest
       }
       checkError(
         exception = error,
-        errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+        condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
         sqlState = None,
         parameters = Map(
           "functionName" -> "`min_by`",
@@ -1186,7 +1186,7 @@ class DataFrameAggregateSuite extends QueryTest
           exception = intercept[AnalysisException] {
             sql("SELECT COUNT_IF(x) FROM tempView")
           },
-          errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
           sqlState = None,
           parameters = Map(
             "sqlExpr" -> "\"count_if(x)\"",
@@ -1350,7 +1350,7 @@ class DataFrameAggregateSuite extends QueryTest
       exception = intercept[AnalysisException] {
         Seq(Tuple1(Seq(1))).toDF("col").groupBy(struct($"col.a")).count()
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"col[a]\"",
         "paramIndex" -> "second",
@@ -1924,7 +1924,7 @@ class DataFrameAggregateSuite extends QueryTest
           )
           .collect()
       },
-      errorClass = "HLL_INVALID_LG_K",
+      condition = "HLL_INVALID_LG_K",
       parameters = Map(
         "function" -> "`hll_sketch_agg`",
         "min" -> "4",
@@ -1940,7 +1940,7 @@ class DataFrameAggregateSuite extends QueryTest
           )
           .collect()
       },
-      errorClass = "HLL_INVALID_LG_K",
+      condition = "HLL_INVALID_LG_K",
       parameters = Map(
         "function" -> "`hll_sketch_agg`",
         "min" -> "4",
@@ -1963,7 +1963,7 @@ class DataFrameAggregateSuite extends QueryTest
           .withColumn("union", hll_union("hllsketch_left", "hllsketch_right"))
           .collect()
       },
-      errorClass = "HLL_UNION_DIFFERENT_LG_K",
+      condition = "HLL_UNION_DIFFERENT_LG_K",
       parameters = Map(
         "left" -> "12",
         "right" -> "20",
@@ -1986,7 +1986,7 @@ class DataFrameAggregateSuite extends QueryTest
           )
           .collect()
       },
-      errorClass = "HLL_UNION_DIFFERENT_LG_K",
+      condition = "HLL_UNION_DIFFERENT_LG_K",
       parameters = Map(
         "left" -> "12",
         "right" -> "20",
@@ -2007,7 +2007,7 @@ class DataFrameAggregateSuite extends QueryTest
             |""".stripMargin)
         checkAnswer(res, Nil)
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"hll_sketch_agg(value, text)\"",
         "paramIndex" -> "second",
@@ -2036,7 +2036,7 @@ class DataFrameAggregateSuite extends QueryTest
             |""".stripMargin)
         checkAnswer(res, Nil)
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"hll_union_agg(sketch, Hll_4)\"",
         "paramIndex" -> "second",
@@ -2078,7 +2078,7 @@ class DataFrameAggregateSuite extends QueryTest
             | cte1 join cte2 on cte1.id = cte2.id
             |""".stripMargin).collect()
       },
-      errorClass = "HLL_UNION_DIFFERENT_LG_K",
+      condition = "HLL_UNION_DIFFERENT_LG_K",
       parameters = Map(
         "left" -> "12",
         "right" -> "20",
@@ -2114,7 +2114,7 @@ class DataFrameAggregateSuite extends QueryTest
             |group by 1
             |""".stripMargin).collect()
       },
-      errorClass = "HLL_UNION_DIFFERENT_LG_K",
+      condition = "HLL_UNION_DIFFERENT_LG_K",
       parameters = Map(
         "left" -> "12",
         "right" -> "20",
@@ -2488,6 +2488,27 @@ class DataFrameAggregateSuite extends QueryTest
           assert(hasExpandNodeInPlan == testCase.hasExpandNodeInPlan)
         })
       })
+    }
+  }
+
+  test("SPARK-49261: Literals in grouping expressions shouldn't result in unresolved aggregation") {
+    val data = Seq((1, 1.001d, 2), (2, 3.001d, 4), (2, 3.001, 4)).toDF("a", "b", "c")
+    withTempView("v1") {
+      data.createOrReplaceTempView("v1")
+      val df =
+        sql("""SELECT
+              |  ROUND(SUM(b), 6) AS sum1,
+              |  COUNT(DISTINCT a) AS count1,
+              |  COUNT(DISTINCT c) AS count2
+              |FROM (
+              |  SELECT
+              |    6 AS gb,
+              |    *
+              |  FROM v1
+              |)
+              |GROUP BY a, gb
+              |""".stripMargin)
+      checkAnswer(df, Row(1.001d, 1, 1) :: Row(6.002d, 1, 1) :: Nil)
     }
   }
 }

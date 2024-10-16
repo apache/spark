@@ -351,6 +351,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def trimCollationNotEnabledError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.TRIM_COLLATION",
+      messageParameters = Map.empty
+    )
+  }
+
+  def trailingCommaInSelectError(origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "TRAILING_COMMA_IN_SELECT",
+      messageParameters = Map.empty,
+      origin = origin
+    )
+  }
+
   def unresolvedUsingColForJoinError(
       colName: String, suggestion: String, side: String): Throwable = {
     new AnalysisException(
@@ -851,6 +866,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "variableName" -> toSQLId(name),
         "searchPath" -> toSQLId(searchPath)),
       origin = origin)
+  }
+
+  def failedToLoadRoutineError(nameParts: Seq[String], e: Exception): Throwable = {
+    new AnalysisException(
+      errorClass = "FAILED_TO_LOAD_ROUTINE",
+      messageParameters = Map("routineName" -> toSQLId(nameParts)),
+      cause = Some(e))
   }
 
   def unresolvedRoutineError(name: FunctionIdentifier, searchPath: Seq[String]): Throwable = {
@@ -1669,12 +1691,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("className" -> className))
   }
 
-  def cannotSaveIntervalIntoExternalStorageError(): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1136",
-      messageParameters = Map.empty)
-  }
-
   def cannotResolveAttributeError(name: String, outputStr: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1137",
@@ -1707,10 +1723,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "sourceNames" -> sourceNames.mkString(", ")))
   }
 
-  def writeEmptySchemasUnsupportedByDataSourceError(): Throwable = {
+  def writeEmptySchemasUnsupportedByDataSourceError(format: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1142",
-      messageParameters = Map.empty)
+      errorClass = "EMPTY_SCHEMA_NOT_SUPPORTED_FOR_DATASOURCE",
+      messageParameters = Map("format" -> format))
   }
 
   def insertMismatchedColumnNumberError(
@@ -2229,12 +2245,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "columnType" -> columnType,
         "columnName" -> columnName,
         "validColumnNames" -> validColumnNames.mkString(", ")))
-  }
-
-  def operationNotSupportPartitioningError(operation: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1197",
-      messageParameters = Map("operation" -> operation))
   }
 
   def mixedRefsInAggFunc(funcStr: String, origin: Origin): Throwable = {
@@ -3266,13 +3276,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "config" -> SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key))
   }
 
-  def invalidSaveModeError(saveMode: String): Throwable = {
-    new AnalysisException(
-      errorClass = "INVALID_SAVE_MODE",
-      messageParameters = Map("mode" -> toDSOption(saveMode))
-    )
-  }
-
   def invalidSingleVariantColumn(): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_SINGLE_VARIANT_COLUMN",
@@ -3297,24 +3300,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1310",
       messageParameters = Map("quote" -> quote))
-  }
-
-  def sortByWithoutBucketingError(): Throwable = {
-    new AnalysisException(
-      errorClass = "SORT_BY_WITHOUT_BUCKETING",
-      messageParameters = Map.empty)
-  }
-
-  def bucketByUnsupportedByOperationError(operation: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1312",
-      messageParameters = Map("operation" -> operation))
-  }
-
-  def bucketByAndSortByUnsupportedByOperationError(operation: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1313",
-      messageParameters = Map("operation" -> operation))
   }
 
   def tableAlreadyExistsError(tableIdent: TableIdentifier): Throwable = {
@@ -3397,8 +3382,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def cannotModifyValueOfStaticConfigError(key: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1325",
-      messageParameters = Map("key" -> key))
+      errorClass = "CANNOT_MODIFY_CONFIG",
+      messageParameters = Map("key" -> toSQLConf(key), "docroot" -> SPARK_DOC_ROOT)
+    )
   }
 
   def cannotModifyValueOfSparkConfigError(key: String, docroot: String): Throwable = {
@@ -3547,29 +3533,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "cond" -> toSQLExpr(cond)))
   }
 
-  def failedToParseExistenceDefaultAsLiteral(fieldName: String, defaultValue: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1344",
-      messageParameters = Map(
-        "fieldName" -> fieldName,
-        "defaultValue" -> defaultValue))
-  }
-
   def defaultReferencesNotAllowedInDataSource(
       statementType: String, dataSource: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1345",
+      errorClass = "DEFAULT_UNSUPPORTED",
       messageParameters = Map(
-        "statementType" -> statementType,
+        "statementType" -> toSQLStmt(statementType),
         "dataSource" -> dataSource))
   }
 
   def addNewDefaultColumnToExistingTableNotAllowed(
       statementType: String, dataSource: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1346",
+      errorClass = "ADD_DEFAULT_UNSUPPORTED",
       messageParameters = Map(
-        "statementType" -> statementType,
+        "statementType" -> toSQLStmt(statementType),
         "dataSource" -> dataSource))
   }
 
@@ -3990,6 +3968,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("provider" -> name))
   }
 
+  def externalDataSourceException(cause: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "DATA_SOURCE_EXTERNAL_ERROR",
+      messageParameters = Map(),
+      cause = Some(cause)
+    )
+  }
+
   def foundMultipleDataSources(provider: String): Throwable = {
     new AnalysisException(
       errorClass = "FOUND_MULTIPLE_DATA_SOURCES",
@@ -4121,6 +4107,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def avroOptionsException(optionName: String, message: String): Throwable = {
+    new AnalysisException(
+      errorClass = "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE",
+      messageParameters = Map("optionName" -> optionName, "message" -> message)
+    )
+  }
+
   def protobufNotLoadedSqlFunctionsUnusable(functionName: String): Throwable = {
     new AnalysisException(
       errorClass = "PROTOBUF_NOT_LOADED_SQL_FUNCTIONS_UNUSABLE",
@@ -4128,21 +4121,32 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def operationNotSupportClusteringError(operation: String): Throwable = {
+  def pipeOperatorSelectContainsAggregateFunction(expr: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "CLUSTERING_NOT_SUPPORTED",
-      messageParameters = Map("operation" -> operation))
+      errorClass = "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION",
+      messageParameters = Map(
+        "expr" -> expr.toString),
+      origin = expr.origin)
   }
 
-  def clusterByWithPartitionedBy(): Throwable = {
+  def inlineTableContainsScalarSubquery(inlineTable: LogicalPlan): Throwable = {
     new AnalysisException(
-      errorClass = "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED",
-      messageParameters = Map.empty)
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.SCALAR_SUBQUERY_IN_VALUES",
+      messageParameters = Map.empty,
+      origin = inlineTable.origin
+    )
   }
 
-  def clusterByWithBucketing(): Throwable = {
+  def ordinalOutOfBoundsError(
+      ordinal: Int,
+      attributes: Seq[Attribute]): Throwable = {
     new AnalysisException(
-      errorClass = "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED",
-      messageParameters = Map.empty)
+      errorClass = "COLUMN_ORDINAL_OUT_OF_BOUNDS",
+      messageParameters = Map(
+        "ordinal" -> ordinal.toString,
+        "attributesLength" -> attributes.length.toString,
+        "attributes" -> attributes.map(attr => toSQLId(attr.name)).mkString(", ")
+      )
+    )
   }
 }

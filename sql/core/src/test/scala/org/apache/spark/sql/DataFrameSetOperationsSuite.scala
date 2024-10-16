@@ -354,21 +354,21 @@ class DataFrameSetOperationsSuite extends QueryTest
     val df = spark.range(1).select(map(lit("key"), $"id").as("m"))
     checkError(
       exception = intercept[AnalysisException](df.intersect(df)),
-      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+      condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
       parameters = Map(
         "colName" -> "`m`",
         "dataType" -> "\"MAP<STRING, BIGINT>\"")
     )
     checkError(
       exception = intercept[AnalysisException](df.except(df)),
-      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+      condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
       parameters = Map(
         "colName" -> "`m`",
         "dataType" -> "\"MAP<STRING, BIGINT>\"")
     )
     checkError(
       exception = intercept[AnalysisException](df.distinct()),
-      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+      condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
       parameters = Map(
         "colName" -> "`m`",
         "dataType" -> "\"MAP<STRING, BIGINT>\""))
@@ -376,7 +376,7 @@ class DataFrameSetOperationsSuite extends QueryTest
       df.createOrReplaceTempView("v")
       checkError(
         exception = intercept[AnalysisException](sql("SELECT DISTINCT m FROM v")),
-        errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+        condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
         parameters = Map(
           "colName" -> "`m`",
           "dataType" -> "\"MAP<STRING, BIGINT>\""),
@@ -546,7 +546,7 @@ class DataFrameSetOperationsSuite extends QueryTest
       exception = intercept[AnalysisException] {
         df1.unionByName(df2)
       },
-      errorClass = "NUM_COLUMNS_MISMATCH",
+      condition = "NUM_COLUMNS_MISMATCH",
       parameters = Map(
         "operator" -> "UNION",
         "firstNumColumns" -> "2",
@@ -610,7 +610,7 @@ class DataFrameSetOperationsSuite extends QueryTest
           exception = intercept[AnalysisException] {
             df1.unionByName(df2)
           },
-          errorClass = "COLUMN_ALREADY_EXISTS",
+          condition = "COLUMN_ALREADY_EXISTS",
           parameters = Map("columnName" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
         df1 = Seq((1, 1)).toDF("c0", "c1")
         df2 = Seq((1, 1)).toDF(c0, c1)
@@ -618,7 +618,7 @@ class DataFrameSetOperationsSuite extends QueryTest
           exception = intercept[AnalysisException] {
             df1.unionByName(df2)
           },
-          errorClass = "COLUMN_ALREADY_EXISTS",
+          condition = "COLUMN_ALREADY_EXISTS",
           parameters = Map("columnName" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
       }
     }
@@ -1022,7 +1022,7 @@ class DataFrameSetOperationsSuite extends QueryTest
       exception = intercept[AnalysisException] {
         df1.unionByName(df2)
       },
-      errorClass = "FIELD_NOT_FOUND",
+      condition = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`c`", "fields" -> "`a`, `b`"))
 
     // If right side of the nested struct has extra col.
@@ -1032,7 +1032,7 @@ class DataFrameSetOperationsSuite extends QueryTest
       exception = intercept[AnalysisException] {
         df1.unionByName(df2)
       },
-      errorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      condition = "INCOMPATIBLE_COLUMN_TYPE",
       parameters = Map(
         "tableOrdinalNumber" -> "second",
         "columnOrdinalNumber" -> "third",

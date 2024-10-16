@@ -345,7 +345,7 @@ class DatasetSuite extends QueryTest
         exception = intercept[AnalysisException] {
           ds.select(expr("`(_1)?+.+`").as[Int])
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = None,
         parameters = Map(
           "objectName" -> "`(_1)?+.+`",
@@ -359,7 +359,7 @@ class DatasetSuite extends QueryTest
         exception = intercept[AnalysisException] {
           ds.select(expr("`(_1|_2)`").as[Int])
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = None,
         parameters = Map(
           "objectName" -> "`(_1|_2)`",
@@ -373,7 +373,7 @@ class DatasetSuite extends QueryTest
         exception = intercept[AnalysisException] {
           ds.select(ds("`(_1)?+.+`"))
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map("objectName" -> "`(_1)?+.+`", "proposal" -> "`_1`, `_2`")
       )
 
@@ -381,7 +381,7 @@ class DatasetSuite extends QueryTest
         exception = intercept[AnalysisException] {
           ds.select(ds("`(_1|_2)`"))
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map("objectName" -> "`(_1|_2)`", "proposal" -> "`_1`, `_2`")
       )
     }
@@ -549,7 +549,7 @@ class DatasetSuite extends QueryTest
         exception = intercept[AnalysisException](
           ds1.joinWith(ds2, $"a.value" === $"b.value", joinType)
         ),
-        errorClass = "INVALID_JOIN_TYPE_FOR_JOINWITH",
+        condition = "INVALID_JOIN_TYPE_FOR_JOINWITH",
         sqlState = "42613",
         parameters = semiErrorParameters
       )
@@ -611,7 +611,7 @@ class DatasetSuite extends QueryTest
           (g, iter) => Iterator(g, iter.mkString(", "))
         }
       },
-      errorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+      condition = "INVALID_USAGE_OF_STAR_OR_REGEX",
       parameters = Map("elem" -> "'*'", "prettyName" -> "MapGroups"),
       context = ExpectedContext(fragment = "$", getCurrentClassCallSitePattern))
   }
@@ -640,7 +640,7 @@ class DatasetSuite extends QueryTest
           (g, iter) => Iterator(g, iter.mkString(", "))
         }
       },
-      errorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+      condition = "INVALID_USAGE_OF_STAR_OR_REGEX",
       parameters = Map("elem" -> "'*'", "prettyName" -> "MapGroups"),
       context = ExpectedContext(fragment = "$", getCurrentClassCallSitePattern))
   }
@@ -1187,11 +1187,15 @@ class DatasetSuite extends QueryTest
       exception = intercept[AnalysisException] {
         df.as[KryoData]
       },
-      errorClass = "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+      condition = "CANNOT_UP_CAST_DATATYPE",
       parameters = Map(
-        "sqlExpr" -> "\"a\"",
-        "srcType" -> "\"DOUBLE\"",
-        "targetType" -> "\"BINARY\""))
+        "expression" -> "a",
+        "sourceType" -> "\"DOUBLE\"",
+        "targetType" -> "\"BINARY\"",
+        "details" -> ("The type path of the target object is:\n- root class: " +
+          "\"org.apache.spark.sql.KryoData\"\n" +
+          "You can either add an explicit cast to the input data or choose a " +
+          "higher precision type of the field in the target object")))
   }
 
   test("Java encoder") {
@@ -1239,7 +1243,7 @@ class DatasetSuite extends QueryTest
     val ds = Seq(ClassData("a", 1)).toDS()
     checkError(
       exception = intercept[AnalysisException] (ds.as[ClassData2]),
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`c`",
         "proposal" -> "`a`, `b`"))
@@ -1269,7 +1273,7 @@ class DatasetSuite extends QueryTest
     // Just check the error class here to avoid flakiness due to different parameters.
     assert(intercept[SparkRuntimeException] {
       buildDataset(Row(Row("hello", null))).collect()
-    }.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
+    }.getCondition == "NOT_NULL_ASSERT_VIOLATION")
   }
 
   test("SPARK-12478: top level null field") {
@@ -1412,7 +1416,7 @@ class DatasetSuite extends QueryTest
     val ex = intercept[SparkRuntimeException] {
       spark.createDataFrame(rdd, schema).collect()
     }
-    assert(ex.getErrorClass == "EXPRESSION_ENCODING_FAILED")
+    assert(ex.getCondition == "EXPRESSION_ENCODING_FAILED")
     assert(ex.getCause.getMessage.contains("The 1th field 'b' of input row cannot be null"))
   }
 
@@ -1429,7 +1433,7 @@ class DatasetSuite extends QueryTest
       dataset.createTempView("tempView"))
     intercept[AnalysisException](dataset.createTempView("tempView"))
     checkError(e,
-      errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
+      condition = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
       parameters = Map("relationName" -> "`tempView`"))
     dataset.sparkSession.catalog.dropTempView("tempView")
 
@@ -1440,7 +1444,7 @@ class DatasetSuite extends QueryTest
           val e = intercept[AnalysisException](
             dataset.createTempView("test_db.tempView"))
           checkError(e,
-            errorClass = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
+            condition = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
             parameters = Map("actualName" -> "test_db.tempView"))
         }
 
@@ -1608,7 +1612,7 @@ class DatasetSuite extends QueryTest
 
   test("Dataset should throw RuntimeException if top-level product input object is null") {
     val e = intercept[SparkRuntimeException](Seq(ClassData("a", 1), null).toDS())
-    assert(e.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
+    assert(e.getCondition == "NOT_NULL_ASSERT_VIOLATION")
   }
 
   test("dropDuplicates") {
@@ -1845,6 +1849,26 @@ class DatasetSuite extends QueryTest
     }
   }
 
+  test("Dataset().localCheckpoint() lazy with StorageLevel") {
+    val df = spark.range(10).repartition($"id" % 2)
+    val checkpointedDf = df.localCheckpoint(eager = false, StorageLevel.DISK_ONLY)
+    val checkpointedPlan = checkpointedDf.queryExecution.analyzed
+    val rdd = checkpointedPlan.asInstanceOf[LogicalRDD].rdd
+    assert(rdd.getStorageLevel == StorageLevel.DISK_ONLY)
+    assert(!rdd.isCheckpointed)
+    checkpointedDf.collect()
+    assert(rdd.isCheckpointed)
+  }
+
+  test("Dataset().localCheckpoint() eager with StorageLevel") {
+    val df = spark.range(10).repartition($"id" % 2)
+    val checkpointedDf = df.localCheckpoint(eager = true, StorageLevel.DISK_ONLY)
+    val checkpointedPlan = checkpointedDf.queryExecution.analyzed
+    val rdd = checkpointedPlan.asInstanceOf[LogicalRDD].rdd
+    assert(rdd.isCheckpointed)
+    assert(rdd.getStorageLevel == StorageLevel.DISK_ONLY)
+  }
+
   test("identity map for primitive arrays") {
     val arrayByte = Array(1.toByte, 2.toByte, 3.toByte)
     val arrayInt = Array(1, 2, 3)
@@ -1902,19 +1926,19 @@ class DatasetSuite extends QueryTest
       exception = intercept[SparkUnsupportedOperationException] {
         Seq(CircularReferenceClassA(null)).toDS()
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2139",
+      condition = "_LEGACY_ERROR_TEMP_2139",
       parameters = Map("t" -> "org.apache.spark.sql.CircularReferenceClassA"))
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
         Seq(CircularReferenceClassC(null)).toDS()
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2139",
+      condition = "_LEGACY_ERROR_TEMP_2139",
       parameters = Map("t" -> "org.apache.spark.sql.CircularReferenceClassC"))
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
         Seq(CircularReferenceClassD(null)).toDS()
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2139",
+      condition = "_LEGACY_ERROR_TEMP_2139",
       parameters = Map("t" -> "org.apache.spark.sql.CircularReferenceClassD"))
   }
 
@@ -2051,17 +2075,17 @@ class DatasetSuite extends QueryTest
   test("SPARK-22472: add null check for top-level primitive values") {
     // If the primitive values are from Option, we need to do runtime null check.
     val ds = Seq(Some(1), None).toDS().as[Int]
-    val errorClass = "NOT_NULL_ASSERT_VIOLATION"
+    val condition = "NOT_NULL_ASSERT_VIOLATION"
     val sqlState = "42000"
     val parameters = Map("walkedTypePath" -> "\n- root class: \"int\"\n")
     checkError(
       exception = intercept[SparkRuntimeException](ds.collect()),
-      errorClass = errorClass,
+      condition = condition,
       sqlState = sqlState,
       parameters = parameters)
     checkError(
       exception = intercept[SparkRuntimeException](ds.map(_ * 2).collect()),
-      errorClass = errorClass,
+      condition = condition,
       sqlState = sqlState,
       parameters = parameters)
 
@@ -2071,12 +2095,12 @@ class DatasetSuite extends QueryTest
       val ds = spark.read.parquet(path.getCanonicalPath).as[Int]
       checkError(
         exception = intercept[SparkRuntimeException](ds.collect()),
-        errorClass = errorClass,
+        condition = condition,
         sqlState = sqlState,
         parameters = parameters)
       checkError(
         exception = intercept[SparkRuntimeException](ds.map(_ * 2).collect()),
-        errorClass = errorClass,
+        condition = condition,
         sqlState = sqlState,
         parameters = parameters)
     }
@@ -2097,7 +2121,7 @@ class DatasetSuite extends QueryTest
   test("SPARK-23835: null primitive data type should throw NullPointerException") {
     val ds = Seq[(Option[Int], Option[Int])]((Some(1), None)).toDS()
     val exception = intercept[SparkRuntimeException](ds.as[(Int, Int)].collect())
-    assert(exception.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
+    assert(exception.getCondition == "NOT_NULL_ASSERT_VIOLATION")
   }
 
   test("SPARK-24569: Option of primitive types are mistakenly mapped to struct type") {
@@ -2317,7 +2341,7 @@ class DatasetSuite extends QueryTest
           exception = intercept[AnalysisException] {
             ds(colName)
           },
-          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
           parameters = Map("objectName" -> colName, "proposal" -> "`field`.`1`, `field 2`")
         )
       }
@@ -2334,7 +2358,7 @@ class DatasetSuite extends QueryTest
             // has different semantics than ds.select(colName)
             ds.select(colName)
           },
-          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
           sqlState = None,
           parameters = Map(
             "objectName" -> s"`${colName.replace(".", "`.`")}`",
@@ -2349,7 +2373,7 @@ class DatasetSuite extends QueryTest
       exception = intercept[AnalysisException] {
         Seq(0).toDF("the.id").select("the.id")
       },
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = None,
       parameters = Map(
         "objectName" -> "`the`.`id`",
@@ -2364,7 +2388,7 @@ class DatasetSuite extends QueryTest
           .select(map(lit("key"), lit(1)).as("map"), lit(2).as("other.column"))
           .select($"`map`"($"nonexisting")).show()
       },
-      errorClass = "UNRESOLVED_MAP_KEY.WITH_SUGGESTION",
+      condition = "UNRESOLVED_MAP_KEY.WITH_SUGGESTION",
       sqlState = None,
       parameters = Map(
         "objectName" -> "`nonexisting`",
@@ -2676,7 +2700,7 @@ class DatasetSuite extends QueryTest
       // Expression decoding error
       checkError(
         exception = exception,
-        errorClass = "EXPRESSION_DECODING_FAILED",
+        condition = "EXPRESSION_DECODING_FAILED",
         parameters = Map(
           "expressions" -> expressions.map(
             _.simpleString(SQLConf.get.maxToStringFields)).mkString("\n"))
@@ -2684,7 +2708,7 @@ class DatasetSuite extends QueryTest
       // class unsupported by map objects
       checkError(
         exception = exception.getCause.asInstanceOf[org.apache.spark.SparkRuntimeException],
-        errorClass = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
+        condition = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
         parameters = Map("cls" -> classOf[Array[Int]].getName))
     }
   }
@@ -2697,7 +2721,7 @@ class DatasetSuite extends QueryTest
     }
     checkError(
       exception = exception,
-      errorClass = "EXPRESSION_ENCODING_FAILED",
+      condition = "EXPRESSION_ENCODING_FAILED",
       parameters = Map(
         "expressions" -> enc.serializer.map(
           _.simpleString(SQLConf.get.maxToStringFields)).mkString("\n"))
@@ -2746,7 +2770,7 @@ class DatasetSuite extends QueryTest
       }
       checkError(
         exception,
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map("objectName" -> "`a`", "proposal" -> "`value`"),
         context = ExpectedContext(fragment = "col", callSitePattern = callSitePattern))

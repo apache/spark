@@ -267,7 +267,8 @@ case class DataSource(
             checkAndGlobPathIfNecessary(checkEmptyGlobPath = false, checkFilesExist = false)
           createInMemoryFileIndex(globbedPaths)
         })
-        val forceNullable = sparkSession.conf.get(SQLConf.FILE_SOURCE_SCHEMA_FORCE_NULLABLE)
+        val forceNullable = sparkSession.sessionState.conf
+          .getConf(SQLConf.FILE_SOURCE_SCHEMA_FORCE_NULLABLE)
         val sourceDataSchema = if (forceNullable) dataSchema.asNullable else dataSchema
         SourceInfo(
           s"FileSource[$path]",
@@ -513,7 +514,8 @@ case class DataSource(
         dataSource.createRelation(
           sparkSession.sqlContext, mode, caseInsensitiveOptions, Dataset.ofRows(sparkSession, data))
       case format: FileFormat =>
-        disallowWritingIntervals(outputColumns.map(_.dataType), forbidAnsiIntervals = false)
+        disallowWritingIntervals(
+          outputColumns.toStructType.asNullable, format.toString, forbidAnsiIntervals = false)
         val cmd = planForWritingFileFormat(format, mode, data)
         val qe = sparkSession.sessionState.executePlan(cmd)
         qe.assertCommandExecuted()
@@ -538,8 +540,8 @@ case class DataSource(
         }
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
-        disallowWritingIntervals(data.schema.map(_.dataType), forbidAnsiIntervals = false)
-        DataSource.validateSchema(data.schema, sparkSession.sessionState.conf)
+        disallowWritingIntervals(data.schema, format.toString, forbidAnsiIntervals = false)
+        DataSource.validateSchema(format.toString, data.schema, sparkSession.sessionState.conf)
         planForWritingFileFormat(format, mode, data)
       case _ => throw SparkException.internalError(
         s"${providingClass.getCanonicalName} does not allow create table as select.")
@@ -565,12 +567,15 @@ case class DataSource(
   }
 
   private def disallowWritingIntervals(
-      dataTypes: Seq[DataType],
+      outputColumns: Seq[StructField],
+      format: String,
       forbidAnsiIntervals: Boolean): Unit = {
-    dataTypes.foreach(
-      TypeUtils.invokeOnceForInterval(_, forbidAnsiIntervals) {
-      throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError()
-    })
+    outputColumns.foreach { field =>
+      TypeUtils.invokeOnceForInterval(field.dataType, forbidAnsiIntervals) {
+      throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(
+        format, field
+      )}
+    }
   }
 }
 
@@ -837,7 +842,7 @@ object DataSource extends Logging {
    * @param schema
    * @param conf
    */
-  def validateSchema(schema: StructType, conf: SQLConf): Unit = {
+  def validateSchema(formatName: String, schema: StructType, conf: SQLConf): Unit = {
     val shouldAllowEmptySchema = conf.getConf(SQLConf.ALLOW_EMPTY_SCHEMAS_FOR_WRITES)
     def hasEmptySchema(schema: StructType): Boolean = {
       schema.size == 0 || schema.exists {
@@ -848,7 +853,7 @@ object DataSource extends Logging {
 
 
     if (!shouldAllowEmptySchema && hasEmptySchema(schema)) {
-      throw QueryCompilationErrors.writeEmptySchemasUnsupportedByDataSourceError()
+      throw QueryCompilationErrors.writeEmptySchemasUnsupportedByDataSourceError(formatName)
     }
   }
 }

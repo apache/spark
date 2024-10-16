@@ -776,7 +776,7 @@ Project [NULL AS Expected#x, variablereference(system.session.var1=CAST(NULL AS 
 -- !query
 DECLARE OR REPLACE VARIABLE var1 STRING DEFAULT CURRENT_DATABASE()
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(current_schema() as string), CURRENT_DATABASE()), true
+CreateVariable defaultvalueexpression(cast(current_database() as string), CURRENT_DATABASE()), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -842,7 +842,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'hello'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -885,7 +884,6 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"INT\"",
     "targetType" : "\"SMALLINT\"",
     "value" : "100000"
@@ -1002,7 +1000,6 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"DOUBLE\"",
     "targetType" : "\"INT\"",
     "value" : "1.0E10D"
@@ -1062,7 +1059,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'hello'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -2151,7 +2147,7 @@ CreateVariable defaultvalueexpression(cast(a INT as string), 'a INT'), true
 -- !query
 SELECT from_json('{"a": 1}', var1)
 -- !query analysis
-Project [from_json(StructField(a,IntegerType,true), {"a": 1}, Some(America/Los_Angeles)) AS from_json({"a": 1})#x]
+Project [from_json(StructField(a,IntegerType,true), {"a": 1}, Some(America/Los_Angeles), false) AS from_json({"a": 1})#x]
 +- OneRowRelation
 
 

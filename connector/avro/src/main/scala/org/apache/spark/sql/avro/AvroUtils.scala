@@ -65,7 +65,8 @@ private[sql] object AvroUtils extends Logging {
     SchemaConverters.toSqlType(
       avroSchema,
       parsedOptions.useStableIdForUnionType,
-      parsedOptions.stableIdPrefixForUnionType).dataType match {
+      parsedOptions.stableIdPrefixForUnionType,
+      parsedOptions.recursiveFieldMaxDepth).dataType match {
       case t: StructType => Some(t)
       case _ => throw new RuntimeException(
         s"""Avro schema cannot be converted to a Spark SQL StructType:

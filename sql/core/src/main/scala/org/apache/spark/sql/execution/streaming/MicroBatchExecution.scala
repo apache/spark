@@ -477,7 +477,7 @@ class MicroBatchExecution(
 
         // update offset metadata
         nextOffsets.metadata.foreach { metadata =>
-          OffsetSeqMetadata.setSessionConf(metadata, sparkSessionToRunBatches.conf)
+          OffsetSeqMetadata.setSessionConf(metadata, sparkSessionToRunBatches.sessionState.conf)
           execCtx.offsetSeqMetadata = OffsetSeqMetadata(
             metadata.batchWatermarkMs, metadata.batchTimestampMs, sparkSessionToRunBatches.conf)
           watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf)
@@ -841,6 +841,10 @@ class MicroBatchExecution(
     }
 
     markMicroBatchExecutionStart(execCtx)
+
+    if (execCtx.previousContext.isEmpty) {
+      purgeStatefulMetadataAsync(execCtx.executionPlan.executedPlan)
+    }
 
     val nextBatch =
       new Dataset(execCtx.executionPlan, ExpressionEncoder(execCtx.executionPlan.analyzed.schema))

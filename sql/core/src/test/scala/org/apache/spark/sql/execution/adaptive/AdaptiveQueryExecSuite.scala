@@ -904,7 +904,7 @@ class AdaptiveQueryExecSuite
         val error = intercept[SparkException] {
           aggregated.count()
         }
-        assert(error.getErrorClass === "INVALID_BUCKET_FILE")
+        assert(error.getCondition === "INVALID_BUCKET_FILE")
         assert(error.getMessage contains "Invalid bucket file")
       }
     }
@@ -936,7 +936,8 @@ class AdaptiveQueryExecSuite
           val error = intercept[SparkException] {
             joined.collect()
           }
-          assert(error.getMessage() contains "coalesce test error")
+          assert((Seq(error) ++ Option(error.getCause) ++ error.getSuppressed()).exists(
+            e => e.getMessage() != null && e.getMessage().contains("coalesce test error")))
 
           val adaptivePlan = joined.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
 
@@ -1082,7 +1083,7 @@ class AdaptiveQueryExecSuite
           val doExecute = PrivateMethod[Unit](Symbol("doExecute"))
           c.invokePrivate(doExecute())
         },
-        errorClass = "INTERNAL_ERROR",
+        condition = "INTERNAL_ERROR",
         parameters = Map("message" -> "operating on canonicalized plan"))
     }
   }
@@ -1605,6 +1606,43 @@ class AdaptiveQueryExecSuite
         assert(findTopLevelBaseJoin(plan).size == 2)
         assert(findTopLevelBaseJoin(adaptivePlan).isEmpty)
       }
+    }
+  }
+
+  test("SPARK-49460: NPE in EmptyRelationExec.cleanupResources") {
+    withTable("t1left", "t1right", "t1empty") {
+      spark.sql("create table t1left (a int, b int);")
+      spark.sql("insert into t1left values (1, 1), (2,2), (3,3);")
+      spark.sql("create table t1right (a int, b int);")
+      spark.sql("create table t1empty (a int, b int);")
+      spark.sql("insert into t1right values (2,20), (4, 40);")
+
+      spark.sql("""
+                  |with leftT as (
+                  |  with erp as (
+                  |    select
+                  |      *
+                  |    from
+                  |      t1left
+                  |      join t1empty on t1left.a = t1empty.a
+                  |      join t1right on t1left.a = t1right.a
+                  |  )
+                  |  SELECT
+                  |    CASE
+                  |      WHEN COUNT(*) = 0 THEN 4
+                  |      ELSE NULL
+                  |    END AS a
+                  |  FROM
+                  |    erp
+                  |  HAVING
+                  |    COUNT(*) = 0
+                  |)
+                  |select
+                  |  /*+ MERGEJOIN(t1right) */
+                  |  *
+                  |from
+                  |  leftT
+                  |  join t1right on leftT.a = t1right.a""".stripMargin).collect()
     }
   }
 
@@ -2791,6 +2829,38 @@ class AdaptiveQueryExecSuite
       )
       assert(findTopLevelBroadcastNestedLoopJoin(adaptivePlan).size == 1)
       assert(findTopLevelUnion(adaptivePlan).size == 0)
+    }
+
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "100") {
+      withTempView("t1", "t2", "t3", "t4") {
+        Seq(1).toDF().createOrReplaceTempView("t1")
+        spark.range(100).createOrReplaceTempView("t2")
+        spark.range(2).createOrReplaceTempView("t3")
+        spark.range(2).createOrReplaceTempView("t4")
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+          """
+            |SELECT tt2.value
+            |FROM (
+            |  SELECT value
+            |  FROM t1
+            |  WHERE NOT EXISTS (
+            |      SELECT 1
+            |      FROM (
+            |        SELECT t2.id
+            |        FROM t2
+            |          JOIN t3 ON t2.id = t3.id
+            |        AND t2.id > 100
+            |      ) tt
+            |      WHERE t1.value = tt.id
+            |    )
+            |    AND t1.value = 1
+            |) tt2
+            |  LEFT JOIN t4 ON tt2.value = t4.id
+            |""".stripMargin
+        )
+        assert(findTopLevelBroadcastNestedLoopJoin(adaptivePlan).size == 1)
+      }
     }
   }
 

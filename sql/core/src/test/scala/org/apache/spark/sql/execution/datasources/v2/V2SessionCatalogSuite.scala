@@ -1173,7 +1173,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
         exception = intercept[SparkUnsupportedOperationException] {
           catalog.alterNamespace(testNs, NamespaceChange.removeProperty(p))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_2069",
+        condition = "CANNOT_REMOVE_RESERVED_PROPERTY",
         parameters = Map("property" -> p))
 
     }
@@ -1184,7 +1184,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     val testIdent: IdentifierHelper = Identifier.of(Array("a", "b"), "c")
     checkError(
       exception = intercept[AnalysisException](testIdent.asTableIdentifier),
-      errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+      condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
       parameters = Map("identifier" -> "`a`.`b`.`c`")
     )
   }
@@ -1193,7 +1193,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     val testIdent: MultipartIdentifierHelper = Seq("a", "b", "c")
     checkError(
       exception = intercept[AnalysisException](testIdent.asFunctionIdentifier),
-      errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+      condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
       parameters = Map("identifier" -> "`a`.`b`.`c`")
     )
   }
