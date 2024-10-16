@@ -66,7 +66,6 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get remove --purge -y gfortran-11
 
 RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/' >> /etc/apt/sources.list
 RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
@@ -153,6 +152,6 @@ RUN python3.13 -m pip install lxml numpy>=2.1 && \
     python3.13 -m pip cache purge
 
 # Remove unused installation packages to free up disk space
-RUN apt-get remove --purge -y 'gfortran-11' 'humanity-icon-theme' 'nodejs-doc' || true
+RUN apt-get remove --purge -y 'humanity-icon-theme' 'nodejs-doc' || true
 RUN apt-get autoremove --purge -y
 RUN apt-get clean
