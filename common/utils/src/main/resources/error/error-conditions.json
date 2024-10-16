@@ -376,7 +376,7 @@
     ],
     "sqlState" : "429BB"
   },
-  "CANNOT_REMOVE_REVERSED_PROPERTY" : {
+  "CANNOT_REMOVE_RESERVED_PROPERTY" : {
     "message" : [
       "Cannot remove reserved property: <property>."
     ],
