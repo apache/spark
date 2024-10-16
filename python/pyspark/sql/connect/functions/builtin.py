@@ -2446,28 +2446,28 @@ encode.__doc__ = pysparkfuncs.encode.__doc__
 
 
 def is_valid_utf8(str: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("is_valid_utf8", str)
+    return _invoke_function_over_columns("is_valid_utf8", _to_col(str))
 
 
 is_valid_utf8.__doc__ = pysparkfuncs.is_valid_utf8.__doc__
 
 
 def make_valid_utf8(str: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("make_valid_utf8", str)
+    return _invoke_function_over_columns("make_valid_utf8", _to_col(str))
 
 
 make_valid_utf8.__doc__ = pysparkfuncs.make_valid_utf8.__doc__
 
 
 def validate_utf8(str: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("validate_utf8", str)
+    return _invoke_function_over_columns("validate_utf8", _to_col(str))
 
 
 validate_utf8.__doc__ = pysparkfuncs.validate_utf8.__doc__
 
 
 def try_validate_utf8(str: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("try_validate_utf8", str)
+    return _invoke_function_over_columns("try_validate_utf8", _to_col(str))
 
 
 try_validate_utf8.__doc__ = pysparkfuncs.try_validate_utf8.__doc__
