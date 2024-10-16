@@ -193,6 +193,7 @@ private[spark] class Client(
    */
   def submitApplication(): Unit = {
     ResourceRequestHelper.validateResources(sparkConf)
+    ResourceRequestHelper.validateJavaOptions(sparkConf)
 
     try {
       launcherBackend.connect()
