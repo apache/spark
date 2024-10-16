@@ -18,7 +18,7 @@
 from typing import TYPE_CHECKING, Any
 
 from pyspark.errors import PySparkValueError
-from pyspark.sql.plot import PySparkPlotAccessor, PySparkBoxPlotBase
+from pyspark.sql.plot import PySparkPlotAccessor, PySparkBoxPlotBase, PySparkKdePlotBase
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame
@@ -123,9 +123,43 @@ def plot_box(data: "DataFrame", **kwargs: Any) -> "Figure":
 
 
 def plot_kde(data: "DataFrame", **kwargs: Any) -> "Figure":
-    if "color" not in kwargs:
-        kwargs["color"] = "names"  # why
+    from pyspark.sql.pandas.utils import require_minimum_pandas_version
 
-    # KdePlotBase.prepare_kde_data(data)
-    ind = KdePlotBase.get_ind(data, kwargs.pop("ind", None))
+    require_minimum_pandas_version()
+
+    import pandas as pd
+    from plotly import express
+
+    if "color" not in kwargs:
+        kwargs["color"] = "names"
+
     bw_method = kwargs.pop("bw_method", None)
+    colnames = kwargs.pop("column", None)
+    if isinstance(colnames, str):
+        colnames = [colnames]
+    ind = PySparkKdePlotBase.get_ind(data.select(*colnames), kwargs.pop("ind", None))
+
+    kde_cols = [
+        PySparkKdePlotBase.compute_kde_col(
+            input_col=data[col_name],
+            ind=ind,
+            bw_method=bw_method,
+        ).alias(f"kde_{i}")
+        for i, col_name in enumerate(colnames)
+    ]
+    kde_results = data.select(*kde_cols).first()
+    pdf = pd.concat(
+        [
+            pd.DataFrame(  # type: ignore
+                {
+                    "Density": kde_result,
+                    "names": col_name,
+                    "index": ind,
+                }
+            )
+            for col_name, kde_result in zip(colnames, list(kde_results))  # type: ignore[arg-type]
+        ]
+    )
+    fig = express.line(pdf, x="index", y="Density", **kwargs)
+    fig["layout"]["xaxis"]["title"] = None
+    return fig
