@@ -30,9 +30,8 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
-import org.apache.spark.sql.catalyst.expressions.json.{JsonExpressionEvalUtils, JsonExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.json.{JsonExpressionEvalUtils, JsonExpressionUtils, JsonToStructsEvaluator}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
-import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, TreePattern}
 import org.apache.spark.sql.catalyst.util._
@@ -639,7 +638,6 @@ case class JsonToStructs(
     variantAllowDuplicateKeys: Boolean = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS))
   extends UnaryExpression
   with TimeZoneAwareExpression
-  with CodegenFallback
   with ExpectsInputTypes
   with NullIntolerant
   with QueryErrorsBase {
@@ -647,7 +645,7 @@ case class JsonToStructs(
   // The JSON input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions. In particular, the parquet-mr encoder
   // can generate incorrect files if values are missing in columns declared as non-nullable.
-  val nullableSchema = schema.asNullable
+  private val nullableSchema: DataType = schema.asNullable
 
   override def nullable: Boolean = true
 
@@ -680,53 +678,35 @@ case class JsonToStructs(
         messageParameters = Map("schema" -> toSQLType(nullableSchema)))
   }
 
-  // This converts parsed rows to the desired output by the given schema.
-  @transient
-  lazy val converter = nullableSchema match {
-    case _: StructType =>
-      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
-    case _: ArrayType =>
-      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getArray(0) else null
-    case _: MapType =>
-      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getMap(0) else null
-  }
-
-  val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
-  @transient lazy val parser = {
-    val parsedOptions = new JSONOptions(options, timeZoneId.get, nameOfCorruptRecord)
-    val mode = parsedOptions.parseMode
-    if (mode != PermissiveMode && mode != FailFastMode) {
-      throw QueryCompilationErrors.parseModeUnsupportedError("from_json", mode)
-    }
-    val (parserSchema, actualSchema) = nullableSchema match {
-      case s: StructType =>
-        ExprUtils.verifyColumnNameOfCorruptRecord(s, parsedOptions.columnNameOfCorruptRecord)
-        (s, StructType(s.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)))
-      case other =>
-        (StructType(Array(StructField("value", other))), other)
-    }
-
-    val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = false)
-    val createParser = CreateJacksonParser.utf8String _
-
-    new FailureSafeParser[UTF8String](
-      input => rawParser.parse(input, createParser, identity[UTF8String]),
-      mode,
-      parserSchema,
-      parsedOptions.columnNameOfCorruptRecord)
-  }
-
   override def dataType: DataType = nullableSchema
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def nullSafeEval(json: Any): Any = nullableSchema match {
-    case _: VariantType =>
-      VariantExpressionEvalUtils.parseJson(json.asInstanceOf[UTF8String],
-        allowDuplicateKeys = variantAllowDuplicateKeys)
-    case _ =>
-      converter(parser.parse(json.asInstanceOf[UTF8String]))
+  @transient
+  private val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
+
+  @transient
+  private lazy val evaluator = new JsonToStructsEvaluator(
+    options, nullableSchema, nameOfCorruptRecord, timeZoneId, variantAllowDuplicateKeys)
+
+  override def nullSafeEval(json: Any): Any = evaluator.evaluate(json.asInstanceOf[UTF8String])
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
+    val eval = child.genCode(ctx)
+    val resultType = CodeGenerator.boxedType(dataType)
+    val resultTerm = ctx.freshName("result")
+    ev.copy(code =
+      code"""
+         |${eval.code}
+         |$resultType $resultTerm = ($resultType) $refEvaluator.evaluate(${eval.value});
+         |boolean ${ev.isNull} = $resultTerm == null;
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |if (!${ev.isNull}) {
+         |  ${ev.value} = $resultTerm;
+         |}
+         |""".stripMargin)
   }
 
   override def inputTypes: Seq[AbstractDataType] = StringTypeWithCaseAccentSensitivity :: Nil
