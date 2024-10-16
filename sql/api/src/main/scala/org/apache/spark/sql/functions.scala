@@ -2419,6 +2419,16 @@ object functions {
   def ceiling(e: Column): Column = Column.fn("ceiling", e)
 
   /**
+   * This is a special version of `conv` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the decoding cannot be performed.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def try_conv(num: Column, fromBase: Int, toBase: Int): Column =
+    Column.fn("try_conv", num, lit(fromBase), lit(toBase))
+
+  /**
    * Convert a number in a string column from one base to another.
    *
    * @group math_funcs

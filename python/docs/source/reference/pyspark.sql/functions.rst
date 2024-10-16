@@ -143,6 +143,7 @@ Mathematical Functions
     tan
     tanh
     try_add
+    try_conv
     try_divide
     try_mod
     try_multiply
