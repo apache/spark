@@ -128,13 +128,20 @@ class FileBasedDataSourceSuite extends QueryTest
 
   allFileBasedDataSources.foreach { format =>
     test(s"SPARK-23372 error while writing empty schema files using $format") {
+      val formatMapping = Map(
+        "csv" -> "CSV",
+        "json" -> "JSON",
+        "parquet" -> "Parquet",
+        "orc" -> "ORC",
+        "text" -> "Text"
+      )
       withTempPath { outputPath =>
         checkError(
           exception = intercept[AnalysisException] {
             spark.emptyDataFrame.write.format(format).save(outputPath.toString)
           },
-          condition = "_LEGACY_ERROR_TEMP_1142",
-          parameters = Map.empty
+          condition = "EMPTY_SCHEMA_NOT_SUPPORTED_FOR_DATASOURCE",
+          parameters = Map("format" -> formatMapping(format))
         )
       }
 
@@ -150,8 +157,8 @@ class FileBasedDataSourceSuite extends QueryTest
           exception = intercept[AnalysisException] {
             df.write.format(format).save(outputPath.toString)
           },
-          condition = "_LEGACY_ERROR_TEMP_1142",
-          parameters = Map.empty
+          condition = "EMPTY_SCHEMA_NOT_SUPPORTED_FOR_DATASOURCE",
+          parameters = Map("format" -> formatMapping(format))
         )
       }
     }
