@@ -74,7 +74,7 @@ private[recommendation] trait LMFModelParams extends Params with HasPredictionCo
 
   /**
    * Attempts to safely cast a user/item id to an Long. Throws an exception if the value is
-   * out of integer range or contains a fractional part.
+   * out of long range or contains a fractional part.
    */
   protected[recommendation] def checkLongs(dataset: Dataset[_], colName: String): Column = {
     dataset.schema(colName).dataType match {
