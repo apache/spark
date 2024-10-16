@@ -85,8 +85,8 @@ object SparkKubernetesClientFactory extends Logging {
     // Allow for specifying a context used to auto-configure from the users K8S config file
     val kubeContext = sparkConf.get(KUBERNETES_CONTEXT).filter(_.nonEmpty)
     logInfo(log"Auto-configuring K8S client using " +
-        log"${MDC(K8S_CONTEXT, kubeContext.map("context " + _).getOrElse("current context"))}" +
-        log" from users K8S config file")
+      log"${MDC(K8S_CONTEXT, kubeContext.map("context " + _).getOrElse("current context"))}" +
+      log" from users K8S config file")
 
     // if backoff limit is not set then set it to 3
     if (getSystemPropertyOrEnvVar(KUBERNETES_REQUEST_RETRY_BACKOFFLIMIT_SYSTEM_PROPERTY) == null) {
@@ -102,8 +102,8 @@ object SparkKubernetesClientFactory extends Logging {
       .withRequestTimeout(clientType.requestTimeout(sparkConf))
       .withConnectionTimeout(clientType.connectionTimeout(sparkConf))
       .withTrustCerts(sparkConf.get(KUBERNETES_TRUST_CERTIFICATES))
-      .withOption(oauthTokenValue) { (token, configBuilder) =>
-        configBuilder.withOauthToken(token)
+      .withOption(oauthTokenValue) {
+        (token, configBuilder) => configBuilder.withOauthToken(token)
       }
       .withOption(oauthTokenFile) {
         (file, configBuilder) => configBuilder.withOauthToken(Files.asCharSource(file, Charsets.UTF_8).read())
@@ -113,11 +113,9 @@ object SparkKubernetesClientFactory extends Logging {
       }
       .withOption(clientKeyFile) {
         (file, configBuilder) => configBuilder.withClientKeyFile(file)
-      }
-      .withOption(clientCertFile) {
+      }.withOption(clientCertFile) {
         (file, configBuilder) => configBuilder.withClientCertFile(file)
-      }
-      .withOption(namespace) {
+      }.withOption(namespace) {
         (ns, configBuilder) => configBuilder.withNamespace(ns)
       }
       .build()
@@ -143,11 +141,11 @@ object SparkKubernetesClientFactory extends Logging {
     extends AnyVal {
 
     def withOption[T]
-        (option: Option[T])(
-        configurator: ((T, ConfigBuilder) => ConfigBuilder)): ConfigBuilder = {
+        (option: Option[T])
+        (configurator: ((T, ConfigBuilder) => ConfigBuilder)): ConfigBuilder = {
       option.map { opt =>
-          configurator(opt, configBuilder)
-        }.getOrElse(configBuilder)
+        configurator(opt, configBuilder)
+      }.getOrElse(configBuilder)
     }
   }
 
