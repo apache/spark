@@ -421,7 +421,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     testVariantGet("null", "$", DateType, null)
   }
 
-  test("SPARK-48994: Disable support for interval types in the variant spec") {
+  test("SPARK-49985: Disable support for interval types in the variant spec") {
     val emptyMetadata = Array[Byte](VERSION, 0, 0)
 
     val resolver = ResolveTimeZone
@@ -783,7 +783,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkToJsonFail(Array(primitiveHeader(25)), 25)
     // Remove these test cases when overriding type IDs 19 and 20.
-    // SPARK-48994: Disable support for interval types in the variant spec.
+    // SPARK-49985: Disable support for interval types in the variant spec.
     checkToJsonFail(Array(primitiveHeader(19)), 19)
     checkToJsonFail(Array(primitiveHeader(20)), 20)
 
@@ -979,7 +979,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     checkErrorInSchemaOf(Array(primitiveHeader(25)), 25)
 
-    // SPARK-48994: Disable support for interval types in the variant spec.
+    // SPARK-49985: Disable support for interval types in the variant spec.
     // Remove these test cases when overriding type ids 19 and 20
     checkErrorInSchemaOf(Array(primitiveHeader(19)), 19)
     checkErrorInSchemaOf(Array(primitiveHeader(20)), 20)
