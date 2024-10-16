@@ -374,7 +374,7 @@ case class RandStr(
     var result: TypeCheckResult = TypeCheckResult.TypeCheckSuccess
     def requiredType = "INT or SMALLINT"
     Seq((length, "length", 0),
-      (seedExpression, "seedExpression", 1)).foreach {
+      (seedExpression, "seed", 1)).foreach {
       case (expr: Expression, name: String, index: Int) =>
         if (result == TypeCheckResult.TypeCheckSuccess) {
           if (!expr.foldable) {
