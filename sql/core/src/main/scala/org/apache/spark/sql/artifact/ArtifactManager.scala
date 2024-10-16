@@ -86,6 +86,8 @@ class ArtifactManager(session: SparkSession) extends Logging {
   protected val cachedBlockIdList = new CopyOnWriteArrayList[CacheId]
   protected val jarsList = new CopyOnWriteArrayList[Path]
   protected val pythonIncludeList = new CopyOnWriteArrayList[String]
+  protected val sparkContextRelativePaths =
+    new CopyOnWriteArrayList[(SparkContextResourceType.ResourceType, Path, Option[String])]
 
   /**
    * Get the URLs of all jar artifacts.
@@ -194,9 +196,13 @@ class ArtifactManager(session: SparkSession) extends Logging {
 
       if (normalizedRemoteRelativePath.startsWith(s"jars${File.separator}")) {
         session.sparkContext.addJar(uri)
+        sparkContextRelativePaths.add(
+          (SparkContextResourceType.JAR, normalizedRemoteRelativePath, fragment))
         jarsList.add(normalizedRemoteRelativePath)
       } else if (normalizedRemoteRelativePath.startsWith(s"pyfiles${File.separator}")) {
         session.sparkContext.addFile(uri)
+        sparkContextRelativePaths.add(
+          (SparkContextResourceType.FILE, normalizedRemoteRelativePath, fragment))
         val stringRemotePath = normalizedRemoteRelativePath.toString
         if (stringRemotePath.endsWith(".zip") || stringRemotePath.endsWith(
             ".egg") || stringRemotePath.endsWith(".jar")) {
@@ -206,8 +212,12 @@ class ArtifactManager(session: SparkSession) extends Logging {
         val canonicalUri =
           fragment.map(Utils.getUriBuilder(new URI(uri)).fragment).getOrElse(new URI(uri))
         session.sparkContext.addArchive(canonicalUri.toString)
+        sparkContextRelativePaths.add(
+          (SparkContextResourceType.ARCHIVE, normalizedRemoteRelativePath, fragment))
       } else if (normalizedRemoteRelativePath.startsWith(s"files${File.separator}")) {
         session.sparkContext.addFile(uri)
+        sparkContextRelativePaths.add(
+          (SparkContextResourceType.FILE, normalizedRemoteRelativePath, fragment))
       }
     }
   }
@@ -287,19 +297,46 @@ class ArtifactManager(session: SparkSession) extends Logging {
   }
 
   private[sql] def clone(newSession: SparkSession): ArtifactManager = {
-    val newArtifactManager = new ArtifactManager(newSession)
-    if (artifactPath.toFile.exists()) {
-      FileUtils.copyDirectory(artifactPath.toFile, newArtifactManager.artifactPath.toFile)
+    val sparkContext = session.sparkContext
+    sparkContext.synchronized {
+      val newArtifactManager = new ArtifactManager(newSession)
+      if (artifactPath.toFile.exists()) {
+        FileUtils.copyDirectory(artifactPath.toFile, newArtifactManager.artifactPath.toFile)
+      }
+      val blockManager = sparkContext.env.blockManager
+      val newBlockIds = cachedBlockIdList.asScala.map { blockId =>
+        val newBlockId = blockId.copy(sessionUUID = newSession.sessionUUID)
+        copyBlock(blockId, newBlockId, blockManager)
+      }
+
+      // Re-register resources to SparkContext
+      JobArtifactSet.withActiveJobArtifactState(newArtifactManager.state) {
+        sparkContextRelativePaths.forEach { case (resourceType, relativePath, fragment) =>
+          val uri = s"${newArtifactManager.artifactURI}/${
+            Utils.encodeRelativeUnixPathToURIRawPath(
+              FilenameUtils.separatorsToUnix(relativePath.toString))
+          }"
+          resourceType match {
+            case SparkContextResourceType.JAR =>
+              sparkContext.addJar(uri)
+            case SparkContextResourceType.FILE =>
+              sparkContext.addFile(uri)
+            case SparkContextResourceType.ARCHIVE =>
+              val canonicalUri =
+                fragment.map(Utils.getUriBuilder(new URI(uri)).fragment).getOrElse(new URI(uri))
+              sparkContext.addArchive(canonicalUri.toString)
+            case _ =>
+              throw SparkException.internalError(s"Unsupported resource type: $resourceType")
+          }
+        }
+      }
+
+      newArtifactManager.cachedBlockIdList.addAll(newBlockIds.asJava)
+      newArtifactManager.jarsList.addAll(jarsList)
+      newArtifactManager.pythonIncludeList.addAll(pythonIncludeList)
+      newArtifactManager.sparkContextRelativePaths.addAll(sparkContextRelativePaths)
+      newArtifactManager
     }
-    val blockManager = session.sparkContext.env.blockManager
-    val newBlockIds = cachedBlockIdList.asScala.map { blockId =>
-      val newBlockId = blockId.copy(sessionUUID = newSession.sessionUUID)
-      copyBlock(blockId, newBlockId, blockManager)
-    }
-    newArtifactManager.cachedBlockIdList.addAll(newBlockIds.asJava)
-    newArtifactManager.jarsList.addAll(jarsList)
-    newArtifactManager.pythonIncludeList.addAll(pythonIncludeList)
-    newArtifactManager
   }
 
   /**
@@ -329,9 +366,11 @@ class ArtifactManager(session: SparkSession) extends Logging {
     // Clean up artifacts folder
     FileUtils.deleteDirectory(artifactPath.toFile)
 
+    // Clean up internal trackers
     jarsList.clear()
     pythonIncludeList.clear()
     cachedBlockIdList.clear()
+    sparkContextRelativePaths.clear()
   }
 
   def uploadArtifactToFs(
@@ -380,10 +419,12 @@ object ArtifactManager extends Logging {
   private[artifact] lazy val artifactRootDirectory =
     Utils.createTempDir(ARTIFACT_DIRECTORY_PREFIX).toPath
 
-  private[artifact] def copyBlock(
-      fromId: CacheId,
-      toId: CacheId,
-      blockManager: BlockManager): CacheId = {
+  private[artifact] object SparkContextResourceType extends Enumeration {
+    type ResourceType = Value
+    val JAR, FILE, ARCHIVE = Value
+  }
+
+  private def copyBlock(fromId: CacheId, toId: CacheId, blockManager: BlockManager): CacheId = {
     require(fromId != toId)
     blockManager.getLocalBytes(fromId) match {
       case Some(blockData) =>
