@@ -209,7 +209,7 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
   /**
    * Param for user factors regularization parameter (&gt;= 0).
    * Default: 0
-   * @group expertGetParam
+   * @group expertParam
    */
   final val regParamU: DoubleParam = new DoubleParam(this, "regParamU",
     "regularization parameter for user factors (>= 0)", ParamValidators.gtEq(0))
