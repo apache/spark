@@ -69,8 +69,12 @@ public final class CollationSupport {
   }
 
   public static class Contains {
-    public static boolean exec(final UTF8String l, final UTF8String r, final int collationId) {
+    public static boolean exec(UTF8String l, UTF8String r, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if(collation.supportsSpaceTrimming){
+        l = CollationFactory.applyTrimmingPolicy(l, collationId);
+        r = CollationFactory.applyTrimmingPolicy(r, collationId);
+      }
       if (collation.isUtf8BinaryType) {
         return execBinary(l, r);
       } else if (collation.isUtf8LcaseType) {
@@ -82,12 +86,10 @@ public final class CollationSupport {
     public static String genCode(final String l, final String r, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       String expr = "CollationSupport.Contains.exec";
-      if (collation.isUtf8BinaryType) {
+      if (collationId == CollationFactory.UTF8_BINARY_COLLATION_ID) {
         return String.format(expr + "Binary(%s, %s)", l, r);
-      } else if (collation.isUtf8LcaseType) {
-        return String.format(expr + "Lowercase(%s, %s)", l, r);
       } else {
-        return String.format(expr + "ICU(%s, %s, %d)", l, r, collationId);
+        return String.format(expr + "(%s, %s, %d)", l, r, collationId);
       }
     }
     public static boolean execBinary(final UTF8String l, final UTF8String r) {
@@ -106,9 +108,14 @@ public final class CollationSupport {
   }
 
   public static class StartsWith {
-    public static boolean exec(final UTF8String l, final UTF8String r,
+    public static boolean exec(UTF8String l, UTF8String r,
         final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if(collation.supportsSpaceTrimming){
+        l = CollationFactory.applyTrimmingPolicy(l, collationId);
+        r = CollationFactory.applyTrimmingPolicy(r, collationId);
+      }
+
       if (collation.isUtf8BinaryType) {
         return execBinary(l, r);
       } else if (collation.isUtf8LcaseType) {
@@ -120,12 +127,10 @@ public final class CollationSupport {
     public static String genCode(final String l, final String r, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       String expr = "CollationSupport.StartsWith.exec";
-      if (collation.isUtf8BinaryType) {
+      if (collationId == CollationFactory.UTF8_BINARY_COLLATION_ID) {
         return String.format(expr + "Binary(%s, %s)", l, r);
-      } else if (collation.isUtf8LcaseType) {
-        return String.format(expr + "Lowercase(%s, %s)", l, r);
       } else {
-        return String.format(expr + "ICU(%s, %s, %d)", l, r, collationId);
+        return String.format(expr + "(%s, %s, %d)", l, r, collationId);
       }
     }
     public static boolean execBinary(final UTF8String l, final UTF8String r) {
@@ -144,8 +149,12 @@ public final class CollationSupport {
   }
 
   public static class EndsWith {
-    public static boolean exec(final UTF8String l, final UTF8String r, final int collationId) {
+    public static boolean exec(UTF8String l,  UTF8String r, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+        if(collation.supportsSpaceTrimming){
+          l = CollationFactory.applyTrimmingPolicy(l, collationId);
+          r = CollationFactory.applyTrimmingPolicy(r, collationId);
+        }
       if (collation.isUtf8BinaryType) {
         return execBinary(l, r);
       } else if (collation.isUtf8LcaseType) {
@@ -157,12 +166,10 @@ public final class CollationSupport {
     public static String genCode(final String l, final String r, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       String expr = "CollationSupport.EndsWith.exec";
-      if (collation.isUtf8BinaryType) {
+      if (collationId == CollationFactory.UTF8_BINARY_COLLATION_ID) {
         return String.format(expr + "Binary(%s, %s)", l, r);
-      } else if (collation.isUtf8LcaseType) {
-        return String.format(expr + "Lowercase(%s, %s)", l, r);
       } else {
-        return String.format(expr + "ICU(%s, %s, %d)", l, r, collationId);
+        return String.format(expr + "(%s, %s, %d)", l, r, collationId);
       }
     }
     public static boolean execBinary(final UTF8String l, final UTF8String r) {

@@ -618,7 +618,8 @@ case class Contains(left: Expression, right: Expression) extends StringPredicate
   }
   override def inputTypes : Seq[AbstractDataType] =
     Seq(StringTypeNonCSAICollation(supportsTrimCollation = true),
-      StringTypeNonCSAICollation(supportsTrimCollation = true))
+      StringTypeNonCSAICollation(supportsTrimCollation = true)
+    )
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
 }
@@ -711,7 +712,11 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
   }
 
   override def inputTypes : Seq[AbstractDataType] =
-    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation, StringTypeNonCSAICollation)
+    Seq(
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      StringTypeNonCSAICollation(supportsTrimCollation = true)
+    )
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)
@@ -744,7 +749,8 @@ case class IsValidUTF8(input: Expression) extends RuntimeReplaceable with Implic
 
   override lazy val replacement: Expression = Invoke(input, "isValid", BooleanType)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCaseAccentSensitivity)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true))
 
   override def nodeName: String = "is_valid_utf8"
 
@@ -791,7 +797,8 @@ case class MakeValidUTF8(input: Expression) extends RuntimeReplaceable with Impl
 
   override lazy val replacement: Expression = Invoke(input, "makeValid", input.dataType)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCaseAccentSensitivity)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true))
 
   override def nodeName: String = "make_valid_utf8"
 
@@ -805,6 +812,7 @@ case class MakeValidUTF8(input: Expression) extends RuntimeReplaceable with Impl
 
 }
 
+// TODO: fix
 /**
  * A function that validates a UTF8 string, throwing an exception if the string is invalid.
  */
@@ -850,6 +858,7 @@ case class ValidateUTF8(input: Expression) extends RuntimeReplaceable with Impli
 
 }
 
+// TODO: fix
 /**
  * A function that tries to validate a UTF8 string, returning NULL if the string is invalid.
  */
@@ -941,7 +950,11 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
 
   override def dataType: DataType = srcExpr.dataType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation, StringTypeNonCSAICollation)
+    Seq(
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      StringTypeNonCSAICollation(supportsTrimCollation = true)
+    )
   override def first: Expression = srcExpr
   override def second: Expression = searchExpr
   override def third: Expression = replaceExpr
@@ -1020,8 +1033,14 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
   override def dataType: DataType = input.dataType
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
-    TypeCollection(StringTypeWithCaseAccentSensitivity, BinaryType),
-    TypeCollection(StringTypeWithCaseAccentSensitivity, BinaryType), IntegerType, IntegerType)
+    TypeCollection(
+      StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true), BinaryType
+    ),
+    TypeCollection(
+      StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true), BinaryType
+    ),
+    IntegerType,
+    IntegerType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
@@ -1189,7 +1208,10 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
 
   override def dataType: DataType = srcExpr.dataType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation, StringTypeNonCSAICollation)
+    Seq(
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      StringTypeNonCSAICollation(supportsTrimCollation = true))
   override def first: Expression = srcExpr
   override def second: Expression = matchingExpr
   override def third: Expression = replaceExpr
@@ -1225,7 +1247,10 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
   final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity, StringTypeWithCaseAccentSensitivity)
+    Seq(
+      StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true),
+      StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true)
+    )
 
   override protected def nullSafeEval(word: Any, set: Any): Any = {
     CollationSupport.FindInSet.
