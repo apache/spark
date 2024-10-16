@@ -20,7 +20,13 @@ from datetime import datetime
 
 import pyspark.sql.plot  # noqa: F401
 from pyspark.errors import PySparkTypeError, PySparkValueError
-from pyspark.testing.sqlutils import ReusedSQLTestCase, have_plotly, plotly_requirement_message
+from pyspark.testing.sqlutils import (
+    ReusedSQLTestCase,
+    have_plotly,
+    have_numpy,
+    plotly_requirement_message,
+    numpy_requirement_message,
+)
 
 
 @unittest.skipIf(not have_plotly, plotly_requirement_message)
@@ -374,6 +380,32 @@ class DataFramePlotPlotlyTestsMixin:
                 "supported_values": ", ".join(["False"]),
             },
         )
+
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
+    def test_kde_plot(self):
+        fig = self.sdf4.plot.kde(column="math_score", bw_method=0.3, ind=5)
+        expected_fig_data = {
+            "mode": "lines",
+            "name": "math_score",
+            "orientation": "v",
+            "xaxis": "x",
+            "yaxis": "y",
+            "type": "scatter",
+        }
+        self._check_fig_data(fig["data"][0], **expected_fig_data)
+
+        fig = self.sdf4.plot.kde(column=["math_score", "english_score"], bw_method=0.3, ind=5)
+        self._check_fig_data(fig["data"][0], **expected_fig_data)
+        expected_fig_data = {
+            "mode": "lines",
+            "name": "english_score",
+            "orientation": "v",
+            "xaxis": "x",
+            "yaxis": "y",
+            "type": "scatter",
+        }
+        self._check_fig_data(fig["data"][1], **expected_fig_data)
+        self.assertEqual(fig["data"][0]["x"], fig["data"][1]["x"])
 
 
 class DataFramePlotPlotlyTests(DataFramePlotPlotlyTestsMixin, ReusedSQLTestCase):
