@@ -1458,16 +1458,6 @@
         <version>${bouncycastle.version}</version>
         <scope>test</scope>
       </dependency>
-      <!-- Managed up to match Hadoop in HADOOP-16530 -->
-      <!--
-        When upgrading `xercesImpl` version, also need to change
-        the version definition in `SparkBuild#DependencyOverrides`.
-      -->
-      <dependency>
-        <groupId>xerces</groupId>
-        <artifactId>xercesImpl</artifactId>
-        <version>2.12.2</version>
-      </dependency>
       <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro</artifactId>
