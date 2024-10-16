@@ -17,6 +17,7 @@
 package org.apache.spark.deploy.k8s
 
 import java.io.File
+
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.google.common.base.Charsets
 import com.google.common.io.Files
@@ -27,6 +28,7 @@ import io.fabric8.kubernetes.client.okhttp.OkHttpClientFactory
 import io.fabric8.kubernetes.client.utils.HttpClientUtils
 import io.fabric8.kubernetes.client.utils.Utils.getSystemPropertyOrEnvVar
 import okhttp3.{Dispatcher, OkHttpClient}
+
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 import org.apache.spark.deploy.k8s.Config._
