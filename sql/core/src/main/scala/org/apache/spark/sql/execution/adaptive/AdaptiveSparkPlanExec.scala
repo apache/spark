@@ -820,7 +820,10 @@ case class AdaptiveSparkPlanExec(
 
   private def assertStageNotFailed(stage: QueryStageExec): Unit = {
     if (stage.hasFailed) {
-      throw stage.error.get().get
+      throw stage.error.get().get match {
+        case fatal: SparkFatalException => fatal.throwable
+        case other => other
+      }
     }
   }
 
