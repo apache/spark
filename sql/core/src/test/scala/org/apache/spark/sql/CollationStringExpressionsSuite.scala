@@ -243,9 +243,14 @@ class CollationStringExpressionsSuite
     val testCases = Seq(
       SubstringIndexTestCase("wwwgapachegorg", "g", -3, "UTF8_BINARY", "apachegorg"),
       SubstringIndexTestCase("www||apache||org", "||", 2, "UTF8_BINARY", "www||apache"),
+      SubstringIndexTestCase("wwwgapachegorg", "g ", -3, "UTF8_BINARY_RTRIM", "apachegorg"),
+      SubstringIndexTestCase("www ||apache||org", "||  ", 2, "UTF8_BINARY_RTRIM", "www ||apache"),
       SubstringIndexTestCase("wwwXapacheXorg", "x", 2, "UTF8_LCASE", "wwwXapache"),
+      SubstringIndexTestCase("AAA ", "a ", -2, "UTF8_LCASE_RTRIM", "A "),
       SubstringIndexTestCase("aaaaaaaaaa", "aa", 2, "UNICODE", "a"),
-      SubstringIndexTestCase("wwwmapacheMorg", "M", -2, "UNICODE_CI", "apacheMorg")
+      SubstringIndexTestCase("aaaaaaaaaa  ", "aa ", 2, "UNICODE_RTRIM", "a"),
+      SubstringIndexTestCase("wwwmapacheMorg", "M", -2, "UNICODE_CI", "apacheMorg"),
+        SubstringIndexTestCase("AA  A ", "a ", -2, "UNICODE_CI_RTRIM", "  A ")
     )
     val unsupportedTestCase = SubstringIndexTestCase("abacde", "a", 2, "UNICODE_AI", "cde")
     testCases.foreach(t => {
@@ -290,11 +295,16 @@ class CollationStringExpressionsSuite
     case class StringInStrTestCase[R](str: String, substr: String, collation: String, result: R)
     val testCases = Seq(
       StringInStrTestCase("test大千世界X大千世界", "大千", "UTF8_BINARY", 5),
+      StringInStrTestCase("test大千世界X大千世界", "大千 ", "UTF8_BINARY_RTRIM", 5),
       StringInStrTestCase("test大千世界X大千世界", "界x", "UTF8_LCASE", 8),
+      StringInStrTestCase(" test大千世界X大千世界 ", "界x ", "UTF8_LCASE_RTRIM", 9),
       StringInStrTestCase("test大千世界X大千世界", "界x", "UNICODE", 0),
+      StringInStrTestCase("test大千世界X大千世界", "界x", "UNICODE_RTRIM", 0),
       StringInStrTestCase("test大千世界X大千世界", "界y", "UNICODE_CI", 0),
       StringInStrTestCase("test大千世界X大千世界", "界x", "UNICODE_CI", 8),
-      StringInStrTestCase("abİo12", "i̇o", "UNICODE_CI", 3)
+      StringInStrTestCase("abİo12", "i̇o", "UNICODE_CI", 3),
+      StringInStrTestCase("test大千世界X大千世界", "大 ", "UNICODE_CI_RTRIM", 5),
+      StringInStrTestCase("test大千世界X大千世界", " 大 ", "UNICODE_CI_RTRIM", 0)
     )
     val unsupportedTestCase = StringInStrTestCase("a", "abcde", "UNICODE_AI", 0)
     testCases.foreach(t => {
@@ -334,10 +344,16 @@ class CollationStringExpressionsSuite
     case class FindInSetTestCase[R](left: String, right: String, collation: String, result: R)
     val testCases = Seq(
       FindInSetTestCase("AB", "abc,b,ab,c,def", "UTF8_BINARY", 0),
+      FindInSetTestCase("b ", "abc,b,ab,c,def", "UTF8_BINARY_RTRIM", 2),
       FindInSetTestCase("C", "abc,b,ab,c,def", "UTF8_LCASE", 4),
+      FindInSetTestCase("C ", "abc,b,ab,c  ,def", "UTF8_LCASE_RTRIM", 4),
       FindInSetTestCase("d,ef", "abc,b,ab,c,def", "UNICODE", 0),
+      FindInSetTestCase(" def", "abc,b,ab,c,def", "UNICODE_RTRIM", 0),
       FindInSetTestCase("i̇o", "ab,İo,12", "UNICODE_CI", 2),
-      FindInSetTestCase("İo", "ab,i̇o,12", "UNICODE_CI", 2)
+      FindInSetTestCase("İo", "ab,i̇o,12", "UNICODE_CI", 2),
+      FindInSetTestCase("İo", "ab,i̇o,12", "UNICODE_CI", 2),
+      FindInSetTestCase("a", "A ,B ,C", "UNICODE_CI_RTRIM", 1),
+      FindInSetTestCase(" a", "A ,B ,C", "UNICODE_CI_RTRIM", 0)
     )
     testCases.foreach(t => {
       // Unit test.
@@ -1271,13 +1287,17 @@ class CollationStringExpressionsSuite
         result: R)
     val testCases = Seq(
       StringLPadTestCase("", 5, " ", "UTF8_BINARY", "     "),
+      StringLPadTestCase("", 5, " ", "UTF8_BINARY_RTRIM", "     "),
       StringLPadTestCase("abc", 5, " ", "UNICODE", "  abc"),
       StringLPadTestCase("Hello", 7, "Wörld", "UTF8_LCASE", "WöHello"),
+      StringLPadTestCase("Hello", 7, "W örld", "UTF8_LCASE_RTRIM", "W Hello"),
       StringLPadTestCase("1234567890", 5, "aaaAAa", "UNICODE_CI", "12345"),
       StringLPadTestCase("aaAA", 2, " ", "UTF8_BINARY", "aa"),
       StringLPadTestCase("ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ℀℃", 2, "1", "UTF8_LCASE", "ÀÃ"),
       StringLPadTestCase("ĂȦÄäåäá", 20, "ÀÃÂĀĂȦÄäåäáâãȻȻȻȻȻǢǼÆ", "UNICODE", "ÀÃÂĀĂȦÄäåäáâãĂȦÄäåäá"),
-      StringLPadTestCase("aȦÄä", 8, "a1", "UNICODE_CI", "a1a1aȦÄä")
+      StringLPadTestCase("ĂȦÄäåäá", 20, "ÀÃÂĀĂȦÄäåäáâãȻȻ", "UNICODE_RTRIM", "ÀÃÂĀĂȦÄäåäáâãĂȦÄäåäá"),
+      StringLPadTestCase("aȦÄä", 8, "a1", "UNICODE_CI", "a1a1aȦÄä"),
+      StringLPadTestCase("aȦÄ ", 8, "a1", "UNICODE_CI_RTRIM", "a1a1aȦÄ "),
     )
     testCases.foreach(t => {
       // Unit test.
@@ -1303,13 +1323,22 @@ class CollationStringExpressionsSuite
         result: R)
     val testCases = Seq(
       StringLocateTestCase("aa", "aaads", 0, "UTF8_BINARY", 0),
+      StringLocateTestCase(" ", "", 1, "UTF8_BINARY_RTRIM", 1),
+      StringLocateTestCase(" abc ", "   cdfg     abc ", 1, "UTF8_BINARY_RTRIM", 12),
       StringLocateTestCase("aa", "Aaads", 0, "UTF8_LCASE", 0),
       StringLocateTestCase("界x", "test大千世界X大千世界", 1, "UTF8_LCASE", 8),
       StringLocateTestCase("aBc", "abcabc", 4, "UTF8_LCASE", 4),
+      StringLocateTestCase("aa", "Aaads", 0, "UTF8_LCASE_RTRIM", 0),
+      StringLocateTestCase("界  ", "test大千世界X大千世界", 1, "UTF8_LCASE_RTRIM", 8),
+      StringLocateTestCase("aBc", "a bc abc ", 4, "UTF8_LCASE_RTRIM", 6),
       StringLocateTestCase("aa", "Aaads", 0, "UNICODE", 0),
       StringLocateTestCase("abC", "abCabC", 2, "UNICODE", 4),
+      StringLocateTestCase("aa", "Aaads", 0, "UNICODE_RTRIM", 0),
+      StringLocateTestCase("abC ", "ab C abC ", 2, "UNICODE_RTRIM", 6),
       StringLocateTestCase("aa", "Aaads", 0, "UNICODE_CI", 0),
-      StringLocateTestCase("界x", "test大千世界X大千世界", 1, "UNICODE_CI", 8)
+      StringLocateTestCase("界x", "test大千世界X大千世界", 1, "UNICODE_CI", 8),
+      StringLocateTestCase("aa", "Aaads", 0, "UNICODE_CI_RTRIM", 0),
+      StringLocateTestCase(" 界", "test大千世界X大千世界", 1, "UNICODE_CI_RTRIM", 0)
     )
     val unsupportedTestCase = StringLocateTestCase("aa", "Aaads", 0, "UNICODE_AI", 1)
     testCases.foreach(t => {

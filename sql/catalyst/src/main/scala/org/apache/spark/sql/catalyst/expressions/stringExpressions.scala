@@ -1279,7 +1279,7 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
   override def children: Seq[Expression] = srcStr +: trimStr.toSeq
   override def dataType: DataType = srcStr.dataType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq.fill(children.size)(StringTypeWithCaseAccentSensitivity)
+    Seq.fill(children.size)(StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true))
 
   final lazy val collationId: Int = srcStr.dataType.asInstanceOf[StringType].collationId
 
@@ -1443,7 +1443,10 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
     CollationSupport.StringTrim.exec(srcString, trimString, collationId)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation)
+    Seq(
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      StringTypeNonCSAICollation(supportsTrimCollation = true)
+    )
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(
@@ -1553,7 +1556,10 @@ case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None
     CollationSupport.StringTrimLeft.exec(srcString, trimString, collationId)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation)
+    Seq(
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      StringTypeNonCSAICollation(supportsTrimCollation = true)
+    )
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): StringTrimLeft =
@@ -1616,7 +1622,10 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
     CollationSupport.StringTrimRight.exec(srcString, trimString, collationId)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation)
+    Seq(
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      StringTypeNonCSAICollation(supportsTrimCollation = true)
+    )
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): StringTrimRight =
@@ -1652,7 +1661,10 @@ case class StringInstr(str: Expression, substr: Expression)
   override def right: Expression = substr
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation)
+    Seq(
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      StringTypeNonCSAICollation(supportsTrimCollation = true)
+    )
 
   override def nullSafeEval(string: Any, sub: Any): Any = {
     CollationSupport.StringInstr.
@@ -1700,7 +1712,11 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
 
   override def dataType: DataType = strExpr.dataType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation, IntegerType)
+    Seq(
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      IntegerType
+    )
   override def first: Expression = strExpr
   override def second: Expression = delimExpr
   override def third: Expression = countExpr
@@ -1758,7 +1774,11 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
   override def nullable: Boolean = substr.nullable || str.nullable
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation, IntegerType)
+    Seq(
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      IntegerType
+    )
 
   override def eval(input: InternalRow): Any = {
     val s = start.eval(input)
@@ -1884,7 +1904,11 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
 
   override def dataType: DataType = str.dataType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity, IntegerType, StringTypeWithCaseAccentSensitivity)
+    Seq(
+      StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true),
+      IntegerType,
+      StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true)
+    )
 
   override def nullSafeEval(string: Any, len: Any, pad: Any): Any = {
     string.asInstanceOf[UTF8String].lpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
