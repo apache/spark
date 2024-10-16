@@ -24,7 +24,7 @@ import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.StringType
 
 class DefaultCollationTestSuite extends DatasourceV2SQLBase {
-  
+
   val dataSource: String = "parquet"
 
   def withSessionCollationAndTable(collation: String, tableName: String)(f: => Unit): Unit = {
@@ -49,7 +49,7 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
   // region DDL tests
 
   test("create/alter table") {
-    val tableName = "testcat.tbl"
+    val tableName = "tbl"
     withSessionCollationAndTable("UTF8_LCASE", tableName) {
       // create table with implicit collation
       sql(s"CREATE TABLE $tableName (c1 STRING) USING $dataSource")
@@ -59,14 +59,16 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
       sql(s"ALTER TABLE $tableName ADD COLUMN c2 STRING")
       assertTableColumnCollation(tableName, "c2", "UTF8_BINARY")
 
-      // TODO: alter table change column with explicit collation when we add alter support
+      sql(s"ALTER TABLE $tableName ALTER COLUMN c2 TYPE STRING COLLATE UNICODE")
+      assertTableColumnCollation(tableName, "c2", "UNICODE")
 
-      // TODO: alter table change column with default collation when we add alter support
+      sql(s"ALTER TABLE $tableName ALTER COLUMN c2 TYPE STRING")
+      assertTableColumnCollation(tableName, "c2", "UTF8_BINARY")
     }
   }
 
   test("create table with explicit collation") {
-    val tableName = "testcat.tbl_explicit_collation"
+    val tableName = "tbl_explicit_collation"
     withSessionCollationAndTable("UTF8_LCASE", tableName) {
       sql(s"CREATE TABLE $tableName (c1 STRING COLLATE UTF8_LCASE) USING $dataSource")
       assertTableColumnCollation(tableName, "c1", "UTF8_LCASE")
@@ -79,12 +81,19 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
   }
 
   test("create table as select") {
-    val tableName = "testcat.tbl"
+    val tableName = "tbl"
 
     // literals in select do not pick up session collation
     withSessionCollationAndTable("UTF8_LCASE", tableName) {
       sql(s"CREATE TABLE $tableName USING $dataSource AS SELECT 'a' AS c1")
       assertTableColumnCollation(tableName, "c1", "UTF8_BINARY")
+    }
+
+    withSessionCollationAndTable("UTF8_LCASE", tableName) {
+      sql(s"CREATE TABLE $tableName USING $dataSource AS SELECT 'a' = 'A' AS c1")
+      checkAnswer(
+        sql(s"SELECT COUNT(*) FROM $tableName WHERE c1"),
+        Seq(Row(1)))
     }
 
     // literals in inline table do not pick up session collation
@@ -107,7 +116,7 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
   }
 
   test("add column") {
-    val tableName = "testcat.tbl_add_col"
+    val tableName = "tbl_add_col"
     withSessionCollationAndTable("UTF8_LCASE", tableName) {
       sql(s"CREATE TABLE $tableName (c1 STRING COLLATE UTF8_LCASE) USING $dataSource")
       assertTableColumnCollation(tableName, "c1", "UTF8_LCASE")
@@ -200,7 +209,7 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
   }
 
   test("having group by is aware of session collation") {
-    val tableName = "testcat.tbl_grp_by"
+    val tableName = "tbl_grp_by"
     withSessionCollationAndTable("UTF8_LCASE", tableName) {
       sql(s"CREATE TABLE $tableName (c1 STRING) USING $dataSource")
       sql(s"INSERT INTO $tableName VALUES ('a'), ('A')")
@@ -219,7 +228,7 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
 
   test("min/max are aware of session collation") {
     // scalastyle:off nonascii
-    val tableName = "testcat.tbl_min_max"
+    val tableName = "tbl_min_max"
     withSessionCollationAndTable("UNICODE", tableName) {
       sql(s"CREATE TABLE $tableName (c1 STRING) USING $dataSource")
       sql(s"INSERT INTO $tableName VALUES ('1'), ('½')")
@@ -236,7 +245,7 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
   }
 
   test("literals in insert inherit session level collation") {
-    val tableName = "testcat.tbl_insert"
+    val tableName = "tbl_insert"
     withSessionCollationAndTable("UTF8_LCASE", tableName) {
       sql(s"CREATE TABLE $tableName (c1 BOOLEAN) USING $dataSource")
       sql(s"INSERT INTO $tableName VALUES ('a' = 'A')")

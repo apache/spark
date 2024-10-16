@@ -101,7 +101,7 @@ class StringType private[sql] (private val _collationId: Int) extends AtomicType
  * @since 1.3.0
  */
 @Stable
-case object StringType extends StringType(0) {
+case object StringType extends StringType(CollationFactory.DEFAULT_COLLATION_ID) {
   private[spark] def apply(collationId: Int): StringType = new StringType(collationId)
 
   def apply(collation: String): StringType = {

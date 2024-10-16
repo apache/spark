@@ -310,6 +310,8 @@ public final class CollationFactory {
 
       private static final int INDETERMINATE_COLLATION_ID = -1;
 
+      private static final int DEFAULT_COLLATION_ID = -2;
+
       /**
        * Thread-safe cache mapping collation IDs to corresponding `Collation` instances.
        * We add entries to this cache lazily as new `Collation` instances are requested.
@@ -1041,6 +1043,8 @@ public final class CollationFactory {
     Collation.CollationSpecICU.UNICODE_CI_COLLATION_ID;
   public static final int INDETERMINATE_COLLATION_ID =
     Collation.CollationSpec.INDETERMINATE_COLLATION_ID;
+  public static final int DEFAULT_COLLATION_ID =
+    Collation.CollationSpec.DEFAULT_COLLATION_ID;
 
   /**
    * Returns a StringSearch object for the given pattern and target strings, under collation

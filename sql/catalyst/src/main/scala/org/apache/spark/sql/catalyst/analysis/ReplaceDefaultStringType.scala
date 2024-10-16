@@ -31,7 +31,7 @@ import org.apache.spark.sql.util.SchemaUtils
  */
 object ReplaceDefaultStringType extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    plan match {
+    plan resolveOperatorsUp {
       case _: V2CreateTablePlan =>
         transform(plan, StringType)
 
@@ -41,11 +41,9 @@ object ReplaceDefaultStringType extends Rule[LogicalPlan] {
       case replaceCols: ReplaceColumns =>
         replaceCols.copy(columnsToAdd = replaceColumnTypes(replaceCols.columnsToAdd, StringType))
 
-      case a: AlterColumn if a.dataType.isDefined =>
-        a.copy(dataType = Some(StringType))
-
-      case _ =>
-        plan
+      case a: AlterColumn
+          if a.dataType.isDefined && SchemaUtils.hasDefaultStringType(a.dataType.get) =>
+        a.copy(dataType = Some(replaceDefaultStringType(a.dataType.get, StringType)))
     }
   }
 
