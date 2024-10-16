@@ -993,22 +993,22 @@ class AstBuilder extends DataTypeAstBuilder
     // Handle ORDER BY, SORT BY, DISTRIBUTE BY, and CLUSTER BY clause.
     val withOrder = if (
       !order.isEmpty && sort.isEmpty && distributeBy.isEmpty && clusterBy.isEmpty) {
-      clause = "ORDER BY"
+      clause = PipeOperators.orderByClause
       Sort(order.asScala.map(visitSortItem).toSeq, global = true, query)
     } else if (order.isEmpty && !sort.isEmpty && distributeBy.isEmpty && clusterBy.isEmpty) {
-      clause = "SORT BY"
+      clause = PipeOperators.sortByClause
       Sort(sort.asScala.map(visitSortItem).toSeq, global = false, query)
     } else if (order.isEmpty && sort.isEmpty && !distributeBy.isEmpty && clusterBy.isEmpty) {
-      clause = "DISTRIBUTE BY"
+      clause = PipeOperators.distributeByClause
       withRepartitionByExpression(ctx, expressionList(distributeBy), query)
     } else if (order.isEmpty && !sort.isEmpty && !distributeBy.isEmpty && clusterBy.isEmpty) {
-      clause = "SORT BY ... DISTRIBUTE BY ..."
+      clause = PipeOperators.sortByDistributeByClause
       Sort(
         sort.asScala.map(visitSortItem).toSeq,
         global = false,
         withRepartitionByExpression(ctx, expressionList(distributeBy), query))
     } else if (order.isEmpty && sort.isEmpty && distributeBy.isEmpty && !clusterBy.isEmpty) {
-      clause = "CLUSTER BY"
+      clause = PipeOperators.clusterByClause
       val expressions = expressionList(clusterBy)
       Sort(
         expressions.map(SortOrder(_, Ascending)),
@@ -1027,30 +1027,28 @@ class AstBuilder extends DataTypeAstBuilder
     }
     if (forPipeOperators && windowClause != null) {
       throw QueryParsingErrors.clausesWithPipeOperatorsUnsupportedError(
-        ctx, s"the WINDOW clause")
+        ctx, s"the ${PipeOperators.windowClause} clause")
     }
 
     // OFFSET
     // - OFFSET 0 is the same as omitting the OFFSET clause
-    val offsetClause = "OFFSET"
     val withOffset = withWindow.optional(offset) {
       if (forPipeOperators && clause.nonEmpty) {
         throw QueryParsingErrors.multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
-          ctx, s"the co-existence of the $clause and $offsetClause clauses")
+          ctx, s"the co-existence of the $clause and ${PipeOperators.offsetClause} clauses")
       }
-      clause = offsetClause
+      clause = PipeOperators.offsetClause
       Offset(typedVisit(offset), withWindow)
     }
 
     // LIMIT
     // - LIMIT ALL is the same as omitting the LIMIT clause
     withOffset.optional(limit) {
-      val limitClause = "LIMIT"
-      if (forPipeOperators && clause.nonEmpty && clause != offsetClause) {
+      if (forPipeOperators && clause.nonEmpty && clause != PipeOperators.offsetClause) {
         throw QueryParsingErrors.multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
-          ctx, s"the co-existence of the $clause and $limitClause clauses")
+          ctx, s"the co-existence of the $clause and ${PipeOperators.limitClause} clauses")
       }
-      clause = limitClause
+      clause = PipeOperators.limitClause
       Limit(typedVisit(limit), withOffset)
     }
   }
