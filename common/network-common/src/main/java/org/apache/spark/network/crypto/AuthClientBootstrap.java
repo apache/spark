@@ -22,7 +22,6 @@ import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.concurrent.TimeoutException;
 
-import com.google.common.base.Throwables;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
@@ -80,7 +79,7 @@ public class AuthClientBootstrap implements TransportClientBootstrap {
       doSparkAuth(client, channel);
       client.setClientId(appId);
     } catch (GeneralSecurityException | IOException e) {
-      throw Throwables.propagate(e);
+      throw new RuntimeException(e);
     } catch (RuntimeException e) {
       // There isn't a good exception that can be caught here to know whether it's really
       // OK to switch back to SASL (because the server doesn't speak the new protocol). So

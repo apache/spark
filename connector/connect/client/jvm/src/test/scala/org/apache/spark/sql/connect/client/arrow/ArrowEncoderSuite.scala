@@ -30,11 +30,11 @@ import org.apache.arrow.memory.{BufferAllocator, RootAllocator}
 import org.apache.arrow.vector.VarBinaryVector
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{sql, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, Encoders, Row}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec, OuterScopes}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, NullEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, RowEncoder, ScalaDecimalEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, YearMonthIntervalEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, NullEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, RowEncoder, ScalaDecimalEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder.{encoderFor => toRowEncoder}
 import org.apache.spark.sql.catalyst.util.{DateFormatter, SparkStringUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_SECOND
@@ -770,10 +770,20 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
   }
 
   test("java serialization") {
-    val encoder = sql.encoderFor(Encoders.javaSerialization[(Int, String)])
+    val encoder = agnosticEncoderFor(Encoders.javaSerialization[(Int, String)])
     roundTripAndCheckIdentical(encoder) { () =>
       Iterator.tabulate(10)(i => (i, "itr_" + i))
     }
+  }
+
+  test("kryo serialization") {
+    val e = intercept[SparkRuntimeException] {
+      val encoder = agnosticEncoderFor(Encoders.kryo[(Int, String)])
+      roundTripAndCheckIdentical(encoder) { () =>
+        Iterator.tabulate(10)(i => (i, "itr_" + i))
+      }
+    }
+    assert(e.getCondition == "CANNOT_USE_KRYO")
   }
 
   test("transforming encoder") {

@@ -24,6 +24,7 @@ import org.apache.spark.sql.errors.DataTypeErrors
  * A non-concrete data type, reserved for internal uses.
  */
 private[sql] abstract class AbstractDataType {
+
   /**
    * The default concrete type to use if we want to cast a null literal into this type.
    */
@@ -47,7 +48,6 @@ private[sql] abstract class AbstractDataType {
   private[sql] def simpleString: String
 }
 
-
 /**
  * A collection of types that can be used to specify type constraints. The sequence also specifies
  * precedence: an earlier type takes precedence over a latter type.
@@ -59,7 +59,7 @@ private[sql] abstract class AbstractDataType {
  * This means that we prefer StringType over BinaryType if it is possible to cast to StringType.
  */
 private[sql] class TypeCollection(private val types: Seq[AbstractDataType])
-  extends AbstractDataType {
+    extends AbstractDataType {
 
   require(types.nonEmpty, s"TypeCollection ($types) cannot be empty")
 
@@ -73,22 +73,20 @@ private[sql] class TypeCollection(private val types: Seq[AbstractDataType])
   }
 }
 
-
 private[sql] object TypeCollection {
 
   /**
    * Types that include numeric types and ANSI interval types.
    */
-  val NumericAndAnsiInterval = TypeCollection(
-    NumericType,
-    DayTimeIntervalType,
-    YearMonthIntervalType)
+  val NumericAndAnsiInterval =
+    TypeCollection(NumericType, DayTimeIntervalType, YearMonthIntervalType)
 
   /**
-   * Types that include numeric and ANSI interval types, and additionally the legacy interval type.
-   * They are only used in unary_minus, unary_positive, add and subtract operations.
+   * Types that include numeric and ANSI interval types, and additionally the legacy interval
+   * type. They are only used in unary_minus, unary_positive, add and subtract operations.
    */
-  val NumericAndInterval = new TypeCollection(NumericAndAnsiInterval.types :+ CalendarIntervalType)
+  val NumericAndInterval = new TypeCollection(
+    NumericAndAnsiInterval.types :+ CalendarIntervalType)
 
   def apply(types: AbstractDataType*): TypeCollection = new TypeCollection(types)
 
@@ -97,7 +95,6 @@ private[sql] object TypeCollection {
     case _ => None
   }
 }
-
 
 /**
  * An `AbstractDataType` that matches any concrete data types.
@@ -114,14 +111,13 @@ protected[sql] object AnyDataType extends AbstractDataType with Serializable {
   override private[sql] def acceptsType(other: DataType): Boolean = true
 }
 
-
 /**
- * An internal type used to represent everything that is not null, UDTs, arrays, structs, and maps.
+ * An internal type used to represent everything that is not null, UDTs, arrays, structs, and
+ * maps.
  */
 protected[sql] abstract class AtomicType extends DataType
 
 object AtomicType
-
 
 /**
  * Numeric data types.
@@ -130,7 +126,6 @@ object AtomicType
  */
 @Stable
 abstract class NumericType extends AtomicType
-
 
 private[spark] object NumericType extends AbstractDataType {
   override private[spark] def defaultConcreteType: DataType = DoubleType
@@ -141,21 +136,18 @@ private[spark] object NumericType extends AbstractDataType {
     other.isInstanceOf[NumericType]
 }
 
-
 private[sql] object IntegralType extends AbstractDataType {
   override private[sql] def defaultConcreteType: DataType = IntegerType
 
   override private[sql] def simpleString: String = "integral"
 
-  override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[IntegralType]
+  override private[sql] def acceptsType(other: DataType): Boolean =
+    other.isInstanceOf[IntegralType]
 }
-
 
 private[sql] abstract class IntegralType extends NumericType
 
-
 private[sql] object FractionalType
-
 
 private[sql] abstract class FractionalType extends NumericType
 

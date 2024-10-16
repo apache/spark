@@ -2023,8 +2023,6 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
 
   override val dataType: DataType = externalDataType
 
-  private lazy val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
-
   private lazy val checkType: (Any) => Boolean = expected match {
     case _: DecimalType =>
       (value: Any) => {
@@ -2057,14 +2055,12 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
     if (checkType(input)) {
       input
     } else {
-      throw new RuntimeException(s"${input.getClass.getName}$errMsg")
+      throw QueryExecutionErrors.invalidExternalTypeError(
+        input.getClass.getName, expected, child)
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    // Use unnamed reference that doesn't create a local field here to reduce the number of fields
-    // because errMsgField is used only when the type doesn't match.
-    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
     val input = child.genCode(ctx)
     val obj = input.value
     def genCheckTypes(classes: Seq[Class[_]]): String = {
@@ -2090,6 +2086,13 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
         s"$obj instanceof ${CodeGenerator.boxedType(dataType)}"
     }
 
+    // Use unnamed reference that doesn't create a local field here to reduce the number of fields
+    // because errMsgField is used only when the type doesn't match.
+    val expectedTypeField = ctx.addReferenceObj(
+      "expectedTypeField", expected)
+    val childExpressionMsgField = ctx.addReferenceObj(
+      "childExpressionMsgField", child)
+
     val code = code"""
       ${input.code}
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -2097,7 +2100,8 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
         if ($typeCheck) {
           ${ev.value} = (${CodeGenerator.boxedType(dataType)}) $obj;
         } else {
-          throw new RuntimeException($obj.getClass().getName() + $errMsgField);
+          throw QueryExecutionErrors.invalidExternalTypeError(
+            $obj.getClass().getName(), $expectedTypeField, $childExpressionMsgField);
         }
       }
 

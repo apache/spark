@@ -47,7 +47,7 @@ class ShowPartitionsParserSuite extends AnalysisTest {
   test("empty values in non-optional partition specs") {
     checkError(
       exception = parseException(parsePlan)("SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)"),
-      errorClass = "INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE",
+      condition = "INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE",
       sqlState = "42000",
       parameters = Map("partKey" -> "`b`"),
       context = ExpectedContext(

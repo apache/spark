@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.collection.mutable.Growable
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
@@ -118,7 +118,8 @@ case class CollectList(
 
   override def createAggregationBuffer(): mutable.ArrayBuffer[Any] = mutable.ArrayBuffer.empty
 
-  override def prettyName: String = "collect_list"
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("collect_list")
 
   override def eval(buffer: mutable.ArrayBuffer[Any]): Any = {
     new GenericArrayData(buffer.toArray)
@@ -170,7 +171,7 @@ case class CollectSet(
   override def eval(buffer: mutable.HashSet[Any]): Any = {
     val array = child.dataType match {
       case BinaryType =>
-        buffer.iterator.map(_.asInstanceOf[ArrayData].toByteArray()).toArray
+        buffer.iterator.map(_.asInstanceOf[ArrayData].toByteArray()).toArray[Any]
       case _ => buffer.toArray
     }
     new GenericArrayData(array)

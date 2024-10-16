@@ -70,7 +70,10 @@ class StateResponse(_message.Message):
     errorMessage: str
     value: bytes
     def __init__(
-        self, statusCode: _Optional[int] = ..., errorMessage: _Optional[str] = ...
+        self,
+        statusCode: _Optional[int] = ...,
+        errorMessage: _Optional[str] = ...,
+        value: _Optional[bytes] = ...,
     ) -> None: ...
 
 class StatefulProcessorCall(_message.Message):
@@ -92,11 +95,15 @@ class StatefulProcessorCall(_message.Message):
     ) -> None: ...
 
 class StateVariableRequest(_message.Message):
-    __slots__ = ("valueStateCall",)
+    __slots__ = ("valueStateCall", "listStateCall")
     VALUESTATECALL_FIELD_NUMBER: _ClassVar[int]
+    LISTSTATECALL_FIELD_NUMBER: _ClassVar[int]
     valueStateCall: ValueStateCall
+    listStateCall: ListStateCall
     def __init__(
-        self, valueStateCall: _Optional[_Union[ValueStateCall, _Mapping]] = ...
+        self,
+        valueStateCall: _Optional[_Union[ValueStateCall, _Mapping]] = ...,
+        listStateCall: _Optional[_Union[ListStateCall, _Mapping]] = ...,
     ) -> None: ...
 
 class ImplicitGroupingKeyRequest(_message.Message):
@@ -112,12 +119,19 @@ class ImplicitGroupingKeyRequest(_message.Message):
     ) -> None: ...
 
 class StateCallCommand(_message.Message):
-    __slots__ = ("stateName", "schema")
+    __slots__ = ("stateName", "schema", "ttl")
     STATENAME_FIELD_NUMBER: _ClassVar[int]
     SCHEMA_FIELD_NUMBER: _ClassVar[int]
+    TTL_FIELD_NUMBER: _ClassVar[int]
     stateName: str
     schema: str
-    def __init__(self, stateName: _Optional[str] = ..., schema: _Optional[str] = ...) -> None: ...
+    ttl: TTLConfig
+    def __init__(
+        self,
+        stateName: _Optional[str] = ...,
+        schema: _Optional[str] = ...,
+        ttl: _Optional[_Union[TTLConfig, _Mapping]] = ...,
+    ) -> None: ...
 
 class ValueStateCall(_message.Message):
     __slots__ = ("stateName", "exists", "get", "valueStateUpdate", "clear")
@@ -137,6 +151,41 @@ class ValueStateCall(_message.Message):
         exists: _Optional[_Union[Exists, _Mapping]] = ...,
         get: _Optional[_Union[Get, _Mapping]] = ...,
         valueStateUpdate: _Optional[_Union[ValueStateUpdate, _Mapping]] = ...,
+        clear: _Optional[_Union[Clear, _Mapping]] = ...,
+    ) -> None: ...
+
+class ListStateCall(_message.Message):
+    __slots__ = (
+        "stateName",
+        "exists",
+        "listStateGet",
+        "listStatePut",
+        "appendValue",
+        "appendList",
+        "clear",
+    )
+    STATENAME_FIELD_NUMBER: _ClassVar[int]
+    EXISTS_FIELD_NUMBER: _ClassVar[int]
+    LISTSTATEGET_FIELD_NUMBER: _ClassVar[int]
+    LISTSTATEPUT_FIELD_NUMBER: _ClassVar[int]
+    APPENDVALUE_FIELD_NUMBER: _ClassVar[int]
+    APPENDLIST_FIELD_NUMBER: _ClassVar[int]
+    CLEAR_FIELD_NUMBER: _ClassVar[int]
+    stateName: str
+    exists: Exists
+    listStateGet: ListStateGet
+    listStatePut: ListStatePut
+    appendValue: AppendValue
+    appendList: AppendList
+    clear: Clear
+    def __init__(
+        self,
+        stateName: _Optional[str] = ...,
+        exists: _Optional[_Union[Exists, _Mapping]] = ...,
+        listStateGet: _Optional[_Union[ListStateGet, _Mapping]] = ...,
+        listStatePut: _Optional[_Union[ListStatePut, _Mapping]] = ...,
+        appendValue: _Optional[_Union[AppendValue, _Mapping]] = ...,
+        appendList: _Optional[_Union[AppendList, _Mapping]] = ...,
         clear: _Optional[_Union[Clear, _Mapping]] = ...,
     ) -> None: ...
 
@@ -168,8 +217,34 @@ class Clear(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
 
+class ListStateGet(_message.Message):
+    __slots__ = ("iteratorId",)
+    ITERATORID_FIELD_NUMBER: _ClassVar[int]
+    iteratorId: str
+    def __init__(self, iteratorId: _Optional[str] = ...) -> None: ...
+
+class ListStatePut(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class AppendValue(_message.Message):
+    __slots__ = ("value",)
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    value: bytes
+    def __init__(self, value: _Optional[bytes] = ...) -> None: ...
+
+class AppendList(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
 class SetHandleState(_message.Message):
     __slots__ = ("state",)
     STATE_FIELD_NUMBER: _ClassVar[int]
     state: HandleState
     def __init__(self, state: _Optional[_Union[HandleState, str]] = ...) -> None: ...
+
+class TTLConfig(_message.Message):
+    __slots__ = ("durationMs",)
+    DURATIONMS_FIELD_NUMBER: _ClassVar[int]
+    durationMs: int
+    def __init__(self, durationMs: _Optional[int] = ...) -> None: ...

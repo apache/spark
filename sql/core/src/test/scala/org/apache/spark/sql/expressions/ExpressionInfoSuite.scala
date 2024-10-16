@@ -67,7 +67,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
         new ExpressionInfo(
           "testClass", null, "testName", null, "", "", "", invalidGroupName, "", "", "")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3202",
+      condition = "_LEGACY_ERROR_TEMP_3202",
       parameters = Map(
         "exprName" -> "testName",
         "group" -> invalidGroupName,
@@ -91,7 +91,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
         new ExpressionInfo(
           "testClass", null, "testName", null, "", "", "", "", "", "", invalidSource)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3203",
+      condition = "_LEGACY_ERROR_TEMP_3203",
       parameters = Map(
         "exprName" -> "testName",
         "source" -> invalidSource,
@@ -104,7 +104,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       exception = intercept[SparkIllegalArgumentException] {
         new ExpressionInfo("testClass", null, "testName", null, "", "", invalidNote, "", "", "", "")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3201",
+      condition = "_LEGACY_ERROR_TEMP_3201",
       parameters = Map("exprName" -> "testName", "note" -> invalidNote))
 
     val invalidSince = "-3.0.0"
@@ -113,7 +113,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
         new ExpressionInfo(
           "testClass", null, "testName", null, "", "", "", "", invalidSince, "", "")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3204",
+      condition = "_LEGACY_ERROR_TEMP_3204",
       parameters = Map("since" -> invalidSince, "exprName" -> "testName"))
 
     val invalidDeprecated = "  invalid deprecated"
@@ -122,7 +122,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
         new ExpressionInfo(
           "testClass", null, "testName", null, "", "", "", "", "", invalidDeprecated, "")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3205",
+      condition = "_LEGACY_ERROR_TEMP_3205",
       parameters = Map("exprName" -> "testName", "deprecated" -> invalidDeprecated))
   }
 
@@ -243,7 +243,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       // Examples can change settings. We clone the session to prevent tests clashing.
       val clonedSpark = spark.cloneSession()
       // Coalescing partitions can change result order, so disable it.
-      clonedSpark.conf.set(SQLConf.COALESCE_PARTITIONS_ENABLED, false)
+      clonedSpark.conf.set(SQLConf.COALESCE_PARTITIONS_ENABLED.key, false)
       val info = clonedSpark.sessionState.catalog.lookupFunctionInfo(funcId)
       val className = info.getClassName
       if (!ignoreSet.contains(className)) {

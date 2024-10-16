@@ -42,6 +42,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, Query
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder, StructEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
@@ -51,6 +52,7 @@ import org.apache.spark.sql.catalyst.trees.{TreeNodeTag, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
@@ -60,8 +62,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, FileTable}
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
-import org.apache.spark.sql.internal.ExpressionUtils.column
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{DataFrameWriterImpl, DataFrameWriterV2Impl, MergeIntoWriterImpl, SQLConf}
 import org.apache.spark.sql.internal.TypedAggUtils.withInputType
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
@@ -78,13 +79,14 @@ private[sql] object Dataset {
   val DATASET_ID_TAG = TreeNodeTag[HashSet[Long]]("dataset_id")
 
   def apply[T: Encoder](sparkSession: SparkSession, logicalPlan: LogicalPlan): Dataset[T] = {
-    val dataset = new Dataset(sparkSession, logicalPlan, implicitly[Encoder[T]])
+    val encoder = implicitly[Encoder[T]]
+    val dataset = new Dataset(sparkSession, logicalPlan, encoder)
     // Eagerly bind the encoder so we verify that the encoder matches the underlying
     // schema. The user will get an error if this is not the case.
     // optimization: it is guaranteed that [[InternalRow]] can be converted to [[Row]] so
     // do not do this check in that case. this check can be expensive since it requires running
     // the whole [[Analyzer]] to resolve the deserializer
-    if (dataset.exprEnc.clsTag.runtimeClass != classOf[Row]) {
+    if (dataset.encoder.clsTag.runtimeClass != classOf[Row]) {
       dataset.resolvedEnc
     }
     dataset
@@ -94,7 +96,7 @@ private[sql] object Dataset {
     sparkSession.withActive {
       val qe = sparkSession.sessionState.executePlan(logicalPlan)
       qe.assertAnalyzed()
-      new Dataset[Row](qe, ExpressionEncoder(qe.analyzed.schema))
+      new Dataset[Row](qe, RowEncoder.encoderFor(qe.analyzed.schema))
   }
 
   def ofRows(
@@ -105,7 +107,7 @@ private[sql] object Dataset {
       val qe = new QueryExecution(
         sparkSession, logicalPlan, shuffleCleanupMode = shuffleCleanupMode)
       qe.assertAnalyzed()
-      new Dataset[Row](qe, ExpressionEncoder(qe.analyzed.schema))
+      new Dataset[Row](qe, RowEncoder.encoderFor(qe.analyzed.schema))
     }
 
   /** A variant of ofRows that allows passing in a tracker so we can track query parsing time. */
@@ -118,7 +120,7 @@ private[sql] object Dataset {
     val qe = new QueryExecution(
       sparkSession, logicalPlan, tracker, shuffleCleanupMode = shuffleCleanupMode)
     qe.assertAnalyzed()
-    new Dataset[Row](qe, ExpressionEncoder(qe.analyzed.schema))
+    new Dataset[Row](qe, RowEncoder.encoderFor(qe.analyzed.schema))
   }
 }
 
@@ -213,7 +215,9 @@ private[sql] object Dataset {
 class Dataset[T] private[sql](
     @DeveloperApi @Unstable @transient val queryExecution: QueryExecution,
     @DeveloperApi @Unstable @transient val encoder: Encoder[T])
-  extends api.Dataset[T, Dataset] {
+  extends api.Dataset[T] {
+  type DS[U] = Dataset[U]
+  type RGD = RelationalGroupedDataset
 
   @transient lazy val sparkSession: SparkSession = {
     if (queryExecution == null || queryExecution.sparkSession == null) {
@@ -242,7 +246,7 @@ class Dataset[T] private[sql](
 
   @transient private[sql] val logicalPlan: LogicalPlan = {
     val plan = queryExecution.commandExecuted
-    if (sparkSession.conf.get(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
+    if (sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
       val dsIds = plan.getTagValue(Dataset.DATASET_ID_TAG).getOrElse(new HashSet[Long])
       dsIds.add(id)
       plan.setTagValue(Dataset.DATASET_ID_TAG, dsIds)
@@ -251,12 +255,17 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Currently [[ExpressionEncoder]] is the only implementation of [[Encoder]], here we turn the
-   * passed in encoder to [[ExpressionEncoder]] explicitly, and mark it implicit so that we can use
-   * it when constructing new Dataset objects that have the same object type (that will be
-   * possibly resolved to a different schema).
+   * Expose the encoder as implicit so it can be used to construct new Dataset objects that have
+   * the same external type.
    */
-  private[sql] implicit val exprEnc: ExpressionEncoder[T] = encoderFor(encoder)
+  private implicit def encoderImpl: Encoder[T] = encoder
+
+  /**
+   * The actual [[ExpressionEncoder]] used by the dataset. This and its resolved counterpart should
+   * only be used for actual (de)serialization, the binding of Aggregator inputs, and in the rare
+   * cases where a plan needs to be constructed with an ExpressionEncoder.
+   */
+  private[sql] lazy val exprEnc: ExpressionEncoder[T] = encoderFor(encoder)
 
   // The resolved `ExpressionEncoder` which can be used to turn rows to objects of type T, after
   // collecting rows to the driver side.
@@ -264,7 +273,7 @@ class Dataset[T] private[sql](
     exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer)
   }
 
-  private implicit def classTag: ClassTag[T] = exprEnc.clsTag
+  private implicit def classTag: ClassTag[T] = encoder.clsTag
 
   // sqlContext must be val because a stable identifier is expected when you import implicits
   @transient lazy val sqlContext: SQLContext = sparkSession.sqlContext
@@ -293,7 +302,7 @@ class Dataset[T] private[sql](
       truncate: Int): Seq[Seq[String]] = {
     val newDf = commandResultOptimized.toDF()
     val castCols = newDf.logicalPlan.output.map { col =>
-      column(ToPrettyString(col))
+      Column(ToPrettyString(col))
     }
     val data = newDf.select(castCols: _*).take(numRows + 1)
 
@@ -403,11 +412,11 @@ class Dataset[T] private[sql](
     // Print a footer
     if (vertical && rows.tail.isEmpty) {
       // In a vertical mode, print an empty row set explicitly
-      sb.append("(0 rows)\n")
+      sb.append("(0 rows)")
     } else if (hasMoreData) {
       // For Data that has more than "numRows" records
       val rowsString = if (numRows == 1) "row" else "rows"
-      sb.append(s"only showing top $numRows $rowsString\n")
+      sb.append(s"only showing top $numRows $rowsString")
     }
 
     sb.toString()
@@ -475,7 +484,7 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `ds.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DataFrame = new Dataset[Row](queryExecution, ExpressionEncoder(schema))
+  def toDF(): DataFrame = new Dataset[Row](queryExecution, RowEncoder.encoderFor(schema))
 
   /** @inheritdoc */
   def as[U : Encoder]: Dataset[U] = Dataset[U](sparkSession, logicalPlan)
@@ -495,7 +504,7 @@ class Dataset[T] private[sql](
         s"New column names (${colNames.size}): " + colNames.mkString(", "))
 
     val newCols = logicalPlan.output.zip(colNames).map { case (oldAttribute, newName) =>
-      column(oldAttribute).as(newName)
+      Column(oldAttribute).as(newName)
     }
     select(newCols : _*)
   }
@@ -531,13 +540,18 @@ class Dataset[T] private[sql](
   def isStreaming: Boolean = logicalPlan.isStreaming
 
   /** @inheritdoc */
-  protected[sql] def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T] = {
+  protected[sql] def checkpoint(
+      eager: Boolean,
+      reliableCheckpoint: Boolean,
+      storageLevel: Option[StorageLevel]): Dataset[T] = {
     val actionName = if (reliableCheckpoint) "checkpoint" else "localCheckpoint"
     withAction(actionName, queryExecution) { physicalPlan =>
       val internalRdd = physicalPlan.execute().map(_.copy())
       if (reliableCheckpoint) {
+        assert(storageLevel.isEmpty, "StorageLevel should not be defined for reliableCheckpoint")
         internalRdd.checkpoint()
       } else {
+        storageLevel.foreach(storageLevel => internalRdd.persist(storageLevel))
         internalRdd.localCheckpoint()
       }
 
@@ -576,28 +590,10 @@ class Dataset[T] private[sql](
     println(showString(numRows, truncate, vertical))
   // scalastyle:on println
 
-  /**
-   * Returns a [[DataFrameNaFunctions]] for working with missing data.
-   * {{{
-   *   // Dropping rows containing any null values.
-   *   ds.na.drop()
-   * }}}
-   *
-   * @group untypedrel
-   * @since 1.6.0
-   */
+  /** @inheritdoc */
   def na: DataFrameNaFunctions = new DataFrameNaFunctions(toDF())
 
-  /**
-   * Returns a [[DataFrameStatFunctions]] for working statistic functions support.
-   * {{{
-   *   // Finding frequent items in column with name 'a'.
-   *   ds.stat.freqItems(Seq("a"))
-   * }}}
-   *
-   * @group untypedrel
-   * @since 1.6.0
-   */
+  /** @inheritdoc */
   def stat: DataFrameStatFunctions = new DataFrameStatFunctions(toDF())
 
   /** @inheritdoc */
@@ -688,17 +684,17 @@ class Dataset[T] private[sql](
         Some(condition.expr),
         JoinHint.NONE)).analyzed.asInstanceOf[Join]
 
-    implicit val tuple2Encoder: Encoder[(T, U)] =
-      ExpressionEncoder
-        .tuple(Seq(this.exprEnc, other.exprEnc), useNullSafeDeserializer = true)
-        .asInstanceOf[Encoder[(T, U)]]
-
-    withTypedPlan(JoinWith.typedJoinWith(
+    val leftEncoder = agnosticEncoderFor(encoder)
+    val rightEncoder = agnosticEncoderFor(other.encoder)
+    val joinEncoder = ProductEncoder.tuple(Seq(leftEncoder, rightEncoder), elementsCanBeNull = true)
+      .asInstanceOf[Encoder[(T, U)]]
+    val joinWith = JoinWith.typedJoinWith(
       joined,
       sparkSession.sessionState.conf.dataFrameSelfJoinAutoResolveAmbiguity,
       sparkSession.sessionState.analyzer.resolver,
-      this.exprEnc.isSerializedAsStructForTopLevel,
-      other.exprEnc.isSerializedAsStructForTopLevel))
+      leftEncoder.isStruct,
+      rightEncoder.isStruct)
+    new Dataset(sparkSession, joinWith, joinEncoder)
   }
 
   // TODO(SPARK-22947): Fix the DataFrame API.
@@ -768,18 +764,18 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   def col(colName: String): Column = colName match {
     case "*" =>
-      column(ResolvedStar(queryExecution.analyzed.output))
+      Column(ResolvedStar(queryExecution.analyzed.output))
     case _ =>
       if (sparkSession.sessionState.conf.supportQuotedRegexColumnName) {
         colRegex(colName)
       } else {
-        column(addDataFrameIdToCol(resolve(colName)))
+        Column(addDataFrameIdToCol(resolve(colName)))
       }
   }
 
   /** @inheritdoc */
   def metadataColumn(colName: String): Column =
-    column(queryExecution.analyzed.getMetadataAttributeByName(colName))
+    Column(queryExecution.analyzed.getMetadataAttributeByName(colName))
 
   // Attach the dataset id and column position to the column reference, so that we can detect
   // ambiguous self-join correctly. See the rule `DetectAmbiguousSelfJoin`.
@@ -789,7 +785,7 @@ class Dataset[T] private[sql](
   private def addDataFrameIdToCol(expr: NamedExpression): NamedExpression = {
     val newExpr = expr transform {
       case a: AttributeReference
-        if sparkSession.conf.get(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED) =>
+        if sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED) =>
         val metadata = new MetadataBuilder()
           .withMetadata(a.metadata)
           .putLong(Dataset.DATASET_ID_KEY, id)
@@ -805,11 +801,11 @@ class Dataset[T] private[sql](
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     colName match {
       case ParserUtils.escapedIdentifier(columnNameRegex) =>
-        column(UnresolvedRegex(columnNameRegex, None, caseSensitive))
+        Column(UnresolvedRegex(columnNameRegex, None, caseSensitive))
       case ParserUtils.qualifiedEscapedIdentifier(nameParts, columnNameRegex) =>
-        column(UnresolvedRegex(columnNameRegex, Some(nameParts), caseSensitive))
+        Column(UnresolvedRegex(columnNameRegex, Some(nameParts), caseSensitive))
       case _ =>
-        column(addDataFrameIdToCol(resolve(colName)))
+        Column(addDataFrameIdToCol(resolve(colName)))
     }
   }
 
@@ -843,24 +839,29 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   def select[U1](c1: TypedColumn[T, U1]): Dataset[U1] = {
-    implicit val encoder: ExpressionEncoder[U1] = encoderFor(c1.encoder)
+    val encoder = agnosticEncoderFor(c1.encoder)
     val tc1 = withInputType(c1.named, exprEnc, logicalPlan.output)
     val project = Project(tc1 :: Nil, logicalPlan)
 
-    if (!encoder.isSerializedAsStructForTopLevel) {
-      new Dataset[U1](sparkSession, project, encoder)
-    } else {
-      // Flattens inner fields of U1
-      new Dataset[Tuple1[U1]](sparkSession, project, ExpressionEncoder.tuple(encoder)).map(_._1)
+    val plan = encoder match {
+      case se: StructEncoder[U1] =>
+        // Flatten the result.
+        val attribute = GetColumnByOrdinal(0, se.dataType)
+        val projectList = se.fields.zipWithIndex.map {
+          case (field, index) =>
+            Alias(GetStructField(attribute, index, None), field.name)()
+        }
+        Project(projectList, project)
+      case _ => project
     }
+    new Dataset[U1](sparkSession, plan, encoder)
   }
 
   /** @inheritdoc */
   protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
-    val encoders = columns.map(c => encoderFor(c.encoder))
+    val encoders = columns.map(c => agnosticEncoderFor(c.encoder))
     val namedColumns = columns.map(c => withInputType(c.named, exprEnc, logicalPlan.output))
-    val execution = new QueryExecution(sparkSession, Project(namedColumns, logicalPlan))
-    new Dataset(execution, ExpressionEncoder.tuple(encoders))
+    new Dataset(sparkSession, Project(namedColumns, logicalPlan), ProductEncoder.tuple(encoders))
   }
 
   /** @inheritdoc */
@@ -868,96 +869,25 @@ class Dataset[T] private[sql](
     Filter(condition.expr, logicalPlan)
   }
 
-  /**
-   * Groups the Dataset using the specified columns, so we can run aggregation on them. See
-   * [[RelationalGroupedDataset]] for all the available aggregate functions.
-   *
-   * {{{
-   *   // Compute the average for all numeric columns grouped by department.
-   *   ds.groupBy($"department").avg()
-   *
-   *   // Compute the max age and average salary, grouped by department and gender.
-   *   ds.groupBy($"department", $"gender").agg(Map(
-   *     "salary" -> "avg",
-   *     "age" -> "max"
-   *   ))
-   * }}}
-   *
-   * @group untypedrel
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
   def groupBy(cols: Column*): RelationalGroupedDataset = {
     RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.GroupByType)
   }
 
-  /**
-   * Create a multi-dimensional rollup for the current Dataset using the specified columns,
-   * so we can run aggregation on them.
-   * See [[RelationalGroupedDataset]] for all the available aggregate functions.
-   *
-   * {{{
-   *   // Compute the average for all numeric columns rolled up by department and group.
-   *   ds.rollup($"department", $"group").avg()
-   *
-   *   // Compute the max age and average salary, rolled up by department and gender.
-   *   ds.rollup($"department", $"gender").agg(Map(
-   *     "salary" -> "avg",
-   *     "age" -> "max"
-   *   ))
-   * }}}
-   *
-   * @group untypedrel
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
   def rollup(cols: Column*): RelationalGroupedDataset = {
     RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.RollupType)
   }
 
-  /**
-   * Create a multi-dimensional cube for the current Dataset using the specified columns,
-   * so we can run aggregation on them.
-   * See [[RelationalGroupedDataset]] for all the available aggregate functions.
-   *
-   * {{{
-   *   // Compute the average for all numeric columns cubed by department and group.
-   *   ds.cube($"department", $"group").avg()
-   *
-   *   // Compute the max age and average salary, cubed by department and gender.
-   *   ds.cube($"department", $"gender").agg(Map(
-   *     "salary" -> "avg",
-   *     "age" -> "max"
-   *   ))
-   * }}}
-   *
-   * @group untypedrel
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
   def cube(cols: Column*): RelationalGroupedDataset = {
     RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.CubeType)
   }
 
-  /**
-   * Create multi-dimensional aggregation for the current Dataset using the specified grouping sets,
-   * so we can run aggregation on them.
-   * See [[RelationalGroupedDataset]] for all the available aggregate functions.
-   *
-   * {{{
-   *   // Compute the average for all numeric columns group by specific grouping sets.
-   *   ds.groupingSets(Seq(Seq($"department", $"group"), Seq()), $"department", $"group").avg()
-   *
-   *   // Compute the max age and average salary, group by specific grouping sets.
-   *   ds.groupingSets(Seq($"department", $"gender"), Seq()), $"department", $"group").agg(Map(
-   *     "salary" -> "avg",
-   *     "age" -> "max"
-   *   ))
-   * }}}
-   *
-   * @group untypedrel
-   * @since 4.0.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
   def groupingSets(groupingSets: Seq[Seq[Column]], cols: Column*): RelationalGroupedDataset = {
     RelationalGroupedDataset(
@@ -966,178 +896,23 @@ class Dataset[T] private[sql](
       RelationalGroupedDataset.GroupingSetsType(groupingSets.map(_.map(_.expr))))
   }
 
-  /**
-   * Groups the Dataset using the specified columns, so that we can run aggregation on them.
-   * See [[RelationalGroupedDataset]] for all the available aggregate functions.
-   *
-   * This is a variant of groupBy that can only group by existing columns using column names
-   * (i.e. cannot construct expressions).
-   *
-   * {{{
-   *   // Compute the average for all numeric columns grouped by department.
-   *   ds.groupBy("department").avg()
-   *
-   *   // Compute the max age and average salary, grouped by department and gender.
-   *   ds.groupBy($"department", $"gender").agg(Map(
-   *     "salary" -> "avg",
-   *     "age" -> "max"
-   *   ))
-   * }}}
-   * @group untypedrel
-   * @since 2.0.0
-   */
-  @scala.annotation.varargs
-  def groupBy(col1: String, cols: String*): RelationalGroupedDataset = {
-    val colNames: Seq[String] = col1 +: cols
-    RelationalGroupedDataset(
-      toDF(), colNames.map(colName => resolve(colName)), RelationalGroupedDataset.GroupByType)
-  }
-
   /** @inheritdoc */
   def reduce(func: (T, T) => T): T = withNewRDDExecutionId("reduce") {
     rdd.reduce(func)
   }
 
-  /**
-   * (Scala-specific)
-   * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key `func`.
-   *
-   * @group typedrel
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T] = {
     val withGroupingKey = AppendColumns(func, logicalPlan)
     val executed = sparkSession.sessionState.executePlan(withGroupingKey)
 
     new KeyValueGroupedDataset(
-      encoderFor[K],
-      encoderFor[T],
+      implicitly[Encoder[K]],
+      encoder,
       executed,
       logicalPlan.output,
       withGroupingKey.newColumns)
   }
-
-  /**
-   * (Java-specific)
-   * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key `func`.
-   *
-   * @group typedrel
-   * @since 2.0.0
-   */
-  def groupByKey[K](func: MapFunction[T, K], encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
-    groupByKey(func.call(_))(encoder)
-
-  /**
-   * Create a multi-dimensional rollup for the current Dataset using the specified columns,
-   * so we can run aggregation on them.
-   * See [[RelationalGroupedDataset]] for all the available aggregate functions.
-   *
-   * This is a variant of rollup that can only group by existing columns using column names
-   * (i.e. cannot construct expressions).
-   *
-   * {{{
-   *   // Compute the average for all numeric columns rolled up by department and group.
-   *   ds.rollup("department", "group").avg()
-   *
-   *   // Compute the max age and average salary, rolled up by department and gender.
-   *   ds.rollup($"department", $"gender").agg(Map(
-   *     "salary" -> "avg",
-   *     "age" -> "max"
-   *   ))
-   * }}}
-   *
-   * @group untypedrel
-   * @since 2.0.0
-   */
-  @scala.annotation.varargs
-  def rollup(col1: String, cols: String*): RelationalGroupedDataset = {
-    val colNames: Seq[String] = col1 +: cols
-    RelationalGroupedDataset(
-      toDF(), colNames.map(colName => resolve(colName)), RelationalGroupedDataset.RollupType)
-  }
-
-  /**
-   * Create a multi-dimensional cube for the current Dataset using the specified columns,
-   * so we can run aggregation on them.
-   * See [[RelationalGroupedDataset]] for all the available aggregate functions.
-   *
-   * This is a variant of cube that can only group by existing columns using column names
-   * (i.e. cannot construct expressions).
-   *
-   * {{{
-   *   // Compute the average for all numeric columns cubed by department and group.
-   *   ds.cube("department", "group").avg()
-   *
-   *   // Compute the max age and average salary, cubed by department and gender.
-   *   ds.cube($"department", $"gender").agg(Map(
-   *     "salary" -> "avg",
-   *     "age" -> "max"
-   *   ))
-   * }}}
-   * @group untypedrel
-   * @since 2.0.0
-   */
-  @scala.annotation.varargs
-  def cube(col1: String, cols: String*): RelationalGroupedDataset = {
-    val colNames: Seq[String] = col1 +: cols
-    RelationalGroupedDataset(
-      toDF(), colNames.map(colName => resolve(colName)), RelationalGroupedDataset.CubeType)
-  }
-
-  /**
-   * (Scala-specific) Aggregates on the entire Dataset without groups.
-   * {{{
-   *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
-   *   ds.agg("age" -> "max", "salary" -> "avg")
-   *   ds.groupBy().agg("age" -> "max", "salary" -> "avg")
-   * }}}
-   *
-   * @group untypedrel
-   * @since 2.0.0
-   */
-  def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
-    groupBy().agg(aggExpr, aggExprs : _*)
-  }
-
-  /**
-   * (Scala-specific) Aggregates on the entire Dataset without groups.
-   * {{{
-   *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
-   *   ds.agg(Map("age" -> "max", "salary" -> "avg"))
-   *   ds.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
-   * }}}
-   *
-   * @group untypedrel
-   * @since 2.0.0
-   */
-  def agg(exprs: Map[String, String]): DataFrame = groupBy().agg(exprs)
-
-  /**
-   * (Java-specific) Aggregates on the entire Dataset without groups.
-   * {{{
-   *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
-   *   ds.agg(Map("age" -> "max", "salary" -> "avg"))
-   *   ds.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
-   * }}}
-   *
-   * @group untypedrel
-   * @since 2.0.0
-   */
-  def agg(exprs: java.util.Map[String, String]): DataFrame = groupBy().agg(exprs)
-
-  /**
-   * Aggregates on the entire Dataset without groups.
-   * {{{
-   *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
-   *   ds.agg(max($"age"), avg($"salary"))
-   *   ds.groupBy().agg(max($"age"), avg($"salary"))
-   * }}}
-   *
-   * @group untypedrel
-   * @since 2.0.0
-   */
-  @scala.annotation.varargs
-  def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs : _*)
 
   /** @inheritdoc */
   def unpivot(
@@ -1192,35 +967,32 @@ class Dataset[T] private[sql](
     unpivot(ids.toArray, variableColumnName, valueColumnName)
 
   /** @inheritdoc */
+  def transpose(indexColumn: Column): DataFrame = withPlan {
+    UnresolvedTranspose(
+      Seq(indexColumn.named),
+      logicalPlan
+    )
+  }
+
+  /** @inheritdoc */
+  def transpose(): DataFrame = withPlan {
+    UnresolvedTranspose(
+      Seq.empty,
+      logicalPlan
+    )
+  }
+
+  /** @inheritdoc */
   @scala.annotation.varargs
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = withTypedPlan {
     CollectMetrics(name, (expr +: exprs).map(_.named), logicalPlan, id)
   }
 
-  /**
-   * Observe (named) metrics through an `org.apache.spark.sql.Observation` instance.
-   * This is equivalent to calling `observe(String, Column, Column*)` but does not require
-   * adding `org.apache.spark.sql.util.QueryExecutionListener` to the spark session.
-   * This method does not support streaming datasets.
-   *
-   * A user can retrieve the metrics by accessing `org.apache.spark.sql.Observation.get`.
-   *
-   * {{{
-   *   // Observe row count (rows) and highest id (maxid) in the Dataset while writing it
-   *   val observation = Observation("my_metrics")
-   *   val observed_ds = ds.observe(observation, count(lit(1)).as("rows"), max($"id").as("maxid"))
-   *   observed_ds.write.parquet("ds.parquet")
-   *   val metrics = observation.get
-   * }}}
-   *
-   * @throws IllegalArgumentException If this is a streaming Dataset (this.isStreaming == true)
-   *
-   * @group typedrel
-   * @since 3.3.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
   def observe(observation: Observation, expr: Column, exprs: Column*): Dataset[T] = {
-    observation.on(this, expr, exprs: _*)
+    sparkSession.observationManager.register(observation, this)
+    observe(observation.name, expr, exprs: _*)
   }
 
   /** @inheritdoc */
@@ -1426,7 +1198,7 @@ class Dataset[T] private[sql](
         resolver(field.name, colName)
       } match {
         case Some((colName: String, col: Column)) => col.as(colName)
-        case _ => column(field)
+        case _ => Column(field)
       }
     }
 
@@ -1496,7 +1268,7 @@ class Dataset[T] private[sql](
     val allColumns = queryExecution.analyzed.output
     val remainingCols = allColumns.filter { attribute =>
       colNames.forall(n => !resolver(attribute.name, n))
-    }.map(attribute => column(attribute))
+    }.map(attribute => Column(attribute))
     if (remainingCols.size == allColumns.size) {
       toDF()
     } else {
@@ -1591,12 +1363,6 @@ class Dataset[T] private[sql](
       implicitly[Encoder[U]])
   }
 
-  /** @inheritdoc */
-  def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
-    val func: (Iterator[T]) => Iterator[U] = x => f.call(x.asJava).asScala
-    mapPartitions(func)(encoder)
-  }
-
   /**
    * Returns a new `DataFrame` that contains the result of applying a serialized R function
    * `func` to each partition.
@@ -1606,7 +1372,11 @@ class Dataset[T] private[sql](
       packageNames: Array[Byte],
       broadcastVars: Array[Broadcast[Object]],
       schema: StructType): DataFrame = {
-    val rowEncoder = encoder.asInstanceOf[ExpressionEncoder[Row]]
+    val rowEncoder: ExpressionEncoder[Row] = if (isUnTyped) {
+      exprEnc.asInstanceOf[ExpressionEncoder[Row]]
+    } else {
+      ExpressionEncoder(schema)
+    }
     Dataset.ofRows(
       sparkSession,
       MapPartitionsInR(func, packageNames, broadcastVars, schema, rowEncoder, logicalPlan))
@@ -1653,11 +1423,6 @@ class Dataset[T] private[sql](
         logicalPlan,
         isBarrier,
         Option(profile)))
-  }
-
-  /** @inheritdoc */
-  def foreach(f: T => Unit): Unit = withNewRDDExecutionId("foreach") {
-    rdd.foreach(f)
   }
 
   /** @inheritdoc */
@@ -1764,12 +1529,7 @@ class Dataset[T] private[sql](
     sparkSession.sessionState.executePlan(deserialized)
   }
 
-  /**
-   * Represents the content of the Dataset as an `RDD` of `T`.
-   *
-   * @group basic
-   * @since 1.6.0
-   */
+  /** @inheritdoc */
   lazy val rdd: RDD[T] = {
     val objectType = exprEnc.deserializer.dataType
     rddQueryExecution.toRdd.mapPartitions { rows =>
@@ -1777,19 +1537,8 @@ class Dataset[T] private[sql](
     }
   }
 
-  /**
-   * Returns the content of the Dataset as a `JavaRDD` of `T`s.
-   * @group basic
-   * @since 1.6.0
-   */
+  /** @inheritdoc */
   def toJavaRDD: JavaRDD[T] = rdd.toJavaRDD()
-
-  /**
-   * Returns the content of the Dataset as a `JavaRDD` of `T`s.
-   * @group basic
-   * @since 1.6.0
-   */
-  def javaRDD: JavaRDD[T] = toJavaRDD
 
   protected def createTempView(
       viewName: String,
@@ -1825,40 +1574,17 @@ class Dataset[T] private[sql](
     }
   }
 
-  /**
-   * Interface for saving the content of the non-streaming Dataset out into external storage.
-   *
-   * @group basic
-   * @since 1.6.0
-   */
+  /** @inheritdoc */
   def write: DataFrameWriter[T] = {
     if (isStreaming) {
       logicalPlan.failAnalysis(
         errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
         messageParameters = Map("methodName" -> toSQLId("write")))
     }
-    new DataFrameWriter[T](this)
+    new DataFrameWriterImpl[T](this)
   }
 
-  /**
-   * Create a write configuration builder for v2 sources.
-   *
-   * This builder is used to configure and execute write operations. For example, to append to an
-   * existing table, run:
-   *
-   * {{{
-   *   df.writeTo("catalog.db.table").append()
-   * }}}
-   *
-   * This can also be used to create or replace existing tables:
-   *
-   * {{{
-   *   df.writeTo("catalog.db.table").partitionedBy($"col").createOrReplace()
-   * }}}
-   *
-   * @group basic
-   * @since 3.0.0
-   */
+  /** @inheritdoc */
   def writeTo(table: String): DataFrameWriterV2[T] = {
     // TODO: streaming could be adapted to use this interface
     if (isStreaming) {
@@ -1866,31 +1592,10 @@ class Dataset[T] private[sql](
         errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
         messageParameters = Map("methodName" -> toSQLId("writeTo")))
     }
-    new DataFrameWriterV2[T](table, this)
+    new DataFrameWriterV2Impl[T](table, this)
   }
 
-  /**
-   * Merges a set of updates, insertions, and deletions based on a source table into
-   * a target table.
-   *
-   * Scala Examples:
-   * {{{
-   *   spark.table("source")
-   *     .mergeInto("target", $"source.id" === $"target.id")
-   *     .whenMatched($"salary" === 100)
-   *     .delete()
-   *     .whenNotMatched()
-   *     .insertAll()
-   *     .whenNotMatchedBySource($"salary" === 100)
-   *     .update(Map(
-   *       "salary" -> lit(200)
-   *     ))
-   *     .merge()
-   * }}}
-   *
-   * @group basic
-   * @since 4.0.0
-   */
+  /** @inheritdoc */
   def mergeInto(table: String, condition: Column): MergeIntoWriter[T] = {
     if (isStreaming) {
       logicalPlan.failAnalysis(
@@ -1898,15 +1603,10 @@ class Dataset[T] private[sql](
         messageParameters = Map("methodName" -> toSQLId("mergeInto")))
     }
 
-    new MergeIntoWriter[T](table, this, condition)
+    new MergeIntoWriterImpl[T](table, this, condition)
   }
 
-  /**
-   * Interface for saving the content of the streaming Dataset out into external storage.
-   *
-   * @group basic
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def writeStream: DataStreamWriter[T] = {
     if (!isStreaming) {
       logicalPlan.failAnalysis(
@@ -1918,7 +1618,7 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   override def toJSON: Dataset[String] = {
-    val rowSchema = this.schema
+    val rowSchema = exprEnc.schema
     val sessionLocalTimeZone = sparkSession.sessionState.conf.sessionLocalTimeZone
     mapPartitions { iter =>
       val writer = new CharArrayWriter()
@@ -2100,6 +1800,10 @@ class Dataset[T] private[sql](
   override def localCheckpoint(eager: Boolean): Dataset[T] = super.localCheckpoint(eager)
 
   /** @inheritdoc */
+  override def localCheckpoint(eager: Boolean, storageLevel: StorageLevel): Dataset[T] =
+    super.localCheckpoint(eager, storageLevel)
+
+  /** @inheritdoc */
   override def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] =
     super.joinWith(other, condition)
 
@@ -2187,14 +1891,15 @@ class Dataset[T] private[sql](
     super.dropDuplicatesWithinWatermark(col1, cols: _*)
 
   /** @inheritdoc */
+  override def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): Dataset[U] =
+    super.mapPartitions(f, encoder)
+
+  /** @inheritdoc */
   override def flatMap[U: Encoder](func: T => IterableOnce[U]): Dataset[U] = super.flatMap(func)
 
   /** @inheritdoc */
   override def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): Dataset[U] =
     super.flatMap(f, encoder)
-
-  /** @inheritdoc */
-  override def foreach(func: ForeachFunction[T]): Unit = super.foreach(func)
 
   /** @inheritdoc */
   override def foreachPartition(func: ForeachPartitionFunction[T]): Unit =
@@ -2223,6 +1928,41 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   override def distinct(): Dataset[T] = super.distinct()
 
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def groupBy(col1: String, cols: String*): RelationalGroupedDataset =
+    super.groupBy(col1, cols: _*)
+
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def rollup(col1: String, cols: String*): RelationalGroupedDataset =
+    super.rollup(col1, cols: _*)
+
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def cube(col1: String, cols: String*): RelationalGroupedDataset =
+    super.cube(col1, cols: _*)
+
+  /** @inheritdoc */
+  override def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame =
+    super.agg(aggExpr, aggExprs: _*)
+
+  /** @inheritdoc */
+  override def agg(exprs: Map[String, String]): DataFrame = super.agg(exprs)
+
+  /** @inheritdoc */
+  override def agg(exprs: java.util.Map[String, String]): DataFrame = super.agg(exprs)
+
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def agg(expr: Column, exprs: Column*): DataFrame = super.agg(expr, exprs: _*)
+
+  /** @inheritdoc */
+  override def groupByKey[K](
+      func: MapFunction[T, K],
+      encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
+    super.groupByKey(func, encoder).asInstanceOf[KeyValueGroupedDataset[K, T]]
+
   ////////////////////////////////////////////////////////////////////////////
   // For Python API
   ////////////////////////////////////////////////////////////////////////////
@@ -2232,7 +1972,7 @@ class Dataset[T] private[sql](
    * This is for 'distributed-sequence' default index in pandas API on Spark.
    */
   private[sql] def withSequenceColumn(name: String) = {
-    select(column(DistributedSequenceID()).alias(name), col("*"))
+    select(Column(DistributedSequenceID()).alias(name), col("*"))
   }
 
   /**
@@ -2462,13 +2202,15 @@ class Dataset[T] private[sql](
 
   /** A convenient function to wrap a set based logical plan and produce a Dataset. */
   @inline private def withSetOperator[U : Encoder](logicalPlan: LogicalPlan): Dataset[U] = {
-    if (classTag.runtimeClass.isAssignableFrom(classOf[Row])) {
+    if (isUnTyped) {
       // Set operators widen types (change the schema), so we cannot reuse the row encoder.
       Dataset.ofRows(sparkSession, logicalPlan).asInstanceOf[Dataset[U]]
     } else {
       Dataset(sparkSession, logicalPlan)
     }
   }
+
+  private def isUnTyped: Boolean = classTag.runtimeClass.isAssignableFrom(classOf[Row])
 
   /** Returns a optimized plan for CommandResult, convert to `LocalRelation`. */
   private def commandResultOptimized: Dataset[T] = {

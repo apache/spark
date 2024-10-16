@@ -36,9 +36,9 @@ addSbtPlugin("com.github.sbt" % "sbt-unidoc" % "0.5.0")
 
 addSbtPlugin("io.spray" % "sbt-revolver" % "0.10.0")
 
-libraryDependencies += "org.ow2.asm"  % "asm" % "9.7"
+libraryDependencies += "org.ow2.asm"  % "asm" % "9.7.1"
 
-libraryDependencies += "org.ow2.asm"  % "asm-commons" % "9.7"
+libraryDependencies += "org.ow2.asm"  % "asm-commons" % "9.7.1"
 
 addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.8.3")
 

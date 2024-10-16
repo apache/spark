@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.io._
 
-import scala.collection.mutable.ArrayBuffer
 import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
@@ -31,13 +30,15 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
+import org.apache.spark.sql.catalyst.expressions.json.JsonExpressionUtils
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, TreePattern}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeWithCaseAccentSensitivity
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.Utils
@@ -134,7 +135,7 @@ case class GetJsonObject(json: Expression, path: Expression)
   override def left: Expression = json
   override def right: Expression = path
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
+    Seq(StringTypeWithCaseAccentSensitivity, StringTypeWithCaseAccentSensitivity)
   override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = true
   override def prettyName: String = "get_json_object"
@@ -489,7 +490,9 @@ case class JsonTuple(children: Seq[Expression])
       throw QueryCompilationErrors.wrongNumArgsError(
         toSQLId(prettyName), Seq("> 1"), children.length
       )
-    } else if (children.forall(child => StringTypeAnyCollation.acceptsType(child.dataType))) {
+    } else if (
+      children.forall(
+        child => StringTypeWithCaseAccentSensitivity.acceptsType(child.dataType))) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       DataTypeMismatch(
@@ -632,7 +635,8 @@ case class JsonToStructs(
     schema: DataType,
     options: Map[String, String],
     child: Expression,
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String] = None,
+    variantAllowDuplicateKeys: Boolean = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS))
   extends UnaryExpression
   with TimeZoneAwareExpression
   with CodegenFallback
@@ -719,12 +723,13 @@ case class JsonToStructs(
 
   override def nullSafeEval(json: Any): Any = nullableSchema match {
     case _: VariantType =>
-      VariantExpressionEvalUtils.parseJson(json.asInstanceOf[UTF8String])
+      VariantExpressionEvalUtils.parseJson(json.asInstanceOf[UTF8String],
+        allowDuplicateKeys = variantAllowDuplicateKeys)
     case _ =>
       converter(parser.parse(json.asInstanceOf[UTF8String]))
   }
 
-  override def inputTypes: Seq[AbstractDataType] = StringTypeAnyCollation :: Nil
+  override def inputTypes: Seq[AbstractDataType] = StringTypeWithCaseAccentSensitivity :: Nil
 
   override def sql: String = schema match {
     case _: MapType => "entries"
@@ -735,6 +740,12 @@ case class JsonToStructs(
 
   override protected def withNewChildInternal(newChild: Expression): JsonToStructs =
     copy(child = newChild)
+}
+
+object JsonToStructs {
+  def unapply(
+      j: JsonToStructs): Option[(DataType, Map[String, String], Expression, Option[String])] =
+    Some((j.schema, j.options, j.child, j.timeZoneId))
 }
 
 /**
@@ -957,54 +968,26 @@ case class SchemaOfJson(
   group = "json_funcs",
   since = "3.1.0"
 )
-case class LengthOfJsonArray(child: Expression) extends UnaryExpression
-  with CodegenFallback with ExpectsInputTypes {
+case class LengthOfJsonArray(child: Expression)
+  extends UnaryExpression
+  with ExpectsInputTypes
+  with RuntimeReplaceable {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCaseAccentSensitivity)
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
   override def prettyName: String = "json_array_length"
 
-  override def eval(input: InternalRow): Any = {
-    val json = child.eval(input).asInstanceOf[UTF8String]
-    // return null for null input
-    if (json == null) {
-      return null
-    }
-
-    try {
-      Utils.tryWithResource(CreateJacksonParser.utf8String(SharedFactory.jsonFactory, json)) {
-        parser => {
-          // return null if null array is encountered.
-          if (parser.nextToken() == null) {
-            return null
-          }
-          // Parse the array to compute its length.
-          parseCounter(parser, input)
-        }
-      }
-    } catch {
-      case _: JsonProcessingException | _: IOException => null
-    }
-  }
-
-  private def parseCounter(parser: JsonParser, input: InternalRow): Any = {
-    var length = 0
-    // Only JSON array are supported for this function.
-    if (parser.currentToken != JsonToken.START_ARRAY) {
-      return null
-    }
-    // Keep traversing until the end of JSON array
-    while(parser.nextToken() != JsonToken.END_ARRAY) {
-      length += 1
-      // skip all the child of inner object or array
-      parser.skipChildren()
-    }
-    length
-  }
-
   override protected def withNewChildInternal(newChild: Expression): LengthOfJsonArray =
     copy(child = newChild)
+
+  override def replacement: Expression = StaticInvoke(
+    classOf[JsonExpressionUtils],
+    dataType,
+    "lengthOfJsonArray",
+    Seq(child),
+    inputTypes
+  )
 }
 
 /**
@@ -1030,50 +1013,23 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
   group = "json_funcs",
   since = "3.1.0"
 )
-case class JsonObjectKeys(child: Expression) extends UnaryExpression with CodegenFallback
-  with ExpectsInputTypes {
+case class JsonObjectKeys(child: Expression)
+  extends UnaryExpression
+  with ExpectsInputTypes
+  with RuntimeReplaceable {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCaseAccentSensitivity)
   override def dataType: DataType = ArrayType(SQLConf.get.defaultStringType)
   override def nullable: Boolean = true
   override def prettyName: String = "json_object_keys"
 
-  override def eval(input: InternalRow): Any = {
-    val json = child.eval(input).asInstanceOf[UTF8String]
-    // return null for `NULL` input
-    if(json == null) {
-      return null
-    }
-
-    try {
-      Utils.tryWithResource(CreateJacksonParser.utf8String(SharedFactory.jsonFactory, json)) {
-        parser => {
-          // return null if an empty string or any other valid JSON string is encountered
-          if (parser.nextToken() == null || parser.currentToken() != JsonToken.START_OBJECT) {
-            return null
-          }
-          // Parse the JSON string to get all the keys of outermost JSON object
-          getJsonKeys(parser, input)
-        }
-      }
-    } catch {
-      case _: JsonProcessingException | _: IOException => null
-    }
-  }
-
-  private def getJsonKeys(parser: JsonParser, input: InternalRow): GenericArrayData = {
-    val arrayBufferOfKeys = ArrayBuffer.empty[UTF8String]
-
-    // traverse until the end of input and ensure it returns valid key
-    while(parser.nextValue() != null && parser.currentName() != null) {
-      // add current fieldName to the ArrayBuffer
-      arrayBufferOfKeys += UTF8String.fromString(parser.currentName)
-
-      // skip all the children of inner object or array
-      parser.skipChildren()
-    }
-    new GenericArrayData(arrayBufferOfKeys.toArray)
-  }
+  override def replacement: Expression = StaticInvoke(
+    classOf[JsonExpressionUtils],
+    dataType,
+    "jsonObjectKeys",
+    Seq(child),
+    inputTypes
+  )
 
   override protected def withNewChildInternal(newChild: Expression): JsonObjectKeys =
     copy(child = newChild)

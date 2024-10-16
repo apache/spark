@@ -1,6 +1,7 @@
 ---
 layout: global
 title: Structured Streaming + Kafka Integration Guide (Kafka broker version 0.10.0 or higher)
+redirect: ./streaming/structured-streaming-kafka-integration.html
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -1181,3 +1182,4 @@ This can be done several ways. One possibility is to provide additional JVM para
         --driver-java-options "-Djava.security.auth.login.config=/path/to/custom_jaas.conf" \
         --conf spark.executor.extraJavaOptions=-Djava.security.auth.login.config=/path/to/custom_jaas.conf \
         ...
+This page has moved [here](./streaming/structured-streaming-kafka-integration.html).

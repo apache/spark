@@ -72,34 +72,34 @@ private[spark] object Column {
       isDistinct: Boolean,
       isInternal: Boolean,
       inputs: Seq[Column]): Column = withOrigin {
-    Column(internal.UnresolvedFunction(
-      name,
-      inputs.map(_.node),
-      isDistinct = isDistinct,
-      isInternal = isInternal))
+    Column(
+      internal.UnresolvedFunction(
+        name,
+        inputs.map(_.node),
+        isDistinct = isDistinct,
+        isInternal = isInternal))
   }
 }
 
 /**
- * A [[Column]] where an [[Encoder]] has been given for the expected input and return type.
- * To create a [[TypedColumn]], use the `as` function on a [[Column]].
+ * A [[Column]] where an [[Encoder]] has been given for the expected input and return type. To
+ * create a [[TypedColumn]], use the `as` function on a [[Column]].
  *
- * @tparam T The input type expected for this expression.  Can be `Any` if the expression is type
- *           checked by the analyzer instead of the compiler (i.e. `expr("sum(...)")`).
- * @tparam U The output type of this column.
+ * @tparam T
+ *   The input type expected for this expression. Can be `Any` if the expression is type checked
+ *   by the analyzer instead of the compiler (i.e. `expr("sum(...)")`).
+ * @tparam U
+ *   The output type of this column.
  *
  * @since 1.6.0
  */
 @Stable
-class TypedColumn[-T, U](
-    node: ColumnNode,
-    private[sql] val encoder: Encoder[U])
-  extends Column(node) {
+class TypedColumn[-T, U](node: ColumnNode, private[sql] val encoder: Encoder[U])
+    extends Column(node) {
 
   /**
-   * Gives the [[TypedColumn]] a name (alias).
-   * If the current `TypedColumn` has metadata associated with it, this metadata will be propagated
-   * to the new column.
+   * Gives the [[TypedColumn]] a name (alias). If the current `TypedColumn` has metadata
+   * associated with it, this metadata will be propagated to the new column.
    *
    * @group expr_ops
    * @since 2.0.0
@@ -168,23 +168,20 @@ class Column(val node: ColumnNode) extends Logging {
   override def hashCode: Int = this.node.normalized.hashCode()
 
   /**
-   * Provides a type hint about the expected return value of this column.  This information can
-   * be used by operations such as `select` on a [[Dataset]] to automatically convert the
-   * results into the correct JVM types.
+   * Provides a type hint about the expected return value of this column. This information can be
+   * used by operations such as `select` on a [[Dataset]] to automatically convert the results
+   * into the correct JVM types.
    * @since 1.6.0
    */
-  def as[U : Encoder]: TypedColumn[Any, U] = new TypedColumn[Any, U](node, implicitly[Encoder[U]])
+  def as[U: Encoder]: TypedColumn[Any, U] = new TypedColumn[Any, U](node, implicitly[Encoder[U]])
 
   /**
-   * Extracts a value or values from a complex type.
-   * The following types of extraction are supported:
-   * <ul>
-   * <li>Given an Array, an integer ordinal can be used to retrieve a single value.</li>
-   * <li>Given a Map, a key of the correct type can be used to retrieve an individual value.</li>
-   * <li>Given a Struct, a string fieldName can be used to extract that field.</li>
-   * <li>Given an Array of Structs, a string fieldName can be used to extract filed
-   *    of every struct in that array, and return an Array of fields.</li>
-   * </ul>
+   * Extracts a value or values from a complex type. The following types of extraction are
+   * supported: <ul> <li>Given an Array, an integer ordinal can be used to retrieve a single
+   * value.</li> <li>Given a Map, a key of the correct type can be used to retrieve an individual
+   * value.</li> <li>Given a Struct, a string fieldName can be used to extract that field.</li>
+   * <li>Given an Array of Structs, a string fieldName can be used to extract filed of every
+   * struct in that array, and return an Array of fields.</li> </ul>
    * @group expr_ops
    * @since 1.4.0
    */
@@ -283,8 +280,8 @@ class Column(val node: ColumnNode) extends Logging {
    *
    * @group expr_ops
    * @since 2.0.0
-    */
-  def =!= (other: Any): Column = !(this === other)
+   */
+  def =!=(other: Any): Column = !(this === other)
 
   /**
    * Inequality test.
@@ -300,9 +297,9 @@ class Column(val node: ColumnNode) extends Logging {
    *
    * @group expr_ops
    * @since 1.3.0
-    */
+   */
   @deprecated("!== does not have the same precedence as ===, use =!= instead", "2.0.0")
-  def !== (other: Any): Column = this =!= other
+  def !==(other: Any): Column = this =!= other
 
   /**
    * Inequality test.
@@ -464,8 +461,8 @@ class Column(val node: ColumnNode) extends Logging {
   def eqNullSafe(other: Any): Column = this <=> other
 
   /**
-   * Evaluates a list of conditions and returns one of multiple possible result expressions.
-   * If otherwise is not defined at the end, null is returned for unmatched conditions.
+   * Evaluates a list of conditions and returns one of multiple possible result expressions. If
+   * otherwise is not defined at the end, null is returned for unmatched conditions.
    *
    * {{{
    *   // Example: encoding gender string column into integer.
@@ -489,8 +486,7 @@ class Column(val node: ColumnNode) extends Logging {
       case internal.CaseWhenOtherwise(branches, None, _) =>
         internal.CaseWhenOtherwise(branches :+ ((condition.node, lit(value).node)), None)
       case internal.CaseWhenOtherwise(_, Some(_), _) =>
-        throw new IllegalArgumentException(
-          "when() cannot be applied once otherwise() is applied")
+        throw new IllegalArgumentException("when() cannot be applied once otherwise() is applied")
       case _ =>
         throw new IllegalArgumentException(
           "when() can only be applied on a Column previously generated by when() function")
@@ -498,8 +494,8 @@ class Column(val node: ColumnNode) extends Logging {
   }
 
   /**
-   * Evaluates a list of conditions and returns one of multiple possible result expressions.
-   * If otherwise is not defined at the end, null is returned for unmatched conditions.
+   * Evaluates a list of conditions and returns one of multiple possible result expressions. If
+   * otherwise is not defined at the end, null is returned for unmatched conditions.
    *
    * {{{
    *   // Example: encoding gender string column into integer.
@@ -765,13 +761,11 @@ class Column(val node: ColumnNode) extends Logging {
    * A boolean expression that is evaluated to true if the value of this expression is contained
    * by the evaluated values of the arguments.
    *
-   * Note: Since the type of the elements in the list are inferred only during the run time,
-   * the elements will be "up-casted" to the most common type for comparison.
-   * For eg:
-   *   1) In the case of "Int vs String", the "Int" will be up-casted to "String" and the
-   * comparison will look like "String vs String".
-   *   2) In the case of "Float vs Double", the "Float" will be up-casted to "Double" and the
-   * comparison will look like "Double vs Double"
+   * Note: Since the type of the elements in the list are inferred only during the run time, the
+   * elements will be "up-casted" to the most common type for comparison. For eg: 1) In the case
+   * of "Int vs String", the "Int" will be up-casted to "String" and the comparison will look like
+   * "String vs String". 2) In the case of "Float vs Double", the "Float" will be up-casted to
+   * "Double" and the comparison will look like "Double vs Double"
    *
    * @group expr_ops
    * @since 1.5.0
@@ -784,12 +778,10 @@ class Column(val node: ColumnNode) extends Logging {
    * by the provided collection.
    *
    * Note: Since the type of the elements in the collection are inferred only during the run time,
-   * the elements will be "up-casted" to the most common type for comparison.
-   * For eg:
-   *   1) In the case of "Int vs String", the "Int" will be up-casted to "String" and the
-   * comparison will look like "String vs String".
-   *   2) In the case of "Float vs Double", the "Float" will be up-casted to "Double" and the
-   * comparison will look like "Double vs Double"
+   * the elements will be "up-casted" to the most common type for comparison. For eg: 1) In the
+   * case of "Int vs String", the "Int" will be up-casted to "String" and the comparison will look
+   * like "String vs String". 2) In the case of "Float vs Double", the "Float" will be up-casted
+   * to "Double" and the comparison will look like "Double vs Double"
    *
    * @group expr_ops
    * @since 2.4.0
@@ -801,12 +793,10 @@ class Column(val node: ColumnNode) extends Logging {
    * by the provided collection.
    *
    * Note: Since the type of the elements in the collection are inferred only during the run time,
-   * the elements will be "up-casted" to the most common type for comparison.
-   * For eg:
-   *   1) In the case of "Int vs String", the "Int" will be up-casted to "String" and the
-   * comparison will look like "String vs String".
-   *   2) In the case of "Float vs Double", the "Float" will be up-casted to "Double" and the
-   * comparison will look like "Double vs Double"
+   * the elements will be "up-casted" to the most common type for comparison. For eg: 1) In the
+   * case of "Int vs String", the "Int" will be up-casted to "String" and the comparison will look
+   * like "String vs String". 2) In the case of "Float vs Double", the "Float" will be up-casted
+   * to "Double" and the comparison will look like "Double vs Double"
    *
    * @group java_expr_ops
    * @since 2.4.0
@@ -822,8 +812,7 @@ class Column(val node: ColumnNode) extends Logging {
   def like(literal: String): Column = fn("like", literal)
 
   /**
-   * SQL RLIKE expression (LIKE with Regex). Returns a boolean column based on a regex
-   * match.
+   * SQL RLIKE expression (LIKE with Regex). Returns a boolean column based on a regex match.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -839,8 +828,8 @@ class Column(val node: ColumnNode) extends Logging {
   def ilike(literal: String): Column = fn("ilike", literal)
 
   /**
-   * An expression that gets an item at position `ordinal` out of an array,
-   * or gets a value by key `key` in a `MapType`.
+   * An expression that gets an item at position `ordinal` out of an array, or gets a value by key
+   * `key` in a `MapType`.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -885,8 +874,8 @@ class Column(val node: ColumnNode) extends Logging {
    *   // result: {"a":{"a":1,"b":2,"c":3,"d":4}}
    * }}}
    *
-   * However, if you are going to add/replace multiple nested fields, it is more optimal to extract
-   * out the nested struct before adding/replacing multiple fields e.g.
+   * However, if you are going to add/replace multiple nested fields, it is more optimal to
+   * extract out the nested struct before adding/replacing multiple fields e.g.
    *
    * {{{
    *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
@@ -906,8 +895,8 @@ class Column(val node: ColumnNode) extends Logging {
 
   // scalastyle:off line.size.limit
   /**
-   * An expression that drops fields in `StructType` by name.
-   * This is a no-op if schema doesn't contain field name(s).
+   * An expression that drops fields in `StructType` by name. This is a no-op if schema doesn't
+   * contain field name(s).
    *
    * {{{
    *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
@@ -951,8 +940,8 @@ class Column(val node: ColumnNode) extends Logging {
    *   // result: {"a":{"a":1}}
    * }}}
    *
-   * However, if you are going to drop multiple nested fields, it is more optimal to extract
-   * out the nested struct before dropping multiple fields from it e.g.
+   * However, if you are going to drop multiple nested fields, it is more optimal to extract out
+   * the nested struct before dropping multiple fields from it e.g.
    *
    * {{{
    *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
@@ -980,8 +969,10 @@ class Column(val node: ColumnNode) extends Logging {
 
   /**
    * An expression that returns a substring.
-   * @param startPos expression for the starting position.
-   * @param len expression for the length of the substring.
+   * @param startPos
+   *   expression for the starting position.
+   * @param len
+   *   expression for the length of the substring.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -990,8 +981,10 @@ class Column(val node: ColumnNode) extends Logging {
 
   /**
    * An expression that returns a substring.
-   * @param startPos starting position.
-   * @param len length of the substring.
+   * @param startPos
+   *   starting position.
+   * @param len
+   *   length of the substring.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -1057,9 +1050,9 @@ class Column(val node: ColumnNode) extends Logging {
    *   df.select($"colA".as("colB"))
    * }}}
    *
-   * If the current column has metadata associated with it, this metadata will be propagated
-   * to the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)`
-   * with explicit metadata.
+   * If the current column has metadata associated with it, this metadata will be propagated to
+   * the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)` with
+   * explicit metadata.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -1097,9 +1090,9 @@ class Column(val node: ColumnNode) extends Logging {
    *   df.select($"colA".as("colB"))
    * }}}
    *
-   * If the current column has metadata associated with it, this metadata will be propagated
-   * to the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)`
-   * with explicit metadata.
+   * If the current column has metadata associated with it, this metadata will be propagated to
+   * the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)` with
+   * explicit metadata.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -1126,9 +1119,9 @@ class Column(val node: ColumnNode) extends Logging {
    *   df.select($"colA".name("colB"))
    * }}}
    *
-   * If the current column has metadata associated with it, this metadata will be propagated
-   * to the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)`
-   * with explicit metadata.
+   * If the current column has metadata associated with it, this metadata will be propagated to
+   * the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)` with
+   * explicit metadata.
    *
    * @group expr_ops
    * @since 2.0.0
@@ -1152,9 +1145,9 @@ class Column(val node: ColumnNode) extends Logging {
   def cast(to: DataType): Column = Column(internal.Cast(node, to))
 
   /**
-   * Casts the column to a different data type, using the canonical string representation
-   * of the type. The supported types are: `string`, `boolean`, `byte`, `short`, `int`, `long`,
-   * `float`, `double`, `decimal`, `date`, `timestamp`.
+   * Casts the column to a different data type, using the canonical string representation of the
+   * type. The supported types are: `string`, `boolean`, `byte`, `short`, `int`, `long`, `float`,
+   * `double`, `decimal`, `date`, `timestamp`.
    * {{{
    *   // Casts colA to integer.
    *   df.select(df("colA").cast("int"))
@@ -1224,8 +1217,8 @@ class Column(val node: ColumnNode) extends Logging {
   def desc: Column = desc_nulls_last
 
   /**
-   * Returns a sort expression based on the descending order of the column,
-   * and null values appear before non-null values.
+   * Returns a sort expression based on the descending order of the column, and null values appear
+   * before non-null values.
    * {{{
    *   // Scala: sort a DataFrame by age column in descending order and null values appearing first.
    *   df.sort(df("age").desc_nulls_first)
@@ -1237,13 +1230,12 @@ class Column(val node: ColumnNode) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def desc_nulls_first: Column = sortOrder(
-    internal.SortOrder.Descending,
-    internal.SortOrder.NullsFirst)
+  def desc_nulls_first: Column =
+    sortOrder(internal.SortOrder.Descending, internal.SortOrder.NullsFirst)
 
   /**
-   * Returns a sort expression based on the descending order of the column,
-   * and null values appear after non-null values.
+   * Returns a sort expression based on the descending order of the column, and null values appear
+   * after non-null values.
    * {{{
    *   // Scala: sort a DataFrame by age column in descending order and null values appearing last.
    *   df.sort(df("age").desc_nulls_last)
@@ -1255,9 +1247,8 @@ class Column(val node: ColumnNode) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def desc_nulls_last: Column = sortOrder(
-    internal.SortOrder.Descending,
-    internal.SortOrder.NullsLast)
+  def desc_nulls_last: Column =
+    sortOrder(internal.SortOrder.Descending, internal.SortOrder.NullsLast)
 
   /**
    * Returns a sort expression based on ascending order of the column.
@@ -1275,8 +1266,8 @@ class Column(val node: ColumnNode) extends Logging {
   def asc: Column = asc_nulls_first
 
   /**
-   * Returns a sort expression based on ascending order of the column,
-   * and null values return before non-null values.
+   * Returns a sort expression based on ascending order of the column, and null values return
+   * before non-null values.
    * {{{
    *   // Scala: sort a DataFrame by age column in ascending order and null values appearing first.
    *   df.sort(df("age").asc_nulls_first)
@@ -1288,13 +1279,12 @@ class Column(val node: ColumnNode) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def asc_nulls_first: Column = sortOrder(
-    internal.SortOrder.Ascending,
-    internal.SortOrder.NullsFirst)
+  def asc_nulls_first: Column =
+    sortOrder(internal.SortOrder.Ascending, internal.SortOrder.NullsFirst)
 
   /**
-   * Returns a sort expression based on ascending order of the column,
-   * and null values appear after non-null values.
+   * Returns a sort expression based on ascending order of the column, and null values appear
+   * after non-null values.
    * {{{
    *   // Scala: sort a DataFrame by age column in ascending order and null values appearing last.
    *   df.sort(df("age").asc_nulls_last)
@@ -1306,9 +1296,8 @@ class Column(val node: ColumnNode) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def asc_nulls_last: Column = sortOrder(
-    internal.SortOrder.Ascending,
-    internal.SortOrder.NullsLast)
+  def asc_nulls_last: Column =
+    sortOrder(internal.SortOrder.Ascending, internal.SortOrder.NullsLast)
 
   /**
    * Prints the expression to the console for debugging purposes.
@@ -1378,8 +1367,8 @@ class Column(val node: ColumnNode) extends Logging {
   }
 
   /**
-   * Defines an empty analytic clause. In this case the analytic function is applied
-   * and presented for all rows in the result set.
+   * Defines an empty analytic clause. In this case the analytic function is applied and presented
+   * for all rows in the result set.
    *
    * {{{
    *   df.select(
@@ -1394,7 +1383,6 @@ class Column(val node: ColumnNode) extends Logging {
   def over(): Column = over(Window.spec)
 
 }
-
 
 /**
  * A convenient class used for constructing schema.

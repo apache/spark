@@ -23,6 +23,7 @@
         }
       }]
     },
+    "variableColumnName": "name",
     "valueColumnName": "value"
   }
 }

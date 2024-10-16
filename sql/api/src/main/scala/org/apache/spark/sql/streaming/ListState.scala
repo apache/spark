@@ -21,8 +21,7 @@ import org.apache.spark.annotation.{Evolving, Experimental}
 @Experimental
 @Evolving
 /**
- * Interface used for arbitrary stateful operations with the v2 API to capture
- * list value state.
+ * Interface used for arbitrary stateful operations with the v2 API to capture list value state.
  */
 private[sql] trait ListState[S] extends Serializable {
 

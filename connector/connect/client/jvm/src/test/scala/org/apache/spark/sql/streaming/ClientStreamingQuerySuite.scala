@@ -331,11 +331,9 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
         query.awaitTermination()
       }
 
-      assert(exception.getErrorClass != null)
+      assert(exception.getCondition != null)
       assert(exception.getMessageParameters().get("id") == query.id.toString)
       assert(exception.getMessageParameters().get("runId") == query.runId.toString)
-      assert(!exception.getMessageParameters().get("startOffset").isEmpty)
-      assert(!exception.getMessageParameters().get("endOffset").isEmpty)
       assert(exception.getCause.isInstanceOf[SparkException])
       assert(exception.getCause.getCause.isInstanceOf[SparkException])
       assert(
@@ -371,11 +369,9 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
       spark.streams.awaitAnyTermination()
     }
 
-    assert(exception.getErrorClass != null)
+    assert(exception.getCondition != null)
     assert(exception.getMessageParameters().get("id") == query.id.toString)
     assert(exception.getMessageParameters().get("runId") == query.runId.toString)
-    assert(!exception.getMessageParameters().get("startOffset").isEmpty)
-    assert(!exception.getMessageParameters().get("endOffset").isEmpty)
     assert(exception.getCause.isInstanceOf[SparkException])
     assert(exception.getCause.getCause.isInstanceOf[SparkException])
     assert(

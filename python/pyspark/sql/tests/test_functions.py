@@ -29,7 +29,7 @@ from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeExce
 from pyspark.sql import Row, Window, functions as F, types
 from pyspark.sql.avro.functions import from_avro, to_avro
 from pyspark.sql.column import Column
-from pyspark.sql.functions.builtin import nullifzero, zeroifnull
+from pyspark.sql.functions.builtin import nullifzero, randstr, uniform, zeroifnull
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.testing.utils import have_numpy
 
@@ -1326,8 +1326,8 @@ class FunctionsTestsMixin:
             self.assertEqual([r[0] for r in resultDf.collect()], expected)
 
         check(df.select(F.is_variant_null(v)), [False, False])
-        check(df.select(F.schema_of_variant(v)), ["STRUCT<a: BIGINT>", "STRUCT<b: BIGINT>"])
-        check(df.select(F.schema_of_variant_agg(v)), ["STRUCT<a: BIGINT, b: BIGINT>"])
+        check(df.select(F.schema_of_variant(v)), ["OBJECT<a: BIGINT>", "OBJECT<b: BIGINT>"])
+        check(df.select(F.schema_of_variant_agg(v)), ["OBJECT<a: BIGINT, b: BIGINT>"])
 
         check(df.select(F.variant_get(v, "$.a", "int")), [1, None])
         check(df.select(F.variant_get(v, "$.b", "int")), [None, 2])
@@ -1364,6 +1364,13 @@ class FunctionsTestsMixin:
         ).collect()
         self.assertEqual("""{"a":1}""", actual[0]["var"])
         self.assertEqual(None, actual[1]["var"])
+
+    def test_to_variant_object(self):
+        df = self.spark.createDataFrame([(1, {"a": 1})], "i int, v struct<a int>")
+        actual = df.select(
+            F.to_json(F.to_variant_object(df.v)).alias("var"),
+        ).collect()
+        self.assertEqual("""{"a":1}""", actual[0]["var"])
 
     def test_schema_of_csv(self):
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1602,6 +1609,25 @@ class FunctionsTestsMixin:
         df = self.spark.createDataFrame([(None,), (1,)], ["a"])
         result = df.select(zeroifnull(df.a).alias("r")).collect()
         self.assertEqual([Row(r=0), Row(r=1)], result)
+
+    def test_randstr_uniform(self):
+        df = self.spark.createDataFrame([(0,)], ["a"])
+        result = df.select(randstr(F.lit(5), F.lit(0)).alias("x")).selectExpr("length(x)").collect()
+        self.assertEqual([Row(5)], result)
+        # The random seed is optional.
+        result = df.select(randstr(F.lit(5)).alias("x")).selectExpr("length(x)").collect()
+        self.assertEqual([Row(5)], result)
+
+        df = self.spark.createDataFrame([(0,)], ["a"])
+        result = (
+            df.select(uniform(F.lit(10), F.lit(20), F.lit(0)).alias("x"))
+            .selectExpr("x > 5")
+            .collect()
+        )
+        self.assertEqual([Row(True)], result)
+        # The random seed is optional.
+        result = df.select(uniform(F.lit(10), F.lit(20)).alias("x")).selectExpr("x > 5").collect()
+        self.assertEqual([Row(True)], result)
 
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):

@@ -116,6 +116,10 @@ private[spark] object KubernetesExecutorBackend extends Logging {
         }
       }
 
+      // Initialize logging system again after `spark.log.structuredLogging.enabled` takes effect
+      Utils.resetStructuredLogging(driverConf)
+      Logging.uninitialize()
+
       cfg.hadoopDelegationCreds.foreach { tokens =>
         SparkHadoopUtil.get.addDelegationTokens(tokens, driverConf)
       }

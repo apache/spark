@@ -1233,6 +1233,19 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.2.1</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.accurateBlockSkewedFactor</code></td>
+  <td>-1.0</td>
+  <td>
+    A shuffle block is considered as skewed and will be accurately recorded in
+    <code>HighlyCompressedMapStatus</code> if its size is larger than this factor multiplying
+    the median shuffle block size or <code>spark.shuffle.accurateBlockThreshold</code>. It is
+    recommended to set this parameter to be the same as
+    <code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code>. Set to -1.0 to disable this
+    feature by default.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.registration.timeout</code></td>
   <td>5000</td>
   <td>
@@ -1332,7 +1345,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.checksum.algorithm</code></td>
   <td>ADLER32</td>
   <td>
-    The algorithm is used to calculate the shuffle checksum. Currently, it only supports built-in algorithms of JDK, e.g., ADLER32, CRC32.
+    The algorithm is used to calculate the shuffle checksum. Currently, it only supports built-in algorithms of JDK, e.g., ADLER32, CRC32 and CRC32C.
   </td>
   <td>3.2.0</td>
 </tr>
@@ -2839,8 +2852,35 @@ Apart from these, the following properties are also available, and may be useful
     If set to "true", prevent Spark from scheduling tasks on executors that have been excluded
     due to too many task failures. The algorithm used to exclude executors and nodes can be further
     controlled by the other "spark.excludeOnFailure" configuration options.
+    This config will be overriden by "spark.excludeOnFailure.application.enabled" and 
+    "spark.excludeOnFailure.taskAndStage.enabled" to specify exclusion enablement on individual
+    levels.
   </td>
   <td>2.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.excludeOnFailure.application.enabled</code></td>
+  <td>
+    false
+  </td>
+  <td>
+    If set to "true", enables excluding executors for the entire application due to too many task
+    failures and prevent Spark from scheduling tasks on them.
+    This config overrides "spark.excludeOnFailure.enabled". 
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.excludeOnFailure.taskAndStage.enabled</code></td>
+  <td>
+    false
+  </td>
+  <td>
+    If set to "true", enables excluding executors on a task set level due to too many task
+    failures and prevent Spark from scheduling tasks on them.
+    This config overrides "spark.excludeOnFailure.enabled". 
+  </td>
+  <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.excludeOnFailure.timeout</code></td>

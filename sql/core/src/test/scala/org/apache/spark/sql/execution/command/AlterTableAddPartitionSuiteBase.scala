@@ -234,9 +234,8 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
               exception = intercept[SparkNumberFormatException] {
                 sql(s"ALTER TABLE $t ADD PARTITION (p='aaa')")
               },
-              errorClass = "CAST_INVALID_INPUT",
+              condition = "CAST_INVALID_INPUT",
               parameters = Map(
-                "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
                 "expression" -> "'aaa'",
                 "sourceType" -> "\"STRING\"",
                 "targetType" -> "\"INT\""),

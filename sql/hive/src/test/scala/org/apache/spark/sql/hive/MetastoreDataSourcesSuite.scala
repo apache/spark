@@ -575,7 +575,7 @@ class MetastoreDataSourcesSuite extends QueryTest
 
         table("createdJsonTable")
       },
-      errorClass = "UNABLE_TO_INFER_SCHEMA",
+      condition = "UNABLE_TO_INFER_SCHEMA",
       parameters = Map("format" -> "JSON")
     )
 
@@ -925,7 +925,7 @@ class MetastoreDataSourcesSuite extends QueryTest
           createDF(10, 19).write.mode(SaveMode.Append).format("orc").
             saveAsTable("appendOrcToParquet")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1159",
+        condition = "_LEGACY_ERROR_TEMP_1159",
         parameters = Map(
           "tableName" -> s"$SESSION_CATALOG_NAME.default.appendorctoparquet",
           "existingProvider" -> "ParquetDataSourceV2",
@@ -941,7 +941,7 @@ class MetastoreDataSourcesSuite extends QueryTest
           createDF(10, 19).write.mode(SaveMode.Append).format("parquet")
             .saveAsTable("appendParquetToJson")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1159",
+        condition = "_LEGACY_ERROR_TEMP_1159",
         parameters = Map(
           "tableName" -> s"$SESSION_CATALOG_NAME.default.appendparquettojson",
           "existingProvider" -> "JsonDataSourceV2",
@@ -957,7 +957,7 @@ class MetastoreDataSourcesSuite extends QueryTest
           createDF(10, 19).write.mode(SaveMode.Append).format("text")
             .saveAsTable("appendTextToJson")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1159",
+        condition = "_LEGACY_ERROR_TEMP_1159",
         // The format of the existing table can be JsonDataSourceV2 or JsonFileFormat.
         parameters = Map(
           "tableName" -> s"$SESSION_CATALOG_NAME.default.appendtexttojson",
@@ -1232,7 +1232,7 @@ class MetastoreDataSourcesSuite extends QueryTest
           Seq((3, 4)).toDF("i", "k")
             .write.mode("append").saveAsTable("saveAsTable_mismatch_column_names")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1162",
+        condition = "_LEGACY_ERROR_TEMP_1162",
         parameters = Map("col" -> "j", "inputColumns" -> "i, k"))
     }
   }
@@ -1245,7 +1245,7 @@ class MetastoreDataSourcesSuite extends QueryTest
           Seq((3, 4, 5)).toDF("i", "j", "k")
             .write.mode("append").saveAsTable("saveAsTable_too_many_columns")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1161",
+        condition = "_LEGACY_ERROR_TEMP_1161",
         parameters = Map(
           "tableName" -> "spark_catalog.default.saveastable_too_many_columns",
           "existingTableSchema" -> "struct<i:int,j:int>",
@@ -1265,7 +1265,7 @@ class MetastoreDataSourcesSuite extends QueryTest
                |USING hive
              """.stripMargin)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1293",
+        condition = "_LEGACY_ERROR_TEMP_1293",
         parameters = Map.empty
       )
     }
@@ -1288,7 +1288,7 @@ class MetastoreDataSourcesSuite extends QueryTest
         exception = intercept[AnalysisException] {
           table(tableName).write.mode(SaveMode.Overwrite).saveAsTable(tableName)
         },
-        errorClass = "UNSUPPORTED_OVERWRITE.TABLE",
+        condition = "UNSUPPORTED_OVERWRITE.TABLE",
         parameters = Map("table" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`")
       )
 
@@ -1296,7 +1296,7 @@ class MetastoreDataSourcesSuite extends QueryTest
         exception = intercept[AnalysisException] {
           table(tableName).write.mode(SaveMode.ErrorIfExists).saveAsTable(tableName)
         },
-        errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+        condition = "TABLE_OR_VIEW_ALREADY_EXISTS",
         parameters = Map("relationName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`")
       )
     }
@@ -1326,7 +1326,7 @@ class MetastoreDataSourcesSuite extends QueryTest
         exception = intercept[AnalysisException] {
           table(tableName).write.mode(SaveMode.Overwrite).insertInto(tableName)
         },
-        errorClass = "UNSUPPORTED_OVERWRITE.TABLE",
+        condition = "UNSUPPORTED_OVERWRITE.TABLE",
         parameters = Map("table" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`")
       )
     }
@@ -1339,7 +1339,7 @@ class MetastoreDataSourcesSuite extends QueryTest
         exception = intercept[AnalysisException] {
           Seq(4).toDF("j").write.mode("append").saveAsTable("saveAsTable_less_columns")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1161",
+        condition = "_LEGACY_ERROR_TEMP_1161",
         parameters = Map(
           "tableName" -> "spark_catalog.default.saveastable_less_columns",
           "existingTableSchema" -> "struct<i:int,j:int>",
@@ -1396,7 +1396,7 @@ class MetastoreDataSourcesSuite extends QueryTest
         exception = intercept[AnalysisException] {
           sharedState.externalCatalog.getTable("default", "t")
         },
-        errorClass = "INSUFFICIENT_TABLE_PROPERTY.MISSING_KEY",
+        condition = "INSUFFICIENT_TABLE_PROPERTY.MISSING_KEY",
         parameters = Map("key" -> toSQLConf("spark.sql.sources.schema"))
       )
 
@@ -1417,7 +1417,7 @@ class MetastoreDataSourcesSuite extends QueryTest
         exception = intercept[AnalysisException] {
           sharedState.externalCatalog.getTable("default", "t2")
         },
-        errorClass = "INSUFFICIENT_TABLE_PROPERTY.MISSING_KEY_PART",
+        condition = "INSUFFICIENT_TABLE_PROPERTY.MISSING_KEY_PART",
         parameters = Map(
           "key" -> toSQLConf("spark.sql.sources.schema.part.1"),
           "totalAmountOfParts" -> "3")
