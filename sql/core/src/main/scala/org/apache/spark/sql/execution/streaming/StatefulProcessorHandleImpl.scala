@@ -327,6 +327,9 @@ class DriverStatefulProcessorHandleImpl(
   private val stateVariableInfos: mutable.Map[String, TransformWithStateVariableInfo] =
     new mutable.HashMap[String, TransformWithStateVariableInfo]()
 
+  // If we want use Avro serializers and deserializers, the schemaUtils will create and populate
+  // these objects as a part of the schema, and will add this to the map
+  // These serde objects will eventually be passed to the executors
   private val schemaUtils: StateStoreColumnFamilySchemaUtils =
     new StateStoreColumnFamilySchemaUtils(initializeAvroSerde)
 

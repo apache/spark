@@ -367,16 +367,19 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def valuesIterator(key: Array[Byte], colFamilyName: String): Iterator[Array[Byte]] = {
-      throw new UnsupportedOperationException
+      throw StateStoreErrors.unsupportedOperationException(
+        "bytearray valuesIterator", "RocksDBStateStore")
     }
 
     override def prefixScan(
         prefixKey: Array[Byte], colFamilyName: String): Iterator[ByteArrayPair] = {
-      throw new UnsupportedOperationException
+      throw StateStoreErrors.unsupportedOperationException(
+        "bytearray prefixScan", "RocksDBStateStore")
     }
 
     override def byteArrayIter(colFamilyName: String): Iterator[ByteArrayPair] = {
-      throw new UnsupportedOperationException
+      throw StateStoreErrors.unsupportedOperationException(
+        "byteArray iterator", "RocksDBStateStore")
     }
   }
 

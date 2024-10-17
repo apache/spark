@@ -39,6 +39,8 @@ class ValueStateImpl[S](
     avroSerde: Option[AvroSerde])
   extends ValueState[S] with Logging {
 
+  // If we are using Avro, the avroSerde parameter must be populated
+  // else, we will default to using UnsafeRow.
   private val usingAvro: Boolean = avroSerde.isDefined
   private val avroTypesEncoder = new AvroTypesEncoder[S](
     keyExprEnc, valEncoder, stateName, hasTtl = false, avroSerde)
