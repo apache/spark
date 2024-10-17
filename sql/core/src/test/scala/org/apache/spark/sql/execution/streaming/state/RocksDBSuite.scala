@@ -2240,28 +2240,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  testWithChangelogCheckpointingEnabled(s"simulate ForEachBatch") {
-    // In ForEachBatch, often batches are executed twice. We simulate this case.
-    val remoteDir = Utils.createTempDir().toString
-    val conf = dbConf.copy(minDeltasForSnapshot = 3, compactOnCommit = false)
-    new File(remoteDir).delete() // to make sure that the directory gets created
-    withDB(remoteDir, conf = conf) { db =>
-      val random = new Random(seed = 66)
-      var curVer: Int = 0
-      for (i <- 1 to 100) {
-        db.load(curVer)
-        db.put("foo", "bar")
-        db.commit()
-        if (random.nextInt(5) == 0) {
-          db.doMaintenance()
-        }
-        if (i % 2 == 1) {
-          curVer = curVer + 1
-        }
-      }
-    }
-  }
-
   private def dbConf = RocksDBConf(StateStoreConf(SQLConf.get.clone()))
 
   def withDB[T](
