@@ -2241,6 +2241,7 @@ table t
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS",
+  "sqlState" : "42000",
   "messageParameters" : {
     "clause1" : "ORDER BY",
     "clause2" : "LIMIT"

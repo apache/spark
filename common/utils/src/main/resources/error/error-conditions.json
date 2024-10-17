@@ -3424,6 +3424,12 @@
     ],
     "sqlState" : "42P20"
   },
+  "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS" : {
+    "message" : [
+      "<clause1> and <clause2> cannot coexist in the same SQL pipe operator using '|>'. Please separate the multiple result clauses into separate pipe operators and then retry the query again."
+    ],
+    "sqlState" : "42000"
+  },
   "MULTIPLE_TIME_TRAVEL_SPEC" : {
     "message" : [
       "Cannot specify time travel in both the time travel clause and options."
@@ -3447,11 +3453,6 @@
       "Not allowed to implement multiple UDF interfaces, UDF class <className>."
     ],
     "sqlState" : "0A000"
-  },
-  "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS" : {
-    "message" : [
-      "<clause1> and <clause2> can not coexist in the same SQL pipe operator using '|>'. Please separate the multiple result clauses into separate pipe operators and then retry the query again."
-    ]
   },
   "NAMED_PARAMETERS_NOT_SUPPORTED" : {
     "message" : [
