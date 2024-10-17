@@ -86,11 +86,11 @@ class RuntimeConfigImpl private[sql](val sqlConf: SQLConf = new SQLConf) extends
 
   private[sql] def requireNonStaticConf(key: String): Unit = {
     // We documented `spark.default.parallelism` by SPARK-48773, however this config
-    // is actually a static config so now a spark.session.set("spark.default.parallelism")
+    // is actually a static config so now a spark.conf.set("spark.default.parallelism")
     // will fail. Before SPARK-48773 it does not, then this becomes a behavior change.
     // Technically the current behavior is correct, however it still forms a behavior change.
     // To address the change, we need a check here and do not fail on default parallelism
-    // setting through spark session to maintain the same behavior.
+    // setting through spark session conf to maintain the same behavior.
     if (key == DEFAULT_PARALLELISM.key) {
       return
     }
