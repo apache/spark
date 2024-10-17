@@ -1354,8 +1354,7 @@ trait CommutativeExpression extends Expression {
     // [SPARK-49977]: Use iterative approach to avoid creating many temporary List objects
     // for deep expression trees through recursion.
     while (stack.nonEmpty) {
-      val current = stack.pop()
-      current match {
+      stack.pop() match {
         case c: CommutativeExpression if f.isDefinedAt(c) =>
           stack.pushAll(f(c))
         case other =>
