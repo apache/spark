@@ -55,6 +55,10 @@ object JsonExpressionEvalUtils {
 
     UTF8String.fromString(dt.sql)
   }
+
+  def fromJson(jsonToStructsEvaluator: JsonToStructsEvaluator, json: UTF8String): Any = {
+    jsonToStructsEvaluator.evaluate(json)
+  }
 }
 
 class JsonToStructsEvaluator(
