@@ -954,6 +954,37 @@ abstract class AvroSuite
     }
   }
 
+  test("SPARK-49140: Widening type promotions from int / long to decimal in AvroDeserializer") {
+    withTempPath { tempPath =>
+      // int -> decimal
+      val intPath = s"$tempPath/int_data"
+      val intDf = Seq(1, Int.MinValue, Int.MaxValue).toDF("col")
+      intDf.write.format("avro").save(intPath)
+
+      Seq((10, 0), (12, 0)).foreach { case (precision, scale) =>
+        checkAnswer(
+          spark.read.schema(s"col Decimal($precision, $scale)").format("avro").load(intPath),
+          Seq(Row(java.math.BigDecimal.valueOf(1, scale)),
+            Row(java.math.BigDecimal.valueOf(-2147483648, scale)),
+            Row(java.math.BigDecimal.valueOf(2147483647, scale)))
+        )
+      }
+
+      // long -> decimal
+      val longPath = s"$tempPath/long_data"
+      val longDf = Seq(1L, Long.MinValue, Long.MaxValue).toDF("col")
+      longDf.write.format("avro").save(longPath)
+      Seq((20, 0), (22, 0)).foreach { case (precision, scale) =>
+        checkAnswer(
+          spark.read.schema(s"col Decimal($precision, $scale)").format("avro").load(longPath),
+          Seq(Row(java.math.BigDecimal.valueOf(1L, scale)),
+            Row(java.math.BigDecimal.valueOf(-9223372036854775808L, scale)),
+            Row(java.math.BigDecimal.valueOf(9223372036854775807L, scale)))
+        )
+      }
+    }
+  }
+
   test("SPARK-43380: Fix Avro data type conversion" +
     " of DayTimeIntervalType to avoid producing incorrect results") {
     withTempPath { path =>
