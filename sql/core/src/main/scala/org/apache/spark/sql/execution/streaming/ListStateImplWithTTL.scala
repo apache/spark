@@ -20,7 +20,7 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
+import org.apache.spark.sql.execution.streaming.state.{AvroSerde, NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.{ListState, TTLConfig}
 import org.apache.spark.util.NextIterator
 
@@ -42,11 +42,12 @@ class ListStateImplWithTTL[S](
     keyExprEnc: ExpressionEncoder[Any],
     valEncoder: Encoder[S],
     ttlConfig: TTLConfig,
-    batchTimestampMs: Long)
+    batchTimestampMs: Long,
+    avroSerde: Option[AvroSerde])
   extends SingleKeyTTLStateImpl(
     stateName, store, keyExprEnc, batchTimestampMs) with ListState[S] {
 
-  private lazy val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder,
+  private lazy val stateTypesEncoder = UnsafeRowTypesEncoder(keyExprEnc, valEncoder,
     stateName, hasTtl = true)
 
   private lazy val ttlExpirationMs =

@@ -101,6 +101,26 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
       throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", "HDFSStateStore")
     }
+
+    override def get(key: Array[Byte], colFamilyName: String): Array[Byte] = {
+      throw StateStoreErrors.unsupportedOperationException("Byte Array get", "HDFSStateStore")
+    }
+
+    override def valuesIterator(key: Array[Byte], colFamilyName: String): Iterator[Array[Byte]] = {
+      throw StateStoreErrors.unsupportedOperationException(
+        "Byte Array valuesIterator", "HDFSStateStore")
+    }
+
+    override def prefixScan(
+        prefixKey: Array[Byte], colFamilyName: String): Iterator[ByteArrayPair] = {
+      throw StateStoreErrors.unsupportedOperationException(
+        "Byte Array prefixScan", "HDFSStateStore")
+    }
+
+    override def byteArrayIter(colFamilyName: String): Iterator[ByteArrayPair] = {
+      throw StateStoreErrors.unsupportedOperationException(
+        "Byte Array iter", "HDFSStateStore")
+    }
   }
 
   /** Implementation of [[StateStore]] API which is backed by an HDFS-compatible file system */
@@ -127,7 +147,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         valueSchema: StructType,
         keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
-        isInternal: Boolean = false): Unit = {
+        isInternal: Boolean = false,
+        useAvro: Boolean = false): Unit = {
       throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
     }
 
@@ -245,6 +266,36 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         value: UnsafeRow,
         colFamilyName: String): Unit = {
       throw StateStoreErrors.unsupportedOperationException("merge", providerName)
+    }
+
+    override def put(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
+      throw StateStoreErrors.unsupportedOperationException(
+        "Byte Array put", "HDFSStateStore")
+    }
+
+    override def remove(key: Array[Byte], colFamilyName: String): Unit = {
+      throw StateStoreErrors.unsupportedOperationException(
+        "Byte Array remove", "HDFSStateStore")
+    }
+
+    override def get(key: Array[Byte], colFamilyName: String): Array[Byte] = {
+      throw StateStoreErrors.unsupportedOperationException("Byte Array get", "HDFSStateStore")
+    }
+
+    override def valuesIterator(key: Array[Byte], colFamilyName: String): Iterator[Array[Byte]] = {
+      throw StateStoreErrors.unsupportedOperationException(
+        "Byte Array valuesIterator", "HDFSStateStore")
+    }
+
+    override def prefixScan(
+        prefixKey: Array[Byte], colFamilyName: String): Iterator[ByteArrayPair] = {
+      throw StateStoreErrors.unsupportedOperationException(
+        "Byte Array prefixScan", "HDFSStateStore")
+    }
+
+    override def byteArrayIter(colFamilyName: String): Iterator[ByteArrayPair] = {
+      throw StateStoreErrors.unsupportedOperationException(
+        "Byte Array iter", "HDFSStateStore")
     }
   }
 

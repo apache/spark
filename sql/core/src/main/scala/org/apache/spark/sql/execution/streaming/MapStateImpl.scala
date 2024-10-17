@@ -20,7 +20,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
-import org.apache.spark.sql.execution.streaming.state.{PrefixKeyScanStateEncoderSpec, StateStore, StateStoreErrors, UnsafeRowPair}
+import org.apache.spark.sql.execution.streaming.state.{AvroSerde, PrefixKeyScanStateEncoderSpec, StateStore, StateStoreErrors, UnsafeRowPair}
 import org.apache.spark.sql.streaming.MapState
 import org.apache.spark.sql.types.StructType
 
@@ -29,15 +29,16 @@ class MapStateImpl[K, V](
     stateName: String,
     keyExprEnc: ExpressionEncoder[Any],
     userKeyEnc: Encoder[K],
-    valEncoder: Encoder[V]) extends MapState[K, V] with Logging {
+    valEncoder: Encoder[V],
+    avroSerde: Option[AvroSerde]) extends MapState[K, V] with Logging {
 
   // Pack grouping key and user key together as a prefixed composite key
   private val schemaForCompositeKeyRow: StructType = {
     getCompositeKeySchema(keyExprEnc.schema, userKeyEnc.schema)
   }
   private val schemaForValueRow: StructType = valEncoder.schema
-  private val stateTypesEncoder = new CompositeKeyStateEncoder(
-    keyExprEnc, userKeyEnc, valEncoder, stateName)
+  private val stateTypesEncoder = new CompositeKeyUnsafeRowEncoder(
+    keyExprEnc, userKeyEnc, valEncoder, stateName, hasTtl = false)
 
   store.createColFamilyIfAbsent(stateName, schemaForCompositeKeyRow, schemaForValueRow,
     PrefixKeyScanStateEncoderSpec(schemaForCompositeKeyRow, 1))

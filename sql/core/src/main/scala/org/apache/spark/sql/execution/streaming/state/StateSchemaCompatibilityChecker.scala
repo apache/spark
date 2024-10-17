@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
+import org.apache.spark.sql.core.avro.{AvroDeserializer, AvroSerializer}
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StatefulOperatorStateInfo}
 import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaReader, SchemaWriter}
 import org.apache.spark.sql.execution.streaming.state.StateSchemaCompatibilityChecker.SCHEMA_FORMAT_V3
@@ -37,14 +38,22 @@ case class StateSchemaValidationResult(
     schemaPath: String
 )
 
+
+case class AvroSerde(
+  keySerializer: AvroSerializer,
+  valueSerializer: AvroSerializer,
+  valueDeserializer: AvroDeserializer
+) extends Serializable
+
 // Used to represent the schema of a column family in the state store
 case class StateStoreColFamilySchema(
     colFamilyName: String,
     keySchema: StructType,
     valueSchema: StructType,
     keyStateEncoderSpec: Option[KeyStateEncoderSpec] = None,
-    userKeyEncoderSchema: Option[StructType] = None
-)
+    userKeyEncoderSchema: Option[StructType] = None,
+    avroSerde: Option[AvroSerde] = None
+) extends Serializable
 
 class StateSchemaCompatibilityChecker(
     providerId: StateStoreProviderId,

@@ -2204,6 +2204,14 @@ object SQLConf {
       .intConf
       .createWithDefault(3)
 
+  val STREAMING_STATE_STORE_USE_AVRO_ENCODING =
+    buildConf("spark.sql.streaming.stateStore.useAvroEncoding")
+      .doc("Whether or not the stateful operators should use Avro encoding to " +
+        "persist state in the StateStore. If false, default to UnsafeRow.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val STATE_STORE_COMPRESSION_CODEC =
     buildConf("spark.sql.streaming.stateStore.compression.codec")
       .internal()
