@@ -263,4 +263,13 @@ class ClientDataFrameStatSuite extends ConnectFunSuite with RemoteSparkSession {
     }
     assert(error3.getCondition === "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE")
   }
+
+  test("SPARK-49961: transform type should be consistent") {
+    val session = spark
+    import session.implicits._
+    val ds = Seq(1, 2).toDS()
+    val f: Dataset[Int] => Dataset[Int] = d => d.selectExpr("(value + 1) value").as[Int]
+    val transformed = ds.transform(f)
+    assert(transformed.collect().sorted === Array(2, 3))
+  }
 }

@@ -183,13 +183,4 @@ class ClientDatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
     val bytes = SparkSerDeUtils.serialize(ds)
     assert(SparkSerDeUtils.deserialize[Dataset[Long]](bytes) == null)
   }
-
-  test("SPARK-49961: transform type should be consistent") {
-    val session = newSparkSession()
-    import session.implicits._
-    val ds = Seq(1, 2).toDS()
-    val f: Dataset[Int] => Dataset[Int] = d => d.selectExpr("(value + 1) value").as[Int]
-    val transformed = ds.transform(f)
-    assert(transformed.collect().sorted === Array(2, 3))
-  }
 }
