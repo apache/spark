@@ -248,7 +248,7 @@ class StateStoreChangeDataPartitionReader(
       changeDataReader.iterator.map { entry =>
         val groupingKey = entry._2.get(0, groupingKeySchema).asInstanceOf[UnsafeRow]
         val userMapKey = entry._2.get(1, userKeySchema).asInstanceOf[UnsafeRow]
-        createFlattenedRow(entry._4, entry._1,
+        createFlattenedRowForMapState(entry._4, entry._1,
           groupingKey, userMapKey, entry._3, partition.partition)
       }
     } else {
@@ -272,7 +272,7 @@ class StateStoreChangeDataPartitionReader(
     result
   }
 
-  private def createFlattenedRow(
+  private def createFlattenedRowForMapState(
       batchId: Long,
       recordType: RecordType,
       groupingKey: UnsafeRow,

@@ -673,7 +673,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  testWithChangelogCheckpointingEnabled("state data source cdf integration -" +
+  testWithChangelogCheckpointingEnabled("state data source cdf integration - " +
    "map state with single variable") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
