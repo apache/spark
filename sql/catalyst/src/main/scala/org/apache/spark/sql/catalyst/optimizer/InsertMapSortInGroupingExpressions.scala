@@ -53,7 +53,7 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
     }
 
     plan transformUpWithNewOutput {
-      case agg @ Aggregate(groupingExprs, aggregateExpressions, child)
+      case agg @ Aggregate(groupingExprs, aggregateExpressions, child, _)
           if agg.groupingExpressions.exists(shouldAddMapSort) =>
         val exprToMapSort = new mutable.HashMap[Expression, NamedExpression]
         val newGroupingKeys = groupingExprs.map { expr =>
