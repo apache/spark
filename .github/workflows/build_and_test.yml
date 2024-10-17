@@ -50,11 +50,6 @@ on:
         type: string
         default: ''
 jobs:
-  maven-test:
-    name: "Run Maven Test"
-    permissions:
-      packages: write
-    uses: ./.github/workflows/maven_test.yml
   precondition:
     name: Check changes
     runs-on: ubuntu-latest
