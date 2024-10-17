@@ -26,6 +26,7 @@ import org.apache.hadoop.mapreduce.lib.input.CombineFileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark.input.WholeTextFileRecordReader
+import org.apache.spark.util.Utils
 
 /**
  * An adaptor from a [[PartitionedFile]] to an [[Iterator]] of [[Text]], which is all of the lines
@@ -42,15 +43,12 @@ class HadoopFileWholeTextReader(file: PartitionedFile, conf: Configuration)
       Array.empty[String])
     val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
     val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
-    val reader = new WholeTextFileRecordReader(fileSplit, hadoopAttemptContext, 0)
-    try {
+    Utils.tryInitializeResource(
+      new WholeTextFileRecordReader(fileSplit, hadoopAttemptContext, 0)
+    ) { reader =>
       reader.setConf(hadoopAttemptContext.getConfiguration)
       reader.initialize(fileSplit, hadoopAttemptContext)
       new RecordReaderIterator(reader)
-    } catch {
-      case e: Throwable =>
-        reader.close()
-        throw e
     }
   }
 
