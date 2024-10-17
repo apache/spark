@@ -18,7 +18,6 @@ import sys
 from typing import cast, overload, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING, Union
 
 from pyspark.util import is_remote_only
-from pyspark.sql.column import Column
 from pyspark.sql.types import StructType
 from pyspark.sql import utils
 from pyspark.sql.utils import to_str

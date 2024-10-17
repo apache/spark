@@ -71,7 +71,7 @@ class ConnectCompatibilityTestsMixin:
 
             # Cannot support RDD arguments from Spark Connect
             has_rdd_arguments = ("createDataFrame", "xml", "json")
-            if not method in has_rdd_arguments:
+            if method not in has_rdd_arguments:
                 self.assertEqual(
                     classic_signature,
                     connect_signature,
