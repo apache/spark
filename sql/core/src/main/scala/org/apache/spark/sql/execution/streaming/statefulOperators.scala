@@ -322,7 +322,8 @@ trait WatermarkSupport extends SparkPlan {
   lazy val allowMultipleStatefulOperators: Boolean =
     conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
 
-  lazy val useAvroEncoding: Boolean = true
+  lazy val useAvroEncoding: Boolean =
+    conf.getConf(SQLConf.STREAMING_STATE_STORE_USE_AVRO_ENCODING)
 
   /** Generate an expression that matches data older than the watermark */
   private def watermarkExpression(watermark: Option[Long]): Option[Expression] = {
