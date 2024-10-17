@@ -255,8 +255,10 @@ class XmlSuite
           .option("mode", FailFastMode.name)
           .xml(inputFile)
       },
-      condition = "_LEGACY_ERROR_TEMP_2165",
-      parameters = Map("failFastMode" -> "FAILFAST")
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "badRecord" -> "_corrupt_record",
+        "failFastMode" -> "FAILFAST")
     )
     val exceptionInParsing = intercept[SparkException] {
       spark.read
@@ -288,8 +290,10 @@ class XmlSuite
           .option("mode", FailFastMode.name)
           .xml(inputFile)
       },
-      condition = "_LEGACY_ERROR_TEMP_2165",
-      parameters = Map("failFastMode" -> "FAILFAST"))
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "badRecord" -> "_corrupt_record",
+        "failFastMode" -> "FAILFAST"))
     val exceptionInParsing = intercept[SparkException] {
       spark.read
         .schema("_id string")
@@ -1328,9 +1332,10 @@ class XmlSuite
         spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'FAILFAST'))""")
           .collect()
       },
-      condition = "_LEGACY_ERROR_TEMP_2165",
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
-        "failFastMode" -> FailFastMode.name)
+        "badRecord" -> "_corrupt_record",
+        "failFastMode" -> "FAILFAST")
     )
   }
 
