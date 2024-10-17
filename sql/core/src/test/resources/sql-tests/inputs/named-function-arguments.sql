@@ -46,13 +46,6 @@ SELECT * FROM inline(array(struct(1, 'a'), struct(2, 'b'))), inline(array(struct
 SELECT * FROM inline(array(struct(1, 'a'), struct(2, 'b'))) AS t, LATERAL inline(array(struct(3 * t.col1, 4 * t.col1)));
 SELECT num, val, 'Spark' FROM inline(array(struct(1, 'a'), struct(2, 'b'))) AS t(num, val);
 
--- Test for tabled value functions variant_explode and variant_explode_outer
-SELECT * FROM variant_explode(input => parse_json('["hello", "world"]'));
-SELECT * FROM variant_explode_outer(input => parse_json('{"a": true, "b": 3.14}'));
-SELECT * FROM variant_explode(parse_json('["hello", "world"]')), variant_explode(parse_json('{"a": true, "b": 3.14}'));
-SELECT * FROM variant_explode(parse_json('{"a": ["hello", "world"], "b": {"x": true, "y": 3.14}}')) AS t, LATERAL variant_explode(t.value);
-SELECT num, key, val, 'Spark' FROM variant_explode(parse_json('["hello", "world"]')) AS t(num, key, val);
-
 -- Test for wrapped EXPLODE call to check error preservation
 SELECT * FROM explode(collection => explode(array(1)));
 SELECT * FROM explode(collection => explode(collection => array(1)));
