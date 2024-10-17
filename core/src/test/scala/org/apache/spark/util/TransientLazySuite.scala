@@ -16,15 +16,16 @@
  */
 package org.apache.spark.util
 
-import java.io.{ByteArrayOutputStream, NotSerializableException, ObjectOutputStream}
+import java.io.{ByteArrayOutputStream, ObjectOutputStream}
 
 import org.apache.spark.SparkFunSuite
 
-class LazySuite extends SparkFunSuite {
-  test("Lazy val works") {
+class TransientLazySuite extends SparkFunSuite {
+
+  test("TransientLazy val works") {
     var test: Option[Object] = None
 
-    val lazyval = new Lazy({
+    val lazyval = new TransientLazy({
       test = Some(new Object())
       test
     })
@@ -39,22 +40,19 @@ class LazySuite extends SparkFunSuite {
     assert(lazyval() == test && test.isDefined)
   }
 
-  test("Lazy val is serializable") {
-    val lazyval = new Lazy({
+  test("TransientLazy val is serializable") {
+    val lazyval = new TransientLazy({
       new Object()
     })
 
-    // Ensure we are serializable before the dereference
+    // Ensure serializable before the dereference
     val oos = new ObjectOutputStream(new ByteArrayOutputStream())
     oos.writeObject(lazyval)
 
-    @SuppressWarnings(Array("never used"))
     val dereferenced = lazyval()
 
-    // Ensure we are not serializable after the dereference (type "Object" is not serializable)
-    intercept[NotSerializableException] {
-      val oos2 = new ObjectOutputStream(new ByteArrayOutputStream())
-      oos2.writeObject(lazyval)
-    }
+    // Ensure serializable after the dereference
+    val oos2 = new ObjectOutputStream(new ByteArrayOutputStream())
+    oos2.writeObject(lazyval)
   }
 }

@@ -32,8 +32,9 @@ package org.apache.spark.util
  *   href="https://docs.scala-lang.org/scala3/reference/changed-features/lazy-vals-init.html">Lazy
  *   Vals Initialization</a> for more details.
  */
-private[spark] class Lazy[T](initializer: => T) extends Serializable {
+private[spark] class TransientLazy[T](initializer: => T) extends Serializable {
 
+  @transient
   private[this] lazy val value: T = initializer
 
   def apply(): T = {

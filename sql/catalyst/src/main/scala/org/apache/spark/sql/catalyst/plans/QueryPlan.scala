@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.util.Lazy
+import org.apache.spark.util.TransientLazy
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -97,7 +97,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    */
   def references: AttributeSet = _references()
 
-  private val _references = new Lazy({
+  private val _references = new TransientLazy({
     AttributeSet(expressions) -- producedAttributes
   })
 
