@@ -546,7 +546,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         condition = "COLLATION_MISMATCH.IMPLICIT",
         parameters = Map(
-          "implicitTypes" -> ""
+          "implicitTypes" -> "`string collate UTF8_LCASE`, `string collate UNICODE`"
         )
       )
 
@@ -572,7 +572,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         condition = "COLLATION_MISMATCH.IMPLICIT",
         parameters = Map(
-          "implicitTypes" -> ""
+          "implicitTypes" -> "`string collate UTF8_LCASE`, `string collate UNICODE`"
         )
       )
 
@@ -590,7 +590,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         condition = "COLLATION_MISMATCH.IMPLICIT",
         parameters = Map(
-          "implicitTypes" -> ""
+          "implicitTypes" -> "`string collate UTF8_LCASE`, `string collate UNICODE_CI`"
         )
       )
 
@@ -639,7 +639,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         condition = "COLLATION_MISMATCH.IMPLICIT",
         parameters = Map(
-          "implicitTypes" -> ""
+          "implicitTypes" -> "`string collate UTF8_LCASE`, `string collate UNICODE_CI`"
         )
       )
 
@@ -651,7 +651,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         condition = "COLLATION_MISMATCH.IMPLICIT",
         parameters = Map(
-          "implicitTypes" -> ""
+          "implicitTypes" -> "`string collate UTF8_LCASE`, `string collate UNICODE_CI`"
         )
       )
 
@@ -671,7 +671,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         condition = "COLLATION_MISMATCH.IMPLICIT",
         parameters = Map(
-          "implicitTypes" -> ""
+          "implicitTypes" -> "`string collate UTF8_LCASE`, `string collate UNICODE_CI`"
         )
       )
 
@@ -681,7 +681,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         condition = "COLLATION_MISMATCH.IMPLICIT",
         parameters = Map(
-          "implicitTypes" -> ""
+          "implicitTypes" -> "`string collate UNICODE`, `string collate UNICODE_CI`"
         )
       )
 
@@ -833,7 +833,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
             },
             condition = "COLLATION_MISMATCH.IMPLICIT",
             parameters = Map(
-              "implicitTypes" -> ""
+              "implicitTypes" -> "`string collate UNICODE`, `string collate UTF8_LCASE`"
             )
           )
         }
