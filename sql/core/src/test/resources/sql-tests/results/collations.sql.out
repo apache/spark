@@ -455,7 +455,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "`string`, `string collate UTF8_LCASE`"
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -771,7 +771,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "`string`, `string collate UTF8_LCASE`"
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -881,7 +881,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "`string`, `string collate UTF8_LCASE`"
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -991,7 +991,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "`string`, `string collate UTF8_LCASE`"
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -1135,7 +1135,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "`string`, `string collate UTF8_LCASE`"
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -1291,7 +1291,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "`string`, `string collate UTF8_LCASE`"
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -1447,7 +1447,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "`string`, `string collate UTF8_LCASE`"
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -1603,7 +1603,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "`string`, `string collate UTF8_LCASE`"
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -1733,7 +1733,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "`string`, `string collate UTF8_LCASE`"
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -1909,7 +1909,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "`string`, `string collate UTF8_LCASE`"
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -2025,7 +2025,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "`string`, `string collate UTF8_LCASE`"
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -2181,7 +2181,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "`string`, `string collate UTF8_LCASE`"
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -2782,7 +2782,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "`string`, `string collate UTF8_LCASE`"
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -3105,7 +3105,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "`string`, `string collate UTF8_LCASE`"
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -3515,7 +3515,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "`string`, `string collate UTF8_LCASE`"
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -3645,7 +3645,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "`string`, `string collate UTF8_LCASE`"
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -3775,7 +3775,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "`string`, `string collate UTF8_LCASE`"
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -3931,7 +3931,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "`string collate UTF8_LCASE`, `string`"
+    "implicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
   }
 }
 
@@ -4075,7 +4075,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "`string`, `string collate UTF8_LCASE`"
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -4231,7 +4231,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "`string collate UTF8_LCASE`, `string`"
+    "implicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
   }
 }
 
@@ -4375,7 +4375,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "`string collate UTF8_LCASE`, `string`"
+    "implicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
   }
 }
 

@@ -192,7 +192,7 @@ object CollationTypeCasts extends TypeCoercionRule {
 
         if (implicitTypes.length > 1) {
           throw QueryCompilationErrors.implicitCollationMismatchError(
-            implicitTypes.map(t => StringType(t).typeName)
+            implicitTypes.map(t => StringType(t))
           )
         }
         else {

@@ -165,7 +165,7 @@ class CollationStringExpressionsSuite
       condition = "COLLATION_MISMATCH.IMPLICIT",
       sqlState = "42P21",
       parameters = Map(
-        "implicitTypes" -> "`string`, `string collate UTF8_LCASE`"
+        "implicitTypes" -> """"STRING", "STRING COLLATE UTF8_LCASE""""
       )
     )
     checkError(
