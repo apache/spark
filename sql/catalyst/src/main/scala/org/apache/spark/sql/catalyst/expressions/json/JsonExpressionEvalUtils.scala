@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.expressions.json
 
 import com.fasterxml.jackson.core.JsonFactory
+import com.google.common.base.Objects
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
@@ -55,18 +56,14 @@ object JsonExpressionEvalUtils {
 
     UTF8String.fromString(dt.sql)
   }
-
-  def fromJson(jsonToStructsEvaluator: JsonToStructsEvaluator, json: UTF8String): Any = {
-    jsonToStructsEvaluator.evaluate(json)
-  }
 }
 
 class JsonToStructsEvaluator(
-    options: Map[String, String],
-    nullableSchema: DataType,
-    nameOfCorruptRecord: String,
-    timeZoneId: Option[String],
-    variantAllowDuplicateKeys: Boolean) extends Serializable {
+    val options: Map[String, String],
+    val nullableSchema: DataType,
+    val nameOfCorruptRecord: String,
+    val timeZoneId: Option[String],
+    val variantAllowDuplicateKeys: Boolean) extends Serializable {
 
   // This converts parsed rows to the desired output by the given schema.
   @transient
@@ -114,4 +111,17 @@ class JsonToStructsEvaluator(
         converter(parser.parse(json))
     }
   }
+
+  override def equals(o: Any): Boolean = o match {
+    case other: JsonToStructsEvaluator =>
+      options.equals(other.options) &&
+        nullableSchema.equals(other.nullableSchema) &&
+        nameOfCorruptRecord == other.nameOfCorruptRecord &&
+        timeZoneId.equals(other.timeZoneId) &&
+        variantAllowDuplicateKeys == other.variantAllowDuplicateKeys
+    case _ => false
+  }
+
+  override def hashCode(): Int = Objects.hashCode(
+    options, nullableSchema, nameOfCorruptRecord, timeZoneId, variantAllowDuplicateKeys)
 }

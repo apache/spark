@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.expressions.json.{JsonExpressionEvalUtils, JsonExpressionUtils, JsonToStructsEvaluator}
-import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
+import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.catalyst.util._
@@ -640,7 +640,6 @@ case class JsonToStructs(
   with RuntimeReplaceable
   with ExpectsInputTypes
   with TimeZoneAwareExpression
-  with NullIntolerant
   with QueryErrorsBase {
 
   // The JSON input data might be missing certain fields. We force the nullability
@@ -700,15 +699,12 @@ case class JsonToStructs(
   lazy val evaluator = new JsonToStructsEvaluator(
     options, nullableSchema, nameOfCorruptRecord, timeZoneId, variantAllowDuplicateKeys)
 
-  @transient
-  private lazy val jsonToStructsEvaluatorObjectType = ObjectType(classOf[JsonToStructsEvaluator])
-
-  override def replacement: Expression = StaticInvoke(
-    JsonExpressionEvalUtils.getClass,
+  override def replacement: Expression = Invoke(
+    Literal.create(evaluator, ObjectType(classOf[JsonToStructsEvaluator])),
+    "evaluate",
     dataType,
-    "fromJson",
-    Seq(Literal(evaluator, jsonToStructsEvaluatorObjectType), child),
-    Seq(jsonToStructsEvaluatorObjectType, child.dataType)
+    Seq(child),
+    Seq(child.dataType)
   )
 
   override protected def withNewChildInternal(newChild: Expression): JsonToStructs =
