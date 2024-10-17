@@ -335,11 +335,11 @@ class FunctionsTestsMixin:
 
     def test_try_parse_url(self):
         df = self.spark.createDataFrame(
-               [("https://spark.apache.org/path?query=1", "QUERY", "query")],
-               ["url", "part", "key"],
+            [("https://spark.apache.org/path?query=1", "QUERY", "query")],
+            ["url", "part", "key"],
         )
         actual = df.select(F.try_parse_url(df.url, df.part, df.key)).collect()
-        self.assertEqual(actual, [Row(1)])
+        self.assertEqual(actual, [Row("1")])
 
     def test_string_functions(self):
         string_functions = [
