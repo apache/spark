@@ -208,8 +208,8 @@ Package                    Supported version Note
 ========================== ================= ==========================
 `pandas`                   >=2.0.0           Required for Spark Connect
 `pyarrow`                  >=10.0.0          Required for Spark Connect
-`grpcio`                   >=1.62.0          Required for Spark Connect
-`grpcio-status`            >=1.62.0          Required for Spark Connect
+`grpcio`                   >=1.67.0          Required for Spark Connect
+`grpcio-status`            >=1.67.0          Required for Spark Connect
 `googleapis-common-protos` >=1.65.0          Required for Spark Connect
 `graphviz`                 >=0.20            Optional for Spark Connect
 ========================== ================= ==========================
