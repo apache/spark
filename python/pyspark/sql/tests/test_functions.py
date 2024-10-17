@@ -83,7 +83,9 @@ class FunctionsTestsMixin:
         missing_in_py = jvm_fn_set.difference(py_fn_set)
 
         # Functions that we expect to be missing in python until they are added to pyspark
-        expected_missing_in_py = set()
+        expected_missing_in_py = set(
+            ["is_valid_utf8", "make_valid_utf8", "validate_utf8", "try_validate_utf8"]
+        )
 
         self.assertEqual(
             expected_missing_in_py, missing_in_py, "Missing functions in pyspark not as expected"
