@@ -26,8 +26,10 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
@@ -143,7 +145,7 @@ class Dataset[T] private[sql] (
   // Make sure we don't forget to set plan id.
   assert(plan.getRoot.getCommon.hasPlanId)
 
-  private[sql] val agnosticEncoder: AgnosticEncoder[T] = encoderFor(encoder)
+  private[sql] val agnosticEncoder: AgnosticEncoder[T] = agnosticEncoderFor(encoder)
 
   override def toString: String = {
     try {
@@ -274,9 +276,7 @@ class Dataset[T] private[sql] (
     df.withResult { result =>
       assert(result.length == 1)
       assert(result.schema.size == 1)
-      // scalastyle:off println
-      println(result.toArray.head)
-      // scalastyle:on println
+      print(result.toArray.head)
     }
   }
 
@@ -437,7 +437,7 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def select[U1](c1: TypedColumn[T, U1]): Dataset[U1] = {
-    val encoder = encoderFor(c1.encoder)
+    val encoder = agnosticEncoderFor(c1.encoder)
     val col = if (encoder.schema == encoder.dataType) {
       functions.inline(functions.array(c1))
     } else {
@@ -452,7 +452,7 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
-    val encoder = ProductEncoder.tuple(columns.map(c => encoderFor(c.encoder)))
+    val encoder = ProductEncoder.tuple(columns.map(c => agnosticEncoderFor(c.encoder)))
     selectUntyped(encoder, columns)
   }
 
@@ -526,7 +526,7 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T] = {
-    KeyValueGroupedDatasetImpl[K, T](this, encoderFor[K], func)
+    KeyValueGroupedDatasetImpl[K, T](this, agnosticEncoderFor[K], func)
   }
 
   /** @inheritdoc */
@@ -881,7 +881,7 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def mapPartitions[U: Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
-    val outputEncoder = encoderFor[U]
+    val outputEncoder = agnosticEncoderFor[U]
     val udf = SparkUserDefinedFunction(
       function = func,
       inputEncoders = agnosticEncoder :: Nil,
@@ -1115,13 +1115,20 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
-  protected def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T] = {
+  protected def checkpoint(
+      eager: Boolean,
+      reliableCheckpoint: Boolean,
+      storageLevel: Option[StorageLevel]): Dataset[T] = {
     sparkSession.newDataset(agnosticEncoder) { builder =>
       val command = sparkSession.newCommand { builder =>
-        builder.getCheckpointCommandBuilder
+        val checkpointBuilder = builder.getCheckpointCommandBuilder
           .setLocal(!reliableCheckpoint)
           .setEager(eager)
           .setRelation(this.plan.getRoot)
+        storageLevel.foreach { storageLevel =>
+          checkpointBuilder.setStorageLevel(
+            StorageLevelProtoConverter.toConnectProtoType(storageLevel))
+        }
       }
       val responseIter = sparkSession.execute(command)
       try {
@@ -1305,6 +1312,10 @@ class Dataset[T] private[sql] (
   override def localCheckpoint(eager: Boolean): Dataset[T] = super.localCheckpoint(eager)
 
   /** @inheritdoc */
+  override def localCheckpoint(eager: Boolean, storageLevel: StorageLevel): Dataset[T] =
+    super.localCheckpoint(eager, storageLevel)
+
+  /** @inheritdoc */
   override def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] =
     super.joinWith(other, condition)
 
@@ -1465,4 +1476,10 @@ class Dataset[T] private[sql] (
       func: MapFunction[T, K],
       encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
     super.groupByKey(func, encoder).asInstanceOf[KeyValueGroupedDataset[K, T]]
+
+  /** @inheritdoc */
+  override def rdd: RDD[T] = throwRddNotSupportedException()
+
+  /** @inheritdoc */
+  override def toJavaRDD: JavaRDD[T] = throwRddNotSupportedException()
 }

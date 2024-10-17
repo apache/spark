@@ -706,7 +706,7 @@ class CrossValidator(
     >>> cvModel = cv.fit(dataset)
     >>> cvModel.getNumFolds()
     3
-    >>> cvModel.avgMetrics[0]
+    >>> float(cvModel.avgMetrics[0])
     0.5
     >>> path = tempfile.mkdtemp()
     >>> model_path = path + "/model"

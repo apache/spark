@@ -27,6 +27,7 @@ import org.apache.spark.SparkException.internalError
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.KnownNotContainsNull
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
@@ -38,7 +39,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation}
+import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeWithCaseAccentSensitivity}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SQLOpenHashSet
 import org.apache.spark.unsafe.UTF8StringBuilder
@@ -1348,7 +1349,7 @@ case class Reverse(child: Expression)
 
   // Input types are utilized by type coercion in ImplicitTypeCasts.
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(StringTypeAnyCollation, ArrayType))
+    Seq(TypeCollection(StringTypeWithCaseAccentSensitivity, ArrayType))
 
   override def dataType: DataType = child.dataType
 
@@ -2134,9 +2135,12 @@ case class ArrayJoin(
     this(array, delimiter, Some(nullReplacement))
 
   override def inputTypes: Seq[AbstractDataType] = if (nullReplacement.isDefined) {
-    Seq(AbstractArrayType(StringTypeAnyCollation), StringTypeAnyCollation, StringTypeAnyCollation)
+    Seq(AbstractArrayType(StringTypeWithCaseAccentSensitivity),
+      StringTypeWithCaseAccentSensitivity,
+        StringTypeWithCaseAccentSensitivity)
   } else {
-    Seq(AbstractArrayType(StringTypeAnyCollation), StringTypeAnyCollation)
+    Seq(AbstractArrayType(StringTypeWithCaseAccentSensitivity),
+        StringTypeWithCaseAccentSensitivity)
   }
 
   override def children: Seq[Expression] = if (nullReplacement.isDefined) {
@@ -2857,7 +2861,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   with QueryErrorsBase {
 
   private def allowedTypes: Seq[AbstractDataType] =
-    Seq(StringTypeAnyCollation, BinaryType, ArrayType)
+    Seq(StringTypeWithCaseAccentSensitivity, BinaryType, ArrayType)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CONCAT)
 
@@ -5327,14 +5331,11 @@ case class ArrayCompact(child: Expression)
     child.dataType.asInstanceOf[ArrayType].elementType, true)
   lazy val lambda = LambdaFunction(isNotNull(lv), Seq(lv))
 
-  override lazy val replacement: Expression = ArrayFilter(child, lambda)
+  override lazy val replacement: Expression = KnownNotContainsNull(ArrayFilter(child, lambda))
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
   override def prettyName: String = "array_compact"
-
-  override def dataType: ArrayType =
-    child.dataType.asInstanceOf[ArrayType].copy(containsNull = false)
 
   override protected def withNewChildInternal(newChild: Expression): ArrayCompact =
     copy(child = newChild)

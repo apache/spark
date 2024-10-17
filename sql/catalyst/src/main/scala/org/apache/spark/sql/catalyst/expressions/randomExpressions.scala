@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedSeed}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.ExpectsInputTypes.{ordinalNumber, toSQLExpr, toSQLType}
+import org.apache.spark.sql.catalyst.expressions.ExpectsInputTypes.{ordinalNumber, toSQLExpr, toSQLId, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
@@ -128,8 +128,12 @@ case class Rand(child: Expression, hideSeed: Boolean = false) extends Nondetermi
   }
 
   override def flatArguments: Iterator[Any] = Iterator(child)
+
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("rand")
+
   override def sql: String = {
-    s"rand(${if (hideSeed) "" else child.sql})"
+    s"$prettyName(${if (hideSeed) "" else child.sql})"
   }
 
   override protected def withNewChildInternal(newChild: Expression): Rand = copy(child = newChild)
@@ -259,7 +263,7 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression,
             result = DataTypeMismatch(
               errorSubClass = "NON_FOLDABLE_INPUT",
               messageParameters = Map(
-                "inputName" -> name,
+                "inputName" -> toSQLId(name),
                 "inputType" -> requiredType,
                 "inputExpr" -> toSQLExpr(expr)))
           } else expr.dataType match {
@@ -370,14 +374,14 @@ case class RandStr(
     var result: TypeCheckResult = TypeCheckResult.TypeCheckSuccess
     def requiredType = "INT or SMALLINT"
     Seq((length, "length", 0),
-      (seedExpression, "seedExpression", 1)).foreach {
+      (seedExpression, "seed", 1)).foreach {
       case (expr: Expression, name: String, index: Int) =>
         if (result == TypeCheckResult.TypeCheckSuccess) {
           if (!expr.foldable) {
             result = DataTypeMismatch(
               errorSubClass = "NON_FOLDABLE_INPUT",
               messageParameters = Map(
-                "inputName" -> name,
+                "inputName" -> toSQLId(name),
                 "inputType" -> requiredType,
                 "inputExpr" -> toSQLExpr(expr)))
           } else expr.dataType match {

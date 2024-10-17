@@ -1223,7 +1223,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val m1 = intercept[SparkException] {
           spark.range(1).coalesce(1).write.options(extraOptions).parquet(dir.getCanonicalPath)
         }
-        assert(m1.getErrorClass == "TASK_WRITE_FAILED")
+        assert(m1.getCondition == "TASK_WRITE_FAILED")
         assert(m1.getCause.getMessage.contains("Intentional exception for testing purposes"))
       }
 
@@ -1233,8 +1233,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
             .coalesce(1)
           df.write.partitionBy("a").options(extraOptions).parquet(dir.getCanonicalPath)
         }
-        if (m2.getErrorClass != null) {
-          assert(m2.getErrorClass == "TASK_WRITE_FAILED")
+        if (m2.getCondition != null) {
+          assert(m2.getCondition == "TASK_WRITE_FAILED")
           assert(m2.getCause.getMessage.contains("Intentional exception for testing purposes"))
         } else {
           assert(m2.getMessage.contains("TASK_WRITE_FAILED"))

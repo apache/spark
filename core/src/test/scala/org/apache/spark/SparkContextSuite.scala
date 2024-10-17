@@ -119,8 +119,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       val absolutePath2 = file2.getAbsolutePath
 
       try {
-        Files.write("somewords1", file1, StandardCharsets.UTF_8)
-        Files.write("somewords2", file2, StandardCharsets.UTF_8)
+        Files.asCharSink(file1, StandardCharsets.UTF_8).write("somewords1")
+        Files.asCharSink(file2, StandardCharsets.UTF_8).write("somewords2")
         val length1 = file1.length()
         val length2 = file2.length()
 
@@ -178,10 +178,10 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         s"${jarFile.getParent}/../${jarFile.getParentFile.getName}/${jarFile.getName}#zoo"
 
       try {
-        Files.write("somewords1", file1, StandardCharsets.UTF_8)
-        Files.write("somewords22", file2, StandardCharsets.UTF_8)
-        Files.write("somewords333", file3, StandardCharsets.UTF_8)
-        Files.write("somewords4444", file4, StandardCharsets.UTF_8)
+        Files.asCharSink(file1, StandardCharsets.UTF_8).write("somewords1")
+        Files.asCharSink(file2, StandardCharsets.UTF_8).write("somewords22")
+        Files.asCharSink(file3, StandardCharsets.UTF_8).write("somewords333")
+        Files.asCharSink(file4, StandardCharsets.UTF_8).write("somewords4444")
         val length1 = file1.length()
         val length2 = file2.length()
         val length3 = file1.length()
@@ -373,8 +373,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       assert(subdir2.mkdir())
       val file1 = new File(subdir1, "file")
       val file2 = new File(subdir2, "file")
-      Files.write("old", file1, StandardCharsets.UTF_8)
-      Files.write("new", file2, StandardCharsets.UTF_8)
+      Files.asCharSink(file1, StandardCharsets.UTF_8).write("old")
+      Files.asCharSink(file2, StandardCharsets.UTF_8).write("new")
       sc = new SparkContext("local-cluster[1,1,1024]", "test")
       sc.addFile(file1.getAbsolutePath)
       def getAddedFileContents(): String = {
@@ -503,12 +503,15 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
         try {
           // Create 5 text files.
-          Files.write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1", file1,
-            StandardCharsets.UTF_8)
-          Files.write("someline1 in file2\nsomeline2 in file2", file2, StandardCharsets.UTF_8)
-          Files.write("someline1 in file3", file3, StandardCharsets.UTF_8)
-          Files.write("someline1 in file4\nsomeline2 in file4", file4, StandardCharsets.UTF_8)
-          Files.write("someline1 in file2\nsomeline2 in file5", file5, StandardCharsets.UTF_8)
+          Files.asCharSink(file1, StandardCharsets.UTF_8)
+            .write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1")
+          Files.asCharSink(file2, StandardCharsets.UTF_8)
+            .write("someline1 in file2\nsomeline2 in file2")
+          Files.asCharSink(file3, StandardCharsets.UTF_8).write("someline1 in file3")
+          Files.asCharSink(file4, StandardCharsets.UTF_8)
+            .write("someline1 in file4\nsomeline2 in file4")
+          Files.asCharSink(file5, StandardCharsets.UTF_8)
+            .write("someline1 in file2\nsomeline2 in file5")
 
           sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
 

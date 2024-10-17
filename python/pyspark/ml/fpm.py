@@ -213,7 +213,6 @@ class FPGrowth(
     |      [q]|   2|
     +---------+----+
     only showing top 5 rows
-    ...
     >>> fpm.associationRules.sort("antecedent", "consequent").show(5)
     +----------+----------+----------+----+------------------+
     |antecedent|consequent|confidence|lift|           support|
@@ -225,7 +224,6 @@ class FPGrowth(
     |       [q]|       [t]|       1.0| 2.0|0.3333333333333333|
     +----------+----------+----------+----+------------------+
     only showing top 5 rows
-    ...
     >>> new_data = spark.createDataFrame([(["t", "s"], )], ["items"])
     >>> sorted(fpm.transform(new_data).first().newPrediction)
     ['x', 'y', 'z']
