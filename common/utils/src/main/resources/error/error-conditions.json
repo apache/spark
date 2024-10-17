@@ -2150,6 +2150,12 @@
     },
     "sqlState" : "22022"
   },
+  "INVALID_CORRUPT_RECORD_TYPE" : {
+    "message" : [
+      "The column <columnName> for corrupt records must have the nullable STRING type, but got <actualType>."
+    ],
+    "sqlState" : "42804"
+  },
   "INVALID_CURSOR" : {
     "message" : [
       "The cursor is invalid."
@@ -6039,11 +6045,6 @@
   "_LEGACY_ERROR_TEMP_1090" : {
     "message" : [
       "Column statistics serialization is not supported for column <colName> of data type: <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1097" : {
-    "message" : [
-      "The field for corrupt records must be string type and nullable."
     ]
   },
   "_LEGACY_ERROR_TEMP_1098" : {
