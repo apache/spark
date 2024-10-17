@@ -18,7 +18,7 @@ false
 -- !query
 select not null::boolean
 -- !query schema
-struct<(NOT CAST(NULL AS BOOLEAN)):boolean>
+struct<(NOT NULL::BOOLEAN):boolean>
 -- !query output
 NULL
 
@@ -58,7 +58,7 @@ false
 -- !query
 select true and null::boolean
 -- !query schema
-struct<(true AND CAST(NULL AS BOOLEAN)):boolean>
+struct<(true AND NULL::BOOLEAN):boolean>
 -- !query output
 NULL
 
@@ -66,7 +66,7 @@ NULL
 -- !query
 select false and null::boolean
 -- !query schema
-struct<(false AND CAST(NULL AS BOOLEAN)):boolean>
+struct<(false AND NULL::BOOLEAN):boolean>
 -- !query output
 false
 
@@ -74,7 +74,7 @@ false
 -- !query
 select null::boolean and true
 -- !query schema
-struct<(CAST(NULL AS BOOLEAN) AND true):boolean>
+struct<(NULL::BOOLEAN AND true):boolean>
 -- !query output
 NULL
 
@@ -82,7 +82,7 @@ NULL
 -- !query
 select null::boolean and false
 -- !query schema
-struct<(CAST(NULL AS BOOLEAN) AND false):boolean>
+struct<(NULL::BOOLEAN AND false):boolean>
 -- !query output
 false
 
@@ -90,7 +90,7 @@ false
 -- !query
 select null::boolean and null::boolean
 -- !query schema
-struct<(CAST(NULL AS BOOLEAN) AND CAST(NULL AS BOOLEAN)):boolean>
+struct<(NULL::BOOLEAN AND NULL::BOOLEAN):boolean>
 -- !query output
 NULL
 
@@ -130,7 +130,7 @@ false
 -- !query
 select true or null::boolean
 -- !query schema
-struct<(true OR CAST(NULL AS BOOLEAN)):boolean>
+struct<(true OR NULL::BOOLEAN):boolean>
 -- !query output
 true
 
@@ -138,7 +138,7 @@ true
 -- !query
 select false or null::boolean
 -- !query schema
-struct<(false OR CAST(NULL AS BOOLEAN)):boolean>
+struct<(false OR NULL::BOOLEAN):boolean>
 -- !query output
 NULL
 
@@ -146,7 +146,7 @@ NULL
 -- !query
 select null::boolean or true
 -- !query schema
-struct<(CAST(NULL AS BOOLEAN) OR true):boolean>
+struct<(NULL::BOOLEAN OR true):boolean>
 -- !query output
 true
 
@@ -154,7 +154,7 @@ true
 -- !query
 select null::boolean or false
 -- !query schema
-struct<(CAST(NULL AS BOOLEAN) OR false):boolean>
+struct<(NULL::BOOLEAN OR false):boolean>
 -- !query output
 NULL
 
@@ -162,7 +162,7 @@ NULL
 -- !query
 select null::boolean or null::boolean
 -- !query schema
-struct<(CAST(NULL AS BOOLEAN) OR CAST(NULL AS BOOLEAN)):boolean>
+struct<(NULL::BOOLEAN OR NULL::BOOLEAN):boolean>
 -- !query output
 NULL
 
