@@ -1072,8 +1072,10 @@ abstract class JsonSuite
           .option("mode", "FAILFAST")
           .json(corruptRecords)
       },
-      condition = "_LEGACY_ERROR_TEMP_2165",
-      parameters = Map("failFastMode" -> "FAILFAST")
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "badRecord" -> "_corrupt_record",
+        "failFastMode" -> "FAILFAST")
     )
 
     checkError(
