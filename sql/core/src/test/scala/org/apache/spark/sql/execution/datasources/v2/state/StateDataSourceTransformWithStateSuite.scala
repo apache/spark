@@ -309,14 +309,20 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
             TimeMode.ProcessingTime(),
             OutputMode.Update())
 
-        testStream(result, OutputMode.Update())(
-          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+        val clock = new StreamManualClock
+        testStream(result)(
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
+            checkpointLocation = tempDir.getCanonicalPath),
           AddData(inputData, "a"),
           AddData(inputData, "b"),
-          Execute { _ =>
-            // wait for the batch to run since we are using processing time
-            Thread.sleep(5000)
-          },
+          AdvanceManualClock(5 * 1000),
+          CheckNewAnswer(("a", "1"), ("b", "1")),
+          AddData(inputData, "c"),
+          AdvanceManualClock(30 * 1000),
+          CheckNewAnswer(("c", "1")),
+          AddData(inputData, "d"),
+          AdvanceManualClock(30 * 1000),
+          CheckNewAnswer(("d", "1")),
           StopStream
         )
 
@@ -333,19 +339,27 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
 
         var count = 0L
         resultDf.collect().foreach { row =>
-          count = count + 1
-          assert(row.getLong(2) > 0)
+          if (!row.anyNull) {
+            count = count + 1
+            assert(row.getLong(2) > 0)
+          }
         }
 
-        // verify that 2 state rows are present
-        assert(count === 2)
+        // verify that 4 state rows are present
+        assert(count === 4)
 
         val answerDf = stateReaderDf.selectExpr(
           "change_type",
           "key.value AS groupingKey",
           "value.value.value AS valueId", "partition_id")
         checkAnswer(answerDf,
-          Seq(Row("update", "a", 1L, 0), Row("update", "b", 1L, 1)))
+          Seq(Row("update", "a", 1L, 0),
+            Row("update", "b", 1L, 1),
+            Row("update", "c", 1L, 2),
+            Row("delete", "a", null, 0),
+            Row("delete", "b", null, 1),
+            Row("update", "d", 1L, 4),
+            Row("delete", "c", null, 2)))
       }
     }
   }
