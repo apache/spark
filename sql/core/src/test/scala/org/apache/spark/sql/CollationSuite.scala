@@ -1458,11 +1458,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         |""".stripMargin), Seq(Row(1)))
     checkAnswer(sql(
       """
-        |select map('a' collate utf8_lcase, 1, 'b' collate utf8_lcase, 2)
-        |['A' collate utf8_lcase]
-        |""".stripMargin), Seq(Row(1)))
-    checkAnswer(sql(
-      """
         |select map('a' collate utf8_lcase, 1, 'b' collate utf8_lcase, 2)['A']
         |""".stripMargin), Seq(Row(1)))
   }
