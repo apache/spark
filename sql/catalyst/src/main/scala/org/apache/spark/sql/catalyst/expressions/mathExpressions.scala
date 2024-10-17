@@ -433,7 +433,7 @@ case class Acosh(child: Expression)
        4
       > SELECT _FUNC_(-10, 16, -10);
        -16
-      > SELECT _FUNC_('9223372036854775807', 36, 16)
+      > SELECT _FUNC_('9223372036854775807', 36, 16);
        FFFFFFFFFFFFFFFF
   """,
   since = "4.0.0",
