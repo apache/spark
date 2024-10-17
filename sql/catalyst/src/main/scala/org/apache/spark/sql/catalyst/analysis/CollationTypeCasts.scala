@@ -24,7 +24,6 @@ import scala.annotation.tailrec
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType}
 
 object CollationTypeCasts extends TypeCoercionRule {
@@ -161,6 +160,8 @@ object CollationTypeCasts extends TypeCoercionRule {
    * complex DataTypes with collated StringTypes (e.g. ArrayType)
    */
   def getOutputCollation(expr: Seq[Expression]): StringType = {
+    require(expr.nonEmpty, "Cannot determine collation for empty expressions")
+
     val explicitTypes = expr.filter {
         case _: Collate => true
         case _ => false
@@ -190,11 +191,19 @@ object CollationTypeCasts extends TypeCoercionRule {
           .map(extractStringType(_).collationId)
           .distinct
 
-        if (implicitTypes.length > 1) {
-          throw QueryCompilationErrors.implicitCollationMismatchError()
-        }
-        else {
-          implicitTypes.headOption.map(StringType(_)).getOrElse(SQLConf.get.defaultStringType)
+        implicitTypes.length match {
+          case 1 =>
+            StringType(implicitTypes.head)
+
+          case size if size > 1 =>
+            throw QueryCompilationErrors.implicitCollationMismatchError()
+
+          case _ =>
+            // If there are no implicit collations then all expressions must have
+            // the default collation so we can just return either one
+            require(expr.forall(_.dataType.sameType(expr.head.dataType)))
+
+            expr.head.dataType.asInstanceOf[StringType]
         }
     }
   }

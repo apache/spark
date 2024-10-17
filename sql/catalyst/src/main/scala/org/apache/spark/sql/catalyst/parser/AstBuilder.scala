@@ -2064,7 +2064,7 @@ class AstBuilder extends DataTypeAstBuilder
    */
   private def canEagerlyEvaluateInlineTable(rows: Seq[Seq[Expression]]): Boolean = {
     val configSet = conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED)
-    val sessionCollationUnchanged = DefaultStringType == StringType
+    val sessionCollationUnchanged = DefaultStringType() == StringType
 
     configSet &&
       (sessionCollationUnchanged || !rows.exists(_.exists(containsStringLiteral)))
@@ -3291,7 +3291,7 @@ class AstBuilder extends DataTypeAstBuilder
    * Create a String literal expression.
    */
   override def visitStringLiteral(ctx: StringLiteralContext): Literal = withOrigin(ctx) {
-    Literal.create(createString(ctx), DefaultStringType)
+    Literal.create(createString(ctx), DefaultStringType())
   }
 
   /**

@@ -18,7 +18,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, ColumnDefinition, LogicalPlan, QualifiedColType, ReplaceColumns, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.{DataType, DefaultStringType, StringType}
@@ -32,8 +32,8 @@ import org.apache.spark.sql.util.SchemaUtils
 object ReplaceDefaultStringType extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan resolveOperatorsUp {
-      case _: V2CreateTablePlan =>
-        transform(plan, StringType)
+      case create: V2CreateTablePlan =>
+        transformPlan(create, StringType)
 
       case addCols: AddColumns =>
         addCols.copy(columnsToAdd = replaceColumnTypes(addCols.columnsToAdd, StringType))
@@ -47,26 +47,34 @@ object ReplaceDefaultStringType extends Rule[LogicalPlan] {
     }
   }
 
-  private def transform(plan: LogicalPlan, newType: StringType): LogicalPlan = {
-    plan resolveOperatorsUp {
-      case operator =>
-        operator transformExpressionsUp {
-          case columnDef: ColumnDefinition
-              if SchemaUtils.hasDefaultStringType(columnDef.dataType) =>
-            columnDef.copy(dataType = replaceDefaultStringType(columnDef.dataType, newType))
+  private def transformPlan(plan: LogicalPlan, newType: StringType): LogicalPlan = {
+    plan resolveOperatorsUp { operator =>
+      operator.transformExpressionsUp { expression =>
+        transformExpression(expression, newType)
+      }
+    }
+  }
 
-          case cast: Cast if SchemaUtils.hasDefaultStringType(cast.dataType) =>
-            cast.copy(dataType = replaceDefaultStringType(cast.dataType, newType))
+  private def transformExpression(expression: Expression, newType: StringType): Expression = {
+    expression match {
+      case columnDef: ColumnDefinition
+          if SchemaUtils.hasDefaultStringType(columnDef.dataType) =>
+        columnDef.copy(dataType = replaceDefaultStringType(columnDef.dataType, newType))
 
-          case Literal(value, dt) if SchemaUtils.hasDefaultStringType(dt) =>
-            Literal(value, replaceDefaultStringType(dt, newType))
-        }
+      case cast: Cast if SchemaUtils.hasDefaultStringType(cast.dataType) =>
+        cast.copy(dataType = replaceDefaultStringType(cast.dataType, newType))
+
+      case Literal(value, dt) if SchemaUtils.hasDefaultStringType(dt) =>
+        val replaced = replaceDefaultStringType(dt, newType)
+        Literal(value, replaced)
+
+      case other => other
     }
   }
 
   private def replaceDefaultStringType(dataType: DataType, newType: StringType): DataType = {
     dataType.transformRecursively {
-      case st: StringType if st.isInstanceOf[DefaultStringType] => newType
+      case _: DefaultStringType => newType
     }
   }
 
@@ -75,7 +83,9 @@ object ReplaceDefaultStringType extends Rule[LogicalPlan] {
       newType: StringType): Seq[QualifiedColType] = {
     colTypes.map {
       case colWithDefault if SchemaUtils.hasDefaultStringType(colWithDefault.dataType) =>
-        colWithDefault.copy(dataType = newType)
+        val replaced = replaceDefaultStringType(colWithDefault.dataType, newType)
+        colWithDefault.copy(dataType = replaced)
+
       case col => col
     }
   }

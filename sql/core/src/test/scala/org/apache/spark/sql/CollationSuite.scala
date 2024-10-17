@@ -977,29 +977,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("SPARK-47431: Default collation set to UNICODE, column type test") {
-    withTable("t") {
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-        sql(s"CREATE TABLE t(c1 STRING) USING PARQUET")
-        sql(s"INSERT INTO t VALUES ('a')")
-        checkAnswer(sql(s"SELECT collation(c1) FROM t"), Seq(Row("UNICODE")))
-      }
-    }
-  }
-
-  test("SPARK-47431: Create table with UTF8_BINARY, make sure collation persists on read") {
-    withTable("t") {
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_BINARY") {
-        sql("CREATE TABLE t(c1 STRING) USING PARQUET")
-        sql("INSERT INTO t VALUES ('a')")
-        checkAnswer(sql("SELECT collation(c1) FROM t"), Seq(Row("UTF8_BINARY")))
-      }
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-        checkAnswer(sql("SELECT collation(c1) FROM t"), Seq(Row("UTF8_BINARY")))
-      }
-    }
-  }
-
   test("Create dataframe with non utf8 binary collation") {
     val schema = StructType(Seq(StructField("Name", StringType("UNICODE_CI"))))
     val data = Seq(Row("Alice"), Row("Bob"), Row("bob"))

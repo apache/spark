@@ -85,15 +85,22 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
 
     // literals in select do not pick up session collation
     withSessionCollationAndTable("UTF8_LCASE", tableName) {
-      sql(s"CREATE TABLE $tableName USING $dataSource AS SELECT 'a' AS c1")
+      sql(s"""
+           |CREATE TABLE $tableName USING $dataSource AS SELECT
+           |  'a' AS c1,
+           |  'a' || 'a' AS c2,
+           |  SUBSTRING('a', 1, 1) AS c3,
+           |  SUBSTRING(SUBSTRING('ab', 1, 1), 1, 1) AS c4,
+           |  'a' = 'A' AS truthy
+           |""".stripMargin)
       assertTableColumnCollation(tableName, "c1", "UTF8_BINARY")
-    }
+      assertTableColumnCollation(tableName, "c2", "UTF8_BINARY")
+      assertTableColumnCollation(tableName, "c3", "UTF8_BINARY")
+      assertTableColumnCollation(tableName, "c4", "UTF8_BINARY")
 
-    withSessionCollationAndTable("UTF8_LCASE", tableName) {
-      sql(s"CREATE TABLE $tableName USING $dataSource AS SELECT 'a' = 'A' AS c1")
       checkAnswer(
-        sql(s"SELECT COUNT(*) FROM $tableName WHERE c1"),
-        Seq(Row(1)))
+        sql(s"SELECT COUNT(*) FROM $tableName WHERE truthy"),
+        Seq(Row(0)))
     }
 
     // literals in inline table do not pick up session collation
@@ -112,6 +119,30 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
     withSessionCollationAndTable("UTF8_LCASE", tableName) {
       sql(s"CREATE TABLE $tableName USING $dataSource AS SELECT cast('a' AS STRING) AS c1")
       assertTableColumnCollation(tableName, "c1", "UTF8_BINARY")
+    }
+  }
+
+  test("ctas with complex types") {
+    val tableName = "tbl_complex"
+    withSessionCollationAndTable("UTF8_LCASE", tableName) {
+      sql(s"""
+           |CREATE TABLE $tableName USING $dataSource AS
+           |SELECT
+           |  struct('a') AS c1,
+           |  map('a', 'b') AS c2,
+           |  array('a') AS c3
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT COLLATION(c1.col1) FROM $tableName"),
+        Seq(Row("UTF8_BINARY")))
+      checkAnswer(
+        // TODO: other PR is supposed to fix explicit collation here
+        sql(s"SELECT COLLATION(c2['a' collate UTF8_BINARY]) FROM $tableName"),
+        Seq(Row("UTF8_BINARY")))
+      checkAnswer(
+        sql(s"SELECT COLLATION(c3[0]) FROM $tableName"),
+        Seq(Row("UTF8_BINARY")))
     }
   }
 

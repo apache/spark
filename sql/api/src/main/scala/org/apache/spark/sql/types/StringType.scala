@@ -27,13 +27,11 @@ import org.apache.spark.sql.internal.SqlApiConf
  * The data type representing `String` values. Please use the singleton `DataTypes.StringType`.
  *
  * @since 1.3.0
- * @param _collationId
+ * @param collationId
  *   The id of collation for this StringType.
  */
 @Stable
-class StringType private[sql] (private val _collationId: Int) extends AtomicType with Serializable {
-
-  def collationId: Int = _collationId
+class StringType private[sql] (val collationId: Int) extends AtomicType with Serializable {
 
   /**
    * Support for Binary Equality implies that strings are considered equal only if they are byte
@@ -118,11 +116,10 @@ case object StringType extends StringType(0) {
  * we can still differentiate it from a regular string type, because in some places default string
  * is not the one with the session collation (e.g. in DDL commands).
  */
-private[spark] class DefaultStringType extends StringType(CollationFactory.DEFAULT_COLLATION_ID) {
-  override def collationId: Int = SqlApiConf.get.defaultStringType.collationId
-}
+private[spark] class DefaultStringType private (collationId: Int) extends StringType(collationId) {}
 
-private[spark] case object DefaultStringType extends DefaultStringType {
-  def apply(): DefaultStringType = new DefaultStringType()
+private[spark] object DefaultStringType {
+  def apply(): DefaultStringType = {
+    new DefaultStringType(SqlApiConf.get.defaultStringType.collationId)
+  }
 }
-
