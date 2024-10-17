@@ -812,7 +812,6 @@ case class MakeValidUTF8(input: Expression) extends RuntimeReplaceable with Impl
 
 }
 
-// TODO: fix
 /**
  * A function that validates a UTF8 string, throwing an exception if the string is invalid.
  */
@@ -859,7 +858,6 @@ case class ValidateUTF8(input: Expression) extends RuntimeReplaceable with Impli
 
 }
 
-// TODO: fix
 /**
  * A function that tries to validate a UTF8 string, returning NULL if the string is invalid.
  */
@@ -3046,7 +3044,7 @@ case class Decode(params: Seq[Expression], replacement: Expression)
     copy(replacement = newChild)
   }
 }
-// TODO: fix.
+
 case class StringDecode(
     bin: Expression,
     charset: Expression,
@@ -3101,7 +3099,7 @@ object StringDecode {
     }
   }
 }
-// TODO: fix.
+
 /**
  * Encode the given string to a binary using the provided charset.
  */
@@ -3178,7 +3176,6 @@ object Encode {
   }
 }
 
-// TODO: fix.
 /**
  * Converts the input expression to a binary value based on the supplied format.
  */
