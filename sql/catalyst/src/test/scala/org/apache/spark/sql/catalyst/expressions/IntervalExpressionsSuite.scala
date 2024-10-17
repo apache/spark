@@ -266,7 +266,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val intervalExpr = MakeInterval(Literal(years), Literal(months), Literal(weeks),
         Literal(days), Literal(hours), Literal(minutes),
         Literal(Decimal(secFrac, Decimal.MAX_LONG_DIGITS, 6)))
-      checkExceptionInExpression[ArithmeticException](intervalExpr, EmptyRow, "")
+      checkExceptionInExpression[ArithmeticException](intervalExpr, EmptyRow, "ARITHMETIC_OVERFLOW")
     }
 
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
