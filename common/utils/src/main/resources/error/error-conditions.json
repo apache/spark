@@ -8607,11 +8607,6 @@
       "Cannot delete map key"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3227" : {
-    "message" : [
-      "Cannot find field: <fieldName>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3228" : {
     "message" : [
       "AFTER column not found: <afterCol>"
