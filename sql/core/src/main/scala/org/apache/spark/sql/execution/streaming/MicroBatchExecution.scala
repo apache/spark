@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.SQLExecution
+import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.sources.{WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
@@ -129,6 +129,11 @@ class MicroBatchExecution(
   }
 
   protected var watermarkTracker: WatermarkTracker = _
+
+  // Store checkpointIDs for state store checkpoints to be committed or have been committed to
+  // the commit log.
+  // operatorID -> (partitionID -> array of uniqueID)
+  private val currentStateStoreCkptId = MutableMap[Long, Array[Array[String]]]()
 
   override lazy val logicalPlan: LogicalPlan = {
     assert(queryExecutionThread eq Thread.currentThread,
@@ -508,6 +513,7 @@ class MicroBatchExecution(
               execCtx.startOffsets ++= execCtx.endOffsets
               watermarkTracker.setWatermark(
                 math.max(watermarkTracker.currentWatermark, commitMetadata.nextBatchWatermarkMs))
+              currentStateStoreCkptId ++= commitMetadata.stateUniqueIds
             } else if (latestCommittedBatchId == latestBatchId - 1) {
               execCtx.endOffsets.foreach {
                 case (source: Source, end: Offset) =>
@@ -519,6 +525,8 @@ class MicroBatchExecution(
                   // The V2 API does not have the same edge case requiring getBatch to be called
                   // here, so we do nothing here.
               }
+              // TODO: add a test case for this
+              currentStateStoreCkptId ++= commitMetadata.stateUniqueIds
             } else if (latestCommittedBatchId < latestBatchId - 1) {
               logWarning(log"Batch completion log latest batch id is " +
                 log"${MDC(LogKeys.LATEST_COMMITTED_BATCH_ID, latestCommittedBatchId)}, which is " +
@@ -836,7 +844,8 @@ class MicroBatchExecution(
         offsetLog.offsetSeqMetadataForBatchId(execCtx.batchId - 1),
         execCtx.offsetSeqMetadata,
         watermarkPropagator,
-        execCtx.previousContext.isEmpty)
+        execCtx.previousContext.isEmpty,
+        currentStateStoreCkptId)
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
     }
 
@@ -900,14 +909,49 @@ class MicroBatchExecution(
    */
   protected def markMicroBatchExecutionStart(execCtx: MicroBatchExecutionContext): Unit = {}
 
+  private def updateStateStoreCkptIdForOperator(
+      execCtx: MicroBatchExecutionContext,
+      opId: Long,
+      checkpointInfo: Array[StatefulOpStateStoreCheckpointInfo]): Unit = {
+    // TODO validate baseStateStoreCkptId
+    checkpointInfo.map(_.batchVersion).foreach { v =>
+      assert(
+        execCtx.batchId == -1 || v == execCtx.batchId + 1,
+        s"Batch version ${execCtx.batchId} should generate state store checkpoint " +
+          s"version ${execCtx.batchId + 1} but we see ${v}")
+    }
+    currentStateStoreCkptId.put(opId, checkpointInfo.map { c =>
+      assert(c.stateStoreCkptId.isDefined)
+      c.stateStoreCkptId.get
+    })
+  }
+
+  private def updateStateStoreCkptId(
+      execCtx: MicroBatchExecutionContext,
+      latestExecPlan: SparkPlan): Unit = {
+    latestExecPlan.collect {
+      case e: StateStoreWriter =>
+        assert(e.stateInfo.isDefined)
+        updateStateStoreCkptIdForOperator(
+          execCtx,
+          e.stateInfo.get.operatorId,
+          e.getStateStoreCheckpointInfo())
+    }
+  }
+
   /**
    * Called after the microbatch has completed execution. It takes care of committing the offset
    * to commit log and other bookkeeping.
    */
   protected def markMicroBatchEnd(execCtx: MicroBatchExecutionContext): Unit = {
-    watermarkTracker.updateWatermark(execCtx.executionPlan.executedPlan)
+    val latestExecPlan = execCtx.executionPlan.executedPlan
+    watermarkTracker.updateWatermark(latestExecPlan)
+    if (sparkSession.sessionState.conf.stateStoreCheckpointFormatVersion >= 2) {
+      updateStateStoreCkptId(execCtx, latestExecPlan)
+    }
     execCtx.reportTimeTaken("commitOffsets") {
-      if (!commitLog.add(execCtx.batchId, CommitMetadata(watermarkTracker.currentWatermark))) {
+      if (!commitLog.add(execCtx.batchId,
+        CommitMetadata(watermarkTracker.currentWatermark, currentStateStoreCkptId.toMap))) {
         throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)
       }
     }
