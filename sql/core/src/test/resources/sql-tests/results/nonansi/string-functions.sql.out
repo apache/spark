@@ -176,7 +176,7 @@ SELECT split('hello', '', 5)
 -- !query schema
 struct<split(hello, , 5):array<string>>
 -- !query output
-["h","e","l", "l", "o"]
+["h","e","l","l","o"]
 
 
 -- !query
@@ -184,7 +184,7 @@ SELECT split('hello', '', 100)
 -- !query schema
 struct<split(hello, , 100):array<string>>
 -- !query output
-["h","e","l", "l", "o"]
+["h","e","l","l","o"]
 
 
 -- !query
