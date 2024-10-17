@@ -1817,6 +1817,10 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
                 finalDf1.collect()
               }
               triggered.set(true)
+              // Collect again on the same df will trigger AQE negative caching
+              intercept[Throwable] {
+                finalDf1.collect()
+              }
               // Collect on a different df will use the refreshed InMemoryRelation
               finalDf2.collect()
             }
