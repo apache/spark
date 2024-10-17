@@ -268,7 +268,7 @@ case class ParquetPartitionReaderFactory(
         convertTz,
         datetimeRebaseSpec,
         int96RebaseSpec)
-    ) {
+    ) { reader =>
       reader match {
         case vectorizedReader: VectorizedParquetRecordReader =>
           vectorizedReader.initialize(split, hadoopAttemptContext, Option.apply(fileFooter))
