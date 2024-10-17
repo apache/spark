@@ -854,6 +854,11 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
             MapOutputEvent("k1", "key1", -1, isTTLValue = true, 61000),
             MapOutputEvent("k1", "key2", -1, isTTLValue = true, 61000)
           ),
+          AddData(inputStream,
+            MapInputEvent("k2", "key3", "put", 3)
+          ),
+          AdvanceManualClock(30 * 1000), // batch timestamp: 62000
+          CheckNewAnswer(),
           StopStream
         )
 
@@ -868,7 +873,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         val outputDf = flattenedStateReaderDf
           .selectExpr(
             "change_type",
-          "key.value AS groupingKey",
+            "key.value AS groupingKey",
             "user_map_key.value AS mapKey",
             "user_map_value.value.value AS mapValue",
             "user_map_value.ttlExpirationMs AS ttlTimestamp",
@@ -877,7 +882,10 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         checkAnswer(outputDf,
           Seq(
             Row("update", "k1", "key1", 1, 61000L, 4L),
-            Row("update", "k1", "key2", 2, 61000L, 4L))
+            Row("update", "k1", "key2", 2, 61000L, 4L),
+            Row("delete", "k1", "key1", null, null, 4L),
+            Row("delete", "k1", "key2", null, null, 4L),
+            Row("update", "k2", "key3", 3, 122000L, 2L))
         )
       }
     }
