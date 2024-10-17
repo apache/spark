@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 
 // scalastyle:off line.contains.tab
@@ -52,6 +52,10 @@ object CollateExpressionBuilder extends ExpressionBuilder {
             if (evalCollation == null) {
               throw QueryCompilationErrors.unexpectedNullError("collation", collationExpr)
             } else {
+              if (!SQLConf.get.trimCollationEnabled &&
+                evalCollation.toString.toUpperCase().contains("TRIM")) {
+                throw QueryCompilationErrors.trimCollationNotEnabledError()
+              }
               Collate(e, evalCollation.toString)
             }
           case (_: StringType, false) => throw QueryCompilationErrors.nonFoldableArgumentError(
@@ -73,7 +77,8 @@ case class Collate(child: Expression, collationName: String)
   extends UnaryExpression with ExpectsInputTypes {
   private val collationId = CollationFactory.collationNameToId(collationName)
   override def dataType: DataType = StringType(collationId)
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
   override protected def withNewChildInternal(
     newChild: Expression): Expression = copy(newChild)
@@ -111,5 +116,6 @@ case class Collation(child: Expression)
     val collationName = CollationFactory.fetchCollation(collationId).collationName
     Literal.create(collationName, SQLConf.get.defaultStringType)
   }
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
 }

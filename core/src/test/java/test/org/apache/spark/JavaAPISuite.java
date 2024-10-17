@@ -960,7 +960,7 @@ public class JavaAPISuite implements Serializable {
     rdd.saveAsTextFile(outputDir);
     // Read the plain text file and check it's OK
     File outputFile = new File(outputDir, "part-00000");
-    String content = Files.toString(outputFile, StandardCharsets.UTF_8);
+    String content = Files.asCharSource(outputFile, StandardCharsets.UTF_8).read();
     assertEquals("1\n2\n3\n4\n", content);
     // Also try reading it in as a text file RDD
     List<String> expected = Arrays.asList("1", "2", "3", "4");

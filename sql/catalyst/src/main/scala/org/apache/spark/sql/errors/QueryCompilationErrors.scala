@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AnyValue
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, InputParameter, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, FailFastMode, ParseMode, PermissiveMode}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ParseMode}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
@@ -348,6 +348,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
         "argument" -> toSQLId(argumentName))
+    )
+  }
+
+  def trimCollationNotEnabledError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.TRIM_COLLATION",
+      messageParameters = Map.empty
+    )
+  }
+
+  def trailingCommaInSelectError(origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "TRAILING_COMMA_IN_SELECT",
+      messageParameters = Map.empty,
+      origin = origin
     )
   }
 
@@ -1312,10 +1327,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def invalidFieldTypeForCorruptRecordError(): Throwable = {
+  def invalidFieldTypeForCorruptRecordError(columnName: String, actualType: DataType): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1097",
-      messageParameters = Map.empty)
+      errorClass = "INVALID_CORRUPT_RECORD_TYPE",
+      messageParameters = Map(
+        "columnName" -> toSQLId(columnName), "actualType" -> toSQLType(actualType)))
   }
 
   def dataTypeUnsupportedByClassError(x: DataType, className: String): Throwable = {
@@ -1326,12 +1342,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def parseModeUnsupportedError(funcName: String, mode: ParseMode): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1099",
+      errorClass = "PARSE_MODE_UNSUPPORTED",
       messageParameters = Map(
-        "funcName" -> funcName,
-        "mode" -> mode.name,
-        "permissiveMode" -> PermissiveMode.name,
-        "failFastMode" -> FailFastMode.name))
+        "funcName" -> toSQLId(funcName),
+        "mode" -> mode.name))
   }
 
   def nonFoldableArgumentError(
@@ -1676,12 +1690,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("className" -> className))
   }
 
-  def cannotSaveIntervalIntoExternalStorageError(): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1136",
-      messageParameters = Map.empty)
-  }
-
   def cannotResolveAttributeError(name: String, outputStr: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1137",
@@ -1714,10 +1722,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "sourceNames" -> sourceNames.mkString(", ")))
   }
 
-  def writeEmptySchemasUnsupportedByDataSourceError(): Throwable = {
+  def writeEmptySchemasUnsupportedByDataSourceError(format: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1142",
-      messageParameters = Map.empty)
+      errorClass = "EMPTY_SCHEMA_NOT_SUPPORTED_FOR_DATASOURCE",
+      messageParameters = Map("format" -> format))
   }
 
   def insertMismatchedColumnNumberError(
@@ -2816,10 +2824,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "tableName" -> tableName))
   }
 
-  def cannotAlterViewWithAlterTableError(): Throwable = {
+  def cannotAlterViewWithAlterTableError(viewName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1252",
-      messageParameters = Map.empty)
+      errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
+      messageParameters = Map(
+        "operation" -> "ALTER TABLE",
+        "viewName" -> toSQLId(viewName)
+      )
+    )
   }
 
   def cannotAlterTableWithAlterViewError(): Throwable = {
@@ -3373,8 +3385,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def cannotModifyValueOfStaticConfigError(key: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1325",
-      messageParameters = Map("key" -> key))
+      errorClass = "CANNOT_MODIFY_CONFIG",
+      messageParameters = Map("key" -> toSQLConf(key), "docroot" -> SPARK_DOC_ROOT)
+    )
   }
 
   def cannotModifyValueOfSparkConfigError(key: String, docroot: String): Throwable = {
@@ -4124,6 +4137,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.SCALAR_SUBQUERY_IN_VALUES",
       messageParameters = Map.empty,
       origin = inlineTable.origin
+    )
+  }
+
+  def ordinalOutOfBoundsError(
+      ordinal: Int,
+      attributes: Seq[Attribute]): Throwable = {
+    new AnalysisException(
+      errorClass = "COLUMN_ORDINAL_OUT_OF_BOUNDS",
+      messageParameters = Map(
+        "ordinal" -> ordinal.toString,
+        "attributesLength" -> attributes.length.toString,
+        "attributes" -> attributes.map(attr => toSQLId(attr.name)).mkString(", ")
+      )
     )
   }
 }

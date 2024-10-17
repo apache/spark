@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.util.ToNumberParser
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, DatetimeType, Decimal, DecimalType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -50,7 +50,7 @@ abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Bo
   }
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
+    Seq(StringTypeWithCollation, StringTypeWithCollation)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
@@ -284,7 +284,8 @@ case class ToCharacter(left: Expression, right: Expression)
   }
 
   override def dataType: DataType = SQLConf.get.defaultStringType
-  override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, StringTypeAnyCollation)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(DecimalType, StringTypeWithCollation)
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {
@@ -306,7 +307,10 @@ case class ToCharacter(left: Expression, right: Expression)
       inputTypeCheck
     }
   }
-  override def prettyName: String = "to_char"
+
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("to_char")
+
   override def nullSafeEval(decimal: Any, format: Any): Any = {
     val input = decimal.asInstanceOf[Decimal]
     numberFormatter.format(input)

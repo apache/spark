@@ -1008,7 +1008,9 @@ object DDLUtils extends Logging {
     if (!catalog.isTempView(tableMetadata.identifier)) {
       tableMetadata.tableType match {
         case CatalogTableType.VIEW if !isView =>
-          throw QueryCompilationErrors.cannotAlterViewWithAlterTableError()
+          throw QueryCompilationErrors.cannotAlterViewWithAlterTableError(
+            viewName = tableMetadata.identifier.table
+          )
         case o if o != CatalogTableType.VIEW && isView =>
           throw QueryCompilationErrors.cannotAlterTableWithAlterViewError()
         case _ =>
