@@ -79,7 +79,8 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       case DropMalformedMode =>
         None
       case FailFastMode =>
-        throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(e)
+        throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(
+          e, columnNameOfCorruptRecord)
     }
   }
 
