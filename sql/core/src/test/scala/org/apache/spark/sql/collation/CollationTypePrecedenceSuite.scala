@@ -49,22 +49,19 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
 
       sql(s"INSERT INTO $tableName VALUES (map('a', 'b'), 'a')")
 
-      Seq(
-        "c1['A']",
+      Seq("c1['A']",
         "c1['A' COLLATE UNICODE_CI]",
-        "c1[c2 COLLATE UNICODE_CI]",
-      ).foreach(condition =>
+        "c1[c2 COLLATE UNICODE_CI]").foreach { condition =>
         checkAnswer(selectQuery(condition), Seq(Row(Map("a" -> "b"))))
-      )
+      }
 
       Seq(
         // different explicit collation
         "c1['A' COLLATE UNICODE]",
         // different implicit collation
-        "c1[c2]",
-      ).foreach(condition =>
+        "c1[c2]").foreach { condition =>
         assertThrowsError(selectQuery(condition), "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
-      )
+      }
     }
   }
 }
