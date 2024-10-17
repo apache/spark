@@ -22,6 +22,7 @@ import java.util.regex.{Matcher, MatchResult, Pattern, PatternSyntaxException}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import org.apache.commons.text.StringEscapeUtils
 
@@ -703,7 +704,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
         try {
           m.appendReplacement(result, lastReplacement)
         } catch {
-          case e: Exception =>
+          case NonFatal(e) =>
             throw QueryExecutionErrors.invalidRegexpReplaceError(s.toString,
               p.toString, r.toString, i.asInstanceOf[Int], e)
         }
@@ -757,8 +758,12 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
           try {
             $matcher.appendReplacement($termResult, $termLastReplacement);
           } catch (Exception e) {
-            throw QueryExecutionErrors.invalidRegexpReplaceError($source, $regexp.toString(),
-              $rep.toString(), $pos, e);
+            if (scala.util.control.NonFatal.apply(e)) {
+              throw QueryExecutionErrors.invalidRegexpReplaceError($source, $regexp.toString(),
+                $rep.toString(), $pos, e);
+            } else {
+              throw e;
+            }
           }
         }
         $matcher.appendTail($termResult);
