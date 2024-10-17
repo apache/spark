@@ -445,9 +445,6 @@ trait ExplodeGeneratorBuilderBase extends GeneratorBuilder {
       > SELECT _FUNC_(collection => array(10, 20));
        10
        20
-      > SELECT * FROM _FUNC_(collection => array(10, 20));
-       10
-       20
   """,
   since = "1.0.0",
   group = "generator_funcs")
@@ -465,17 +462,14 @@ object ExplodeExpressionBuilder extends ExpressionBuilder {
   usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns. Unless specified otherwise, uses the default column name `col` for elements of the array or `key` and `value` for the elements of the map.",
   examples = """
     Examples:
-      > SELECT _FUNC_(array(10, 20));
-       10
-       20
-      > SELECT _FUNC_(collection => array(10, 20));
+      > SELECT * FROM _FUNC_(array(10, 20));
        10
        20
       > SELECT * FROM _FUNC_(collection => array(10, 20));
        10
        20
   """,
-  since = "1.0.0",
+  since = "3.4.0",
   group = "generator_funcs")
 // scalastyle:on line.size.limit
 object ExplodeGeneratorBuilder extends ExplodeGeneratorBuilderBase {
@@ -487,17 +481,14 @@ object ExplodeGeneratorBuilder extends ExplodeGeneratorBuilderBase {
   usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns. Unless specified otherwise, uses the default column name `col` for elements of the array or `key` and `value` for the elements of the map.",
   examples = """
     Examples:
-      > SELECT _FUNC_(array(10, 20));
-       10
-       20
-      > SELECT _FUNC_(collection => array(10, 20));
+      > SELECT * FROM _FUNC_(array(10, 20));
        10
        20
       > SELECT * FROM _FUNC_(collection => array(10, 20));
        10
        20
   """,
-  since = "1.0.0",
+  since = "3.4.0",
   group = "generator_funcs")
 // scalastyle:on line.size.limit
 object ExplodeOuterGeneratorBuilder extends ExplodeGeneratorBuilderBase {
@@ -559,17 +550,14 @@ object PosExplodeExpressionBuilder extends ExpressionBuilder {
   usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows with positions, or the elements of map `expr` into multiple rows and columns with positions. Unless specified otherwise, uses the column name `pos` for position, `col` for elements of the array or `key` and `value` for elements of the map.",
   examples = """
     Examples:
-      > SELECT _FUNC_(array(10,20));
-       0	10
-       1	20
-      > SELECT _FUNC_(collection => array(10,20));
+      > SELECT * FROM _FUNC_(array(10,20));
        0	10
        1	20
       > SELECT * FROM _FUNC_(collection => array(10,20));
        0	10
        1	20
   """,
-  since = "2.0.0",
+  since = "3.5.0",
   group = "generator_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 object PosExplodeGeneratorBuilder extends PosExplodeGeneratorBuilderBase {
@@ -581,17 +569,14 @@ object PosExplodeGeneratorBuilder extends PosExplodeGeneratorBuilderBase {
   usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows with positions, or the elements of map `expr` into multiple rows and columns with positions. Unless specified otherwise, uses the column name `pos` for position, `col` for elements of the array or `key` and `value` for elements of the map.",
   examples = """
     Examples:
-      > SELECT _FUNC_(array(10,20));
-       0	10
-       1	20
-      > SELECT _FUNC_(collection => array(10,20));
+      > SELECT * FROM _FUNC_(array(10,20));
        0	10
        1	20
       > SELECT * FROM _FUNC_(collection => array(10,20));
        0	10
        1	20
   """,
-  since = "2.0.0",
+  since = "3.5.0",
   group = "generator_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 object PosExplodeOuterGeneratorBuilder extends PosExplodeGeneratorBuilderBase {
@@ -669,9 +654,6 @@ trait InlineGeneratorBuilderBase extends GeneratorBuilder {
       > SELECT _FUNC_(input => array(struct(1, 'a'), struct(2, 'b')));
        1	a
        2	b
-      > SELECT * FROM _FUNC_(input => array(struct(1, 'a'), struct(2, 'b')));
-       1	a
-       2	b
   """,
   since = "2.0.0",
   group = "generator_funcs")
@@ -689,17 +671,14 @@ object InlineExpressionBuilder extends ExpressionBuilder {
   usage = "_FUNC_(expr) - Explodes an array of structs into a table. Uses column names col1, col2, etc. by default unless specified otherwise.",
   examples = """
     Examples:
-      > SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
-       1	a
-       2	b
-      > SELECT _FUNC_(input => array(struct(1, 'a'), struct(2, 'b')));
+      > SELECT * FROM _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
        1	a
        2	b
       > SELECT * FROM _FUNC_(input => array(struct(1, 'a'), struct(2, 'b')));
        1	a
        2	b
   """,
-  since = "2.0.0",
+  since = "3.4.0",
   group = "generator_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 object InlineGeneratorBuilder extends InlineGeneratorBuilderBase {
@@ -711,17 +690,14 @@ object InlineGeneratorBuilder extends InlineGeneratorBuilderBase {
   usage = "_FUNC_(expr) - Explodes an array of structs into a table. Uses column names col1, col2, etc. by default unless specified otherwise.",
   examples = """
     Examples:
-      > SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
-       1	a
-       2	b
-      > SELECT _FUNC_(input => array(struct(1, 'a'), struct(2, 'b')));
+      > SELECT * FROM _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
        1	a
        2	b
       > SELECT * FROM _FUNC_(input => array(struct(1, 'a'), struct(2, 'b')));
        1	a
        2	b
   """,
-  since = "2.0.0",
+  since = "3.4.0",
   group = "generator_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 object InlineOuterGeneratorBuilder extends InlineGeneratorBuilderBase {
