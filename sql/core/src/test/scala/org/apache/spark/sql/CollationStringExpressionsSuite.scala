@@ -1569,7 +1569,7 @@ class CollationStringExpressionsSuite
       StringTrimTestCase("xxasdxx", Some("y"), "UNICODE", "xxasdxx"),
       StringTrimTestCase("xxasdxx", Some("  x"), "UNICODE_RTRIM", "asd"),
       StringTrimTestCase("  asd  ", None, "UNICODE_CI", "asd"),
-      StringTrimTestCase("  asd  ", None, "UNICODE_CI_RTRIM", "asd"),
+      StringTrimTestCase("  asd  ", None, "UNICODE_CI_RTRIM", "asd")
     )
     val unsupportedTestCase = StringTrimTestCase("xxasdxx", Some("x"), "UNICODE_AI", "asd")
     testCases.foreach(t => {
