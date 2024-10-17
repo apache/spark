@@ -180,6 +180,8 @@ object ParseUrl {
        spark.apache.org
       > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY');
        query=1
+      > SELECT _FUNC_('inva lid://spark.apache.org/path?query=1', 'QUERY');
+       NULL
       > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY', 'query');
        1
   """,

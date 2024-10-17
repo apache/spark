@@ -12945,12 +12945,12 @@ def try_parse_url(
     ...   [("https://spark.apache.org/path?query=1", "QUERY")],
     ...   ["url", "part"]
     ... )
-    >>> df.select(sf.parse_url(df.url, df.part)).show()
-    +--------------------+
-    |parse_url(url, part)|
-    +--------------------+
-    |             query=1|
-    +--------------------+
+    >>> df.select(sf.try_parse_url(df.url, df.part)).show()
+    +------------------------+
+    |try_parse_url(url, part)|
+    +------------------------+
+    |                 query=1|
+    +------------------------+
 
     Example 2: Extracting the value of a specific query parameter from a URL
 
@@ -12959,12 +12959,12 @@ def try_parse_url(
     ...   [("https://spark.apache.org/path?query=1", "QUERY", "query")],
     ...   ["url", "part", "key"]
     ... )
-    >>> df.select(sf.parse_url(df.url, df.part, df.key)).show()
-    +-------------------------+
-    |parse_url(url, part, key)|
-    +-------------------------+
-    |                        1|
-    +-------------------------+
+    >>> df.select(sf.try_parse_url(df.url, df.part, df.key)).show()
+    +-----------------------------+
+    |try_parse_url(url, part, key)|
+    +-----------------------------+
+    |                            1|
+    +-----------------------------+
 
     Example 3: Extracting the protocol part from a URL
 
@@ -12973,12 +12973,12 @@ def try_parse_url(
     ...   [("https://spark.apache.org/path?query=1", "PROTOCOL")],
     ...   ["url", "part"]
     ... )
-    >>> df.select(sf.parse_url(df.url, df.part)).show()
-    +--------------------+
-    |parse_url(url, part)|
-    +--------------------+
-    |               https|
-    +--------------------+
+    >>> df.select(sf.try_parse_url(df.url, df.part)).show()
+    +------------------------+
+    |try_parse_url(url, part)|
+    +------------------------+
+    |                   https|
+    +------------------------+
 
     Example 4: Extracting the host part from a URL
 
@@ -12987,12 +12987,12 @@ def try_parse_url(
     ...   [("https://spark.apache.org/path?query=1", "HOST")],
     ...   ["url", "part"]
     ... )
-    >>> df.select(sf.parse_url(df.url, df.part)).show()
-    +--------------------+
-    |parse_url(url, part)|
-    +--------------------+
-    |    spark.apache.org|
-    +--------------------+
+    >>> df.select(sf.try_parse_url(df.url, df.part)).show()
+    +------------------------+
+    |try_parse_url(url, part)|
+    +------------------------+
+    |        spark.apache.org|
+    +------------------------+
 
     Example 5: Extracting the path part from a URL
 
@@ -13001,12 +13001,12 @@ def try_parse_url(
     ...   [("https://spark.apache.org/path?query=1", "PATH")],
     ...   ["url", "part"]
     ... )
-    >>> df.select(sf.parse_url(df.url, df.part)).show()
-    +--------------------+
-    |parse_url(url, part)|
-    +--------------------+
-    |               /path|
-    +--------------------+
+    >>> df.select(sf.try_parse_url(df.url, df.part)).show()
+    +------------------------+
+    |try_parse_url(url, part)|
+    +------------------------+
+    |                   /path|
+    +------------------------+
     """
     if key is not None:
         return _invoke_function_over_columns("try_parse_url", url, partToExtract, key)
