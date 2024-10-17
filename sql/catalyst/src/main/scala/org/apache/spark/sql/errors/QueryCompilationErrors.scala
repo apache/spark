@@ -3646,7 +3646,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def implicitCollationMismatchError(implicitTypes: Seq[AbstractDataType]): Throwable = {
+  def implicitCollationMismatchError(implicitTypes: Seq[StringType]): Throwable = {
     new AnalysisException(
       errorClass = "COLLATION_MISMATCH.IMPLICIT",
       messageParameters = Map(
