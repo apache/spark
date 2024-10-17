@@ -245,6 +245,7 @@ class NewHadoopRDD[K, V](
             format.createRecordReader(split.serializableHadoopSplit.value, hadoopAttemptContext)
           ) { reader =>
             reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
+            reader
           }
         } catch {
           case e: FileNotFoundException if ignoreMissingFiles =>
