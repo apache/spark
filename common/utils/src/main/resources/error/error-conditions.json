@@ -7258,11 +7258,6 @@
       "Initial type <dataType> must be an <arrayType>, a <structType> or a <mapType>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2165" : {
-    "message" : [
-      "Malformed records are detected in schema inference. Parse Mode: <failFastMode>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2166" : {
     "message" : [
       "Malformed JSON."
