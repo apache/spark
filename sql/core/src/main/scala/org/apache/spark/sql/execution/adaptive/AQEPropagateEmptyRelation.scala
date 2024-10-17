@@ -82,6 +82,13 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
     case _ => false
   }
 
+  // A broadcast query stage can't be executed without the join operator.
+  // TODO: we can return the original query plan before broadcast.
+  override protected def canExecuteWithoutJoin(plan: LogicalPlan): Boolean = plan match {
+    case LogicalQueryStage(_, _: BroadcastQueryStageExec) => false
+    case _ => true
+  }
+
   override protected def applyInternal(p: LogicalPlan): LogicalPlan = p.transformUpWithPruning(
     // LOCAL_RELATION and TRUE_OR_FALSE_LITERAL pattern are matched at
     // `PropagateEmptyRelationBase.commonApplyFunc`
