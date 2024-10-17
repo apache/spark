@@ -387,7 +387,7 @@ class FunctionsTestsMixin:
         df = self.spark.createDataFrame(
             [("92233720368547758070",), ("-92233720368547758070",)], ["num"]
         )
-        actual = df.select(F.try_conv(df.num, "10", "16").alias("res")).collect()
+        actual = df.select(F.try_conv(df.num, 10, 16).alias("res")).collect()
         self.assertEqual([Row(res="FFFFFFFFFFFFFFFF"), Row(res="FFFFFFFFFFFFFFFF")], actual)
 
     def test_octet_length_function(self):
