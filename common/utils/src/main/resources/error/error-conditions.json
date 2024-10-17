@@ -6519,11 +6519,6 @@
       "<action> is not allowed on <tableName> since its partition metadata is not stored in the Hive metastore. To import this information into the metastore, run `msck repair table <tableName>`."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1252" : {
-    "message" : [
-      "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1253" : {
     "message" : [
       "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead."
