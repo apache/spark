@@ -1489,9 +1489,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       byte[] input = getBytes();
       int byteIndex = 0;
       UTF8String[] result = new UTF8String[newLimit];
-      for (int i = 0; i < newLimit - 1; i++) {
+      for (int charIndex = 0; charIndex < newLimit - 1; charIndex++) {
         int currCharNumBytes = numBytesForFirstByte(input[byteIndex]);
-        result[i] = UTF8String.fromBytes(input, byteIndex, currCharNumBytes);
+        result[charIndex] = UTF8String.fromBytes(input, byteIndex, currCharNumBytes);
         byteIndex += currCharNumBytes;
       }
       result[newLimit - 1] = UTF8String.fromBytes(input, byteIndex, numBytes() - byteIndex);
