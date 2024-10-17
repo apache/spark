@@ -177,13 +177,6 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   }
 
   /**
-   * If the heartbeat receiver is not stopped, notify it of executor registrations.
-   */
-  override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
-    addExecutor(executorAdded.executorId)
-  }
-
-  /**
    * Send ExecutorRemoved to the event loop to remove an executor. Only for test.
    *
    * @return if HeartbeatReceiver is stopped, return None. Otherwise, return a Some(Future) that
