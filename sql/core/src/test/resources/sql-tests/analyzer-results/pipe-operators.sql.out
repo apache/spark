@@ -2240,10 +2240,10 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS",
-  "sqlState" : "0A000",
+  "errorClass" : "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS",
   "messageParameters" : {
-    "clauses" : "the co-existence of the ORDER BY and LIMIT clauses"
+    "clause1" : "ORDER BY",
+    "clause2" : "LIMIT"
   },
   "queryContext" : [ {
     "objectType" : "",

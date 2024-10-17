@@ -93,10 +93,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
       ctx: QueryOrganizationContext,
-      clauses: String): Throwable = {
+      clause1: String,
+      clause2: String): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE.MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS",
-      messageParameters = Map("clauses" -> clauses),
+      errorClass = "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS",
+      messageParameters = Map(
+        "clause1" -> clause1,
+        "clause2" -> clause2),
       ctx)
   }
 

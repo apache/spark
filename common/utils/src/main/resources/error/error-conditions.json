@@ -3448,6 +3448,11 @@
     ],
     "sqlState" : "0A000"
   },
+  "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS" : {
+    "message" : [
+      "<clause1> and <clause2> can not coexist in the same SQL pipe operator using '|>'. Please separate the multiple result clauses into separate pipe operators and then retry the query again."
+    ]
+  },
   "NAMED_PARAMETERS_NOT_SUPPORTED" : {
     "message" : [
       "Named parameters are not supported for function <functionName>; please retry the query with positional arguments to the function call instead."
@@ -5009,11 +5014,6 @@
       "MULTIPLE_BUCKET_TRANSFORMS" : {
         "message" : [
           "Multiple bucket TRANSFORMs."
-        ]
-      },
-      "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS" : {
-        "message" : [
-          "Syntax error: the SQL pipe operator syntax using |> does not support <clauses>. Please separate the multiple result clauses into separate pipe operators and then retry the query again."
         ]
       },
       "MULTI_ACTION_ALTER" : {

@@ -1035,7 +1035,7 @@ class AstBuilder extends DataTypeAstBuilder
     val withOffset = withWindow.optional(offset) {
       if (forPipeOperators && clause.nonEmpty) {
         throw QueryParsingErrors.multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
-          ctx, s"the co-existence of the $clause and ${PipeOperators.offsetClause} clauses")
+          ctx, clause, PipeOperators.offsetClause)
       }
       clause = PipeOperators.offsetClause
       Offset(typedVisit(offset), withWindow)
@@ -1046,7 +1046,7 @@ class AstBuilder extends DataTypeAstBuilder
     withOffset.optional(limit) {
       if (forPipeOperators && clause.nonEmpty && clause != PipeOperators.offsetClause) {
         throw QueryParsingErrors.multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
-          ctx, s"the co-existence of the $clause and ${PipeOperators.limitClause} clauses")
+          ctx, clause, PipeOperators.limitClause)
       }
       clause = PipeOperators.limitClause
       Limit(typedVisit(limit), withOffset)
