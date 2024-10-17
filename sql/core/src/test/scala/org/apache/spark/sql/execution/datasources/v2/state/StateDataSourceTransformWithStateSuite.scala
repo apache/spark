@@ -572,17 +572,19 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
             TimeMode.ProcessingTime(),
             OutputMode.Update())
 
-        testStream(result, OutputMode.Update())(
-          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+        val clock = new StreamManualClock
+        testStream(result)(
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
+            checkpointLocation = tempDir.getCanonicalPath),
           AddData(inputData, ("session1", "group2")),
           AddData(inputData, ("session1", "group1")),
           AddData(inputData, ("session2", "group1")),
+          AdvanceManualClock(5 * 1000),
+          CheckNewAnswer(),
           AddData(inputData, ("session3", "group7")),
           AddData(inputData, ("session1", "group4")),
-          Execute { _ =>
-            // wait for the batch to run since we are using processing time
-            Thread.sleep(5000)
-          },
+          AdvanceManualClock(30 * 1000),
+          CheckNewAnswer(),
           StopStream
         )
 
@@ -598,12 +600,14 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           .selectExpr("list_element.ttlExpirationMs AS ttlExpirationMs")
         var flattenedCount = 0L
         flattenedResultDf.collect().foreach { row =>
-          flattenedCount = flattenedCount + 1
-          assert(row.getLong(0) > 0)
+          if (!row.anyNull) {
+            flattenedCount = flattenedCount + 1
+            assert(row.getLong(0) > 0)
+          }
         }
 
-        // verify that 5 state rows are present
-        assert(flattenedCount === 5)
+        // verify that 6 state rows are present
+        assert(flattenedCount === 6)
 
         val outputDf = flattenedStateReaderDf
           .selectExpr(
@@ -617,7 +621,10 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
             Row("append", "session1", "group2", 0),
             Row("append", "session1", "group4", 0),
             Row("append", "session2", "group1", 0),
-            Row("append", "session3", "group7", 3)))
+            Row("append", "session3", "group7", 3),
+            Row("delete", "session1", null, 0),
+            Row("delete", "session2", null, 0),
+            Row("update", "session1", "group4", 0)))
       }
     }
   }
