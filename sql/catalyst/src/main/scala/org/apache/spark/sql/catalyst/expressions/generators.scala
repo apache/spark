@@ -530,9 +530,6 @@ trait PosExplodeGeneratorBuilderBase extends GeneratorBuilder {
       > SELECT _FUNC_(collection => array(10,20));
        0	10
        1	20
-      > SELECT * FROM _FUNC_(collection => array(10,20));
-       0	10
-       1	20
   """,
   since = "2.0.0",
   group = "generator_funcs")
