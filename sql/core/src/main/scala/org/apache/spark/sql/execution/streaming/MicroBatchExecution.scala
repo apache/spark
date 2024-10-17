@@ -931,8 +931,9 @@ class MicroBatchExecution(
   /**
    * Walk the query plan `latestExecPlan` to find out a StateStoreWriter operator. Retrieve
    * the state store checkpoint id from the operator and update it to `currentStateStoreCkptId`.
-   * @param execCtx
-   * @param latestExecPlan
+   * @param execCtx information is needed to do some validation.
+   * @param latestExecPlan the query plan that contains stateful operators where we would
+   *                       extract the state store checkpoint id.
    */
   private def updateStateStoreCkptId(
       execCtx: MicroBatchExecutionContext,

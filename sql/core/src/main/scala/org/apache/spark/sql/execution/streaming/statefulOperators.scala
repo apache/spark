@@ -88,6 +88,10 @@ case class StatefulOperatorStateInfo(
 }
 
 object StatefulOperatorStateInfo {
+  /**
+   * Whether stateo store checkpoint version requires checkpointID to be used.
+   * @return true if state store checkpointID should be used.
+   */
   def enableStateStoreCheckpointIds(conf: SQLConf): Boolean = {
     conf.stateStoreCheckpointFormatVersion >= 2
   }
