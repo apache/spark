@@ -402,7 +402,6 @@ org.xerial.snappy:snappy-java
 org.yaml:snakeyaml
 oro:oro
 stax:stax-api
-xerces:xercesImpl
 
 core/src/main/java/org/apache/spark/util/collection/TimSort.java
 core/src/main/resources/org/apache/spark/ui/static/bootstrap*
