@@ -101,9 +101,4 @@ class RuntimeConfigSuite extends SparkFunSuite {
     // Get the unset config entry, which should return its defaultValue again.
     assert(conf.get(key) == SQLConf.SESSION_LOCAL_TIMEZONE.defaultValue.get)
   }
-
-  test("test") {
-    val conf = newConf()
-    conf.set("spark.default.parallelism", "2")
-  }
 }
