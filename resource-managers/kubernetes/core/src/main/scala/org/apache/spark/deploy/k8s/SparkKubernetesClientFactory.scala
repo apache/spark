@@ -79,8 +79,6 @@ object SparkKubernetesClientFactory extends Logging {
       .getOption(s"$kubernetesAuthConfPrefix.$CLIENT_KEY_FILE_CONF_SUFFIX")
     val clientCertFile = sparkConf
       .getOption(s"$kubernetesAuthConfPrefix.$CLIENT_CERT_FILE_CONF_SUFFIX")
-    // TODO(SPARK-37687): clean up direct usage of OkHttpClient, see also:
-    // https://github.com/fabric8io/kubernetes-client/issues/3547
 
     // Allow for specifying a context used to auto-configure from the users K8S config file
     val kubeContext = sparkConf.get(KUBERNETES_CONTEXT).filter(_.nonEmpty)
