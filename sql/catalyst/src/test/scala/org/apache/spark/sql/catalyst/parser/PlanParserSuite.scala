@@ -1980,7 +1980,7 @@ class PlanParserSuite extends AnalysisTest {
       exception = parseException(query),
       condition = "INVALID_LAMBDA_USAGE",
       sqlState = Some("42K0E"),
-      parameters = Map("lambdaExpr" -> "lambdafunction((b = true), a)"),
+      parameters = Map("lambdaExpr" -> "\"lambdafunction((b = true), a)\""),
       context = ExpectedContext(
         fragment = "case when a->b = true then 1 else 0 end",
         start = 8,
