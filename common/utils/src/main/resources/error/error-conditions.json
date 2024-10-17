@@ -376,6 +376,12 @@
     ],
     "sqlState" : "429BB"
   },
+  "CANNOT_REMOVE_RESERVED_PROPERTY" : {
+    "message" : [
+      "Cannot remove reserved property: <property>."
+    ],
+    "sqlState" : "42000"
+  },
   "CANNOT_RENAME_ACROSS_SCHEMA" : {
     "message" : [
       "Renaming a <type> across schemas is not allowed."
@@ -605,6 +611,12 @@
       "The column <columnName> already exists. Choose another name or rename the existing column."
     ],
     "sqlState" : "42711"
+  },
+  "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH" : {
+    "message" : [
+      "Some values in field <pos> are incompatible with the column array type. Expected type <type>."
+    ],
+    "sqlState" : "0A000"
   },
   "COLUMN_NOT_DEFINED_IN_TABLE" : {
     "message" : [
@@ -3821,6 +3833,12 @@
     ],
     "sqlState" : "42617"
   },
+  "PARSE_MODE_UNSUPPORTED" : {
+    "message" : [
+      "The function <funcName> doesn't support the <mode> mode. Acceptable modes are PERMISSIVE and FAILFAST."
+    ],
+    "sqlState" : "42601"
+  },
   "PARSE_SYNTAX_ERROR" : {
     "message" : [
       "Syntax error at or near <error><hint>."
@@ -6034,11 +6052,6 @@
       "DataType '<x>' is not supported by <className>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1099" : {
-    "message" : [
-      "<funcName>() doesn't support the <mode> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1103" : {
     "message" : [
       "Unsupported component type <clz> in arrays."
@@ -6853,11 +6866,6 @@
       "<methodName> is not implemented."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2042" : {
-    "message" : [
-      "<message>. If necessary set <ansiConfig> to false to bypass this error."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2045" : {
     "message" : [
       "Unsupported table change: <message>"
@@ -6948,11 +6956,6 @@
   "_LEGACY_ERROR_TEMP_2068" : {
     "message" : [
       "Missing database location."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2069" : {
-    "message" : [
-      "Cannot remove reserved property: <property>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2070" : {
@@ -8095,11 +8098,6 @@
       "No handler for UDF/UDAF/UDTF '<clazz>': <e>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3085" : {
-    "message" : [
-      "from_avro() doesn't support the <name> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3086" : {
     "message" : [
       "Cannot persist <tableName> into Hive metastore as table property keys may not start with 'spark.sql.': <invalidKeys>"
@@ -8703,6 +8701,21 @@
   "_LEGACY_ERROR_TEMP_3262" : {
     "message" : [
       "Doesn't support month or year interval: <interval>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3300" : {
+    "message" : [
+      "error while calling spill() on <consumerToSpill> : <message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3301" : {
+    "message" : [
+      "Not enough memory to grow pointer array"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3302" : {
+    "message" : [
+      "No enough memory for aggregation"
     ]
   },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {

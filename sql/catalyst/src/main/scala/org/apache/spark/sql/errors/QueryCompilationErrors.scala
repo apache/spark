@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AnyValue
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, InputParameter, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, FailFastMode, ParseMode, PermissiveMode}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ParseMode}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
@@ -1342,12 +1342,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def parseModeUnsupportedError(funcName: String, mode: ParseMode): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1099",
+      errorClass = "PARSE_MODE_UNSUPPORTED",
       messageParameters = Map(
-        "funcName" -> funcName,
-        "mode" -> mode.name,
-        "permissiveMode" -> PermissiveMode.name,
-        "failFastMode" -> FailFastMode.name))
+        "funcName" -> toSQLId(funcName),
+        "mode" -> mode.name))
   }
 
   def nonFoldableArgumentError(

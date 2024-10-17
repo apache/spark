@@ -202,7 +202,8 @@ class SparkConnectListenerBusListenerSuite
     val listenerHolder = sessionHolder.streamingServersideListenerHolder
     eventually(timeout(5.seconds), interval(500.milliseconds)) {
       assert(
-        sessionHolder.streamingServersideListenerHolder.streamingQueryServerSideListener.isEmpty)
+        sessionHolder.streamingServersideListenerHolder.streamingQueryServerSideListener.get() ==
+          null)
       assert(spark.streams.listListeners().size === listenerCntBeforeThrow)
       assert(listenerHolder.streamingQueryStartedEventCache.isEmpty)
     }
