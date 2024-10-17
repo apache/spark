@@ -71,6 +71,13 @@ trait StateTypesEncoder[V, S] {
   def encodeValue(value: V): S
 
   def decodeValue(row: S): V
+
+  def encodeValue(value: V, expirationMs: Long): S
+
+
+  def decodeTtlExpirationMs(row: S): Option[Long]
+
+  def isExpired(row: S, batchTimestampMs: Long): Boolean
 }
 
 /**
@@ -187,7 +194,7 @@ class AvroTypesEncoder[V](
     valEncoder: Encoder[V],
     stateName: String,
     hasTtl: Boolean,
-    avroSerde: AvroSerde) extends StateTypesEncoder[V, Array[Byte]] {
+    avroSerde: Option[AvroSerde]) extends StateTypesEncoder[V, Array[Byte]] {
 
   val out = new ByteArrayOutputStream
 
@@ -196,11 +203,8 @@ class AvroTypesEncoder[V](
   private val valExpressionEnc = encoderFor(valEncoder)
   private val objToRowSerializer = valExpressionEnc.createSerializer()
   private val rowToObjDeserializer = valExpressionEnc.resolveAndBind().createDeserializer()
-  // This variable is only used when has Ttl is true
-  private val valueTTLProjection =
-    UnsafeProjection.create(getValueSchemaWithTTL(valEncoder.schema, true))
 
-  val keySchema = keyEncoder.schema
+  private val keySchema = keyEncoder.schema
   private val keyAvroType = SchemaConverters.toAvroType(keySchema)
 
   // case class -> dataType
@@ -214,8 +218,8 @@ class AvroTypesEncoder[V](
       throw StateStoreErrors.implicitKeyNotFound(stateName)
     }
 
-    val keyRow = keySerializer.apply(keyOption.get).copy().asInstanceOf[UnsafeRow]
-    val avroData = avroSerde.keySerializer.serialize(keyRow)
+    val keyRow = keySerializer.apply(keyOption.get).copy() // V -> InternalRow
+    val avroData = avroSerde.get.keySerializer.serialize(keyRow) // InternalRow -> GenericDataRecord
 
     out.reset()
     val encoder = EncoderFactory.get().directBinaryEncoder(out, null)
@@ -228,7 +232,8 @@ class AvroTypesEncoder[V](
 
   override def encodeValue(value: V): Array[Byte] = {
     val objRow: InternalRow = objToRowSerializer.apply(value).copy() // V -> InternalRow
-    val avroData = avroSerde.valueSerializer.serialize(objRow) // InternalRow -> GenericDataRecord
+    val avroData =
+      avroSerde.get.valueSerializer.serialize(objRow) // InternalRow -> GenericDataRecord
     out.reset()
 
     val encoder = EncoderFactory.get().directBinaryEncoder(out, null)
@@ -244,11 +249,23 @@ class AvroTypesEncoder[V](
     val reader = new GenericDatumReader[Any](valueAvroType)
     val decoder = DecoderFactory.get().binaryDecoder(row, 0, row.length, null)
     val genericData = reader.read(null, decoder) // bytes -> GenericDataRecord
-    val internalRow = avroSerde.valueDeserializer.deserialize(
+    val internalRow = avroSerde.get.valueDeserializer.deserialize(
       genericData).orNull.asInstanceOf[InternalRow] // GenericDataRecord -> InternalRow
     if (hasTtl) {
       rowToObjDeserializer.apply(internalRow.getStruct(0, valEncoder.schema.length))
     } else rowToObjDeserializer.apply(internalRow)
+  }
+
+  override def encodeValue(value: V, expirationMs: Long): Array[Byte] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def decodeTtlExpirationMs(row: Array[Byte]): Option[Long] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def isExpired(row: Array[Byte], batchTimestampMs: Long): Boolean = {
+    throw new UnsupportedOperationException
   }
 }
 

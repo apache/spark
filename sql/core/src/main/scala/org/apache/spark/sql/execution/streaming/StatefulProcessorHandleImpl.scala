@@ -132,6 +132,20 @@ class StatefulProcessorHandleImpl(
     resultState
   }
 
+  // For testing
+
+  private[sql] def getValueStateWithSerde[T](
+      stateName: String,
+      valEncoder: Encoder[T]): ValueState[T] = {
+    verifyStateVarOperations("get_value_state", CREATED)
+    incrementMetric("numValueStateVars")
+    val avroSerde = new StateStoreColumnFamilySchemaUtils(true).getValueStateSchema[T](
+      stateName, keyEncoder, valEncoder, hasTtl = false).avroSerde
+    val resultState = new ValueStateImpl[T](
+      store, stateName, keyEncoder, valEncoder, avroSerde)
+    resultState
+  }
+
   override def getValueState[T](
       stateName: String,
       valEncoder: Encoder[T],
@@ -141,7 +155,7 @@ class StatefulProcessorHandleImpl(
 
     assert(batchTimestampMs.isDefined)
     val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
-      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get, schemas(stateName).avroSerde)
+      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get, avroSerde = None)
     incrementMetric("numValueStateWithTTLVars")
     ttlStates.add(valueStateWithTTL)
     valueStateWithTTL
@@ -221,7 +235,7 @@ class StatefulProcessorHandleImpl(
     verifyStateVarOperations("get_list_state", CREATED)
     incrementMetric("numListStateVars")
     val resultState = new ListStateImpl[T](
-      store, stateName, keyEncoder, valEncoder, schemas(stateName).avroSerde)
+      store, stateName, keyEncoder, valEncoder, avroSerde = None)
     resultState
   }
 
@@ -250,7 +264,7 @@ class StatefulProcessorHandleImpl(
 
     assert(batchTimestampMs.isDefined)
     val listStateWithTTL = new ListStateImplWithTTL[T](store, stateName,
-      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get, schemas(stateName).avroSerde)
+      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get, avroSerde = None)
     incrementMetric("numListStateWithTTLVars")
     ttlStates.add(listStateWithTTL)
 
@@ -264,7 +278,7 @@ class StatefulProcessorHandleImpl(
     verifyStateVarOperations("get_map_state", CREATED)
     incrementMetric("numMapStateVars")
     val resultState = new MapStateImpl[K, V](
-      store, stateName, keyEncoder, userKeyEnc, valEncoder, schemas(stateName).avroSerde)
+      store, stateName, keyEncoder, userKeyEnc, valEncoder, avroSerde = None)
     resultState
   }
 
@@ -278,7 +292,7 @@ class StatefulProcessorHandleImpl(
 
     assert(batchTimestampMs.isDefined)
     val mapStateWithTTL = new MapStateImplWithTTL[K, V](store, stateName, keyEncoder, userKeyEnc,
-      valEncoder, ttlConfig, batchTimestampMs.get, schemas(stateName).avroSerde)
+      valEncoder, ttlConfig, batchTimestampMs.get, avroSerde = None)
     incrementMetric("numMapStateWithTTLVars")
     ttlStates.add(mapStateWithTTL)
 

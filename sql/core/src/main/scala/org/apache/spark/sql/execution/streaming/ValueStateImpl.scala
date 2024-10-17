@@ -39,8 +39,11 @@ class ValueStateImpl[S](
     avroSerde: Option[AvroSerde])
   extends ValueState[S] with Logging {
 
-  private val stateTypesEncoder = new AvroTypesEncoder[S](
-    keyExprEnc, valEncoder, stateName, hasTtl = false, avroSerde.get)
+  private val usingAvro: Boolean = avroSerde.isDefined
+  private val avroTypesEncoder = new AvroTypesEncoder[S](
+    keyExprEnc, valEncoder, stateName, hasTtl = false, avroSerde)
+  private val unsafeRowTypesEncoder = new UnsafeRowTypesEncoder[S](
+    keyExprEnc, valEncoder, stateName, hasTtl = false)
 
   initialize()
 
@@ -61,11 +64,28 @@ class ValueStateImpl[S](
 
   /** Function to return associated value with key if exists and null otherwise */
   override def get(): S = {
-    val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
-    val retRow = store.get(encodedGroupingKey, stateName)
+    if (usingAvro) {
+      getAvro()
+    } else {
+      getUnsafeRow()
+    }
+  }
 
+  private def getAvro(): S = {
+    val encodedGroupingKey = avroTypesEncoder.encodeGroupingKey()
+    val retRow = store.get(encodedGroupingKey, stateName)
     if (retRow != null) {
-      stateTypesEncoder.decodeValue(retRow)
+      avroTypesEncoder.decodeValue(retRow)
+    } else {
+      null.asInstanceOf[S]
+    }
+  }
+
+  private def getUnsafeRow(): S = {
+    val encodedGroupingKey = unsafeRowTypesEncoder.encodeGroupingKey()
+    val retRow = store.get(encodedGroupingKey, stateName)
+    if (retRow != null) {
+      unsafeRowTypesEncoder.decodeValue(retRow)
     } else {
       null.asInstanceOf[S]
     }
@@ -73,13 +93,25 @@ class ValueStateImpl[S](
 
   /** Function to update and overwrite state associated with given key */
   override def update(newState: S): Unit = {
-    val encodedValue = stateTypesEncoder.encodeValue(newState)
-    store.put(stateTypesEncoder.encodeGroupingKey(),
-      encodedValue, stateName)
+    if (usingAvro) {
+      val encodedValue = avroTypesEncoder.encodeValue(newState)
+      store.put(avroTypesEncoder.encodeGroupingKey(),
+        encodedValue, stateName)
+    } else {
+      val encodedValue = unsafeRowTypesEncoder.encodeValue(newState)
+      store.put(unsafeRowTypesEncoder.encodeGroupingKey(),
+        encodedValue, stateName)
+    }
   }
 
   /** Function to remove state for given key */
   override def clear(): Unit = {
-    store.remove(stateTypesEncoder.encodeGroupingKey(), stateName)
+    if (usingAvro) {
+      val encodedKey = avroTypesEncoder.encodeGroupingKey()
+      store.remove(encodedKey, stateName)
+    } else {
+      val encodedKey = unsafeRowTypesEncoder.encodeGroupingKey()
+      store.remove(encodedKey, stateName)
+    }
   }
 }

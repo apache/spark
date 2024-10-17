@@ -33,6 +33,10 @@ sealed trait RocksDBKeyStateEncoder {
   def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte]
   def encodeKey(row: UnsafeRow): Array[Byte]
   def decodeKey(keyBytes: Array[Byte]): UnsafeRow
+
+  def encodeKeyBytes(row: Array[Byte]): Array[Byte]
+  def decodeKeyBytes(keyBytes: Array[Byte]): Array[Byte]
+
   def getColumnFamilyIdBytes(): Array[Byte]
 }
 
@@ -268,6 +272,12 @@ class PrefixKeyScanStateEncoder(
   }
 
   override def supportPrefixKeyScan: Boolean = true
+
+  override def encodeKeyBytes(row: Array[Byte]): Array[Byte] =
+    throw new UnsupportedOperationException
+
+  override def decodeKeyBytes(keyBytes: Array[Byte]): Array[Byte] =
+    throw new UnsupportedOperationException
 }
 
 /**
@@ -645,6 +655,12 @@ class RangeKeyScanStateEncoder(
   }
 
   override def supportPrefixKeyScan: Boolean = true
+
+  override def encodeKeyBytes(row: Array[Byte]): Array[Byte] =
+    throw new UnsupportedOperationException
+
+  override def decodeKeyBytes(keyBytes: Array[Byte]): Array[Byte] =
+    throw new UnsupportedOperationException
 }
 
 /**
@@ -707,6 +723,39 @@ class NoPrefixKeyStateEncoder(
         null
       }
     } else decodeToUnsafeRow(keyBytes, keyRow)
+  }
+
+  override def encodeKeyBytes(row: Array[Byte]): Array[Byte] = {
+    if (!useColumnFamilies) {
+      row
+    } else {
+      val (encodedBytes, startingOffset) = encodeColumnFamilyPrefix(
+        row.length +
+          STATE_ENCODING_NUM_VERSION_BYTES
+      )
+
+      Platform.putByte(encodedBytes, startingOffset, STATE_ENCODING_VERSION)
+      // Platform.BYTE_ARRAY_OFFSET is the recommended way to memcopy b/w byte arrays. See Platform.
+      Platform.copyMemory(
+        row, Platform.BYTE_ARRAY_OFFSET,
+        encodedBytes, startingOffset + STATE_ENCODING_NUM_VERSION_BYTES, row.length)
+      encodedBytes
+    }
+  }
+
+  override def decodeKeyBytes(keyBytes: Array[Byte]): Array[Byte] = {
+    if (keyBytes == null) {
+      null
+    } else if (useColumnFamilies) {
+      val startOffset = decodeKeyStartOffset + STATE_ENCODING_NUM_VERSION_BYTES
+      val length = keyBytes.length -
+        STATE_ENCODING_NUM_VERSION_BYTES - VIRTUAL_COL_FAMILY_PREFIX_BYTES
+      java.util.Arrays.copyOfRange(keyBytes, startOffset, startOffset + length)
+    } else {
+      // Assuming decodeToUnsafeRow is not applicable for byte array encoding
+      // If there's no special decoding needed, just return a copy of the input
+      keyBytes.clone()
+    }
   }
 
   override def supportPrefixKeyScan: Boolean = false

@@ -71,13 +71,14 @@ private[sql] class RocksDBStateStoreProvider
         valueSchema: StructType,
         keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
-        isInternal: Boolean = false): Unit = {
+        isInternal: Boolean = false,
+        useAvro: Boolean = false): Unit = {
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
       val newColFamilyId = rocksDB.createColFamilyIfAbsent(colFamilyName)
       keyValueEncoderMap.putIfAbsent(colFamilyName,
         (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies,
-          Some(newColFamilyId)), RocksDBStateEncoder.getValueEncoder(valueSchema,
-          useMultipleValuesPerKey)))
+          Some(newColFamilyId)),
+          RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
     }
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
@@ -339,28 +340,43 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def put(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
-      rocksDB.put(key, value)
+      verify(state == UPDATING, "Cannot put after already committed or aborted")
+      verify(key != null, "Key cannot be null")
+      require(value != null, "Cannot put a null value")
+      verifyColFamilyOperations("put", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      rocksDB.put(kvEncoder._1.encodeKeyBytes(key), value)
     }
 
     override def remove(key: Array[Byte], colFamilyName: String): Unit = {
-      rocksDB.remove(key)
+      verify(state == UPDATING, "Cannot remove after already committed or aborted")
+      verify(key != null, "Key cannot be null")
+      verifyColFamilyOperations("remove", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      rocksDB.remove(kvEncoder._1.encodeKeyBytes(key))
     }
 
     override def get(key: Array[Byte], colFamilyName: String): Array[Byte] = {
-      rocksDB.get(key)
+      verify(key != null, "Key cannot be null")
+      verifyColFamilyOperations("get", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      rocksDB.get(kvEncoder._1.encodeKeyBytes(key))
     }
 
     override def valuesIterator(key: Array[Byte], colFamilyName: String): Iterator[Array[Byte]] = {
-      throw new Exception
+      throw new UnsupportedOperationException
     }
 
     override def prefixScan(
         prefixKey: Array[Byte], colFamilyName: String): Iterator[ByteArrayPair] = {
-      throw new UnsupportedOperationException("Operation is currently not supported")
+      throw new UnsupportedOperationException
     }
 
     override def byteArrayIter(colFamilyName: String): Iterator[ByteArrayPair] = {
-      throw new Exception
+      throw new UnsupportedOperationException
     }
   }
 

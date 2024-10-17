@@ -52,7 +52,8 @@ class ValueStateSuite extends StateVariableSuiteBase {
         stringEncoder, TimeMode.None())
 
       val stateName = "testState"
-      val testState: ValueState[Long] = handle.getValueState[Long]("testState", Encoders.scalaLong)
+      val testState: ValueState[Long] = handle.getValueStateWithSerde[Long](
+        "testState", Encoders.scalaLong)
       assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
       val ex = intercept[Exception] {
         testState.update(123)
@@ -95,7 +96,8 @@ class ValueStateSuite extends StateVariableSuiteBase {
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         stringEncoder, TimeMode.None())
 
-      val testState: ValueState[Long] = handle.getValueState[Long]("testState", Encoders.scalaLong)
+      val testState: ValueState[Long] = handle.getValueStateWithSerde[Long](
+        "testState", Encoders.scalaLong)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(123)
       assert(testState.get() === 123)
@@ -121,9 +123,9 @@ class ValueStateSuite extends StateVariableSuiteBase {
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         stringEncoder, TimeMode.None())
 
-      val testState1: ValueState[Long] = handle.getValueState[Long](
+      val testState1: ValueState[Long] = handle.getValueStateWithSerde[Long](
         "testState1", Encoders.scalaLong)
-      val testState2: ValueState[Long] = handle.getValueState[Long](
+      val testState2: ValueState[Long] = handle.getValueStateWithSerde[Long](
         "testState2", Encoders.scalaLong)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState1.update(123)
@@ -168,7 +170,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
 
       val cfName = "$testState"
       val ex = intercept[SparkUnsupportedOperationException] {
-        handle.getValueState[Long](cfName, Encoders.scalaLong)
+        handle.getValueStateWithSerde[Long](cfName, Encoders.scalaLong)
       }
       checkError(
         ex,
@@ -206,7 +208,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         stringEncoder, TimeMode.None())
 
-      val testState: ValueState[Double] = handle.getValueState[Double]("testState",
+      val testState: ValueState[Double] = handle.getValueStateWithSerde[Double]("testState",
         Encoders.scalaDouble)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(1.0)
@@ -232,7 +234,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         stringEncoder, TimeMode.None())
 
-      val testState: ValueState[Long] = handle.getValueState[Long]("testState",
+      val testState: ValueState[Long] = handle.getValueStateWithSerde[Long]("testState",
         Encoders.scalaLong)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(1L)
@@ -258,7 +260,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         stringEncoder, TimeMode.None())
 
-      val testState: ValueState[TestClass] = handle.getValueState[TestClass]("testState",
+      val testState: ValueState[TestClass] = handle.getValueStateWithSerde[TestClass]("testState",
         Encoders.product[TestClass])
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(TestClass(1, "testcase1"))
@@ -284,8 +286,8 @@ class ValueStateSuite extends StateVariableSuiteBase {
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         stringEncoder, TimeMode.None())
 
-      val testState: ValueState[POJOTestClass] = handle.getValueState[POJOTestClass]("testState",
-        Encoders.bean(classOf[POJOTestClass]))
+      val testState: ValueState[POJOTestClass] = handle.getValueStateWithSerde[POJOTestClass](
+        "testState", Encoders.bean(classOf[POJOTestClass]))
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(new POJOTestClass("testcase1", 1))
       assert(testState.get().equals(new POJOTestClass("testcase1", 1)))

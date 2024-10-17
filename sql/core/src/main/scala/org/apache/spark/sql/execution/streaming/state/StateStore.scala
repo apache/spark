@@ -173,7 +173,8 @@ trait StateStore extends ReadStateStore {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useMultipleValuesPerKey: Boolean = false,
-      isInternal: Boolean = false): Unit
+      isInternal: Boolean = false,
+      useAvro: Boolean = false): Unit
 
   /**
    * Put a new non-null value for a non-null key. Implementations must be aware that the UnsafeRows
