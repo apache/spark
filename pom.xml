@@ -327,7 +327,7 @@
       -Dio.netty.tryReflectionSetAccessible=true
     </extraJavaTestArgs>
     <mariadb.java.client.version>2.7.12</mariadb.java.client.version>
-    <mysql.connector.version>9.0.0</mysql.connector.version>
+    <mysql.connector.version>9.1.0</mysql.connector.version>
     <postgresql.version>42.7.4</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
     <mssql.jdbc.version>12.8.1.jre11</mssql.jdbc.version>
