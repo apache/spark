@@ -411,7 +411,10 @@ select str_to_map(text, pairDelim, keyValueDelim) from t4
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : ""
+  }
 }
 
 
@@ -693,7 +696,10 @@ select concat_ws(' ', utf8_binary, utf8_lcase) from t5
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : ""
+  }
 }
 
 
@@ -748,7 +754,10 @@ select elt(2, utf8_binary, utf8_lcase, s) from t5
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : ""
+  }
 }
 
 
@@ -803,7 +812,10 @@ select split_part(utf8_binary, utf8_lcase, 3) from t5
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : ""
+  }
 }
 
 
@@ -890,7 +902,10 @@ select contains(utf8_binary, utf8_lcase) from t5
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : ""
+  }
 }
 
 
@@ -977,7 +992,10 @@ select substring_index(utf8_binary, utf8_lcase, 2) from t5
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : ""
+  }
 }
 
 
@@ -1064,7 +1082,10 @@ select instr(utf8_binary, utf8_lcase) from t5
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : ""
+  }
 }
 
 
@@ -1151,7 +1172,10 @@ select find_in_set(utf8_binary, utf8_lcase) from t5
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : ""
+  }
 }
 
 
@@ -1214,7 +1238,10 @@ select startswith(utf8_binary, utf8_lcase) from t5
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : ""
+  }
 }
 
 
@@ -1309,7 +1336,10 @@ select translate(utf8_binary, utf8_lcase, '12345') from t5
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : ""
+  }
 }
 
 
@@ -1380,7 +1410,10 @@ select replace(utf8_binary, utf8_lcase, 'abc') from t5
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : ""
+  }
 }
 
 
@@ -1467,7 +1500,10 @@ select endswith(utf8_binary, utf8_lcase) from t5
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : ""
+  }
 }
 
 
@@ -1754,7 +1790,10 @@ select overlay(utf8_binary, utf8_lcase, 2) from t5
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : ""
+  }
 }
 
 
@@ -1913,7 +1952,10 @@ select levenshtein(utf8_binary, utf8_lcase) from t5
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : ""
+  }
 }
 
 
@@ -2088,7 +2130,10 @@ select rpad(utf8_binary, 8, utf8_lcase) from t5
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : ""
+  }
 }
 
 
@@ -2151,7 +2196,10 @@ select lpad(utf8_binary, 8, utf8_lcase) from t5
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : ""
+  }
 }
 
 
@@ -2214,7 +2262,10 @@ select locate(utf8_binary, utf8_lcase) from t5
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : ""
+  }
 }
 
 
@@ -2301,7 +2352,10 @@ select TRIM(utf8_binary, utf8_lcase) from t5
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : ""
+  }
 }
 
 
@@ -2388,7 +2442,10 @@ select BTRIM(utf8_binary, utf8_lcase) from t5
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : ""
+  }
 }
 
 
@@ -2475,7 +2532,10 @@ select LTRIM(utf8_binary, utf8_lcase) from t5
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : ""
+  }
 }
 
 
@@ -2562,7 +2622,10 @@ select RTRIM(utf8_binary, utf8_lcase) from t5
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : ""
+  }
 }
 
 

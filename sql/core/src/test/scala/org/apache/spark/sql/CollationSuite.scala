@@ -545,7 +545,9 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
             s"WHERE c1 = SUBSTR(COLLATE('a', 'UNICODE'), 0)")
         },
         condition = "COLLATION_MISMATCH.IMPLICIT",
-        parameters = Map.empty
+        parameters = Map(
+          "implicitTypes" -> ""
+        )
       )
 
       // in operator
@@ -568,7 +570,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         exception = intercept[AnalysisException] {
           sql(s"SELECT c1 || c2 FROM $tableName")
         },
-        condition = "COLLATION_MISMATCH.IMPLICIT"
+        condition = "COLLATION_MISMATCH.IMPLICIT",
+        parameters = Map(
+          "implicitTypes" -> ""
+        )
       )
 
 
@@ -583,7 +588,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         exception = intercept[AnalysisException] {
           sql(s"SELECT c1 FROM $tableName WHERE c1 = c3")
         },
-        condition = "COLLATION_MISMATCH.IMPLICIT"
+        condition = "COLLATION_MISMATCH.IMPLICIT",
+        parameters = Map(
+          "implicitTypes" -> ""
+        )
       )
 
       // different explicit collations are set
@@ -629,7 +637,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         exception = intercept[AnalysisException] {
           sql(s"SELECT c1 FROM $tableName WHERE c1 || c3 = 'aa'")
         },
-        condition = "COLLATION_MISMATCH.IMPLICIT"
+        condition = "COLLATION_MISMATCH.IMPLICIT",
+        parameters = Map(
+          "implicitTypes" -> ""
+        )
       )
 
       // concat on different implicit collations should succeed,
@@ -638,7 +649,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         exception = intercept[AnalysisException] {
           sql(s"SELECT * FROM $tableName ORDER BY c1 || c3")
         },
-        condition = "COLLATION_MISMATCH.IMPLICIT"
+        condition = "COLLATION_MISMATCH.IMPLICIT",
+        parameters = Map(
+          "implicitTypes" -> ""
+        )
       )
 
       // concat + in
@@ -655,14 +669,20 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         exception = intercept[AnalysisException] {
           sql(s"SELECT * FROM $tableName WHERE contains(c1||c3, 'a')")
         },
-        condition = "COLLATION_MISMATCH.IMPLICIT"
+        condition = "COLLATION_MISMATCH.IMPLICIT",
+        parameters = Map(
+          "implicitTypes" -> ""
+        )
       )
 
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"SELECT array('A', 'a' COLLATE UNICODE) == array('b' COLLATE UNICODE_CI)")
         },
-        condition = "COLLATION_MISMATCH.IMPLICIT"
+        condition = "COLLATION_MISMATCH.IMPLICIT",
+        parameters = Map(
+          "implicitTypes" -> ""
+        )
       )
 
       checkAnswer(sql("SELECT array_join(array('a', 'b' collate UNICODE), 'c' collate UNICODE_CI)"),
@@ -811,7 +831,11 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
             exception = intercept[AnalysisException] {
               sql(s"CREATE TABLE $newTableName AS SELECT c1 || c2 FROM $tableName")
             },
-            condition = "COLLATION_MISMATCH.IMPLICIT")
+            condition = "COLLATION_MISMATCH.IMPLICIT",
+            parameters = Map(
+              "implicitTypes" -> ""
+            )
+          )
         }
       }
     }
