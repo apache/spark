@@ -529,7 +529,7 @@ The following configurations are optional:
   has upto <code>maxRecordsPerPartition</code> records. When both <code>minPartitions</code> and
   <code>maxRecordsPerPartition</code> are set, number of partitions will be <strong>approximately</strong>
   max of <code>(recordsPerPartition / maxRecordsPerPartition)</code> and <code>minPartitions</code>. In such case spark
-  will divvy up partitions based on <code>maxRecordsPerPartition</code> and if final the partition count is less than
+  will divvy up partitions based on <code>maxRecordsPerPartition</code> and if the final partition count is less than
   <code>minPartitions</code> it will divvy up partitions again based on <code>minPartitions</code>.</td>
 </tr>
 <tr>
