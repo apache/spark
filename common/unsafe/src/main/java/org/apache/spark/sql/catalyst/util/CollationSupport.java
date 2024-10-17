@@ -35,8 +35,11 @@ public final class CollationSupport {
    */
 
   public static class StringSplitSQL {
-    public static UTF8String[] exec(final UTF8String s, final UTF8String d, final int collationId) {
+    public static UTF8String[] exec(final UTF8String s, UTF8String d, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if(collation.supportsSpaceTrimming){
+        d = CollationFactory.applyTrimmingPolicy(d, collationId);
+      }
       if (collation.isUtf8BinaryType) {
         return execBinary(s, d);
       } else if (collation.isUtf8LcaseType) {
@@ -46,14 +49,11 @@ public final class CollationSupport {
       }
     }
     public static String genCode(final String s, final String d, final int collationId) {
-      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       String expr = "CollationSupport.StringSplitSQL.exec";
-      if (collation.isUtf8BinaryType) {
+      if (CollationFactory.UTF8_BINARY_COLLATION_ID == collationId) {
         return String.format(expr + "Binary(%s, %s)", s, d);
-      } else if (collation.isUtf8LcaseType) {
-        return String.format(expr + "Lowercase(%s, %s)", s, d);
       } else {
-        return String.format(expr + "ICU(%s, %s, %d)", s, d, collationId);
+        return String.format(expr + "(%s, %s, %d)", s, d, collationId);
       }
     }
     public static UTF8String[] execBinary(final UTF8String string, final UTF8String delimiter) {
