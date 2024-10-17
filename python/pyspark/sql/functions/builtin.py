@@ -11207,7 +11207,7 @@ def is_valid_utf8(str: "ColumnOrName") -> Column:
     Parameters
     ----------
     str : :class:`~pyspark.sql.Column` or str
-        A column of strings, each representing a URL-encoded string.
+        A column of strings, each representing a UTF-8 byte sequence.
 
     Returns
     -------
@@ -11238,7 +11238,7 @@ def make_valid_utf8(str: "ColumnOrName") -> Column:
     Parameters
     ----------
     str : :class:`~pyspark.sql.Column` or str
-        A column of strings, each representing a URL-encoded string.
+        A column of strings, each representing a UTF-8 byte sequence.
 
     Returns
     -------
@@ -11268,7 +11268,7 @@ def validate_utf8(str: "ColumnOrName") -> Column:
     Parameters
     ----------
     str : :class:`~pyspark.sql.Column` or str
-        A column of strings, each representing a URL-encoded string.
+        A column of strings, each representing a UTF-8 byte sequence.
 
     Returns
     -------
@@ -11298,7 +11298,7 @@ def try_validate_utf8(str: "ColumnOrName") -> Column:
     Parameters
     ----------
     str : :class:`~pyspark.sql.Column` or str
-        A column of strings, each representing a URL-encoded string.
+        A column of strings, each representing a UTF-8 byte sequence.
 
     Returns
     -------
