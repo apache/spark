@@ -433,6 +433,8 @@ case class Acosh(child: Expression)
        4
       > SELECT _FUNC_(-10, 16, -10);
        -16
+      > SELECT _FUNC_('9223372036854775807', 36, 16)
+       FFFFFFFFFFFFFFFF
   """,
   since = "4.0.0",
   group = "math_funcs")
@@ -443,10 +445,7 @@ case class TryConv(
     replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
 
-  def this(
-            numExpr: Expression,
-            fromBaseExpr: Expression,
-            toBaseExpr: Expression) =
+  def this(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression) =
     this(numExpr, fromBaseExpr, toBaseExpr,
       Conv(numExpr, fromBaseExpr, toBaseExpr, failOnError = false))
 

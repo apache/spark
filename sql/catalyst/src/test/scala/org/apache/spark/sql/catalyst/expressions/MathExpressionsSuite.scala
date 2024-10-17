@@ -195,7 +195,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
        Conv(Literal(numExpr), Literal(fromBase), Literal(toBase), failOnError = false), expected)
       checkExceptionInExpression[SparkArithmeticException](
         Conv(Literal(numExpr), Literal(fromBase), Literal(toBase), failOnError = true),
-        "Overflow in function conv()")
+        "Overflow in function conv(). Use 'try_conv' to tolerate overflow and return NULL instead.")
     }
   }
 

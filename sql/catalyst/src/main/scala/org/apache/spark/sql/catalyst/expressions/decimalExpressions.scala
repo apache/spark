@@ -273,7 +273,7 @@ case class DecimalDivideWithOverflowCheck(
         null
       } else {
         throw QueryExecutionErrors.overflowInSumOfDecimalError(getContextOrNull(),
-          suggestedFunc = "try_average")
+          suggestedFunc = "try_avg")
       }
     } else {
       val value2 = right.eval(input)
@@ -289,8 +289,7 @@ case class DecimalDivideWithOverflowCheck(
     val nullHandling = if (nullOnOverflow) {
       ""
     } else {
-      s"""throw QueryExecutionErrors.overflowInSumOfDecimalError($errorContextCode,
-         | "try_average");""".stripMargin
+      s"""throw QueryExecutionErrors.overflowInSumOfDecimalError($errorContextCode, "try_avg");"""
     }
 
     val eval1 = left.genCode(ctx)
