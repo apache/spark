@@ -682,7 +682,7 @@ case class HashAggregateExec(
          |    $unsafeRowKeys, $unsafeRowKeyHash);
          |  if ($unsafeRowBuffer == null) {
          |    // failed to allocate the first page
-         |    throw new $oomeClassName("No enough memory for aggregation");
+         |    throw new $oomeClassName("_LEGACY_ERROR_TEMP_3302", new java.util.HashMap());
          |  }
          |}
        """.stripMargin

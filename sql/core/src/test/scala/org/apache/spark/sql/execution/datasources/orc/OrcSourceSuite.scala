@@ -450,8 +450,8 @@ abstract class OrcSuite
         val ex = intercept[SparkException] {
           spark.read.orc(basePath).columns.length
         }
-        assert(ex.getErrorClass == "CANNOT_MERGE_SCHEMAS")
-        assert(ex.getCause.asInstanceOf[SparkException].getErrorClass ===
+        assert(ex.getCondition == "CANNOT_MERGE_SCHEMAS")
+        assert(ex.getCause.asInstanceOf[SparkException].getCondition ===
           "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE")
       }
 

@@ -1373,7 +1373,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       put(store, "a", 0, 0)
       val e = intercept[SparkException](quietly { store.commit() } )
 
-      assert(e.getErrorClass == "CANNOT_WRITE_STATE_STORE.CANNOT_COMMIT")
+      assert(e.getCondition == "CANNOT_WRITE_STATE_STORE.CANNOT_COMMIT")
       if (store.getClass.getName contains ROCKSDB_STATE_STORE) {
         assert(e.getMessage contains "RocksDBStateStore[id=(op=0,part=0)")
       } else {

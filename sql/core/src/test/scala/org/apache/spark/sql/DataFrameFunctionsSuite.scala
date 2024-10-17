@@ -478,7 +478,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       intercept[AnalysisException](df.select(expr)),
       condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
-        "inputName" -> "length",
+        "inputName" -> "`length`",
         "inputType" -> "INT or SMALLINT",
         "inputExpr" -> "\"a\"",
         "sqlExpr" -> "\"randstr(a, 10)\""),
@@ -530,7 +530,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       intercept[AnalysisException](df.select(expr)),
       condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
-        "inputName" -> "min",
+        "inputName" -> "`min`",
         "inputType" -> "integer or floating-point",
         "inputExpr" -> "\"a\"",
         "sqlExpr" -> "\"uniform(a, 10)\""),

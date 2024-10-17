@@ -574,7 +574,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       val q = spark.readStream.format(dataSourceName).load().writeStream.format("console").start()
       q.awaitTermination()
     }
-    assert(err.getErrorClass == "STREAM_FAILED")
+    assert(err.getCondition == "STREAM_FAILED")
     assert(err.getMessage.contains("error creating stream reader"))
   }
 

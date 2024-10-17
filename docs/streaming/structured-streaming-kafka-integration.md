@@ -519,6 +519,20 @@ The following configurations are optional:
   rounding errors or Kafka partitions that didn't receive any new data.</td>
 </tr>
 <tr>
+  <td>maxRecordsPerPartition</td>
+  <td>long</td>
+  <td>none</td>
+  <td>streaming and batch</td>
+  <td>Limit maximum number of records present in a partition.
+  By default, Spark has a 1-1 mapping of topicPartitions to Spark partitions consuming from Kafka.
+  If you set this option, Spark will divvy up Kafka partitions to smaller pieces so that each partition
+  has upto <code>maxRecordsPerPartition</code> records. When both <code>minPartitions</code> and
+  <code>maxRecordsPerPartition</code> are set, number of partitions will be <strong>approximately</strong>
+  max of <code>(recordsPerPartition / maxRecordsPerPartition)</code> and <code>minPartitions</code>. In such case spark
+  will divvy up partitions based on <code>maxRecordsPerPartition</code> and if the final partition count is less than
+  <code>minPartitions</code> it will divvy up partitions again based on <code>minPartitions</code>.</td>
+</tr>
+<tr>
   <td>groupIdPrefix</td>
   <td>string</td>
   <td>spark-kafka-source</td>

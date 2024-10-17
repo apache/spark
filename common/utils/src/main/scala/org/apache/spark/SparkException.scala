@@ -69,7 +69,7 @@ class SparkException(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass.orNull
+  override def getCondition: String = errorClass.orNull
 
   override def getQueryContext: Array[QueryContext] = context
 }
@@ -179,7 +179,7 @@ private[spark] class SparkUpgradeException private(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass.orNull
+  override def getCondition: String = errorClass.orNull
 }
 
 /**
@@ -212,7 +212,7 @@ private[spark] class SparkArithmeticException private(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass.orNull
+  override def getCondition: String = errorClass.orNull
   override def getQueryContext: Array[QueryContext] = context
 }
 
@@ -250,7 +250,7 @@ private[spark] class SparkUnsupportedOperationException private(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass.orNull
+  override def getCondition: String = errorClass.orNull
 }
 
 private[spark] object SparkUnsupportedOperationException {
@@ -280,7 +280,7 @@ private[spark] class SparkClassNotFoundException(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass
+  override def getCondition: String = errorClass
 }
 
 /**
@@ -296,7 +296,7 @@ private[spark] class SparkConcurrentModificationException(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass
+  override def getCondition: String = errorClass
 }
 
 /**
@@ -346,7 +346,7 @@ private[spark] class SparkDateTimeException private(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass.orNull
+  override def getCondition: String = errorClass.orNull
   override def getQueryContext: Array[QueryContext] = context
 }
 
@@ -362,7 +362,7 @@ private[spark] class SparkFileNotFoundException(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass
+  override def getCondition: String = errorClass
 }
 
 /**
@@ -396,7 +396,7 @@ private[spark] class SparkNumberFormatException private(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass.orNull
+  override def getCondition: String = errorClass.orNull
   override def getQueryContext: Array[QueryContext] = context
 }
 
@@ -448,7 +448,7 @@ private[spark] class SparkIllegalArgumentException private(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass.orNull
+  override def getCondition: String = errorClass.orNull
   override def getQueryContext: Array[QueryContext] = context
 }
 
@@ -477,7 +477,7 @@ private[spark] class SparkRuntimeException private(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass.orNull
+  override def getCondition: String = errorClass.orNull
   override def getQueryContext: Array[QueryContext] = context
 }
 
@@ -506,7 +506,7 @@ private[spark] class SparkPythonException private(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass.orNull
+  override def getCondition: String = errorClass.orNull
   override def getQueryContext: Array[QueryContext] = context
 }
 
@@ -524,7 +524,7 @@ private[spark] class SparkNoSuchElementException(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass
+  override def getCondition: String = errorClass
 
   override def getQueryContext: Array[QueryContext] = context
 }
@@ -541,7 +541,7 @@ private[spark] class SparkSecurityException(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass
+  override def getCondition: String = errorClass
 }
 
 /**
@@ -575,7 +575,7 @@ private[spark] class SparkArrayIndexOutOfBoundsException private(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass.orNull
+  override def getCondition: String = errorClass.orNull
   override def getQueryContext: Array[QueryContext] = context
 }
 
@@ -591,7 +591,7 @@ private[spark] class SparkSQLException(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass
+  override def getCondition: String = errorClass
 }
 
 /**
@@ -606,5 +606,5 @@ private[spark] class SparkSQLFeatureNotSupportedException(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass
+  override def getCondition: String = errorClass
 }

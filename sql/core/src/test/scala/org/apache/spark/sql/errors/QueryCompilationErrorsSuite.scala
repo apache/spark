@@ -1003,7 +1003,7 @@ class QueryCompilationErrorsSuite
         val exception = intercept[AnalysisException] {
           sql(queryWithTrailingComma)
         }
-        assert(exception.getErrorClass === "TRAILING_COMMA_IN_SELECT")
+        assert(exception.getCondition === "TRAILING_COMMA_IN_SELECT")
       }
 
       val unresolvedColumnErrors = Seq(
@@ -1017,7 +1017,7 @@ class QueryCompilationErrorsSuite
         val exception = intercept[AnalysisException] {
           sql(query)
         }
-        assert(exception.getErrorClass === "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+        assert(exception.getCondition === "UNRESOLVED_COLUMN.WITH_SUGGESTION")
       }
 
       // sanity checks

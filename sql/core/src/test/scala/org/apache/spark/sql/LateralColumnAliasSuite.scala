@@ -205,7 +205,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
     withLCAOn { checkAnswer(sql(query), expectedAnswerLCAOn) }
     withLCAOff {
       assert(intercept[AnalysisException]{ sql(query) }
-        .getErrorClass == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+        .getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
     }
   }
 
@@ -216,8 +216,8 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       errorParams: Map[String, String]): Unit = {
     val e1 = intercept[AnalysisException] { sql(q1) }
     val e2 = intercept[AnalysisException] { sql(q2) }
-    assert(e1.getErrorClass == condition)
-    assert(e2.getErrorClass == condition)
+    assert(e1.getCondition == condition)
+    assert(e2.getCondition == condition)
     errorParams.foreach { case (k, v) =>
       assert(e1.messageParameters.get(k).exists(_ == v))
       assert(e2.messageParameters.get(k).exists(_ == v))
@@ -1187,7 +1187,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
           "sum_avg * 1.0 as sum_avg1, sum_avg1 + dept " +
           s"from $testTable group by dept, properties.joinYear $havingSuffix"
       ).foreach { query =>
-        assert(intercept[AnalysisException](sql(query)).getErrorClass ==
+        assert(intercept[AnalysisException](sql(query)).getCondition ==
           "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING")
       }
     }

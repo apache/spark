@@ -783,7 +783,7 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
         Iterator.tabulate(10)(i => (i, "itr_" + i))
       }
     }
-    assert(e.getErrorClass == "CANNOT_USE_KRYO")
+    assert(e.getCondition == "CANNOT_USE_KRYO")
   }
 
   test("transforming encoder") {

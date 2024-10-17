@@ -1173,7 +1173,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
         exception = intercept[SparkUnsupportedOperationException] {
           catalog.alterNamespace(testNs, NamespaceChange.removeProperty(p))
         },
-        condition = "_LEGACY_ERROR_TEMP_2069",
+        condition = "CANNOT_REMOVE_RESERVED_PROPERTY",
         parameters = Map("property" -> p))
 
     }

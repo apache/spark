@@ -902,22 +902,14 @@ class InternalFrame:
 
     @staticmethod
     def attach_sequence_column(sdf: PySparkDataFrame, column_name: str) -> PySparkDataFrame:
-        scols = [scol_for(sdf, column) for column in sdf.columns]
         sequential_index = (
             F.row_number().over(Window.orderBy(F.monotonically_increasing_id())).cast("long") - 1
         )
-        return sdf.select(sequential_index.alias(column_name), *scols)
+        return sdf.select(sequential_index.alias(column_name), "*")
 
     @staticmethod
     def attach_distributed_column(sdf: PySparkDataFrame, column_name: str) -> PySparkDataFrame:
-        scols = [scol_for(sdf, column) for column in sdf.columns]
-        # Does not add an alias to avoid having some changes in protobuf definition for now.
-        # The alias is more for query strings in DataFrame.explain, and they are cosmetic changes.
-        if is_remote():
-            return sdf.select(F.monotonically_increasing_id().alias(column_name), *scols)
-        jvm = sdf.sparkSession._jvm
-        jcol = jvm.PythonSQLUtils.distributedIndex()
-        return sdf.select(PySparkColumn(jcol).alias(column_name), *scols)
+        return sdf.select(SF.distributed_id().alias(column_name), "*")
 
     @staticmethod
     def attach_distributed_sequence_column(
@@ -938,19 +930,7 @@ class InternalFrame:
         |       2|  c|
         +--------+---+
         """
-        if len(sdf.columns) > 0:
-            return sdf.select(
-                SF.distributed_sequence_id().alias(column_name),
-                "*",
-            )
-        else:
-            cnt = sdf.count()
-            if cnt > 0:
-                return default_session().range(cnt).toDF(column_name)
-            else:
-                return default_session().createDataFrame(
-                    [], schema=StructType().add(column_name, data_type=LongType(), nullable=False)
-                )
+        return sdf.select(SF.distributed_sequence_id().alias(column_name), "*")
 
     def spark_column_for(self, label: Label) -> PySparkColumn:
         """Return Spark Column for the given column label."""

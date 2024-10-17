@@ -47,7 +47,7 @@ class SparkThrowableSuite extends SparkFunSuite {
    }}}
    */
   private val regenerateCommand = "SPARK_GENERATE_GOLDEN_FILES=1 build/sbt " +
-    "\"core/testOnly *SparkThrowableSuite -- -t \\\"Error classes match with document\\\"\""
+    "\"core/testOnly *SparkThrowableSuite -- -t \\\"Error conditions are correctly formatted\\\"\""
 
   private val errorJsonFilePath = getWorkspaceFilePath(
     "common", "utils", "src", "main", "resources", "error", "error-conditions.json")
@@ -199,7 +199,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     val e = intercept[SparkException] {
       getMessage("UNRESOLVED_COLUMN.WITHOUT_SUGGESTION", Map.empty[String, String])
     }
-    assert(e.getErrorClass === "INTERNAL_ERROR")
+    assert(e.getCondition === "INTERNAL_ERROR")
     assert(e.getMessageParameters().get("message").contains("Undefined error message parameter"))
   }
 
@@ -245,7 +245,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       throw new SparkException("Arbitrary legacy message")
     } catch {
       case e: SparkThrowable =>
-        assert(e.getErrorClass == null)
+        assert(e.getCondition == null)
         assert(!e.isInternalError)
         assert(e.getSqlState == null)
       case _: Throwable =>
@@ -262,7 +262,7 @@ class SparkThrowableSuite extends SparkFunSuite {
         cause = null)
     } catch {
       case e: SparkThrowable =>
-        assert(e.getErrorClass == "CANNOT_PARSE_DECIMAL")
+        assert(e.getCondition == "CANNOT_PARSE_DECIMAL")
         assert(!e.isInternalError)
         assert(e.getSqlState == "22018")
       case _: Throwable =>
@@ -357,7 +357,7 @@ class SparkThrowableSuite extends SparkFunSuite {
         |}""".stripMargin)
     // Legacy mode when an exception does not have any error class
     class LegacyException extends Throwable with SparkThrowable {
-      override def getErrorClass: String = null
+      override def getCondition: String = null
       override def getMessage: String = "Test message"
     }
     val e3 = new LegacyException
@@ -452,7 +452,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       val e = intercept[SparkException] {
         new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
       }
-      assert(e.getErrorClass === "INTERNAL_ERROR")
+      assert(e.getCondition === "INTERNAL_ERROR")
       assert(e.getMessage.contains("DIVIDE.BY_ZERO"))
     }
 
@@ -478,7 +478,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       val e = intercept[SparkException] {
         new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
       }
-      assert(e.getErrorClass === "INTERNAL_ERROR")
+      assert(e.getCondition === "INTERNAL_ERROR")
       assert(e.getMessage.contains("BY.ZERO"))
     }
   }

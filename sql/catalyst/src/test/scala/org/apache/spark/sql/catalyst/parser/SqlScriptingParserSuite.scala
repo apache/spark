@@ -50,7 +50,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val e = intercept[ParseException] {
       parseScript(sqlScriptText)
     }
-    assert(e.getErrorClass === "PARSE_SYNTAX_ERROR")
+    assert(e.getCondition === "PARSE_SYNTAX_ERROR")
     assert(e.getMessage.contains("Syntax error"))
     assert(e.getMessage.contains("SELECT"))
   }
@@ -90,7 +90,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val e = intercept[ParseException] {
       parseScript(sqlScriptText)
     }
-    assert(e.getErrorClass === "PARSE_SYNTAX_ERROR")
+    assert(e.getCondition === "PARSE_SYNTAX_ERROR")
     assert(e.getMessage.contains("Syntax error"))
     assert(e.getMessage.contains("at or near ';'"))
   }
@@ -105,7 +105,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val e = intercept[ParseException] {
       parseScript(sqlScriptText)
     }
-    assert(e.getErrorClass === "PARSE_SYNTAX_ERROR")
+    assert(e.getCondition === "PARSE_SYNTAX_ERROR")
     assert(e.getMessage.contains("Syntax error"))
     assert(e.getMessage.contains("at or near end of input"))
   }
@@ -367,7 +367,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val e = intercept[ParseException] {
       parseScript(sqlScriptText)
     }
-    assert(e.getErrorClass === "PARSE_SYNTAX_ERROR")
+    assert(e.getCondition === "PARSE_SYNTAX_ERROR")
     assert(e.getMessage.contains("Syntax error"))
   }
 

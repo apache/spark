@@ -205,7 +205,7 @@ trait AnalysisTest extends PlanTest {
       assert(e.message.contains(message))
     }
     if (condition.isDefined) {
-      assert(e.getErrorClass == condition.get)
+      assert(e.getCondition == condition.get)
     }
   }
 

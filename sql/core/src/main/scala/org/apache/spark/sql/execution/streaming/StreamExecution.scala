@@ -374,7 +374,7 @@ abstract class StreamExecution(
             "message" -> message))
 
         errorClassOpt = e match {
-          case t: SparkThrowable => Option(t.getErrorClass)
+          case t: SparkThrowable => Option(t.getCondition)
           case _ => None
         }
 

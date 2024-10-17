@@ -89,9 +89,9 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         LogicalRelation(ds.resolveRelation())
       } catch {
         case _: ClassNotFoundException => u
-        case e: SparkIllegalArgumentException if e.getErrorClass != null =>
+        case e: SparkIllegalArgumentException if e.getCondition != null =>
           u.failAnalysis(
-            errorClass = e.getErrorClass,
+            errorClass = e.getCondition,
             messageParameters = e.getMessageParameters.asScala.toMap,
             cause = e)
         case e: Exception if !e.isInstanceOf[AnalysisException] =>
@@ -469,8 +469,8 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
         supportColDefaultValue = true)
     } catch {
       case e: AnalysisException if staticPartCols.nonEmpty &&
-        (e.getErrorClass == "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS" ||
-          e.getErrorClass == "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS") =>
+        (e.getCondition == "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS" ||
+          e.getCondition == "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS") =>
         val newException = e.copy(
           errorClass = Some("INSERT_PARTITION_COLUMN_ARITY_MISMATCH"),
           messageParameters = e.messageParameters ++ Map(

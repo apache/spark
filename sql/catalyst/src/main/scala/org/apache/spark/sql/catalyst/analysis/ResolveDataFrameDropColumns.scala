@@ -36,7 +36,7 @@ class ResolveDataFrameDropColumns(val catalogManager: CatalogManager)
       //   df.drop(col("non-existing-column"))
       val dropped = d.dropList.map {
         case u: UnresolvedAttribute =>
-          resolveExpressionByPlanChildren(u, d.child)
+          resolveExpressionByPlanChildren(u, d)
         case e => e
       }
       val remaining = d.child.output.filterNot(attr => dropped.exists(_.semanticEquals(attr)))

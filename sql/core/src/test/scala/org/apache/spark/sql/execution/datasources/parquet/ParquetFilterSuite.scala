@@ -1958,7 +1958,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
           val ex = intercept[SparkException] {
             sql(s"select a from $tableName where b > 0").collect()
           }
-          assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
+          assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
           assert(ex.getCause.isInstanceOf[SparkRuntimeException])
           assert(ex.getCause.getMessage.contains(
             """Found duplicate field(s) "B": [B, b] in case-insensitive mode"""))

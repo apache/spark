@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.util.{MapData, RandomUUIDGenerator}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.raiseError
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeWithCaseAccentSensitivity
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -85,7 +85,7 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
   override def foldable: Boolean = false
   override def nullable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity, MapType(StringType, StringType))
+    Seq(StringTypeWithCollation, MapType(StringType, StringType))
 
   override def left: Expression = errorClass
   override def right: Expression = errorParms
@@ -417,8 +417,8 @@ case class AesEncrypt(
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(BinaryType, BinaryType,
-      StringTypeWithCaseAccentSensitivity,
-      StringTypeWithCaseAccentSensitivity,
+      StringTypeWithCollation,
+      StringTypeWithCollation,
       BinaryType, BinaryType)
 
   override def children: Seq[Expression] = Seq(input, key, mode, padding, iv, aad)
@@ -494,8 +494,8 @@ case class AesDecrypt(
   override def inputTypes: Seq[AbstractDataType] = {
     Seq(BinaryType,
       BinaryType,
-      StringTypeWithCaseAccentSensitivity,
-      StringTypeWithCaseAccentSensitivity, BinaryType)
+      StringTypeWithCollation,
+      StringTypeWithCollation, BinaryType)
   }
 
   override def prettyName: String = "aes_decrypt"

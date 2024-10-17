@@ -184,5 +184,5 @@ private[kafka010] class KafkaIllegalStateException(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass
+  override def getCondition: String = errorClass
 }

@@ -57,6 +57,7 @@ Collate:
     'types.R'
     'utils.R'
     'window.R'
+    'zzz.R'
 RoxygenNote: 7.1.2
 VignetteBuilder: knitr
 NeedsCompilation: no

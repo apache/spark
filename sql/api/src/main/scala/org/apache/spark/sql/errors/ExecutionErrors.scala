@@ -195,9 +195,9 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
       fieldName: String,
       walkedTypePath: WalkedTypePath): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2140",
+      errorClass = "INVALID_JAVA_IDENTIFIER_AS_FIELD_NAME",
       messageParameters =
-        Map("fieldName" -> fieldName, "walkedTypePath" -> walkedTypePath.toString))
+        Map("fieldName" -> toSQLId(fieldName), "walkedTypePath" -> walkedTypePath.toString))
   }
 
   def primaryConstructorNotFoundError(cls: Class[_]): SparkRuntimeException = {

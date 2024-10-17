@@ -1181,7 +1181,7 @@ abstract class ParquetPartitionDiscoverySuite
         spark.read.parquet(dir.toString)
       }
       val msg = exception.getMessage
-      assert(exception.getErrorClass === "CONFLICTING_PARTITION_COLUMN_NAMES")
+      assert(exception.getCondition === "CONFLICTING_PARTITION_COLUMN_NAMES")
       // Partitions inside the error message can be presented in any order
       assert("Partition column name list #[0-1]: col1".r.findFirstIn(msg).isDefined)
       assert("Partition column name list #[0-1]: col1, col2".r.findFirstIn(msg).isDefined)

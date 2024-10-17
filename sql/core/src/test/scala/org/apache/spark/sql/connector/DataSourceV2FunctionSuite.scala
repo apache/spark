@@ -414,8 +414,8 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       new JavaStrLen(new JavaStrLenNoImpl))
     checkError(
       exception = intercept[AnalysisException](sql("SELECT testcat.ns.strlen('abc')").collect()),
-      condition = "_LEGACY_ERROR_TEMP_3055",
-      parameters = Map("scalarFunc" -> "strlen"),
+      condition = "SCALAR_FUNCTION_NOT_FULLY_IMPLEMENTED",
+      parameters = Map("scalarFunc" -> "`strlen`"),
       context = ExpectedContext(
         fragment = "testcat.ns.strlen('abc')",
         start = 7,
@@ -448,13 +448,30 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     addFunction(Identifier.of(Array("ns"), "add"), new JavaLongAdd(new JavaLongAddMismatchMagic))
     checkError(
       exception = intercept[AnalysisException](sql("SELECT testcat.ns.add(1L, 2L)").collect()),
-      condition = "_LEGACY_ERROR_TEMP_3055",
-      parameters = Map("scalarFunc" -> "long_add_mismatch_magic"),
+      condition = "SCALAR_FUNCTION_NOT_FULLY_IMPLEMENTED",
+      parameters = Map("scalarFunc" -> "`long_add_mismatch_magic`"),
       context = ExpectedContext(
         fragment = "testcat.ns.add(1L, 2L)",
         start = 7,
         stop = 28
       )
+    )
+  }
+
+  test("SPARK-49549: scalar function w/ mismatch a compatible ScalarFunction#produceResult") {
+    case object CharLength extends ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(StringType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "CHAR_LENGTH"
+    }
+
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "my_strlen"), StrLen(CharLength))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException]
+        (sql("SELECT testcat.ns.my_strlen('abc')").collect()),
+      condition = "SCALAR_FUNCTION_NOT_COMPATIBLE",
+      parameters = Map("scalarFunc" -> "`CHAR_LENGTH`")
     )
   }
 

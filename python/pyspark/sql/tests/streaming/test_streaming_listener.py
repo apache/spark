@@ -381,7 +381,12 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                     .start()
                 )
                 self.assertTrue(q.isActive)
-                q.awaitTermination(10)
+                wait_count = 0
+                while progress_event is None or progress_event.progress.batchId == 0:
+                    q.awaitTermination(0.5)
+                    wait_count = wait_count + 1
+                    if wait_count > 100:
+                        self.fail("Not getting progress event after 50 seconds")
                 q.stop()
 
                 # Make sure all events are empty
