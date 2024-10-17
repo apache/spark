@@ -901,7 +901,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
         from pyspark.pandas import DataFrame, Series
 
         if isinstance(self.data, (Series, DataFrame)):
-            return self(kind="box", precision=precision, **kwds)
+            return self(kind="box", **kwds)
 
     def hist(self, bins=10, **kwds):
         """

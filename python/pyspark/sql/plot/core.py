@@ -402,7 +402,7 @@ class PySparkPlotAccessor:
         >>> df.plot.box(column="math_score")  # doctest: +SKIP
         >>> df.plot.box(column=["math_score", "english_score"])  # doctest: +SKIP
         """
-        return self(kind="box", column=column, precision=precision, **kwargs)
+        return self(kind="box", column=column, **kwargs)
 
     def kde(
         self,
