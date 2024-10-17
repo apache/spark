@@ -34,7 +34,7 @@ if should_test_connect:
 
 
 class ConnectCompatibilityTestsMixin:
-    def _get_public_methods(self, cls):
+    def get_public_methods(self, cls):
         """Get public methods of a class."""
         return {
             name: method
@@ -43,7 +43,7 @@ class ConnectCompatibilityTestsMixin:
             and not name.startswith("_")
         }
 
-    def _get_public_properties(self, cls):
+    def get_public_properties(self, cls):
         """Get public properties of a class."""
         return {
             name: member
@@ -52,10 +52,10 @@ class ConnectCompatibilityTestsMixin:
             and not name.startswith("_")
         }
 
-    def _compare_method_signatures(self, classic_cls, connect_cls, cls_name):
+    def compare_method_signatures(self, classic_cls, connect_cls, cls_name):
         """Compare method signatures between classic and connect classes."""
-        classic_methods = self._get_public_methods(classic_cls)
-        connect_methods = self._get_public_methods(connect_cls)
+        classic_methods = self.get_public_methods(classic_cls)
+        connect_methods = self.get_public_methods(connect_cls)
 
         common_methods = set(classic_methods.keys()) & set(connect_methods.keys())
 
@@ -72,7 +72,7 @@ class ConnectCompatibilityTestsMixin:
                     f"Connect: {connect_signature}",
                 )
 
-    def _compare_property_lists(
+    def compare_property_lists(
         self,
         classic_cls,
         connect_cls,
@@ -81,8 +81,8 @@ class ConnectCompatibilityTestsMixin:
         expected_missing_classic_properties,
     ):
         """Compare properties between classic and connect classes."""
-        classic_properties = self._get_public_properties(classic_cls)
-        connect_properties = self._get_public_properties(connect_cls)
+        classic_properties = self.get_public_properties(classic_cls)
+        connect_properties = self.get_public_properties(connect_cls)
 
         # Identify missing properties
         classic_only_properties = set(classic_properties.keys()) - set(connect_properties.keys())
@@ -102,7 +102,7 @@ class ConnectCompatibilityTestsMixin:
             f"{cls_name}: Unexpected missing properties in Classic: {connect_only_properties}",
         )
 
-    def _check_missing_methods(
+    def check_missing_methods(
         self,
         classic_cls,
         connect_cls,
@@ -111,8 +111,8 @@ class ConnectCompatibilityTestsMixin:
         expected_missing_classic_methods,
     ):
         """Check for expected missing methods between classic and connect classes."""
-        classic_methods = self._get_public_methods(classic_cls)
-        connect_methods = self._get_public_methods(connect_cls)
+        classic_methods = self.get_public_methods(classic_cls)
+        connect_methods = self.get_public_methods(connect_cls)
 
         # Identify missing methods
         classic_only_methods = set(classic_methods.keys()) - set(connect_methods.keys())
@@ -167,15 +167,15 @@ class ConnectCompatibilityTestsMixin:
         expected_missing_classic_methods : set
             A set of methods expected to be missing in the classic class.
         """
-        self._compare_method_signatures(classic_cls, connect_cls, cls_name)
-        self._compare_property_lists(
+        self.compare_method_signatures(classic_cls, connect_cls, cls_name)
+        self.compare_property_lists(
             classic_cls,
             connect_cls,
             cls_name,
             expected_missing_connect_properties,
             expected_missing_classic_properties,
         )
-        self._check_missing_methods(
+        self.check_missing_methods(
             classic_cls,
             connect_cls,
             cls_name,
