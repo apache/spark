@@ -5952,6 +5952,7 @@ class AstBuilder extends DataTypeAstBuilder
     }.getOrElse(Option(ctx.queryOrganization).map { c =>
       withQueryResultClauses(c, withSubqueryAlias(), forPipeOperators = true)
     }.get)))))))
+
   }
 
   /**
