@@ -2400,7 +2400,7 @@ class DataFrameWriterV2:
         self._jwriter.tableProperty(property, value)
         return self
 
-    def partitionedBy(self, col: Column, *cols: Column) -> "DataFrameWriterV2":
+    def partitionedBy(self, col: "ColumnOrName", *cols: "ColumnOrName") -> "DataFrameWriterV2":
         """
         Partition the output table created by `create`, `createOrReplace`, or `replace` using
         the given columns or transforms.
@@ -2487,7 +2487,7 @@ class DataFrameWriterV2:
         """
         self._jwriter.append()
 
-    def overwrite(self, condition: Column) -> None:
+    def overwrite(self, condition: "ColumnOrName") -> None:
         """
         Overwrite rows matching the given filter condition with the contents of the data frame in
         the output table.

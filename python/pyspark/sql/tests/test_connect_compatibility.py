@@ -25,12 +25,18 @@ from pyspark.sql.classic.dataframe import DataFrame as ClassicDataFrame
 from pyspark.sql.classic.column import Column as ClassicColumn
 from pyspark.sql.session import SparkSession as ClassicSparkSession
 from pyspark.sql.catalog import Catalog as ClassicCatalog
+from pyspark.sql.readwriter import DataFrameReader as ClassicDataFrameReader
+from pyspark.sql.readwriter import DataFrameWriter as ClassicDataFrameWriter
+from pyspark.sql.readwriter import DataFrameWriterV2 as ClassicDataFrameWriterV2
 
 if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
     from pyspark.sql.connect.column import Column as ConnectColumn
     from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
     from pyspark.sql.connect.catalog import Catalog as ConnectCatalog
+    from pyspark.sql.connect.readwriter import DataFrameReader as ConnectDataFrameReader
+    from pyspark.sql.connect.readwriter import DataFrameWriter as ConnectDataFrameWriter
+    from pyspark.sql.connect.readwriter import DataFrameWriterV2 as ConnectDataFrameWriterV2
 
 
 class ConnectCompatibilityTestsMixin:
@@ -63,7 +69,9 @@ class ConnectCompatibilityTestsMixin:
             classic_signature = inspect.signature(classic_methods[method])
             connect_signature = inspect.signature(connect_methods[method])
 
-            if not method == "createDataFrame":
+            # Cannot support RDD arguments from Spark Connect
+            has_rdd_arguments = ("createDataFrame", "xml", "json")
+            if not method in has_rdd_arguments:
                 self.assertEqual(
                     classic_signature,
                     connect_signature,
@@ -241,6 +249,54 @@ class ConnectCompatibilityTestsMixin:
             ClassicCatalog,
             ConnectCatalog,
             "Catalog",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_dataframe_reader_compatibility(self):
+        """Test DataFrameReader compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = set()
+        self.check_compatibility(
+            ClassicDataFrameReader,
+            ConnectDataFrameReader,
+            "DataFrameReader",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_dataframe_writer_compatibility(self):
+        """Test DataFrameWriter compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = set()
+        self.check_compatibility(
+            ClassicDataFrameWriter,
+            ConnectDataFrameWriter,
+            "DataFrameWriter",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_dataframe_writer_v2_compatibility(self):
+        """Test DataFrameWriterV2 compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = set()
+        self.check_compatibility(
+            ClassicDataFrameWriterV2,
+            ConnectDataFrameWriterV2,
+            "DataFrameWriterV2",
             expected_missing_connect_properties,
             expected_missing_classic_properties,
             expected_missing_connect_methods,
