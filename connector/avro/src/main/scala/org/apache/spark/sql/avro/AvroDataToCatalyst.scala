@@ -121,7 +121,7 @@ private[sql] case class AvroDataToCatalyst(
             "result, try setting the option 'mode' as 'PERMISSIVE'.", e)
         case _ =>
           throw QueryCompilationErrors.parseModeUnsupportedError(
-            "from_avro", parseMode
+            prettyName, parseMode
           )
       }
     }

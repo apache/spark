@@ -354,7 +354,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         },
         condition = "PARSE_MODE_UNSUPPORTED",
         parameters = Map(
-          "funcName" -> "from_csv",
+          "funcName" -> "`from_csv`",
           "mode" -> "DROPMALFORMED"))
     }
   }

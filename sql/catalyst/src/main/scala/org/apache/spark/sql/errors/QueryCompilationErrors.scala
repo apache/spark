@@ -1343,7 +1343,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "PARSE_MODE_UNSUPPORTED",
       messageParameters = Map(
-        "funcName" -> funcName,
+        "funcName" -> toSQLId(funcName),
         "mode" -> mode.name))
   }
 

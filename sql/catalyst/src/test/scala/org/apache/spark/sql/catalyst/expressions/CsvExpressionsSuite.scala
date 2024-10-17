@@ -158,7 +158,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
       }.getCause.asInstanceOf[AnalysisException],
       condition = "PARSE_MODE_UNSUPPORTED",
       parameters = Map(
-        "funcName" -> "from_csv",
+        "funcName" -> "`from_csv`",
         "mode" -> "DROPMALFORMED"))
   }
 
