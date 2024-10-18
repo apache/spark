@@ -945,6 +945,34 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     }
   }
 
+  test("SPARK-49210: Report driver metrics from Datasource v2 write") {
+    withTempDir { dir =>
+      val statusStore = spark.sharedState.statusStore
+      val oldCount = statusStore.executionsList().size
+
+      val cls = classOf[CustomMetricsDataSource].getName
+      spark.range(10).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+        .write.format(cls)
+        .option("path", dir.getCanonicalPath).mode("append").save()
+
+      // Wait until the new execution is started and being tracked.
+      eventually(timeout(10.seconds), interval(10.milliseconds)) {
+        assert(statusStore.executionsCount() >= oldCount)
+      }
+
+      // Wait for listener to finish computing the metrics for the execution.
+      eventually(timeout(10.seconds), interval(10.milliseconds)) {
+        assert(statusStore.executionsList().nonEmpty &&
+          statusStore.executionsList().last.metricValues != null)
+      }
+
+      val execId = statusStore.executionsList().last.executionId
+      val metrics = statusStore.executionMetrics(execId)
+      val driverMetric = metrics.find(_._2 == "11111")
+      assert(driverMetric.isDefined)
+    }
+  }
+
   test("SPARK-37578: Update output metrics from Datasource v2") {
     withTempDir { dir =>
       val statusStore = spark.sharedState.statusStore
@@ -1157,6 +1185,19 @@ class SimpleCustomDriverTaskMetric(value : Long) extends CustomTaskMetric {
   override def value(): Long = value
 }
 
+class SimpleWriterCustomDriverMetric extends CustomMetric {
+  override def name(): String = "custom_writer_driver_metric"
+  override def description(): String = "Simple custom driver metrics - custom metric"
+  override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
+    taskMetrics.sum.toString
+  }
+}
+
+class SimpleWriterCustomDriverTaskMetric(value : Long) extends CustomTaskMetric {
+  override def name(): String = "custom_writer_driver_metric"
+  override def value(): Long = value
+}
+
 class BytesWrittenCustomMetric extends CustomMetric {
   override def name(): String = "bytesWritten"
   override def description(): String = "bytesWritten metric"
@@ -1299,7 +1340,12 @@ class CustomMetricsDataSource extends SimpleWritableDataSource {
 
         override def supportedCustomMetrics(): Array[CustomMetric] = {
           Array(new SimpleCustomMetric, new Outer.InnerCustomMetric,
-            new BytesWrittenCustomMetric, new RecordsWrittenCustomMetric)
+            new BytesWrittenCustomMetric, new RecordsWrittenCustomMetric,
+            new SimpleWriterCustomDriverMetric)
+        }
+
+        override def reportDriverMetrics(): Array[CustomTaskMetric] = {
+          Array(new SimpleWriterCustomDriverTaskMetric(11111))
         }
       }
     }
