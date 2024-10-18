@@ -46,6 +46,10 @@ class SparkSubmitOptionParser {
   protected final String DRIVER_LIBRARY_PATH = "--driver-library-path";
   protected final String DRIVER_MEMORY = "--driver-memory";
   protected final String EXECUTOR_MEMORY = "--executor-memory";
+  protected final String YARN_DOCKER_IMAGE = "--yarn-docker-image";
+  protected final String YARN_DOCKER_MOUNTS = "--yarn-docker-mounts";
+  protected final String EXECUTOR_DOCKER_IMAGE = "--executor-docker-image";
+  protected final String EXECUTOR_DOCKER_MOUNTS = "--executor-docker-mounts";
   protected final String FILES = "--files";
   protected final String JARS = "--jars";
   protected final String KILL_SUBMISSION = "--kill";
@@ -120,6 +124,10 @@ class SparkSubmitOptionParser {
     { REPOSITORIES },
     { STATUS },
     { TOTAL_EXECUTOR_CORES },
+    { YARN_DOCKER_IMAGE },
+    { YARN_DOCKER_MOUNTS },
+    { EXECUTOR_DOCKER_IMAGE },
+    { EXECUTOR_DOCKER_MOUNTS },
   };
 
   /**
