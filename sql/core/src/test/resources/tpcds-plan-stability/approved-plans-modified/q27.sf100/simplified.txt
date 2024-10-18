@@ -59,9 +59,9 @@ TakeOrderedAndProject [i_item_id,s_state,g_state,agg1,agg2,agg3,agg4]
                 Project [i_item_id,ss_quantity,ss_list_price,ss_coupon_amt,ss_sales_price]
                   BroadcastHashJoin [ss_item_sk,i_item_sk]
                     Project [ss_item_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt]
-                      BroadcastHashJoin [ss_cdemo_sk,cd_demo_sk]
-                        Project [ss_item_sk,ss_cdemo_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt]
-                          BroadcastHashJoin [ss_store_sk,s_store_sk]
+                      BroadcastHashJoin [ss_store_sk,s_store_sk]
+                        Project [ss_item_sk,ss_store_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt]
+                          BroadcastHashJoin [ss_cdemo_sk,cd_demo_sk]
                             Project [ss_item_sk,ss_cdemo_sk,ss_store_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt]
                               BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                 Filter [ss_cdemo_sk,ss_store_sk,ss_item_sk]
@@ -72,15 +72,15 @@ TakeOrderedAndProject [i_item_id,s_state,g_state,agg1,agg2,agg3,agg4]
                                 InputAdapter
                                   ReusedExchange [d_date_sk] #2
                             InputAdapter
-                              BroadcastExchange #7
-                                WholeStageCodegen (8)
-                                  Project [s_store_sk]
-                                    Filter [s_state,s_store_sk]
-                                      ColumnarToRow
-                                        InputAdapter
-                                          Scan parquet spark_catalog.default.store [s_store_sk,s_state]
+                              ReusedExchange [cd_demo_sk] #3
                         InputAdapter
-                          ReusedExchange [cd_demo_sk] #3
+                          BroadcastExchange #7
+                            WholeStageCodegen (9)
+                              Project [s_store_sk]
+                                Filter [s_state,s_store_sk]
+                                  ColumnarToRow
+                                    InputAdapter
+                                      Scan parquet spark_catalog.default.store [s_store_sk,s_state]
                     InputAdapter
                       ReusedExchange [i_item_sk,i_item_id] #5
     WholeStageCodegen (18)
@@ -92,9 +92,9 @@ TakeOrderedAndProject [i_item_id,s_state,g_state,agg1,agg2,agg3,agg4]
                 Project [ss_quantity,ss_list_price,ss_coupon_amt,ss_sales_price]
                   BroadcastHashJoin [ss_item_sk,i_item_sk]
                     Project [ss_item_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt]
-                      BroadcastHashJoin [ss_cdemo_sk,cd_demo_sk]
-                        Project [ss_item_sk,ss_cdemo_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt]
-                          BroadcastHashJoin [ss_store_sk,s_store_sk]
+                      BroadcastHashJoin [ss_store_sk,s_store_sk]
+                        Project [ss_item_sk,ss_store_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt]
+                          BroadcastHashJoin [ss_cdemo_sk,cd_demo_sk]
                             Project [ss_item_sk,ss_cdemo_sk,ss_store_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt]
                               BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                 Filter [ss_cdemo_sk,ss_store_sk,ss_item_sk]
@@ -105,9 +105,9 @@ TakeOrderedAndProject [i_item_id,s_state,g_state,agg1,agg2,agg3,agg4]
                                 InputAdapter
                                   ReusedExchange [d_date_sk] #2
                             InputAdapter
-                              ReusedExchange [s_store_sk] #7
+                              ReusedExchange [cd_demo_sk] #3
                         InputAdapter
-                          ReusedExchange [cd_demo_sk] #3
+                          ReusedExchange [s_store_sk] #7
                     InputAdapter
                       BroadcastExchange #9
                         WholeStageCodegen (16)
