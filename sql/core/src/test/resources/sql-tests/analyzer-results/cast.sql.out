@@ -296,7 +296,7 @@ SELECT CAST(interval 3 month 1 hour AS string)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
+  "condition" : "_LEGACY_ERROR_TEMP_0029",
   "messageParameters" : {
     "literal" : "interval 3 month 1 hour"
   },
@@ -913,7 +913,7 @@ SELECT '2147483648' :: BINT
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "condition" : "UNSUPPORTED_DATATYPE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "typeName" : "\"BINT\""
@@ -933,7 +933,7 @@ SELECT '2147483648' :: SELECT
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "condition" : "UNSUPPORTED_DATATYPE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "typeName" : "\"SELECT\""
@@ -953,7 +953,7 @@ SELECT FALSE IS NOT NULL :: string
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'::'",

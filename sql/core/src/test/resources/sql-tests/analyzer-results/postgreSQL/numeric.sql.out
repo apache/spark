@@ -3560,7 +3560,7 @@ INSERT INTO num_exp_power_10_ln VALUES (7,1716699575118597095.423308199106402476
 -- !query analysis
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+  "condition" : "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
   "sqlState" : "22003",
   "messageParameters" : {
     "maxPrecision" : "38",
@@ -3841,7 +3841,7 @@ INSERT INTO num_result SELECT t1.id, t2.id, t1.val, t2.val, t1.val * t2.val
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+  "condition" : "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
   "sqlState" : "21S01",
   "messageParameters" : {
     "dataColumns" : "`id`, `id`, `val`, `val`, `(val * val)`",
@@ -4521,7 +4521,7 @@ SELECT '' AS to_number_2,  to_number('-34,338,492.654,878', '99G999G999D999G999'
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_FORMAT.THOUSANDS_SEPS_MUST_BEFORE_DEC",
+  "condition" : "INVALID_FORMAT.THOUSANDS_SEPS_MUST_BEFORE_DEC",
   "sqlState" : "42601",
   "messageParameters" : {
     "format" : "'99G999G999D999G999'"
@@ -4576,7 +4576,7 @@ SELECT '' AS to_number_15, to_number('123,000','999G')
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_FORMAT.CONT_THOUSANDS_SEPS",
+  "condition" : "INVALID_FORMAT.CONT_THOUSANDS_SEPS",
   "sqlState" : "42601",
   "messageParameters" : {
     "format" : "'999G'"

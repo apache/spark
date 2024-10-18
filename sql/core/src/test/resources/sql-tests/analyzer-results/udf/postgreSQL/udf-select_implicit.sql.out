@@ -112,7 +112,7 @@ SELECT udf(count(*)) FROM test_missing_target GROUP BY udf(a) ORDER BY udf(b)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`b`",
@@ -191,7 +191,7 @@ SELECT udf(c), udf(count(*)) FROM test_missing_target GROUP BY 3
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
+  "condition" : "GROUP_BY_POS_OUT_OF_RANGE",
   "sqlState" : "42805",
   "messageParameters" : {
     "index" : "3",
@@ -214,7 +214,7 @@ SELECT udf(count(*)) FROM test_missing_target x, test_missing_target y
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "condition" : "AMBIGUOUS_REFERENCE",
   "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`b`",
@@ -325,7 +325,7 @@ SELECT udf(count(udf(a))) FROM test_missing_target GROUP BY udf(a) ORDER BY udf(
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`b`",
@@ -389,7 +389,7 @@ SELECT udf(count(udf(x.a))) FROM test_missing_target x, test_missing_target y
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "condition" : "AMBIGUOUS_REFERENCE",
   "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`b`",
@@ -430,7 +430,7 @@ SELECT udf(count(udf(b))) FROM test_missing_target x, test_missing_target y
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "condition" : "AMBIGUOUS_REFERENCE",
   "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`b`",

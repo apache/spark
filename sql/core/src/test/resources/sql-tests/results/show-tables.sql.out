@@ -168,7 +168,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "end of input",
@@ -195,7 +195,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'PARTITION'",
@@ -211,7 +211,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`show_t*`"
@@ -233,7 +233,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1232",
+  "condition" : "_LEGACY_ERROR_TEMP_1232",
   "messageParameters" : {
     "partitionColumnNames" : "c, d",
     "specKeys" : "c",
@@ -249,7 +249,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1231",
+  "condition" : "_LEGACY_ERROR_TEMP_1231",
   "messageParameters" : {
     "key" : "a",
     "tblName" : "`spark_catalog`.`showdb`.`show_t1`"
@@ -264,7 +264,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 {
-  "errorClass" : "PARTITIONS_NOT_FOUND",
+  "condition" : "PARTITIONS_NOT_FOUND",
   "sqlState" : "428FT",
   "messageParameters" : {
     "partitionList" : "PARTITION (`c` = Ch, `d` = 1)",

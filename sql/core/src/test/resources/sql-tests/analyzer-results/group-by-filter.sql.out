@@ -86,7 +86,7 @@ SELECT a, COUNT(b) FILTER (WHERE a >= 2) FROM testData
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_GROUP_BY",
+  "condition" : "MISSING_GROUP_BY",
   "sqlState" : "42803",
   "queryContext" : [ {
     "objectType" : "",
@@ -343,7 +343,7 @@ SELECT a, COUNT(b) FILTER (WHERE a != 2) FROM testData GROUP BY b
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_AGGREGATION",
+  "condition" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"a\"",
@@ -773,7 +773,7 @@ SELECT a + 2, COUNT(b) FILTER (WHERE b IN (1, 2)) FROM testData GROUP BY a + 1
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_AGGREGATION",
+  "condition" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"a\"",
@@ -980,7 +980,7 @@ SELECT count(num1) FILTER (WHERE rand(int(num2)) > 1) FROM FilterExpressionTestD
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_AGGREGATE_FILTER.NON_DETERMINISTIC",
+  "condition" : "INVALID_AGGREGATE_FILTER.NON_DETERMINISTIC",
   "sqlState" : "42903",
   "messageParameters" : {
     "filterExpr" : "\"(rand(num2) > 1)\""
@@ -1000,7 +1000,7 @@ SELECT sum(num1) FILTER (WHERE str) FROM FilterExpressionTestData
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_AGGREGATE_FILTER.NOT_BOOLEAN",
+  "condition" : "INVALID_AGGREGATE_FILTER.NOT_BOOLEAN",
   "sqlState" : "42903",
   "messageParameters" : {
     "filterExpr" : "\"str\""
@@ -1020,7 +1020,7 @@ SELECT sum(num1) FILTER (WHERE max(num2) > 1) FROM FilterExpressionTestData
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_AGGREGATE_FILTER.CONTAINS_AGGREGATE",
+  "condition" : "INVALID_AGGREGATE_FILTER.CONTAINS_AGGREGATE",
   "sqlState" : "42903",
   "messageParameters" : {
     "aggExpr" : "\"max(num2)\"",
@@ -1041,7 +1041,7 @@ SELECT sum(num1) FILTER (WHERE nth_value(num2, 2) OVER(ORDER BY num2) > 1) FROM 
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_AGGREGATE_FILTER.CONTAINS_WINDOW_FUNCTION",
+  "condition" : "INVALID_AGGREGATE_FILTER.CONTAINS_WINDOW_FUNCTION",
   "sqlState" : "42903",
   "messageParameters" : {
     "filterExpr" : "\"(nth_value(num2, 2) OVER (ORDER BY num2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) > 1)\"",

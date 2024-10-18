@@ -19,7 +19,7 @@ SELECT * FROM parquet.``
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_EMPTY_LOCATION",
+  "condition" : "INVALID_EMPTY_LOCATION",
   "sqlState" : "42K05",
   "messageParameters" : {
     "location" : ""
@@ -39,7 +39,7 @@ SELECT * FROM parquet.`file:tmp`
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_LOCATION",
+  "condition" : "INVALID_LOCATION",
   "sqlState" : "42K05",
   "messageParameters" : {
     "location" : "file:tmp"
@@ -59,7 +59,7 @@ SELECT * FROM parquet.`/file/not/found`
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PATH_NOT_FOUND",
+  "condition" : "PATH_NOT_FOUND",
   "sqlState" : "42K03",
   "messageParameters" : {
     "path" : "file:/file/not/found"
@@ -94,7 +94,7 @@ SELECT * FROM orc.``
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_EMPTY_LOCATION",
+  "condition" : "INVALID_EMPTY_LOCATION",
   "sqlState" : "42K05",
   "messageParameters" : {
     "location" : ""
@@ -114,7 +114,7 @@ SELECT * FROM orc.`file:tmp`
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_LOCATION",
+  "condition" : "INVALID_LOCATION",
   "sqlState" : "42K05",
   "messageParameters" : {
     "location" : "file:tmp"
@@ -134,7 +134,7 @@ SELECT * FROM orc.`/file/not/found`
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PATH_NOT_FOUND",
+  "condition" : "PATH_NOT_FOUND",
   "sqlState" : "42K03",
   "messageParameters" : {
     "path" : "file:/file/not/found"
@@ -169,7 +169,7 @@ SELECT * FROM csv.``
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_EMPTY_LOCATION",
+  "condition" : "INVALID_EMPTY_LOCATION",
   "sqlState" : "42K05",
   "messageParameters" : {
     "location" : ""
@@ -189,7 +189,7 @@ SELECT * FROM csv.`file:tmp`
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_LOCATION",
+  "condition" : "INVALID_LOCATION",
   "sqlState" : "42K05",
   "messageParameters" : {
     "location" : "file:tmp"
@@ -209,7 +209,7 @@ SELECT * FROM csv.`/file/not/found`
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PATH_NOT_FOUND",
+  "condition" : "PATH_NOT_FOUND",
   "sqlState" : "42K03",
   "messageParameters" : {
     "path" : "file:/file/not/found"
@@ -244,7 +244,7 @@ SELECT * FROM json.``
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_EMPTY_LOCATION",
+  "condition" : "INVALID_EMPTY_LOCATION",
   "sqlState" : "42K05",
   "messageParameters" : {
     "location" : ""
@@ -264,7 +264,7 @@ SELECT * FROM json.`file:tmp`
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_LOCATION",
+  "condition" : "INVALID_LOCATION",
   "sqlState" : "42K05",
   "messageParameters" : {
     "location" : "file:tmp"
@@ -284,7 +284,7 @@ SELECT * FROM json.`/file/not/found`
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PATH_NOT_FOUND",
+  "condition" : "PATH_NOT_FOUND",
   "sqlState" : "42K03",
   "messageParameters" : {
     "path" : "file:/file/not/found"

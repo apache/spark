@@ -22,7 +22,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_EMPTY_LOCATION",
+  "condition" : "INVALID_EMPTY_LOCATION",
   "sqlState" : "42K05",
   "messageParameters" : {
     "location" : ""
@@ -44,7 +44,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_LOCATION",
+  "condition" : "INVALID_LOCATION",
   "sqlState" : "42K05",
   "messageParameters" : {
     "location" : "file:tmp"
@@ -66,7 +66,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PATH_NOT_FOUND",
+  "condition" : "PATH_NOT_FOUND",
   "sqlState" : "42K03",
   "messageParameters" : {
     "path" : "file:/file/not/found"
@@ -105,7 +105,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_EMPTY_LOCATION",
+  "condition" : "INVALID_EMPTY_LOCATION",
   "sqlState" : "42K05",
   "messageParameters" : {
     "location" : ""
@@ -127,7 +127,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_LOCATION",
+  "condition" : "INVALID_LOCATION",
   "sqlState" : "42K05",
   "messageParameters" : {
     "location" : "file:tmp"
@@ -149,7 +149,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PATH_NOT_FOUND",
+  "condition" : "PATH_NOT_FOUND",
   "sqlState" : "42K03",
   "messageParameters" : {
     "path" : "file:/file/not/found"
@@ -188,7 +188,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_EMPTY_LOCATION",
+  "condition" : "INVALID_EMPTY_LOCATION",
   "sqlState" : "42K05",
   "messageParameters" : {
     "location" : ""
@@ -210,7 +210,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_LOCATION",
+  "condition" : "INVALID_LOCATION",
   "sqlState" : "42K05",
   "messageParameters" : {
     "location" : "file:tmp"
@@ -232,7 +232,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PATH_NOT_FOUND",
+  "condition" : "PATH_NOT_FOUND",
   "sqlState" : "42K03",
   "messageParameters" : {
     "path" : "file:/file/not/found"
@@ -271,7 +271,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_EMPTY_LOCATION",
+  "condition" : "INVALID_EMPTY_LOCATION",
   "sqlState" : "42K05",
   "messageParameters" : {
     "location" : ""
@@ -293,7 +293,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_LOCATION",
+  "condition" : "INVALID_LOCATION",
   "sqlState" : "42K05",
   "messageParameters" : {
     "location" : "file:tmp"
@@ -315,7 +315,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PATH_NOT_FOUND",
+  "condition" : "PATH_NOT_FOUND",
   "sqlState" : "42K03",
   "messageParameters" : {
     "path" : "file:/file/not/found"

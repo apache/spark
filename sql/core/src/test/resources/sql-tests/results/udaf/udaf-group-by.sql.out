@@ -16,7 +16,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_GROUP_BY",
+  "condition" : "MISSING_GROUP_BY",
   "sqlState" : "42803",
   "queryContext" : [ {
     "objectType" : "",
@@ -54,7 +54,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_AGGREGATION",
+  "condition" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"a\"",
@@ -117,7 +117,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_AGGREGATION",
+  "condition" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"a\"",
@@ -145,7 +145,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_PANDAS_UDF_PLACEMENT",
+  "condition" : "INVALID_PANDAS_UDF_PLACEMENT",
   "sqlState" : "0A000",
   "messageParameters" : {
     "functionList" : "`udaf`"
@@ -160,7 +160,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+  "condition" : "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
   "sqlState" : "42000",
   "messageParameters" : {
     "prettyName" : "`pythonudaf`",
@@ -203,7 +203,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`non_existing`",
@@ -235,7 +235,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_AGGREGATION",
+  "condition" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"k\"",
@@ -259,7 +259,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`k`",
@@ -341,7 +341,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_PANDAS_UDF_PLACEMENT",
+  "condition" : "INVALID_PANDAS_UDF_PLACEMENT",
   "sqlState" : "0A000",
   "messageParameters" : {
     "functionList" : "`udaf`"
@@ -356,7 +356,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_PANDAS_UDF_PLACEMENT",
+  "condition" : "INVALID_PANDAS_UDF_PLACEMENT",
   "sqlState" : "0A000",
   "messageParameters" : {
     "functionList" : "`udaf`"
@@ -371,7 +371,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_PANDAS_UDF_PLACEMENT",
+  "condition" : "INVALID_PANDAS_UDF_PLACEMENT",
   "sqlState" : "0A000",
   "messageParameters" : {
     "functionList" : "`udaf`"
@@ -386,7 +386,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_PANDAS_UDF_PLACEMENT",
+  "condition" : "INVALID_PANDAS_UDF_PLACEMENT",
   "sqlState" : "0A000",
   "messageParameters" : {
     "functionList" : "`udaf`"

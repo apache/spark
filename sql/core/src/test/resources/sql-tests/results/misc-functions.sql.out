@@ -70,7 +70,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "USER_RAISED_EXCEPTION",
+  "condition" : "USER_RAISED_EXCEPTION",
   "sqlState" : "P0001",
   "messageParameters" : {
     "errorMessage" : "'false' is not true!"
@@ -85,7 +85,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "USER_RAISED_EXCEPTION",
+  "condition" : "USER_RAISED_EXCEPTION",
   "sqlState" : "P0001",
   "messageParameters" : {
     "errorMessage" : "'cast(0 as boolean)' is not true!"
@@ -100,7 +100,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "USER_RAISED_EXCEPTION",
+  "condition" : "USER_RAISED_EXCEPTION",
   "sqlState" : "P0001",
   "messageParameters" : {
     "errorMessage" : "'null' is not true!"
@@ -115,7 +115,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "USER_RAISED_EXCEPTION",
+  "condition" : "USER_RAISED_EXCEPTION",
   "sqlState" : "P0001",
   "messageParameters" : {
     "errorMessage" : "'cast(null as boolean)' is not true!"
@@ -130,7 +130,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "USER_RAISED_EXCEPTION",
+  "condition" : "USER_RAISED_EXCEPTION",
   "sqlState" : "P0001",
   "messageParameters" : {
     "errorMessage" : "custom error message"
@@ -153,7 +153,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "USER_RAISED_EXCEPTION",
+  "condition" : "USER_RAISED_EXCEPTION",
   "sqlState" : "P0001",
   "messageParameters" : {
     "errorMessage" : "error message"
@@ -168,7 +168,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "USER_RAISED_EXCEPTION",
+  "condition" : "USER_RAISED_EXCEPTION",
   "sqlState" : "P0001",
   "messageParameters" : {
     "errorMessage" : "too big: 8"
@@ -183,7 +183,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "2",
@@ -208,7 +208,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "2",
@@ -233,7 +233,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
@@ -258,7 +258,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "USER_RAISED_EXCEPTION",
+  "condition" : "USER_RAISED_EXCEPTION",
   "sqlState" : "P0001",
   "messageParameters" : {
     "errorMessage" : "null"
@@ -273,7 +273,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "USER_RAISED_EXCEPTION",
+  "condition" : "USER_RAISED_EXCEPTION",
   "sqlState" : "P0001",
   "messageParameters" : {
     "errorMessage" : "1"

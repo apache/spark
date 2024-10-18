@@ -93,7 +93,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "GROUP_BY_POS_AGGREGATE",
+  "condition" : "GROUP_BY_POS_AGGREGATE",
   "sqlState" : "42903",
   "messageParameters" : {
     "aggExpr" : "udaf(b#x) AS `udaf(b)`",
@@ -116,7 +116,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "GROUP_BY_POS_AGGREGATE",
+  "condition" : "GROUP_BY_POS_AGGREGATE",
   "sqlState" : "42903",
   "messageParameters" : {
     "aggExpr" : "(udaf(b#x) + 2) AS `(udaf(b) + 2)`",
@@ -342,7 +342,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
+  "condition" : "GROUP_BY_POS_OUT_OF_RANGE",
   "sqlState" : "42805",
   "messageParameters" : {
     "index" : "-1",
@@ -365,7 +365,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "GROUP_BY_POS_AGGREGATE",
+  "condition" : "GROUP_BY_POS_AGGREGATE",
   "sqlState" : "42903",
   "messageParameters" : {
     "aggExpr" : "udaf(1) AS `udaf(1)`",
@@ -388,7 +388,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
+  "condition" : "GROUP_BY_POS_OUT_OF_RANGE",
   "sqlState" : "42805",
   "messageParameters" : {
     "index" : "-1",
@@ -411,7 +411,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "GROUP_BY_POS_AGGREGATE",
+  "condition" : "GROUP_BY_POS_AGGREGATE",
   "sqlState" : "42903",
   "messageParameters" : {
     "aggExpr" : "udaf(1) AS `udaf(1)`",

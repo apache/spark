@@ -142,7 +142,7 @@ ROWS BETWEEN CURRENT ROW AND 2147483648 FOLLOWING) FROM testData ORDER BY cate, 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+  "condition" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "expectedType" : "\"INT\"",
@@ -378,7 +378,7 @@ ORDER BY cate, val_date
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE",
+  "condition" : "DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "orderSpecType" : "\"DATE\"",
@@ -418,7 +418,7 @@ ROWS BETWEEN UNBOUNDED FOLLOWING AND 1 FOLLOWING) FROM testData ORDER BY cate, v
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_INVALID_BOUND",
+  "condition" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_INVALID_BOUND",
   "sqlState" : "42K09",
   "messageParameters" : {
     "lower" : "\"UNBOUNDED FOLLOWING\"",
@@ -441,7 +441,7 @@ RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_WITHOUT_ORDER",
+  "condition" : "DATATYPE_MISMATCH.RANGE_FRAME_WITHOUT_ORDER",
   "sqlState" : "42K09",
   "messageParameters" : {
     "sqlExpr" : "\"(PARTITION BY cate RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)\""
@@ -462,7 +462,7 @@ RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
+  "condition" : "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
   "sqlState" : "42K09",
   "messageParameters" : {
     "orderSpec" : "val#x ASC NULLS FIRST,cate#x ASC NULLS FIRST",
@@ -484,7 +484,7 @@ RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE",
+  "condition" : "DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "orderSpecType" : "\"TIMESTAMP\"",
@@ -507,7 +507,7 @@ RANGE BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM testData ORDER BY cate, val
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_WRONG_COMPARISON",
+  "condition" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_WRONG_COMPARISON",
   "sqlState" : "42K09",
   "messageParameters" : {
     "comparison" : "less than or equal",
@@ -529,7 +529,7 @@ RANGE BETWEEN CURRENT ROW AND current_date PRECEDING) FROM testData ORDER BY cat
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
+  "condition" : "_LEGACY_ERROR_TEMP_0064",
   "messageParameters" : {
     "msg" : "Frame bound value must be a literal."
   },
@@ -616,7 +616,7 @@ SELECT val, cate, row_number() OVER(PARTITION BY cate) FROM testData ORDER BY ca
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1037",
+  "condition" : "_LEGACY_ERROR_TEMP_1037",
   "messageParameters" : {
     "wf" : "row_number()"
   }
@@ -693,7 +693,7 @@ FROM testData ORDER BY cate, val
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1030"
+  "condition" : "_LEGACY_ERROR_TEMP_1030"
 }
 
 
@@ -967,7 +967,7 @@ ORDER BY salary DESC
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.REPETITIVE_WINDOW_DEFINITION",
+  "condition" : "INVALID_SQL_SYNTAX.REPETITIVE_WINDOW_DEFINITION",
   "sqlState" : "42000",
   "messageParameters" : {
     "windowName" : "`w`"
@@ -1259,7 +1259,7 @@ FROM
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "condition" : "MISSING_WINDOW_SPECIFICATION",
   "sqlState" : "42P20",
   "messageParameters" : {
     "docroot" : "https://spark.apache.org/docs/latest",
@@ -1276,7 +1276,7 @@ FROM
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "condition" : "MISSING_WINDOW_SPECIFICATION",
   "sqlState" : "42P20",
   "messageParameters" : {
     "docroot" : "https://spark.apache.org/docs/latest",

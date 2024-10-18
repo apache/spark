@@ -443,7 +443,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION",
+  "condition" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "subqueryExpression" : "(x.x2 IN (listquery(x.x2, y.y2, (z.z2 = x.x2), (z.z2 = y.y2))))"
@@ -458,7 +458,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION",
+  "condition" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "subqueryExpression" : "(x.x2 IN (listquery(x.x2, y.y2, (z.z2 = x.x2), (z.z2 = y.y2))))"
