@@ -352,8 +352,6 @@ The Decimal type contains a scale, but no precision. The implied precision of a 
 | Float                | float                       | `14`    | FLOAT                       | IEEE little-endian                                                                                                  |
 | Binary               | binary                      | `15`    | BINARY                      | 4 byte little-endian size, followed by bytes                                                                        |
 | String               | string                      | `16`    | STRING                      | 4 byte little-endian size, followed by UTF-8 encoded bytes                                                          |
-| YMInterval           | year-month interval         | `19`    | INT(32, signed)<sup>1</sup> | 1 byte denoting start field (1 bit) and end field (1 bit) starting at LSB followed by 4-byte little-endian value.   |
-| DTInterval           | day-time interval           | `20`    | INT(64, signed)<sup>1</sup> | 1 byte denoting start field (2 bits) and end field (2 bits) starting at LSB followed by 8-byte little-endian value. |
 
 | Decimal Precision     | Decimal value type |
 |-----------------------|--------------------|
@@ -363,12 +361,6 @@ The Decimal type contains a scale, but no precision. The implied precision of a 
 | > 38                  | Not supported      |
 
 The *Logical Type* column indicates logical equivalence of physically encoded types. For example, a user expression operating on a string value containing "hello" should behave the same, whether it is encoded with the short string optimization, or long string encoding. Similarly, user expressions operating on an *int8* value of 1 should behave the same as a decimal16 with scale 2 and unscaled value 100.
-
-The year-month and day-time interval types have one byte at the beginning indicating the start and end fields. In the case of the year-month interval, the least significant bit denotes the start field and the next least significant bit denotes the end field. The remaining 6 bits are unused. A field value of 0 represents YEAR and 1 represents MONTH. In the case of the day-time interval, the least significant 2 bits denote the start field and the next least significant 2 bits denote the end field. The remaining 4 bits are unused. A field value of 0 represents DAY, 1 represents HOUR, 2 represents MINUTE, and 3 represents SECOND.
-
-Type IDs 17 and 18 were originally reserved for a prototype feature (string-from-metadata) that was never implemented. These IDs are available for use by new types.
-
-[1] The parquet format does not have pure equivalents for the year-month and day-time interval types. Year-month intervals are usually represented using int32 values and the day-time intervals are usually represented using int64 values. However, these values don't include the start and end fields of these types. Therefore, Spark stores them in the column metadata.
 
 # Field ID order and uniqueness
 
