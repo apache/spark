@@ -89,6 +89,7 @@ object SparkPlanGraph {
           planInfo.nodeName,
           planInfo.simpleString,
           mutable.ArrayBuffer[SparkPlanGraphNode](),
+          planInfo.metadata,
           metrics)
         nodes += cluster
 
@@ -161,6 +162,7 @@ class SparkPlanGraphNode(
     val id: Long,
     val name: String,
     val desc: String,
+    val metadata: Map[String, String],
     val metrics: collection.Seq[SQLPlanMetric]) {
 
   def makeDotNode(metricsValue: Map[Long, String]): String = {
@@ -191,6 +193,10 @@ class SparkPlanGraphNode(
       // so that there won't be gaps between an edge and a small node.
       s"<br><b>${StringEscapeUtils.escapeJava(name)}</b><br><br>"
     }
+    metadata.get(SparkPlanInfo.sizeInBytesKey).foreach((v:String) => {
+        builder ++= "<tr><td>" + "size in bytes" + "</td> <td>" + v + "</td></tr>"})
+    metadata.get(SparkPlanInfo.rowCountKey).foreach((v:String) => {
+        builder ++= "<tr><td>" + "row counts" + "</td> <td>" + v + "</td></tr>"})
     s"""  $id [id="$nodeId" labelType="html" label="$labelStr" tooltip="$tooltip"];"""
 
   }
@@ -204,8 +210,9 @@ class SparkPlanGraphCluster(
     name: String,
     desc: String,
     val nodes: mutable.ArrayBuffer[SparkPlanGraphNode],
+    metadata: Map[String, String],
     metrics: collection.Seq[SQLPlanMetric])
-  extends SparkPlanGraphNode(id, name, desc, metrics) {
+  extends SparkPlanGraphNode(id, name, desc, metadata, metrics) {
 
   override def makeDotNode(metricsValue: Map[Long, String]): String = {
     val duration = metrics.filter(_.name.startsWith(WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
