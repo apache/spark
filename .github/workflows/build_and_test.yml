@@ -264,20 +264,20 @@ jobs:
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
-    - name: Install Python 3.9
+    - name: Install Python 3.11
       uses: actions/setup-python@v5
       # We should install one Python that is higher than 3+ for SQL and Yarn because:
       # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
       # - Yarn has a Python specific test too, for example, YarnClusterSuite.
       if: contains(matrix.modules, 'yarn') || (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')) || contains(matrix.modules, 'connect')
       with:
-        python-version: '3.9'
+        python-version: '3.11'
         architecture: x64
-    - name: Install Python packages (Python 3.9)
+    - name: Install Python packages (Python 3.11)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')) || contains(matrix.modules, 'connect')
       run: |
-        python3.9 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.62.0' 'grpcio-status==1.62.0' 'protobuf==4.25.1'
-        python3.9 -m pip list
+        python3.11 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.62.0' 'grpcio-status==1.62.0' 'protobuf==4.25.1'
+        python3.11 -m pip list
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
@@ -608,14 +608,14 @@ jobs:
       with:
         input: sql/connect/common/src/main
         against: 'https://github.com/apache/spark.git#branch=branch-3.5,subdir=connector/connect/common/src/main'
-    - name: Install Python 3.9
+    - name: Install Python 3.11
       uses: actions/setup-python@v5
       with:
-        python-version: '3.9'
+        python-version: '3.11'
     - name: Install dependencies for Python CodeGen check
       run: |
-        python3.9 -m pip install 'black==23.9.1' 'protobuf==4.25.1' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
-        python3.9 -m pip list
+        python3.11 -m pip install 'black==23.9.1' 'protobuf==4.25.1' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
+        python3.11 -m pip list
     - name: Python CodeGen check
       run: ./dev/connect-check-protos.py
 
@@ -1112,6 +1112,10 @@ jobs:
         with:
           distribution: zulu
           java-version: ${{ inputs.java }}
+      - name: Install R
+        run: |
+          sudo apt update
+          sudo apt-get install r-base
       - name: Start Minikube
         uses: medyagh/setup-minikube@v0.0.18
         with:

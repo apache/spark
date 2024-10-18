@@ -21,14 +21,13 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.ExpectsInputTypes.{ordinalNumber, toSQLExpr, toSQLType}
+import org.apache.spark.sql.catalyst.expressions.ExpectsInputTypes.{ordinalNumber, toSQLExpr, toSQLId, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXPRESSION_WITH_RANDOM_SEED, RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
@@ -259,7 +258,7 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression,
             result = DataTypeMismatch(
               errorSubClass = "NON_FOLDABLE_INPUT",
               messageParameters = Map(
-                "inputName" -> name,
+                "inputName" -> toSQLId(name),
                 "inputType" -> requiredType,
                 "inputExpr" -> toSQLExpr(expr)))
           } else expr.dataType match {
@@ -370,14 +369,14 @@ case class RandStr(
     var result: TypeCheckResult = TypeCheckResult.TypeCheckSuccess
     def requiredType = "INT or SMALLINT"
     Seq((length, "length", 0),
-      (seedExpression, "seedExpression", 1)).foreach {
+      (seedExpression, "seed", 1)).foreach {
       case (expr: Expression, name: String, index: Int) =>
         if (result == TypeCheckResult.TypeCheckSuccess) {
           if (!expr.foldable) {
             result = DataTypeMismatch(
               errorSubClass = "NON_FOLDABLE_INPUT",
               messageParameters = Map(
-                "inputName" -> name,
+                "inputName" -> toSQLId(name),
                 "inputType" -> requiredType,
                 "inputExpr" -> toSQLExpr(expr)))
           } else expr.dataType match {
@@ -399,23 +398,7 @@ case class RandStr(
 
   override def evalInternal(input: InternalRow): Any = {
     val numChars = length.eval(input).asInstanceOf[Number].intValue()
-    val bytes = new Array[Byte](numChars)
-    (0 until numChars).foreach { i =>
-      // We generate a random number between 0 and 61, inclusive. Between the 62 different choices
-      // we choose 0-9, a-z, or A-Z, where each category comprises 10 choices, 26 choices, or 26
-      // choices, respectively (10 + 26 + 26 = 62).
-      val num = (rng.nextInt() % 62).abs
-      num match {
-        case _ if num < 10 =>
-          bytes.update(i, ('0' + num).toByte)
-        case _ if num < 36 =>
-          bytes.update(i, ('a' + num - 10).toByte)
-        case _ =>
-          bytes.update(i, ('A' + num - 36).toByte)
-      }
-    }
-    val result: UTF8String = UTF8String.fromBytes(bytes.toArray)
-    result
+    ExpressionImplUtils.randStr(rng, numChars)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -427,19 +410,8 @@ case class RandStr(
     ev.copy(code =
       code"""
         |${eval.code}
-        |int length = (int)(${eval.value});
-        |char[] chars = new char[length];
-        |for (int i = 0; i < length; i++) {
-        |  int v = Math.abs($rngTerm.nextInt() % 62);
-        |  if (v < 10) {
-        |    chars[i] = (char)('0' + v);
-        |  } else if (v < 36) {
-        |    chars[i] = (char)('a' + (v - 10));
-        |  } else {
-        |    chars[i] = (char)('A' + (v - 36));
-        |  }
-        |}
-        |UTF8String ${ev.value} = UTF8String.fromString(new String(chars));
+        |UTF8String ${ev.value} =
+        |  ${classOf[ExpressionImplUtils].getName}.randStr($rngTerm, (int)(${eval.value}));
         |boolean ${ev.isNull} = false;
         |""".stripMargin,
       isNull = FalseLiteral)
@@ -452,4 +424,3 @@ object RandStr {
   def apply(length: Expression, seedExpression: Expression): RandStr =
     RandStr(length, seedExpression, hideSeed = false)
 }
-

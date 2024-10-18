@@ -26,8 +26,10 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
@@ -274,9 +276,7 @@ class Dataset[T] private[sql] (
     df.withResult { result =>
       assert(result.length == 1)
       assert(result.schema.size == 1)
-      // scalastyle:off println
-      println(result.toArray.head)
-      // scalastyle:on println
+      print(result.toArray.head)
     }
   }
 
@@ -1115,13 +1115,20 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
-  protected def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T] = {
+  protected def checkpoint(
+      eager: Boolean,
+      reliableCheckpoint: Boolean,
+      storageLevel: Option[StorageLevel]): Dataset[T] = {
     sparkSession.newDataset(agnosticEncoder) { builder =>
       val command = sparkSession.newCommand { builder =>
-        builder.getCheckpointCommandBuilder
+        val checkpointBuilder = builder.getCheckpointCommandBuilder
           .setLocal(!reliableCheckpoint)
           .setEager(eager)
           .setRelation(this.plan.getRoot)
+        storageLevel.foreach { storageLevel =>
+          checkpointBuilder.setStorageLevel(
+            StorageLevelProtoConverter.toConnectProtoType(storageLevel))
+        }
       }
       val responseIter = sparkSession.execute(command)
       try {
@@ -1305,6 +1312,10 @@ class Dataset[T] private[sql] (
   override def localCheckpoint(eager: Boolean): Dataset[T] = super.localCheckpoint(eager)
 
   /** @inheritdoc */
+  override def localCheckpoint(eager: Boolean, storageLevel: StorageLevel): Dataset[T] =
+    super.localCheckpoint(eager, storageLevel)
+
+  /** @inheritdoc */
   override def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] =
     super.joinWith(other, condition)
 
@@ -1465,4 +1476,10 @@ class Dataset[T] private[sql] (
       func: MapFunction[T, K],
       encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
     super.groupByKey(func, encoder).asInstanceOf[KeyValueGroupedDataset[K, T]]
+
+  /** @inheritdoc */
+  override def rdd: RDD[T] = throwRddNotSupportedException()
+
+  /** @inheritdoc */
+  override def toJavaRDD: JavaRDD[T] = throwRddNotSupportedException()
 }

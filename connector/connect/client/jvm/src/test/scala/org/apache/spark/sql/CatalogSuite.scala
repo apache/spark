@@ -69,7 +69,7 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
       val exception = intercept[SparkException] {
         spark.catalog.setCurrentCatalog("notExists")
       }
-      assert(exception.getErrorClass == "CATALOG_NOT_FOUND")
+      assert(exception.getCondition == "CATALOG_NOT_FOUND")
       spark.catalog.setCurrentCatalog("testcat")
       assert(spark.catalog.currentCatalog().equals("testcat"))
       val catalogsAfterChange = spark.catalog.listCatalogs().collect()

@@ -593,6 +593,11 @@ class IterateStatementExec(val label: String) extends LeafStatementExec {
   override def reset(): Unit = hasBeenMatched = false
 }
 
+/**
+ * Executable node for LoopStatement.
+ * @param body Executable node for the body, executed on every loop iteration.
+ * @param label Label set to LoopStatement by user, None if not set.
+ */
 class LoopStatementExec(
     body: CompoundBodyExec,
     val label: Option[String]) extends NonLeafStatementExec {

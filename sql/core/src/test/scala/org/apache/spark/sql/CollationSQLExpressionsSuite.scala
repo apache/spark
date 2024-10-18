@@ -49,9 +49,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       Md5TestCase("Spark", "UTF8_BINARY", "8cde774d6f7333752ed72cacddb05126"),
+      Md5TestCase("Spark", "UTF8_BINARY_RTRIM", "8cde774d6f7333752ed72cacddb05126"),
       Md5TestCase("Spark", "UTF8_LCASE", "8cde774d6f7333752ed72cacddb05126"),
+      Md5TestCase("Spark", "UTF8_LCASE_RTRIM", "8cde774d6f7333752ed72cacddb05126"),
       Md5TestCase("SQL", "UNICODE", "9778840a0100cb30c982876741b0b5a2"),
-      Md5TestCase("SQL", "UNICODE_CI", "9778840a0100cb30c982876741b0b5a2")
+      Md5TestCase("SQL", "UNICODE_RTRIM", "9778840a0100cb30c982876741b0b5a2"),
+      Md5TestCase("SQL", "UNICODE_CI", "9778840a0100cb30c982876741b0b5a2"),
+      Md5TestCase("SQL", "UNICODE_CI_RTRIM", "9778840a0100cb30c982876741b0b5a2")
     )
 
     // Supported collations
@@ -81,11 +85,19 @@ class CollationSQLExpressionsSuite
     val testCases = Seq(
       Sha2TestCase("Spark", "UTF8_BINARY", 256,
         "529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b"),
+      Sha2TestCase("Spark", "UTF8_BINARY_RTRIM", 256,
+        "529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b"),
       Sha2TestCase("Spark", "UTF8_LCASE", 256,
+        "529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b"),
+      Sha2TestCase("Spark", "UTF8_LCASE_RTRIM", 256,
         "529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b"),
       Sha2TestCase("SQL", "UNICODE", 256,
         "a7056a455639d1c7deec82ee787db24a0c1878e2792b4597709f0facf7cc7b35"),
+      Sha2TestCase("SQL", "UNICODE_RTRIM", 256,
+        "a7056a455639d1c7deec82ee787db24a0c1878e2792b4597709f0facf7cc7b35"),
       Sha2TestCase("SQL", "UNICODE_CI", 256,
+        "a7056a455639d1c7deec82ee787db24a0c1878e2792b4597709f0facf7cc7b35"),
+      Sha2TestCase("SQL", "UNICODE_CI_RTRIM", 256,
         "a7056a455639d1c7deec82ee787db24a0c1878e2792b4597709f0facf7cc7b35")
     )
 
@@ -114,9 +126,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       Sha1TestCase("Spark", "UTF8_BINARY", "85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c"),
+      Sha1TestCase("Spark", "UTF8_BINARY_RTRIM", "85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c"),
       Sha1TestCase("Spark", "UTF8_LCASE", "85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c"),
+      Sha1TestCase("Spark", "UTF8_LCASE_RTRIM", "85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c"),
       Sha1TestCase("SQL", "UNICODE", "2064cb643caa8d9e1de12eea7f3e143ca9f8680d"),
-      Sha1TestCase("SQL", "UNICODE_CI", "2064cb643caa8d9e1de12eea7f3e143ca9f8680d")
+      Sha1TestCase("SQL", "UNICODE_RTRIM", "2064cb643caa8d9e1de12eea7f3e143ca9f8680d"),
+      Sha1TestCase("SQL", "UNICODE_CI", "2064cb643caa8d9e1de12eea7f3e143ca9f8680d"),
+      Sha1TestCase("SQL", "UNICODE_CI_RTRIM", "2064cb643caa8d9e1de12eea7f3e143ca9f8680d")
     )
 
     // Supported collations
@@ -144,9 +160,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       Crc321TestCase("Spark", "UTF8_BINARY", 1557323817),
+      Crc321TestCase("Spark", "UTF8_BINARY_RTRIM", 1557323817),
       Crc321TestCase("Spark", "UTF8_LCASE", 1557323817),
+      Crc321TestCase("Spark", "UTF8_LCASE_RTRIM", 1557323817),
       Crc321TestCase("SQL", "UNICODE", 1299261525),
-      Crc321TestCase("SQL", "UNICODE_CI", 1299261525)
+      Crc321TestCase("SQL", "UNICODE_RTRIM", 1299261525),
+      Crc321TestCase("SQL", "UNICODE_CI", 1299261525),
+      Crc321TestCase("SQL", "UNICODE_CI_RTRIM", 1299261525)
     )
 
     // Supported collations
@@ -172,9 +192,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       Murmur3HashTestCase("Spark", "UTF8_BINARY", 228093765),
+      Murmur3HashTestCase("Spark  ", "UTF8_BINARY_RTRIM", 1779328737),
       Murmur3HashTestCase("Spark", "UTF8_LCASE", -1928694360),
+      Murmur3HashTestCase("Spark  ", "UTF8_LCASE_RTRIM", -1928694360),
       Murmur3HashTestCase("SQL", "UNICODE", -1923567940),
-      Murmur3HashTestCase("SQL", "UNICODE_CI", 1029527950)
+      Murmur3HashTestCase("SQL ", "UNICODE_RTRIM", -1923567940),
+      Murmur3HashTestCase("SQL", "UNICODE_CI", 1029527950),
+      Murmur3HashTestCase("SQL ", "UNICODE_CI_RTRIM", 1029527950)
     )
 
     // Supported collations
@@ -200,9 +224,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       XxHash64TestCase("Spark", "UTF8_BINARY", -4294468057691064905L),
+      XxHash64TestCase("Spark ", "UTF8_BINARY_RTRIM", 6480371823304753502L),
       XxHash64TestCase("Spark", "UTF8_LCASE", -3142112654825786434L),
+      XxHash64TestCase("Spark ", "UTF8_LCASE_RTRIM", -3142112654825786434L),
       XxHash64TestCase("SQL", "UNICODE", 5964849564945649886L),
-      XxHash64TestCase("SQL", "UNICODE_CI", 3732497619779520590L)
+      XxHash64TestCase("SQL ", "UNICODE_RTRIM", 5964849564945649886L),
+      XxHash64TestCase("SQL", "UNICODE_CI", 3732497619779520590L),
+      XxHash64TestCase("SQL ", "UNICODE_CI_RTRIM", 3732497619779520590L)
     )
 
     // Supported collations
@@ -982,7 +1010,11 @@ class CollationSQLExpressionsSuite
       StringToMapTestCase("1/AX2/BX3/C", "x", "/", "UNICODE_CI",
         Map("1" -> "A", "2" -> "B", "3" -> "C"))
     )
-    val unsupportedTestCase = StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UNICODE_AI", null)
+    val unsupportedTestCases = Seq(
+      StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UNICODE_AI", null),
+      StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UNICODE_RTRIM", null),
+      StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UTF8_BINARY_RTRIM", null),
+      StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UTF8_LCASE_RTRIM", null))
     testCases.foreach(t => {
       // Unit test.
       val text = Literal.create(t.text, StringType(t.collation))
@@ -998,28 +1030,30 @@ class CollationSQLExpressionsSuite
       }
     })
     // Test unsupported collation.
-    withSQLConf(SQLConf.DEFAULT_COLLATION.key -> unsupportedTestCase.collation) {
-      val query =
-        s"select str_to_map('${unsupportedTestCase.text}', '${unsupportedTestCase.pairDelim}', " +
-        s"'${unsupportedTestCase.keyValueDelim}')"
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(query).collect()
-        },
-        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-        sqlState = Some("42K09"),
-        parameters = Map(
-          "sqlExpr" -> ("\"str_to_map('a:1,b:2,c:3' collate UNICODE_AI, " +
-            "'?' collate UNICODE_AI, '?' collate UNICODE_AI)\""),
-          "paramIndex" -> "first",
-          "inputSql" -> "\"'a:1,b:2,c:3' collate UNICODE_AI\"",
-          "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
-          "requiredType" -> "\"STRING\""),
-        context = ExpectedContext(
-          fragment = "str_to_map('a:1,b:2,c:3', '?', '?')",
-          start = 7,
-          stop = 41))
-    }
+    unsupportedTestCases.foreach(t => {
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.collation) {
+        val query =
+          s"select str_to_map('${t.text}', '${t.pairDelim}', " +
+            s"'${t.keyValueDelim}')"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query).collect()
+          },
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          sqlState = Some("42K09"),
+          parameters = Map(
+            "sqlExpr" -> ("\"str_to_map('a:1,b:2,c:3' collate " + s"${t.collation}, " +
+              "'?' collate " + s"${t.collation}, '?' collate ${t.collation})" + "\""),
+            "paramIndex" -> "first",
+            "inputSql" -> ("\"'a:1,b:2,c:3' collate " + s"${t.collation}" + "\""),
+            "inputType" -> ("\"STRING COLLATE " + s"${t.collation}" + "\""),
+            "requiredType" -> "\"STRING\""),
+          context = ExpectedContext(
+            fragment = "str_to_map('a:1,b:2,c:3', '?', '?')",
+            start = 7,
+            stop = 41))
+      }
+    })
   }
 
   test("Support RaiseError misc expression with collation") {
@@ -1218,7 +1252,9 @@ class CollationSQLExpressionsSuite
         sql("SELECT mask(collate('ab-CD-12-@$','UNICODE'),collate('X','UNICODE_CI'),'x','0','#')")
       },
       condition = "COLLATION_MISMATCH.EXPLICIT",
-      parameters = Map("explicitTypes" -> "`string collate UNICODE`, `string collate UNICODE_CI`")
+      parameters = Map(
+        "explicitTypes" -> """"STRING COLLATE UNICODE", "STRING COLLATE UNICODE_CI""""
+      )
     )
   }
 
@@ -2785,16 +2821,24 @@ class CollationSQLExpressionsSuite
     }
   }
 
-  test("collect_set supports collation") {
+  test("collect_set does not support collation") {
     val collation = "UNICODE"
     val query = s"SELECT collect_set(col) FROM VALUES ('a'), ('b'), ('a') AS tab(col);"
     withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      val result = sql(query).collect().head.getSeq[String](0).toSet
-      val expected = Set("a", "b")
-      assert(result == expected)
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), false)
-      assert(sql(query).schema.head.dataType == dataType)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(query)
+        },
+        condition = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
+        sqlState = Some("42K09"),
+        parameters = Map(
+          "functionName" -> "`collect_set`",
+          "dataType" -> "\"MAP\" or \"COLLATED STRING\"",
+          "sqlExpr" -> "\"collect_set(col)\""),
+        context = ExpectedContext(
+          fragment = "collect_set(col)",
+          start = 7,
+          stop = 22))
     }
   }
 

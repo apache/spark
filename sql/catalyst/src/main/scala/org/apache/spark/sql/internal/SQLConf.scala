@@ -764,8 +764,7 @@ object SQLConf {
       .internal()
       .doc(
         "Trim collation feature is under development and its use should be done under this" +
-        "feature flag. Trim collation trims leading, trailing or both spaces depending of" +
-        "specifier (LTRIM, RTRIM, TRIM)."
+        "feature flag. Trim collation trims trailing whitespaces from strings."
       )
       .version("4.0.0")
       .booleanConf
@@ -783,7 +782,7 @@ object SQLConf {
             CollationFactory.fetchCollation(collationName)
             true
           } catch {
-            case e: SparkException if e.getErrorClass == "COLLATION_INVALID_NAME" => false
+            case e: SparkException if e.getCondition == "COLLATION_INVALID_NAME" => false
           }
         },
         "DEFAULT_COLLATION",

@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicLong
 import ColumnNode._
 
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.catalyst.util.AttributeNameParser
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, Metadata}
 import org.apache.spark.util.SparkClassUtils
@@ -122,7 +123,7 @@ private[sql] case class Literal(
 /**
  * Reference to an attribute produced by one of the underlying DataFrames.
  *
- * @param unparsedIdentifier
+ * @param nameParts
  *   name of the attribute.
  * @param planId
  *   id of the plan (Dataframe) that produces the attribute.
@@ -130,14 +131,40 @@ private[sql] case class Literal(
  *   whether this is a metadata column.
  */
 private[sql] case class UnresolvedAttribute(
-    unparsedIdentifier: String,
+    nameParts: Seq[String],
     planId: Option[Long] = None,
     isMetadataColumn: Boolean = false,
     override val origin: Origin = CurrentOrigin.get)
     extends ColumnNode {
+
   override private[internal] def normalize(): UnresolvedAttribute =
     copy(planId = None, origin = NO_ORIGIN)
-  override def sql: String = unparsedIdentifier
+
+  override def sql: String = nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
+}
+
+private[sql] object UnresolvedAttribute {
+  def apply(
+      unparsedIdentifier: String,
+      planId: Option[Long],
+      isMetadataColumn: Boolean,
+      origin: Origin): UnresolvedAttribute = UnresolvedAttribute(
+    AttributeNameParser.parseAttributeName(unparsedIdentifier),
+    planId = planId,
+    isMetadataColumn = isMetadataColumn,
+    origin = origin)
+
+  def apply(
+      unparsedIdentifier: String,
+      planId: Option[Long],
+      isMetadataColumn: Boolean): UnresolvedAttribute =
+    apply(unparsedIdentifier, planId, isMetadataColumn, CurrentOrigin.get)
+
+  def apply(unparsedIdentifier: String, planId: Option[Long]): UnresolvedAttribute =
+    apply(unparsedIdentifier, planId, false, CurrentOrigin.get)
+
+  def apply(unparsedIdentifier: String): UnresolvedAttribute =
+    apply(unparsedIdentifier, None, false, CurrentOrigin.get)
 }
 
 /**
