@@ -2,6 +2,6 @@
 -- !query
 select current_database(), current_schema(), current_catalog()
 -- !query schema
-struct<current_database():string,current_schema():string,current_catalog():string>
+struct<current_database():string,current_database():string,current_catalog():string>
 -- !query output
 default	default	spark_catalog
