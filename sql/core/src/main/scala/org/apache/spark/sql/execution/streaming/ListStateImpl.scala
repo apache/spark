@@ -20,7 +20,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
+import org.apache.spark.sql.execution.streaming.state.{AvroSerde, NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.ListState
 import org.apache.spark.sql.types.StructType
 
@@ -40,16 +40,17 @@ class ListStateImpl[S](
      stateName: String,
      keyExprEnc: ExpressionEncoder[Any],
      valEncoder: Encoder[S],
+     avroSerde: Option[AvroSerde],
      metrics: Map[String, SQLMetric] = Map.empty)
   extends ListStateMetricsImpl
-  with ListState[S]
-  with Logging {
+    with ListState[S]
+    with Logging {
 
   override def stateStore: StateStore = store
   override def baseStateName: String = stateName
   override def exprEncSchema: StructType = keyExprEnc.schema
 
-  private val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder, stateName)
+  private val stateTypesEncoder = UnsafeRowTypesEncoder(keyExprEnc, valEncoder, stateName)
 
   store.createColFamilyIfAbsent(stateName, keyExprEnc.schema, valEncoder.schema,
     NoPrefixKeyStateEncoderSpec(keyExprEnc.schema), useMultipleValuesPerKey = true)
@@ -95,7 +96,7 @@ class ListStateImpl[S](
          store.put(encodedKey, encodedValue, stateName)
          isFirst = false
        } else {
-         store.merge(encodedKey, encodedValue, stateName)
+          store.merge(encodedKey, encodedValue, stateName)
        }
        entryCount += 1
        TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
