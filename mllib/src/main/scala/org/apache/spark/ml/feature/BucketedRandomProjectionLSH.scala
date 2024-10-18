@@ -90,6 +90,15 @@ class BucketedRandomProjectionLSHModel private[ml](
     hashVec.values.map(h => Vectors.dense(h.floor))
   }
 
+  override protected[ml] def createHashFunction: Vector => Array[Vector] = {
+    val localBucketLength = $(bucketLength)
+    (elems: Vector) => {
+      val hashVec = new DenseVector(Array.ofDim[Double](randMatrix.numRows))
+      BLAS.gemv(1.0 / localBucketLength, randMatrix, elems, 0.0, hashVec)
+      hashVec.values.map(h => Vectors.dense(h.floor))
+    }
+  }
+
   @Since("2.1.0")
   override protected[ml] def keyDistance(x: Vector, y: Vector): Double = {
     Math.sqrt(Vectors.sqdist(x, y))

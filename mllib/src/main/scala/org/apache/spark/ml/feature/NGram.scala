@@ -61,7 +61,8 @@ class NGram @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   setDefault(n -> 2)
 
   override protected def createTransformFunc: Seq[String] => Seq[String] = {
-    _.iterator.sliding($(n)).withPartial(false).map(_.mkString(" ")).toSeq
+    val localN = $(n)
+    seq => seq.iterator.sliding(localN).withPartial(false).map(_.mkString(" ")).toSeq
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {
