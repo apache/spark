@@ -571,7 +571,7 @@
       },
       "IMPLICIT" : {
         "message" : [
-          "Error occurred due to the mismatch between multiple implicit non-default collations. Use COLLATE function to set the collation explicitly."
+          "Error occurred due to the mismatch between implicit collations: [<implicitTypes>]. Use COLLATE function to set the collation explicitly."
         ]
       }
     },
@@ -3460,6 +3460,12 @@
     ],
     "sqlState" : "42P20"
   },
+  "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS" : {
+    "message" : [
+      "<clause1> and <clause2> cannot coexist in the same SQL pipe operator using '|>'. Please separate the multiple result clauses into separate pipe operators and then retry the query again."
+    ],
+    "sqlState" : "42000"
+  },
   "MULTIPLE_TIME_TRAVEL_SPEC" : {
     "message" : [
       "Cannot specify time travel in both the time travel clause and options."
@@ -4984,6 +4990,11 @@
       "CATALOG_OPERATION" : {
         "message" : [
           "Catalog <catalogName> does not support <operation>."
+        ]
+      },
+      "CLAUSE_WITH_PIPE_OPERATORS" : {
+        "message" : [
+          "The SQL pipe operator syntax using |> does not support <clauses>."
         ]
       },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
@@ -6519,11 +6530,6 @@
   "_LEGACY_ERROR_TEMP_1251" : {
     "message" : [
       "<action> is not allowed on <tableName> since its partition metadata is not stored in the Hive metastore. To import this information into the metastore, run `msck repair table <tableName>`."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1253" : {
-    "message" : [
-      "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead."
     ]
   },
   "_LEGACY_ERROR_TEMP_1255" : {
@@ -8596,11 +8602,6 @@
   "_LEGACY_ERROR_TEMP_3226" : {
     "message" : [
       "Cannot delete map key"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3227" : {
-    "message" : [
-      "Cannot find field: <fieldName>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3228" : {
