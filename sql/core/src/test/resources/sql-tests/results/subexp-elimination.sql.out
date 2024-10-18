@@ -72,7 +72,7 @@ NULL
 -- !query
 SELECT from_json(a, 'struct<a:int,b:string>').a + random() > 2, from_json(a, 'struct<a:int,b:string>').b, from_json(b, 'array<struct<a:int,b:int>>')[0].a, from_json(b, 'array<struct<a:int,b:int>>')[0].b + + random() > 2 FROM testData
 -- !query schema
-struct<((from_json(a).a + random()) > 2):boolean,from_json(a).b:string,from_json(b)[0].a:int,((from_json(b)[0].b + (+ random())) > 2):boolean>
+struct<((from_json(a).a + rand()) > 2):boolean,from_json(a).b:string,from_json(b)[0].a:int,((from_json(b)[0].b + (+ rand())) > 2):boolean>
 -- !query output
 NULL	NULL	1	true
 false	2	1	true
@@ -84,7 +84,7 @@ true	6	6	true
 -- !query
 SELECT if(from_json(a, 'struct<a:int,b:string>').a + random() > 5, from_json(b, 'array<struct<a:int,b:int>>')[0].a, from_json(b, 'array<struct<a:int,b:int>>')[0].a + 1) FROM testData
 -- !query schema
-struct<(IF(((from_json(a).a + random()) > 5), from_json(b)[0].a, (from_json(b)[0].a + 1))):int>
+struct<(IF(((from_json(a).a + rand()) > 5), from_json(b)[0].a, (from_json(b)[0].a + 1))):int>
 -- !query output
 2
 2
@@ -96,7 +96,7 @@ NULL
 -- !query
 SELECT case when from_json(a, 'struct<a:int,b:string>').a > 5 then from_json(a, 'struct<a:int,b:string>').b + random() > 5 when from_json(a, 'struct<a:int,b:string>').a > 4 then from_json(a, 'struct<a:int,b:string>').b + 1 + random() > 2 else from_json(a, 'struct<a:int,b:string>').b + 2 + random() > 5 end FROM testData
 -- !query schema
-struct<CASE WHEN (from_json(a).a > 5) THEN ((from_json(a).b + random()) > 5) WHEN (from_json(a).a > 4) THEN (((from_json(a).b + 1) + random()) > 2) ELSE (((from_json(a).b + 2) + random()) > 5) END:boolean>
+struct<CASE WHEN (from_json(a).a > 5) THEN ((from_json(a).b + rand()) > 5) WHEN (from_json(a).a > 4) THEN (((from_json(a).b + 1) + rand()) > 2) ELSE (((from_json(a).b + 2) + rand()) > 5) END:boolean>
 -- !query output
 NULL
 false

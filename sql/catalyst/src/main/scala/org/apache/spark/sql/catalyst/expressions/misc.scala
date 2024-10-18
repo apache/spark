@@ -202,8 +202,7 @@ object AssertTrue {
 case class CurrentDatabase() extends LeafExpression with Unevaluable {
   override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = false
-  override def prettyName: String =
-    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("current_database")
+  override def prettyName: String = "current_schema"
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 

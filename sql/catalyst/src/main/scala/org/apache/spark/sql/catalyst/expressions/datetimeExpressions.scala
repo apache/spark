@@ -150,8 +150,7 @@ case class CurrentDate(timeZoneId: Option[String] = None)
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def prettyName: String =
-    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("current_date")
+  override def prettyName: String = "current_date"
 }
 
 // scalastyle:off line.size.limit
@@ -330,7 +329,7 @@ case class DateAdd(startDate: Expression, days: Expression)
     })
   }
 
-  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("date_add")
+  override def prettyName: String = "date_add"
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): DateAdd = copy(startDate = newLeft, days = newRight)

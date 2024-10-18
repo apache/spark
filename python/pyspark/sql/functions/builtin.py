@@ -4921,44 +4921,44 @@ def array_agg(col: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
     >>> df.agg(sf.sort_array(sf.array_agg('c'))).show()
-    +------------------------------+
-    |sort_array(array_agg(c), true)|
-    +------------------------------+
-    |                     [1, 1, 2]|
-    +------------------------------+
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |                        [1, 1, 2]|
+    +---------------------------------+
 
     Example 2: Using array_agg function on a string column
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([["apple"],["apple"],["banana"]], ["c"])
     >>> df.agg(sf.sort_array(sf.array_agg('c'))).show(truncate=False)
-    +------------------------------+
-    |sort_array(array_agg(c), true)|
-    +------------------------------+
-    |[apple, apple, banana]        |
-    +------------------------------+
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |[apple, apple, banana]           |
+    +---------------------------------+
 
     Example 3: Using array_agg function on a column with null values
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([[1],[None],[2]], ["c"])
     >>> df.agg(sf.sort_array(sf.array_agg('c'))).show()
-    +------------------------------+
-    |sort_array(array_agg(c), true)|
-    +------------------------------+
-    |                        [1, 2]|
-    +------------------------------+
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |                           [1, 2]|
+    +---------------------------------+
 
     Example 4: Using array_agg function on a column with different data types
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([[1],["apple"],[2]], ["c"])
     >>> df.agg(sf.sort_array(sf.array_agg('c'))).show()
-    +------------------------------+
-    |sort_array(array_agg(c), true)|
-    +------------------------------+
-    |                 [1, 2, apple]|
-    +------------------------------+
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |                    [1, 2, apple]|
+    +---------------------------------+
     """
     return _invoke_function_over_columns("array_agg", col)
 
@@ -8712,31 +8712,31 @@ def dateadd(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     >>> spark.createDataFrame(
     ...     [('2015-04-08', 2,)], ['dt', 'add']
     ... ).select(sf.dateadd("dt", 1)).show()
-    +--------------+
-    |dateadd(dt, 1)|
-    +--------------+
-    |    2015-04-09|
-    +--------------+
+    +---------------+
+    |date_add(dt, 1)|
+    +---------------+
+    |     2015-04-09|
+    +---------------+
 
     >>> import pyspark.sql.functions as sf
     >>> spark.createDataFrame(
     ...     [('2015-04-08', 2,)], ['dt', 'add']
     ... ).select(sf.dateadd("dt", sf.lit(2))).show()
-    +--------------+
-    |dateadd(dt, 2)|
-    +--------------+
-    |    2015-04-10|
-    +--------------+
+    +---------------+
+    |date_add(dt, 2)|
+    +---------------+
+    |     2015-04-10|
+    +---------------+
 
     >>> import pyspark.sql.functions as sf
     >>> spark.createDataFrame(
     ...     [('2015-04-08', 2,)], ['dt', 'add']
     ... ).select(sf.dateadd("dt", -1)).show()
-    +---------------+
-    |dateadd(dt, -1)|
-    +---------------+
-    |     2015-04-07|
-    +---------------+
+    +----------------+
+    |date_add(dt, -1)|
+    +----------------+
+    |      2015-04-07|
+    +----------------+
     """
     days = _enum_to_value(days)
     days = lit(days) if isinstance(days, int) else days
@@ -10343,11 +10343,11 @@ def current_database() -> Column:
     Examples
     --------
     >>> spark.range(1).select(current_database()).show()
-    +------------------+
-    |current_database()|
-    +------------------+
-    |           default|
-    +------------------+
+    +----------------+
+    |current_schema()|
+    +----------------+
+    |         default|
+    +----------------+
     """
     return _invoke_function("current_database")
 

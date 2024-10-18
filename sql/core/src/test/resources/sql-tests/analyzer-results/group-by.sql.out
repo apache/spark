@@ -1133,7 +1133,7 @@ SELECT
 FROM VALUES
   (1), (2), (1) AS tab(col)
 -- !query analysis
-Aggregate [collect_list(col#x, 0, 0) AS collect_list(col)#x, array_agg(col#x, 0, 0) AS array_agg(col)#x]
+Aggregate [collect_list(col#x, 0, 0) AS collect_list(col)#x, collect_list(col#x, 0, 0) AS collect_list(col)#x]
 +- SubqueryAlias tab
    +- LocalRelation [col#x]
 
@@ -1147,7 +1147,7 @@ FROM VALUES
   (1,4),(2,3),(1,4),(2,4) AS v(a,b)
 GROUP BY a
 -- !query analysis
-Aggregate [a#x], [a#x, collect_list(b#x, 0, 0) AS collect_list(b)#x, array_agg(b#x, 0, 0) AS array_agg(b)#x]
+Aggregate [a#x], [a#x, collect_list(b#x, 0, 0) AS collect_list(b)#x, collect_list(b#x, 0, 0) AS collect_list(b)#x]
 +- SubqueryAlias v
    +- LocalRelation [a#x, b#x]
 
