@@ -41,6 +41,8 @@ trait ListStateMetricsImpl {
 
   private val counterCFProjection = UnsafeProjection.create(counterCFValueSchema)
 
+  private val updatedCountRow = new GenericInternalRow(1)
+
   private def getRowCounterCFName(stateName: String) = "$rowCounter_" + stateName
 
   stateStore.createColFamilyIfAbsent(getRowCounterCFName(baseStateName), exprEncSchema,
@@ -68,7 +70,6 @@ trait ListStateMetricsImpl {
   def updateEntryCount(
       encodedKey: UnsafeRow,
       updatedCount: Long): Unit = {
-    val updatedCountRow = new GenericInternalRow(1)
     updatedCountRow.setLong(0, updatedCount)
     stateStore.put(encodedKey,
       counterCFProjection(updatedCountRow.asInstanceOf[InternalRow]),

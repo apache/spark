@@ -86,7 +86,7 @@ class ListStateImpl[S](
 
      val encodedKey = stateTypesEncoder.encodeGroupingKey()
      var isFirst = true
-     var entryCount = getEntryCount(encodedKey)
+     var entryCount = 0
 
      newState.foreach { v =>
        val encodedValue = stateTypesEncoder.encodeValue(v)
@@ -94,7 +94,7 @@ class ListStateImpl[S](
          store.put(encodedKey, encodedValue, stateName)
          isFirst = false
        } else {
-          store.merge(encodedKey, encodedValue, stateName)
+         store.merge(encodedKey, encodedValue, stateName)
        }
        entryCount += 1
        TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")

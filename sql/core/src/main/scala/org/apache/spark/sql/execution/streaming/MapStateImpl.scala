@@ -112,6 +112,8 @@ class MapStateImpl[K, V](
     StateStoreErrors.requireNonNullStateValue(key, stateName)
     val compositeKey = stateTypesEncoder.encodeCompositeKey(key)
     store.remove(compositeKey, stateName)
+    // Note that for mapState, the rows are flattened. So we count the number of rows removed
+    // proportional to the number of keys in the map per grouping key.
     TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
   }
 
