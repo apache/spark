@@ -70,6 +70,14 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     }
   }
 
+  override def afterEach(): Unit = {
+    try {
+      spark.artifactManager.cleanUpResources()
+    } finally {
+      super.afterEach()
+    }
+  }
+
   private def assertUnsupportedFeature(
       body: => Unit,
       operation: String,

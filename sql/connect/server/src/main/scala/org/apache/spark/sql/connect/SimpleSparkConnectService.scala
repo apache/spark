@@ -40,6 +40,8 @@ private[sql] object SimpleSparkConnectService {
   def main(args: Array[String]): Unit = {
     val conf = new SparkConf()
       .set("spark.plugins", "org.apache.spark.sql.connect.SparkConnectPlugin")
+      .set("spark.repl.isolate.artifacts", "true")
+      .set("spark.session.isolate.artifacts", "true")
     val sparkSession = SparkSession.builder().config(conf).getOrCreate()
     val sparkContext = sparkSession.sparkContext // init spark context
     // scalastyle:off println
