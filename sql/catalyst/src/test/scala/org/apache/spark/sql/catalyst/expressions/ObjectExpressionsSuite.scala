@@ -758,18 +758,18 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("StaticInvoke call return `any` method") {
     val cls = TestStaticInvokeReturnAny.getClass
-    Seq((0, true), (1, true), (2, false)).foreach {
-      case (arg, returnNullable) =>
+    Seq((0, IntegerType, true), (1, IntegerType, true), (2, IntegerType, false)).foreach {
+      case (arg, argDataType, returnNullable) =>
         val dataType = arg match {
-          case 0 => IntegerType
-          case 1 => ObjectType(classOf[java.lang.Long])
+          case 0 => ObjectType(classOf[java.lang.Integer])
+          case 1 => ShortType
           case 2 => ObjectType(classOf[java.lang.Long])
         }
-        val arguments = Seq(Literal(arg))
+        val arguments = Seq(Literal(arg, argDataType))
         val inputTypes = Seq(IntegerType)
         val expected = arg match {
-          case 0 => 0
-          case 1 => java.lang.Long.valueOf(1)
+          case 0 => java.lang.Integer.valueOf(1)
+          case 1 => 0.toShort
           case 2 => java.lang.Long.valueOf(2)
         }
         val inputRow = InternalRow.fromSeq(Seq(arg))
@@ -817,8 +817,8 @@ case object TestFun {
 
 object TestStaticInvokeReturnAny {
   def func(input: Int): Any = input match {
-    case 0 => 0
-    case 1 => java.lang.Long.valueOf(1)
+    case 0 => java.lang.Integer.valueOf(1)
+    case 1 => 0.toShort
     case 2 => java.lang.Long.valueOf(2)
   }
 }
