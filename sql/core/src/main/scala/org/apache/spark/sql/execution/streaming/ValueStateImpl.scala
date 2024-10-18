@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
 import org.apache.spark.sql.execution.streaming.state.{AvroSerde, NoPrefixKeyStateEncoderSpec, StateStore}
 import org.apache.spark.sql.streaming.ValueState
 
@@ -29,6 +31,7 @@ import org.apache.spark.sql.streaming.ValueState
  * @param stateName - name of logical state partition
  * @param keyExprEnc - Spark SQL encoder for key
  * @param valEncoder - Spark SQL encoder for value
+ * @param metrics - metrics to be updated as part of stateful processing
  * @tparam S - data type of object that will be stored
  */
 class ValueStateImpl[S](
@@ -36,7 +39,8 @@ class ValueStateImpl[S](
     stateName: String,
     keyExprEnc: ExpressionEncoder[Any],
     valEncoder: Encoder[S],
-    avroSerde: Option[AvroSerde])
+    avroSerde: Option[AvroSerde],
+    metrics: Map[String, SQLMetric] = Map.empty)
   extends ValueState[S] with Logging {
 
   // If we are using Avro, the avroSerde parameter must be populated
@@ -104,6 +108,7 @@ class ValueStateImpl[S](
       store.put(unsafeRowTypesEncoder.encodeGroupingKey(),
         encodedValue, stateName)
     }
+    TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
   }
 
   /** Function to remove state for given key */
@@ -115,5 +120,6 @@ class ValueStateImpl[S](
       val encodedKey = unsafeRowTypesEncoder.encodeGroupingKey()
       store.remove(encodedKey, stateName)
     }
+    TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
   }
 }
