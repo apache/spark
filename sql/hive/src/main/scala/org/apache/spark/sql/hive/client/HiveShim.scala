@@ -45,6 +45,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTable, CatalogTablePartition, CatalogUtils, ExternalCatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateFormatter, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
@@ -827,6 +828,18 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       case EndsWith(ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>
         Some(s"$name like " + ("\".*" + value.drop(1)))
 
+      case CaseWhen(branches, elseValue) =>
+        val cases = branches ++ elseValue.map((TrueLiteral, _)).toSeq
+        val (firstCond, firstValue) = cases(0)
+        val initFilter: Expression = And(firstCond, firstValue)
+        // prefixPredicate accumulates the negation of all previous conditions
+        val (_, finalFilter) = cases.drop(1).foldLeft((Not(firstCond): Expression, initFilter)) {
+          case ((prefixPredicate, filter), (cond, value)) =>
+            val newFilter = Or(filter, And(And(prefixPredicate, cond), value))
+            (And(prefixPredicate, Not(cond)), newFilter)
+        }
+        convert(finalFilter)
+
       case And(expr1, expr2) if useAdvanced =>
         val converted = convert(expr1) ++ convert(expr2)
         if (converted.isEmpty) {
@@ -848,6 +861,10 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       case Not(EqualTo(
           ExtractableLiteral(value), ExtractAttribute(SupportedAttribute(name)))) if useAdvanced =>
         Some(s"$value != $name")
+
+      case Not(And(expr1, expr2)) => convert(Or(Not(expr1), Not(expr2)))
+
+      case Not(Or(expr1, expr2)) => convert(And(Not(expr1), Not(expr2)))
 
       case _ => None
     }
