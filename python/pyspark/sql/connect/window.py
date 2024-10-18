@@ -84,23 +84,21 @@ class WindowSpec(ParentWindowSpec):
         self._orderSpec = orderSpec
         self._frame = frame
 
-    def partitionBy(
-        self, *cols: Union["ColumnOrName", Sequence["ColumnOrName"]]
-    ) -> ParentWindowSpec:
+    def partitionBy(self, *cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> "WindowSpec":
         return WindowSpec(
             partitionSpec=[c._expr for c in _to_cols(cols)],  # type: ignore[misc]
             orderSpec=self._orderSpec,
             frame=self._frame,
         )
 
-    def orderBy(self, *cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> ParentWindowSpec:
+    def orderBy(self, *cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> "WindowSpec":
         return WindowSpec(
             partitionSpec=self._partitionSpec,
             orderSpec=[cast(SortOrder, F._sort_col(c)._expr) for c in _to_cols(cols)],
             frame=self._frame,
         )
 
-    def rowsBetween(self, start: int, end: int) -> ParentWindowSpec:
+    def rowsBetween(self, start: int, end: int) -> "WindowSpec":
         if start <= Window._PRECEDING_THRESHOLD:
             start = Window.unboundedPreceding
         if end >= Window._FOLLOWING_THRESHOLD:
@@ -112,7 +110,7 @@ class WindowSpec(ParentWindowSpec):
             frame=WindowFrame(isRowFrame=True, start=start, end=end),
         )
 
-    def rangeBetween(self, start: int, end: int) -> ParentWindowSpec:
+    def rangeBetween(self, start: int, end: int) -> "WindowSpec":
         if start <= Window._PRECEDING_THRESHOLD:
             start = Window.unboundedPreceding
         if end >= Window._FOLLOWING_THRESHOLD:
@@ -141,19 +139,19 @@ class Window(ParentWindow):
     _spec = WindowSpec(partitionSpec=[], orderSpec=[], frame=None)
 
     @staticmethod
-    def partitionBy(*cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> ParentWindowSpec:
+    def partitionBy(*cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> "WindowSpec":
         return Window._spec.partitionBy(*cols)
 
     @staticmethod
-    def orderBy(*cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> ParentWindowSpec:
+    def orderBy(*cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> "WindowSpec":
         return Window._spec.orderBy(*cols)
 
     @staticmethod
-    def rowsBetween(start: int, end: int) -> ParentWindowSpec:
+    def rowsBetween(start: int, end: int) -> "WindowSpec":
         return Window._spec.rowsBetween(start, end)
 
     @staticmethod
-    def rangeBetween(start: int, end: int) -> ParentWindowSpec:
+    def rangeBetween(start: int, end: int) -> "WindowSpec":
         return Window._spec.rangeBetween(start, end)
 
 
