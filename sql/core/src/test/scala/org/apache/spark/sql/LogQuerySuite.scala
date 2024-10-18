@@ -42,7 +42,11 @@ class LogQuerySuite extends QueryTest with SharedSparkSession with Logging {
   }
 
   private def createTempView(viewName: String): Unit = {
-    spark.read.schema(SPARK_LOG_SCHEMA).json(logFile.getCanonicalPath).createOrReplaceTempView(viewName)
+    spark
+      .read
+      .schema(SPARK_LOG_SCHEMA)
+      .json(logFile.getCanonicalPath)
+      .createOrReplaceTempView(viewName)
   }
 
   test("Query Spark logs using SQL") {
