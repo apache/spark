@@ -2015,4 +2015,35 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     checkAnswer(sql("SELECT NAME FROM collations() WHERE ICU_VERSION is null"),
       Seq(Row("UTF8_BINARY"), Row("UTF8_LCASE")))
   }
+
+  test("fully qualified name") {
+    // Make sure that the collation expression returns the correct fully qualified name.
+    Seq[String]("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI_AI").foreach { collation =>
+      val df = sql(s"SELECT collation('a' collate $collation)")
+      checkAnswer(df,
+        Seq(Row(s"${CollationFactory.CATALOG}.${CollationFactory.SCHEMA}.$collation")))
+    }
+
+    // Make sure the user can specify the fully qualified name as a collation name.
+    Seq[String]("contains", "startswith", "endswith").foreach{ binaryFunction =>
+      Seq[String]("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI_AI").foreach { collation =>
+        val dfRegularName = sql(
+          s"SELECT $binaryFunction('a' collate $collation, 'A' collate $collation)")
+        val dfFullyQualifiedName = sql(
+          s"SELECT $binaryFunction('a' collate SYSTEM.BUILTIN.$collation, 'A' collate $collation)")
+        checkAnswer(dfRegularName, dfFullyQualifiedName.collect())
+      }
+    }
+
+    // Wrong collation names raise a Spark runtime exception.
+    intercept[SparkException](sql("SELECT 'a' COLLATE SYSTEM.BUILTIN2.UTF8_BINARY"))
+    intercept[SparkException](sql("SELECT 'a' COLLATE SYSTEM.UTF8_BINARY"))
+    intercept[SparkException](sql("SELECT 'a' COLLATE BUILTIN.UTF8_BINARY"))
+
+    // Case insensitive fully qualified names are supported.
+    checkAnswer(
+      sql("SELECT 'a' collate sYstEm.bUiltIn.utf8_lCAse = 'A'"),
+      Seq(Row(true))
+    )
+  }
 }

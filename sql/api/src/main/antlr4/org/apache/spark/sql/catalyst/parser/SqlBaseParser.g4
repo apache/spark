@@ -1228,7 +1228,7 @@ colPosition
     ;
 
 collateClause
-    : COLLATE collationName=identifier
+    : COLLATE collationName=qualifiedName
     ;
 
 type

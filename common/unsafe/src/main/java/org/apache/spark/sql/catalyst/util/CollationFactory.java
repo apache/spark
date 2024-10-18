@@ -1154,7 +1154,31 @@ public final class CollationFactory {
    * Returns the collation ID for the given collation name.
    */
   public static int collationNameToId(String collationName) throws SparkException {
+    // If collation name is given as a fully qualified name, extract the actual collation name as
+    // the last part of the [catalog].[schema].[collation_name] name.
+    long numDots = collationName.chars().filter(ch -> ch == '.').count();
+    if (numDots > 0) {
+      String[] nameParts = collationName.split("\\.");
+      // Currently only predefined collations are supported.
+      if (numDots != 2 || !CollationFactory.CATALOG.equalsIgnoreCase(nameParts[0]) ||
+          !CollationFactory.SCHEMA.equalsIgnoreCase(nameParts[1])) {
+        throw CollationFactory.Collation.CollationSpec.collationInvalidNameException(collationName);
+      }
+      return Collation.CollationSpec.collationNameToId(nameParts[2]);
+    }
     return Collation.CollationSpec.collationNameToId(collationName);
+  }
+
+  /**
+   * Returns the fully qualified collation name for the given collation ID.
+   */
+  public static String fullyQualifiedName(int collationId) {
+    Collation.CollationSpec.DefinitionOrigin definitionOrigin =
+        Collation.CollationSpec.getDefinitionOrigin(collationId);
+    // Currently only predefined collations are supported.
+    assert definitionOrigin == Collation.CollationSpec.DefinitionOrigin.PREDEFINED;
+    return String.format("%s.%s.%s", CATALOG, SCHEMA,
+        Collation.CollationSpec.fetchCollation(collationId).collationName);
   }
 
   /**

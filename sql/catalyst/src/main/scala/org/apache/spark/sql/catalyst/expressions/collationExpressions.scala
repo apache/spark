@@ -113,8 +113,8 @@ case class Collation(child: Expression)
   override protected def withNewChildInternal(newChild: Expression): Collation = copy(newChild)
   override lazy val replacement: Expression = {
     val collationId = child.dataType.asInstanceOf[StringType].collationId
-    val collationName = CollationFactory.fetchCollation(collationId).collationName
-    Literal.create(collationName, SQLConf.get.defaultStringType)
+    val fullyQualifiedCollationName = CollationFactory.fullyQualifiedName(collationId)
+    Literal.create(fullyQualifiedCollationName, SQLConf.get.defaultStringType)
   }
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCaseAccentSensitivity(/* supportsTrimCollation = */ true))
