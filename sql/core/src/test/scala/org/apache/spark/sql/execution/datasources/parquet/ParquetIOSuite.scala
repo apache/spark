@@ -1585,6 +1585,17 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       }
     }
   }
+
+  test("SPARK-49991: Respect 'mapreduce.output.basename' to generate file names") {
+    withTempPath { dir =>
+      withSQLConf("mapreduce.output.basename" -> "apachespark") {
+        spark.range(1).coalesce(1).write.parquet(dir.getCanonicalPath)
+        val df = spark.read.parquet(dir.getCanonicalPath)
+        assert(df.inputFiles.head.contains("apachespark"))
+        checkAnswer(spark.read.parquet(dir.getCanonicalPath), Row(0))
+      }
+    }
+  }
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)

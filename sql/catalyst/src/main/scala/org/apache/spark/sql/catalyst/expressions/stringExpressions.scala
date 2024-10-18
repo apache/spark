@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayData, CharsetProvider, Collation
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.{AbstractArrayType,
-  StringTypeNonCSAICollation, StringTypeWithCaseAccentSensitivity}
+  StringTypeNonCSAICollation, StringTypeWithCollation}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -83,10 +83,10 @@ case class ConcatWs(children: Seq[Expression])
   override def inputTypes: Seq[AbstractDataType] = {
     val arrayOrStr =
       TypeCollection(AbstractArrayType(
-        StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true)),
-        StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true)
+        StringTypeWithCollation(supportsTrimCollation = true)),
+        StringTypeWithCollation(supportsTrimCollation = true)
       )
-    StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true) +:
+    StringTypeWithCollation(supportsTrimCollation = true) +:
       Seq.fill(children.size - 1)(arrayOrStr)
   }
 
@@ -439,7 +439,7 @@ trait String2StringExpression extends ImplicitCastInputTypes {
 
   override def dataType: DataType = child.dataType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true))
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
   protected override def nullSafeEval(input: Any): Any =
     convert(input.asInstanceOf[UTF8String])
@@ -521,8 +521,8 @@ abstract class StringPredicate extends BinaryExpression
   def compare(l: UTF8String, r: UTF8String): Boolean
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true),
-      StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true))
+    Seq(StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true))
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any =
     compare(input1.asInstanceOf[UTF8String], input2.asInstanceOf[UTF8String])
@@ -750,7 +750,7 @@ case class IsValidUTF8(input: Expression) extends RuntimeReplaceable with Implic
   override lazy val replacement: Expression = Invoke(input, "isValid", BooleanType)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true))
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
   override def nodeName: String = "is_valid_utf8"
 
@@ -798,7 +798,7 @@ case class MakeValidUTF8(input: Expression) extends RuntimeReplaceable with Impl
   override lazy val replacement: Expression = Invoke(input, "makeValid", input.dataType)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true))
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
   override def nodeName: String = "make_valid_utf8"
 
@@ -844,7 +844,7 @@ case class ValidateUTF8(input: Expression) extends RuntimeReplaceable with Impli
     inputTypes)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity)
+    Seq(StringTypeWithCollation)
 
   override def nodeName: String = "validate_utf8"
 
@@ -893,7 +893,7 @@ case class TryValidateUTF8(input: Expression) extends RuntimeReplaceable with Im
     Seq(input),
     inputTypes)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCaseAccentSensitivity)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCollation)
 
   override def nodeName: String = "try_validate_utf8"
 
@@ -1033,10 +1033,10 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
     TypeCollection(
-      StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true), BinaryType
+      StringTypeWithCollation(supportsTrimCollation = true), BinaryType
     ),
     TypeCollection(
-      StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true), BinaryType
+      StringTypeWithCollation(supportsTrimCollation = true), BinaryType
     ),
     IntegerType,
     IntegerType)
@@ -1247,8 +1247,8 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
-      StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true),
-      StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true)
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true)
     )
 
   override protected def nullSafeEval(word: Any, set: Any): Any = {
@@ -1278,7 +1278,7 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
   override def children: Seq[Expression] = srcStr +: trimStr.toSeq
   override def dataType: DataType = srcStr.dataType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq.fill(children.size)(StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true))
+    Seq.fill(children.size)(StringTypeWithCollation(supportsTrimCollation = true))
 
   final lazy val collationId: Int = srcStr.dataType.asInstanceOf[StringType].collationId
 
@@ -1904,9 +1904,9 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
   override def dataType: DataType = str.dataType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
-      StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true),
       IntegerType,
-      StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true)
+      StringTypeWithCollation(supportsTrimCollation = true)
     )
 
   override def nullSafeEval(string: Any, len: Any, pad: Any): Any = {
@@ -1988,9 +1988,9 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression = Litera
   override def dataType: DataType = str.dataType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
-      StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true),
       IntegerType,
-      StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true)
+      StringTypeWithCollation(supportsTrimCollation = true)
     )
 
   override def nullSafeEval(string: Any, len: Any, pad: Any): Any = {
@@ -2036,7 +2036,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
   override def dataType: DataType = children(0).dataType
 
   override def inputTypes: Seq[AbstractDataType] =
-    StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true) ::
+    StringTypeWithCollation(supportsTrimCollation = true) ::
       List.fill(children.size - 1)(AnyDataType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -2149,7 +2149,7 @@ case class InitCap(child: Expression)
   private final lazy val useICU = SQLConf.get.getConf(SQLConf.ICU_CASE_MAPPINGS_ENABLED)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true))
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
   override def dataType: DataType = child.dataType
 
   override def nullSafeEval(string: Any): Any = {
@@ -2183,7 +2183,7 @@ case class StringRepeat(str: Expression, times: Expression)
   override def dataType: DataType = str.dataType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
-      StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true),
       IntegerType
     )
 
@@ -2279,7 +2279,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
-      TypeCollection(StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true), BinaryType),
+      TypeCollection(StringTypeWithCollation(supportsTrimCollation = true), BinaryType),
       IntegerType,
       IntegerType
     )
@@ -2342,7 +2342,7 @@ case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
-      StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true),
       IntegerType
     )
   override def left: Expression = str
@@ -2377,7 +2377,7 @@ case class Left(str: Expression, len: Expression) extends RuntimeReplaceable
   override def inputTypes: Seq[AbstractDataType] = {
     Seq(
       TypeCollection(
-        StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true),
+        StringTypeWithCollation(supportsTrimCollation = true),
         BinaryType)
       , IntegerType
     )
@@ -2418,7 +2418,7 @@ case class Length(child: Expression)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       TypeCollection(
-        StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true),
+        StringTypeWithCollation(supportsTrimCollation = true),
         BinaryType
       )
     )
@@ -2458,7 +2458,7 @@ case class BitLength(child: Expression)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       TypeCollection(
-        StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true),
+        StringTypeWithCollation(supportsTrimCollation = true),
         BinaryType
       )
     )
@@ -2501,7 +2501,7 @@ case class OctetLength(child: Expression)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       TypeCollection(
-        StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true),
+        StringTypeWithCollation(supportsTrimCollation = true),
         BinaryType
       )
     )
@@ -2566,14 +2566,14 @@ case class Levenshtein(
   override def inputTypes: Seq[AbstractDataType] = threshold match {
       case Some(_) =>
         Seq(
-          StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true),
-          StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true),
+          StringTypeWithCollation(supportsTrimCollation = true),
+          StringTypeWithCollation(supportsTrimCollation = true),
           IntegerType
         )
       case _ =>
         Seq(
-          StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true),
-          StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true)
+          StringTypeWithCollation(supportsTrimCollation = true),
+          StringTypeWithCollation(supportsTrimCollation = true)
         )
   }
 
@@ -2700,7 +2700,7 @@ case class SoundEx(child: Expression)
   override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true))
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
   override def nullSafeEval(input: Any): Any = input.asInstanceOf[UTF8String].soundex()
 
@@ -2731,7 +2731,7 @@ case class Ascii(child: Expression)
 
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true))
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
   protected override def nullSafeEval(string: Any): Any = {
     // only pick the first character to reduce the `toString` cost
@@ -2877,7 +2877,7 @@ case class UnBase64(child: Expression, failOnError: Boolean = false)
 
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true))
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
   def this(expr: Expression) = this(expr, false)
 
@@ -3058,7 +3058,7 @@ case class StringDecode(
   override val dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[AbstractDataType] = Seq(
       BinaryType,
-      StringTypeWithCaseAccentSensitivity
+      StringTypeWithCollation
     )
   override def prettyName: String = "decode"
   override def toString: String = s"$prettyName($bin, $charset)"
@@ -3070,7 +3070,7 @@ case class StringDecode(
     Seq(bin, charset, Literal(legacyCharsets), Literal(legacyErrorAction)),
     Seq(
       BinaryType,
-      StringTypeWithCaseAccentSensitivity,
+      StringTypeWithCollation,
       BooleanType,
       BooleanType
     )
@@ -3131,7 +3131,7 @@ case class Encode(
 
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity, StringTypeWithCaseAccentSensitivity)
+    Seq(StringTypeWithCollation, StringTypeWithCollation)
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[Encode],
@@ -3141,8 +3141,8 @@ case class Encode(
       str, charset, Literal(legacyCharsets, BooleanType), Literal(legacyErrorAction, BooleanType)
     ),
     Seq(
-      StringTypeWithCaseAccentSensitivity,
-      StringTypeWithCaseAccentSensitivity,
+      StringTypeWithCollation,
+      StringTypeWithCollation,
       BooleanType,
       BooleanType))
 
@@ -3229,7 +3229,7 @@ case class ToBinary(
   override def children: Seq[Expression] = expr +: format.toSeq
 
   override def inputTypes: Seq[AbstractDataType] =
-    children.map(_ => StringTypeWithCaseAccentSensitivity)
+    children.map(_ => StringTypeWithCollation)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     def isValidFormat: Boolean = {
@@ -3246,7 +3246,7 @@ case class ToBinary(
               messageParameters = Map(
                 "inputName" -> "fmt",
                 "requireType" ->
-                  s"case-insensitive ${toSQLType(StringTypeWithCaseAccentSensitivity)}",
+                  s"case-insensitive ${toSQLType(StringTypeWithCollation)}",
                 "validValues" -> "'hex', 'utf-8', 'utf8', or 'base64'",
                 "inputValue" -> toSQLValue(fmt, f.dataType)
               )
@@ -3257,7 +3257,7 @@ case class ToBinary(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
               "inputName" -> toSQLId("fmt"),
-              "inputType" -> toSQLType(StringTypeWithCaseAccentSensitivity),
+              "inputType" -> toSQLType(StringTypeWithCollation),
               "inputExpr" -> toSQLExpr(f)
             )
           )
@@ -3267,7 +3267,7 @@ case class ToBinary(
             messageParameters = Map(
               "inputName" -> "fmt",
               "requireType" ->
-                s"case-insensitive ${toSQLType(StringTypeWithCaseAccentSensitivity)}",
+                s"case-insensitive ${toSQLType(StringTypeWithCollation)}",
               "validValues" -> "'hex', 'utf-8', 'utf8', or 'base64'",
               "inputValue" -> toSQLValue(f.eval(), f.dataType)
             )
@@ -3319,7 +3319,7 @@ case class FormatNumber(x: Expression, d: Expression)
     Seq(
       NumericType,
       TypeCollection(IntegerType,
-        StringTypeWithCaseAccentSensitivity(supportsTrimCollation = true)
+        StringTypeWithCollation(supportsTrimCollation = true)
       )
     )
 
@@ -3527,9 +3527,9 @@ case class Sentences(
     ArrayType(ArrayType(str.dataType, containsNull = false), containsNull = false)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
-      StringTypeWithCaseAccentSensitivity,
-      StringTypeWithCaseAccentSensitivity,
-      StringTypeWithCaseAccentSensitivity
+      StringTypeWithCollation,
+      StringTypeWithCollation,
+      StringTypeWithCollation
     )
   override def first: Expression = str
   override def second: Expression = language
@@ -3682,7 +3682,7 @@ case class Luhncheck(input: Expression) extends RuntimeReplaceable with Implicit
     "isLuhnNumber",
     Seq(input), inputTypes)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCaseAccentSensitivity)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCollation)
 
   override def prettyName: String = "luhn_check"
 
