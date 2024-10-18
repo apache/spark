@@ -844,7 +844,7 @@ case class ValidateUTF8(input: Expression) extends RuntimeReplaceable with Impli
     inputTypes)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCollation)
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
   override def nodeName: String = "validate_utf8"
 
@@ -893,7 +893,8 @@ case class TryValidateUTF8(input: Expression) extends RuntimeReplaceable with Im
     Seq(input),
     inputTypes)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCollation)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
   override def nodeName: String = "try_validate_utf8"
 
@@ -3058,7 +3059,7 @@ case class StringDecode(
   override val dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[AbstractDataType] = Seq(
       BinaryType,
-      StringTypeWithCollation
+      StringTypeWithCollation(supportsTrimCollation = true)
     )
   override def prettyName: String = "decode"
   override def toString: String = s"$prettyName($bin, $charset)"
@@ -3070,7 +3071,7 @@ case class StringDecode(
     Seq(bin, charset, Literal(legacyCharsets), Literal(legacyErrorAction)),
     Seq(
       BinaryType,
-      StringTypeWithCollation,
+      StringTypeWithCollation(supportsTrimCollation = true),
       BooleanType,
       BooleanType
     )
@@ -3131,7 +3132,10 @@ case class Encode(
 
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCollation, StringTypeWithCollation)
+    Seq(
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true)
+    )
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[Encode],
@@ -3141,8 +3145,8 @@ case class Encode(
       str, charset, Literal(legacyCharsets, BooleanType), Literal(legacyErrorAction, BooleanType)
     ),
     Seq(
-      StringTypeWithCollation,
-      StringTypeWithCollation,
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true),
       BooleanType,
       BooleanType))
 
@@ -3229,7 +3233,7 @@ case class ToBinary(
   override def children: Seq[Expression] = expr +: format.toSeq
 
   override def inputTypes: Seq[AbstractDataType] =
-    children.map(_ => StringTypeWithCollation)
+    children.map(_ => StringTypeWithCollation(supportsTrimCollation = true))
 
   override def checkInputDataTypes(): TypeCheckResult = {
     def isValidFormat: Boolean = {
@@ -3682,7 +3686,8 @@ case class Luhncheck(input: Expression) extends RuntimeReplaceable with Implicit
     "isLuhnNumber",
     Seq(input), inputTypes)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCollation)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
   override def prettyName: String = "luhn_check"
 

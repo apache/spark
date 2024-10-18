@@ -683,9 +683,13 @@ class CollationStringExpressionsSuite
     case class Base64TestCase[R](input: Array[Byte], collation: String, result: R)
     val testCases = Seq(
       Base64TestCase(Array(65, 66, 67), "UTF8_BINARY", "QUJD"),
+      Base64TestCase(Array(65, 66, 67), "UTF8_BINARY_RTRIM", "QUJD"),
       Base64TestCase(Array(120, 121, 122), "UTF8_LCASE", "eHl6"),
+      Base64TestCase(Array(120, 121, 122), "UTF8_LCASE_RTRIM", "eHl6"),
       Base64TestCase(Array(35, 35, 35), "UNICODE", "IyMj"),
-      Base64TestCase(Array(33), "UNICODE_CI", "IQ==")
+      Base64TestCase(Array(35, 35, 35), "UNICODE_RTRIM", "IyMj"),
+      Base64TestCase(Array(33), "UNICODE_CI", "IQ=="),
+      Base64TestCase(Array(33), "UNICODE_CI_RTRIM", "IQ==")
     )
     testCases.foreach(t => {
       // Unit test.
@@ -730,9 +734,13 @@ class CollationStringExpressionsSuite
     case class DecodeTestCase[R](input: String, collation: String, result: R)
     val testCases = Seq(
       DecodeTestCase("a", "UTF8_BINARY", "a"),
+      DecodeTestCase("a", "UTF8_BINARY_RTRIM", "a"),
       DecodeTestCase("A", "UTF8_LCASE", "A"),
+      DecodeTestCase("A", "UTF8_LCASE_RTRIM", "A"),
       DecodeTestCase("b", "UNICODE", "b"),
-      DecodeTestCase("B", "UNICODE_CI", "B")
+      DecodeTestCase("b", "UNICODE_RTRIM", "b"),
+      DecodeTestCase("B", "UNICODE_CI", "B"),
+      DecodeTestCase("B", "UNICODE_CI_RTRIM", "B")
     )
     testCases.foreach(t => {
       // Unit test.
@@ -759,9 +767,13 @@ class CollationStringExpressionsSuite
     case class EncodeTestCase[R](input: String, collation: String, result: R)
     val testCases = Seq(
       EncodeTestCase("a", "UTF8_BINARY", Array(97)),
+      EncodeTestCase("a ", "UTF8_BINARY_RTRIM", Array(97, 32)),
       EncodeTestCase("A", "UTF8_LCASE", Array(65)),
+      EncodeTestCase("A ", "UTF8_LCASE_RTRIM", Array(65, 32)),
       EncodeTestCase("b", "UNICODE", Array(98)),
-      EncodeTestCase("B", "UNICODE_CI", Array(66))
+      EncodeTestCase("b ", "UNICODE_RTRIM", Array(98, 32)),
+      EncodeTestCase("B", "UNICODE_CI", Array(66)),
+      EncodeTestCase("B ", "UNICODE_CI_RTRIM", Array(66, 32))
     )
     testCases.foreach(t => {
       // Unit test.
@@ -781,9 +793,13 @@ class CollationStringExpressionsSuite
     case class ToBinaryTestCase[R](expr: String, format: String, collation: String, result: R)
     val testCases = Seq(
       ToBinaryTestCase("a", "utf-8", "UTF8_BINARY", Array(97)),
+      ToBinaryTestCase("a ", "utf-8", "UTF8_BINARY_RTRIM", Array(97, 32)),
       ToBinaryTestCase("A", "utf-8", "UTF8_LCASE", Array(65)),
+      ToBinaryTestCase("A ", "utf-8", "UTF8_LCASE_RTRIM", Array(65, 32)),
       ToBinaryTestCase("b", "utf-8", "UNICODE", Array(98)),
-      ToBinaryTestCase("B", "utf-8", "UNICODE_CI", Array(66))
+      ToBinaryTestCase("b ", "utf-8", "UNICODE_RTRIM", Array(98, 32)),
+      ToBinaryTestCase("B", "utf-8", "UNICODE_CI", Array(66)),
+      ToBinaryTestCase("B ", "utf-8", "UNICODE_CI_RTRIM", Array(66, 32))
     )
     testCases.foreach(t => {
       // Unit test.
@@ -1081,9 +1097,13 @@ class CollationStringExpressionsSuite
     case class LuhncheckTestCase[R](input: String, collation: String, result: R)
     val testCases = Seq(
       LuhncheckTestCase("123", "UTF8_BINARY", false),
+      LuhncheckTestCase("123", "UTF8_BINARY_RTRIM", false),
       LuhncheckTestCase("000", "UTF8_LCASE", true),
+      LuhncheckTestCase("000", "UTF8_LCASE_RTRIM", true),
       LuhncheckTestCase("111", "UNICODE", false),
-      LuhncheckTestCase("222", "UNICODE_CI", false)
+      LuhncheckTestCase("111", "UNICODE_RTRIM", false),
+      LuhncheckTestCase("222", "UNICODE_CI", false),
+      LuhncheckTestCase("222", "UNICODE_CI_RTRIM", false)
     )
     testCases.foreach(t => {
       // Unit test.
@@ -1184,9 +1204,13 @@ class CollationStringExpressionsSuite
     case class ValidateUTF8TestCase[R](input: String, collation: String, result: R)
     val testCases = Seq(
       ValidateUTF8TestCase(null, "UTF8_BINARY", null),
+      ValidateUTF8TestCase(null, "UTF8_BINARY_RTRIM", null),
       ValidateUTF8TestCase("", "UTF8_LCASE", ""),
+      ValidateUTF8TestCase("", "UTF8_LCASE_RTRIM", ""),
       ValidateUTF8TestCase("abc", "UNICODE", "abc"),
-      ValidateUTF8TestCase("hello", "UNICODE_CI", "hello")
+      ValidateUTF8TestCase("abc", "UNICODE_RTRIM", "abc"),
+      ValidateUTF8TestCase("hello", "UNICODE_CI", "hello"),
+      ValidateUTF8TestCase("hello", "UNICODE_CI_RTRIM", "hello")
     )
     testCases.foreach(t => {
       // Unit test.
@@ -1205,9 +1229,13 @@ class CollationStringExpressionsSuite
     case class ValidateUTF8TestCase(input: String, collation: String, result: Any)
     val testCases = Seq(
       ValidateUTF8TestCase(null, "UTF8_BINARY", null),
+      ValidateUTF8TestCase(null, "UTF8_BINARY_RTRIM", null),
       ValidateUTF8TestCase("", "UTF8_LCASE", ""),
+      ValidateUTF8TestCase("", "UTF8_LCASE_RTRIM", ""),
       ValidateUTF8TestCase("abc", "UNICODE", "abc"),
-      ValidateUTF8TestCase("hello", "UNICODE_CI", "hello")
+      ValidateUTF8TestCase("abc", "UNICODE_RTRIM", "abc"),
+      ValidateUTF8TestCase("hello", "UNICODE_CI", "hello"),
+      ValidateUTF8TestCase("hello", "UNICODE_CI_RTRIM", "hello")
     )
     testCases.foreach(t => {
       // Unit test.
