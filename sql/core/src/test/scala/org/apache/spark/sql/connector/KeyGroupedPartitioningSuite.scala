@@ -1761,7 +1761,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
                  |t1.store_id, t1.dept_id, t1.data, t2.data
                  |FROM testcat.ns.$table1 t1 JOIN testcat.ns.$table2 t2
                  |ON t1.store_id = t2.store_id AND t1.dept_id = t2.dept_id
-                 |ORDER BY t1.store_id, t1.dept_id, t1.data, t2.data
                  |""".stripMargin)
 
             val shuffles = collectShuffles(df.queryExecution.executedPlan)
