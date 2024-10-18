@@ -40,6 +40,7 @@ message StatefulProcessorCall {
     StateCallCommand getValueState = 2;
     StateCallCommand getListState = 3;
     StateCallCommand getMapState = 4;
+    StateCallCommand deleteIfExists = 5;
   }
 }
 
