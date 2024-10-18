@@ -307,6 +307,8 @@ private[spark] object LogKeys {
   case object HIVE_METASTORE_VERSION extends LogKey
   case object HIVE_OPERATION_STATE extends LogKey
   case object HIVE_OPERATION_TYPE extends LogKey
+  case object HMS_CURRENT_BATCH_SIZE extends LogKey
+  case object HMS_INITIAL_BATCH_SIZE extends LogKey
   case object HOST extends LogKey
   case object HOSTS extends LogKey
   case object HOST_LOCAL_BLOCKS_SIZE extends LogKey
