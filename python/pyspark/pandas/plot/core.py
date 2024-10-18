@@ -858,7 +858,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
         Parameters
         ----------
         **kwds : dict, optional
-            Extra arguments to `precision `: refer to a float that is used by
+            Extra arguments to `precision`: refer to a float that is used by
             pandas-on-Spark to compute approximate statistics for building a
             boxplot. The default value is 0.01. Use smaller values to get more
             precise statistics. Additional keyword arguments are documented in
