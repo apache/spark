@@ -41,7 +41,7 @@ from typing import (
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.column import Column
-from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 from pyspark.sql.types import ArrayType, DataType, StringType, StructType, _from_numpy_type
 
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
@@ -5590,7 +5590,7 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
 
 
 @_try_remote_functions
-def broadcast(df: DataFrame) -> DataFrame:
+def broadcast(df: "ParentDataFrame") -> "ParentDataFrame":
     """
     Marks a DataFrame as small enough for use in broadcast joins.
 
@@ -5621,7 +5621,7 @@ def broadcast(df: DataFrame) -> DataFrame:
     from py4j.java_gateway import JVMView
 
     sc = _get_active_spark_context()
-    return DataFrame(cast(JVMView, sc._jvm).functions.broadcast(df._jdf), df.sparkSession)
+    return ParentDataFrame(cast(JVMView, sc._jvm).functions.broadcast(df._jdf), df.sparkSession)
 
 
 @_try_remote_functions
@@ -9678,7 +9678,7 @@ def from_utc_timestamp(timestamp: "ColumnOrName", tz: Union[Column, str]) -> Col
 
 
 @_try_remote_functions
-def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
+def to_utc_timestamp(timestamp: "ColumnOrName", tz: Union[Column, str]) -> Column:
     """
     This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
     takes a timestamp which is timezone-agnostic, and interprets it as a timestamp in the given
@@ -14533,7 +14533,7 @@ def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
 
 @_try_remote_functions
 def slice(
-    x: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]
+    col: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]
 ) -> Column:
     """
     Array function: Returns a new array column by slicing the input array column from
@@ -14547,7 +14547,7 @@ def slice(
 
     Parameters
     ----------
-    x : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         Input array column or column name to be sliced.
     start : :class:`~pyspark.sql.Column`, str, or int
         The start index for the slice operation. If negative, starts the index from the
@@ -14604,7 +14604,7 @@ def slice(
     length = _enum_to_value(length)
     length = lit(length) if isinstance(length, int) else length
 
-    return _invoke_function_over_columns("slice", x, start, length)
+    return _invoke_function_over_columns("slice", col, start, length)
 
 
 @_try_remote_functions

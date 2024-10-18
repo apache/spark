@@ -28,6 +28,7 @@ from pyspark.sql.catalog import Catalog as ClassicCatalog
 from pyspark.sql.readwriter import DataFrameReader as ClassicDataFrameReader
 from pyspark.sql.readwriter import DataFrameWriter as ClassicDataFrameWriter
 from pyspark.sql.readwriter import DataFrameWriterV2 as ClassicDataFrameWriterV2
+import pyspark.sql.functions as ClassicFunctions
 
 if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
@@ -37,6 +38,7 @@ if should_test_connect:
     from pyspark.sql.connect.readwriter import DataFrameReader as ConnectDataFrameReader
     from pyspark.sql.connect.readwriter import DataFrameWriter as ConnectDataFrameWriter
     from pyspark.sql.connect.readwriter import DataFrameWriterV2 as ConnectDataFrameWriterV2
+    import pyspark.sql.connect.functions as ConnectFunctions
 
 
 class ConnectCompatibilityTestsMixin:
@@ -297,6 +299,22 @@ class ConnectCompatibilityTestsMixin:
             ClassicDataFrameWriterV2,
             ConnectDataFrameWriterV2,
             "DataFrameWriterV2",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_functions_compatibility(self):
+        """Test Functions compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = {"check_dependencies"}
+        self.check_compatibility(
+            ClassicFunctions,
+            ConnectFunctions,
+            "Functions",
             expected_missing_connect_properties,
             expected_missing_classic_properties,
             expected_missing_connect_methods,
