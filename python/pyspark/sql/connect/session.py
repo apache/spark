@@ -52,6 +52,7 @@ import urllib
 
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.dataframe import DataFrame as ParentDataFrame
+from pyspark.sql.connect.logging import logger
 from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.plan import (
@@ -218,8 +219,8 @@ class SparkSession:
                         # simply ignore it for now.
                         try:
                             session.conf.set(k, v)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.warn(f"Failed to set configuration {k} due to {e}")
 
             with self._lock:
                 for k, v in self._options.items():
@@ -232,7 +233,7 @@ class SparkSession:
                         try:
                             session.conf.set(k, v)
                         except Exception as e:
-                            warnings.warn(str(e))
+                            logger.warn(f"Failed to set configuration {k} due to {e}")
 
         def create(self) -> "SparkSession":
             has_channel_builder = self._channel_builder is not None
@@ -860,12 +861,12 @@ class SparkSession:
                 try:
                     self.client.release_session()
                 except Exception as e:
-                    warnings.warn(f"session.stop(): Session could not be released. Error: ${e}")
+                    logger.warn(f"session.stop(): Session could not be released. Error: ${e}")
 
             try:
                 self.client.close()
             except Exception as e:
-                warnings.warn(f"session.stop(): Client could not be closed. Error: ${e}")
+                logger.warn(f"session.stop(): Client could not be closed. Error: ${e}")
 
             if self is SparkSession._default_session:
                 SparkSession._default_session = None
@@ -881,7 +882,7 @@ class SparkSession:
                     try:
                         PySparkSession._activeSession.stop()
                     except Exception as e:
-                        warnings.warn(
+                        logger.warn(
                             "session.stop(): Local Spark Connect Server could not be stopped. "
                             f"Error: ${e}"
                         )
