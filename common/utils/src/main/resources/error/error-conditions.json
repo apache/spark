@@ -1111,6 +1111,12 @@
     ],
     "sqlState" : "42K03"
   },
+  "DATETIME_ARGUMENT_OUT_OF_RANGE" : {
+    "message" : [
+      "<rangeMessage>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+    ],
+    "sqlState" : "22023"
+  },
   "DATETIME_OVERFLOW" : {
     "message" : [
       "Datetime operation overflow: <operation>."
@@ -2878,6 +2884,11 @@
       "INTEGER" : {
         "message" : [
           "expects an integer literal, but got <invalidValue>."
+        ]
+      },
+      "INTERVAL_WITH_MICROSECONDS" : {
+        "message" : [
+          "Cannot add hours, minutes, seconds or microseconds to a date. If necessary set <ansiConfig> to \"false\" to bypass this error."
         ]
       },
       "LENGTH" : {
@@ -6765,11 +6776,6 @@
   "_LEGACY_ERROR_TEMP_1338" : {
     "message" : [
       "Sinks cannot request distribution and ordering in continuous execution mode."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2000" : {
-    "message" : [
-      "<message>. If necessary set <ansiConfig> to false to bypass this error."
     ]
   },
   "_LEGACY_ERROR_TEMP_2003" : {
