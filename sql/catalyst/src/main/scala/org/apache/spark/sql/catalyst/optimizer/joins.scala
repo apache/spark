@@ -21,7 +21,7 @@ import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{HASH_JOIN_KEYS, JOIN_CONDITION}
+import org.apache.spark.internal.LogKeys.JOIN_CONDITION
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins, ExtractSingleColumnNullAwareAntiJoin}
@@ -397,18 +397,15 @@ trait JoinSelectionHelper extends Logging {
 
   protected def hashJoinSupported
       (leftKeys: Seq[Expression], rightKeys: Seq[Expression]): Boolean = {
-    val result = leftKeys.concat(rightKeys).forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))
-    if (!result) {
-      val keysNotSupportingHashJoin = leftKeys.concat(rightKeys).filterNot(
-        e => UnsafeRowUtils.isBinaryStable(e.dataType))
-      logWarning(log"Hash based joins are not supported due to joining on keys that don't " +
-        log"support binary equality. Keys not supporting hash joins: " +
-        log"${
-          MDC(HASH_JOIN_KEYS, keysNotSupportingHashJoin.map(
-            e => e.toString + " due to DataType: " + e.dataType.typeName).mkString(", "))
-        }")
-    }
-    result
+    val keysNotSupportingHashJoin = leftKeys.concat(rightKeys).filterNot(
+      e => UnsafeRowUtils.isBinaryStable(e.dataType))
+    // `RewriteCollationJoin` should have been applied before this rule, so all keys in the
+    // join conditions should be binary stable (i.e. support binary equality comparison).
+    assert(keysNotSupportingHashJoin.isEmpty, "Hash based joins are not supported due to " +
+      "joining on keys that don't support binary equality. Keys not supporting hash joins: " +
+      s"${keysNotSupportingHashJoin.map(e => e.toString + " due to DataType: " +
+        e.dataType.typeName).mkString(", ")}")
+    true // If the assert doesn't fail, all keys are binary stable (which should be guaranteed).
   }
 
   def canPlanAsBroadcastHashJoin(join: Join, conf: SQLConf): Boolean = join match {
