@@ -112,14 +112,14 @@ case object StringType extends StringType(0) {
 }
 
 /**
- * The result type of literals, column definitions without explicit collation, casts to string
- * and some expressions that produce strings but whose output type is not based on the types of its
- * children.
- * Idea is to have this behave like a string with the default collation of the session, but that
- * we can still differentiate it from a regular string type, because in some places default string
- * is not the one with the session collation (e.g. in DDL commands).
+ * The result type of literals, column definitions without explicit collation, casts to string and
+ * some expressions that produce strings but whose output type is not based on the types of its
+ * children. Idea is to have this behave like a string with the default collation of the session,
+ * but that we can still differentiate it from a regular string type, because in some places
+ * default string is not the one with the session collation (e.g. in DDL commands).
  */
-private[spark] class DefaultStringType private (collationId: Int) extends StringType(collationId) {}
+private[spark] class DefaultStringType private (collationId: Int)
+    extends StringType(collationId) {}
 
 private[spark] object DefaultStringType {
   def apply(): DefaultStringType = {

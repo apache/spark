@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 package org.apache.spark.sql.collation
 
 import org.apache.spark.sql.Row
@@ -41,7 +40,10 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
     }
   }
 
-  def assertTableColumnCollation(table: String, column: String, expectedCollation: String): Unit = {
+  def assertTableColumnCollation(
+      table: String,
+      column: String,
+      expectedCollation: String): Unit = {
     val colType = spark.table(table).schema(column).dataType
     assert(colType === StringType(expectedCollation))
   }
@@ -98,9 +100,7 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
       assertTableColumnCollation(tableName, "c3", "UTF8_BINARY")
       assertTableColumnCollation(tableName, "c4", "UTF8_BINARY")
 
-      checkAnswer(
-        sql(s"SELECT COUNT(*) FROM $tableName WHERE truthy"),
-        Seq(Row(0)))
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $tableName WHERE truthy"), Seq(Row(0)))
     }
 
     // literals in inline table do not pick up session collation
@@ -110,9 +110,7 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
            |SELECT c1, c1 = 'A' as c2 FROM VALUES ('a'), ('A') AS vals(c1)
            |""".stripMargin)
       assertTableColumnCollation(tableName, "c1", "UTF8_BINARY")
-      checkAnswer(
-        sql(s"SELECT COUNT(*) FROM $tableName WHERE c2"),
-        Seq(Row(1)))
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $tableName WHERE c2"), Seq(Row(1)))
     }
 
     // cast in select does not pick up session collation
@@ -133,16 +131,12 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
            |  array('a') AS c3
            |""".stripMargin)
 
-      checkAnswer(
-        sql(s"SELECT COLLATION(c1.col1) FROM $tableName"),
-        Seq(Row("UTF8_BINARY")))
+      checkAnswer(sql(s"SELECT COLLATION(c1.col1) FROM $tableName"), Seq(Row("UTF8_BINARY")))
       checkAnswer(
         // TODO: other PR is supposed to fix explicit collation here
         sql(s"SELECT COLLATION(c2['a' collate UTF8_BINARY]) FROM $tableName"),
         Seq(Row("UTF8_BINARY")))
-      checkAnswer(
-        sql(s"SELECT COLLATION(c3[0]) FROM $tableName"),
-        Seq(Row("UTF8_BINARY")))
+      checkAnswer(sql(s"SELECT COLLATION(c3[0]) FROM $tableName"), Seq(Row("UTF8_BINARY")))
     }
   }
 
@@ -168,37 +162,25 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
     withSessionCollation("UTF8_LCASE") {
 
       // literal without collation
-      checkAnswer(
-        sql("SELECT COLLATION('a')"),
-        Seq(Row("UTF8_LCASE")))
+      checkAnswer(sql("SELECT COLLATION('a')"), Seq(Row("UTF8_LCASE")))
 
-      checkAnswer(
-        sql("SELECT COLLATION(map('a', 'b')['a'])"),
-        Seq(Row("UTF8_LCASE")))
+      checkAnswer(sql("SELECT COLLATION(map('a', 'b')['a'])"), Seq(Row("UTF8_LCASE")))
 
-      checkAnswer(
-        sql("SELECT COLLATION(array('a')[0])"),
-        Seq(Row("UTF8_LCASE")))
+      checkAnswer(sql("SELECT COLLATION(array('a')[0])"), Seq(Row("UTF8_LCASE")))
 
-      checkAnswer(
-        sql("SELECT COLLATION(struct('a' as c)['c'])"),
-        Seq(Row("UTF8_LCASE")))
+      checkAnswer(sql("SELECT COLLATION(struct('a' as c)['c'])"), Seq(Row("UTF8_LCASE")))
     }
   }
 
   test("literals with explicit collation") {
     withSessionCollation("UTF8_LCASE") {
-      checkAnswer(
-        sql("SELECT COLLATION('a' collate unicode)"),
-        Seq(Row("UNICODE")))
+      checkAnswer(sql("SELECT COLLATION('a' collate unicode)"), Seq(Row("UNICODE")))
 
       checkAnswer(
         sql("SELECT COLLATION(map('a', 'b' collate unicode)['a'])"),
         Seq(Row("UNICODE")))
 
-      checkAnswer(
-        sql("SELECT COLLATION(array('a' collate unicode)[0])"),
-        Seq(Row("UNICODE")))
+      checkAnswer(sql("SELECT COLLATION(array('a' collate unicode)[0])"), Seq(Row("UNICODE")))
 
       checkAnswer(
         sql("SELECT COLLATION(struct('a' collate unicode as c)['c'])"),
@@ -229,13 +211,9 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
   test("expressions in where are aware of session collation") {
     withSessionCollation("UTF8_LCASE") {
       // expression in where is aware of session collation
-      checkAnswer(
-        sql("SELECT 1 WHERE 'a' = 'A'"),
-        Seq(Row(1)))
+      checkAnswer(sql("SELECT 1 WHERE 'a' = 'A'"), Seq(Row(1)))
 
-      checkAnswer(
-        sql("SELECT 1 WHERE 'a' = cast('A' as STRING)"),
-        Seq(Row(1)))
+      checkAnswer(sql("SELECT 1 WHERE 'a' = cast('A' as STRING)"), Seq(Row(1)))
     }
   }
 
@@ -264,13 +242,9 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
       sql(s"CREATE TABLE $tableName (c1 STRING) USING $dataSource")
       sql(s"INSERT INTO $tableName VALUES ('1'), ('½')")
 
-      checkAnswer(
-        sql(s"SELECT MIN(c1) FROM $tableName"),
-        Seq(Row("1")))
+      checkAnswer(sql(s"SELECT MIN(c1) FROM $tableName"), Seq(Row("1")))
 
-      checkAnswer(
-        sql(s"SELECT MAX(c1) FROM $tableName"),
-        Seq(Row("½")))
+      checkAnswer(sql(s"SELECT MAX(c1) FROM $tableName"), Seq(Row("½")))
     }
     // scalastyle:on nonascii
   }
@@ -281,14 +255,10 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
       sql(s"CREATE TABLE $tableName (c1 BOOLEAN) USING $dataSource")
       sql(s"INSERT INTO $tableName VALUES ('a' = 'A')")
 
-      checkAnswer(
-        sql(s"SELECT COUNT(*) FROM $tableName WHERE c1"),
-        Seq(Row(1)))
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $tableName WHERE c1"), Seq(Row(1)))
 
       sql(s"INSERT INTO $tableName VALUES (array_contains(array('a'), 'A'))")
-      checkAnswer(
-        sql(s"SELECT COUNT(*) FROM $tableName WHERE c1"),
-        Seq(Row(2)))
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $tableName WHERE c1"), Seq(Row(2)))
     }
   }
 
@@ -299,9 +269,7 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
       sql(s"INSERT INTO $tableName VALUES ('a'), ('A')")
 
       sql(s"DELETE FROM $tableName WHERE 'a' = 'A'")
-      checkAnswer(
-        sql(s"SELECT COUNT(*) FROM $tableName"),
-        Seq(Row(0)))
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $tableName"), Seq(Row(0)))
     }
   }
   // endregion

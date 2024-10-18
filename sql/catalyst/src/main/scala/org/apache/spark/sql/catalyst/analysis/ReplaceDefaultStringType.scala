@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
@@ -25,9 +24,9 @@ import org.apache.spark.sql.types.{DataType, DefaultStringType, StringType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
- * Replaces default string types in DDL commands.
- * DDL commands should have a default collation based on the object's collation,
- * however, this is not implemented yet. So, we will just use UTF8_BINARY for now.
+ * Replaces default string types in DDL commands. DDL commands should have a default collation
+ * based on the object's collation, however, this is not implemented yet. So, we will just use
+ * UTF8_BINARY for now.
  */
 object ReplaceDefaultStringType extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
@@ -60,8 +59,7 @@ object ReplaceDefaultStringType extends Rule[LogicalPlan] {
 
   private def transformExpression(expression: Expression, newType: StringType): Expression = {
     expression match {
-      case columnDef: ColumnDefinition
-          if SchemaUtils.hasDefaultStringType(columnDef.dataType) =>
+      case columnDef: ColumnDefinition if SchemaUtils.hasDefaultStringType(columnDef.dataType) =>
         columnDef.copy(dataType = replaceDefaultStringType(columnDef.dataType, newType))
 
       case cast: Cast if SchemaUtils.hasDefaultStringType(cast.dataType) =>
