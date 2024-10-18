@@ -1181,11 +1181,6 @@ public final class CollationFactory {
         Collation.CollationSpec.fetchCollation(collationId).collationName);
   }
 
-  /**
-   * Returns whether the ICU collation is not Case Sensitive Accent Insensitive
-   * for the given collation id.
-   * This method is used in expressions which do not support CS_AI collations.
-   */
   public static boolean isCaseInsensitive(int collationId) {
     return Collation.CollationSpecICU.fromCollationId(collationId).caseSensitivity ==
             Collation.CollationSpecICU.CaseSensitivity.CI;
