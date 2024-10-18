@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.StatefulOpStateStoreCheckpointInfo
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.types.{BooleanType, LongType, StructField, StructType}
 import org.apache.spark.util.NextIterator
@@ -85,6 +86,8 @@ class SymmetricHashJoinStateManager(
     storeConf: StateStoreConf,
     hadoopConf: Configuration,
     partitionId: Int,
+    keyToNumValuesStateStoreCkptId: Option[String],
+    keyWithIndexToValueStateStoreCkptId: Option[String],
     stateFormatVersion: Int,
     skippedNullValueCount: Option[SQLMetric] = None,
     useStateStoreCoordinator: Boolean = true,
@@ -411,6 +414,28 @@ class SymmetricHashJoinStateManager(
     keyWithIndexToValue.abortIfNeeded()
   }
 
+  /**
+   * Get state store checkpoint information of the two state stores for this joiner, after
+   * they finished data processing.
+   */
+  def getLatestCheckpointInfo(): JoinerStateStoreCkptInfo = {
+    val keyToNumValuesCkptInfo = keyToNumValues.getLatestCheckpointInfo()
+    val keyWithIndexToValueCkptInfo = keyWithIndexToValue.getLatestCheckpointInfo()
+
+    assert(
+      keyToNumValuesCkptInfo.partitionId == keyWithIndexToValueCkptInfo.partitionId,
+      "two state stores in a stream-stream joiner don't return the same partition ID")
+    assert(
+      keyToNumValuesCkptInfo.batchVersion == keyWithIndexToValueCkptInfo.batchVersion,
+      "two state stores in a stream-stream joiner don't return the same batch version")
+    assert(
+      keyToNumValuesCkptInfo.stateStoreCkptId.isDefined ==
+      keyWithIndexToValueCkptInfo.stateStoreCkptId.isDefined,
+      "two state stores in a stream-stream joiner should both return checkpoint ID or not")
+
+    JoinerStateStoreCkptInfo(keyToNumValuesCkptInfo, keyWithIndexToValueCkptInfo)
+  }
+
   /** Get the combined metrics of all the state stores */
   def metrics: StateStoreMetrics = {
     val keyToNumValuesMetrics = keyToNumValues.metrics
@@ -451,7 +476,9 @@ class SymmetricHashJoinStateManager(
   Option(TaskContext.get()).foreach { _.addTaskCompletionListener[Unit] { _ => abortIfNeeded() } }
 
   /** Helper trait for invoking common functionalities of a state store. */
-  private abstract class StateStoreHandler(stateStoreType: StateStoreType) extends Logging {
+  private abstract class StateStoreHandler(
+      stateStoreType: StateStoreType,
+      stateStoreCkptId: Option[String]) extends Logging {
     private var stateStoreProvider: StateStoreProvider = _
 
     /** StateStore that the subclasses of this class is going to operate on */
@@ -476,6 +503,10 @@ class SymmetricHashJoinStateManager(
 
     def metrics: StateStoreMetrics = stateStore.metrics
 
+    def getLatestCheckpointInfo(): StateStoreCheckpointInfo = {
+      stateStore.getStateStoreCheckpointInfo()
+    }
+
     /** Get the StateStore with the given schema */
     protected def getStateStore(keySchema: StructType, valueSchema: StructType): StateStore = {
       val storeProviderId = StateStoreProviderId(
@@ -485,7 +516,8 @@ class SymmetricHashJoinStateManager(
           "when reading state as data source.")
         StateStore.get(
           storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-          stateInfo.get.storeVersion, useColumnFamilies = false, storeConf, hadoopConf)
+          stateInfo.get.storeVersion, stateStoreCkptId, useColumnFamilies = false,
+          storeConf, hadoopConf)
       } else {
         // This class will manage the state store provider by itself.
         stateStoreProvider = StateStoreProvider.createAndInit(
@@ -500,7 +532,7 @@ class SymmetricHashJoinStateManager(
           stateStoreProvider.asInstanceOf[SupportsFineGrainedReplay]
             .replayStateFromSnapshot(snapshotStartVersion.get, stateInfo.get.storeVersion)
         } else {
-          stateStoreProvider.getStore(stateInfo.get.storeVersion)
+          stateStoreProvider.getStore(stateInfo.get.storeVersion, stateStoreCkptId)
         }
       }
       logInfo(log"Loaded store ${MDC(STATE_STORE_ID, store.id)}")
@@ -522,7 +554,8 @@ class SymmetricHashJoinStateManager(
 
 
   /** A wrapper around a [[StateStore]] that stores [key -> number of values]. */
-  private class KeyToNumValuesStore extends StateStoreHandler(KeyToNumValuesType) {
+  private class KeyToNumValuesStore
+    extends StateStoreHandler(KeyToNumValuesType, keyToNumValuesStateStoreCkptId) {
     private val longValueSchema = new StructType().add("value", "long")
     private val longToUnsafeRow = UnsafeProjection.create(longValueSchema)
     private val valueRow = longToUnsafeRow(new SpecificInternalRow(longValueSchema))
@@ -669,7 +702,7 @@ class SymmetricHashJoinStateManager(
    * state format version - please refer implementations of [[KeyWithIndexToValueRowConverter]].
    */
   private class KeyWithIndexToValueStore(stateFormatVersion: Int)
-    extends StateStoreHandler(KeyWithIndexToValueType) {
+    extends StateStoreHandler(KeyWithIndexToValueType, keyWithIndexToValueStateStoreCkptId) {
 
     private val keyWithIndexExprs = keyAttributes :+ Literal(1L)
     private val keyWithIndexSchema = keySchema.add("index", LongType)
@@ -806,6 +839,80 @@ object SymmetricHashJoinStateManager {
       (keyWithIndexSchema, valueSchema.toStructType))
 
     result
+  }
+
+  /**
+   * Stream-stream join has 4 state stores instead of one. So it will generate 4 different
+   * checkpoint IDs. The approach we take here is to merge them into one array in the checkpointing
+   * path. The driver will process this single checkpointID. When it is passed back to the
+   * executors, they will split it back into 4 IDs and use them to load the state. This function is
+   * used to merge two checkpoint IDs (each in the form of an array of 1) into one array.
+   * The merged array is expected to read back by `getStateStoreCheckpointIds()`.
+   */
+  def mergeStateStoreCheckpointInfo(joinCkptInfo: JoinStateStoreCkptInfo):
+      StatefulOpStateStoreCheckpointInfo = {
+    assert(
+      joinCkptInfo.left.keyToNumValues.partitionId == joinCkptInfo.right.keyToNumValues.partitionId,
+      "state store info returned from two Stream-Stream Join sides have different partition IDs")
+    assert(
+      joinCkptInfo.left.keyToNumValues.batchVersion ==
+      joinCkptInfo.right.keyToNumValues.batchVersion,
+      "state store info returned from two Stream-Stream Join sides have different batch versions")
+    assert(
+      joinCkptInfo.left.keyToNumValues.stateStoreCkptId.isDefined ==
+      joinCkptInfo.right.keyToNumValues.stateStoreCkptId.isDefined,
+      "state store info returned from two Stream-Stream Join sides should both return " +
+        "checkpoint ID or not")
+
+    val ckptIds = joinCkptInfo.left.keyToNumValues.stateStoreCkptId.map(
+      Array(
+        _,
+        joinCkptInfo.left.valueToNumKeys.stateStoreCkptId.get,
+        joinCkptInfo.right.keyToNumValues.stateStoreCkptId.get,
+        joinCkptInfo.right.valueToNumKeys.stateStoreCkptId.get
+      )
+    )
+    val baseCkptIds = joinCkptInfo.left.keyToNumValues.baseStateStoreCkptId.map(
+      Array(
+        _,
+        joinCkptInfo.left.valueToNumKeys.baseStateStoreCkptId.get,
+        joinCkptInfo.right.keyToNumValues.baseStateStoreCkptId.get,
+        joinCkptInfo.right.valueToNumKeys.baseStateStoreCkptId.get
+      )
+    )
+
+    StatefulOpStateStoreCheckpointInfo(
+      joinCkptInfo.left.keyToNumValues.partitionId,
+      joinCkptInfo.left.keyToNumValues.batchVersion,
+      ckptIds,
+      baseCkptIds)
+  }
+
+  /**
+   * Stream-stream join has 4 state stores instead of one. So it will generate 4 different
+   * checkpoint IDs. They are translated from each joiners' state store into an array through
+   * mergeStateStoreCheckpointInfo(). This function is used to read it back into individual state
+   * store checkpoint IDs.
+   * @param partitionId
+   * @param stateInfo
+   * @return
+   */
+  def getStateStoreCheckpointIds(
+      partitionId: Int,
+      stateInfo: StatefulOperatorStateInfo): JoinStateStoreCheckpointId = {
+
+    val stateStoreCkptIds = stateInfo
+      .stateStoreCkptIds
+      .map(_(partitionId))
+      .map(_.map(Option(_)))
+      .getOrElse(Array.fill[Option[String]](4)(None))
+    JoinStateStoreCheckpointId(
+      left = JoinerStateStoreCheckpointId(
+        keyToNumValues = stateStoreCkptIds(0),
+        valueToNumKeys = stateStoreCkptIds(1)),
+      right = JoinerStateStoreCheckpointId(
+        keyToNumValues = stateStoreCkptIds(2),
+        valueToNumKeys = stateStoreCkptIds(3)))
   }
 
   private sealed trait StateStoreType

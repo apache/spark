@@ -164,7 +164,9 @@ class CollationStringExpressionsSuite
       },
       condition = "COLLATION_MISMATCH.IMPLICIT",
       sqlState = "42P21",
-      parameters = Map.empty
+      parameters = Map(
+        "implicitTypes" -> """"STRING", "STRING COLLATE UTF8_LCASE""""
+      )
     )
     checkError(
       exception = intercept[AnalysisException] {
@@ -175,7 +177,9 @@ class CollationStringExpressionsSuite
       },
       condition = "COLLATION_MISMATCH.EXPLICIT",
       sqlState = "42P21",
-      parameters = Map("explicitTypes" -> "`string`, `string collate UTF8_LCASE`")
+      parameters = Map(
+        "explicitTypes" -> """"STRING", "STRING COLLATE UTF8_LCASE""""
+      )
     )
   }
 

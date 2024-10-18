@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, UnresolvedSeed}
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.ExpectsInputTypes.{ordinalNumber, toSQLExpr, toSQLId, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
@@ -127,12 +127,8 @@ case class Rand(child: Expression, hideSeed: Boolean = false) extends Nondetermi
   }
 
   override def flatArguments: Iterator[Any] = Iterator(child)
-
-  override def prettyName: String =
-    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("rand")
-
   override def sql: String = {
-    s"$prettyName(${if (hideSeed) "" else child.sql})"
+    s"rand(${if (hideSeed) "" else child.sql})"
   }
 
   override protected def withNewChildInternal(newChild: Expression): Rand = copy(child = newChild)
