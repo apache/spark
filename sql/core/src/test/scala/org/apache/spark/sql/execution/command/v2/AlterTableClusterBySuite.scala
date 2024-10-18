@@ -40,13 +40,13 @@ class AlterTableClusterBySuite extends command.AlterTableClusterBySuiteBase
 
   test("test REPLACE TABLE with clustering columns") {
     withNamespaceAndTable("ns", "table") { tbl =>
-      spark.sql(s"CREATE TABLE $tbl (id INT) $defaultUsing CLUSTER BY (id)")
+      sql(s"CREATE TABLE $tbl (id INT) $defaultUsing CLUSTER BY (id)")
       validateClusterBy(tbl, Seq("id"))
 
-      spark.sql(s"REPLACE TABLE $tbl (id INT, id2 INT) $defaultUsing CLUSTER BY (id2)")
+      sql(s"REPLACE TABLE $tbl (id INT, id2 INT) $defaultUsing CLUSTER BY (id2)")
       validateClusterBy(tbl, Seq("id2"))
 
-      spark.sql(s"ALTER TABLE $tbl CLUSTER BY (id)")
+      sql(s"ALTER TABLE $tbl CLUSTER BY (id)")
       validateClusterBy(tbl, Seq("id"))
     }
   }

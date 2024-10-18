@@ -421,4 +421,23 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
     assert(session2.range(3).collect().length == 3)
   }
 
+  test("SPARK-48810: session.stop should not throw when the session is invalid") {
+    val remote = s"sc://localhost:$serverPort"
+
+    SparkSession.clearDefaultSession()
+    SparkSession.clearActiveSession()
+
+    val session = SparkSession
+      .builder()
+      .remote(remote)
+      .getOrCreate()
+
+    session.range(3).collect()
+
+    session.hijackServerSideSessionIdForTesting("-testing")
+
+    // no error is thrown here.
+    session.stop()
+  }
+
 }

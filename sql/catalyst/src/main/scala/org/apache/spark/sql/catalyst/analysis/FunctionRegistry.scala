@@ -376,6 +376,7 @@ object FunctionRegistry {
     expression[Least]("least"),
     expression[NaNvl]("nanvl"),
     expression[NullIf]("nullif"),
+    expression[NullIfZero]("nullifzero"),
     expression[Nvl]("nvl"),
     expression[Nvl2]("nvl2"),
     expression[PosExplode]("posexplode"),
@@ -383,8 +384,11 @@ object FunctionRegistry {
     expression[Rand]("rand"),
     expression[Rand]("random", true, Some("3.0.0")),
     expression[Randn]("randn"),
+    expression[RandStr]("randstr"),
     expression[Stack]("stack"),
-    expression[CaseWhen]("when"),
+    expression[Uniform]("uniform"),
+    expression[ZeroIfNull]("zeroifnull"),
+    CaseWhen.registryEntry,
 
     // math functions
     expression[Acos]("acos"),
@@ -451,7 +455,7 @@ object FunctionRegistry {
     // "try_*" function which always return Null instead of runtime error.
     expression[TryAdd]("try_add"),
     expression[TryDivide]("try_divide"),
-    expression[TryRemainder]("try_remainder"),
+    expression[TryMod]("try_mod"),
     expression[TrySubtract]("try_subtract"),
     expression[TryMultiply]("try_multiply"),
     expression[TryElementAt]("try_element_at"),
@@ -461,6 +465,7 @@ object FunctionRegistry {
     expressionBuilder("try_to_timestamp", TryToTimestampExpressionBuilder, setAlias = true),
     expression[TryAesDecrypt]("try_aes_decrypt"),
     expression[TryReflect]("try_reflect"),
+    expression[TryUrlDecode]("try_url_decode"),
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
@@ -836,6 +841,7 @@ object FunctionRegistry {
     expressionBuilder("try_variant_get", TryVariantGetExpressionBuilder),
     expression[SchemaOfVariant]("schema_of_variant"),
     expression[SchemaOfVariantAgg]("schema_of_variant_agg"),
+    expression[ToVariantObject]("to_variant_object"),
 
     // cast
     expression[Cast]("cast"),
@@ -868,7 +874,11 @@ object FunctionRegistry {
 
     // Avro
     expression[FromAvro]("from_avro"),
-    expression[ToAvro]("to_avro")
+    expression[ToAvro]("to_avro"),
+
+    // Protobuf
+    expression[FromProtobuf]("from_protobuf"),
+    expression[ToProtobuf]("to_protobuf")
   )
 
   val builtin: SimpleFunctionRegistry = {
@@ -881,6 +891,50 @@ object FunctionRegistry {
   }
 
   val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
+
+  /** Registry for internal functions used by Connect and the Column API. */
+  private[sql] val internal: SimpleFunctionRegistry = new SimpleFunctionRegistry
+
+  private def registerInternalExpression[T <: Expression : ClassTag](
+      name: String,
+      setAlias: Boolean = false): Unit = {
+    val (info, builder) = FunctionRegistryBase.build[T](name, None)
+    val newBuilder = if (setAlias) {
+      (expressions: Seq[Expression]) => {
+        val expr = builder(expressions)
+        expr.setTagValue(FUNC_ALIAS, name)
+        expr
+      }
+    } else {
+      builder
+    }
+    internal.internalRegisterFunction(FunctionIdentifier(name), info, newBuilder)
+  }
+
+  registerInternalExpression[Product]("product")
+  registerInternalExpression[BloomFilterAggregate]("bloom_filter_agg")
+  registerInternalExpression[CollectTopK]("collect_top_k")
+  registerInternalExpression[TimestampAdd]("timestampadd")
+  registerInternalExpression[TimestampDiff]("timestampdiff")
+  registerInternalExpression[Bucket]("bucket")
+  registerInternalExpression[Years]("years")
+  registerInternalExpression[Months]("months")
+  registerInternalExpression[Days]("days")
+  registerInternalExpression[Hours]("hours")
+  registerInternalExpression[UnwrapUDT]("unwrap_udt")
+  registerInternalExpression[MonotonicallyIncreasingID]("distributed_id", setAlias = true)
+  registerInternalExpression[DistributedSequenceID]("distributed_sequence_id")
+  registerInternalExpression[PandasProduct]("pandas_product")
+  registerInternalExpression[PandasStddev]("pandas_stddev")
+  registerInternalExpression[PandasVariance]("pandas_var")
+  registerInternalExpression[PandasSkewness]("pandas_skew")
+  registerInternalExpression[PandasKurtosis]("pandas_kurt")
+  registerInternalExpression[PandasCovar]("pandas_covar")
+  registerInternalExpression[PandasMode]("pandas_mode")
+  registerInternalExpression[EWM]("ewm")
+  registerInternalExpression[NullIndex]("null_index")
+  registerInternalExpression[CastTimestampNTZToLong]("timestamp_ntz_to_long")
+  registerInternalExpression[ArrayBinarySearch]("array_binary_search")
 
   private def makeExprInfoForVirtualOperator(name: String, usage: String): ExpressionInfo = {
     new ExpressionInfo(
@@ -1118,6 +1172,7 @@ object TableFunctionRegistry {
     generator[PosExplode]("posexplode"),
     generator[PosExplode]("posexplode_outer", outer = true),
     generator[Stack]("stack"),
+    generator[Collations]("collations"),
     generator[SQLKeywords]("sql_keywords"),
     generator[VariantExplode]("variant_explode"),
     generator[VariantExplode]("variant_explode_outer", outer = true)

@@ -25,11 +25,11 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CurrentUserContext
-import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TimeTravelSpec}
+import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchTableException, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
-import org.apache.spark.sql.catalyst.util.GeneratedColumn
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
@@ -178,16 +178,19 @@ private[sql] object CatalogV2Util {
      schema: StructType,
      changes: Seq[TableChange]): Array[Transform] = {
 
-    val newPartitioning = partitioning.filterNot(_.isInstanceOf[ClusterByTransform]).toBuffer
-    changes.foreach {
-      case clusterBy: ClusterBy =>
-        newPartitioning += ClusterBySpec.extractClusterByTransform(
+    var newPartitioning = partitioning
+    // If there is a clusterBy change (only the first one), we overwrite the existing
+    // clustering columns.
+    val clusterByOpt = changes.collectFirst { case c: ClusterBy => c }
+    clusterByOpt.foreach { clusterBy =>
+      newPartitioning = partitioning.map {
+        case _: ClusterByTransform => ClusterBySpec.extractClusterByTransform(
           schema, ClusterBySpec(clusterBy.clusteringColumns.toIndexedSeq), conf.resolver)
-
-      case _ =>
-      // ignore other changes
+        case other => other
+      }
     }
-    newPartitioning.toArray
+
+    newPartitioning
   }
 
   /**
@@ -333,8 +336,11 @@ private[sql] object CatalogV2Util {
         return struct
       } else {
         throw new SparkIllegalArgumentException(
-          errorClass = "_LEGACY_ERROR_TEMP_3227",
-          messageParameters = Map("fieldName" -> fieldNames.head))
+          errorClass = "FIELD_NOT_FOUND",
+          messageParameters = Map(
+            "fieldName" -> toSQLId(fieldNames.head),
+            "fields" -> struct.fields.map(f => toSQLId(f.name)).mkString(", "))
+        )
       }
     }
 
@@ -400,20 +406,22 @@ private[sql] object CatalogV2Util {
   def loadTable(
       catalog: CatalogPlugin,
       ident: Identifier,
-      timeTravelSpec: Option[TimeTravelSpec] = None): Option[Table] =
+      timeTravelSpec: Option[TimeTravelSpec] = None,
+      writePrivilegesString: Option[String] = None): Option[Table] =
     try {
-      Option(getTable(catalog, ident, timeTravelSpec))
+      Option(getTable(catalog, ident, timeTravelSpec, writePrivilegesString))
     } catch {
       case _: NoSuchTableException => None
       case _: NoSuchDatabaseException => None
-      case _: NoSuchNamespaceException => None
     }
 
   def getTable(
       catalog: CatalogPlugin,
       ident: Identifier,
-      timeTravelSpec: Option[TimeTravelSpec] = None): Table = {
+      timeTravelSpec: Option[TimeTravelSpec] = None,
+      writePrivilegesString: Option[String] = None): Table = {
     if (timeTravelSpec.nonEmpty) {
+      assert(writePrivilegesString.isEmpty, "Should not write to a table with time travel")
       timeTravelSpec.get match {
         case v: AsOfVersion =>
           catalog.asTableCatalog.loadTable(ident, v.version)
@@ -421,7 +429,13 @@ private[sql] object CatalogV2Util {
           catalog.asTableCatalog.loadTable(ident, ts.timestamp)
       }
     } else {
-      catalog.asTableCatalog.loadTable(ident)
+      if (writePrivilegesString.isDefined) {
+        val writePrivileges = writePrivilegesString.get.split(",").map(_.trim)
+          .map(TableWritePrivilege.valueOf).toSet.asJava
+        catalog.asTableCatalog.loadTable(ident, writePrivileges)
+      } else {
+        catalog.asTableCatalog.loadTable(ident)
+      }
     }
   }
 
@@ -431,7 +445,6 @@ private[sql] object CatalogV2Util {
     } catch {
       case _: NoSuchFunctionException => None
       case _: NoSuchDatabaseException => None
-      case _: NoSuchNamespaceException => None
     }
   }
 
@@ -569,18 +582,10 @@ private[sql] object CatalogV2Util {
     val isDefaultColumn = f.getCurrentDefaultValue().isDefined &&
       f.getExistenceDefaultValue().isDefined
     val isGeneratedColumn = GeneratedColumn.isGeneratedColumn(f)
-    if (isDefaultColumn && isGeneratedColumn) {
-      throw new AnalysisException(
-        errorClass = "GENERATED_COLUMN_WITH_DEFAULT_VALUE",
-        messageParameters = Map(
-          "colName" -> f.name,
-          "defaultValue" -> f.getCurrentDefaultValue().get,
-          "genExpr" -> GeneratedColumn.getGenerationExpression(f).get
-        )
-      )
-    }
-
+    val isIdentityColumn = IdentityColumn.isIdentityColumn(f)
     if (isDefaultColumn) {
+      checkDefaultColumnConflicts(f)
+
       val e = analyze(
         f,
         statementType = "Column analysis",
@@ -601,10 +606,41 @@ private[sql] object CatalogV2Util {
         Seq("comment", GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY))
       Column.create(f.name, f.dataType, f.nullable, f.getComment().orNull,
         GeneratedColumn.getGenerationExpression(f).get, metadataAsJson(cleanedMetadata))
+    } else if (isIdentityColumn) {
+      val cleanedMetadata = metadataWithKeysRemoved(
+        Seq("comment",
+          IdentityColumn.IDENTITY_INFO_START,
+          IdentityColumn.IDENTITY_INFO_STEP,
+          IdentityColumn.IDENTITY_INFO_ALLOW_EXPLICIT_INSERT))
+        Column.create(f.name, f.dataType, f.nullable, f.getComment().orNull,
+          IdentityColumn.getIdentityInfo(f).get, metadataAsJson(cleanedMetadata))
     } else {
       val cleanedMetadata = metadataWithKeysRemoved(Seq("comment"))
       Column.create(f.name, f.dataType, f.nullable, f.getComment().orNull,
         metadataAsJson(cleanedMetadata))
+    }
+  }
+
+  private def checkDefaultColumnConflicts(f: StructField): Unit = {
+    if (GeneratedColumn.isGeneratedColumn(f)) {
+      throw new AnalysisException(
+        errorClass = "GENERATED_COLUMN_WITH_DEFAULT_VALUE",
+        messageParameters = Map(
+          "colName" -> f.name,
+          "defaultValue" -> f.getCurrentDefaultValue().get,
+          "genExpr" -> GeneratedColumn.getGenerationExpression(f).get
+        )
+      )
+    }
+    if (IdentityColumn.isIdentityColumn(f)) {
+      throw new AnalysisException(
+        errorClass = "IDENTITY_COLUMN_WITH_DEFAULT_VALUE",
+        messageParameters = Map(
+          "colName" -> f.name,
+          "defaultValue" -> f.getCurrentDefaultValue().get,
+          "identityColumnSpec" -> IdentityColumn.getIdentityInfo(f).get.toString
+        )
+      )
     }
   }
 }

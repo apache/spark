@@ -1,2 +1,0 @@
-Project [map_from_entries(transform(e#0, lambdafunction(struct(y, lambda y#0, x, lambda x#0), lambda x#0, lambda y#0, false))) AS map_from_entries(transform(e, lambdafunction(struct(namedlambdavariable(), namedlambdavariable()), namedlambdavariable(), namedlambdavariable())))#0]
-+- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

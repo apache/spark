@@ -83,8 +83,8 @@ class DataFrameReader(OptionUtils):
             self._schema = schema
         else:
             raise PySparkTypeError(
-                error_class="NOT_STR_OR_STRUCT",
-                message_parameters={
+                errorClass="NOT_STR_OR_STRUCT",
+                messageParameters={
                     "arg_name": "schema",
                     "arg_type": type(schema).__name__,
                 },
@@ -94,7 +94,7 @@ class DataFrameReader(OptionUtils):
     schema.__doc__ = PySparkDataFrameReader.schema.__doc__
 
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataFrameReader":
-        self._options[key] = str(value)
+        self._options[key] = cast(str, to_str(value))
         return self
 
     option.__doc__ = PySparkDataFrameReader.option.__doc__
@@ -170,6 +170,7 @@ class DataFrameReader(OptionUtils):
         modifiedBefore: Optional[Union[bool, str]] = None,
         modifiedAfter: Optional[Union[bool, str]] = None,
         allowNonNumericNumbers: Optional[Union[bool, str]] = None,
+        useUnsafeRow: Optional[Union[bool, str]] = None,
     ) -> "DataFrame":
         self._set_opts(
             primitivesAsString=primitivesAsString,
@@ -195,6 +196,7 @@ class DataFrameReader(OptionUtils):
             modifiedBefore=modifiedBefore,
             modifiedAfter=modifiedAfter,
             allowNonNumericNumbers=allowNonNumericNumbers,
+            useUnsafeRow=useUnsafeRow,
         )
         if isinstance(path, str):
             path = [path]
@@ -227,7 +229,7 @@ class DataFrameReader(OptionUtils):
     def text(
         self,
         paths: PathOrPaths,
-        wholetext: Optional[bool] = None,
+        wholetext: bool = False,
         lineSep: Optional[str] = None,
         pathGlobFilter: Optional[Union[bool, str]] = None,
         recursiveFileLookup: Optional[Union[bool, str]] = None,
@@ -479,7 +481,7 @@ class DataFrameReader(OptionUtils):
     @property
     def _jreader(self) -> None:
         raise PySparkAttributeError(
-            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jreader"}
+            errorClass="JVM_ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": "_jreader"}
         )
 
 
@@ -557,8 +559,8 @@ class DataFrameWriter(OptionUtils):
     ) -> "DataFrameWriter":
         if not isinstance(numBuckets, int):
             raise PySparkValueError(
-                error_class="CANNOT_SET_TOGETHER",
-                message_parameters={
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={
                     "arg_list": f"`col` of type {type(col).__name__} and `cols`",
                 },
             )
@@ -566,8 +568,8 @@ class DataFrameWriter(OptionUtils):
         if isinstance(col, (list, tuple)):
             if cols:
                 raise PySparkValueError(
-                    error_class="NOT_INT",
-                    message_parameters={
+                    errorClass="NOT_INT",
+                    messageParameters={
                         "arg_list": "numBuckets",
                     },
                 )
@@ -577,16 +579,16 @@ class DataFrameWriter(OptionUtils):
         for c in cols:
             if not isinstance(c, str):
                 raise PySparkTypeError(
-                    error_class="NOT_LIST_OF_STR",
-                    message_parameters={
+                    errorClass="NOT_LIST_OF_STR",
+                    messageParameters={
                         "arg_name": "cols",
                         "arg_type": type(c).__name__,
                     },
                 )
         if not isinstance(col, str):
             raise PySparkTypeError(
-                error_class="NOT_LIST_OF_STR",
-                message_parameters={
+                errorClass="NOT_LIST_OF_STR",
+                messageParameters={
                     "arg_name": "col",
                     "arg_type": type(col).__name__,
                 },
@@ -612,8 +614,8 @@ class DataFrameWriter(OptionUtils):
         if isinstance(col, (list, tuple)):
             if cols:
                 raise PySparkValueError(
-                    error_class="CANNOT_SET_TOGETHER",
-                    message_parameters={
+                    errorClass="CANNOT_SET_TOGETHER",
+                    messageParameters={
                         "arg_list": f"`col` of type {type(col).__name__} and `cols`",
                     },
                 )
@@ -623,16 +625,16 @@ class DataFrameWriter(OptionUtils):
         for c in cols:
             if not isinstance(c, str):
                 raise PySparkTypeError(
-                    error_class="NOT_LIST_OF_STR",
-                    message_parameters={
+                    errorClass="NOT_LIST_OF_STR",
+                    messageParameters={
                         "arg_name": "cols",
                         "arg_type": type(c).__name__,
                     },
                 )
         if not isinstance(col, str):
             raise PySparkTypeError(
-                error_class="NOT_LIST_OF_STR",
-                message_parameters={
+                errorClass="NOT_LIST_OF_STR",
+                messageParameters={
                     "arg_name": "col",
                     "arg_type": type(col).__name__,
                 },
@@ -642,6 +644,23 @@ class DataFrameWriter(OptionUtils):
         return self
 
     sortBy.__doc__ = PySparkDataFrameWriter.sortBy.__doc__
+
+    @overload
+    def clusterBy(self, *cols: str) -> "DataFrameWriter":
+        ...
+
+    @overload
+    def clusterBy(self, *cols: List[str]) -> "DataFrameWriter":
+        ...
+
+    def clusterBy(self, *cols: Union[str, List[str]]) -> "DataFrameWriter":
+        if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
+            cols = cols[0]  # type: ignore[assignment]
+        assert len(cols) > 0, "clusterBy needs one or more clustering columns."
+        self._write.clustering_cols = cast(List[str], cols)
+        return self
+
+    clusterBy.__doc__ = PySparkDataFrameWriter.clusterBy.__doc__
 
     def save(
         self,
@@ -899,6 +918,13 @@ class DataFrameWriterV2(OptionUtils):
         return self
 
     partitionedBy.__doc__ = PySparkDataFrameWriterV2.partitionedBy.__doc__
+
+    def clusterBy(self, col: str, *cols: str) -> "DataFrameWriterV2":
+        self._write.clustering_columns = [col]
+        self._write.clustering_columns.extend(cols)
+        return self
+
+    clusterBy.__doc__ = PySparkDataFrameWriterV2.clusterBy.__doc__
 
     def create(self) -> None:
         self._write.mode = "create"

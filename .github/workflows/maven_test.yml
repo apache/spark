@@ -40,7 +40,7 @@ on:
         description: OS to run this build.
         required: false
         type: string
-        default: ubuntu-22.04
+        default: ubuntu-latest
       envs:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
@@ -194,7 +194,7 @@ jobs:
           if [[ "$INCLUDED_TAGS" != "" ]]; then
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} -Dtest.include.tags="$INCLUDED_TAGS" test -fae
           elif [[ "$MODULES_TO_TEST" == "connect" ]]; then
-            ./build/mvn $MAVEN_CLI_OPTS -Dtest.exclude.tags="$EXCLUDED_TAGS" -Djava.version=${JAVA_VERSION/-ea} -pl connector/connect/client/jvm,connector/connect/common,connector/connect/server test -fae
+            ./build/mvn $MAVEN_CLI_OPTS -Dtest.exclude.tags="$EXCLUDED_TAGS" -Djava.version=${JAVA_VERSION/-ea} -pl connector/connect/client/jvm,sql/connect/common,sql/connect/server test -fae
           elif [[ "$EXCLUDED_TAGS" != "" ]]; then
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} -Dtest.exclude.tags="$EXCLUDED_TAGS" test -fae
           elif [[ "$MODULES_TO_TEST" == *"sql#hive-thriftserver"* ]]; then

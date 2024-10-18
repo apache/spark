@@ -408,14 +408,26 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
             def checks():
                 self.assertEqual(1, stub.execute_calls)
                 self.assertEqual(1, stub.attach_calls)
-                self.assertEqual(0, stub.release_calls)
-                self.assertEqual(0, stub.release_until_calls)
+                self.assertEqual(1, stub.release_calls)
+                self.assertEqual(1, stub.release_until_calls)
 
             eventually(timeout=1, catch_assertions=True)(checks)()
 
         parameters = ["INVALID_HANDLE.SESSION_NOT_FOUND", "INVALID_HANDLE.OPERATION_NOT_FOUND"]
         for b in parameters:
             not_found_fails(b)
+
+    def test_observed_session_id(self):
+        stub = self._stub_with([self.response, self.finished])
+        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, [])
+        session_id = "test-session-id"
+
+        reattach = ite._create_reattach_execute_request()
+        self.assertEqual(reattach.client_observed_server_side_session_id, "")
+
+        self.request.client_observed_server_side_session_id = session_id
+        reattach = ite._create_reattach_execute_request()
+        self.assertEqual(reattach.client_observed_server_side_session_id, session_id)
 
 
 if __name__ == "__main__":

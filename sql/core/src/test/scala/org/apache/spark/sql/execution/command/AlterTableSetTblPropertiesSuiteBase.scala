@@ -19,6 +19,10 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This base suite contains unified tests for the `ALTER TABLE .. SET TBLPROPERTIES`
@@ -39,7 +43,26 @@ trait AlterTableSetTblPropertiesSuiteBase extends QueryTest with DDLCommandTestU
 
   def checkTblProps(tableIdent: TableIdentifier, expectedTblProps: Map[String, String]): Unit
 
-  test("alter table set tblproperties") {
+  def getTblPropertyValue(tableIdent: TableIdentifier, key: String): String
+
+  test("table to alter does not exist") {
+    withNamespaceAndTable("ns", "does_not_exist") { t =>
+      val sqlText = s"ALTER TABLE $t SET TBLPROPERTIES ('k1' = 'v1')"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> toSQLId(t)),
+      context = ExpectedContext(
+        fragment = t,
+        start = 12,
+        stop = 11 + t.length)
+      )
+    }
+  }
+
+  test("alter table set properties") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (col1 int, col2 string, a int, b int) $defaultUsing")
       val tableIdent = TableIdentifier("tbl", Some("ns"), Some(catalog))
@@ -54,16 +77,53 @@ trait AlterTableSetTblPropertiesSuiteBase extends QueryTest with DDLCommandTestU
 
       sql(s"ALTER TABLE $t SET TBLPROPERTIES ('k1' = 'v1', 'k2' = 'v8')")
       checkTblProps(tableIdent, Map("k1" -> "v1", "k2" -> "v8", "k3" -> "v3"))
+    }
+  }
 
-      // table to alter does not exist
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("ALTER TABLE does_not_exist SET TBLPROPERTIES ('winner' = 'loser')")
-        },
-        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`does_not_exist`"),
-        context = ExpectedContext(fragment = "does_not_exist", start = 12, stop = 25)
-      )
+  test("alter table set reserved properties") {
+    import TableCatalog._
+    val keyParameters = Map[String, String](
+      PROP_PROVIDER -> "please use the USING clause to specify it",
+      PROP_LOCATION -> "please use the LOCATION clause to specify it",
+      PROP_OWNER -> "it will be set to the current user",
+      PROP_EXTERNAL -> "please use CREATE EXTERNAL TABLE"
+    )
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
+      CatalogV2Util.TABLE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+        withNamespaceAndTable("ns", "tbl") { t =>
+          val sqlText = s"ALTER TABLE $t SET TBLPROPERTIES ('$key'='bar')"
+          checkError(
+            exception = intercept[ParseException] {
+              sql(sqlText)
+            },
+            condition = "UNSUPPORTED_FEATURE.SET_TABLE_PROPERTY",
+            parameters = Map(
+              "property" -> key,
+              "msg" -> keyParameters.getOrElse(
+                key, "please remove it from the TBLPROPERTIES list.")),
+            context = ExpectedContext(
+              fragment = sqlText,
+              start = 0,
+              stop = 40 + t.length + key.length))
+        }
+      }
+    }
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
+      CatalogV2Util.TABLE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+        Seq("OPTIONS", "TBLPROPERTIES").foreach { clause =>
+          withNamespaceAndTable("ns", "tbl") { t =>
+            sql(s"CREATE TABLE $t (key int) USING parquet $clause ('$key'='bar')")
+            val tableIdent = TableIdentifier("tbl", Some("ns"), Some(catalog))
+
+            val originValue = getTblPropertyValue(tableIdent, key)
+            assert(originValue != "bar", "reserved properties should not have side effects")
+
+            sql(s"ALTER TABLE $t SET TBLPROPERTIES ('$key'='newValue')")
+            assert(getTblPropertyValue(tableIdent, key) == originValue,
+              "reserved properties should not have side effects")
+          }
+        }
+      }
     }
   }
 }

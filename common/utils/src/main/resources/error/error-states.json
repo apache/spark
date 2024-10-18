@@ -4613,6 +4613,36 @@
         "standard": "N",
         "usedBy": ["Spark"]
     },
+    "42K0L": {
+        "description": "Invalid usage of labels.",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
+    "42K0M": {
+        "description": "Invalid variable declaration.",
+        "origin": "Spark,",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
+    "42K0N": {
+        "description": "Invalid external type.",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
+    "42K0O": {
+        "description": "ScalarFunction not overrides method 'produceResult(InternalRow)' with custom implementation.",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
+    "42K0P": {
+        "description": "ScalarFunction not implements or overrides method 'produceResult(InternalRow)'.",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
     "42KD0": {
         "description": "Ambiguous name reference.",
         "origin": "Databricks",
@@ -4882,6 +4912,12 @@
         "origin": "SQL Server",
         "standard": "N",
         "usedBy": ["SQL Server"]
+    },
+    "42S23": {
+        "description": "Partition transform expression not in 'partitionedBy'",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
     },
     "44000": {
         "description": "with check option violation",
@@ -7395,6 +7431,12 @@
     },
     "KD00E": {
         "description": "table feature validation failure",
+        "origin": "Databricks",
+        "standard": "N",
+        "usedBy": ["Databricks"]
+    },
+    "KD010": {
+        "description": "external data source failure",
         "origin": "Databricks",
         "standard": "N",
         "usedBy": ["Databricks"]

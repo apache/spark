@@ -28,7 +28,7 @@ from dataclasses import dataclass, asdict
 from pyspark.sql import Row
 from pyspark.sql import functions as F
 from pyspark.errors import (
-    AnalysisException,
+    ParseException,
     PySparkTypeError,
     PySparkValueError,
     PySparkRuntimeError,
@@ -133,8 +133,8 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_LIST_OR_NONE_OR_STRUCT",
-            message_parameters={"arg_name": "schema", "arg_type": "int"},
+            errorClass="NOT_LIST_OR_NONE_OR_STRUCT",
+            messageParameters={"arg_name": "schema", "arg_type": "int"},
         )
 
         df = self.spark.createDataFrame(rdd)
@@ -612,6 +612,12 @@ class TypesTestsMixin:
         self.assertEqual(df.count(), 1)
         self.assertEqual(df.head(), Row(name="[123]", income=120))
 
+    def test_string_type_simple_string(self):
+        self.assertEqual(StringType().simpleString(), "string")
+        self.assertEqual(StringType("UTF8_BINARY").simpleString(), "string")
+        self.assertEqual(StringType("UTF8_LCASE").simpleString(), "string collate UTF8_LCASE")
+        self.assertEqual(StringType("UNICODE").simpleString(), "string collate UNICODE")
+
     def test_schema_with_collations_json_ser_de(self):
         from pyspark.sql.types import _parse_datatype_json_string
 
@@ -816,6 +822,38 @@ class TypesTestsMixin:
         self.assertRaises(
             PySparkTypeError, lambda: _parse_datatype_json_string(collations_in_nested_map_json)
         )
+
+    def test_array_type_from_json(self):
+        arrayWithoutCollations = ArrayType(StringType(), True)
+        arrayWithCollations = ArrayType(StringType("UNICODE"), True)
+        array_json = {"type": "array", "elementType": "string", "containsNull": True}
+        collationsMap = {"element": "UNICODE"}
+
+        self.assertEqual(arrayWithoutCollations, ArrayType.fromJson(array_json))
+        self.assertEqual(
+            arrayWithCollations,
+            ArrayType.fromJson(array_json, fieldPath="", collationsMap=collationsMap),
+        )
+        self.assertEqual(
+            arrayWithCollations, ArrayType.fromJson(array_json, collationsMap=collationsMap)
+        )
+
+    def test_map_type_from_json(self):
+        mapWithoutCollations = MapType(StringType(), StringType(), True)
+        mapWithCollations = MapType(StringType("UNICODE"), StringType("UNICODE"), True)
+        map_json = {
+            "type": "map",
+            "keyType": "string",
+            "valueType": "string",
+            "valueContainsNull": True,
+        }
+        collationsMap = {"key": "UNICODE", "value": "UNICODE"}
+
+        self.assertEqual(mapWithoutCollations, MapType.fromJson(map_json))
+        self.assertEqual(
+            mapWithCollations, MapType.fromJson(map_json, fieldPath="", collationsMap=collationsMap)
+        )
+        self.assertEqual(mapWithCollations, MapType.fromJson(map_json, collationsMap=collationsMap))
 
     def test_schema_with_bad_collations_provider(self):
         from pyspark.sql.types import _parse_datatype_json_string, _COLLATIONS_METADATA_KEY
@@ -1091,10 +1129,17 @@ class TypesTestsMixin:
     def test_cast_to_udt_with_udt(self):
         row = Row(point=ExamplePoint(1.0, 2.0), python_only_point=PythonOnlyPoint(1.0, 2.0))
         df = self.spark.createDataFrame([row])
-        with self.assertRaises(AnalysisException):
-            df.select(F.col("point").cast(PythonOnlyUDT())).collect()
-        with self.assertRaises(AnalysisException):
-            df.select(F.col("python_only_point").cast(ExamplePointUDT())).collect()
+        result = df.select(F.col("point").cast(PythonOnlyUDT())).collect()
+        self.assertEqual(
+            result,
+            [Row(point=PythonOnlyPoint(1.0, 2.0))],
+        )
+
+        result = df.select(F.col("python_only_point").cast(ExamplePointUDT())).collect()
+        self.assertEqual(
+            result,
+            [Row(python_only_point=ExamplePoint(1.0, 2.0))],
+        )
 
     def test_struct_type(self):
         struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
@@ -1601,8 +1646,8 @@ class TypesTestsMixin:
             _merge_type(ArrayType(LongType()), ArrayType(DoubleType()))
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_MERGE_TYPE",
-            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+            errorClass="CANNOT_MERGE_TYPE",
+            messageParameters={"data_type1": "LongType", "data_type2": "DoubleType"},
         )
 
         self.assertEqual(
@@ -1619,8 +1664,8 @@ class TypesTestsMixin:
             _merge_type(MapType(StringType(), LongType()), MapType(StringType(), DoubleType()))
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_MERGE_TYPE",
-            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+            errorClass="CANNOT_MERGE_TYPE",
+            messageParameters={"data_type1": "LongType", "data_type2": "DoubleType"},
         )
 
         self.assertEqual(
@@ -1637,8 +1682,8 @@ class TypesTestsMixin:
             )
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_MERGE_TYPE",
-            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+            errorClass="CANNOT_MERGE_TYPE",
+            messageParameters={"data_type1": "LongType", "data_type2": "DoubleType"},
         )
 
         self.assertEqual(
@@ -1678,8 +1723,8 @@ class TypesTestsMixin:
             )
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_MERGE_TYPE",
-            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+            errorClass="CANNOT_MERGE_TYPE",
+            messageParameters={"data_type1": "LongType", "data_type2": "DoubleType"},
         )
 
         self.assertEqual(
@@ -1721,8 +1766,8 @@ class TypesTestsMixin:
             )
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_MERGE_TYPE",
-            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+            errorClass="CANNOT_MERGE_TYPE",
+            messageParameters={"data_type1": "LongType", "data_type2": "DoubleType"},
         )
 
         self.assertEqual(
@@ -1832,8 +1877,8 @@ class TypesTestsMixin:
 
             self.check_error(
                 exception=pe.exception,
-                error_class="CANNOT_INFER_TYPE_FOR_FIELD",
-                message_parameters={"field_name": "myarray"},
+                errorClass="CANNOT_INFER_TYPE_FOR_FIELD",
+                messageParameters={"field_name": "myarray"},
             )
 
     def test_repr(self):
@@ -1885,8 +1930,8 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_INTERVAL_CASTING",
-            message_parameters={"start_field": "None", "end_field": "3"},
+            errorClass="INVALID_INTERVAL_CASTING",
+            messageParameters={"start_field": "None", "end_field": "3"},
         )
 
         with self.assertRaises(PySparkRuntimeError) as pe:
@@ -1894,8 +1939,8 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_INTERVAL_CASTING",
-            message_parameters={"start_field": "123", "end_field": "123"},
+            errorClass="INVALID_INTERVAL_CASTING",
+            messageParameters={"start_field": "123", "end_field": "123"},
         )
 
         with self.assertRaises(PySparkRuntimeError) as pe:
@@ -1903,8 +1948,8 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_INTERVAL_CASTING",
-            message_parameters={"start_field": "0", "end_field": "321"},
+            errorClass="INVALID_INTERVAL_CASTING",
+            messageParameters={"start_field": "0", "end_field": "321"},
         )
 
     def test_daytime_interval_type(self):
@@ -1972,8 +2017,8 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_INTERVAL_CASTING",
-            message_parameters={"start_field": "None", "end_field": "3"},
+            errorClass="INVALID_INTERVAL_CASTING",
+            messageParameters={"start_field": "None", "end_field": "3"},
         )
 
         with self.assertRaises(PySparkRuntimeError) as pe:
@@ -1981,8 +2026,8 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_INTERVAL_CASTING",
-            message_parameters={"start_field": "123", "end_field": "123"},
+            errorClass="INVALID_INTERVAL_CASTING",
+            messageParameters={"start_field": "123", "end_field": "123"},
         )
 
         with self.assertRaises(PySparkRuntimeError) as pe:
@@ -1990,8 +2035,8 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_INTERVAL_CASTING",
-            message_parameters={"start_field": "0", "end_field": "321"},
+            errorClass="INVALID_INTERVAL_CASTING",
+            messageParameters={"start_field": "0", "end_field": "321"},
         )
 
     def test_yearmonth_interval_type(self):
@@ -2086,6 +2131,100 @@ class TypesTestsMixin:
             + " as timestamp) as variant) as t1, cast(cast('0001-12-31 01:01:01+08:00'"
             + " as timestamp) as variant) as t2"
         ).collect()[0]
+        # Highest possible DT interval value
+        high_dt_interval_columns = self.spark.sql(
+            "select 9223372036854.775807::interval day to second::variant as dti00, "
+            + "9223372036854.775807::interval hour to second::variant as dti01, "
+            + "9223372036854.775807::interval minute to second::variant as dti02, "
+            + "9223372036854.775807::interval second::variant as dti03, "
+            + "153722867280.912930::interval day to minute::variant as dti10, "
+            + "153722867280.912930::interval hour to minute::variant as dti11, "
+            + "153722867280.912930::interval minute::variant as dti12, "
+            + "2562047788.015215::interval day to hour::variant as dti20, "
+            + "2562047788.015215::interval hour::variant as dti21, "
+            + "106751991.167300::interval day::variant as dti30"
+        ).collect()[0]
+        # Lowest possible DT interval value
+        low_dt_interval_columns = self.spark.sql(
+            "select -9223372036854.775808::interval day to second::variant as dti00, "
+            + "-9223372036854.775808::interval hour to second::variant as dti01, "
+            + "-9223372036854.775808::interval minute to second::variant as dti02, "
+            + "-9223372036854.775808::interval second::variant as dti03, "
+            + "-153722867280.912930::interval day to minute::variant as dti10, "
+            + "-153722867280.912930::interval hour to minute::variant as dti11, "
+            + "-153722867280.912930::interval minute::variant as dti12, "
+            + "-2562047788.015215::interval day to hour::variant as dti20, "
+            + "-2562047788.015215::interval hour::variant as dti21, "
+            + "-106751991.167300::interval day::variant as dti30"
+        ).collect()[0]
+        zero_dt_interval_columns = self.spark.sql(
+            "select 0::interval day to second::variant as dti00, "
+            + "0::interval hour to second::variant as dti01, "
+            + "0::interval minute to second::variant as dti02, "
+            + "0::interval second::variant as dti03, "
+            + "0::interval day to minute::variant as dti10, "
+            + "0::interval hour to minute::variant as dti11, "
+            + "0::interval minute::variant as dti12, "
+            + "0::interval day to hour::variant as dti20, "
+            + "0::interval hour::variant as dti21, "
+            + "0::interval day::variant as dti30"
+        ).collect()[0]
+        # Random positive dt interval value
+        rand_pos_dt_interval_columns = self.spark.sql(
+            "select 12893121435::interval day to second::variant as dti00, "
+            + "273457447832::interval hour to second::variant as dti01, "
+            + "234233247::interval minute to second::variant as dti02, "
+            + "9310354::interval second::variant as dti03, "
+            + "214885357::interval day to minute::variant as dti10, "
+            + "4557624130::interval hour to minute::variant as dti11, "
+            + "3903887::interval minute::variant as dti12, "
+            + "3581422::interval day to hour::variant as dti20, "
+            + "75960402::interval hour::variant as dti21, "
+            + "65064::interval day::variant as dti30"
+        ).collect()[0]
+        # Random negative dt interval value
+        rand_neg_dt_interval_columns = self.spark.sql(
+            "select -426547473652::interval day to second::variant as dti00, "
+            + "-2327834334::interval hour to second::variant as dti01, "
+            + "-324223232::interval minute to second::variant as dti02, "
+            + "-2342332::interval second::variant as dti03, "
+            + "-7109124560::interval day to minute::variant as dti10, "
+            + "-38797238::interval hour to minute::variant as dti11, "
+            + "-5403720::interval minute::variant as dti12, "
+            + "-118485409::interval day to hour::variant as dti20, "
+            + "-646620::interval hour::variant as dti21, "
+            + "-90062::interval day::variant as dti30"
+        ).collect()[0]
+
+        # Highest possible ym interval value
+        high_ym_interval_columns = self.spark.sql(
+            "select 2147483647::interval year to month::variant as ymi0, "
+            + "2147483647::interval month::variant as ymi1, "
+            + "178956970::interval year::variant as ymi2"
+        ).collect()[0]
+        # Lowest possible ym interval value
+        low_ym_interval_columns = self.spark.sql(
+            "select -2147483648::interval year to month::variant as ymi0, "
+            + "-2147483648::interval month::variant as ymi1, "
+            + "-178956970::interval year::variant as ymi2"
+        ).collect()[0]
+        zero_ym_interval_columns = self.spark.sql(
+            "select 0::interval year to month::variant ymi0, "
+            + "0::interval month::variant ymi1, "
+            + "0::interval year::variant ymi2"
+        ).collect()[0]
+        # Random positive ym interval value
+        rand_pos_ym_interval_columns = self.spark.sql(
+            "select 24678537::interval year to month::variant ymi0, "
+            + "345763467::interval month::variant ymi1, "
+            + "45723888::interval year::variant ymi2"
+        ).collect()[0]
+        # Random negative ym interval value
+        rand_neg_ym_interval_columns = self.spark.sql(
+            "select -425245345::interval year to month::variant ymi0, "
+            + "-849348229::interval month::variant ymi1, "
+            + "-85349890::interval year::variant ymi2"
+        ).collect()[0]
 
         variants = [
             row["v"],
@@ -2103,6 +2242,71 @@ class TypesTestsMixin:
             timetamp_columns["t0"],
             timetamp_columns["t1"],
             timetamp_columns["t2"],
+            high_dt_interval_columns["dti00"],
+            high_dt_interval_columns["dti01"],
+            high_dt_interval_columns["dti02"],
+            high_dt_interval_columns["dti03"],
+            high_dt_interval_columns["dti10"],
+            high_dt_interval_columns["dti11"],
+            high_dt_interval_columns["dti12"],
+            high_dt_interval_columns["dti20"],
+            high_dt_interval_columns["dti21"],
+            high_dt_interval_columns["dti30"],
+            low_dt_interval_columns["dti00"],
+            low_dt_interval_columns["dti01"],
+            low_dt_interval_columns["dti02"],
+            low_dt_interval_columns["dti03"],
+            low_dt_interval_columns["dti10"],
+            low_dt_interval_columns["dti11"],
+            low_dt_interval_columns["dti12"],
+            low_dt_interval_columns["dti20"],
+            low_dt_interval_columns["dti21"],
+            low_dt_interval_columns["dti30"],
+            zero_dt_interval_columns["dti00"],
+            zero_dt_interval_columns["dti01"],
+            zero_dt_interval_columns["dti02"],
+            zero_dt_interval_columns["dti03"],
+            zero_dt_interval_columns["dti10"],
+            zero_dt_interval_columns["dti11"],
+            zero_dt_interval_columns["dti12"],
+            zero_dt_interval_columns["dti20"],
+            zero_dt_interval_columns["dti21"],
+            zero_dt_interval_columns["dti30"],
+            rand_pos_dt_interval_columns["dti00"],
+            rand_pos_dt_interval_columns["dti01"],
+            rand_pos_dt_interval_columns["dti02"],
+            rand_pos_dt_interval_columns["dti03"],
+            rand_pos_dt_interval_columns["dti10"],
+            rand_pos_dt_interval_columns["dti11"],
+            rand_pos_dt_interval_columns["dti12"],
+            rand_pos_dt_interval_columns["dti20"],
+            rand_pos_dt_interval_columns["dti21"],
+            rand_pos_dt_interval_columns["dti30"],
+            rand_neg_dt_interval_columns["dti00"],
+            rand_neg_dt_interval_columns["dti01"],
+            rand_neg_dt_interval_columns["dti02"],
+            rand_neg_dt_interval_columns["dti03"],
+            rand_neg_dt_interval_columns["dti10"],
+            rand_neg_dt_interval_columns["dti11"],
+            rand_neg_dt_interval_columns["dti12"],
+            rand_neg_dt_interval_columns["dti20"],
+            rand_neg_dt_interval_columns["dti21"],
+            rand_neg_dt_interval_columns["dti30"],
+            high_ym_interval_columns["ymi0"],
+            high_ym_interval_columns["ymi1"],
+            high_ym_interval_columns["ymi2"],
+            low_ym_interval_columns["ymi0"],
+            low_ym_interval_columns["ymi1"],
+            low_ym_interval_columns["ymi2"],
+            zero_ym_interval_columns["ymi0"],
+            zero_ym_interval_columns["ymi1"],
+            zero_ym_interval_columns["ymi2"],
+            rand_pos_ym_interval_columns["ymi0"],
+            rand_pos_ym_interval_columns["ymi1"],
+            rand_pos_ym_interval_columns["ymi2"],
+            rand_neg_ym_interval_columns["ymi0"],
+            rand_neg_ym_interval_columns["ymi1"],
+            rand_neg_ym_interval_columns["ymi2"],
         ]
 
         for v in variants:
@@ -2126,6 +2330,81 @@ class TypesTestsMixin:
         self.assertEqual(str(variants[12]), '"1940-01-01 05:05:13.123000+00:00"')
         self.assertEqual(str(variants[13]), '"2522-12-31 05:23:00+00:00"')
         self.assertEqual(str(variants[14]), '"0001-12-30 17:01:01+00:00"')
+        self.assertEqual(
+            str(variants[15]), "\"INTERVAL '106751991 04:00:54.775807' DAY TO SECOND\""
+        )
+        self.assertEqual(str(variants[16]), "\"INTERVAL '2562047788:00:54.775807' HOUR TO SECOND\"")
+        self.assertEqual(
+            str(variants[17]), "\"INTERVAL '153722867280:54.775807' MINUTE TO SECOND\""
+        )
+        self.assertEqual(str(variants[18]), "\"INTERVAL '9223372036854.775807' SECOND\"")
+        self.assertEqual(str(variants[19]), "\"INTERVAL '106751991 04:00' DAY TO MINUTE\"")
+        self.assertEqual(str(variants[20]), "\"INTERVAL '2562047788:00' HOUR TO MINUTE\"")
+        self.assertEqual(str(variants[21]), "\"INTERVAL '153722867280' MINUTE\"")
+        self.assertEqual(str(variants[22]), "\"INTERVAL '106751991 04' DAY TO HOUR\"")
+        self.assertEqual(str(variants[23]), "\"INTERVAL '2562047788' HOUR\"")
+        self.assertEqual(str(variants[24]), "\"INTERVAL '106751991' DAY\"")
+        self.assertEqual(
+            str(variants[25]), "\"INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND\""
+        )
+        self.assertEqual(
+            str(variants[26]), "\"INTERVAL '-2562047788:00:54.775808' HOUR TO SECOND\""
+        )
+        self.assertEqual(
+            str(variants[27]), "\"INTERVAL '-153722867280:54.775808' MINUTE TO SECOND\""
+        )
+        self.assertEqual(str(variants[28]), "\"INTERVAL '-9223372036854.775808' SECOND\"")
+        self.assertEqual(str(variants[29]), "\"INTERVAL '-106751991 04:00' DAY TO MINUTE\"")
+        self.assertEqual(str(variants[30]), "\"INTERVAL '-2562047788:00' HOUR TO MINUTE\"")
+        self.assertEqual(str(variants[31]), "\"INTERVAL '-153722867280' MINUTE\"")
+        self.assertEqual(str(variants[32]), "\"INTERVAL '-106751991 04' DAY TO HOUR\"")
+        self.assertEqual(str(variants[33]), "\"INTERVAL '-2562047788' HOUR\"")
+        self.assertEqual(str(variants[34]), "\"INTERVAL '-106751991' DAY\"")
+        self.assertEqual(str(variants[35]), "\"INTERVAL '0 00:00:00' DAY TO SECOND\"")
+        self.assertEqual(str(variants[36]), "\"INTERVAL '00:00:00' HOUR TO SECOND\"")
+        self.assertEqual(str(variants[37]), "\"INTERVAL '00:00' MINUTE TO SECOND\"")
+        self.assertEqual(str(variants[38]), "\"INTERVAL '00' SECOND\"")
+        self.assertEqual(str(variants[39]), "\"INTERVAL '0 00:00' DAY TO MINUTE\"")
+        self.assertEqual(str(variants[40]), "\"INTERVAL '00:00' HOUR TO MINUTE\"")
+        self.assertEqual(str(variants[41]), "\"INTERVAL '00' MINUTE\"")
+        self.assertEqual(str(variants[42]), "\"INTERVAL '0 00' DAY TO HOUR\"")
+        self.assertEqual(str(variants[43]), "\"INTERVAL '00' HOUR\"")
+        self.assertEqual(str(variants[44]), "\"INTERVAL '0' DAY\"")
+        self.assertEqual(str(variants[45]), "\"INTERVAL '149225 22:37:15' DAY TO SECOND\"")
+        self.assertEqual(str(variants[46]), "\"INTERVAL '75960402:10:32' HOUR TO SECOND\"")
+        self.assertEqual(str(variants[47]), "\"INTERVAL '3903887:27' MINUTE TO SECOND\"")
+        self.assertEqual(str(variants[48]), "\"INTERVAL '9310354' SECOND\"")
+        self.assertEqual(str(variants[49]), "\"INTERVAL '149225 22:37' DAY TO MINUTE\"")
+        self.assertEqual(str(variants[50]), "\"INTERVAL '75960402:10' HOUR TO MINUTE\"")
+        self.assertEqual(str(variants[51]), "\"INTERVAL '3903887' MINUTE\"")
+        self.assertEqual(str(variants[52]), "\"INTERVAL '149225 22' DAY TO HOUR\"")
+        self.assertEqual(str(variants[53]), "\"INTERVAL '75960402' HOUR\"")
+        self.assertEqual(str(variants[54]), "\"INTERVAL '65064' DAY\"")
+        self.assertEqual(str(variants[55]), "\"INTERVAL '-4936892 01:20:52' DAY TO SECOND\"")
+        self.assertEqual(str(variants[56]), "\"INTERVAL '-646620:38:54' HOUR TO SECOND\"")
+        self.assertEqual(str(variants[57]), "\"INTERVAL '-5403720:32' MINUTE TO SECOND\"")
+        self.assertEqual(str(variants[58]), "\"INTERVAL '-2342332' SECOND\"")
+        self.assertEqual(str(variants[59]), "\"INTERVAL '-4936892 01:20' DAY TO MINUTE\"")
+        self.assertEqual(str(variants[60]), "\"INTERVAL '-646620:38' HOUR TO MINUTE\"")
+        self.assertEqual(str(variants[61]), "\"INTERVAL '-5403720' MINUTE\"")
+        self.assertEqual(str(variants[62]), "\"INTERVAL '-4936892 01' DAY TO HOUR\"")
+        self.assertEqual(str(variants[63]), "\"INTERVAL '-646620' HOUR\"")
+        self.assertEqual(str(variants[64]), "\"INTERVAL '-90062' DAY\"")
+        self.assertEqual(str(variants[65]), "\"INTERVAL '178956970-7' YEAR TO MONTH\"")
+        self.assertEqual(str(variants[66]), "\"INTERVAL '2147483647' MONTH\"")
+        self.assertEqual(str(variants[67]), "\"INTERVAL '178956970' YEAR\"")
+        self.assertEqual(str(variants[68]), "\"INTERVAL '-178956970-8' YEAR TO MONTH\"")
+        self.assertEqual(str(variants[69]), "\"INTERVAL '-2147483648' MONTH\"")
+        self.assertEqual(str(variants[70]), "\"INTERVAL '-178956970' YEAR\"")
+        self.assertEqual(str(variants[71]), "\"INTERVAL '0-0' YEAR TO MONTH\"")
+        self.assertEqual(str(variants[72]), "\"INTERVAL '0' MONTH\"")
+        self.assertEqual(str(variants[73]), "\"INTERVAL '0' YEAR\"")
+        self.assertEqual(str(variants[74]), "\"INTERVAL '2056544-9' YEAR TO MONTH\"")
+        self.assertEqual(str(variants[75]), "\"INTERVAL '345763467' MONTH\"")
+        self.assertEqual(str(variants[76]), "\"INTERVAL '45723888' YEAR\"")
+        self.assertEqual(str(variants[77]), "\"INTERVAL '-35437112-1' YEAR TO MONTH\"")
+        self.assertEqual(str(variants[78]), "\"INTERVAL '-849348229' MONTH\"")
+        self.assertEqual(str(variants[79]), "\"INTERVAL '-85349890' YEAR\"")
 
         # Check to_json on timestamps with custom timezones
         self.assertEqual(
@@ -2184,6 +2463,31 @@ class TypesTestsMixin:
                 tzinfo=datetime.timezone(datetime.timedelta(hours=23, minutes=2, seconds=22)),
             ),
         )
+        # For day time intervals, the success of the str() tests proves that the microseconds
+        # are being extracted correctly. Therefore, not all of the cases need to be verified for
+        # toPython
+        self.assertEqual(
+            variants[15].toPython(),
+            datetime.timedelta(microseconds=9223372036854775807),
+        )
+        self.assertEqual(
+            variants[29].toPython(),
+            datetime.timedelta(microseconds=-9223372036854775800),
+        )
+        self.assertEqual(
+            variants[42].toPython(),
+            datetime.timedelta(microseconds=0),
+        )
+        self.assertEqual(
+            variants[54].toPython(),
+            datetime.timedelta(microseconds=5621529600000000),
+        )
+        self.assertEqual(
+            variants[57].toPython(),
+            datetime.timedelta(microseconds=-324223232000000),
+        )
+
+        self.assertRaises(PySparkNotImplementedError, lambda: variants[65].toPython())
 
         # check repr
         self.assertEqual(str(variants[0]), str(eval(repr(variants[0]))))
@@ -2215,6 +2519,44 @@ class TypesTestsMixin:
             DataType.fromDDL("a int, v variant"),
             StructType([StructField("a", IntegerType()), StructField("v", VariantType())]),
         )
+
+    # Ensures that changing the implementation of `DataType.fromDDL` in PR #47253 does not change
+    # `fromDDL`'s behavior.
+    def test_spark48834_from_ddl_matches_udf_schema_string(self):
+        from pyspark.sql.functions import udf
+
+        def schema_from_udf(ddl):
+            schema = (
+                self.spark.active().range(0).select(udf(lambda x: x, returnType=ddl)("id")).schema
+            )
+            assert len(schema) == 1
+            return schema[0].dataType
+
+        tests = [
+            ("a:int, b:string", True),
+            (
+                "a struct<>, b map<int, binary>, "
+                + "c array<array<map<struct<a: int, b: int>, binary>>>",
+                True,
+            ),
+            ("struct<>", True),
+            ("struct<a: string, b: array<long>>", True),
+            ("", True),
+            ("<a: int, b: variant>", False),
+            ("randomstring", False),
+            ("struct", False),
+        ]
+        for test, is_valid_input in tests:
+            if is_valid_input:
+                self.assertEqual(DataType.fromDDL(test), schema_from_udf(test))
+            else:
+                with self.assertRaises(ParseException) as from_ddl_pe:
+                    DataType.fromDDL(test)
+                with self.assertRaises(ParseException) as udf_pe:
+                    schema_from_udf(test)
+                self.assertEqual(
+                    from_ddl_pe.exception.getErrorClass(), udf_pe.exception.getErrorClass()
+                )
 
     def test_collated_string(self):
         dfs = [
@@ -2338,8 +2680,8 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            error_class="FIELD_NOT_NULLABLE_WITH_NAME",
-            message_parameters={
+            errorClass="FIELD_NOT_NULLABLE_WITH_NAME",
+            messageParameters={
                 "field_name": "test_name",
             },
         )
@@ -2350,8 +2692,8 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            error_class="FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME",
-            message_parameters={
+            errorClass="FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME",
+            messageParameters={
                 "data_type": "IntegerType()",
                 "field_name": "field b in field a",
                 "obj": "'data'",

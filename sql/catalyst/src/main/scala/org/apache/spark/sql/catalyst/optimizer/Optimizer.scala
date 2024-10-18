@@ -25,7 +25,9 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.SubqueryExpression.hasCorrelatedSubquery
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -149,7 +151,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     }
 
     val batches = (
-    Batch("Finish Analysis", Once, FinishAnalysis) ::
+    Batch("Finish Analysis", FixedPoint(1), FinishAnalysis) ::
     // We must run this batch after `ReplaceExpressions`, as `RuntimeReplaceable` expression
     // may produce `With` expressions that need to be rewritten.
     Batch("Rewrite With expression", Once, RewriteWithExpression) ::
@@ -245,8 +247,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
       CollapseProject,
       RemoveRedundantAliases,
       RemoveNoopOperators) :+
-    Batch("InsertMapSortInGroupingExpressions", Once,
-      InsertMapSortInGroupingExpressions) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
     Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)
@@ -296,11 +296,16 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
       PullOutGroupingExpressions,
+      // Put `InsertMapSortInGroupingExpressions` after `PullOutGroupingExpressions`,
+      // so the grouping keys can only be attribute and literal which makes
+      // `InsertMapSortInGroupingExpressions` easy to insert `MapSort`.
+      InsertMapSortInGroupingExpressions,
       ComputeCurrentTime,
       ReplaceCurrentLike(catalogManager),
       SpecialDatetimeValues,
       RewriteAsOfJoin,
-      EvalInlineTables
+      EvalInlineTables,
+      ReplaceTranspose
     )
 
     override def apply(plan: LogicalPlan): LogicalPlan = {
@@ -332,7 +337,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // Do not optimize DPP subquery, as it was created from optimized plan and we should not
       // optimize it again, to save optimization time and avoid breaking broadcast/subquery reuse.
       case d: DynamicPruningSubquery => d
-      case s @ ScalarSubquery(a @ Aggregate(group, _, child), _, _, _, _, mayHaveCountBug)
+      case s @ ScalarSubquery(
+        PhysicalOperation(projections, predicates, a @ Aggregate(group, _, child)),
+        _, _, _, _, mayHaveCountBug, _)
         if conf.getConf(SQLConf.DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG) &&
           mayHaveCountBug.nonEmpty && mayHaveCountBug.get =>
         // This is a subquery with an aggregate that may suffer from a COUNT bug.
@@ -357,19 +364,28 @@ abstract class Optimizer(catalogManager: CatalogManager)
         val needProject = projectOverAggregateChild.output.zip(optimizedInput.output).exists {
           case (oldAttr, newAttr) => oldAttr.exprId != newAttr.exprId
         }
-        if (needProject) {
+        val optimizedAgg = if (needProject) {
           val updatedProjectList = projectOverAggregateChild.output.zip(optimizedInput.output).map {
             case (oldAttr, newAttr) => Alias(newAttr, newAttr.name)(exprId = oldAttr.exprId)
           }
-          s.withNewPlan(a.withNewChildren(Seq(Project(updatedProjectList, optimizedInput))))
+          a.withNewChildren(Seq(Project(updatedProjectList, optimizedInput)))
         } else {
           // Remove the top-level project if it is trivial. We do it to minimize plan changes.
           optimizedInput match {
             case Project(projectList, input) if projectList.forall(_.isInstanceOf[Attribute]) =>
-              s.withNewPlan(a.withNewChildren(Seq(input)))
-            case _ => s.withNewPlan(a.withNewChildren(Seq(optimizedInput)))
+              a.withNewChildren(Seq(input))
+            case _ => a.withNewChildren(Seq(optimizedInput))
           }
         }
+        val newPlan = Project(projections,
+          if (predicates.nonEmpty) Filter(predicates.reduce(And), optimizedAgg) else optimizedAgg
+        )
+        val needTopLevelProject = newPlan.output.zip(optimizedAgg.output).exists {
+          case (oldAttr, newAttr) => oldAttr.exprId != newAttr.exprId
+        }
+        s.withNewPlan(
+          if (needTopLevelProject) newPlan else newPlan.child
+        )
       case s: SubqueryExpression =>
         val Subquery(newPlan, _) = Optimizer.this.execute(Subquery.fromExpression(s))
         // At this point we have an optimized subquery plan that we are going to attach
@@ -1217,11 +1233,8 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
    * in aggregate if they are also part of the grouping expressions. Otherwise the plan
    * after subquery rewrite will not be valid.
    */
-  private def canCollapseAggregate(p: Project, a: Aggregate): Boolean = {
-    p.projectList.forall(_.collect {
-      case s: ScalarSubquery if s.outerAttrs.nonEmpty => s
-    }.isEmpty)
-  }
+  private def canCollapseAggregate(p: Project, a: Aggregate): Boolean =
+    !p.projectList.exists(hasCorrelatedSubquery)
 
   def buildCleanedProjectList(
       upper: Seq[NamedExpression],
@@ -1708,15 +1721,18 @@ object EliminateSorts extends Rule[LogicalPlan] {
  * 3) by eliminating the always-true conditions given the constraints on the child's output.
  */
 object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
+  private def shouldApply(child: LogicalPlan): Boolean =
+    SQLConf.get.getConf(SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN) || !child.isStreaming
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(FILTER), ruleId) {
     // If the filter condition always evaluate to true, remove the filter.
     case Filter(Literal(true, BooleanType), child) => child
     // If the filter condition always evaluate to null or false,
     // replace the input with an empty relation.
-    case Filter(Literal(null, _), child) =>
+    case Filter(Literal(null, _), child) if shouldApply(child) =>
       LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
-    case Filter(Literal(false, BooleanType), child) =>
+    case Filter(Literal(false, BooleanType), child) if shouldApply(child) =>
       LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
     // If any deterministic condition is guaranteed to be true given the constraints on the child's
     // output, remove the condition
@@ -1970,7 +1986,8 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def canPushThrough(joinType: JoinType): Boolean = joinType match {
-    case _: InnerLike | LeftSemi | RightOuter | LeftOuter | LeftAnti | ExistenceJoin(_) => true
+    case _: InnerLike | LeftSemi | RightOuter | LeftOuter | LeftSingle |
+         LeftAnti | ExistenceJoin(_) => true
     case _ => false
   }
 
@@ -2010,7 +2027,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
           (leftFilterConditions ++ commonFilterCondition).
             reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
-        case LeftOuter | LeftExistence(_) =>
+        case LeftOuter | LeftSingle | LeftExistence(_) =>
           // push down the left side only `where` condition
           val newLeft = leftFilterConditions.
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
@@ -2056,6 +2073,8 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           val newJoinCond = (leftJoinConditions ++ commonJoinCondition).reduceLeftOption(And)
 
           Join(newLeft, newRight, joinType, newJoinCond, hint)
+        // Do not move join predicates of a single join.
+        case LeftSingle => j
 
         case other =>
           throw SparkException.internalError(s"Unexpected join type: $other")

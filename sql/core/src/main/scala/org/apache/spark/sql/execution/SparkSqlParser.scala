@@ -27,13 +27,12 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, SchemaEvolution, SchemaTypeEvolution, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
@@ -67,6 +66,25 @@ class SparkSqlAstBuilder extends AstBuilder {
   private val configKeyDef = """([a-zA-Z_\d\\.:]+)$""".r
   private val configValueDef = """([^;]*);*""".r
   private val strLiteralDef = """(".*?[^\\]"|'.*?[^\\]'|[^ \n\r\t"']+)""".r
+
+  private def withCatalogIdentClause(
+      ctx: CatalogIdentifierReferenceContext,
+      builder: Seq[String] => LogicalPlan): LogicalPlan = {
+    val exprCtx = ctx.expression
+    if (exprCtx != null) {
+      // resolve later in analyzer
+      PlanWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, Nil,
+        (ident, _) => builder(ident))
+    } else if (ctx.errorCapturingIdentifier() != null) {
+      // resolve immediately
+      builder.apply(Seq(ctx.errorCapturingIdentifier().getText))
+    } else if (ctx.stringLit() != null) {
+      // resolve immediately
+      builder.apply(Seq(string(visitStringLit(ctx.stringLit()))))
+    } else {
+      throw SparkException.internalError("Invalid catalog name")
+    }
+  }
 
   /**
    * Create a [[SetCommand]] logical plan.
@@ -150,8 +168,9 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitSetCollation(ctx: SetCollationContext): LogicalPlan = withOrigin(ctx) {
-    if (!SQLConf.get.collationEnabled) {
-      throw QueryCompilationErrors.collationNotEnabledError()
+    val collationName = ctx.collationName.getText
+    if (!SQLConf.get.trimCollationEnabled && collationName.toUpperCase().contains("TRIM")) {
+      throw QueryCompilationErrors.trimCollationNotEnabledError()
     }
     val key = SQLConf.DEFAULT_COLLATION.key
     SetCommand(Some(key -> Some(ctx.identifier.getText.toUpperCase(Locale.ROOT))))
@@ -170,10 +189,29 @@ class SparkSqlAstBuilder extends AstBuilder {
     val key = SQLConf.SESSION_LOCAL_TIMEZONE.key
     if (ctx.interval != null) {
       val interval = parseIntervalLiteral(ctx.interval)
-      if (interval.months != 0 || interval.days != 0 ||
-        math.abs(interval.microseconds) > 18 * DateTimeConstants.MICROS_PER_HOUR ||
-        interval.microseconds % DateTimeConstants.MICROS_PER_SECOND != 0) {
-        throw QueryParsingErrors.intervalValueOutOfRangeError(ctx.interval())
+      if (interval.months != 0) {
+        throw QueryParsingErrors.intervalValueOutOfRangeError(
+          toSQLValue(interval.months),
+          ctx.interval()
+        )
+      }
+      else if (interval.days != 0) {
+        throw QueryParsingErrors.intervalValueOutOfRangeError(
+          toSQLValue(interval.days),
+          ctx.interval()
+        )
+      }
+      else if (math.abs(interval.microseconds) > 18 * DateTimeConstants.MICROS_PER_HOUR) {
+        throw QueryParsingErrors.intervalValueOutOfRangeError(
+          toSQLValue((math.abs(interval.microseconds) / DateTimeConstants.MICROS_PER_HOUR).toInt),
+          ctx.interval()
+        )
+      }
+      else if (interval.microseconds % DateTimeConstants.MICROS_PER_SECOND != 0) {
+        throw QueryParsingErrors.intervalValueOutOfRangeError(
+          toSQLValue((interval.microseconds / DateTimeConstants.MICROS_PER_SECOND).toInt),
+          ctx.interval()
+        )
       } else {
         val seconds = (interval.microseconds / DateTimeConstants.MICROS_PER_SECOND).toInt
         SetCommand(Some(key -> Some(ZoneOffset.ofTotalSeconds(seconds).toString)))
@@ -238,7 +276,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       invalidStatement("EXPLAIN LOGICAL", ctx)
     }
 
-    val statement = plan(ctx.statement)
+    val statement = plan(Option(ctx.statement()).getOrElse(ctx.setResetStatement()))
     if (statement == null) {
       null  // This is enough since ParseException will raise later.
     } else {
@@ -280,13 +318,13 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Create a [[SetCatalogCommand]] logical command.
    */
   override def visitSetCatalog(ctx: SetCatalogContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.errorCapturingIdentifier() != null) {
-      SetCatalogCommand(ctx.errorCapturingIdentifier().getText)
-    } else if (ctx.stringLit() != null) {
-      SetCatalogCommand(string(visitStringLit(ctx.stringLit())))
-    } else {
-      throw SparkException.internalError("Invalid catalog name")
-    }
+    withCatalogIdentClause(ctx.catalogIdentifierReference, identifiers => {
+      if (identifiers.size > 1) {
+        // can occur when user put multipart string in IDENTIFIER(...) clause
+        throw QueryParsingErrors.invalidNameForSetCatalog(identifiers, ctx)
+      }
+      SetCatalogCommand(identifiers.head)
+    })
   }
 
   /**
@@ -399,19 +437,18 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Fail an unsupported Hive native command.
+   * Fail an unsupported Hive native command (SET ROLE is handled separately).
    */
   override def visitFailNativeCommand(
-    ctx: FailNativeCommandContext): LogicalPlan = withOrigin(ctx) {
-    val keywords = if (ctx.unsupportedHiveNativeCommands != null) {
-      ctx.unsupportedHiveNativeCommands.children.asScala.collect {
-        case n: TerminalNode => n.getText
-      }.mkString(" ")
-    } else {
-      // SET ROLE is the exception to the rule, because we handle this before other SET commands.
-      "SET ROLE"
-    }
+      ctx: FailNativeCommandContext): LogicalPlan = withOrigin(ctx) {
+    val keywords = ctx.unsupportedHiveNativeCommands.children.asScala.collect {
+      case n: TerminalNode => n.getText
+    }.mkString(" ")
     invalidStatement(keywords, ctx)
+  }
+
+  override def visitFailSetRole(ctx: FailSetRoleContext): LogicalPlan = withOrigin(ctx) {
+    invalidStatement("SET ROLE", ctx);
   }
 
   /**
@@ -470,22 +507,6 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
   }
 
-
-  private def checkInvalidParameter(plan: LogicalPlan, statement: String):
-  Unit = {
-    plan.foreach { p =>
-      p.expressions.foreach { expr =>
-        if (expr.containsPattern(PARAMETER)) {
-          throw QueryParsingErrors.parameterMarkerNotAllowed(statement, p.origin)
-        }
-      }
-    }
-    plan.children.foreach(p => checkInvalidParameter(p, statement))
-    plan.innerChildren.collect {
-      case child: LogicalPlan => checkInvalidParameter(child, statement)
-    }
-  }
-
   /**
    * Create or replace a view. This creates a [[CreateViewCommand]].
    *
@@ -541,12 +562,13 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
     val qPlan: LogicalPlan = plan(ctx.query)
 
-    // Disallow parameter markers in the body of the view.
+    // Disallow parameter markers in the query of the view.
     // We need this limitation because we store the original query text, pre substitution.
-    // To lift this we would need to reconstitute the body with parameter markers replaced with the
+    // To lift this we would need to reconstitute the query with parameter markers replaced with the
     // values given at CREATE VIEW time, or we would need to store the parameter values alongside
     // the text.
-    checkInvalidParameter(qPlan, "CREATE VIEW body")
+    // The same rule can be found in CACHE TABLE builder.
+    checkInvalidParameter(qPlan, "the query of CREATE VIEW")
     if (viewType == PersistedView) {
       val originalText = source(ctx.query)
       assert(Option(originalText).isDefined,
@@ -575,7 +597,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         throw QueryParsingErrors.defineTempViewWithIfNotExistsError(ctx)
       }
 
-      withIdentClause(ctx.identifierReference(), ident => {
+      withIdentClause(ctx.identifierReference(), Seq(qPlan), (ident, otherPlans) => {
         val tableIdentifier = ident.asTableIdentifier
         if (tableIdentifier.database.isDefined) {
           // Temporary view names should NOT contain database prefix like "database.table"
@@ -589,7 +611,7 @@ class SparkSqlAstBuilder extends AstBuilder {
           visitCommentSpecList(ctx.commentSpec()),
           properties,
           Option(source(ctx.query)),
-          qPlan,
+          otherPlans.head,
           ctx.EXISTS != null,
           ctx.REPLACE != null,
           viewType = viewType)

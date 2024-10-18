@@ -45,13 +45,30 @@ object KubernetesVolumeUtils {
       val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_PATH_KEY"
       val readOnlyKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_READONLY_KEY"
       val subPathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_SUBPATH_KEY"
+      val subPathExprKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_SUBPATHEXPR_KEY"
+      val labelKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_LABEL_KEY"
+      val annotationKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_ANNOTATION_KEY"
+      verifyMutuallyExclusiveOptionKeys(properties, subPathKey, subPathExprKey)
+
+      val volumeLabelsMap = properties
+        .filter(_._1.startsWith(labelKey))
+        .map {
+          case (k, v) => k.replaceAll(labelKey, "") -> v
+        }
+      val volumeAnnotationsMap = properties
+        .filter(_._1.startsWith(annotationKey))
+        .map {
+          case (k, v) => k.replaceAll(annotationKey, "") -> v
+        }
 
       KubernetesVolumeSpec(
         volumeName = volumeName,
         mountPath = properties(pathKey),
         mountSubPath = properties.getOrElse(subPathKey, ""),
+        mountSubPathExpr = properties.getOrElse(subPathExprKey, ""),
         mountReadOnly = properties.get(readOnlyKey).exists(_.toBoolean),
-        volumeConf = parseVolumeSpecificConf(properties, volumeType, volumeName))
+        volumeConf = parseVolumeSpecificConf(properties,
+          volumeType, volumeName, Option(volumeLabelsMap), Option(volumeAnnotationsMap)))
     }.toSeq
   }
 
@@ -74,12 +91,17 @@ object KubernetesVolumeUtils {
   private def parseVolumeSpecificConf(
       options: Map[String, String],
       volumeType: String,
-      volumeName: String): KubernetesVolumeSpecificConf = {
+      volumeName: String,
+      labels: Option[Map[String, String]],
+      annotations: Option[Map[String, String]]): KubernetesVolumeSpecificConf = {
     volumeType match {
       case KUBERNETES_VOLUMES_HOSTPATH_TYPE =>
         val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_PATH_KEY"
+        val typeKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_TYPE_KEY"
         verifyOptionKey(options, pathKey, KUBERNETES_VOLUMES_HOSTPATH_TYPE)
-        KubernetesHostPathVolumeConf(options(pathKey))
+        // "" means that no checks will be performed before mounting the hostPath volume
+        // backward compatibility default
+        KubernetesHostPathVolumeConf(options(pathKey), options.getOrElse(typeKey, ""))
 
       case KUBERNETES_VOLUMES_PVC_TYPE =>
         val claimNameKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY"
@@ -91,7 +113,9 @@ object KubernetesVolumeUtils {
         KubernetesPVCVolumeConf(
           options(claimNameKey),
           options.get(storageClassKey),
-          options.get(sizeLimitKey))
+          options.get(sizeLimitKey),
+          labels,
+          annotations)
 
       case KUBERNETES_VOLUMES_EMPTYDIR_TYPE =>
         val mediumKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY"
@@ -116,6 +140,16 @@ object KubernetesVolumeUtils {
   private def verifyOptionKey(options: Map[String, String], key: String, msg: String): Unit = {
     if (!options.isDefinedAt(key)) {
       throw new NoSuchElementException(key + s" is required for $msg")
+    }
+  }
+
+  private def verifyMutuallyExclusiveOptionKeys(
+      options: Map[String, String],
+      keys: String*): Unit = {
+    val givenKeys = keys.filter(options.contains)
+    if (givenKeys.length > 1) {
+      throw new IllegalArgumentException("These config options are mutually exclusive: " +
+        s"${givenKeys.mkString(", ")}")
     }
   }
 

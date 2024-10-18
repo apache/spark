@@ -18,8 +18,11 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -189,9 +192,14 @@ trait FlatMapGroupsWithStateExecBase
     })
   }
 
-  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
-    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
-      groupingAttributes.toStructType, stateManager.stateSchema, session.sqlContext.sessionState)
+  override def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration,
+      batchId: Long,
+      stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
+    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+      groupingAttributes.toStructType, stateManager.stateSchema))
+    List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+      newStateSchema, session.sessionState, stateSchemaVersion))
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -215,14 +223,14 @@ trait FlatMapGroupsWithStateExecBase
     if (hasInitialState) {
       // If the user provided initial state we need to have the initial state and the
       // data in the same partition so that we can still have just one commit at the end.
-      val storeConf = new StateStoreConf(session.sqlContext.sessionState.conf)
+      val storeConf = new StateStoreConf(session.sessionState.conf)
       val hadoopConfBroadcast = sparkContext.broadcast(
-        new SerializableConfiguration(session.sqlContext.sessionState.newHadoopConf()))
+        new SerializableConfiguration(session.sessionState.newHadoopConf()))
       child.execute().stateStoreAwareZipPartitions(
         initialState.execute(),
         getStateInfo,
         storeNames = Seq(),
-        session.sqlContext.streams.stateStoreCoordinator) {
+        session.streams.stateStoreCoordinator) {
         // The state store aware zip partitions will provide us with two iterators,
         // child data iterator and the initial state iterator per partition.
         case (partitionId, childDataIterator, initStateIterator) =>
@@ -235,6 +243,7 @@ trait FlatMapGroupsWithStateExecBase
             stateManager.stateSchema,
             NoPrefixKeyStateEncoderSpec(groupingAttributes.toStructType),
             stateInfo.get.storeVersion,
+            stateInfo.get.getStateStoreCkptId(partitionId).map(_.head),
             useColumnFamilies = false,
             storeConf, hadoopConfBroadcast.value.value)
           val processor = createInputProcessor(store)
@@ -246,8 +255,8 @@ trait FlatMapGroupsWithStateExecBase
         groupingAttributes.toStructType,
         stateManager.stateSchema,
         NoPrefixKeyStateEncoderSpec(groupingAttributes.toStructType),
-        session.sqlContext.sessionState,
-        Some(session.sqlContext.streams.stateStoreCoordinator)
+        session.sessionState,
+        Some(session.streams.stateStoreCoordinator)
       ) { case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
         val processor = createInputProcessor(store)
         processDataWithPartition(singleIterator, store, processor)
@@ -410,8 +419,13 @@ case class FlatMapGroupsWithStateExec(
   override def right: SparkPlan = initialState
 
   override protected def withNewChildrenInternal(
-      newLeft: SparkPlan, newRight: SparkPlan): FlatMapGroupsWithStateExec =
-    copy(child = newLeft, initialState = newRight)
+      newLeft: SparkPlan, newRight: SparkPlan): FlatMapGroupsWithStateExec = {
+    if (hasInitialState) {
+      copy(child = newLeft, initialState = newRight)
+    } else {
+      copy(child = newLeft)
+    }
+  }
 
   override def createInputProcessor(
       store: StateStore): InputProcessor = new InputProcessor(store) {
@@ -437,10 +451,33 @@ case class FlatMapGroupsWithStateExec(
         hasTimedOut,
         watermarkPresent)
 
-      // Call function, get the returned objects and convert them to rows
-      val mappedIterator = func(keyObj, valueObjIter, groupState).map { obj =>
-        numOutputRows += 1
-        getOutputRow(obj)
+      def withUserFuncExceptionHandling[T](func: => T): T = {
+        try {
+          func
+        } catch {
+          case NonFatal(e) if !e.isInstanceOf[SparkThrowable] =>
+            throw FlatMapGroupsWithStateUserFuncException(e)
+          case f: Throwable =>
+            throw f
+        }
+      }
+
+      val mappedIterator = withUserFuncExceptionHandling {
+        func(keyObj, valueObjIter, groupState).map { obj =>
+          numOutputRows += 1
+          getOutputRow(obj)
+        }
+      }
+
+      // Wrap user-provided fns with error handling
+      val wrappedMappedIterator = new Iterator[InternalRow] {
+        override def hasNext: Boolean = {
+          withUserFuncExceptionHandling(mappedIterator.hasNext)
+        }
+
+        override def next(): InternalRow = {
+          withUserFuncExceptionHandling(mappedIterator.next())
+        }
       }
 
       // When the iterator is consumed, then write changes to state
@@ -462,7 +499,9 @@ case class FlatMapGroupsWithStateExec(
       }
 
       // Return an iterator of rows such that fully consumed, the updated state value will be saved
-      CompletionIterator[InternalRow, Iterator[InternalRow]](mappedIterator, onIteratorCompletion)
+      CompletionIterator[InternalRow, Iterator[InternalRow]](
+        wrappedMappedIterator, onIteratorCompletion
+      )
     }
   }
 }
@@ -534,3 +573,13 @@ object FlatMapGroupsWithStateExec {
     }
   }
 }
+
+
+/**
+ * Exception that wraps the exception thrown in the user provided function in Foreach sink.
+ */
+private[sql] case class FlatMapGroupsWithStateUserFuncException(cause: Throwable)
+  extends SparkException(
+    errorClass = "FLATMAPGROUPSWITHSTATE_USER_FUNCTION_ERROR",
+    messageParameters = Map("reason" -> Option(cause.getMessage).getOrElse("")),
+    cause = cause)

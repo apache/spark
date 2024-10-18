@@ -119,7 +119,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
 
   private def getFormatVersion(query: StreamingQuery): Int = {
     query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.sparkSession
-      .conf.get(SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION)
+      .sessionState.conf.getConf(SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION)
   }
 
   testWithColumnFamilies("SPARK-36519: store RocksDB format version in the checkpoint",
@@ -164,6 +164,8 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      // Set an unsupported RocksDB format version and the query should fail if it's passed down
+      // into RocksDB
       SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION.key -> "100") {
       val inputData = MemoryStream[Int]
       val query = inputData.toDS().toDF("value")
@@ -175,9 +177,8 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
         .outputMode("complete")
         .start()
       inputData.addData(1, 2)
-      query.processAllAvailable()
-      assert(getFormatVersion(query) == 100)
-      query.stop()
+      val e = intercept[StreamingQueryException](query.processAllAvailable())
+      assert(e.getCause.getCause.getMessage.contains("Unsupported BlockBasedTable format_version"))
     }
   }
 

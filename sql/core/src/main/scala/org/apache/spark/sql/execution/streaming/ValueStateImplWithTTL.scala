@@ -18,7 +18,9 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL}
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
 import org.apache.spark.sql.streaming.{TTLConfig, ValueState}
 
@@ -32,6 +34,7 @@ import org.apache.spark.sql.streaming.{TTLConfig, ValueState}
  * @param valEncoder - Spark SQL encoder for value
  * @param ttlConfig  - TTL configuration for values  stored in this state
  * @param batchTimestampMs - current batch processing timestamp.
+ * @param metrics - metrics to be updated as part of stateful processing
  * @tparam S - data type of object that will be stored
  */
 class ValueStateImplWithTTL[S](
@@ -40,11 +43,12 @@ class ValueStateImplWithTTL[S](
     keyExprEnc: ExpressionEncoder[Any],
     valEncoder: Encoder[S],
     ttlConfig: TTLConfig,
-    batchTimestampMs: Long)
-  extends SingleKeyTTLStateImpl(stateName, store, batchTimestampMs) with ValueState[S] {
+    batchTimestampMs: Long,
+    metrics: Map[String, SQLMetric] = Map.empty)
+  extends SingleKeyTTLStateImpl(
+    stateName, store, keyExprEnc, batchTimestampMs) with ValueState[S] {
 
-  private val keySerializer = keyExprEnc.createSerializer()
-  private val stateTypesEncoder = StateTypesEncoder(keySerializer, valEncoder,
+  private val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder,
     stateName, hasTtl = true)
   private val ttlExpirationMs =
     StateTTL.calculateExpirationTimeForDuration(ttlConfig.ttlDuration, batchTimestampMs)
@@ -52,8 +56,9 @@ class ValueStateImplWithTTL[S](
   initialize()
 
   private def initialize(): Unit = {
-    store.createColFamilyIfAbsent(stateName, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL,
-      NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA))
+    store.createColFamilyIfAbsent(stateName,
+      keyExprEnc.schema, getValueSchemaWithTTL(valEncoder.schema, true),
+      NoPrefixKeyStateEncoderSpec(keyExprEnc.schema))
   }
 
   /** Function to check if state exists. Returns true if present and false otherwise */
@@ -87,26 +92,28 @@ class ValueStateImplWithTTL[S](
   /** Function to update and overwrite state associated with given key */
   override def update(newState: S): Unit = {
     val encodedValue = stateTypesEncoder.encodeValue(newState, ttlExpirationMs)
-    val serializedGroupingKey = stateTypesEncoder.serializeGroupingKey()
-    store.put(stateTypesEncoder.encodeSerializedGroupingKey(serializedGroupingKey),
+    val serializedGroupingKey = stateTypesEncoder.encodeGroupingKey()
+    store.put(serializedGroupingKey,
       encodedValue, stateName)
+    TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
     upsertTTLForStateKey(ttlExpirationMs, serializedGroupingKey)
   }
 
   /** Function to remove state for given key */
   override def clear(): Unit = {
     store.remove(stateTypesEncoder.encodeGroupingKey(), stateName)
+    TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
     clearTTLState()
   }
 
-  def clearIfExpired(groupingKey: Array[Byte]): Long = {
-    val encodedGroupingKey = stateTypesEncoder.encodeSerializedGroupingKey(groupingKey)
-    val retRow = store.get(encodedGroupingKey, stateName)
+  def clearIfExpired(groupingKey: UnsafeRow): Long = {
+    val retRow = store.get(groupingKey, stateName)
 
     var result = 0L
     if (retRow != null) {
       if (stateTypesEncoder.isExpired(retRow, batchTimestampMs)) {
-        store.remove(encodedGroupingKey, stateName)
+        store.remove(groupingKey, stateName)
+        TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
         result = 1L
       }
     }
@@ -158,7 +165,7 @@ class ValueStateImplWithTTL[S](
    * grouping key.
    */
   private[sql] def getValuesInTTLState(): Iterator[Long] = {
-    getValuesInTTLState(stateTypesEncoder.serializeGroupingKey())
+    getValuesInTTLState(stateTypesEncoder.encodeGroupingKey())
   }
 }
 

@@ -264,20 +264,20 @@ jobs:
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
-    - name: Install Python 3.9
+    - name: Install Python 3.11
       uses: actions/setup-python@v5
       # We should install one Python that is higher than 3+ for SQL and Yarn because:
       # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
       # - Yarn has a Python specific test too, for example, YarnClusterSuite.
       if: contains(matrix.modules, 'yarn') || (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')) || contains(matrix.modules, 'connect')
       with:
-        python-version: '3.9'
+        python-version: '3.11'
         architecture: x64
-    - name: Install Python packages (Python 3.9)
+    - name: Install Python packages (Python 3.11)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')) || contains(matrix.modules, 'connect')
       run: |
-        python3.9 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.62.0' 'grpcio-status==1.62.0' 'protobuf==4.25.1'
-        python3.9 -m pip list
+        python3.11 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.62.0' 'grpcio-status==1.62.0' 'protobuf==4.25.1'
+        python3.11 -m pip list
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
@@ -304,7 +304,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
-        path: "**/target/unit-tests.log"
+        path: "**/target/*.log"
 
   infra-image:
     name: "Base image build"
@@ -343,7 +343,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       - name: Build and push
         id: docker_build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./dev/infra/
           push: true
@@ -449,10 +449,7 @@ jobs:
           pyspark-coursier-
     - name: Free up disk space
       shell: 'script -q -e -c "bash {0}"'
-      run: |
-        if [ -f ./dev/free_disk_space_container ]; then
-          ./dev/free_disk_space_container
-        fi
+      run: ./dev/free_disk_space_container
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v4
       with:
@@ -558,10 +555,7 @@ jobs:
         restore-keys: |
           sparkr-coursier-
     - name: Free up disk space
-      run: |
-        if [ -f ./dev/free_disk_space_container ]; then
-          ./dev/free_disk_space_container
-        fi
+      run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v4
       with:
@@ -612,16 +606,16 @@ jobs:
     - name: Breaking change detection against branch-3.5
       uses: bufbuild/buf-breaking-action@v1
       with:
-        input: connector/connect/common/src/main
+        input: sql/connect/common/src/main
         against: 'https://github.com/apache/spark.git#branch=branch-3.5,subdir=connector/connect/common/src/main'
-    - name: Install Python 3.9
+    - name: Install Python 3.11
       uses: actions/setup-python@v5
       with:
-        python-version: '3.9'
+        python-version: '3.11'
     - name: Install dependencies for Python CodeGen check
       run: |
-        python3.9 -m pip install 'black==23.9.1' 'protobuf==4.25.1' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
-        python3.9 -m pip list
+        python3.11 -m pip install 'black==23.9.1' 'protobuf==4.25.1' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
+        python3.11 -m pip list
     - name: Python CodeGen check
       run: ./dev/connect-check-protos.py
 
@@ -685,10 +679,7 @@ jobs:
         restore-keys: |
           docs-maven-
     - name: Free up disk space
-      run: |
-        if [ -f ./dev/free_disk_space_container ]; then
-          ./dev/free_disk_space_container
-        fi
+      run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v4
       with:
@@ -702,6 +693,11 @@ jobs:
       run: ./dev/mima
     - name: Scala linter
       run: ./dev/lint-scala
+    - name: Scala structured logging check
+      run: |
+        if [ -f ./dev/structured_logging_style.py ]; then
+            python3.9 ./dev/structured_logging_style.py
+        fi
     - name: Java linter
       run: ./dev/lint-java
     - name: Spark connect jvm client mima check
@@ -727,7 +723,7 @@ jobs:
         # See 'ipython_genutils' in SPARK-38517
         # See 'docutils<0.18.0' in SPARK-39421
         python3.9 -m pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13' sphinx-copybutton nbsphinx numpydoc jinja2 markupsafe 'pyzmq<24.0.0' \
-          ipython ipython_genutils sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8' 'docutils<0.18.0' \
+          ipython ipython_genutils sphinx_plotly_directive 'numpy==1.26.4' pyarrow pandas 'plotly>=4.8' 'docutils<0.18.0' \
           'flake8==3.9.0' 'mypy==1.8.0' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' 'black==23.9.1' \
           'pandas-stubs==1.2.0.53' 'grpcio==1.62.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0' \
           'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' 'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' 'sphinxcontrib-serializinghtml==1.1.5'
@@ -831,10 +827,7 @@ jobs:
         restore-keys: |
           docs-maven-
     - name: Free up disk space
-      run: |
-        if [ -f ./dev/free_disk_space_container ]; then
-          ./dev/free_disk_space_container
-        fi
+      run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v4
       with:
@@ -874,20 +867,26 @@ jobs:
         #   - docs/README.md
         gem install bundler -v 2.4.22
         cd docs
-        bundle install
+        bundle install --retry=100
     - name: Run documentation build
       run: |
-        # We need this link because the jekyll build calls `python`.
-        ln -s "$(which python3.9)" "/usr/local/bin/python"
+        # We need this link to make sure `python3` points to `python3.9` which contains the prerequisite packages.
+        ln -s "$(which python3.9)" "/usr/local/bin/python3"
         # Build docs first with SKIP_API to ensure they are buildable without requiring any
         # language docs to be built beforehand.
-        cd docs; SKIP_API=1 bundle exec jekyll build; cd ..
+        cd docs; SKIP_ERRORDOC=1 SKIP_API=1 bundle exec jekyll build; cd ..
         if [ -f "./dev/is-changed.py" ]; then
           # Skip PySpark and SparkR docs while keeping Scala/Java/SQL docs
           pyspark_modules=`cd dev && python3.9 -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
           if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
           if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
         fi
+        # Print the values of environment variables `SKIP_ERRORDOC`, `SKIP_SCALADOC`, `SKIP_PYTHONDOC`, `SKIP_RDOC` and `SKIP_SQLDOC`
+        echo "SKIP_ERRORDOC: $SKIP_ERRORDOC"
+        echo "SKIP_SCALADOC: $SKIP_SCALADOC"
+        echo "SKIP_PYTHONDOC: $SKIP_PYTHONDOC"
+        echo "SKIP_RDOC: $SKIP_RDOC"
+        echo "SKIP_SQLDOC: $SKIP_SQLDOC"
         cd docs
         bundle exec jekyll build
     - name: Tar documentation
@@ -1113,14 +1112,16 @@ jobs:
         with:
           distribution: zulu
           java-version: ${{ inputs.java }}
-      - name: start minikube
+      - name: Install R
         run: |
-          # See more in "Installation" https://minikube.sigs.k8s.io/docs/start/
-          curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-          sudo install minikube-linux-amd64 /usr/local/bin/minikube
-          rm minikube-linux-amd64
+          sudo apt update
+          sudo apt-get install r-base
+      - name: Start Minikube
+        uses: medyagh/setup-minikube@v0.0.18
+        with:
           # Github Action limit cpu:2, memory: 6947MB, limit to 2U6G for better resource statistic
-          minikube start --cpus 2 --memory 6144
+          cpus: 2
+          memory: 6144m
       - name: Print K8S pods and nodes info
         run: |
           kubectl get pods -A
@@ -1133,11 +1134,10 @@ jobs:
           export PVC_TESTS_VM_PATH=$PVC_TMP_DIR
           minikube mount ${PVC_TESTS_HOST_PATH}:${PVC_TESTS_VM_PATH} --gid=0 --uid=185 &
           kubectl create clusterrolebinding serviceaccounts-cluster-admin --clusterrole=cluster-admin --group=system:serviceaccounts || true
-          kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.8.2/installer/volcano-development.yaml || true
           if [[ "${{ inputs.branch }}" == 'branch-3.5' || "${{ inputs.branch }}" == 'branch-3.4' ]]; then
             kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml || true
           else
-            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.8.2/installer/volcano-development.yaml || true
+            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.9.0/installer/volcano-development.yaml || true
           fi
           eval $(minikube docker-env)
           build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"

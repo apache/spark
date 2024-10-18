@@ -52,7 +52,7 @@ singleCompoundStatement
     ;
 
 beginEndCompoundBlock
-    : BEGIN compoundBody END
+    : beginLabel? BEGIN compoundBody END endLabel?
     ;
 
 compoundBody
@@ -61,11 +61,66 @@ compoundBody
 
 compoundStatement
     : statement
+    | setStatementWithOptionalVarKeyword
     | beginEndCompoundBlock
+    | ifElseStatement
+    | caseStatement
+    | whileStatement
+    | repeatStatement
+    | leaveStatement
+    | iterateStatement
+    | loopStatement
+    ;
+
+setStatementWithOptionalVarKeyword
+    : SET variable? assignmentList                              #setVariableWithOptionalKeyword
+    | SET variable? LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
+        LEFT_PAREN query RIGHT_PAREN                            #setVariableWithOptionalKeyword
+    ;
+
+whileStatement
+    : beginLabel? WHILE booleanExpression DO compoundBody END WHILE endLabel?
+    ;
+
+ifElseStatement
+    : IF booleanExpression THEN conditionalBodies+=compoundBody
+        (ELSE IF booleanExpression THEN conditionalBodies+=compoundBody)*
+        (ELSE elseBody=compoundBody)? END IF
+    ;
+
+repeatStatement
+    : beginLabel? REPEAT compoundBody UNTIL booleanExpression END REPEAT endLabel?
+    ;
+
+leaveStatement
+    : LEAVE multipartIdentifier
+    ;
+
+iterateStatement
+    : ITERATE multipartIdentifier
+    ;
+
+caseStatement
+    : CASE (WHEN conditions+=booleanExpression THEN conditionalBodies+=compoundBody)+
+        (ELSE elseBody=compoundBody)? END CASE                #searchedCaseStatement
+    | CASE caseVariable=expression (WHEN conditionExpressions+=expression THEN conditionalBodies+=compoundBody)+
+        (ELSE elseBody=compoundBody)? END CASE                #simpleCaseStatement
+    ;
+
+loopStatement
+    : beginLabel? LOOP compoundBody END LOOP endLabel?
     ;
 
 singleStatement
-    : statement SEMICOLON* EOF
+    : (statement|setResetStatement) SEMICOLON* EOF
+    ;
+
+beginLabel
+    : multipartIdentifier COLON
+    ;
+
+endLabel
+    : multipartIdentifier
     ;
 
 singleExpression
@@ -98,7 +153,7 @@ statement
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE identifierReference                                          #use
     | USE namespace identifierReference                                #useNamespace
-    | SET CATALOG (errorCapturingIdentifier | stringLit)                  #setCatalog
+    | SET CATALOG catalogIdentifierReference                           #setCatalog
     | CREATE namespace (IF errorCapturingNot EXISTS)? identifierReference
         (commentSpec |
          locationSpec |
@@ -200,11 +255,11 @@ statement
         routineCharacteristics
         RETURN (query | expression)                                    #createUserDefinedFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? identifierReference        #dropFunction
-    | DECLARE (OR REPLACE)? VARIABLE?
+    | DECLARE (OR REPLACE)? variable?
         identifierReference dataType? variableDefaultExpression?       #createVariable
-    | DROP TEMPORARY VARIABLE (IF EXISTS)? identifierReference         #dropVariable
+    | DROP TEMPORARY variable (IF EXISTS)? identifierReference         #dropVariable
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
-        statement                                                      #explain
+        (statement|setResetStatement)                                  #explain
     | SHOW TABLES ((FROM | IN) identifierReference)?
         (LIKE? pattern=stringLit)?                                        #showTables
     | SHOW TABLE EXTENDED ((FROM | IN) ns=identifierReference)?
@@ -243,26 +298,33 @@ statement
     | (MSCK)? REPAIR TABLE identifierReference
         (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
     | op=(ADD | LIST) identifier .*?                                   #manageResource
-    | SET COLLATION collationName=identifier                           #setCollation
-    | SET ROLE .*?                                                     #failNativeCommand
+    | CREATE INDEX (IF errorCapturingNot EXISTS)? identifier ON TABLE?
+        identifierReference (USING indexType=identifier)?
+        LEFT_PAREN columns=multipartIdentifierPropertyList RIGHT_PAREN
+        (OPTIONS options=propertyList)?                                #createIndex
+    | DROP INDEX (IF EXISTS)? identifier ON TABLE? identifierReference #dropIndex
+    | CALL identifierReference
+        LEFT_PAREN
+        (functionArgument (COMMA functionArgument)*)?
+        RIGHT_PAREN                                                    #call
+    | unsupportedHiveNativeCommands .*?                                #failNativeCommand
+    ;
+
+setResetStatement
+    : SET COLLATION collationName=identifier                           #setCollation
+    | SET ROLE .*?                                                     #failSetRole
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone                                           #setTimeZone
     | SET TIME ZONE .*?                                                #setTimeZone
-    | SET (VARIABLE | VAR) assignmentList                              #setVariable
-    | SET (VARIABLE | VAR) LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
-          LEFT_PAREN query RIGHT_PAREN                                 #setVariable
+    | SET variable assignmentList                                      #setVariable
+    | SET variable LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
+        LEFT_PAREN query RIGHT_PAREN                                   #setVariable
     | SET configKey EQ configValue                                     #setQuotedConfiguration
     | SET configKey (EQ .*?)?                                          #setConfiguration
     | SET .*? EQ configValue                                           #setQuotedConfiguration
     | SET .*?                                                          #setConfiguration
     | RESET configKey                                                  #resetQuotedConfiguration
     | RESET .*?                                                        #resetConfiguration
-    | CREATE INDEX (IF errorCapturingNot EXISTS)? identifier ON TABLE?
-        identifierReference (USING indexType=identifier)?
-        LEFT_PAREN columns=multipartIdentifierPropertyList RIGHT_PAREN
-        (OPTIONS options=propertyList)?                                #createIndex
-    | DROP INDEX (IF EXISTS)? identifier ON TABLE? identifierReference #dropIndex
-    | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
 executeImmediate
@@ -388,9 +450,9 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE? identifierReference (partitionSpec (IF errorCapturingNot EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
-    | INSERT INTO TABLE? identifierReference partitionSpec? (IF errorCapturingNot EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
-    | INSERT INTO TABLE? identifierReference REPLACE whereClause                                             #insertIntoReplaceWhere
+    : INSERT OVERWRITE TABLE? identifierReference optionsClause? (partitionSpec (IF errorCapturingNot EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
+    | INSERT INTO TABLE? identifierReference optionsClause? partitionSpec? (IF errorCapturingNot EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
+    | INSERT INTO TABLE? identifierReference optionsClause? REPLACE whereClause                                             #insertIntoReplaceWhere
     | INSERT OVERWRITE LOCAL? DIRECTORY path=stringLit rowFormat? createFileFormat?                     #insertOverwriteHiveDir
     | INSERT OVERWRITE LOCAL? DIRECTORY (path=stringLit)? tableProvider (OPTIONS options=propertyList)? #insertOverwriteDir
     ;
@@ -418,6 +480,11 @@ namespaces
     : NAMESPACES
     | DATABASES
     | SCHEMAS
+    ;
+
+variable
+    : VARIABLE
+    | VAR
     ;
 
 describeFuncName
@@ -532,6 +599,12 @@ identifierReference
     | multipartIdentifier
     ;
 
+catalogIdentifierReference
+    : IDENTIFIER_KW LEFT_PAREN expression RIGHT_PAREN
+    | errorCapturingIdentifier
+    | stringLit
+    ;
+
 queryOrganization
     : (ORDER BY order+=sortItem (COMMA order+=sortItem)*)?
       (CLUSTER BY clusterBy+=expression (COMMA clusterBy+=expression)*)?
@@ -554,6 +627,7 @@ queryTerm
         operator=INTERSECT setQuantifier? right=queryTerm                                #setOperation
     | left=queryTerm {!legacy_setops_precedence_enabled}?
         operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
+    | left=queryTerm OPERATOR_PIPE operatorPipeRightSide                                 #operatorPipeStatement
     ;
 
 queryPrimary
@@ -855,11 +929,15 @@ identifierComment
 
 relationPrimary
     : identifierReference temporalClause?
-      sample? tableAlias                                    #tableName
+      optionsClause? sample? tableAlias                     #tableName
     | LEFT_PAREN query RIGHT_PAREN sample? tableAlias       #aliasedQuery
     | LEFT_PAREN relation RIGHT_PAREN sample? tableAlias    #aliasedRelation
     | inlineTable                                           #inlineTableDefault2
     | functionTable                                         #tableValuedFunction
+    ;
+
+optionsClause
+    : WITH options=propertyList
     ;
 
 inlineTable
@@ -1233,7 +1311,22 @@ colDefinitionOption
     ;
 
 generationExpression
-    : GENERATED ALWAYS AS LEFT_PAREN expression RIGHT_PAREN
+    : GENERATED ALWAYS AS LEFT_PAREN expression RIGHT_PAREN     #generatedColumn
+    | GENERATED (ALWAYS | BY DEFAULT) AS IDENTITY identityColSpec? #identityColumn
+    ;
+
+identityColSpec
+    : LEFT_PAREN sequenceGeneratorOption* RIGHT_PAREN
+    ;
+
+sequenceGeneratorOption
+    : START WITH start=sequenceGeneratorStartOrStep
+    | INCREMENT BY step=sequenceGeneratorStartOrStep
+    ;
+
+sequenceGeneratorStartOrStep
+    : MINUS? INTEGER_VALUE
+    | MINUS? BIGINT_LITERAL
     ;
 
 complexColTypeList
@@ -1408,6 +1501,20 @@ version
     | stringLit
     ;
 
+operatorPipeRightSide
+    : selectClause
+    | whereClause
+    // The following two cases match the PIVOT or UNPIVOT clause, respectively.
+    // For each one, we add the other clause as an option in order to return high-quality error
+    // messages in the event that both are present (this is not allowed).
+    | pivotClause unpivotClause?
+    | unpivotClause pivotClause?
+    | sample
+    | joinRelation
+    | operator=(UNION | EXCEPT | SETMINUS | INTERSECT) setQuantifier? right=queryTerm
+    | queryOrganization
+    ;
+
 // When `SQL_standard_keyword_behavior=true`, there are 2 kinds of keywords in Spark SQL.
 // - Reserved keywords:
 //     Keywords that are reserved and can't be used as identifiers for table, view, column,
@@ -1495,6 +1602,7 @@ ansiNonReserved
     | DIRECTORY
     | DISTRIBUTE
     | DIV
+    | DO
     | DOUBLE
     | DROP
     | ESCAPED
@@ -1522,11 +1630,13 @@ ansiNonReserved
     | HOUR
     | HOURS
     | IDENTIFIER_KW
+    | IDENTITY
     | IF
     | IGNORE
     | IMMEDIATE
     | IMPORT
     | INCLUDE
+    | INCREMENT
     | INDEX
     | INDEXES
     | INPATH
@@ -1538,10 +1648,12 @@ ansiNonReserved
     | INTERVAL
     | INVOKER
     | ITEMS
+    | ITERATE
     | KEYS
     | LANGUAGE
     | LAST
     | LAZY
+    | LEAVE
     | LIKE
     | ILIKE
     | LIMIT
@@ -1554,6 +1666,7 @@ ansiNonReserved
     | LOCKS
     | LOGICAL
     | LONG
+    | LOOP
     | MACRO
     | MAP
     | MATCHED
@@ -1608,6 +1721,7 @@ ansiNonReserved
     | REFRESH
     | RENAME
     | REPAIR
+    | REPEAT
     | REPEATABLE
     | REPLACE
     | RESET
@@ -1683,6 +1797,7 @@ ansiNonReserved
     | UNLOCK
     | UNPIVOT
     | UNSET
+    | UNTIL
     | UPDATE
     | USE
     | VALUES
@@ -1696,6 +1811,7 @@ ansiNonReserved
     | VOID
     | WEEK
     | WEEKS
+    | WHILE
     | WINDOW
     | YEAR
     | YEARS
@@ -1761,6 +1877,7 @@ nonReserved
     | BY
     | BYTE
     | CACHE
+    | CALL
     | CALLED
     | CASCADE
     | CASE
@@ -1826,6 +1943,7 @@ nonReserved
     | DISTINCT
     | DISTRIBUTE
     | DIV
+    | DO
     | DOUBLE
     | DROP
     | ELSE
@@ -1866,12 +1984,14 @@ nonReserved
     | HOUR
     | HOURS
     | IDENTIFIER_KW
+    | IDENTITY
     | IF
     | IGNORE
     | IMMEDIATE
     | IMPORT
     | IN
     | INCLUDE
+    | INCREMENT
     | INDEX
     | INDEXES
     | INPATH
@@ -1885,11 +2005,13 @@ nonReserved
     | INVOKER
     | IS
     | ITEMS
+    | ITERATE
     | KEYS
     | LANGUAGE
     | LAST
     | LAZY
     | LEADING
+    | LEAVE
     | LIKE
     | LONG
     | ILIKE
@@ -1903,6 +2025,7 @@ nonReserved
     | LOCKS
     | LOGICAL
     | LONG
+    | LOOP
     | MACRO
     | MAP
     | MATCHED
@@ -1967,6 +2090,7 @@ nonReserved
     | REFRESH
     | RENAME
     | REPAIR
+    | REPEAT
     | REPEATABLE
     | REPLACE
     | RESET
@@ -2051,6 +2175,7 @@ nonReserved
     | UNLOCK
     | UNPIVOT
     | UNSET
+    | UNTIL
     | UPDATE
     | USE
     | USER
@@ -2065,6 +2190,7 @@ nonReserved
     | VOID
     | WEEK
     | WEEKS
+    | WHILE
     | WHEN
     | WHERE
     | WINDOW

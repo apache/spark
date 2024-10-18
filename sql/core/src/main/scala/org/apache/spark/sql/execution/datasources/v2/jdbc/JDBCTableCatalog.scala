@@ -31,7 +31,6 @@ import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, 
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JDBCRDD, JdbcUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class JDBCTableCatalog extends TableCatalog
@@ -74,7 +73,8 @@ class JDBCTableCatalog extends TableCatalog
           "url" -> options.getRedactUrl(),
           "namespace" -> toSQLId(namespace.toSeq)),
         dialect,
-        description = s"Failed get tables from: ${namespace.mkString(".")}") {
+        description = s"Failed get tables from: ${namespace.mkString(".")}",
+        isRuntime = false) {
         conn.getMetaData.getTables(null, schemaPattern, "%", Array("TABLE"))
       }
       new Iterator[Identifier] {
@@ -94,7 +94,8 @@ class JDBCTableCatalog extends TableCatalog
         "url" -> options.getRedactUrl(),
         "tableName" -> toSQLId(ident)),
       dialect,
-      description = s"Failed table existence check: $ident") {
+      description = s"Failed table existence check: $ident",
+      isRuntime = false) {
       JdbcUtils.withConnection(options)(JdbcUtils.tableExists(_, writeOptions))
     }
   }
@@ -121,7 +122,8 @@ class JDBCTableCatalog extends TableCatalog
           "oldName" -> toSQLId(oldIdent),
           "newName" -> toSQLId(newIdent)),
         dialect,
-        description = s"Failed table renaming from $oldIdent to $newIdent") {
+        description = s"Failed table renaming from $oldIdent to $newIdent",
+        isRuntime = false) {
         JdbcUtils.renameTable(conn, oldIdent, newIdent, options)
       }
     }
@@ -137,19 +139,12 @@ class JDBCTableCatalog extends TableCatalog
         "url" -> options.getRedactUrl(),
         "tableName" -> toSQLId(ident)),
       dialect,
-      description = s"Failed to load table: $ident"
+      description = s"Failed to load table: $ident",
+      isRuntime = false
     ) {
       val schema = JDBCRDD.resolveTable(optionsWithTableName)
       JDBCTable(ident, schema, optionsWithTableName)
     }
-  }
-
-  override def createTable(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: java.util.Map[String, String]): Table = {
-    throw QueryCompilationErrors.createTableDeprecatedError()
   }
 
   override def createTable(
@@ -201,7 +196,8 @@ class JDBCTableCatalog extends TableCatalog
           "url" -> options.getRedactUrl(),
           "tableName" -> toSQLId(ident)),
         dialect,
-        description = s"Failed table creation: $ident") {
+        description = s"Failed table creation: $ident",
+        isRuntime = false) {
         JdbcUtils.createTable(conn, getTableName(ident), schema, caseSensitive, writeOptions)
       }
     }
@@ -218,7 +214,8 @@ class JDBCTableCatalog extends TableCatalog
           "url" -> options.getRedactUrl(),
           "tableName" -> toSQLId(ident)),
         dialect,
-        description = s"Failed table altering: $ident") {
+        description = s"Failed table altering: $ident",
+        isRuntime = false) {
         JdbcUtils.alterTable(conn, getTableName(ident), changes, options)
       }
       loadTable(ident)
@@ -234,7 +231,8 @@ class JDBCTableCatalog extends TableCatalog
             "url" -> options.getRedactUrl(),
             "namespace" -> toSQLId(namespace.toSeq)),
           dialect,
-          description = s"Failed namespace exists: ${namespace.mkString}") {
+          description = s"Failed namespace exists: ${namespace.mkString}",
+          isRuntime = false) {
           JdbcUtils.schemaExists(conn, options, db)
         }
       }
@@ -247,7 +245,8 @@ class JDBCTableCatalog extends TableCatalog
         errorClass = "FAILED_JDBC.LIST_NAMESPACES",
         messageParameters = Map("url" -> options.getRedactUrl()),
         dialect,
-        description = s"Failed list namespaces") {
+        description = s"Failed list namespaces",
+        isRuntime = false) {
         JdbcUtils.listSchemas(conn, options)
       }
     }
@@ -301,7 +300,8 @@ class JDBCTableCatalog extends TableCatalog
             "url" -> options.getRedactUrl(),
             "namespace" -> toSQLId(db)),
           dialect,
-          description = s"Failed create name space: $db") {
+          description = s"Failed create name space: $db",
+          isRuntime = false) {
           JdbcUtils.createSchema(conn, options, db, comment)
         }
       }
@@ -326,7 +326,8 @@ class JDBCTableCatalog extends TableCatalog
                     "url" -> options.getRedactUrl(),
                     "namespace" -> toSQLId(db)),
                   dialect,
-                  description = s"Failed create comment on name space: $db") {
+                  description = s"Failed create comment on name space: $db",
+                  isRuntime = false) {
                   JdbcUtils.alterSchemaComment(conn, options, db, set.value)
                 }
               }
@@ -343,7 +344,8 @@ class JDBCTableCatalog extends TableCatalog
                     "url" -> options.getRedactUrl(),
                     "namespace" -> toSQLId(db)),
                   dialect,
-                  description = s"Failed remove comment on name space: $db") {
+                  description = s"Failed remove comment on name space: $db",
+                  isRuntime = false) {
                   JdbcUtils.removeSchemaComment(conn, options, db)
                 }
               }
@@ -371,7 +373,8 @@ class JDBCTableCatalog extends TableCatalog
             "url" -> options.getRedactUrl(),
             "namespace" -> toSQLId(db)),
           dialect,
-          description = s"Failed drop name space: $db") {
+          description = s"Failed drop name space: $db",
+          isRuntime = false) {
           JdbcUtils.dropSchema(conn, options, db, cascade)
           true
         }

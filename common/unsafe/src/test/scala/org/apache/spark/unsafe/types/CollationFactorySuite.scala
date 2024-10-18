@@ -38,22 +38,22 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     assert(UTF8_BINARY_COLLATION_ID == 0)
     val utf8Binary = fetchCollation(UTF8_BINARY_COLLATION_ID)
     assert(utf8Binary.collationName == "UTF8_BINARY")
-    assert(utf8Binary.supportsBinaryEquality)
+    assert(utf8Binary.isUtf8BinaryType)
 
     assert(UTF8_LCASE_COLLATION_ID == 1)
-    val utf8BinaryLcase = fetchCollation(UTF8_LCASE_COLLATION_ID)
-    assert(utf8BinaryLcase.collationName == "UTF8_LCASE")
-    assert(!utf8BinaryLcase.supportsBinaryEquality)
+    val utf8Lcase = fetchCollation(UTF8_LCASE_COLLATION_ID)
+    assert(utf8Lcase.collationName == "UTF8_LCASE")
+    assert(!utf8Lcase.isUtf8BinaryType)
 
     assert(UNICODE_COLLATION_ID == (1 << 29))
     val unicode = fetchCollation(UNICODE_COLLATION_ID)
     assert(unicode.collationName == "UNICODE")
-    assert(!unicode.supportsBinaryEquality)
+    assert(!unicode.isUtf8BinaryType)
 
     assert(UNICODE_CI_COLLATION_ID == ((1 << 29) | (1 << 17)))
     val unicodeCi = fetchCollation(UNICODE_CI_COLLATION_ID)
     assert(unicodeCi.collationName == "UNICODE_CI")
-    assert(!unicodeCi.supportsBinaryEquality)
+    assert(!unicodeCi.isUtf8BinaryType)
   }
 
   test("UTF8_BINARY and ICU root locale collation names") {
@@ -115,10 +115,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       ("UNICODE_INDETERMINATE", "UNICODE"),
       ("UNICODE_CI_INDETERMINATE", "UNICODE")
     ).foreach{case (collationName, proposals) =>
-      val error = intercept[SparkException] { fetchCollation(collationName) }
-      assert(error.getErrorClass === "COLLATION_INVALID_NAME")
-      assert(error.getMessageParameters.asScala === Map(
-        "collationName" -> collationName, "proposals" -> proposals))
+      checkCollationNameError(collationName, proposals)
     }
   }
 
@@ -130,6 +127,11 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UTF8_BINARY", "aaa", "AAA", false),
       CollationTestCase("UTF8_BINARY", "aaa", "bbb", false),
       CollationTestCase("UTF8_BINARY", "å", "a\u030A", false),
+      CollationTestCase("UTF8_BINARY_RTRIM", "aaa", "aaa", true),
+      CollationTestCase("UTF8_BINARY_RTRIM", "aaa", "aaa  ", true),
+      CollationTestCase("UTF8_BINARY_RTRIM", "aaa  ", "aaa ", true),
+      CollationTestCase("UTF8_BINARY_RTRIM", "aaa", " aaa ", false),
+      CollationTestCase("UTF8_BINARY_RTRIM", "    ", "  ", true),
       CollationTestCase("UTF8_LCASE", "aaa", "aaa", true),
       CollationTestCase("UTF8_LCASE", "aaa", "AAA", true),
       CollationTestCase("UTF8_LCASE", "aaa", "AaA", true),
@@ -137,15 +139,30 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UTF8_LCASE", "aaa", "aa", false),
       CollationTestCase("UTF8_LCASE", "aaa", "bbb", false),
       CollationTestCase("UTF8_LCASE", "å", "a\u030A", false),
+      CollationTestCase("UTF8_LCASE_RTRIM", "aaa", "AaA", true),
+      CollationTestCase("UTF8_LCASE_RTRIM", "aaa", "AaA ", true),
+      CollationTestCase("UTF8_LCASE_RTRIM", "aaa ", "AaA ", true),
+      CollationTestCase("UTF8_LCASE_RTRIM", "aaa", " AaA ", false),
+      CollationTestCase("UTF8_LCASE_RTRIM", "    ", "  ", true),
       CollationTestCase("UNICODE", "aaa", "aaa", true),
       CollationTestCase("UNICODE", "aaa", "AAA", false),
       CollationTestCase("UNICODE", "aaa", "bbb", false),
       CollationTestCase("UNICODE", "å", "a\u030A", true),
+      CollationTestCase("UNICODE_RTRIM", "aaa", "aaa", true),
+      CollationTestCase("UNICODE_RTRIM", "aaa", "aaa  ", true),
+      CollationTestCase("UNICODE_RTRIM", "aaa  ", "aaa ", true),
+      CollationTestCase("UNICODE_RTRIM", "aaa", " aaa ", false),
+      CollationTestCase("UNICODE_RTRIM", "    ", "  ", true),
       CollationTestCase("UNICODE_CI", "aaa", "aaa", true),
       CollationTestCase("UNICODE_CI", "aaa", "AAA", true),
       CollationTestCase("UNICODE_CI", "aaa", "bbb", false),
       CollationTestCase("UNICODE_CI", "å", "a\u030A", true),
-      CollationTestCase("UNICODE_CI", "Å", "a\u030A", true)
+      CollationTestCase("UNICODE_CI", "Å", "a\u030A", true),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa", "AaA", true),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa", "AaA ", true),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "AaA ", true),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa", " AaA ", false),
+      CollationTestCase("UNICODE_RTRIM", "    ", "  ", true)
     )
 
     checks.foreach(testCase => {
@@ -154,8 +171,8 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
         testCase.expectedResult)
 
       val hash1 = collation.hashFunction.applyAsLong(toUTF8(testCase.s1))
-      val hash2 = collation.hashFunction.applyAsLong(toUTF8(testCase.s1))
-      assert(hash1 == hash2)
+      val hash2 = collation.hashFunction.applyAsLong(toUTF8(testCase.s2))
+      assert((hash1 == hash2) == testCase.expectedResult)
     })
   }
 
@@ -165,19 +182,48 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UTF8_BINARY", "aaa", "AAA", 1),
       CollationTestCase("UTF8_BINARY", "aaa", "bbb", -1),
       CollationTestCase("UTF8_BINARY", "aaa", "BBB", 1),
+      CollationTestCase("UTF8_BINARY_RTRIM", "aaa  ", "aaa", 0),
+      CollationTestCase("UTF8_BINARY_RTRIM", "aaa  ", "aaa ", 0),
+      CollationTestCase("UTF8_BINARY_RTRIM", "aaa ", "bbb", -1),
+      CollationTestCase("UTF8_BINARY_RTRIM", "aaa ", "bbb ", -1),
+      CollationTestCase("UTF8_BINARY_RTRIM", "aaa", "BBB" , 1),
+      CollationTestCase("UTF8_BINARY_RTRIM", "aaa  ", "BBB " , 1),
+      CollationTestCase("UTF8_BINARY_RTRIM", "   ", " " , 0),
       CollationTestCase("UTF8_LCASE", "aaa", "aaa", 0),
       CollationTestCase("UTF8_LCASE", "aaa", "AAA", 0),
       CollationTestCase("UTF8_LCASE", "aaa", "AaA", 0),
       CollationTestCase("UTF8_LCASE", "aaa", "AaA", 0),
       CollationTestCase("UTF8_LCASE", "aaa", "aa", 1),
       CollationTestCase("UTF8_LCASE", "aaa", "bbb", -1),
+      CollationTestCase("UTF8_LCASE_RTRIM", "aaa ", "AAA", 0),
+      CollationTestCase("UTF8_LCASE_RTRIM", "aaa ", "AAA  ", 0),
+      CollationTestCase("UTF8_LCASE_RTRIM", "aaa", "bbb ", -1),
+      CollationTestCase("UTF8_LCASE_RTRIM", "aaa  ", "bbb ", -1),
+      CollationTestCase("UTF8_LCASE_RTRIM", "aaa ", "aa", 1),
+      CollationTestCase("UTF8_LCASE_RTRIM", "aaa ", "aa  ", 1),
+      CollationTestCase("UTF8_LCASE_RTRIM", " ", "  ", 0),
       CollationTestCase("UNICODE", "aaa", "aaa", 0),
       CollationTestCase("UNICODE", "aaa", "AAA", -1),
       CollationTestCase("UNICODE", "aaa", "bbb", -1),
       CollationTestCase("UNICODE", "aaa", "BBB", -1),
+      CollationTestCase("UNICODE_RTRIM", "aaa  ", "aaa", 0),
+      CollationTestCase("UNICODE_RTRIM", "aaa  ", "aaa ", 0),
+      CollationTestCase("UNICODE_RTRIM", "aaa ", "bbb", -1),
+      CollationTestCase("UNICODE_RTRIM", "aaa ", "bbb ", -1),
+      CollationTestCase("UNICODE_RTRIM", "aaa", "BBB" , -1),
+      CollationTestCase("UNICODE_RTRIM", "aaa  ", "BBB " , -1),
+      CollationTestCase("UNICODE_RTRIM", " ", "  ", 0),
       CollationTestCase("UNICODE_CI", "aaa", "aaa", 0),
       CollationTestCase("UNICODE_CI", "aaa", "AAA", 0),
-      CollationTestCase("UNICODE_CI", "aaa", "bbb", -1))
+      CollationTestCase("UNICODE_CI", "aaa", "bbb", -1),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "AAA", 0),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "AAA  ", 0),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa", "bbb ", -1),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa  ", "bbb ", -1),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "aa", 1),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "aa  ", 1),
+      CollationTestCase("UNICODE_CI_RTRIM", " ", "   ", 0)
+    )
 
     checks.foreach(testCase => {
       val collation = fetchCollation(testCase.collationName)
@@ -316,13 +362,9 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       // no locale specified
       ("_CI_AI", "af_CI_AI, am_CI_AI, ar_CI_AI"),
       ("", "af, am, ar")
-    ).foreach { case (collationName, proposals) => {
-      val error = intercept[SparkException] { fetchCollation(collationName) }
-      assert(error.getErrorClass === "COLLATION_INVALID_NAME")
-
-      assert(error.getMessageParameters.asScala === Map(
-        "collationName" -> collationName, "proposals" -> proposals))
-    }}
+    ).foreach { case (collationName, proposals) =>
+      checkCollationNameError(collationName, proposals)
+    }
   }
 
   test("collations name normalization for ICU non-root localization") {
@@ -376,9 +418,9 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       1 << 15, // UTF8_BINARY mandatory zero bit 15 breach.
       1 << 16, // UTF8_BINARY mandatory zero bit 16 breach.
       1 << 17, // UTF8_BINARY mandatory zero bit 17 breach.
-      1 << 18, // UTF8_BINARY mandatory zero bit 18 breach.
       1 << 19, // UTF8_BINARY mandatory zero bit 19 breach.
       1 << 20, // UTF8_BINARY mandatory zero bit 20 breach.
+      1 << 21, // UTF8_BINARY mandatory zero bit 21 breach.
       1 << 23, // UTF8_BINARY mandatory zero bit 23 breach.
       1 << 24, // UTF8_BINARY mandatory zero bit 24 breach.
       1 << 25, // UTF8_BINARY mandatory zero bit 25 breach.
@@ -389,7 +431,6 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       (1 << 29) | (1 << 13), // ICU mandatory zero bit 13 breach.
       (1 << 29) | (1 << 14), // ICU mandatory zero bit 14 breach.
       (1 << 29) | (1 << 15), // ICU mandatory zero bit 15 breach.
-      (1 << 29) | (1 << 18), // ICU mandatory zero bit 18 breach.
       (1 << 29) | (1 << 19), // ICU mandatory zero bit 19 breach.
       (1 << 29) | (1 << 20), // ICU mandatory zero bit 20 breach.
       (1 << 29) | (1 << 21), // ICU mandatory zero bit 21 breach.
@@ -427,13 +468,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       ("UNICODECSAS", "UNICODE"),
       ("_CS_AS_UNICODE", "UNICODE")
     ).foreach { case (collationName, proposals) =>
-      val error = intercept[SparkException] {
-        fetchCollation(collationName)
-      }
-
-      assert(error.getErrorClass === "COLLATION_INVALID_NAME")
-      assert(error.getMessageParameters.asScala === Map(
-        "collationName" -> collationName, "proposals" -> proposals))
+      checkCollationNameError(collationName, proposals)
     }
   }
 
@@ -464,5 +499,14 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       val result = collation.comparator.compare(toUTF8(testCase.s1), toUTF8(testCase.s2))
       assert(Integer.signum(result) == testCase.expectedResult)
     })
+  }
+
+  private def checkCollationNameError(collationName: String, proposals: String): Unit = {
+    val e = intercept[SparkException] {
+      fetchCollation(collationName)
+    }
+    assert(e.getCondition === "COLLATION_INVALID_NAME")
+    assert(e.getMessageParameters.asScala === Map(
+      "collationName" -> collationName, "proposals" -> proposals))
   }
 }

@@ -25,9 +25,9 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
-import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataTableEntry
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
-import org.apache.spark.sql.execution.streaming.state.{StateStoreConf, StateStoreErrors}
+import org.apache.spark.sql.execution.streaming.TransformWithStateVariableInfo
+import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, StateStoreColFamilySchema, StateStoreConf, StateStoreErrors}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -37,9 +37,11 @@ class StateScanBuilder(
     schema: StructType,
     sourceOptions: StateSourceOptions,
     stateStoreConf: StateStoreConf,
-    stateStoreMetadata: Array[StateMetadataTableEntry]) extends ScanBuilder {
+    keyStateEncoderSpec: KeyStateEncoderSpec,
+    stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
+    stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema]) extends ScanBuilder {
   override def build(): Scan = new StateScan(session, schema, sourceOptions, stateStoreConf,
-    stateStoreMetadata)
+    keyStateEncoderSpec, stateVariableInfoOpt, stateStoreColFamilySchemaOpt)
 }
 
 /** An implementation of [[InputPartition]] for State Store data source. */
@@ -54,7 +56,10 @@ class StateScan(
     schema: StructType,
     sourceOptions: StateSourceOptions,
     stateStoreConf: StateStoreConf,
-    stateStoreMetadata: Array[StateMetadataTableEntry]) extends Scan with Batch {
+    keyStateEncoderSpec: KeyStateEncoderSpec,
+    stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
+    stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema]) extends Scan
+  with Batch {
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
   private val hadoopConfBroadcast = session.sparkContext.broadcast(
@@ -86,17 +91,18 @@ class StateScan(
       assert((tail - head + 1) == partitionNums.length,
         s"No continuous partitions in state: ${partitionNums.mkString("Array(", ", ", ")")}")
 
-      sourceOptions.snapshotPartitionId match {
+      sourceOptions.fromSnapshotOptions match {
         case None => partitionNums.map { pn =>
           new StateStoreInputPartition(pn, queryId, sourceOptions)
         }.toArray
 
-        case Some(snapshotPartitionId) =>
-          if (partitionNums.contains(snapshotPartitionId)) {
-            Array(new StateStoreInputPartition(snapshotPartitionId, queryId, sourceOptions))
+        case Some(fromSnapshotOptions) =>
+          if (partitionNums.contains(fromSnapshotOptions.snapshotPartitionId)) {
+            Array(new StateStoreInputPartition(
+                fromSnapshotOptions.snapshotPartitionId, queryId, sourceOptions))
           } else {
             throw StateStoreErrors.stateStoreSnapshotPartitionNotFound(
-              snapshotPartitionId, sourceOptions.operatorId,
+              fromSnapshotOptions.snapshotPartitionId, sourceOptions.operatorId,
               sourceOptions.stateCheckpointLocation.toString)
           }
       }
@@ -122,22 +128,33 @@ class StateScan(
 
     case JoinSideValues.none =>
       new StatePartitionReaderFactory(stateStoreConf, hadoopConfBroadcast.value, schema,
-        stateStoreMetadata)
+        keyStateEncoderSpec, stateVariableInfoOpt, stateStoreColFamilySchemaOpt)
   }
 
   override def toBatch: Batch = this
 
   override def description(): String = {
-    val desc = s"StateScan " +
+    var desc = s"StateScan " +
       s"[stateCkptLocation=${sourceOptions.stateCheckpointLocation}]" +
       s"[batchId=${sourceOptions.batchId}][operatorId=${sourceOptions.operatorId}]" +
       s"[storeName=${sourceOptions.storeName}]"
 
     if (sourceOptions.joinSide != JoinSideValues.none) {
-      desc + s"[joinSide=${sourceOptions.joinSide}]"
-    } else {
-      desc
+      desc += s"[joinSide=${sourceOptions.joinSide}]"
     }
+    sourceOptions.fromSnapshotOptions match {
+      case Some(fromSnapshotOptions) =>
+        desc += s"[snapshotStartBatchId=${fromSnapshotOptions.snapshotStartBatchId}]"
+        desc += s"[snapshotPartitionId=${fromSnapshotOptions.snapshotPartitionId}]"
+      case _ =>
+    }
+    sourceOptions.readChangeFeedOptions match {
+      case Some(fromSnapshotOptions) =>
+        desc += s"[changeStartBatchId=${fromSnapshotOptions.changeStartBatchId}"
+        desc += s"[changeEndBatchId=${fromSnapshotOptions.changeEndBatchId}"
+      case _ =>
+    }
+    desc
   }
 
   private def stateCheckpointPartitionsLocation: Path = {

@@ -324,9 +324,9 @@ connect = Module(
     name="connect",
     dependencies=[hive, avro, protobuf],
     source_file_regexes=[
+        "sql/connect",
         "connector/connect",
     ],
-    build_profile_flags=["-Pconnect"],
     sbt_test_goals=[
         "connect/test",
         "connect-client-jvm/test",
@@ -427,7 +427,7 @@ examples = Module(
 pyspark_core = Module(
     name="pyspark-core",
     dependencies=[core],
-    source_file_regexes=["python/(?!pyspark/(ml|mllib|sql|streaming))"],
+    source_file_regexes=["python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing))"],
     python_test_goals=[
         # doctests
         "pyspark.conf",
@@ -483,6 +483,7 @@ pyspark_sql = Module(
         "pyspark.sql.group",
         "pyspark.sql.functions.builtin",
         "pyspark.sql.functions.partitioning",
+        "pyspark.sql.merge",
         "pyspark.sql.readwriter",
         "pyspark.sql.streaming.query",
         "pyspark.sql.streaming.readwriter",
@@ -519,6 +520,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_errors",
         "pyspark.sql.tests.test_functions",
         "pyspark.sql.tests.test_group",
+        "pyspark.sql.tests.test_sql",
         "pyspark.sql.tests.pandas.test_pandas_cogrouped_map",
         "pyspark.sql.tests.pandas.test_pandas_grouped_map",
         "pyspark.sql.tests.pandas.test_pandas_grouped_map_with_state",
@@ -547,6 +549,9 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_udtf",
         "pyspark.sql.tests.test_utils",
         "pyspark.sql.tests.test_resources",
+        "pyspark.sql.tests.plot.test_frame_plot",
+        "pyspark.sql.tests.plot.test_frame_plot_plotly",
+        "pyspark.sql.tests.test_connect_compatibility",
     ],
 )
 
@@ -997,6 +1002,7 @@ pyspark_connect = Module(
         "pyspark.sql.connect.session",
         "pyspark.sql.connect.window",
         "pyspark.sql.connect.column",
+        "pyspark.sql.connect.merge",
         "pyspark.sql.connect.readwriter",
         "pyspark.sql.connect.dataframe",
         "pyspark.sql.connect.functions.builtin",
@@ -1027,6 +1033,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_serde",
         "pyspark.sql.tests.connect.test_parity_functions",
         "pyspark.sql.tests.connect.test_parity_group",
+        "pyspark.sql.tests.connect.test_parity_sql",
         "pyspark.sql.tests.connect.test_parity_dataframe",
         "pyspark.sql.tests.connect.test_parity_collection",
         "pyspark.sql.tests.connect.test_parity_creation",
@@ -1049,6 +1056,8 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_arrow_cogrouped_map",
         "pyspark.sql.tests.connect.test_parity_python_datasource",
         "pyspark.sql.tests.connect.test_parity_python_streaming_datasource",
+        "pyspark.sql.tests.connect.test_parity_frame_plot",
+        "pyspark.sql.tests.connect.test_parity_frame_plot_plotly",
         "pyspark.sql.tests.connect.test_utils",
         "pyspark.sql.tests.connect.client.test_artifact",
         "pyspark.sql.tests.connect.client.test_artifact_localcluster",
@@ -1421,6 +1430,18 @@ pyspark_errors = Module(
         "pyspark.errors.tests.test_errors",
     ],
 )
+
+pyspark_logging = Module(
+    name="pyspark-logger",
+    dependencies=[],
+    source_file_regexes=["python/pyspark/logger"],
+    python_test_goals=[
+        # unittests
+        "pyspark.logger.tests.test_logger",
+        "pyspark.logger.tests.connect.test_parity_logger",
+    ],
+)
+
 
 sparkr = Module(
     name="sparkr",

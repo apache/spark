@@ -165,9 +165,13 @@ object ExternalShuffleService extends Logging {
   private[spark] def main(
       args: Array[String],
       newShuffleService: (SparkConf, SecurityManager) => ExternalShuffleService): Unit = {
+    Utils.resetStructuredLogging()
     Utils.initDaemon(log)
     val sparkConf = new SparkConf
     Utils.loadDefaultSparkProperties(sparkConf)
+    // Initialize logging system again after `spark.log.structuredLogging.enabled` takes effect
+    Utils.resetStructuredLogging(sparkConf)
+    Logging.uninitialize()
     val securityManager = new SecurityManager(sparkConf)
 
     // we override this value since this service is started from the command line

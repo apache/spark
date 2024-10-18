@@ -542,10 +542,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
           val metadataRoot = Option(checkpointLocation).getOrElse(defaultCheckpointLocation)
 
           additionalConfs.foreach(pair => {
-            val value =
-              if (sparkSession.conf.contains(pair._1)) {
-                Some(sparkSession.conf.get(pair._1))
-              } else None
+            val value = sparkSession.conf.getOption(pair._1)
             resetConfValues(pair._1) = value
             sparkSession.conf.set(pair._1, pair._2)
           })
@@ -813,6 +810,13 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
         case (key, None) => sparkSession.conf.unset(key)
       }
       sparkSession.streams.removeListener(listener)
+      // The state store is stopped here to unload all state stores and terminate all maintenance
+      // threads. It is necessary because the temp directory used by the checkpoint directory
+      // may be deleted soon after, and the maintenance thread may see unexpected error and
+      // cause unexpected behavior. Doing it after a test finishes might be too late because
+      // sometimes the checkpoint directory is under `withTempDir`, and in this case the temp
+      // directory is deleted before the test finishes.
+      StateStore.stop()
     }
   }
 

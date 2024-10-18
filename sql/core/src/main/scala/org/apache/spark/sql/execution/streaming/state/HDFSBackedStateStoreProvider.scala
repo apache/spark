@@ -31,7 +31,7 @@ import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 import org.apache.spark.internal.{Logging, LogKeys, MDC, MessageWithContext}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -222,6 +222,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       StateStoreMetrics(mapToUpdate.size(), metricsFromProvider("memoryUsedBytes"), customMetrics)
     }
 
+    override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {
+      StateStoreCheckpointInfo(id.partitionId, newVersion, None, None)
+    }
+
     /**
      * Whether all updates have been committed
      */
@@ -255,7 +259,12 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   }
 
   /** Get the state store for making updates to create a new `version` of the store. */
-  override def getStore(version: Long): StateStore = {
+  override def getStore(version: Long, uniqueId: Option[String] = None): StateStore = {
+    if (uniqueId.isDefined) {
+      throw QueryExecutionErrors.cannotLoadStore(new SparkException(
+        "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1 " +
+        "but a state store checkpointID is passed in"))
+    }
     val newMap = getLoadedMapForStore(version)
     logInfo(log"Retrieved version ${MDC(LogKeys.STATE_STORE_VERSION, version)} " +
       log"of ${MDC(LogKeys.STATE_STORE_PROVIDER, HDFSBackedStateStoreProvider.this)} for update")
@@ -263,7 +272,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   }
 
   /** Get the state store for reading to specific `version` of the store. */
-  override def getReadStore(version: Long): ReadStateStore = {
+  override def getReadStore(version: Long, stateStoreCkptId: Option[String]): ReadStateStore = {
     val newMap = getLoadedMapForStore(version)
     logInfo(log"Retrieved version ${MDC(LogKeys.STATE_STORE_VERSION, version)} of " +
       log"${MDC(LogKeys.STATE_STORE_PROVIDER, HDFSBackedStateStoreProvider.this)} for readonly")
@@ -282,6 +291,13 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       newMap
     }
     catch {
+      case e: SparkException if e.getCondition.contains("CANNOT_LOAD_STATE_STORE") =>
+        throw e
+      case e: OutOfMemoryError =>
+        throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
+          stateStoreId.toString,
+          "HDFS_STORE_PROVIDER",
+          e)
       case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
     }
   }
@@ -323,6 +339,11 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): Unit = {
+    assert(
+      !storeConf.enableStateStoreCheckpointIds,
+      "HDFS State Store Provider doesn't support checkpointFormatVersion >= 2 " +
+        s"checkpointFormatVersion ${storeConf.sqlConf.stateStoreCheckpointFormatVersion}")
+
     this.stateStoreId_ = stateStoreId
     this.keySchema = keySchema
     this.valueSchema = valueSchema
@@ -947,6 +968,11 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       newMap
     }
     catch {
+      case e: OutOfMemoryError =>
+        throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
+          stateStoreId.toString,
+          "HDFS_STORE_PROVIDER",
+          e)
       case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
     }
   }
@@ -977,5 +1003,56 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       s"$endVersion takes $elapsedMs ms.")
 
     result
+  }
+
+  override def getStateStoreChangeDataReader(
+      startVersion: Long,
+      endVersion: Long,
+      colFamilyNameOpt: Option[String] = None):
+    StateStoreChangeDataReader = {
+    // Multiple column families are not supported with HDFSBackedStateStoreProvider
+    if (colFamilyNameOpt.isDefined) {
+      throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
+    }
+
+    new HDFSBackedStateStoreChangeDataReader(fm, baseDir, startVersion, endVersion,
+      CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec),
+      keySchema, valueSchema)
+  }
+}
+
+/** [[StateStoreChangeDataReader]] implementation for [[HDFSBackedStateStoreProvider]] */
+class HDFSBackedStateStoreChangeDataReader(
+    fm: CheckpointFileManager,
+    stateLocation: Path,
+    startVersion: Long,
+    endVersion: Long,
+    compressionCodec: CompressionCodec,
+    keySchema: StructType,
+    valueSchema: StructType)
+  extends StateStoreChangeDataReader(
+    fm, stateLocation, startVersion, endVersion, compressionCodec) {
+
+  override protected var changelogSuffix: String = "delta"
+
+  override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
+    val reader = currentChangelogReader()
+    if (reader == null) {
+      return null
+    }
+    val (recordType, keyArray, valueArray) = reader.next()
+    val keyRow = new UnsafeRow(keySchema.fields.length)
+    keyRow.pointTo(keyArray, keyArray.length)
+    if (valueArray == null) {
+      (recordType, keyRow, null, currentChangelogVersion - 1)
+    } else {
+      val valueRow = new UnsafeRow(valueSchema.fields.length)
+      // If valueSize in existing file is not multiple of 8, floor it to multiple of 8.
+      // This is a workaround for the following:
+      // Prior to Spark 2.3 mistakenly append 4 bytes to the value row in
+      // `RowBasedKeyValueBatch`, which gets persisted into the checkpoint data
+      valueRow.pointTo(valueArray, (valueArray.length / 8) * 8)
+      (recordType, keyRow, valueRow, currentChangelogVersion - 1)
+    }
   }
 }

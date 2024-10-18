@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 class MySQLDatabaseOnDocker extends DatabaseOnDocker {
-  override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:8.4.0")
+  override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:9.0.1")
   override val env = Map(
     "MYSQL_ROOT_PASSWORD" -> "rootpass"
   )

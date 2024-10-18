@@ -326,14 +326,15 @@ specific plotting methods of the form ``DataFrame.plot.<kind>``.
    :template: autosummary/accessor_method.rst
 
    DataFrame.plot.area
-   DataFrame.plot.barh
    DataFrame.plot.bar
-   DataFrame.plot.hist
+   DataFrame.plot.barh
    DataFrame.plot.box
+   DataFrame.plot.density
+   DataFrame.plot.hist
+   DataFrame.plot.kde
    DataFrame.plot.line
    DataFrame.plot.pie
    DataFrame.plot.scatter
-   DataFrame.plot.density
 
 .. autosummary::
    :toctree: api/

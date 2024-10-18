@@ -23,10 +23,11 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIden
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, LeafNode, LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
+import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, Metadata, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -60,9 +61,30 @@ trait UnresolvedUnaryNode extends UnaryNode with UnresolvedNode
  */
 case class PlanWithUnresolvedIdentifier(
     identifierExpr: Expression,
-    planBuilder: Seq[String] => LogicalPlan)
-  extends UnresolvedLeafNode {
+    children: Seq[LogicalPlan],
+    planBuilder: (Seq[String], Seq[LogicalPlan]) => LogicalPlan)
+  extends UnresolvedNode {
+
+  def this(identifierExpr: Expression, planBuilder: Seq[String] => LogicalPlan) = {
+    this(identifierExpr, Nil, (ident, _) => planBuilder(ident))
+  }
+
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan =
+    copy(identifierExpr, newChildren, planBuilder)
+}
+
+/**
+ * A logical plan placeholder which delays CTE resolution
+ * to moment when PlanWithUnresolvedIdentifier gets resolved
+ */
+case class UnresolvedWithCTERelations(
+   unresolvedPlan: LogicalPlan,
+   cteRelations: Seq[(String, CTERelationDef)])
+  extends UnresolvedLeafNode {
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER_WITH_CTE)
 }
 
 /**
@@ -113,10 +135,36 @@ case class UnresolvedRelation(
 
   override def name: String = tableName
 
+  def requireWritePrivileges(privileges: Seq[TableWritePrivilege]): UnresolvedRelation = {
+    if (privileges.nonEmpty) {
+      val newOptions = new java.util.HashMap[String, String]
+      newOptions.putAll(options)
+      newOptions.put(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES, privileges.mkString(","))
+      copy(options = new CaseInsensitiveStringMap(newOptions))
+    } else {
+      this
+    }
+  }
+
+  def clearWritePrivileges: UnresolvedRelation = {
+    if (options.containsKey(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)) {
+      val newOptions = new java.util.HashMap[String, String]
+      newOptions.putAll(options)
+      newOptions.remove(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
+      copy(options = new CaseInsensitiveStringMap(newOptions))
+    } else {
+      this
+    }
+  }
+
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_RELATION)
 }
 
 object UnresolvedRelation {
+  // An internal option of `UnresolvedRelation` to specify the required write privileges when
+  // writing data to this relation.
+  val REQUIRED_WRITE_PRIVILEGES = "__required_write_privileges__"
+
   def apply(
       tableIdentifier: TableIdentifier,
       extraOptions: CaseInsensitiveStringMap,
@@ -331,7 +379,8 @@ case class UnresolvedFunction(
     isDistinct: Boolean,
     filter: Option[Expression] = None,
     ignoreNulls: Boolean = false,
-    orderingWithinGroup: Seq[SortOrder] = Seq.empty)
+    orderingWithinGroup: Seq[SortOrder] = Seq.empty,
+    isInternal: Boolean = false)
   extends Expression with Unevaluable {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -924,4 +973,14 @@ case object UnresolvedWithinGroup extends LeafExpression with Unevaluable {
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override lazy val resolved = false
+}
+
+case class UnresolvedTranspose(
+    indices: Seq[Expression],
+    child: LogicalPlan
+) extends UnresolvedUnaryNode {
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_TRANSPOSE)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedTranspose =
+    copy(child = newChild)
 }

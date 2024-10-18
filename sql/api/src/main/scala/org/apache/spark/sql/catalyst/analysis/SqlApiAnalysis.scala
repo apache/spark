@@ -17,9 +17,10 @@
 package org.apache.spark.sql.catalyst.analysis
 
 object SqlApiAnalysis {
+
   /**
-   * Resolver should return true if the first string refers to the same entity as the second string.
-   * For example, by using case insensitive equality.
+   * Resolver should return true if the first string refers to the same entity as the second
+   * string. For example, by using case insensitive equality.
    */
   type Resolver = (String, String) => Boolean
 }

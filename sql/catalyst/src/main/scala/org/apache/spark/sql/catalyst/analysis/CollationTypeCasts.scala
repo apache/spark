@@ -83,14 +83,36 @@ object CollationTypeCasts extends TypeCoercionRule {
       val Seq(newInput, newDefault) = collateToSingleType(Seq(input, default))
       framelessOffsetWindow.withNewChildren(Seq(newInput, offset, newDefault))
 
+    case mapCreate : CreateMap if mapCreate.children.size % 2 == 0 =>
+      // We only take in mapCreate if it has even number of children, as otherwise it should fail
+      // with wrong number of arguments
+      val newKeys = collateToSingleType(mapCreate.keys)
+      val newValues = collateToSingleType(mapCreate.values)
+      mapCreate.withNewChildren(newKeys.zip(newValues).flatMap(pair => Seq(pair._1, pair._2)))
+
+    case splitPart: SplitPart =>
+      val Seq(str, delimiter, partNum) = splitPart.children
+      val Seq(newStr, newDelimiter) = collateToSingleType(Seq(str, delimiter))
+      splitPart.withNewChildren(Seq(newStr, newDelimiter, partNum))
+
+    case stringSplitSQL: StringSplitSQL =>
+      val Seq(str, delimiter) = stringSplitSQL.children
+      val Seq(newStr, newDelimiter) = collateToSingleType(Seq(str, delimiter))
+      stringSplitSQL.withNewChildren(Seq(newStr, newDelimiter))
+
+    case levenshtein: Levenshtein =>
+      val Seq(left, right, threshold @ _*) = levenshtein.children
+      val Seq(newLeft, newRight) = collateToSingleType(Seq(left, right))
+      levenshtein.withNewChildren(Seq(newLeft, newRight) ++ threshold)
+
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
       _: Coalesce | _: ArrayContains | _: ArrayExcept | _: ConcatWs | _: Mask | _: StringReplace |
-      _: StringTranslate | _: StringTrim | _: StringTrimLeft | _: StringTrimRight |
+      _: StringTranslate | _: StringTrim | _: StringTrimLeft | _: StringTrimRight | _: ArrayAppend |
       _: ArrayIntersect | _: ArrayPosition | _: ArrayRemove | _: ArrayUnion | _: ArraysOverlap |
       _: Contains | _: EndsWith | _: EqualNullSafe | _: EqualTo | _: FindInSet | _: GreaterThan |
       _: GreaterThanOrEqual | _: LessThan | _: LessThanOrEqual | _: StartsWith | _: StringInstr |
-      _: ToNumber | _: TryToNumber) =>
+      _: ToNumber | _: TryToNumber | _: StringToMap) =>
       val newChildren = collateToSingleType(otherExpr.children)
       otherExpr.withNewChildren(newChildren)
   }
@@ -153,7 +175,7 @@ object CollationTypeCasts extends TypeCoercionRule {
       case size if size > 1 =>
         throw QueryCompilationErrors
           .explicitCollationMismatchError(
-            explicitTypes.map(t => StringType(t).typeName)
+            explicitTypes.map(t => StringType(t))
           )
       // Only implicit or default collations present
       case 0 =>
@@ -169,7 +191,9 @@ object CollationTypeCasts extends TypeCoercionRule {
           .distinct
 
         if (implicitTypes.length > 1) {
-          throw QueryCompilationErrors.implicitCollationMismatchError()
+          throw QueryCompilationErrors.implicitCollationMismatchError(
+            implicitTypes.map(t => StringType(t))
+          )
         }
         else {
           implicitTypes.headOption.map(StringType(_)).getOrElse(SQLConf.get.defaultStringType)

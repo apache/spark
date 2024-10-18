@@ -120,8 +120,8 @@ class DataFrameStatTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_LIST_OR_STR_OR_TUPLE",
-            message_parameters={"arg_name": "subset", "arg_type": "int"},
+            errorClass="NOT_LIST_OR_STR_OR_TUPLE",
+            messageParameters={"arg_name": "subset", "arg_type": "int"},
         )
 
     def test_fillna(self):
@@ -200,8 +200,8 @@ class DataFrameStatTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_STR",
-            message_parameters={"arg_name": "value", "arg_type": "list"},
+            errorClass="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_STR",
+            messageParameters={"arg_name": "value", "arg_type": "list"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -209,8 +209,8 @@ class DataFrameStatTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_LIST_OR_TUPLE",
-            message_parameters={"arg_name": "subset", "arg_type": "int"},
+            errorClass="NOT_LIST_OR_TUPLE",
+            messageParameters={"arg_name": "subset", "arg_type": "int"},
         )
 
     def test_replace(self):
@@ -399,8 +399,8 @@ class DataFrameStatTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="ARGUMENT_REQUIRED",
-            message_parameters={"arg_name": "value", "condition": "`to_replace` is dict"},
+            errorClass="ARGUMENT_REQUIRED",
+            messageParameters={"arg_name": "value", "condition": "`to_replace` is dict"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -408,8 +408,8 @@ class DataFrameStatTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
-            message_parameters={"arg_name": "to_replace", "arg_type": "function"},
+            errorClass="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
+            messageParameters={"arg_name": "to_replace", "arg_type": "function"},
         )
 
     def test_unpivot(self):

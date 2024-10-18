@@ -130,8 +130,8 @@ def main(infile: IO, outfile: IO) -> None:
 
         if not isinstance(data_source, DataSource):
             raise PySparkAssertionError(
-                error_class="DATA_SOURCE_TYPE_MISMATCH",
-                message_parameters={
+                errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                messageParameters={
                     "expected": "a Python data source instance of type 'DataSource'",
                     "actual": f"'{type(data_source).__name__}'",
                 },
@@ -142,8 +142,8 @@ def main(infile: IO, outfile: IO) -> None:
         schema = _parse_datatype_json_string(schema_json)
         if not isinstance(schema, StructType):
             raise PySparkAssertionError(
-                error_class="DATA_SOURCE_TYPE_MISMATCH",
-                message_parameters={
+                errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                messageParameters={
                     "expected": "an output schema of type 'StructType'",
                     "actual": f"'{type(schema).__name__}'",
                 },
@@ -177,8 +177,8 @@ def main(infile: IO, outfile: IO) -> None:
                     commit_func(reader, infile, outfile)
                 else:
                     raise IllegalArgumentException(
-                        error_class="UNSUPPORTED_OPERATION",
-                        message_parameters={
+                        errorClass="UNSUPPORTED_OPERATION",
+                        messageParameters={
                             "operation": "Function call id not recognized by stream reader"
                         },
                     )
@@ -186,13 +186,15 @@ def main(infile: IO, outfile: IO) -> None:
         except Exception as e:
             error_msg = "data source {} throw exception: {}".format(data_source.name, e)
             raise PySparkRuntimeError(
-                error_class="PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
-                message_parameters={"msg": error_msg},
+                errorClass="PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
+                messageParameters={"msg": error_msg},
             )
         finally:
             reader.stop()
     except BaseException as e:
         handle_worker_exception(e, outfile)
+        # ensure that the updates to the socket are flushed
+        outfile.flush()
         sys.exit(-1)
     send_accumulator_updates(outfile)
 

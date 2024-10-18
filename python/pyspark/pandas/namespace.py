@@ -88,6 +88,7 @@ from pyspark.pandas.internal import (
     DEFAULT_SERIES_NAME,
     HIDDEN_COLUMNS,
     SPARK_INDEX_NAME_FORMAT,
+    NATURAL_ORDER_COLUMN_NAME,
 )
 from pyspark.pandas.series import Series, first_series
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
@@ -125,6 +126,7 @@ __all__ = [
     "to_numeric",
     "broadcast",
     "read_orc",
+    "json_normalize",
 ]
 
 
@@ -1800,7 +1802,7 @@ def date_range(
 
     Changed the `freq` (frequency) to ``'M'`` (month end frequency).
 
-    >>> ps.date_range(start='1/1/2018', periods=5, freq='M')  # doctest: +SKIP
+    >>> ps.date_range(start='1/1/2018', periods=5, freq='ME')  # doctest: +SKIP
     DatetimeIndex(['2018-01-31', '2018-02-28', '2018-03-31', '2018-04-30',
                    '2018-05-31'],
                   dtype='datetime64[ns]', freq=None)
@@ -3685,6 +3687,82 @@ def read_orc(
         psdf = psdf[new_columns]
 
     return psdf
+
+
+def json_normalize(
+    data: Union[Dict, List[Dict]],
+    sep: str = ".",
+) -> DataFrame:
+    """
+    Normalize semi-structured JSON data into a flat table.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    data : dict or list of dicts
+        Unserialized JSON objects.
+    sep : str, default '.'
+        Nested records will generate names separated by sep.
+
+    Returns
+    -------
+    DataFrame
+
+    See Also
+    --------
+    DataFrame.to_json : Convert the pandas-on-Spark DataFrame to a JSON string.
+
+    Examples
+    --------
+    >>> data = [
+    ...     {"id": 1, "name": "Alice", "address": {"city": "NYC", "zipcode": "10001"}},
+    ...     {"id": 2, "name": "Bob", "address": {"city": "SF", "zipcode": "94105"}},
+    ... ]
+    >>> ps.json_normalize(data)
+       id   name address.city address.zipcode
+    0   1  Alice          NYC           10001
+    1   2    Bob           SF           94105
+    """
+    # Convert the input JSON data to a Pandas-on-Spark DataFrame.
+    psdf: DataFrame = ps.DataFrame(data)
+    internal = psdf._internal
+    sdf = internal.spark_frame
+
+    index_spark_column_names = internal.index_spark_column_names
+
+    def flatten_schema(schema: StructType, prefix: str = "") -> Tuple[List[str], List[str]]:
+        """
+        Recursively flattens a nested schema and returns a list of columns and aliases.
+        """
+        fields = []
+        aliases = []
+        for field in schema.fields:
+            field_name = field.name
+            if field_name not in index_spark_column_names + [NATURAL_ORDER_COLUMN_NAME]:
+                name = f"{prefix}.{field_name}" if prefix else field_name
+                alias = f"{prefix}{sep}{field_name}" if prefix else field_name
+                if isinstance(field.dataType, StructType):
+                    subfields, subaliases = flatten_schema(field.dataType, prefix=name)
+                    fields += subfields
+                    aliases += subaliases
+                else:
+                    fields.append(name)
+                    aliases.append(alias)
+        return fields, aliases
+
+    fields, aliases = flatten_schema(sdf.schema)
+
+    # Create columns using fields and aliases
+    selected_columns = [F.col(field).alias(alias) for field, alias in zip(fields, aliases)]
+
+    # Update internal frame with new columns
+    internal = internal.with_new_columns(
+        selected_columns, column_labels=[(column_label,) for column_label in aliases]
+    )
+
+    # Convert back to Pandas-on-Spark DataFrame
+    return ps.DataFrame(internal)
 
 
 def _get_index_map(

@@ -139,7 +139,7 @@ class SetCommandSuite extends QueryTest with SharedSparkSession with ResetSystem
     withSQLConf(key1 -> value1) {
       checkError(
         intercept[ParseException](sql("SET ${test.password}")),
-        errorClass = "INVALID_SET_SYNTAX"
+        condition = "INVALID_SET_SYNTAX"
       )
     }
   }

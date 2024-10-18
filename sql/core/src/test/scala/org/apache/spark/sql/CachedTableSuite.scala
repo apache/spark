@@ -157,7 +157,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         sql("CACHE TABLE tempView AS SELECT 1")
       }
       checkError(e,
-        errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
+        condition = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
         parameters = Map("relationName" -> "`tempView`"))
     }
   }
@@ -1473,7 +1473,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           assert(spark.catalog.isCached("view2"))
 
           val oldView = spark.table("view2")
-          spark.sqlContext.uncacheTable("view1")
+          spark.catalog.uncacheTable("view1")
           assert(storeAnalyzed ==
             spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined,
             s"when storeAnalyzed = $storeAnalyzed")
@@ -1493,7 +1493,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
             assert(spark.catalog.isCached("view2"))
 
             val oldView = spark.table("view2")
-            spark.sqlContext.uncacheTable(s"$db.view1")
+            spark.catalog.uncacheTable(s"$db.view1")
             assert(storeAnalyzed ==
               spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined,
               s"when storeAnalyzed = $storeAnalyzed")

@@ -56,7 +56,7 @@ abstract class MetadataCacheSuite extends QueryTest with SharedSparkSession {
         exception = intercept[SparkException] {
           df.count()
         },
-        errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
+        condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
         parameters = Map("path" -> ".*")
       )
     }
@@ -87,7 +87,7 @@ class MetadataCacheV1Suite extends MetadataCacheSuite {
         exception = intercept[SparkException] {
           sql("select count(*) from view_refresh").first()
         },
-        errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
+        condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
         parameters = Map("path" -> ".*")
       )
 
@@ -115,7 +115,7 @@ class MetadataCacheV1Suite extends MetadataCacheSuite {
             exception = intercept[SparkException] {
               sql("select count(*) from view_refresh").first()
             },
-            errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
+            condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
             parameters = Map("path" -> ".*")
           )
 

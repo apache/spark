@@ -18,8 +18,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
@@ -56,6 +56,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
   val DATA_TYPE_MISMATCH_ERROR = TreeNodeTag[Unit]("dataTypeMismatchError")
   val INVALID_FORMAT_ERROR = TreeNodeTag[Unit]("invalidFormatError")
+
+  // Error that is not supposed to throw immediately on triggering, e.g. certain internal errors.
+  // The error will be thrown at the end of the whole check analysis process, if no other error
+  // occurs.
+  val preemptedError = new PreemptedError()
 
   /**
    * Fails the analysis at the point where a specific tree node was parsed using a provided
@@ -114,10 +119,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   private def checkNotContainingLCA(exprs: Seq[Expression], plan: LogicalPlan): Unit = {
     exprs.foreach(_.transformDownWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
       case lcaRef: LateralColumnAliasReference =>
-        throw SparkException.internalError("Resolved plan should not contain any " +
-          s"LateralColumnAliasReference.\nDebugging information: plan:\n$plan",
-          context = lcaRef.origin.getQueryContext,
-          summary = lcaRef.origin.context.summary)
+        // this should be a low priority internal error to be preempted
+        preemptedError.set(
+          SparkException.internalError(
+            "Resolved plan should not contain any " +
+            s"LateralColumnAliasReference.\nDebugging information: plan:\n$plan",
+            context = lcaRef.origin.getQueryContext,
+            summary = lcaRef.origin.context.summary)
+        )
+        lcaRef
     })
   }
 
@@ -143,6 +153,56 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       errorClass, missingCol, orderedCandidates, a.origin)
   }
 
+  /**
+   * Checks whether the operator allows non-deterministic expressions.
+   */
+  private def operatorAllowsNonDeterministicExpressions(plan: LogicalPlan): Boolean = {
+    plan match {
+      case p: SupportsNonDeterministicExpression =>
+        p.allowNonDeterministicExpression
+      case _ => false
+    }
+  }
+
+  private def checkForUnspecifiedWindow(expressions: Seq[Expression]): Unit = {
+    expressions.foreach(_.transformDownWithPruning(
+      _.containsPattern(UNRESOLVED_WINDOW_EXPRESSION)) {
+      case UnresolvedWindowExpression(_, windowSpec) =>
+        throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowSpec.name)
+      }
+    )
+  }
+
+  /**
+   * Checks for errors in a `SELECT` clause, such as a trailing comma or an empty select list.
+   *
+   * @param plan The logical plan of the query.
+   * @param starRemoved Whether a '*' (wildcard) was removed from the select list.
+   * @throws AnalysisException if the select list is empty or ends with a trailing comma.
+   */
+  protected def checkTrailingCommaInSelect(
+      plan: LogicalPlan,
+      starRemoved: Boolean = false): Unit = {
+    val exprList = plan match {
+      case proj: Project if proj.projectList.nonEmpty =>
+        proj.projectList
+      case agg: Aggregate if agg.aggregateExpressions.nonEmpty =>
+        agg.aggregateExpressions
+      case _ =>
+        Seq.empty
+    }
+
+    exprList.lastOption match {
+      case Some(Alias(UnresolvedAttribute(Seq(name)), _)) =>
+        if (name.equalsIgnoreCase("FROM") && plan.exists(_.isInstanceOf[OneRowRelation])) {
+          if (exprList.size > 1  || starRemoved) {
+            throw QueryCompilationErrors.trailingCommaInSelectError(exprList.last.origin)
+          }
+        }
+      case _ =>
+    }
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We should inline all CTE relations to restore the original plan shape, as the analysis check
     // may need to match certain plan shapes. For dangling CTE relations, they will still be kept
@@ -154,11 +214,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case e: AnalysisException =>
         throw new ExtendedAnalysisException(e, plan)
     }
+    preemptedError.clear()
     try {
       checkAnalysis0(inlinedPlan)
+      preemptedError.getErrorOpt().foreach(throw _) // throw preempted error if any
     } catch {
       case e: AnalysisException =>
         throw new ExtendedAnalysisException(e, inlinedPlan)
+    } finally {
+      preemptedError.clear()
     }
     plan.setAnalyzed()
   }
@@ -175,6 +239,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
         val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
         write.table.tableNotFound(tblName)
+
+      // We should check for trailing comma errors first, since we would get less obvious
+      // unresolved column errors if we do it bottom up
+      case proj: Project =>
+        checkTrailingCommaInSelect(proj)
+      case agg: Aggregate =>
+        checkTrailingCommaInSelect(agg)
 
       case _ =>
     }
@@ -215,6 +286,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           msg = s"Hint not found: ${toSQLId(u.name)}",
           context = u.origin.getQueryContext,
           summary = u.origin.context.summary)
+
+      case u: UnresolvedInlineTable if unresolvedInlineTableContainsScalarSubquery(u) =>
+        throw QueryCompilationErrors.inlineTableContainsScalarSubquery(u)
 
       case command: V2PartitionCommand =>
         command.table match {
@@ -284,6 +358,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             withPosition(s) {
               throw QueryCompilationErrors.invalidStarUsageError(operator.nodeName, Seq(s))
             }
+
+          // Should be before `e.checkInputDataTypes()` to produce the correct error for unknown
+          // window expressions nested inside other expressions
+          case UnresolvedWindowExpression(_, WindowSpecReference(windowName)) =>
+            throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName)
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
@@ -380,6 +459,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case _ =>
         })
+
+        // Check for unresolved TABLE arguments after the main check above to allow other analysis
+        // errors to apply first, providing better error messages.
+        getAllExpressions(operator).foreach(_.foreachUp {
+          case expr: FunctionTableSubqueryArgumentExpression =>
+            expr.failAnalysis(
+              errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_TABLE_ARGUMENT",
+              messageParameters = Map("treeNode" -> planToString(plan)))
+          case _ =>
+        })
+
         if (stagedError.isDefined) stagedError.get.apply()
 
         operator match {
@@ -623,6 +713,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               varName,
               c.defaultExpr.originalSQL)
 
+          case c: Call if c.resolved && c.bound && c.checkArgTypes().isFailure =>
+            c.checkArgTypes() match {
+              case mismatch: TypeCheckResult.DataTypeMismatch =>
+                c.dataTypeMismatch("CALL", mismatch)
+              case _ =>
+                throw SparkException.internalError("Invalid input for procedure")
+            }
+
           case _ => // Falls back to the following checks
         }
 
@@ -657,11 +755,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             }
 
           case p @ Project(projectList, _) =>
-            projectList.foreach(_.transformDownWithPruning(
-              _.containsPattern(UNRESOLVED_WINDOW_EXPRESSION)) {
-              case UnresolvedWindowExpression(_, windowSpec) =>
-                throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowSpec.name)
-            })
+            checkForUnspecifiedWindow(projectList)
+
+          case agg@Aggregate(_, aggregateExpressions, _) if
+            PlanHelper.specialExpressionsInUnsupportedOperator(agg).isEmpty =>
+            checkForUnspecifiedWindow(aggregateExpressions)
 
           case j: Join if !j.duplicateResolved =>
             val conflictingAttributes =
@@ -718,6 +816,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 "dataType" -> toSQLType(mapCol.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
+            !operatorAllowsNonDeterministicExpressions(o) &&
             !o.isInstanceOf[Project] &&
             // non-deterministic expressions inside CollectMetrics have been
             // already validated inside checkMetric function
@@ -890,43 +989,43 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           messageParameters = Map.empty)
       }
 
-      // SPARK-18504/SPARK-18814: Block cases where GROUP BY columns
-      // are not part of the correlated columns.
-
-      // Note: groupByCols does not contain outer refs - grouping by an outer ref is always ok
-      val groupByCols = AttributeSet(agg.groupingExpressions.flatMap(_.references))
-      // Collect the inner query attributes that are guaranteed to have a single value for each
-      // outer row. See comment on getCorrelatedEquivalentInnerColumns.
-      val correlatedEquivalentCols = getCorrelatedEquivalentInnerColumns(query)
-      val nonEquivalentGroupByCols = groupByCols -- correlatedEquivalentCols
-
+      val nonEquivalentGroupByExprs = nonEquivalentGroupbyCols(query, agg)
       val invalidCols = if (!SQLConf.get.getConf(
         SQLConf.LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE)) {
-        nonEquivalentGroupByCols
+        nonEquivalentGroupByExprs
       } else {
         // Legacy incorrect logic for checking for invalid group-by columns (see SPARK-48503).
         // Allows any inner attribute that appears in a correlated predicate, even if it is a
         // non-equality predicate or under an operator that can change the values of the attribute
         // (see comments on getCorrelatedEquivalentInnerColumns for examples).
+        // Note: groupByCols does not contain outer refs - grouping by an outer ref is always ok
+        val groupByCols = AttributeSet(agg.groupingExpressions.flatMap(_.references))
         val subqueryColumns = getCorrelatedPredicates(query).flatMap(_.references)
           .filterNot(conditions.flatMap(_.references).contains)
         val correlatedCols = AttributeSet(subqueryColumns)
         val invalidColsLegacy = groupByCols -- correlatedCols
-        if (!nonEquivalentGroupByCols.isEmpty && invalidColsLegacy.isEmpty) {
-          logWarning("Using legacy behavior for " +
-            s"${SQLConf.LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE
-              .key}. Query would be rejected with non-legacy behavior but is allowed by " +
-            s"legacy behavior. Query may be invalid and return wrong results if the scalar " +
-            s"subquery's group-by outputs multiple rows.")
+        if (!nonEquivalentGroupByExprs.isEmpty && invalidColsLegacy.isEmpty) {
+          logWarning(log"Using legacy behavior for " +
+            log"${MDC(LogKeys.CONFIG, SQLConf
+            .LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE.key)}. " +
+            log"Query would be rejected with non-legacy behavior but is allowed by " +
+            log"legacy behavior. Query may be invalid and return wrong results if the scalar " +
+            log"subquery's group-by outputs multiple rows.")
         }
         invalidColsLegacy
       }
 
       if (invalidCols.nonEmpty) {
+        val names = invalidCols.map { el =>
+          el match {
+            case attr: Attribute => attr.name
+            case expr: Expression => expr.toString
+          }
+        }
         expr.failAnalysis(
           errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
             "NON_CORRELATED_COLUMNS_IN_GROUP_BY",
-          messageParameters = Map("value" -> invalidCols.map(_.name).mkString(",")))
+          messageParameters = Map("value" -> names.mkString(",")))
       }
     }
 
@@ -970,7 +1069,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     checkOuterReference(plan, expr)
 
     expr match {
-      case ScalarSubquery(query, outerAttrs, _, _, _, _) =>
+      case ScalarSubquery(query, outerAttrs, _, _, _, _, _) =>
         // Scalar subquery must return one column as output.
         if (query.output.size != 1) {
           throw QueryCompilationErrors.subqueryReturnMoreThanOneColumn(query.output.size,
@@ -978,15 +1077,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         }
 
         if (outerAttrs.nonEmpty) {
-          cleanQueryInScalarSubquery(query) match {
-            case a: Aggregate => checkAggregateInScalarSubquery(outerAttrs, query, a)
-            case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(outerAttrs, query, a)
-            case p: LogicalPlan if p.maxRows.exists(_ <= 1) => // Ok
-            case other =>
-              expr.failAnalysis(
-                errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-                  "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
-                messageParameters = Map.empty)
+          if (!SQLConf.get.getConf(SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN)) {
+            cleanQueryInScalarSubquery(query) match {
+              case a: Aggregate => checkAggregateInScalarSubquery(outerAttrs, query, a)
+              case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(outerAttrs, query, a)
+              case p: LogicalPlan if p.maxRows.exists(_ <= 1) => // Ok
+              case other =>
+                expr.failAnalysis(
+                  errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+                    "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
+                  messageParameters = Map.empty)
+            }
           }
 
           // Only certain operators are allowed to host subquery expression containing
@@ -1045,9 +1146,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         checkCorrelationsInSubquery(expr.plan, isLateral = true)
 
       case _: FunctionTableSubqueryArgumentExpression =>
-        expr.failAnalysis(
-          errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_TABLE_ARGUMENT",
-          messageParameters = Map("treeNode" -> planToString(plan)))
+        // Do nothing here, since we will check for this pattern later.
 
       case inSubqueryOrExistsSubquery =>
         plan match {
@@ -1498,4 +1597,41 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case _ =>
     }
   }
+
+  private def unresolvedInlineTableContainsScalarSubquery(
+      unresolvedInlineTable: UnresolvedInlineTable) = {
+    unresolvedInlineTable.rows.exists { row =>
+      row.exists { expression =>
+        expression.exists(_.isInstanceOf[ScalarSubquery])
+      }
+    }
+  }
+}
+
+// a heap of the preempted error that only keeps the top priority element, representing the sole
+// error to be thrown at the end of the whole check analysis process, if no other error occurs.
+class PreemptedError() {
+  case class ErrorWithPriority(error: Exception with SparkThrowable, priority: Int) {}
+
+  private var errorOpt: Option[ErrorWithPriority] = None
+
+  // Set/overwrite the given error as the preempted error, if no other errors are preempted, or it
+  // has a higher priority than the existing one.
+  // If the priority is not provided, it will be calculated based on error class. Currently internal
+  // errors have the lowest priority.
+  def set(error: Exception with SparkThrowable, priority: Option[Int] = None): Unit = {
+    val calculatedPriority = priority.getOrElse {
+      error.getCondition match {
+        case c if c.startsWith("INTERNAL_ERROR") => 1
+        case _ => 2
+      }
+    }
+    if (errorOpt.isEmpty || calculatedPriority > errorOpt.get.priority) {
+      errorOpt = Some(ErrorWithPriority(error, calculatedPriority))
+    }
+  }
+
+  def getErrorOpt(): Option[Exception with SparkThrowable] = errorOpt.map(_.error)
+
+  def clear(): Unit = errorOpt = None
 }

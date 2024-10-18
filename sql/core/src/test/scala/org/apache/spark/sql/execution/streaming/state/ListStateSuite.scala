@@ -22,7 +22,7 @@ import java.util.UUID
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, ListStateImplWithTTL, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.streaming.{ListState, TimeMode, TTLConfig, ValueState}
 
@@ -38,7 +38,7 @@ class ListStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        stringEncoder, TimeMode.None())
 
       val listState: ListState[Long] = handle.getListState[Long]("listState", Encoders.scalaLong)
 
@@ -49,7 +49,7 @@ class ListStateSuite extends StateVariableSuiteBase {
 
       checkError(
         exception = e,
-        errorClass = "ILLEGAL_STATE_STORE_VALUE.NULL_VALUE",
+        condition = "ILLEGAL_STATE_STORE_VALUE.NULL_VALUE",
         sqlState = Some("42601"),
         parameters = Map("stateName" -> "listState")
       )
@@ -71,7 +71,7 @@ class ListStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        stringEncoder, TimeMode.None())
 
       val testState: ListState[Long] = handle.getListState[Long]("testState", Encoders.scalaLong)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
@@ -99,7 +99,7 @@ class ListStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        stringEncoder, TimeMode.None())
 
       val testState1: ListState[Long] = handle.getListState[Long]("testState1", Encoders.scalaLong)
       val testState2: ListState[Long] = handle.getListState[Long]("testState2", Encoders.scalaLong)
@@ -137,7 +137,7 @@ class ListStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        stringEncoder, TimeMode.None())
 
       val listState1: ListState[Long] = handle.getListState[Long]("listState1", Encoders.scalaLong)
       val listState2: ListState[Long] = handle.getListState[Long]("listState2", Encoders.scalaLong)
@@ -167,7 +167,7 @@ class ListStateSuite extends StateVariableSuiteBase {
       val store = provider.getStore(0)
       val timestampMs = 10
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        stringEncoder,
         TimeMode.ProcessingTime(), batchTimestampMs = Some(timestampMs))
 
       val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
@@ -187,7 +187,7 @@ class ListStateSuite extends StateVariableSuiteBase {
 
       // increment batchProcessingTime, or watermark and ensure expired value is not returned
       val nextBatchHandle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        stringEncoder,
         TimeMode.ProcessingTime(), batchTimestampMs = Some(ttlExpirationMs))
 
       val nextBatchTestState: ListStateImplWithTTL[String] =
@@ -223,7 +223,7 @@ class ListStateSuite extends StateVariableSuiteBase {
       val store = provider.getStore(0)
       val batchTimestampMs = 10
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        stringEncoder,
         TimeMode.ProcessingTime(), batchTimestampMs = Some(batchTimestampMs))
 
       Seq(null, Duration.ZERO, Duration.ofMinutes(-1)).foreach { ttlDuration =>
@@ -234,7 +234,7 @@ class ListStateSuite extends StateVariableSuiteBase {
 
         checkError(
           ex,
-          errorClass = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
+          condition = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
           parameters = Map(
             "operationType" -> "update",
             "stateName" -> "testState"
@@ -242,6 +242,34 @@ class ListStateSuite extends StateVariableSuiteBase {
           matchPVals = true
         )
       }
+    }
+  }
+
+  test("ListState TTL with non-primitive types") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      val timestampMs = 10
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        encoderFor(Encoders.bean(classOf[POJOTestClass])).asInstanceOf[ExpressionEncoder[Any]],
+        TimeMode.ProcessingTime(), batchTimestampMs = Some(timestampMs))
+
+      val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+      val testState: ListStateImplWithTTL[TestClass] =
+        handle.getListState[TestClass]("testState",
+        Encoders.product[TestClass], ttlConfig).asInstanceOf[ListStateImplWithTTL[TestClass]]
+      ImplicitGroupingKeyTracker.setImplicitKey(new POJOTestClass("gk1", 1))
+      testState.put(Array(TestClass(1L, "v1"), TestClass(2L, "v2"), TestClass(3L, "v3")))
+      assert(testState.get().toSeq ===
+        Seq(TestClass(1L, "v1"), TestClass(2L, "v2"), TestClass(3L, "v3")))
+      assert(testState.getWithoutEnforcingTTL().toSeq ===
+        Seq(TestClass(1L, "v1"), TestClass(2L, "v2"), TestClass(3L, "v3")))
+
+      val ttlExpirationMs = timestampMs + 60000
+      val ttlValues = testState.getTTLValues()
+      assert(ttlValues.nonEmpty)
+      assert(ttlValues.forall(_._2 === ttlExpirationMs))
+      val ttlStateValueIterator = testState.getValuesInTTLState()
+      assert(ttlStateValueIterator.hasNext)
     }
   }
 }

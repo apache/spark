@@ -63,3 +63,8 @@ Input/Output
     DataFrameWriterV2.append
     DataFrameWriterV2.overwrite
     DataFrameWriterV2.overwritePartitions
+    MergeIntoWriter.whenMatched
+    MergeIntoWriter.whenNotMatched
+    MergeIntoWriter.whenNotMatchedBySource
+    MergeIntoWriter.withSchemaEvolution
+    MergeIntoWriter.merge

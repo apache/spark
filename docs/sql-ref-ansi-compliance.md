@@ -141,13 +141,13 @@ In the table above, all the `CAST`s with new syntax are marked as red <span styl
 
 -- `spark.sql.ansi.enabled=true` (This is a default behaviour)
 SELECT CAST('a' AS INT);
-org.apache.spark.SparkNumberFormatException: [CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+org.apache.spark.SparkNumberFormatException: [CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead.
 == SQL(line 1, position 8) ==
 SELECT CAST('a' AS INT)
        ^^^^^^^^^^^^^^^^
 
 SELECT CAST(2147483648L AS INT);
-org.apache.spark.SparkArithmeticException: [CAST_OVERFLOW] The value 2147483648L of the type "BIGINT" cannot be cast to "INT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+org.apache.spark.SparkArithmeticException: [CAST_OVERFLOW] The value 2147483648L of the type "BIGINT" cannot be cast to "INT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead.
 
 SELECT CAST(DATE'2020-01-01' AS INT);
 org.apache.spark.sql.AnalysisException: cannot resolve 'CAST(DATE '2020-01-01' AS INT)' due to data type mismatch: cannot cast date to int.
@@ -374,7 +374,7 @@ When ANSI mode is on, it throws exceptions for invalid operations. You can use t
   - `try_subtract`: identical to the add operator `-`, except that it returns `NULL` result instead of throwing an exception on integral value overflow.
   - `try_multiply`: identical to the add operator `*`, except that it returns `NULL` result instead of throwing an exception on integral value overflow.
   - `try_divide`: identical to the division operator `/`, except that it returns `NULL` result instead of throwing an exception on dividing 0.
-  - `try_remainder`: identical to the remainder operator `%`, except that it returns `NULL` result instead of throwing an exception on dividing 0.
+  - `try_mod`: identical to the remainder operator `%`, except that it returns `NULL` result instead of throwing an exception on dividing 0.
   - `try_sum`: identical to the function `sum`, except that it returns `NULL` result instead of throwing an exception on integral/decimal/interval value overflow.
   - `try_avg`: identical to the function `avg`, except that it returns `NULL` result instead of throwing an exception on decimal/interval value overflow.
   - `try_element_at`: identical to the function `element_at`, except that it returns `NULL` result instead of throwing an exception on array's index out of bound.
@@ -426,6 +426,7 @@ Below is a list of all the keywords in Spark SQL.
 |BY|non-reserved|non-reserved|reserved|
 |BYTE|non-reserved|non-reserved|non-reserved|
 |CACHE|non-reserved|non-reserved|non-reserved|
+|CALL|reserved|non-reserved|reserved|
 |CALLED|non-reserved|non-reserved|non-reserved|
 |CASCADE|non-reserved|non-reserved|non-reserved|
 |CASE|reserved|non-reserved|reserved|
@@ -492,6 +493,7 @@ Below is a list of all the keywords in Spark SQL.
 |DISTINCT|reserved|non-reserved|reserved|
 |DISTRIBUTE|non-reserved|non-reserved|non-reserved|
 |DIV|non-reserved|non-reserved|not a keyword|
+|DO|non-reserved|non-reserved|non-reserved|
 |DOUBLE|non-reserved|non-reserved|reserved|
 |DROP|non-reserved|non-reserved|reserved|
 |ELSE|reserved|non-reserved|reserved|
@@ -534,12 +536,14 @@ Below is a list of all the keywords in Spark SQL.
 |HOUR|non-reserved|non-reserved|non-reserved|
 |HOURS|non-reserved|non-reserved|non-reserved|
 |IDENTIFIER|non-reserved|non-reserved|non-reserved|
+|IDENTITY|non-reserved|non-reserved|non-reserved|
 |IF|non-reserved|non-reserved|not a keyword|
 |IGNORE|non-reserved|non-reserved|non-reserved|
 |IMMEDIATE|non-reserved|non-reserved|non-reserved|
 |IMPORT|non-reserved|non-reserved|non-reserved|
 |IN|reserved|non-reserved|reserved|
 |INCLUDE|non-reserved|non-reserved|non-reserved|
+|INCREMENT|non-reserved|non-reserved|non-reserved|
 |INDEX|non-reserved|non-reserved|non-reserved|
 |INDEXES|non-reserved|non-reserved|non-reserved|
 |INNER|reserved|strict-non-reserved|reserved|
@@ -555,6 +559,7 @@ Below is a list of all the keywords in Spark SQL.
 |INVOKER|non-reserved|non-reserved|non-reserved|
 |IS|reserved|non-reserved|reserved|
 |ITEMS|non-reserved|non-reserved|non-reserved|
+|ITERATE|non-reserved|non-reserved|non-reserved|
 |JOIN|reserved|strict-non-reserved|reserved|
 |KEYS|non-reserved|non-reserved|non-reserved|
 |LANGUAGE|non-reserved|non-reserved|reserved|
@@ -562,6 +567,7 @@ Below is a list of all the keywords in Spark SQL.
 |LATERAL|reserved|strict-non-reserved|reserved|
 |LAZY|non-reserved|non-reserved|non-reserved|
 |LEADING|reserved|non-reserved|reserved|
+|LEAVE|non-reserved|non-reserved|non-reserved|
 |LEFT|reserved|strict-non-reserved|reserved|
 |LIKE|non-reserved|non-reserved|reserved|
 |ILIKE|non-reserved|non-reserved|non-reserved|
@@ -575,6 +581,7 @@ Below is a list of all the keywords in Spark SQL.
 |LOCKS|non-reserved|non-reserved|non-reserved|
 |LOGICAL|non-reserved|non-reserved|non-reserved|
 |LONG|non-reserved|non-reserved|non-reserved|
+|LOOP|non-reserved|non-reserved|non-reserved|
 |MACRO|non-reserved|non-reserved|non-reserved|
 |MAP|non-reserved|non-reserved|non-reserved|
 |MATCHED|non-reserved|non-reserved|non-reserved|
@@ -643,6 +650,7 @@ Below is a list of all the keywords in Spark SQL.
 |REGEXP|non-reserved|non-reserved|not a keyword|
 |RENAME|non-reserved|non-reserved|non-reserved|
 |REPAIR|non-reserved|non-reserved|non-reserved|
+|REPEAT|non-reserved|non-reserved|non-reserved|
 |REPEATABLE|non-reserved|non-reserved|non-reserved|
 |REPLACE|non-reserved|non-reserved|non-reserved|
 |RESET|non-reserved|non-reserved|non-reserved|
@@ -731,6 +739,7 @@ Below is a list of all the keywords in Spark SQL.
 |UNLOCK|non-reserved|non-reserved|non-reserved|
 |UNPIVOT|non-reserved|non-reserved|non-reserved|
 |UNSET|non-reserved|non-reserved|non-reserved|
+|UNTIL|non-reserved|non-reserved|non-reserved|
 |UPDATE|non-reserved|non-reserved|reserved|
 |USE|non-reserved|non-reserved|non-reserved|
 |USER|reserved|non-reserved|reserved|
@@ -748,6 +757,7 @@ Below is a list of all the keywords in Spark SQL.
 |WEEKS|non-reserved|non-reserved|non-reserved|
 |WHEN|reserved|non-reserved|reserved|
 |WHERE|reserved|non-reserved|reserved|
+|WHILE|non-reserved|non-reserved|non-reserved|
 |WINDOW|non-reserved|non-reserved|reserved|
 |WITH|reserved|non-reserved|reserved|
 |WITHIN|reserved|non-reserved|reserved|

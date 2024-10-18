@@ -53,7 +53,7 @@ class PandasMapOpsMixin:
         udf_column = udf(*[self[col] for col in self.columns])
 
         jrp = self._build_java_profile(profile)
-        jdf = self._jdf.mapInPandas(udf_column._jc.expr(), barrier, jrp)
+        jdf = self._jdf.mapInPandas(udf_column._jc, barrier, jrp)
         return DataFrame(jdf, self.sparkSession)
 
     def mapInArrow(
@@ -75,7 +75,7 @@ class PandasMapOpsMixin:
         udf_column = udf(*[self[col] for col in self.columns])
 
         jrp = self._build_java_profile(profile)
-        jdf = self._jdf.mapInArrow(udf_column._jc.expr(), barrier, jrp)
+        jdf = self._jdf.mapInArrow(udf_column._jc, barrier, jrp)
         return DataFrame(jdf, self.sparkSession)
 
     def _build_java_profile(

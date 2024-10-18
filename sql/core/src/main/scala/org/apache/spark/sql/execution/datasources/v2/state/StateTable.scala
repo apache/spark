@@ -24,12 +24,11 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
-import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataTableEntry
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
-import org.apache.spark.sql.execution.streaming.state.StateStoreConf
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.execution.streaming.TransformWithStateVariableInfo
+import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, StateStoreColFamilySchema, StateStoreConf}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.ArrayImplicits._
 
 /** An implementation of [[Table]] with [[SupportsRead]] for State Store data source. */
 class StateTable(
@@ -37,12 +36,14 @@ class StateTable(
     override val schema: StructType,
     sourceOptions: StateSourceOptions,
     stateConf: StateStoreConf,
-    stateStoreMetadata: Array[StateMetadataTableEntry])
+    keyStateEncoderSpec: KeyStateEncoderSpec,
+    stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
+    stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema])
   extends Table with SupportsRead with SupportsMetadataColumns {
 
   import StateTable._
 
-  if (!isValidSchema(schema)) {
+  if (!SchemaUtil.isValidSchema(sourceOptions, schema, stateVariableInfoOpt)) {
     throw StateDataSourceErrors.internalError(
       s"Invalid schema is provided. Provided schema: $schema for " +
         s"checkpoint location: ${sourceOptions.stateCheckpointLocation} , operatorId: " +
@@ -59,11 +60,17 @@ class StateTable(
     if (sourceOptions.joinSide != JoinSideValues.none) {
       desc += s"[joinSide=${sourceOptions.joinSide}]"
     }
-    if (sourceOptions.snapshotStartBatchId.isDefined) {
-      desc += s"[snapshotStartBatchId=${sourceOptions.snapshotStartBatchId}]"
+    sourceOptions.fromSnapshotOptions match {
+      case Some(fromSnapshotOptions) =>
+        desc += s"[snapshotStartBatchId=${fromSnapshotOptions.snapshotStartBatchId}]"
+        desc += s"[snapshotPartitionId=${fromSnapshotOptions.snapshotPartitionId}]"
+      case _ =>
     }
-    if (sourceOptions.snapshotPartitionId.isDefined) {
-      desc += s"[snapshotPartitionId=${sourceOptions.snapshotPartitionId}]"
+    sourceOptions.readChangeFeedOptions match {
+      case Some(fromSnapshotOptions) =>
+        desc += s"[changeStartBatchId=${fromSnapshotOptions.changeStartBatchId}"
+        desc += s"[changeEndBatchId=${fromSnapshotOptions.changeEndBatchId}"
+      case _ =>
     }
     desc
   }
@@ -71,23 +78,10 @@ class StateTable(
   override def capabilities(): util.Set[TableCapability] = CAPABILITY
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
-    new StateScanBuilder(session, schema, sourceOptions, stateConf, stateStoreMetadata)
+    new StateScanBuilder(session, schema, sourceOptions, stateConf, keyStateEncoderSpec,
+      stateVariableInfoOpt, stateStoreColFamilySchemaOpt)
 
   override def properties(): util.Map[String, String] = Map.empty[String, String].asJava
-
-  private def isValidSchema(schema: StructType): Boolean = {
-    if (schema.fieldNames.toImmutableArraySeq != Seq("key", "value", "partition_id")) {
-      false
-    } else if (!SchemaUtil.getSchemaAsDataType(schema, "key").isInstanceOf[StructType]) {
-      false
-    } else if (!SchemaUtil.getSchemaAsDataType(schema, "value").isInstanceOf[StructType]) {
-      false
-    } else if (!SchemaUtil.getSchemaAsDataType(schema, "partition_id").isInstanceOf[IntegerType]) {
-      false
-    } else {
-      true
-    }
-  }
 
   override def metadataColumns(): Array[MetadataColumn] = Array.empty
 }

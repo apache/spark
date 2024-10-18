@@ -794,7 +794,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.redaction.regex</code></td>
-  <td>(?i)secret|password|token|access[.]key</td>
+  <td>(?i)secret|password|token|access[.]?key</td>
   <td>
     Regex to decide which Spark configuration properties and environment variables in driver and
     executor environments contain sensitive information. When this regex matches a property key or
@@ -1030,6 +1030,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.4.0</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.file.merge.buffer</code></td>
+  <td>32k</td>
+  <td>
+    Size of the in-memory buffer for each shuffle file input stream, in KiB unless otherwise
+    specified. These buffers use off-heap buffers and are related to the number of files in
+    the shuffle file. Too large buffers should be avoided.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.unsafe.file.output.buffer</code></td>
   <td>32k</td>
   <td>
@@ -1223,6 +1233,19 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.2.1</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.accurateBlockSkewedFactor</code></td>
+  <td>-1.0</td>
+  <td>
+    A shuffle block is considered as skewed and will be accurately recorded in
+    <code>HighlyCompressedMapStatus</code> if its size is larger than this factor multiplying
+    the median shuffle block size or <code>spark.shuffle.accurateBlockThreshold</code>. It is
+    recommended to set this parameter to be the same as
+    <code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code>. Set to -1.0 to disable this
+    feature by default.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.registration.timeout</code></td>
   <td>5000</td>
   <td>
@@ -1322,7 +1345,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.checksum.algorithm</code></td>
   <td>ADLER32</td>
   <td>
-    The algorithm is used to calculate the shuffle checksum. Currently, it only supports built-in algorithms of JDK, e.g., ADLER32, CRC32.
+    The algorithm is used to calculate the shuffle checksum. Currently, it only supports built-in algorithms of JDK, e.g., ADLER32, CRC32 and CRC32C.
   </td>
   <td>3.2.0</td>
 </tr>
@@ -1666,7 +1689,7 @@ Apart from these, the following properties are also available, and may be useful
     which will be also effective when accessing the application on history server. The new log urls must be
     permanent, otherwise you might have dead link for executor log urls.
     <p/>
-    For now, only YARN mode supports this configuration
+    For now, only YARN and K8s cluster manager supports this configuration
   </td>
   <td>3.0.0</td>
 </tr>
@@ -1733,6 +1756,10 @@ Apart from these, the following properties are also available, and may be useful
     <br /><code>spark.ui.filters=com.test.filter1</code>
     <br /><code>spark.com.test.filter1.param.name1=foo</code>
     <br /><code>spark.com.test.filter1.param.name2=bar</code>
+    <br />
+    <br />Note that some filter requires additional dependencies. For example,
+    the built-in <code>org.apache.spark.ui.JWSFilter</code> requires
+    <code>jjwt-impl</code> and <code>jjwt-jackson</code> jar files.
   </td>
   <td>1.0.0</td>
 </tr>
@@ -2825,8 +2852,35 @@ Apart from these, the following properties are also available, and may be useful
     If set to "true", prevent Spark from scheduling tasks on executors that have been excluded
     due to too many task failures. The algorithm used to exclude executors and nodes can be further
     controlled by the other "spark.excludeOnFailure" configuration options.
+    This config will be overriden by "spark.excludeOnFailure.application.enabled" and 
+    "spark.excludeOnFailure.taskAndStage.enabled" to specify exclusion enablement on individual
+    levels.
   </td>
   <td>2.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.excludeOnFailure.application.enabled</code></td>
+  <td>
+    false
+  </td>
+  <td>
+    If set to "true", enables excluding executors for the entire application due to too many task
+    failures and prevent Spark from scheduling tasks on them.
+    This config overrides "spark.excludeOnFailure.enabled". 
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.excludeOnFailure.taskAndStage.enabled</code></td>
+  <td>
+    false
+  </td>
+  <td>
+    If set to "true", enables excluding executors on a task set level due to too many task
+    failures and prevent Spark from scheduling tasks on them.
+    This config overrides "spark.excludeOnFailure.enabled". 
+  </td>
+  <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.excludeOnFailure.timeout</code></td>
@@ -3562,7 +3616,7 @@ External users can query the static sql config values via `SparkSession.conf` or
 </tr>
 </table>
 
-### SparkR
+### SparkR (deprecated)
 
 <table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>

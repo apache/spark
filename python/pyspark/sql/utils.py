@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from enum import Enum
 import inspect
 import functools
 import os
@@ -40,6 +41,7 @@ from pyspark.errors import (  # noqa: F401
     PythonException,
     UnknownException,
     SparkUpgradeException,
+    PySparkImportError,
     PySparkNotImplementedError,
     PySparkRuntimeError,
 )
@@ -109,9 +111,25 @@ def require_test_compiled() -> None:
 
     if len(paths) == 0:
         raise PySparkRuntimeError(
-            error_class="TEST_CLASS_NOT_COMPILED",
-            message_parameters={"test_class_path": test_class_path},
+            errorClass="TEST_CLASS_NOT_COMPILED",
+            messageParameters={"test_class_path": test_class_path},
         )
+
+
+def require_minimum_plotly_version() -> None:
+    """Raise ImportError if plotly is not installed"""
+    minimum_plotly_version = "4.8"
+
+    try:
+        import plotly  # noqa: F401
+    except ImportError as error:
+        raise PySparkImportError(
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={
+                "package_name": "plotly",
+                "minimum_version": str(minimum_plotly_version),
+            },
+        ) from error
 
 
 class ForeachBatchFunction:
@@ -191,6 +209,11 @@ def to_str(value: Any) -> Optional[str]:
         return value
     else:
         return str(value)
+
+
+def enum_to_value(value: Any) -> Any:
+    """Convert an Enum to its value if it is not None."""
+    return enum_to_value(value.value) if value is not None and isinstance(value, Enum) else value
 
 
 def is_timestamp_ntz_preferred() -> bool:
@@ -306,8 +329,8 @@ def get_active_spark_context() -> "SparkContext":
     sc = SparkContext._active_spark_context
     if sc is None or sc._jvm is None:
         raise PySparkRuntimeError(
-            error_class="SESSION_OR_CONTEXT_NOT_EXISTS",
-            message_parameters={},
+            errorClass="SESSION_OR_CONTEXT_NOT_EXISTS",
+            messageParameters={},
         )
     return sc
 
@@ -330,7 +353,7 @@ def try_remote_session_classmethod(f: FuncT) -> FuncT:
 
 def dispatch_df_method(f: FuncT) -> FuncT:
     """
-    For the usecases of direct DataFrame.union(df, ...), it checks if self
+    For the use cases of direct DataFrame.method(df, ...), it checks if self
     is a Connect DataFrame or Classic DataFrame, and dispatches.
     """
 
@@ -348,8 +371,8 @@ def dispatch_df_method(f: FuncT) -> FuncT:
                 return getattr(ClassicDataFrame, f.__name__)(*args, **kwargs)
 
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": f"DataFrame.{f.__name__}"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": f"DataFrame.{f.__name__}"},
         )
 
     return cast(FuncT, wrapped)
@@ -357,8 +380,8 @@ def dispatch_df_method(f: FuncT) -> FuncT:
 
 def dispatch_col_method(f: FuncT) -> FuncT:
     """
-    For the usecases of direct Column.method(col, ...), it checks if self
-    is a Connect DataFrame or Classic DataFrame, and dispatches.
+    For the use cases of direct Column.method(col, ...), it checks if self
+    is a Connect Column or Classic Column, and dispatches.
     """
 
     @functools.wraps(f)
@@ -375,8 +398,8 @@ def dispatch_col_method(f: FuncT) -> FuncT:
                 return getattr(ClassicColumn, f.__name__)(*args, **kwargs)
 
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": f"Column.{f.__name__}"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": f"Column.{f.__name__}"},
         )
 
     return cast(FuncT, wrapped)
@@ -384,8 +407,9 @@ def dispatch_col_method(f: FuncT) -> FuncT:
 
 def dispatch_window_method(f: FuncT) -> FuncT:
     """
-    For the usecases of direct Window.method(col, ...), it checks if self
-    is a Connect Window or Classic Window, and dispatches.
+    For use cases of direct Window.method(col, ...), this function dispatches
+    the call to either ConnectWindow or ClassicWindow based on the execution
+    environment.
     """
 
     @functools.wraps(f)
@@ -398,11 +422,6 @@ def dispatch_window_method(f: FuncT) -> FuncT:
             from pyspark.sql.classic.window import Window as ClassicWindow
 
             return getattr(ClassicWindow, f.__name__)(*args, **kwargs)
-
-        raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": f"Window.{f.__name__}"},
-        )
 
     return cast(FuncT, wrapped)
 
