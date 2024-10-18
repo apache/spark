@@ -35,6 +35,7 @@ import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
 import org.apache.spark.util.Utils
 
 class MasterWebUISuite extends SparkFunSuite {
+  import MasterWebUISuite._
 
   val conf = new SparkConf().set(DECOMMISSION_ENABLED, true)
   val securityMgr = new SecurityManager(conf)
@@ -113,12 +114,14 @@ class MasterWebUISuite extends SparkFunSuite {
   private def convPostDataToString(data: Map[String, String]): String = {
     convPostDataToString(data.toSeq)
   }
+}
 
+object MasterWebUISuite {
   /**
    * Send an HTTP request to the given URL using the method and the body specified.
    * Return the connection object.
    */
-  private def sendHttpRequest(
+  private[ui] def sendHttpRequest(
       url: String,
       method: String,
       body: String = ""): HttpURLConnection = {
