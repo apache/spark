@@ -17,9 +17,11 @@
 
 package org.apache.spark.util
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.executor.{ExecutorExitCode, KilledByTaskReaperException}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.THREAD
+import org.apache.spark.internal.config.EXECUTOR_KILL_ON_FATAL_ERROR_DEPTH
 
 /**
  * The default uncaught exception handler for Spark daemons. It terminates the whole process for
@@ -36,6 +38,20 @@ private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: 
     val _ = SparkExitCode.OOM
   }
 
+  // The maximum depth to search in the exception cause chain for a fatal error,
+  // as defined by killOnFatalErrorDepth in Executor.scala.
+  //
+  // SPARK-50034: When this handler is called, there is a fatal error in the cause chain within
+  // the specified depth. We should identify that fatal error and exit with the
+  // correct exit code.
+  private val killOnFatalErrorDepth: Int = {
+    // At this point SparkEnv might be None
+    Option(SparkEnv.get) match {
+      case Some(env) => env.conf.get(EXECUTOR_KILL_ON_FATAL_ERROR_DEPTH)
+      case None => 5
+    }
+  }
+
   override def uncaughtException(thread: Thread, exception: Throwable): Unit = {
     try {
       val mdc = MDC(THREAD, thread)
@@ -50,19 +66,30 @@ private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: 
       // We may have been called from a shutdown hook. If so, we must not call System.exit().
       // (If we do, we will deadlock.)
       if (!ShutdownHookManager.inShutdown()) {
-        exception match {
-          case _: OutOfMemoryError =>
-            System.exit(SparkExitCode.OOM)
-          case e: SparkFatalException if e.throwable.isInstanceOf[OutOfMemoryError] =>
-            // SPARK-24294: This is defensive code, in case that SparkFatalException is
-            // misused and uncaught.
-            System.exit(SparkExitCode.OOM)
-          case _: KilledByTaskReaperException if exitOnUncaughtException =>
-            System.exit(ExecutorExitCode.KILLED_BY_TASK_REAPER)
-          case _ if exitOnUncaughtException =>
-            System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
-          case _ =>
-            // SPARK-30310: Don't System.exit() when exitOnUncaughtException is false
+        // Traverse the causes up to killOnFatalErrorDepth layers
+        var currentException: Throwable = exception
+        var depth = 0
+
+        while (currentException != null && depth < killOnFatalErrorDepth) {
+          currentException match {
+            case _: OutOfMemoryError =>
+              System.exit(SparkExitCode.OOM)
+            case e: SparkFatalException if e.throwable.isInstanceOf[OutOfMemoryError] =>
+              // SPARK-24294: This is defensive code, in case that SparkFatalException is
+              // misused and uncaught.
+              System.exit(SparkExitCode.OOM)
+            case _: KilledByTaskReaperException if exitOnUncaughtException =>
+              System.exit(ExecutorExitCode.KILLED_BY_TASK_REAPER)
+            // No match, continue traversing the cause chain
+            case _ =>
+          }
+          // Move to the next cause in the chain
+          currentException = currentException.getCause
+          depth += 1
+        }
+
+        if (exitOnUncaughtException) {
+          System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
         }
       }
     } catch {
