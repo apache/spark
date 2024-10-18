@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, UnresolvedSeed}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedSeed
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXPRESSION_WITH_RANDOM_SEED, TreePattern}
@@ -111,12 +111,8 @@ case class Rand(child: Expression, hideSeed: Boolean = false) extends RDG {
   }
 
   override def flatArguments: Iterator[Any] = Iterator(child)
-
-  override def prettyName: String =
-    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("rand")
-
   override def sql: String = {
-    s"$prettyName(${if (hideSeed) "" else child.sql})"
+    s"rand(${if (hideSeed) "" else child.sql})"
   }
 
   override protected def withNewChildInternal(newChild: Expression): Rand = copy(child = newChild)
