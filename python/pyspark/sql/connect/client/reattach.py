@@ -29,7 +29,7 @@ import os
 import grpc
 from grpc_status import rpc_status
 
-from pyspark.sql.connect.client.logging import logger
+from pyspark.sql.connect.logging import logger
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 from pyspark.errors import PySparkRuntimeError
