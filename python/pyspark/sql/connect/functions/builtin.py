@@ -2394,22 +2394,31 @@ def unbase64(col: "ColumnOrName") -> Column:
 unbase64.__doc__ = pysparkfuncs.unbase64.__doc__
 
 
-def ltrim(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("ltrim", col)
+def ltrim(col: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
+    if trim is not None:
+        return _invoke_function_over_columns("ltrim", trim, col)
+    else:
+        return _invoke_function_over_columns("ltrim", col)
 
 
 ltrim.__doc__ = pysparkfuncs.ltrim.__doc__
 
 
-def rtrim(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("rtrim", col)
+def rtrim(col: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
+    if trim is not None:
+        return _invoke_function_over_columns("rtrim", trim, col)
+    else:
+        return _invoke_function_over_columns("rtrim", col)
 
 
 rtrim.__doc__ = pysparkfuncs.rtrim.__doc__
 
 
-def trim(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("trim", col)
+def trim(col: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
+    if trim is not None:
+        return _invoke_function_over_columns("trim", trim, col)
+    else:
+        return _invoke_function_over_columns("trim", col)
 
 
 trim.__doc__ = pysparkfuncs.trim.__doc__
@@ -2434,6 +2443,34 @@ def encode(col: "ColumnOrName", charset: str) -> Column:
 
 
 encode.__doc__ = pysparkfuncs.encode.__doc__
+
+
+def is_valid_utf8(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("is_valid_utf8", _to_col(str))
+
+
+is_valid_utf8.__doc__ = pysparkfuncs.is_valid_utf8.__doc__
+
+
+def make_valid_utf8(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("make_valid_utf8", _to_col(str))
+
+
+make_valid_utf8.__doc__ = pysparkfuncs.make_valid_utf8.__doc__
+
+
+def validate_utf8(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("validate_utf8", _to_col(str))
+
+
+validate_utf8.__doc__ = pysparkfuncs.validate_utf8.__doc__
+
+
+def try_validate_utf8(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_validate_utf8", _to_col(str))
+
+
+try_validate_utf8.__doc__ = pysparkfuncs.try_validate_utf8.__doc__
 
 
 def format_number(col: "ColumnOrName", d: int) -> Column:

@@ -288,7 +288,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
       sem.acquire(1)
       sc.cancelJobGroupAndFutureJobs(s"job-group-$idx")
       ThreadUtils.awaitReady(job, Duration.Inf).failed.foreach { case e: SparkException =>
-        assert(e.getErrorClass == "SPARK_JOB_CANCELLED")
+        assert(e.getCondition == "SPARK_JOB_CANCELLED")
       }
     }
     // submit a job with the 0 job group that was evicted from cancelledJobGroups set, it should run

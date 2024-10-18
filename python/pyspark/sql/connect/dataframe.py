@@ -781,53 +781,14 @@ class DataFrame(ParentDataFrame):
         fraction: Optional[Union[int, float]] = None,
         seed: Optional[int] = None,
     ) -> ParentDataFrame:
-        # For the cases below:
-        #   sample(True, 0.5 [, seed])
-        #   sample(True, fraction=0.5 [, seed])
-        #   sample(withReplacement=False, fraction=0.5 [, seed])
-        is_withReplacement_set = type(withReplacement) == bool and isinstance(fraction, float)
-
-        # For the case below:
-        #   sample(faction=0.5 [, seed])
-        is_withReplacement_omitted_kwargs = withReplacement is None and isinstance(fraction, float)
-
-        # For the case below:
-        #   sample(0.5 [, seed])
-        is_withReplacement_omitted_args = isinstance(withReplacement, float)
-
-        if not (
-            is_withReplacement_set
-            or is_withReplacement_omitted_kwargs
-            or is_withReplacement_omitted_args
-        ):
-            argtypes = [type(arg).__name__ for arg in [withReplacement, fraction, seed]]
-            raise PySparkTypeError(
-                errorClass="NOT_BOOL_OR_FLOAT_OR_INT",
-                messageParameters={
-                    "arg_name": "withReplacement (optional), "
-                    + "fraction (required) and seed (optional)",
-                    "arg_type": ", ".join(argtypes),
-                },
-            )
-
-        if is_withReplacement_omitted_args:
-            if fraction is not None:
-                seed = cast(int, fraction)
-            fraction = withReplacement
-            withReplacement = None
-
-        if withReplacement is None:
-            withReplacement = False
-
-        seed = int(seed) if seed is not None else random.randint(0, sys.maxsize)
-
+        _w, _f, _s = self._preapare_args_for_sample(withReplacement, fraction, seed)
         res = DataFrame(
             plan.Sample(
                 child=self._plan,
                 lower_bound=0.0,
-                upper_bound=fraction,  # type: ignore[arg-type]
-                with_replacement=withReplacement,  # type: ignore[arg-type]
-                seed=seed,
+                upper_bound=_f,
+                with_replacement=_w,
+                seed=_s,
             ),
             session=self._session,
         )
@@ -2173,8 +2134,10 @@ class DataFrame(ParentDataFrame):
         assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
         return checkpointed
 
-    def localCheckpoint(self, eager: bool = True) -> ParentDataFrame:
-        cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager)
+    def localCheckpoint(
+        self, eager: bool = True, storageLevel: Optional[StorageLevel] = None
+    ) -> ParentDataFrame:
+        cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager, storage_level=storageLevel)
         _, properties, self._execution_info = self._session.client.execute_command(
             cmd.command(self._session.client)
         )

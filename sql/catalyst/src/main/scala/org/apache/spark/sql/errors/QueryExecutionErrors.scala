@@ -599,16 +599,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("methodName" -> methodName))
   }
 
-  def arithmeticOverflowError(e: ArithmeticException): SparkArithmeticException = {
-    new SparkArithmeticException(
-      errorClass = "_LEGACY_ERROR_TEMP_2042",
-      messageParameters = Map(
-        "message" -> e.getMessage,
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = Array.empty,
-      summary = "")
-  }
-
   def binaryArithmeticCauseOverflowError(
       eval1: Short,
       symbol: String,
@@ -870,7 +860,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def cannotRemoveReservedPropertyError(property: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2069",
+      errorClass = "CANNOT_REMOVE_RESERVED_PROPERTY",
       messageParameters = Map("property" -> property))
   }
 
@@ -1112,7 +1102,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def cannotAcquireMemoryToBuildUnsafeHashedRelationError(): Throwable = {
     new SparkOutOfMemoryError(
-      "_LEGACY_ERROR_TEMP_2107")
+      "_LEGACY_ERROR_TEMP_2107",
+      new java.util.HashMap[String, String]())
   }
 
   def rowLargerThan256MUnsupportedError(): SparkUnsupportedOperationException = {
@@ -1255,6 +1246,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "fieldValue" -> fieldValue,
         "jsonType" -> jsonType.toString(),
         "dataType" -> toSQLType(dataType)))
+  }
+
+  def wrongDatatypeInSomeRows(pos: Int, dataType: DataType): SparkSQLException = {
+    new SparkSQLException(
+      errorClass = "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH",
+      messageParameters = Map("pos" -> pos.toString(), "type" -> toSQLType(dataType)))
   }
 
   def rootConverterReturnNullError(): SparkRuntimeException = {
@@ -1401,10 +1398,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "mapType" -> MapType.simpleString))
   }
 
-  def malformedRecordsDetectedInSchemaInferenceError(e: Throwable): Throwable = {
+  def malformedRecordsDetectedInSchemaInferenceError(e: Throwable, badRecord: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2165",
+      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       messageParameters = Map(
+        "badRecord" -> badRecord,
         "failFastMode" -> FailFastMode.name),
       cause = e)
   }
@@ -2275,7 +2273,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def unsupportedUpdateColumnNullabilityError(): SparkSQLFeatureNotSupportedException = {
     new SparkSQLFeatureNotSupportedException(
-      errorClass = "_LEGACY_ERROR_TEMP_2271",
+      errorClass = "UNSUPPORTED_FEATURE.UPDATE_COLUMN_NULLABILITY",
       messageParameters = Map.empty)
   }
 
@@ -2845,6 +2843,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
+  def conflictingDirectoryStructuresError(
+      discoveredBasePaths: Seq[String]): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "CONFLICTING_DIRECTORY_STRUCTURES",
+      messageParameters = Map(
+        "discoveredBasePaths" -> discoveredBasePaths.distinct.mkString("\n\t", "\n\t", "\n")
+      )
+    )
+  }
+
   def conflictingPartitionColumnNamesError(
       distinctPartColLists: Seq[String],
       suspiciousPaths: Seq[Path]): SparkRuntimeException = {
@@ -2853,6 +2861,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "distinctPartColLists" -> distinctPartColLists.mkString("\n\t", "\n\t", "\n"),
         "suspiciousPaths" -> suspiciousPaths.map("\t" + _).mkString("\n", "\n", "")
+      )
+    )
+  }
+
+  def partitionColumnNotFoundInTheTableSchemaError(
+      column: Seq[String],
+      schema: StructType): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "PARTITION_COLUMN_NOT_FOUND_IN_SCHEMA",
+      messageParameters = Map(
+        "column" -> toSQLId(column),
+        "schema" -> toSQLType(schema)
       )
     )
   }

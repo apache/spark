@@ -554,9 +554,9 @@ class PCA:
     ...     Vectors.dense([4.0, 0.0, 0.0, 6.0, 7.0])]
     >>> model = PCA(2).fit(sc.parallelize(data))
     >>> pcArray = model.transform(Vectors.sparse(5, [(1, 1.0), (3, 7.0)])).toArray()
-    >>> pcArray[0]
+    >>> float(pcArray[0])
     1.648...
-    >>> pcArray[1]
+    >>> float(pcArray[1])
     -4.013...
     """
 
