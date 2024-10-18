@@ -511,7 +511,7 @@ abstract class CTEInlineSuiteBase
          """.stripMargin)
       checkAnswer(df1, Row(2, 2) :: Nil)
       df1.queryExecution.analyzed match {
-        case Aggregate(_, _, WithCTE(_, cteDefs)) => assert(cteDefs.length == 2)
+        case Aggregate(_, _, WithCTE(_, cteDefs), _) => assert(cteDefs.length == 2)
         case other => fail(s"Expect pattern Aggregate(WithCTE(_)) but got $other")
       }
 
@@ -530,7 +530,7 @@ abstract class CTEInlineSuiteBase
          """.stripMargin)
       checkAnswer(df2, Row(2, 2) :: Nil)
       df2.queryExecution.analyzed match {
-        case Aggregate(_, _, Join(_, SubqueryAlias(_, WithCTE(_, cteDefs)), _, _, _)) =>
+        case Aggregate(_, _, Join(_, SubqueryAlias(_, WithCTE(_, cteDefs)), _, _, _), _) =>
           assert(cteDefs.length == 1)
         case other => fail(s"Expect pattern Aggregate(Join(_, WithCTE(_))) but got $other")
       }
@@ -560,7 +560,7 @@ abstract class CTEInlineSuiteBase
          """.stripMargin)
       checkAnswer(df3, Row(4, 4) :: Nil)
       df3.queryExecution.analyzed match {
-        case Aggregate(_, _, Join(_, SubqueryAlias(_, WithCTE(_: Union, cteDefs)), _, _, _)) =>
+        case Aggregate(_, _, Join(_, SubqueryAlias(_, WithCTE(_: Union, cteDefs)), _, _, _), _) =>
           assert(cteDefs.length == 2)
         case other => fail(
           s"Expect pattern Aggregate(Join(_, (WithCTE(Union(_, _))))) but got $other")
@@ -585,7 +585,7 @@ abstract class CTEInlineSuiteBase
          """.stripMargin)
       checkAnswer(df4, Row(4, 4) :: Nil)
       df4.queryExecution.analyzed match {
-        case Aggregate(_, _, Join(_, SubqueryAlias(_, Union(children, _, _)), _, _, _))
+        case Aggregate(_, _, Join(_, SubqueryAlias(_, Union(children, _, _)), _, _, _), _)
           if children.head.find(_.isInstanceOf[WithCTE]).isDefined =>
           assert(
             children.head.collect {
@@ -618,7 +618,7 @@ abstract class CTEInlineSuiteBase
          """.stripMargin)
       checkAnswer(df5, Row(4, 4) :: Nil)
       df5.queryExecution.analyzed match {
-        case Aggregate(_, _, WithCTE(_, cteDefs)) => assert(cteDefs.length == 2)
+        case Aggregate(_, _, WithCTE(_, cteDefs), _) => assert(cteDefs.length == 2)
         case other => fail(s"Expect pattern Aggregate(WithCTE(_)) but got $other")
       }
 
