@@ -75,7 +75,7 @@ private[spark] class NewHadoopPartition(
  */
 @DeveloperApi
 class NewHadoopRDD[K, V](
-    sc : SparkContext,
+    sc: SparkContext,
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
@@ -85,7 +85,7 @@ class NewHadoopRDD[K, V](
   extends RDD[(K, V)](sc, Nil) with Logging {
 
   def this(
-      sc: SparkContext,
+      sc : SparkContext,
       inputFormatClass: Class[_ <: InputFormat[K, V]],
       keyClass: Class[K],
       valueClass: Class[V],
