@@ -83,6 +83,17 @@ case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
  */
 @DeveloperApi
 abstract class JdbcDialect extends Serializable with Logging {
+
+  /**
+   * Returns jdbc version that this dialect uses.
+   */
+  def jdbcVersion(): Int = Int.MaxValue
+
+  /**
+   * Returns dialect version that this dialect uses.
+   */
+  def dialectVersion(): Int = Int.MaxValue
+
   /**
    * Check if this dialect instance can handle a certain jdbc url.
    * @param url the jdbc url.
@@ -930,4 +941,15 @@ object JdbcDialects {
  */
 private[spark] object NoopDialect extends JdbcDialect {
   override def canHandle(url : String): Boolean = true
+
+  /**
+   * Noop dialect always uses latest version
+   */
+  override def jdbcVersion(): Int = SQLConf.get.getConf(SQLConf.NOOP_JDBC_VERSION)
+
+  /**
+   * Noop dialect always uses latest version
+   */
+  override def dialectVersion(): Int = SQLConf.get.getConf(SQLConf.NOOP_DIALECT_VERSION)
+
 }

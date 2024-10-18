@@ -34,9 +34,21 @@ import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, MetadataBuilder, ShortType, StringType, TimestampType}
 
 private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
+
+  /**
+   * Returns jdbc version that this dialect uses.
+   */
+  override def jdbcVersion(): Int = SQLConf.get.getConf(SQLConf.H2_JDBC_VERSION)
+
+  /**
+   * Returns dialect version that this dialect uses.
+   */
+  override def dialectVersion(): Int = SQLConf.get.getConf(SQLConf.H2_DIALECT_VERSION)
+
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:h2")
 
