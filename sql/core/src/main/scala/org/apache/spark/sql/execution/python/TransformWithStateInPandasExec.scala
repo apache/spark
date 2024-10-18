@@ -154,6 +154,7 @@ case class TransformWithStateInPandasExec(
           // by the upstream (consumer) operators in addition to the processing in this operator.
           allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
           commitTimeMs += timeTakenMs {
+            processorHandle.doTtlCleanup()
             store.commit()
           }
           setStoreMetrics(store)
