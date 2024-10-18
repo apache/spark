@@ -3207,7 +3207,7 @@
   },
   "INVALID_URL" : {
     "message" : [
-      "The url is invalid: <url>. Use `try_parse_url` to tolerate invalid URL and return NULL instead."
+      "The url is invalid: <url>. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
     "sqlState" : "22P02"
   },
