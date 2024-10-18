@@ -48,7 +48,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, con
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, IdentityColumnSpec, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
-import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryParsingErrors, SqlScriptingErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LEGACY_BANG_EQUALS_NOT
 import org.apache.spark.sql.types._
@@ -62,7 +62,7 @@ import org.apache.spark.util.random.RandomSampler
  * TableIdentifier.
  */
 class AstBuilder extends DataTypeAstBuilder
-  with SQLConfHelper with Logging with DataTypeErrorsBase {
+  with SQLConfHelper with Logging with QueryErrorsBase {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import ParserUtils._
 
@@ -2956,6 +2956,18 @@ class AstBuilder extends DataTypeAstBuilder
     val branches = ctx.whenClause.asScala.map { wCtx =>
       (expression(wCtx.condition), expression(wCtx.result))
     }
+    branches.foreach(
+      branch =>
+        branch._1 match {
+          case _: LambdaFunction =>
+            throw new ParseException(
+              "INVALID_LAMBDA_USAGE",
+              Map("lambdaExpr" -> toSQLExpr(branch._1)),
+              ctx
+            )
+          case _ =>
+        }
+    )
     CaseWhen(branches.toSeq, Option(ctx.elseExpression).map(expression))
   }
 

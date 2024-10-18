@@ -2701,6 +2701,12 @@
     },
     "sqlState" : "42K0D"
   },
+  "INVALID_LAMBDA_USAGE" : {
+    "message" : [
+      "The lambda function <lambdaExpr> cannot be used in this context. Lambda functions must be passed as arguments to functions defined to accept them, such as array_sort."
+    ],
+    "sqlState" : "42K0E"
+  },
   "INVALID_LATERAL_JOIN_TYPE" : {
     "message" : [
       "The <joinType> JOIN with LATERAL correlation is not allowed because an OUTER subquery cannot correlate to its join partner. Remove the LATERAL correlation or use an INNER JOIN, or LEFT OUTER JOIN instead."
