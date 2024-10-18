@@ -453,7 +453,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
 }
 
 
@@ -766,7 +769,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
 }
 
 
@@ -873,7 +879,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
 }
 
 
@@ -980,7 +989,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
 }
 
 
@@ -1121,7 +1133,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
 }
 
 
@@ -1274,7 +1289,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
 }
 
 
@@ -1427,7 +1445,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
 }
 
 
@@ -1580,7 +1601,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
 }
 
 
@@ -1707,7 +1731,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
 }
 
 
@@ -1880,7 +1907,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
 }
 
 
@@ -1993,7 +2023,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
 }
 
 
@@ -2146,7 +2179,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
 }
 
 
@@ -2744,7 +2780,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
 }
 
 
@@ -3064,7 +3103,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
 }
 
 
@@ -3471,7 +3513,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
 }
 
 
@@ -3598,7 +3643,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
 }
 
 
@@ -3725,7 +3773,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
 }
 
 
@@ -3878,7 +3929,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
+  }
 }
 
 
@@ -4019,7 +4073,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
 }
 
 
@@ -4172,7 +4229,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
+  }
 }
 
 
@@ -4313,7 +4373,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21"
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
+  }
 }
 
 
