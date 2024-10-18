@@ -93,14 +93,12 @@ private[spark] object History {
 
   val LOCAL_STORE_SERIALIZER = ConfigBuilder("spark.history.store.serializer")
     .doc("Serializer for writing/reading in-memory UI objects to/from disk-based KV Store; " +
-      "JSON or PROTOBUF. JSON serializer is the only choice before Spark 3.4.0, thus it is the " +
-      "default value. PROTOBUF serializer is fast and compact, and it is the default " +
-      "serializer for disk-based KV store of live UI.")
+      "JSON or PROTOBUF (default). PROTOBUF serializer is fast and compact.")
     .version("3.4.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(LocalStoreSerializer.values.map(_.toString))
-    .createWithDefault(LocalStoreSerializer.JSON.toString)
+    .createWithDefault(LocalStoreSerializer.PROTOBUF.toString)
 
   val MAX_LOCAL_DISK_USAGE = ConfigBuilder("spark.history.store.maxDiskUsage")
     .version("2.3.0")
