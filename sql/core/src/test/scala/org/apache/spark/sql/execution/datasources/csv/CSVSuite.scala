@@ -1510,8 +1510,9 @@ abstract class CSVSuite
             .csv(testFile(valueMalformedFile))
             .collect()
         },
-        condition = "_LEGACY_ERROR_TEMP_1097",
-        parameters = Map.empty
+        condition = "INVALID_CORRUPT_RECORD_TYPE",
+        parameters = Map(
+          "columnName" -> toSQLId(columnNameOfCorruptRecord), "actualType" -> "\"INT\"")
       )
     }
   }
