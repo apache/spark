@@ -97,9 +97,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       clause2: String): Throwable = {
     new ParseException(
       errorClass = "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS",
-      messageParameters = Map(
-        "clause1" -> clause1,
-        "clause2" -> clause2),
+      messageParameters = Map("clause1" -> clause1, "clause2" -> clause2),
       ctx)
   }
 
