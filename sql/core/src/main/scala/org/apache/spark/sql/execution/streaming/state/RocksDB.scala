@@ -72,7 +72,8 @@ class RocksDB(
     localRootDir: File = Utils.createTempDir(),
     hadoopConf: Configuration = new Configuration,
     loggingId: String = "",
-    useColumnFamilies: Boolean = false) extends Logging {
+    useColumnFamilies: Boolean = false,
+    enableStateStoreCheckpointIds: Boolean = false) extends Logging {
 
   import RocksDB._
 
@@ -158,6 +159,22 @@ class RocksDB(
   @volatile private var changelogWriter: Option[StateStoreChangelogWriter] = None
   private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
   @volatile private var loadedVersion = -1L   // -1 = nothing valid is loaded
+
+  // variables to manage checkpoint ID. Once a checkpointing finishes, it needs to return
+  // `lastCommittedStateStoreCkptId` as the committed checkpointID, as well as
+  // `lastCommitBasedStateStoreCkptId` as the checkpontID of the previous version that is based on.
+  // `loadedStateStoreCkptId` is the checkpointID for the current live DB. After the batch finishes
+  // and checkpoint finishes, it will turn into `lastCommitBasedStateStoreCkptId`.
+  // `sessionStateStoreCkptId` store an ID to be used for future checkpoints. It will be used as
+  // `lastCommittedStateStoreCkptId` after the checkpoint is committed. It will be reused until
+  // we have to use a new one. We have to update `sessionStateStoreCkptId` if we reload a previous
+  // batch version, as we would have to use a new checkpointID for re-committing a version.
+  // The reusing is to help debugging but is not required for the algorithm to work.
+  private var lastCommitBasedStateStoreCkptId: Option[String] = None
+  private var lastCommittedStateStoreCkptId: Option[String] = None
+  private var loadedStateStoreCkptId: Option[String] = None
+  private var sessionStateStoreCkptId: Option[String] = None
+
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
@@ -266,13 +283,18 @@ class RocksDB(
    * Note that this will copy all the necessary file from DFS to local disk as needed,
    * and possibly restart the native RocksDB instance.
    */
-  def load(version: Long, readOnly: Boolean = false): RocksDB = {
+  def load(
+      version: Long,
+      stateStoreCkptId: Option[String] = None,
+      readOnly: Boolean = false): RocksDB = {
     assert(version >= 0)
     acquire(LoadStore)
     recordedMetrics = None
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)}")
     try {
-      if (loadedVersion != version) {
+      if (loadedVersion != version ||
+        (enableStateStoreCheckpointIds && stateStoreCkptId.isDefined &&
+        (loadedStateStoreCkptId.isEmpty || stateStoreCkptId.get != loadedStateStoreCkptId.get))) {
         closeDB(ignoreException = false)
         val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
         rocksDBFileMapping.currentVersion = latestSnapshotVersion
@@ -311,6 +333,12 @@ class RocksDB(
         numKeysOnLoadedVersion = numKeysOnWritingVersion
         fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
       }
+      if (enableStateStoreCheckpointIds) {
+        lastCommitBasedStateStoreCkptId = None
+        loadedStateStoreCkptId = stateStoreCkptId
+        sessionStateStoreCkptId = Some(java.util.UUID.randomUUID.toString)
+      }
+      lastCommittedStateStoreCkptId = None
       if (conf.resetStatsOnLoad) {
         nativeStats.reset
       }
@@ -318,6 +346,10 @@ class RocksDB(
     } catch {
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded data
+        lastCommitBasedStateStoreCkptId = None
+        lastCommittedStateStoreCkptId = None
+        loadedStateStoreCkptId = None
+        sessionStateStoreCkptId = None
         throw t
     }
     if (enableChangelogCheckpointing && !readOnly) {
@@ -672,6 +704,11 @@ class RocksDB(
 
       numKeysOnLoadedVersion = numKeysOnWritingVersion
       loadedVersion = newVersion
+      if (enableStateStoreCheckpointIds) {
+        lastCommitBasedStateStoreCkptId = loadedStateStoreCkptId
+        lastCommittedStateStoreCkptId = sessionStateStoreCkptId
+        loadedStateStoreCkptId = sessionStateStoreCkptId
+      }
       commitLatencyMs ++= Map(
         "flush" -> flushTimeMs,
         "compact" -> compactTimeMs,
@@ -708,6 +745,10 @@ class RocksDB(
     acquire(RollbackStore)
     numKeysOnWritingVersion = numKeysOnLoadedVersion
     loadedVersion = -1L
+    lastCommitBasedStateStoreCkptId = None
+    lastCommittedStateStoreCkptId = None
+    loadedStateStoreCkptId = None
+    sessionStateStoreCkptId = None
     changelogWriter.foreach(_.abort())
     // Make sure changelogWriter gets recreated next time.
     changelogWriter = None
@@ -777,6 +818,19 @@ class RocksDB(
 
   /** Get the write buffer manager and cache */
   def getWriteBufferManagerAndCache(): (WriteBufferManager, Cache) = (writeBufferManager, lruCache)
+
+  /**
+   * Called by RocksDBStateStoreProvider to retrieve the checkpoint information to be
+   * passed back to the stateful operator. It will return the information for the latest
+   * state store checkpointing.
+   */
+  def getLatestCheckpointInfo(partitionId: Int): StateStoreCheckpointInfo = {
+    StateStoreCheckpointInfo(
+      partitionId,
+      loadedVersion,
+      lastCommittedStateStoreCkptId,
+      lastCommitBasedStateStoreCkptId)
+  }
 
   /** Get current instantaneous statistics */
   private def metrics: RocksDBMetrics = {

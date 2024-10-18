@@ -209,7 +209,8 @@ class MergingSortWithSessionWindowStateIteratorSuite extends StreamTest with Bef
       f: (StreamingSessionWindowStateManager, StateStore) => Unit): Unit = {
     withTempDir { file =>
       val storeConf = new StateStoreConf()
-      val stateInfo = StatefulOperatorStateInfo(file.getAbsolutePath, UUID.randomUUID, 0, 0, 5)
+      val stateInfo = StatefulOperatorStateInfo(
+        file.getAbsolutePath, UUID.randomUUID, 0, 0, 5, None)
 
       val manager = StreamingSessionWindowStateManager.createStateManager(
         keysWithoutSessionAttributes,
@@ -221,7 +222,7 @@ class MergingSortWithSessionWindowStateIteratorSuite extends StreamTest with Bef
       val store = StateStore.get(
         storeProviderId, manager.getStateKeySchema, manager.getStateValueSchema,
         PrefixKeyScanStateEncoderSpec(manager.getStateKeySchema, manager.getNumColsForPrefixKey),
-        stateInfo.storeVersion, useColumnFamilies = false, storeConf, new Configuration)
+        stateInfo.storeVersion, None, useColumnFamilies = false, storeConf, new Configuration)
 
       try {
         f(manager, store)
