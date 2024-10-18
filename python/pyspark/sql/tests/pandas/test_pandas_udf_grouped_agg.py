@@ -31,7 +31,7 @@ from pyspark.sql.functions import (
     pandas_udf,
     PandasUDFType,
 )
-from pyspark.sql.types import ArrayType, YearMonthIntervalType
+from pyspark.sql.types import ArrayType
 from pyspark.errors import AnalysisException, PySparkNotImplementedError, PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -39,6 +39,7 @@ from pyspark.testing.sqlutils import (
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
+    UnsupportedType,
 )
 from pyspark.testing.utils import assertDataFrameEqual
 
@@ -183,7 +184,7 @@ class GroupedAggPandasUDFTestsMixin:
         with self.assertRaises(PySparkNotImplementedError) as pe:
             pandas_udf(
                 lambda x: x,
-                ArrayType(ArrayType(YearMonthIntervalType())),
+                ArrayType(ArrayType(UnsupportedType())),
                 PandasUDFType.GROUPED_AGG,
             )
 
@@ -192,7 +193,7 @@ class GroupedAggPandasUDFTestsMixin:
             errorClass="NOT_IMPLEMENTED",
             messageParameters={
                 "feature": "Invalid return type with grouped aggregate Pandas UDFs: "
-                "ArrayType(ArrayType(YearMonthIntervalType(0, 1), True), True)"
+                "ArrayType(ArrayType(UnsupportedType(), True), True)"
             },
         )
 
@@ -214,7 +215,7 @@ class GroupedAggPandasUDFTestsMixin:
 
         with self.assertRaises(PySparkNotImplementedError) as pe:
 
-            @pandas_udf(ArrayType(YearMonthIntervalType()), PandasUDFType.GROUPED_AGG)
+            @pandas_udf(ArrayType(UnsupportedType()), PandasUDFType.GROUPED_AGG)
             def mean_and_std_udf(v):  # noqa: F811
                 return {v.mean(): v.std()}
 
@@ -223,7 +224,7 @@ class GroupedAggPandasUDFTestsMixin:
             errorClass="NOT_IMPLEMENTED",
             messageParameters={
                 "feature": "Invalid return type with grouped aggregate Pandas UDFs: "
-                "ArrayType(YearMonthIntervalType(0, 1), True)"
+                "ArrayType(UnsupportedType(), True)"
             },
         )
 

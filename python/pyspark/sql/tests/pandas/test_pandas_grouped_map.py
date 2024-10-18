@@ -50,7 +50,6 @@ from pyspark.sql.types import (
     StructField,
     NullType,
     MapType,
-    YearMonthIntervalType,
 )
 from pyspark.errors import PythonException, PySparkTypeError, PySparkValueError
 from pyspark.testing.sqlutils import (
@@ -59,6 +58,7 @@ from pyspark.testing.sqlutils import (
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
+    UnsupportedType,
 )
 
 if have_pandas:
@@ -406,11 +406,11 @@ class GroupedApplyInPandasTestsMixin:
     def check_wrong_return_type(self):
         with self.assertRaisesRegex(
             NotImplementedError,
-            "Invalid return type.*grouped map Pandas UDF.*ArrayType.*YearMonthIntervalType",
+            "Invalid return type.*grouped map Pandas UDF.*ArrayType.*UnsupportedType",
         ):
             pandas_udf(
                 lambda pdf: pdf,
-                StructType().add("id", LongType()).add("v", ArrayType(YearMonthIntervalType())),
+                StructType().add("id", LongType()).add("v", ArrayType(UnsupportedType())),
                 PandasUDFType.GROUPED_MAP,
             )
 
@@ -466,8 +466,8 @@ class GroupedApplyInPandasTestsMixin:
     def check_unsupported_types(self):
         common_err_msg = "Invalid return type.*grouped map Pandas UDF.*"
         unsupported_types = [
-            StructField("array_struct", ArrayType(YearMonthIntervalType())),
-            StructField("map", MapType(StringType(), YearMonthIntervalType())),
+            StructField("array_struct", ArrayType(UnsupportedType())),
+            StructField("map", MapType(StringType(), UnsupportedType())),
         ]
 
         for unsupported_type in unsupported_types:
