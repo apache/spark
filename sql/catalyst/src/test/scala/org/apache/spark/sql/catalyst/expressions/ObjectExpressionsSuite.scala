@@ -755,6 +755,31 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val genCode = StaticInvoke(TestFun.getClass, IntegerType, "foo", arguments).genCode(ctx)
     assert(!genCode.code.toString.contains("boxedResult"))
   }
+
+  test("StaticInvoke call return `any` method") {
+    val cls = TestStaticInvokeReturnAny.getClass
+    Seq((0, true), (1, true), (2, false)).foreach {
+      case (arg, returnNullable) =>
+        val dataType = arg match {
+          case 0 => IntegerType
+          case 1 => ObjectType(classOf[java.lang.Long])
+          case 2 => ObjectType(classOf[java.lang.Long])
+        }
+        val arguments = Seq(Literal(arg))
+        val inputTypes = Seq(IntegerType)
+        val expected = arg match {
+          case 0 => 0
+          case 1 => java.lang.Long.valueOf(1)
+          case 2 => java.lang.Long.valueOf(2)
+        }
+        val inputRow = InternalRow.fromSeq(Seq(arg))
+        checkObjectExprEvaluation(
+          StaticInvoke(cls, dataType, "func", arguments, inputTypes,
+            returnNullable = returnNullable),
+          expected,
+          inputRow)
+    }
+  }
 }
 
 class TestBean extends Serializable {
@@ -790,3 +815,10 @@ case object TestFun {
   def foo(left: Int, right: Int): Int = left + right
 }
 
+object TestStaticInvokeReturnAny {
+  def func(input: Int): Any = input match {
+    case 0 => 0
+    case 1 => java.lang.Long.valueOf(1)
+    case 2 => java.lang.Long.valueOf(2)
+  }
+}
