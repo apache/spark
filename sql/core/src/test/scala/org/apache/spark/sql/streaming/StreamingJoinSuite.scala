@@ -1417,6 +1417,56 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
       )
     }
   }
+
+  test("SPARK-49829 left-outer join, input being unmatched is between WM for late event and " +
+    "WM for eviction") {
+
+    withTempDir { checkpoint =>
+      // This config needs to be set, otherwise no-data batch will be triggered and after
+      // no-data batch, WM for late event and WM for eviction would be same.
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        val memoryStream1 = MemoryStream[(String, Int)]
+        val memoryStream2 = MemoryStream[(String, Int)]
+
+        val data1 = memoryStream1.toDF()
+          .selectExpr("_1 AS key", "timestamp_seconds(_2) AS eventTime")
+          .withWatermark("eventTime", "0 seconds")
+        val data2 = memoryStream2.toDF()
+          .selectExpr("_1 AS key", "timestamp_seconds(_2) AS eventTime")
+          .withWatermark("eventTime", "0 seconds")
+
+        val joinedDf = data1.join(data2, Seq("key", "eventTime"), "leftOuter")
+          .selectExpr("key", "CAST(eventTime AS long) AS eventTime")
+
+        testStream(joinedDf)(
+          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          // batch 0
+          // WM: late record = 0, eviction = 0
+          MultiAddData(
+            (memoryStream1, Seq(("a", 1), ("b", 2))),
+            (memoryStream2, Seq(("b", 2), ("c", 1)))
+          ),
+          CheckNewAnswer(("b", 2)),
+          // state rows
+          // left: ("a", 1), ("b", 2)
+          // right: ("b", 2), ("c", 1)
+          // batch 1
+          // WM: late record = 0, eviction = 2
+          // Before Spark introduces multiple stateful operator, WM for late record was same as
+          // WM for eviction, hence ("d", 1) was treated as late record.
+          // With the multiple state operator, ("d", 1) is added in batch 1 but also evicted in
+          // batch 1. Note that the eviction is happening with state watermark: for this join,
+          // state watermark = state eviction under join condition. Before SPARK-49829, this
+          // wasn't producing unmatched row, and it is fixed.
+          AddData(memoryStream1, ("d", 1)),
+          CheckNewAnswer(("a", 1), ("d", 1))
+          // state rows
+          // left: none
+          // right: none
+        )
+      }
+    }
+  }
 }
 
 @SlowSQLTest
@@ -1823,5 +1873,120 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
       // right: (6, 6L), (8, 8L)
       assertNumStateRows(total = 9, updated = 4)
     )
+  }
+
+  test("SPARK-49829 two chained stream-stream left outer joins among three input streams") {
+    withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+      val memoryStream1 = MemoryStream[(Long, Int)]
+      val memoryStream2 = MemoryStream[(Long, Int)]
+      val memoryStream3 = MemoryStream[(Long, Int)]
+
+      val data1 = memoryStream1.toDF()
+        .selectExpr("timestamp_seconds(_1) AS eventTime", "_2 AS v1")
+        .withWatermark("eventTime", "0 seconds")
+      val data2 = memoryStream2.toDF()
+        .selectExpr("timestamp_seconds(_1) AS eventTime", "_2 AS v2")
+        .withWatermark("eventTime", "0 seconds")
+      val data3 = memoryStream3.toDF()
+        .selectExpr("timestamp_seconds(_1) AS eventTime", "_2 AS v3")
+        .withWatermark("eventTime", "0 seconds")
+
+      val join = data1
+        .join(data2, Seq("eventTime"), "leftOuter")
+        .join(data3, Seq("eventTime"), "leftOuter")
+        .selectExpr("CAST(eventTime AS long) AS eventTime", "v1", "v2", "v3")
+
+      testStream(join)(
+        // batch 0
+        // WM: late event = 0, eviction = 0
+        MultiAddData(
+          (memoryStream1, Seq((20L, 1))),
+          (memoryStream2, Seq((20L, 1))),
+          (memoryStream3, Seq((20L, 1)))
+        ),
+        CheckNewAnswer((20, 1, 1, 1)),
+        // state rows
+        // 1st join
+        // left: (20, 1)
+        // right: (20, 1)
+        // 2nd join
+        // left: (20, 1, 1)
+        // right: (20, 1)
+        // batch 1
+        // WM: late event = 0, eviction = 20
+        MultiAddData(
+          (memoryStream1, Seq((21L, 2))),
+          (memoryStream2, Seq((21L, 2)))
+        ),
+        CheckNewAnswer(),
+        // state rows
+        // 1st join
+        // left: (21, 2)
+        // right: (21, 2)
+        // 2nd join
+        // left: (21, 2, 2)
+        // right: none
+        // batch 2
+        // WM: late event = 20, eviction = 20 (slowest: inputStream3)
+        MultiAddData(
+          (memoryStream1, Seq((22L, 3))),
+          (memoryStream3, Seq((22L, 3)))
+        ),
+        CheckNewAnswer(),
+        // state rows
+        // 1st join
+        // left: (21, 2), (22, 3)
+        // right: (21, 2)
+        // 2nd join
+        // left: (21, 2, 2)
+        // right: (22, 3)
+        // batch 3
+        // WM: late event = 20, eviction = 21 (slowest: inputStream2)
+        AddData(memoryStream1, (23L, 4)),
+        CheckNewAnswer(Row(21, 2, 2, null)),
+        // state rows
+        // 1st join
+        // left: (22, 3), (23, 4)
+        // right: none
+        // 2nd join
+        // left: none
+        // right: (22, 3)
+        // batch 4
+        // WM: late event = 21, eviction = 21 (slowest: inputStream2)
+        MultiAddData(
+          (memoryStream1, Seq((24L, 5))),
+          (memoryStream2, Seq((24L, 5))),
+          (memoryStream3, Seq((24L, 5)))
+        ),
+        CheckNewAnswer(Row(24, 5, 5, 5)),
+        // state rows
+        // 1st join
+        // left: (22, 3), (23, 4), (24, 5)
+        // right: (24, 5)
+        // 2nd join
+        // left: (24, 5, 5)
+        // right: (22, 3), (24, 5)
+        // batch 5
+        // WM: late event = 21, eviction = 24
+        // just trigger a new batch with arbitrary data as the original test relies on no-data
+        // batch, and we need to check with remaining unmatched outputs
+        AddData(memoryStream1, (100L, 6)),
+        // Before SPARK-49829, the test fails because (23, 4, null, null) wasn't produced.
+        // (The assertion of state for left inputs & right inputs weren't included on the test
+        // before SPARK-49829.)
+        CheckNewAnswer(Row(22, 3, null, 3), Row(23, 4, null, null))
+      )
+
+      /*
+      // The collection of the above new answers is the same with below in original test:
+      val expected = Array(
+        Row(Timestamp.valueOf("2024-02-10 10:20:00"), 1, 1, 1),
+        Row(Timestamp.valueOf("2024-02-10 10:21:00"), 2, 2, null),
+        Row(Timestamp.valueOf("2024-02-10 10:22:00"), 3, null, 3),
+        Row(Timestamp.valueOf("2024-02-10 10:23:00"), 4, null, null),
+        Row(Timestamp.valueOf("2024-02-10 10:24:00"), 5, 5, 5),
+      )
+       */
+    }
   }
 }
