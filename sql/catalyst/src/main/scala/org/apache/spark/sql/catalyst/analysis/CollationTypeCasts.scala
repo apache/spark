@@ -24,7 +24,7 @@ import scala.annotation.tailrec
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DefaultStringType, MapType, StringType}
 
 object CollationTypeCasts extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
@@ -159,10 +159,8 @@ object CollationTypeCasts extends TypeCoercionRule {
    * any expressions, but will only be affected by collated StringTypes or
    * complex DataTypes with collated StringTypes (e.g. ArrayType)
    */
-  def getOutputCollation(expr: Seq[Expression]): StringType = {
-    require(expr.nonEmpty, "Cannot determine collation for empty expressions")
-
-    val explicitTypes = expr.filter {
+  def getOutputCollation(expressions: Seq[Expression]): StringType = {
+    val explicitTypes = expressions.filter {
         case _: Collate => true
         case _ => false
       }
@@ -180,7 +178,7 @@ object CollationTypeCasts extends TypeCoercionRule {
           )
       // Only implicit or default collations present
       case 0 =>
-        val implicitTypes = expr.filter {
+        val implicitTypes = expressions.filter {
             case Literal(_, _: StringType) => false
             case cast: Cast if cast.getTagValue(Cast.USER_SPECIFIED_CAST).isEmpty =>
               cast.child.dataType.isInstanceOf[StringType]
@@ -191,19 +189,13 @@ object CollationTypeCasts extends TypeCoercionRule {
           .map(extractStringType(_).collationId)
           .distinct
 
-        implicitTypes.length match {
-          case 1 =>
-            StringType(implicitTypes.head)
-
-          case size if size > 1 =>
-            throw QueryCompilationErrors.implicitCollationMismatchError()
-
-          case _ =>
-            // If there are no implicit collations then all expressions must have
-            // the default collation so we can just return either one
-            require(expr.forall(_.dataType.sameType(expr.head.dataType)))
-
-            expr.head.dataType.asInstanceOf[StringType]
+        if (implicitTypes.length > 1) {
+          throw QueryCompilationErrors.implicitCollationMismatchError(
+            implicitTypes.map(t => StringType(t))
+          )
+        }
+        else {
+          implicitTypes.headOption.map(StringType(_)).getOrElse(DefaultStringType())
         }
     }
   }

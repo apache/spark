@@ -19,7 +19,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, ColumnDefinition, LogicalPlan, QualifiedColType, ReplaceColumns, V2CreateTablePlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, ColumnDefinition, LogicalPlan, QualifiedColType, ReplaceColumns, V1DDLCommand, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.{DataType, DefaultStringType, StringType}
 import org.apache.spark.sql.util.SchemaUtils
@@ -31,9 +31,12 @@ import org.apache.spark.sql.util.SchemaUtils
  */
 object ReplaceDefaultStringType extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    plan resolveOperatorsUp {
-      case create: V2CreateTablePlan =>
-        transformPlan(create, StringType)
+    plan resolveOperators {
+      case createTable: V2CreateTablePlan =>
+        transformPlan(createTable, StringType)
+
+      case v1Ddl: V1DDLCommand =>
+        transformPlan(v1Ddl, StringType)
 
       case addCols: AddColumns =>
         addCols.copy(columnsToAdd = replaceColumnTypes(addCols.columnsToAdd, StringType))
@@ -41,14 +44,14 @@ object ReplaceDefaultStringType extends Rule[LogicalPlan] {
       case replaceCols: ReplaceColumns =>
         replaceCols.copy(columnsToAdd = replaceColumnTypes(replaceCols.columnsToAdd, StringType))
 
-      case a: AlterColumn
-          if a.dataType.isDefined && SchemaUtils.hasDefaultStringType(a.dataType.get) =>
-        a.copy(dataType = Some(replaceDefaultStringType(a.dataType.get, StringType)))
+      case alter: AlterColumn
+          if alter.dataType.isDefined && SchemaUtils.hasDefaultStringType(alter.dataType.get) =>
+        alter.copy(dataType = Some(replaceDefaultStringType(alter.dataType.get, StringType)))
     }
   }
 
   private def transformPlan(plan: LogicalPlan, newType: StringType): LogicalPlan = {
-    plan resolveOperatorsUp { operator =>
+    plan resolveOperators { operator =>
       operator.transformExpressionsUp { expression =>
         transformExpression(expression, newType)
       }

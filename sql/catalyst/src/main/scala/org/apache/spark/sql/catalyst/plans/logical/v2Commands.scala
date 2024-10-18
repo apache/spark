@@ -89,6 +89,11 @@ trait V2PartitionCommand extends UnaryCommand {
 }
 
 /**
+ * Trait to
+ */
+trait V1DDLCommand {}
+
+/**
  * Append data to an existing table.
  */
 case class AppendData(
