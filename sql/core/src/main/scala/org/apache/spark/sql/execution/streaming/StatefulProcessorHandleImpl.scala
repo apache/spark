@@ -49,6 +49,12 @@ object ImplicitGroupingKeyTracker {
  * Utility object to perform metrics updates
  */
 object TWSMetricsUtils {
+  def resetMetric(
+      metrics: Map[String, SQLMetric],
+      metricName: String): Unit = {
+    metrics.get(metricName).foreach(_.reset())
+  }
+
   def incrementMetric(
       metrics: Map[String, SQLMetric],
       metricName: String,

@@ -108,7 +108,8 @@ class ListStateImplWithTTL[S](
 
     val encodedKey = stateTypesEncoder.encodeGroupingKey()
     var isFirst = true
-    var entryCount = getEntryCount(encodedKey)
+    var entryCount = 0L
+    TWSMetricsUtils.resetMetric(metrics, "numUpdatedStateRows")
 
     newState.foreach { v =>
       val encodedValue = stateTypesEncoder.encodeValue(v, ttlExpirationMs)

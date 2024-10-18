@@ -86,7 +86,8 @@ class ListStateImpl[S](
 
      val encodedKey = stateTypesEncoder.encodeGroupingKey()
      var isFirst = true
-     var entryCount = 0
+     var entryCount = 0L
+     TWSMetricsUtils.resetMetric(metrics, "numUpdatedStateRows")
 
      newState.foreach { v =>
        val encodedValue = stateTypesEncoder.encodeValue(v)
