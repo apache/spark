@@ -21,6 +21,8 @@
   "memoryBytesSpilled" : 0,
   "diskBytesSpilled" : 0,
   "peakExecutionMemory" : 0,
+  "peakOnHeapExecutionMemory" : 0,
+  "peakOffHeapExecutionMemory" : 0,
   "inputBytes" : 0,
   "inputRecords" : 0,
   "outputBytes" : 0,
@@ -79,6 +81,8 @@
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
         "peakExecutionMemory" : 0,
+        "peakOnHeapExecutionMemory" : 0,
+        "peakOffHeapExecutionMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -145,6 +149,8 @@
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
         "peakExecutionMemory" : 0,
+        "peakOnHeapExecutionMemory" : 0,
+        "peakOffHeapExecutionMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -211,6 +217,8 @@
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
         "peakExecutionMemory" : 0,
+        "peakOnHeapExecutionMemory" : 0,
+        "peakOffHeapExecutionMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -277,6 +285,8 @@
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
         "peakExecutionMemory" : 0,
+        "peakOnHeapExecutionMemory" : 0,
+        "peakOffHeapExecutionMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -343,6 +353,8 @@
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
         "peakExecutionMemory" : 0,
+        "peakOnHeapExecutionMemory" : 0,
+        "peakOffHeapExecutionMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -409,6 +421,8 @@
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
         "peakExecutionMemory" : 0,
+        "peakOnHeapExecutionMemory" : 0,
+        "peakOffHeapExecutionMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -476,6 +490,8 @@
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
         "peakExecutionMemory" : 0,
+        "peakOnHeapExecutionMemory" : 0,
+        "peakOffHeapExecutionMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -542,6 +558,8 @@
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
         "peakExecutionMemory" : 0,
+        "peakOnHeapExecutionMemory" : 0,
+        "peakOffHeapExecutionMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -608,6 +626,8 @@
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
         "peakExecutionMemory" : 0,
+        "peakOnHeapExecutionMemory" : 0,
+        "peakOffHeapExecutionMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -674,6 +694,8 @@
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
         "peakExecutionMemory" : 0,
+        "peakOnHeapExecutionMemory" : 0,
+        "peakOffHeapExecutionMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -740,6 +762,8 @@
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
         "peakExecutionMemory" : 0,
+        "peakOnHeapExecutionMemory" : 0,
+        "peakOffHeapExecutionMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -806,6 +830,8 @@
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
         "peakExecutionMemory" : 0,
+        "peakOnHeapExecutionMemory" : 0,
+        "peakOffHeapExecutionMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0

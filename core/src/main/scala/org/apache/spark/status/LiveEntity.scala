@@ -150,6 +150,8 @@ private class LiveTask(
         metrics.memoryBytesSpilled,
         metrics.diskBytesSpilled,
         metrics.peakExecutionMemory,
+        metrics.peakOnHeapExecutionMemory,
+        metrics.peakOffHeapExecutionMemory,
         metrics.inputMetrics.bytesRead,
         metrics.inputMetrics.recordsRead,
         metrics.outputMetrics.bytesWritten,
@@ -236,6 +238,8 @@ private class LiveTask(
       taskMetrics.memoryBytesSpilled,
       taskMetrics.diskBytesSpilled,
       taskMetrics.peakExecutionMemory,
+      taskMetrics.peakOnHeapExecutionMemory,
+      taskMetrics.peakOffHeapExecutionMemory,
       taskMetrics.inputMetrics.bytesRead,
       taskMetrics.inputMetrics.recordsRead,
       taskMetrics.outputMetrics.bytesWritten,
@@ -511,6 +515,8 @@ private class LiveStage(var info: StageInfo) extends LiveEntity {
       memoryBytesSpilled = metrics.memoryBytesSpilled,
       diskBytesSpilled = metrics.diskBytesSpilled,
       peakExecutionMemory = metrics.peakExecutionMemory,
+      peakOnHeapExecutionMemory = metrics.peakOnHeapExecutionMemory,
+      peakOffHeapExecutionMemory = metrics.peakOffHeapExecutionMemory,
       inputBytes = metrics.inputMetrics.bytesRead,
       inputRecords = metrics.inputMetrics.recordsRead,
       outputBytes = metrics.outputMetrics.bytesWritten,
@@ -762,6 +768,8 @@ private[spark] object LiveEntityHelpers {
       memoryBytesSpilled: Long,
       diskBytesSpilled: Long,
       peakExecutionMemory: Long,
+      peakOnHeapExecutionMemory: Long,
+      peakOffHeapExecutionMemory: Long,
       inputBytesRead: Long,
       inputRecordsRead: Long,
       outputBytesWritten: Long,
@@ -797,6 +805,8 @@ private[spark] object LiveEntityHelpers {
       memoryBytesSpilled,
       diskBytesSpilled,
       peakExecutionMemory,
+      peakOnHeapExecutionMemory,
+      peakOffHeapExecutionMemory,
       new v1.InputMetrics(
         inputBytesRead,
         inputRecordsRead),
@@ -834,7 +844,7 @@ private[spark] object LiveEntityHelpers {
     createMetrics(default, default, default, default, default, default, default, default,
       default, default, default, default, default, default, default, default, default,
       default, default, default, default, default, default, default, default, default,
-      default, default, default, default, default, default, default, default)
+      default, default, default, default, default, default, default, default, default, default)
   }
 
   /** Add m2 values to m1. */
@@ -869,6 +879,8 @@ private[spark] object LiveEntityHelpers {
       updateMetricValue(m.memoryBytesSpilled),
       updateMetricValue(m.diskBytesSpilled),
       updateMetricValue(m.peakExecutionMemory),
+      updateMetricValue(m.peakOnHeapExecutionMemory),
+      updateMetricValue(m.peakOffHeapExecutionMemory),
       updateMetricValue(m.inputMetrics.bytesRead),
       updateMetricValue(m.inputMetrics.recordsRead),
       updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.corruptMergedBlockChunks),
@@ -907,6 +919,8 @@ private[spark] object LiveEntityHelpers {
       m1.memoryBytesSpilled + m2.memoryBytesSpilled * mult,
       m1.diskBytesSpilled + m2.diskBytesSpilled * mult,
       m1.peakExecutionMemory + m2.peakExecutionMemory * mult,
+      m1.peakOnHeapExecutionMemory + m2.peakOnHeapExecutionMemory * mult,
+      m1.peakOffHeapExecutionMemory + m2.peakOffHeapExecutionMemory * mult,
       m1.inputMetrics.bytesRead + m2.inputMetrics.bytesRead * mult,
       m1.inputMetrics.recordsRead + m2.inputMetrics.recordsRead * mult,
       m1.outputMetrics.bytesWritten + m2.outputMetrics.bytesWritten * mult,
