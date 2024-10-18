@@ -1481,7 +1481,7 @@ class AstBuilder extends DataTypeAstBuilder
       selectExpressions: Seq[NamedExpression],
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     if (ctx.groupingExpressionsWithGroupingAnalytics.isEmpty) {
-      val groupByExpressions = expressionList(ctx.groupingExpressions)
+      val groupByExpressions = namedExpressionList(ctx.groupingExpressions)
       if (ctx.GROUPING != null) {
         // GROUP BY ... GROUPING SETS (...)
         // `groupByExpressions` can be non-empty for Hive compatibility. It may add extra grouping
@@ -2170,6 +2170,14 @@ class AstBuilder extends DataTypeAstBuilder
    */
   private def expressionList(trees: java.util.List[ExpressionContext]): Seq[Expression] = {
     trees.asScala.map(expression).toSeq
+  }
+
+  /**
+   * Create sequence of named expressions from the given sequence of contexts.
+   */
+  private def namedExpressionList(
+      trees: java.util.List[NamedExpressionContext]): Seq[Expression] = {
+    trees.asScala.map(visitNamedExpression).toSeq
   }
 
   /**
@@ -5924,7 +5932,79 @@ class AstBuilder extends DataTypeAstBuilder
     }.getOrElse(Option(ctx.operator).map { c =>
       val all = Option(ctx.setQuantifier()).exists(_.ALL != null)
       visitSetOperationImpl(left, plan(ctx.right), all, c.getType)
-    }.get))))))
+    }.getOrElse(
+      visitOperatorPipeAggregate(ctx, left)
+    )))))))
+  }
+
+  private def visitOperatorPipeAggregate(
+      ctx: OperatorPipeRightSideContext, left: LogicalPlan): LogicalPlan = {
+    assert(ctx.AGGREGATE != null)
+    if (ctx.namedExpressionSeq() == null && ctx.aggregationClause() == null) {
+      operationNotAllowed(
+        "The AGGREGATE clause requires a list of aggregate expressions " +
+          "or a list of grouping expressions, or both", ctx)
+    }
+    val aggregateExpressions: Seq[NamedExpression] =
+      Option(ctx.namedExpressionSeq()).map { n: NamedExpressionSeqContext =>
+        visitNamedExpressionSeq(n).map {
+          case (e: NamedExpression, _) => e
+          case (e: Expression, aliasFunc) => UnresolvedAlias(e, aliasFunc)
+        }
+      }.getOrElse(Seq.empty)
+    Option(ctx.aggregationClause()).map { c: AggregationClauseContext =>
+      withAggregationClause(c, aggregateExpressions, left) match {
+        case a: Aggregate =>
+          // GROUP BY ALL, GROUP BY CUBE, GROUPING_ID, GROUPING SETS, and GROUP BY ROLLUP are not
+          // supported yet.
+          def error(s: String): Unit =
+            throw QueryParsingErrors.pipeOperatorAggregateUnsupportedCaseError(s, c)
+          a.groupingExpressions match {
+            case Seq(key: UnresolvedAttribute) if key.equalsIgnoreCase("ALL") =>
+              error("GROUP BY ALL")
+            case _ =>
+          }
+          def visit(e: Expression): Unit = {
+            e match {
+              case _: Cube => error("GROUP BY CUBE")
+              case _: GroupingSets => error("GROUPING SETS")
+              case _: Rollup => error("GROUP BY ROLLUP")
+              case f: UnresolvedFunction if f.arguments.length == 1 && f.nameParts.length == 1 =>
+                Seq("GROUPING", "GROUPING_ID").foreach { name =>
+                  if (f.nameParts.head.equalsIgnoreCase(name)) error(name)
+                }
+              case _: WindowSpec => error("window functions")
+              case _ =>
+            }
+            e.children.foreach(visit)
+          }
+          a.groupingExpressions.foreach(visit)
+          a.aggregateExpressions.foreach(visit)
+          // Non-aggregate expressions are not allowed in place of aggregate functions, even if they
+          // appear separately in the GROUP BY clause.
+          val groupingExpressionSet = a.groupingExpressions.toSet
+          a.aggregateExpressions.foreach { e: Expression =>
+            if (groupingExpressionSet.contains(e)) {
+              error("Non-aggregate expressions in place of aggregate functions, even if they " +
+                "appear separately in the GROUP BY clause")
+            }
+          }
+          // Prepend grouping keys to the list of aggregate functions, since operator pipe AGGREGATE
+          // clause returns the GROUP BY expressions followed by the list of aggregate functions.
+          val namedGroupingExpressions: Seq[NamedExpression] =
+            a.groupingExpressions.map {
+              case n: NamedExpression => n
+              case e: Expression => UnresolvedAlias(e, None)
+            }
+          a.copy(aggregateExpressions = namedGroupingExpressions ++ a.aggregateExpressions)
+      }
+    }.getOrElse {
+      // This is a table aggregation with no grouping expressions.
+      Aggregate(
+        groupingExpressions = Seq.empty,
+        aggregateExpressions = aggregateExpressions,
+        child = left)
+    }
   }
 
   /**
