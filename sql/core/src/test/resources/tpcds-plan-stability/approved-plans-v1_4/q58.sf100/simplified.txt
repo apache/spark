@@ -11,9 +11,9 @@ TakeOrderedAndProject [item_id,ss_item_rev,ss_dev,cs_item_rev,cs_dev,ws_item_rev
                     WholeStageCodegen (4)
                       HashAggregate [i_item_id,ss_ext_sales_price] [sum,sum]
                         Project [ss_ext_sales_price,i_item_id]
-                          BroadcastHashJoin [ss_item_sk,i_item_sk]
-                            Project [ss_item_sk,ss_ext_sales_price]
-                              BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                          BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                            Project [ss_ext_sales_price,ss_sold_date_sk,i_item_id]
+                              BroadcastHashJoin [ss_item_sk,i_item_sk]
                                 Filter [ss_item_sk]
                                   ColumnarToRow
                                     InputAdapter
@@ -44,14 +44,14 @@ TakeOrderedAndProject [item_id,ss_item_rev,ss_dev,cs_item_rev,cs_dev,ws_item_rev
                                                                             InputAdapter
                                                                               Scan parquet spark_catalog.default.date_dim [d_date,d_week_seq]
                                 InputAdapter
-                                  ReusedExchange [d_date_sk] #2
+                                  BroadcastExchange #4
+                                    WholeStageCodegen (1)
+                                      Filter [i_item_sk,i_item_id]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet spark_catalog.default.item [i_item_sk,i_item_id]
                             InputAdapter
-                              BroadcastExchange #4
-                                WholeStageCodegen (3)
-                                  Filter [i_item_sk,i_item_id]
-                                    ColumnarToRow
-                                      InputAdapter
-                                        Scan parquet spark_catalog.default.item [i_item_sk,i_item_id]
+                              ReusedExchange [d_date_sk] #2
             InputAdapter
               BroadcastExchange #5
                 WholeStageCodegen (9)
@@ -62,18 +62,18 @@ TakeOrderedAndProject [item_id,ss_item_rev,ss_dev,cs_item_rev,cs_dev,ws_item_rev
                           WholeStageCodegen (8)
                             HashAggregate [i_item_id,cs_ext_sales_price] [sum,sum]
                               Project [cs_ext_sales_price,i_item_id]
-                                BroadcastHashJoin [cs_item_sk,i_item_sk]
-                                  Project [cs_item_sk,cs_ext_sales_price]
-                                    BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
+                                BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
+                                  Project [cs_ext_sales_price,cs_sold_date_sk,i_item_id]
+                                    BroadcastHashJoin [cs_item_sk,i_item_sk]
                                       Filter [cs_item_sk]
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet spark_catalog.default.catalog_sales [cs_item_sk,cs_ext_sales_price,cs_sold_date_sk]
                                               ReusedSubquery [d_date_sk] #1
                                       InputAdapter
-                                        ReusedExchange [d_date_sk] #2
+                                        ReusedExchange [i_item_sk,i_item_id] #4
                                   InputAdapter
-                                    ReusedExchange [i_item_sk,i_item_id] #4
+                                    ReusedExchange [d_date_sk] #2
         InputAdapter
           BroadcastExchange #7
             WholeStageCodegen (14)
@@ -84,15 +84,15 @@ TakeOrderedAndProject [item_id,ss_item_rev,ss_dev,cs_item_rev,cs_dev,ws_item_rev
                       WholeStageCodegen (13)
                         HashAggregate [i_item_id,ws_ext_sales_price] [sum,sum]
                           Project [ws_ext_sales_price,i_item_id]
-                            BroadcastHashJoin [ws_item_sk,i_item_sk]
-                              Project [ws_item_sk,ws_ext_sales_price]
-                                BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
+                            BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
+                              Project [ws_ext_sales_price,ws_sold_date_sk,i_item_id]
+                                BroadcastHashJoin [ws_item_sk,i_item_sk]
                                   Filter [ws_item_sk]
                                     ColumnarToRow
                                       InputAdapter
                                         Scan parquet spark_catalog.default.web_sales [ws_item_sk,ws_ext_sales_price,ws_sold_date_sk]
                                           ReusedSubquery [d_date_sk] #1
                                   InputAdapter
-                                    ReusedExchange [d_date_sk] #2
+                                    ReusedExchange [i_item_sk,i_item_id] #4
                               InputAdapter
-                                ReusedExchange [i_item_sk,i_item_id] #4
+                                ReusedExchange [d_date_sk] #2
