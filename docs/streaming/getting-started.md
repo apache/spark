@@ -18,6 +18,7 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
+{% include rel_path_to_root.html %}
 
 # Quick Example
 Let’s say you want to maintain a running word count of text data received from a data server listening on a TCP socket. Let’s see how you can express this using Structured Streaming. You can see the full code in
@@ -451,11 +452,11 @@ table. Let’s understand this model in more detail.
 Consider the input data stream as the "Input Table". Every data item that is
 arriving on the stream is like a new row being appended to the Input Table.
 
-![Stream as a Table](/img/structured-streaming-stream-as-a-table.png "Stream as a Table")
+![Stream as a Table]({{ rel_path_to_root }}img/structured-streaming-stream-as-a-table.png "Stream as a Table")
 
 A query on the input will generate the "Result Table". Every trigger interval (say, every 1 second), new rows get appended to the Input Table, which eventually updates the Result Table. Whenever the result table gets updated, we would want to write the changed result rows to an external sink.
 
-![Model](/img/structured-streaming-model.png)
+![Model]({{ rel_path_to_root }}img/structured-streaming-model.png)
 
 The "Output" is defined as what gets written out to the external storage. The output can be defined in a different mode:
 
@@ -476,7 +477,7 @@ will continuously check for new data from the socket connection. If there is
 new data, Spark will run an "incremental" query that combines the previous
 running counts with the new data to compute updated counts, as shown below.
 
-![Model](/img/structured-streaming-example-model.png)
+![Model]({{ rel_path_to_root }}img/structured-streaming-example-model.png)
 
 **Note that Structured Streaming does not materialize the entire table**. It reads the latest
 available data from the streaming data source, processes it incrementally to update the result,
