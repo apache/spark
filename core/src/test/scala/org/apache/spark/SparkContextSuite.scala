@@ -41,6 +41,7 @@ import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.resource.ResourceAllocation
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
@@ -1465,6 +1466,16 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     sc.stop()
   }
 
+  test("SPARK-49984: Don't duplicate default Java options to extra Java options") {
+    val conf = new SparkConf().setAppName("test").setMaster("local")
+    conf.set(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS, "-Dfoo=bar")
+    conf.set(SparkLauncher.EXECUTOR_DEFAULT_JAVA_OPTIONS, "-Dfoo=bar")
+    sc = new SparkContext(conf)
+    assert(!sc.conf.get(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS).contains("-Dfoo=bar"))
+    assert(!sc.conf.get(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS).contains("-Dfoo=bar"))
+
+    sc.stop()
+  }
 }
 
 object SparkContextSuite {
