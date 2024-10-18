@@ -18,6 +18,7 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
+{% include rel_path_to_root.html %}
 
 # API using Datasets and DataFrames
 Since Spark 2.0, DataFrames and Datasets can represent static, bounded data, as well as streaming, unbounded data. Similar to static Datasets/DataFrames, you can use the common entry point `SparkSession`
@@ -436,7 +437,7 @@ Imagine our [quick example](./getting-started.html#quick-example) is modified an
 
 The result tables would look something like the following.
 
-![Window Operations](/img/structured-streaming-window.png)
+![Window Operations]({{ rel_path_to_root }}img/structured-streaming-window.png)
 
 Since this windowing is similar to grouping, in code, you can use `groupBy()` and `window()` operations to express windowed aggregations. You can see the full code for the below examples in
 [Python]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/sql/streaming/structured_network_wordcount_windowed.py)/[Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredNetworkWordCountWindowed.scala)/[Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredNetworkWordCountWindowed.java).
@@ -512,7 +513,7 @@ naturally in our window-based grouping – Structured Streaming can maintain the
 for partial aggregates for a long period of time such that late data can update aggregates of
 old windows correctly, as illustrated below.
 
-![Handling Late Data](/img/structured-streaming-late-data.png)
+![Handling Late Data]({{ rel_path_to_root }}img/structured-streaming-late-data.png)
 
 However, to run this query for days, it's necessary for the system to bound the amount of
 intermediate in-memory state it accumulates. This means the system needs to know when an old
@@ -605,7 +606,7 @@ the engine will keep updating counts of a window in the Result Table until the w
 than the watermark, which lags behind the current event time in column "timestamp" by 10 minutes.
 Here is an illustration.
 
-![Watermarking in Update Mode](/img/structured-streaming-watermark-update-mode.png)
+![Watermarking in Update Mode]({{ rel_path_to_root }}img/structured-streaming-watermark-update-mode.png)
 
 As shown in the illustration, the maximum event time tracked by the engine is the
 *blue dashed line*, and the watermark set as `(max event time - '10 mins')`
@@ -628,7 +629,7 @@ This is illustrated below.
 Note that using `withWatermark` on a non-streaming Dataset is no-op. As the watermark should not affect
 any batch query in any way, we will ignore it directly.
 
-![Watermarking in Append Mode](/img/structured-streaming-watermark-append-mode.png)
+![Watermarking in Append Mode]({{ rel_path_to_root }}img/structured-streaming-watermark-append-mode.png)
 
 Similar to the Update Mode earlier, the engine maintains intermediate counts for each window.
 However, the partial counts are not updated to the Result Table and not written to sink. The engine
@@ -641,7 +642,7 @@ appended to the Result Table only after the watermark is updated to `12:11`.
 
 Spark supports three types of time windows: tumbling (fixed), sliding and session.
 
-![The types of time windows](/img/structured-streaming-time-window-types.jpg)
+![The types of time windows]({{ rel_path_to_root }}img/structured-streaming-time-window-types.jpg)
 
 Tumbling windows are a series of fixed-sized, non-overlapping and contiguous time intervals. An input
 can only be bound to a single window.
