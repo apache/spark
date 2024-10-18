@@ -582,7 +582,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val schema = StructType(StructField("\"quote", IntegerType) :: Nil)
     val struct = Literal.create(create_row(1), schema)
     GenerateUnsafeProjection.generate(
-      StructsToJson(Map.empty, struct, UTC_OPT) :: Nil)
+      StructsToJson(Map.empty, struct, UTC_OPT).replacement :: Nil)
   }
 
   test("to_json - struct") {
@@ -682,7 +682,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val input = Literal(
       ArrayBasedMapData(Map(UTF8String.fromString("test") -> InternalRow(1))), schema)
     checkEvaluation(
-      StructsToJson(Map.empty, input),
+      StructsToJson(Map.empty, input, UTC_OPT),
       """{"test":{"a":1}}"""
     )
   }
@@ -692,7 +692,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       StructType(StructField("b", IntegerType) :: Nil))
     val input = Literal(ArrayBasedMapData(Map(InternalRow(1) -> InternalRow(2))), schema)
     checkEvaluation(
-      StructsToJson(Map.empty, input),
+      StructsToJson(Map.empty, input, UTC_OPT),
       """{"[1]":{"b":2}}"""
     )
   }
@@ -701,7 +701,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val schema = MapType(StringType, IntegerType)
     val input = Literal(ArrayBasedMapData(Map(UTF8String.fromString("a") -> 1)), schema)
     checkEvaluation(
-      StructsToJson(Map.empty, input),
+      StructsToJson(Map.empty, input, UTC_OPT),
       """{"a":1}"""
     )
   }
