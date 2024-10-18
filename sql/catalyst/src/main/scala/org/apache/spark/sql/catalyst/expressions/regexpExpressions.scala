@@ -733,7 +733,6 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
     val termLastReplacement = ctx.addMutableState("String", "lastReplacement")
     val termLastReplacementInUTF8 = ctx.addMutableState("UTF8String", "lastReplacementInUTF8")
-    val nonFatal = ctx.addMutableState("scala.util.control.NonFatal", "nonFatal")
 
     val setEvNotNull = if (nullable) {
       s"${ev.isNull} = false;"
@@ -759,7 +758,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
           try {
             $matcher.appendReplacement($termResult, $termLastReplacement);
           } catch (Exception e) {
-            if ($nonFatal.apply(e)) {
+            if (scala.util.control.NonFatal.apply(e)) {
               throw QueryExecutionErrors.invalidRegexpReplaceError($source, $regexp.toString(),
                 $rep.toString(), $pos, e);
             } else {
