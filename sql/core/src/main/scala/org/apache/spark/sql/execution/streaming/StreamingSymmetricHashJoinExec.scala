@@ -303,6 +303,9 @@ case class StreamingSymmetricHashJoinExec(
     val updateStartTimeNs = System.nanoTime
     val joinedRow = new JoinedRow
 
+    assert(stateInfo.isDefined, "State info not defined")
+    val checkpointIds = SymmetricHashJoinStateManager.getStateStoreCheckpointIds(
+      partitionId, stateInfo.get)
 
     val inputSchema = left.output ++ right.output
     val postJoinFilter =
@@ -310,11 +313,11 @@ case class StreamingSymmetricHashJoinExec(
     val leftSideJoiner = new OneSideHashJoiner(
       LeftSide, left.output, leftKeys, leftInputIter,
       condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId,
-      skippedNullValueCount)
+      checkpointIds.left.keyToNumValues, checkpointIds.left.valueToNumKeys, skippedNullValueCount)
     val rightSideJoiner = new OneSideHashJoiner(
       RightSide, right.output, rightKeys, rightInputIter,
       condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId,
-      skippedNullValueCount)
+      checkpointIds.right.keyToNumValues, checkpointIds.right.valueToNumKeys, skippedNullValueCount)
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
@@ -507,6 +510,12 @@ case class StreamingSymmetricHashJoinExec(
         val rightSideMetrics = rightSideJoiner.commitStateAndGetMetrics()
         val combinedMetrics = StateStoreMetrics.combine(Seq(leftSideMetrics, rightSideMetrics))
 
+        val checkpointInfo = SymmetricHashJoinStateManager.mergeStateStoreCheckpointInfo(
+          JoinStateStoreCkptInfo(
+            leftSideJoiner.getLatestCheckpointInfo(),
+            rightSideJoiner.getLatestCheckpointInfo()))
+        setStateStoreCheckpointInfo(checkpointInfo)
+
         // Update SQL metrics
         numUpdatedStateRows +=
           (leftSideJoiner.numUpdatedStateRows + rightSideJoiner.numUpdatedStateRows)
@@ -544,6 +553,7 @@ case class StreamingSymmetricHashJoinExec(
    * @param stateWatermarkPredicate The state watermark predicate. See
    *                                [[StreamingSymmetricHashJoinExec]] for further description of
    *                                state watermarks.
+   * @param oneSideStateInfo  Reconstructed state info for this side
    * @param partitionId A partition ID of source RDD.
    */
   private class OneSideHashJoiner(
@@ -555,6 +565,8 @@ case class StreamingSymmetricHashJoinExec(
       postJoinFilter: (InternalRow) => Boolean,
       stateWatermarkPredicate: Option[JoinStateWatermarkPredicate],
       partitionId: Int,
+      keyToNumValuesStateStoreCkptId: Option[String],
+      keyWithIndexToValueStateStoreCkptId: Option[String],
       skippedNullValueCount: Option[SQLMetric]) {
 
     // Filter the joined rows based on the given condition.
@@ -562,8 +574,18 @@ case class StreamingSymmetricHashJoinExec(
       Predicate.create(preJoinFilterExpr.getOrElse(Literal(true)), inputAttributes).eval _
 
     private val joinStateManager = new SymmetricHashJoinStateManager(
-      joinSide, inputAttributes, joinKeys, stateInfo, storeConf, hadoopConfBcast.value.value,
-      partitionId, stateFormatVersion, skippedNullValueCount)
+      joinSide = joinSide,
+      inputValueAttributes = inputAttributes,
+      joinKeys = joinKeys,
+      stateInfo = stateInfo,
+      storeConf = storeConf,
+      hadoopConf = hadoopConfBcast.value.value,
+      partitionId = partitionId,
+      keyToNumValuesStateStoreCkptId = keyToNumValuesStateStoreCkptId,
+      keyWithIndexToValueStateStoreCkptId = keyWithIndexToValueStateStoreCkptId,
+      stateFormatVersion = stateFormatVersion,
+      skippedNullValueCount = skippedNullValueCount)
+
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
     private[this] val stateKeyWatermarkPredicateFunc = stateWatermarkPredicate match {
@@ -740,6 +762,10 @@ case class StreamingSymmetricHashJoinExec(
     def commitStateAndGetMetrics(): StateStoreMetrics = {
       joinStateManager.commit()
       joinStateManager.metrics
+    }
+
+    def getLatestCheckpointInfo(): JoinerStateStoreCkptInfo = {
+      joinStateManager.getLatestCheckpointInfo()
     }
 
     def numUpdatedStateRows: Long = updatedStateRowsCount
