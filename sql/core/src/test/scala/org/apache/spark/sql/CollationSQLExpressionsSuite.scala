@@ -1252,7 +1252,9 @@ class CollationSQLExpressionsSuite
         sql("SELECT mask(collate('ab-CD-12-@$','UNICODE'),collate('X','UNICODE_CI'),'x','0','#')")
       },
       condition = "COLLATION_MISMATCH.EXPLICIT",
-      parameters = Map("explicitTypes" -> "`string collate UNICODE`, `string collate UNICODE_CI`")
+      parameters = Map(
+        "explicitTypes" -> """"STRING COLLATE UNICODE", "STRING COLLATE UNICODE_CI""""
+      )
     )
   }
 
