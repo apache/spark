@@ -102,6 +102,13 @@ abstract class StateStoreChangelogWriter(
     fm.createAtomic(file, overwriteIfPossible = true)
   protected var compressedStream: DataOutputStream = compressStream(backingFileStream)
 
+  def writeLineage(lineage: Array[(Long, String)]): Unit = {
+    val lineageStr = lineage.map { case (version, uniqueId) =>
+      s"$version:$uniqueId"
+    }.mkString(" ")
+    compressedStream.writeUTF(lineageStr)
+  }
+
   def version: Short
 
   def put(key: Array[Byte], value: Array[Byte]): Unit
@@ -279,6 +286,16 @@ abstract class StateStoreChangelogReader(
       throw QueryExecutionErrors.failedToReadStreamingStateFileError(fileToRead, f)
   }
   protected val input: DataInputStream = decompressStream(sourceStream)
+
+  def readLineage(): Array[(Long, String)] = {
+    val lineageStr = input.readUTF()
+    lineageStr.split(" ").map { lineage =>
+      val Array(version, uniqueId) = lineage.split(":")
+      (version.toLong, uniqueId)
+    }
+  }
+
+  lazy val lineage: Array[(Long, String)] = readLineage()
 
   def version: Short
 
