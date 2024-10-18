@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, SQLException, Types}
+import java.sql.{Connection, SQLException, Statement, Types}
 import java.util
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -33,10 +33,11 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, MetadataBuilder, ShortType, StringType, TimestampType}
 
-private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
+private[sql] case class H2Dialect() extends JdbcDialect with MergeByTempTable
+    with NoLegacyJDBCError {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:h2")
 
@@ -94,6 +95,14 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
   // test only
   def clearFunctions(): Unit = {
     functionMap.clear()
+  }
+
+  override def createTempTable(
+      statement: Statement,
+      tableName: String,
+      strSchema: String,
+      options: JdbcOptionsInWrite): Unit = {
+    statement.executeUpdate(s"CREATE LOCAL TEMPORARY TABLE $tableName ($strSchema)")
   }
 
   // CREATE INDEX syntax

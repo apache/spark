@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
-import java.sql.{Connection, Date, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Time, Timestamp}
+import java.sql.{Connection, Date, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Statement, Time, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util
 
@@ -46,7 +46,8 @@ import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType, NoopDialect}
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions.JDBC_TABLE_NAME
+import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType, MergeByTempTable, NoopDialect}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
@@ -109,19 +110,15 @@ object JdbcUtils extends Logging with SQLConfHelper {
     JdbcDialects.get(url).isCascadingTruncateTable()
   }
 
-  /**
-   * Returns an Insert SQL statement for inserting a row into the target table via JDBC conn.
-   */
-  def getInsertStatement(
-      table: String,
+  def getColumns(
       rddSchema: StructType,
       tableSchema: Option[StructType],
       isCaseSensitive: Boolean,
-      dialect: JdbcDialect): String = {
-    val columns = if (tableSchema.isEmpty) {
+      dialect: JdbcDialect): Array[StructField] = {
+    if (tableSchema.isEmpty) {
       rddSchema.fields
     } else {
-      // The generated insert statement needs to follow rddSchema's column sequence and
+      // The column sequence needs to follow rddSchema's column sequence and
       // tableSchema's column names. When appending data into some case-sensitive DBMSs like
       // PostgreSQL/Oracle, we need to respect the existing case-sensitive column names instead of
       // RDD column names for user convenience.
@@ -131,6 +128,18 @@ object JdbcUtils extends Logging with SQLConfHelper {
         }
       }
     }
+  }
+
+  /**
+   * Returns an Insert SQL statement for inserting a row into the target table via JDBC conn.
+   */
+  def getInsertStatement(
+      table: String,
+      rddSchema: StructType,
+      tableSchema: Option[StructType],
+      isCaseSensitive: Boolean,
+      dialect: JdbcDialect): String = {
+    val columns = getColumns(rddSchema, tableSchema, isCaseSensitive, dialect)
     dialect.insertIntoTable(table, columns)
   }
 
@@ -754,14 +763,16 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * updated even with error if it doesn't support transaction, as there're dirty outputs.
    */
   def savePartition(
-      table: String,
+      connection: Option[Connection],
       iterator: Iterator[Row],
       rddSchema: StructType,
       insertStmt: String,
       batchSize: Int,
       dialect: JdbcDialect,
       isolationLevel: Int,
-      options: JDBCOptions): Unit = {
+      options: JDBCOptions,
+      batchExecuted: () => Unit = () => (),
+      finallyCallback: () => Unit = () => ()): Unit = {
 
     if (iterator.isEmpty) {
       return
@@ -769,7 +780,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     val outMetrics = TaskContext.get().taskMetrics().outputMetrics
 
-    val conn = dialect.createConnectionFactory(options)(-1)
+    val closeConn = connection.isEmpty
+    val conn = connection.getOrElse(dialect.createConnectionFactory(options)(-1))
     var committed = false
 
     var finalIsolationLevel = Connection.TRANSACTION_NONE
@@ -830,11 +842,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
           totalRowCount += 1
           if (rowCount % batchSize == 0) {
             stmt.executeBatch()
+            batchExecuted()
             rowCount = 0
           }
         }
         if (rowCount > 0) {
           stmt.executeBatch()
+          batchExecuted()
         }
       } finally {
         stmt.close()
@@ -864,6 +878,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         }
         throw e
     } finally {
+      finallyCallback()
       if (!committed) {
         // The stage must fail.  We got here through an exception path, so
         // let the exception through unless rollback() or close() want to
@@ -873,18 +888,75 @@ object JdbcUtils extends Logging with SQLConfHelper {
         } else {
           outMetrics.setRecordsWritten(totalRowCount)
         }
-        conn.close()
+        if (closeConn) {
+          conn.close()
+        }
       } else {
         outMetrics.setRecordsWritten(totalRowCount)
 
         // The stage must succeed.  We cannot propagate any exception close() might throw.
         try {
-          conn.close()
+          if (closeConn) {
+            conn.close()
+          }
         } catch {
           case e: Exception => logWarning("Transaction succeeded, but closing failed", e)
         }
       }
     }
+  }
+
+  def upsertPartition(
+      table: String,
+      iterator: Iterator[Row],
+      rddSchema: StructType,
+      tblSchema: Option[StructType],
+      isCaseSensitive: Boolean,
+      batchSize: Int,
+      dialect: JdbcDialect with MergeByTempTable,
+      isolationLevel: Int,
+      options: JdbcOptionsInWrite): Unit = {
+    val conn = dialect.createConnectionFactory(options)(-1)
+    val stmt = conn.createStatement()
+    stmt.setQueryTimeout(options.queryTimeout)
+
+    val tempTable = dialect.createTempTableName()
+    createTable(conn, tempTable, rddSchema, isCaseSensitive, options, temporary = true)
+    val insertStmt = getInsertStatement(tempTable, rddSchema, tblSchema, isCaseSensitive, dialect)
+    val tempParams = options.parameters.updated(JDBC_TABLE_NAME, tempTable)
+    val tempOptions = new JdbcOptionsInWrite(tempParams)
+    val columns = getColumns(rddSchema, tblSchema, isCaseSensitive, dialect)
+    val upsert = () => upsertBatch(stmt, table, tempTable, columns,
+      options.upsertKeyColumns, dialect)()
+    val finallyCallback = () => try {
+      dropTable(conn, tempTable, options)
+    } catch {
+      case e: Exception => logWarning(s"Exception dropping temp table $tempTable", e)
+    }
+
+    savePartition(Some(conn), iterator, rddSchema, insertStmt, batchSize, dialect,
+      isolationLevel, tempOptions, upsert, finallyCallback)
+
+    // The stage must succeed.  We cannot propagate any exception close() might throw.
+    try {
+      conn.close()
+    } catch {
+      case e: Exception => logWarning("Transaction succeeded, but closing failed", e)
+    }
+  }
+
+  def upsertBatch(
+      stmt: Statement,
+      table: String,
+      tempTable: String,
+      columns: Array[StructField],
+      upsertKeyColumns: Array[String],
+      dialect: JdbcDialect with MergeByTempTable)(): Unit = {
+    // upsert batch into table from tempTable by
+    dialect.merge(stmt, tempTable, table, columns, upsertKeyColumns)
+
+    // truncate tempTable
+    stmt.executeUpdate(dialect.getTruncateQuery(tempTable))
   }
 
   /**
@@ -986,8 +1058,72 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case Some(n) if n < df.rdd.getNumPartitions => df.coalesce(n)
       case _ => df
     }
-    repartitionedDF.foreachPartition { iterator => savePartition(
-      table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel, options)
+    repartitionedDF.foreachPartition { iterator: Iterator[Row] => savePartition(
+      None, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel, options)
+    }
+  }
+
+  def upsertTable(
+      df: DataFrame,
+      tableSchema: Option[StructType],
+      isCaseSensitive: Boolean,
+      options: JdbcOptionsInWrite): Unit = {
+    val url = options.url
+    val table = options.table
+    val dialect = JdbcDialects.get(url)
+    val rddSchema = df.schema
+    val batchSize = options.batchSize
+    val isolationLevel = options.isolationLevel
+
+    if (!dialect.isInstanceOf[MergeByTempTable]) {
+      throw QueryCompilationErrors.tableDoesNotSupportUpsertError(
+        options.table, dialect.getClass.getSimpleName)
+    }
+    val dialectWithMerge = dialect.asInstanceOf[JdbcDialect with MergeByTempTable]
+
+    if (options.upsertKeyColumns.isEmpty) {
+      throw QueryCompilationErrors.upsertKeyColumnsRequiredError()
+    }
+
+    val columns = getColumns(rddSchema, tableSchema, isCaseSensitive, dialect)
+    if (columns.forall(col => options.upsertKeyColumns.contains(col.name))) {
+      throw QueryCompilationErrors.upsertNotAllowedError(options.table,
+        "table has only key columns")
+    }
+
+    val repartitionedDF = options.numPartitions match {
+      case Some(n) if n <= 0 => throw QueryExecutionErrors.invalidJdbcNumPartitionsError(
+        n, JDBCOptions.JDBC_NUM_PARTITIONS)
+      case Some(n) if n < df.rdd.getNumPartitions => df.coalesce(n)
+      case _ => df
+    }
+    repartitionedDF.foreachPartition { iterator: Iterator[Row] => upsertPartition(
+      table, iterator, rddSchema, tableSchema, isCaseSensitive, batchSize, dialectWithMerge,
+      isolationLevel, options)
+    }
+  }
+
+  private def getMergeSchemaAndDialect(
+      schema: StructType,
+      dialect: JdbcDialect,
+      options: JdbcOptionsInWrite): (StructType, Option[JdbcDialect with MergeByTempTable]) = {
+    if (options.isUpsert) {
+      if (!dialect.isInstanceOf[MergeByTempTable]) {
+        throw QueryCompilationErrors.tableDoesNotSupportUpsertError(
+          options.table, dialect.getClass.getSimpleName)
+      }
+      val mergeDialect = dialect.asInstanceOf[JdbcDialect with MergeByTempTable]
+
+      // upsert requires a primary index on the upsert key columns
+      // upsert key columns have to be not-nullable to support a primary index
+      val mergeSchema = StructType(schema.fields.map {
+        case field if options.upsertKeyColumns.contains(field.name) => field.copy(nullable = false)
+        case field => field
+      }.toSeq)
+
+      (mergeSchema, Some(mergeDialect))
+    } else {
+      (schema, None)
     }
   }
 
@@ -997,16 +1133,30 @@ object JdbcUtils extends Logging with SQLConfHelper {
   def createTable(
       conn: Connection,
       tableName: String,
-      schema: StructType,
+      tableSchema: StructType,
       caseSensitive: Boolean,
-      options: JdbcOptionsInWrite): Unit = {
+      options: JdbcOptionsInWrite,
+      temporary: Boolean = false): Unit = {
     val statement = conn.createStatement
     val dialect = JdbcDialects.get(options.url)
+
+    // in presence of upsert mode, we need to modify schema and access the MergeByTempTable dialect
+    val (schema, mergeDialect) = getMergeSchemaAndDialect(tableSchema, dialect, options)
+
     val strSchema = schemaString(
       dialect, schema, caseSensitive, options.createTableColumnTypes)
     try {
       statement.setQueryTimeout(options.queryTimeout)
-      dialect.createTable(statement, tableName, strSchema, options)
+      if (temporary) {
+        dialect.createTempTable(statement, tableName, strSchema, options)
+      } else {
+        dialect.createTable(statement, tableName, strSchema, options)
+      }
+      if (options.isUpsert) {
+        // creating a table that is going to be upsert requires a primary index
+        assert(mergeDialect.isDefined)
+        mergeDialect.foreach(_.createPrimaryIndex(statement, tableName, options.upsertKeyColumns))
+      }
       if (options.tableComment.nonEmpty) {
         try {
           val tableCommentQuery = dialect.getTableCommentQuery(tableName, options.tableComment)
