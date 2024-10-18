@@ -737,7 +737,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     )
   }
 
-  test("transformWithState - batch should succeed") {
+  testWithAvroEncoding("transformWithState - batch should succeed") {
     val inputData = Seq("a", "b")
     val result = inputData.toDS()
       .groupByKey(x => x)

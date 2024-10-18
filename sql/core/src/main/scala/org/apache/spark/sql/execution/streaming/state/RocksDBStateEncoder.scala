@@ -45,6 +45,10 @@ sealed trait RocksDBValueStateEncoder {
   def encodeValue(row: UnsafeRow): Array[Byte]
   def decodeValue(valueBytes: Array[Byte]): UnsafeRow
   def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow]
+
+  def encodeValueBytes(row: Array[Byte]): Array[Byte]
+  def decodeValueBytes(valueBytes: Array[Byte]): Array[Byte]
+  def decodeValuesBytes(valueBytes: Array[Byte]): Iterator[Array[Byte]]
 }
 
 abstract class RocksDBKeyStateEncoderBase(
@@ -170,6 +174,34 @@ object RocksDBStateEncoder {
       null
     }
   }
+
+  /**
+   * Encode a byte array of N bytes as a N+1 byte array.
+   * @note This creates a new byte array and copies the input array to the new array.
+   */
+  def encodeByteArray(input: Array[Byte]): Array[Byte] = {
+    val encodedBytes = new Array[Byte](input.length + STATE_ENCODING_NUM_VERSION_BYTES)
+    Platform.putByte(encodedBytes, Platform.BYTE_ARRAY_OFFSET, STATE_ENCODING_VERSION)
+    Platform.copyMemory(
+      input, Platform.BYTE_ARRAY_OFFSET,
+      encodedBytes, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_NUM_VERSION_BYTES,
+      input.length)
+    encodedBytes
+  }
+
+  def decodeToByteArray(bytes: Array[Byte]): Array[Byte] = {
+    if (bytes != null) {
+      val decodedBytes = new Array[Byte](bytes.length - STATE_ENCODING_NUM_VERSION_BYTES)
+      Platform.copyMemory(
+        bytes, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_NUM_VERSION_BYTES,
+        decodedBytes, Platform.BYTE_ARRAY_OFFSET,
+        decodedBytes.length)
+      decodedBytes
+    } else {
+      null
+    }
+  }
+
 }
 
 /**
@@ -839,6 +871,18 @@ class MultiValuedStateEncoder(valueSchema: StructType)
   }
 
   override def supportsMultipleValuesPerKey: Boolean = true
+
+  override def encodeValueBytes(row: Array[Byte]): Array[Byte] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def decodeValueBytes(valueBytes: Array[Byte]): Array[Byte] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def decodeValuesBytes(valueBytes: Array[Byte]): Iterator[Array[Byte]] = {
+    throw new UnsupportedOperationException
+  }
 }
 
 /**
@@ -877,5 +921,17 @@ class SingleValueStateEncoder(valueSchema: StructType)
 
   override def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow] = {
     throw new IllegalStateException("This encoder doesn't support multiple values!")
+  }
+
+  override def encodeValueBytes(row: Array[Byte]): Array[Byte] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def decodeValueBytes(valueBytes: Array[Byte]): Array[Byte] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def decodeValuesBytes(valueBytes: Array[Byte]): Iterator[Array[Byte]] = {
+    throw new UnsupportedOperationException
   }
 }

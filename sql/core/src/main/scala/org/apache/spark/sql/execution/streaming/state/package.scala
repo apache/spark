@@ -120,6 +120,7 @@ package object state {
         stateInfo.queryRunId,
         stateInfo.operatorId,
         stateInfo.storeVersion,
+        stateInfo.stateStoreCkptIds,
         keySchema,
         valueSchema,
         keyStateEncoderSpec,

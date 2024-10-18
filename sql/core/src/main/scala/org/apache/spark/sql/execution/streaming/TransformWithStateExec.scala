@@ -535,10 +535,11 @@ case class TransformWithStateExec(
         initialState.execute(),
         getStateInfo,
         storeNames = Seq(),
-        session.streams.stateStoreCoordinator) {
+        session.streams.stateStoreCoordinator,
+        getColFamilySchemas()) {
         // The state store aware zip partitions will provide us with two iterators,
         // child data iterator and the initial state iterator per partition.
-        case (partitionId, childDataIterator, initStateIterator) =>
+        case (partitionId, childDataIterator, initStateIterator, colFamilySchemas) =>
           if (isStreaming) {
             val stateStoreId = StateStoreId(stateInfo.get.checkpointLocation,
               stateInfo.get.operatorId, partitionId)
@@ -555,10 +556,12 @@ case class TransformWithStateExec(
               hadoopConf = hadoopConfBroadcast.value.value
             )
 
-            processDataWithInitialState(store, childDataIterator, initStateIterator)
+            processDataWithInitialState(
+              store, childDataIterator, initStateIterator, colFamilySchemas)
           } else {
-            initNewStateStoreAndProcessData(partitionId, hadoopConfBroadcast) { store =>
-              processDataWithInitialState(store, childDataIterator, initStateIterator)
+            initNewStateStoreAndProcessData(
+              partitionId, hadoopConfBroadcast, getColFamilySchemas()) { (store, schemas) =>
+              processDataWithInitialState(store, childDataIterator, initStateIterator, schemas)
             }
           }
       }
@@ -584,8 +587,9 @@ case class TransformWithStateExec(
           new SerializableConfiguration(session.sessionState.newHadoopConf()))
         child.execute().mapPartitionsWithIndex[InternalRow](
           (i: Int, iter: Iterator[InternalRow]) => {
-            initNewStateStoreAndProcessData(i, hadoopConfBroadcast) { store =>
-              processData(store, iter, Map.empty)
+            initNewStateStoreAndProcessData(
+              i, hadoopConfBroadcast, getColFamilySchemas()) { (store, schemas) =>
+              processData(store, iter, schemas)
             }
           }
         )
@@ -599,8 +603,10 @@ case class TransformWithStateExec(
    */
   private def initNewStateStoreAndProcessData(
       partitionId: Int,
-      hadoopConfBroadcast: Broadcast[SerializableConfiguration])
-    (f: StateStore => CompletionIterator[InternalRow, Iterator[InternalRow]]):
+      hadoopConfBroadcast: Broadcast[SerializableConfiguration],
+      schemas: Map[String, StateStoreColFamilySchema])
+    (f: (StateStore, Map[String, StateStoreColFamilySchema]) =>
+      CompletionIterator[InternalRow, Iterator[InternalRow]]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
 
     val providerId = {
@@ -625,8 +631,8 @@ case class TransformWithStateExec(
       hadoopConf = hadoopConfBroadcast.value.value,
       useMultipleValuesPerKey = true)
 
-    val store = stateStoreProvider.getStore(0, None)
-    val outputIterator = f(store)
+    val store = stateStoreProvider.getStore(0)
+    val outputIterator = f(store, schemas)
     CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator.iterator, {
       stateStoreProvider.close()
       statefulProcessor.close()
@@ -658,10 +664,11 @@ case class TransformWithStateExec(
   private def processDataWithInitialState(
       store: StateStore,
       childDataIterator: Iterator[InternalRow],
-      initStateIterator: Iterator[InternalRow]):
+      initStateIterator: Iterator[InternalRow],
+      schemas: Map[String, StateStoreColFamilySchema]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
-      keyEncoder, timeMode, isStreaming, batchTimestampMs, metrics)
+      keyEncoder, timeMode, isStreaming, batchTimestampMs, metrics, schemas)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)
@@ -726,8 +733,7 @@ object TransformWithStateExec {
       queryRunId = UUID.randomUUID(),
       operatorId = 0,
       storeVersion = 0,
-      numPartitions = shufflePartitions,
-      stateStoreCkptIds = None
+      numPartitions = shufflePartitions
     )
 
     new TransformWithStateExec(
