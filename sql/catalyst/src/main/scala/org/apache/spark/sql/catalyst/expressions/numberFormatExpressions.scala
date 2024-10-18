@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
@@ -257,10 +257,7 @@ case class ToCharacter(left: Expression, right: Expression)
       inputTypeCheck
     }
   }
-
-  override def prettyName: String =
-    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("to_char")
-
+  override def prettyName: String = "to_char"
   override def nullSafeEval(decimal: Any, format: Any): Any = {
     val input = decimal.asInstanceOf[Decimal]
     numberFormatter.format(input)
