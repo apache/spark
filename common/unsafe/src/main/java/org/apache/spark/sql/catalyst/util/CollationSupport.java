@@ -588,9 +588,9 @@ public final class CollationSupport {
       return execBinary(srcString);
     }
     public static UTF8String exec(
-            final UTF8String srcString,
-            UTF8String trimString,
-            final int collationId) {
+      final UTF8String srcString,
+      UTF8String trimString,
+      final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.isUtf8BinaryType) {
         return execBinary(srcString, trimString);
