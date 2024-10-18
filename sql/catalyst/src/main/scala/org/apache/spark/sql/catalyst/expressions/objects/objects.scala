@@ -322,13 +322,14 @@ case class StaticInvoke(
     val evaluate = if (returnNullable && !method.getReturnType.isPrimitive) {
       if (CodeGenerator.defaultValue(dataType) == "null") {
         s"""
-          ${ev.value} = $callFunc;
+          ${ev.value} = ($javaType) $callFunc;
           ${ev.isNull} = ${ev.value} == null;
         """
       } else {
         val boxedResult = ctx.freshName("boxedResult")
+        val boxedJavaType = CodeGenerator.boxedType(dataType)
         s"""
-          ${CodeGenerator.boxedType(dataType)} $boxedResult = $callFunc;
+          $boxedJavaType $boxedResult = ($boxedJavaType) $callFunc;
           ${ev.isNull} = $boxedResult == null;
           if (!${ev.isNull}) {
             ${ev.value} = $boxedResult;
@@ -336,7 +337,7 @@ case class StaticInvoke(
         """
       }
     } else {
-      s"${ev.value} = $callFunc;"
+      s"${ev.value} = ($javaType) $callFunc;"
     }
 
     val code = code"""
