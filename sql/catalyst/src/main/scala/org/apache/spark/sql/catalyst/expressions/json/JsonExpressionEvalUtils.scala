@@ -114,7 +114,7 @@ class JsonToStructsEvaluator(
   }
 }
 
-class StructsToJsonEvaluator(
+case class StructsToJsonEvaluator(
     options: Map[String, String],
     inputSchema: DataType,
     timeZoneId: Option[String]) extends Serializable {

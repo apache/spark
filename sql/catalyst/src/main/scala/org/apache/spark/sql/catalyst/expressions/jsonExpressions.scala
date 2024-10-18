@@ -31,9 +31,9 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.expressions.json.{JsonExpressionEvalUtils, JsonExpressionUtils, JsonToStructsEvaluator, StructsToJsonEvaluator}
-import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
+import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -758,12 +758,14 @@ case class StructsToJson(
     child: Expression,
     timeZoneId: Option[String] = None)
   extends UnaryExpression
-  with TimeZoneAwareExpression
+  with RuntimeReplaceable
   with ExpectsInputTypes
-  with NullIntolerant
+  with TimeZoneAwareExpression
   with QueryErrorsBase {
 
   override def nullable: Boolean = true
+
+  override def nodePatternsInternal(): Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
 
   def this(options: Map[String, String], child: Expression) = this(options, child, None)
 
@@ -777,9 +779,6 @@ case class StructsToJson(
 
   @transient
   private lazy val inputSchema = child.dataType
-
-  @transient
-  private lazy val evaluator = new StructsToJsonEvaluator(options, inputSchema, timeZoneId)
 
   override def dataType: DataType = SQLConf.get.defaultStringType
 
@@ -795,31 +794,23 @@ case class StructsToJson(
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def nullSafeEval(value: Any): Any = evaluator.evaluate(value)
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
-    val eval = child.genCode(ctx)
-    val resultType = CodeGenerator.boxedType(dataType)
-    val resultTerm = ctx.freshName("result")
-    ev.copy(code =
-      code"""
-         |${eval.code}
-         |$resultType $resultTerm = ($resultType) $refEvaluator.evaluate(${eval.value});
-         |boolean ${ev.isNull} = $resultTerm == null;
-         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-         |if (!${ev.isNull}) {
-         |  ${ev.value} = $resultTerm;
-         |}
-         |""".stripMargin)
-  }
-
   override def inputTypes: Seq[AbstractDataType] = TypeCollection(ArrayType, StructType) :: Nil
 
   override def prettyName: String = "to_json"
 
   override protected def withNewChildInternal(newChild: Expression): StructsToJson =
     copy(child = newChild)
+
+  @transient
+  private lazy val evaluator = StructsToJsonEvaluator(options, inputSchema, timeZoneId)
+
+  override def replacement: Expression = Invoke(
+    Literal.create(evaluator, ObjectType(classOf[StructsToJsonEvaluator])),
+    "evaluate",
+    dataType,
+    Seq(child),
+    Seq(child.dataType)
+  )
 }
 
 /**
