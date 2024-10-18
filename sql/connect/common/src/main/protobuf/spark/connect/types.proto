@@ -69,7 +69,12 @@ message DataType {
 
     // UnparsedDataType
     Unparsed unparsed = 24;
+
+    Unknown unknown = 999;
   }
+
+  // Used for testing purposes only.
+  message Unknown {}
 
   message Boolean {
     uint32 type_variation_reference = 1;
