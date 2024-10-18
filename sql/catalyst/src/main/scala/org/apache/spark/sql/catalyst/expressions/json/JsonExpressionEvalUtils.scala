@@ -57,7 +57,7 @@ object JsonExpressionEvalUtils {
   }
 }
 
-class JsonToStructsEvaluator(
+case class JsonToStructsEvaluator(
     options: Map[String, String],
     nullableSchema: DataType,
     nameOfCorruptRecord: String,
