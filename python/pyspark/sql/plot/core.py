@@ -376,10 +376,9 @@ class PySparkPlotAccessor:
         column: str or list of str
             Column name or list of names to be used for creating the boxplot.
         **kwargs
-            Additional keyword arguments.
-            One of the optional keyword arguments is `precision`, a float that is used by
-            pyspark to compute approximate statistics for building a boxplot. The default
-            value is 0.01. Use smaller values to get more precise statistics.
+            Extra arguments to `precision `: refer to a float that is used by
+            pyspark to compute approximate statistics for building a boxplot.
+            The default value is 0.01. Use smaller values to get more precise statistics.
 
         Returns
         -------
