@@ -74,9 +74,12 @@ public class JsonExpressionUtils {
       List<UTF8String> arrayBufferOfKeys = new ArrayList<>();
 
       // traverse until the end of input and ensure it returns valid key
-      while (jsonParser.nextValue() != null && jsonParser.currentName() != null) {
-        // add current fieldName to the ArrayBuffer
-        arrayBufferOfKeys.add(UTF8String.fromString(jsonParser.currentName()));
+      while (jsonParser.nextValue() != null) {
+        String currName = jsonParser.currentName();
+        if (currName != null) {
+          // add current fieldName to the ArrayBuffer
+          arrayBufferOfKeys.add(UTF8String.fromString(currName));
+        }
 
         // skip all the children of inner object or array
         jsonParser.skipChildren();
