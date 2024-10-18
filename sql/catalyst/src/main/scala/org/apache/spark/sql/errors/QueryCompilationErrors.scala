@@ -3649,18 +3649,20 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def implicitCollationMismatchError(): Throwable = {
+  def implicitCollationMismatchError(implicitTypes: Seq[StringType]): Throwable = {
     new AnalysisException(
       errorClass = "COLLATION_MISMATCH.IMPLICIT",
-      messageParameters = Map.empty
+      messageParameters = Map(
+        "implicitTypes" -> implicitTypes.map(toSQLType).mkString(", ")
+      )
     )
   }
 
-  def explicitCollationMismatchError(explicitTypes: Seq[String]): Throwable = {
+  def explicitCollationMismatchError(explicitTypes: Seq[StringType]): Throwable = {
     new AnalysisException(
       errorClass = "COLLATION_MISMATCH.EXPLICIT",
       messageParameters = Map(
-        "explicitTypes" -> explicitTypes.map(toSQLId).mkString(", ")
+        "explicitTypes" -> explicitTypes.map(toSQLType).mkString(", ")
       )
     )
   }

@@ -175,7 +175,7 @@ object CollationTypeCasts extends TypeCoercionRule {
       case size if size > 1 =>
         throw QueryCompilationErrors
           .explicitCollationMismatchError(
-            explicitTypes.map(t => StringType(t).typeName)
+            explicitTypes.map(t => StringType(t))
           )
       // Only implicit or default collations present
       case 0 =>
@@ -191,7 +191,9 @@ object CollationTypeCasts extends TypeCoercionRule {
           .distinct
 
         if (implicitTypes.length > 1) {
-          throw QueryCompilationErrors.implicitCollationMismatchError()
+          throw QueryCompilationErrors.implicitCollationMismatchError(
+            implicitTypes.map(t => StringType(t))
+          )
         }
         else {
           implicitTypes.headOption.map(StringType(_)).getOrElse(SQLConf.get.defaultStringType)
