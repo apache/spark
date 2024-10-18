@@ -173,12 +173,12 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
   def getMinItemCount: Int = $(minItemCount)
 
   /**
-   * Param for the number of negative samples per positive sample (nonnegative).
+   * Param for the number of negative samples per positive sample (> 0).
    * Default: 10
    * @group param
    */
   val negative = new IntParam(this, "negative", "number of negative samples (> 0)",
-    ParamValidators.gtEq(0))
+    ParamValidators.gt(0))
 
   /** @group getParam */
   def getNegative: Int = $(negative)
