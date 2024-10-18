@@ -242,10 +242,12 @@ class NewHadoopRDD[K, V](
       private var finished = false
       private var reader =
         try {
-          val _reader = format.createRecordReader(
-            split.serializableHadoopSplit.value, hadoopAttemptContext)
-          _reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
-          _reader
+          Utils.tryInitializeResource(
+            format.createRecordReader(split.serializableHadoopSplit.value, hadoopAttemptContext)
+          ) { reader =>
+            reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
+            reader
+          }
         } catch {
           case e: FileNotFoundException if ignoreMissingFiles =>
             logWarning(log"Skipped missing file: ${MDC(PATH, split.serializableHadoopSplit)}", e)

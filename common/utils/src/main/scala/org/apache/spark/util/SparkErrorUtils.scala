@@ -49,6 +49,22 @@ private[spark] trait SparkErrorUtils extends Logging {
   }
 
   /**
+   * Try to initialize a resource. If an exception is throw during initialization, closes the
+   * resource before propagating the error. Otherwise, the caller is responsible for closing
+   * the resource. This means that [[T]] should provide some way to close the resource.
+   */
+  def tryInitializeResource[R <: Closeable, T](createResource: => R)(initialize: R => T): T = {
+    val resource = createResource
+    try {
+      initialize(resource)
+    } catch {
+      case e: Throwable =>
+        resource.close()
+        throw e
+    }
+  }
+
+  /**
    * Execute a block of code, then a finally block, but if exceptions happen in
    * the finally block, do not suppress the original exception.
    *
