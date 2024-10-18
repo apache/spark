@@ -112,7 +112,7 @@ object ThrowableTypes extends Enumeration {
 
   // Should not report as OOM when its depth is greater than killOnFatalErrorDepth
   val DeepNestedOOMError = ThrowableTypesVal(
-    "NonFatalNestedErrors",
+    "DeepNestedOOMError",
     new RuntimeException("Nonfatal Level 1",
       new RuntimeException("Nonfatal Level 2",
         new RuntimeException("Nonfatal Level 3",
