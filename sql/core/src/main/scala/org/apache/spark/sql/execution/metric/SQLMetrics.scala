@@ -61,6 +61,11 @@ class SQLMetric(
   override def reset(): Unit = _value = initValue
 
   override def merge(other: AccumulatorV2[Long, Long]): Unit = other match {
+    case o: SQLMetric if metricType == SQLMetrics.MAX_METRIC =>
+      if ((o.value != SQLMetrics.MIN_MAX_SENTINEL_VALUE)
+        && (_value == SQLMetrics.MIN_MAX_SENTINEL_VALUE || o.value > _value)) {
+        _value = o.value
+      }
     case o: SQLMetric =>
       if (!o.isZero) {
         if (isZero) _value = 0
@@ -98,7 +103,11 @@ class SQLMetric(
 
   // _value may be uninitialized, in many cases being -1. We should not expose it to the user
   // and instead return 0.
-  override def value: Long = if (isZero) 0 else _value
+  override def value: Long =
+    metricType match {
+      case SQLMetrics.MAX_METRIC => _value
+      case _ => if (isZero) 0 else _value
+    }
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
@@ -115,11 +124,13 @@ class SQLMetric(
 }
 
 object SQLMetrics {
-  private val SUM_METRIC = "sum"
-  private val SIZE_METRIC = "size"
-  private val TIMING_METRIC = "timing"
-  private val NS_TIMING_METRIC = "nsTiming"
-  private val AVERAGE_METRIC = "average"
+  val SUM_METRIC = "sum"
+  val SIZE_METRIC = "size"
+  val TIMING_METRIC = "timing"
+  val NS_TIMING_METRIC = "nsTiming"
+  val AVERAGE_METRIC = "average"
+  val MAX_METRIC = "maximum"
+  val MIN_MAX_SENTINEL_VALUE: Long = -1
 
   private val baseForAvgMetric: Int = 10
 
@@ -203,6 +214,16 @@ object SQLMetrics {
     acc
   }
 
+  /**
+   * Create a metric to report a created maximum value. Should be used by setting values
+   * through `.set(Math.max(current, new))`, when the value is set multiple times.
+   */
+  def createMaxMetric(sc: SparkContext, name: String): SQLMetric = {
+    val acc = new SQLMetric(MAX_METRIC, MIN_MAX_SENTINEL_VALUE)
+    acc.register(sc, name = metricsCache.get(name), countFailedValues = false)
+    acc
+  }
+
   private def toNumberFormat(value: Long): String = {
     val numberFormat = NumberFormat.getNumberInstance(Locale.US)
     numberFormat.format(value.toDouble / baseForAvgMetric)
@@ -228,6 +249,15 @@ object SQLMetrics {
     if (metricsType == SUM_METRIC) {
       val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
       numberFormat.format(values.sum)
+    } else if (metricsType == MAX_METRIC) {
+      val validValues = values.filter(_ >= 0)
+      if (validValues.length > 0) {
+        val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
+        val value = validValues.max
+        numberFormat.format(value)
+      } else {
+        "-"
+      }
     } else if (metricsType == AVERAGE_METRIC) {
       val validValues = values.filter(_ > 0)
       // When there are only 1 metrics value (or None), no need to display max/min/median. This is
