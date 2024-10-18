@@ -696,7 +696,7 @@ case class JsonToStructs(
   private val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
 
   @transient
-  lazy val evaluator = new JsonToStructsEvaluator(
+  lazy val evaluator: JsonToStructsEvaluator = JsonToStructsEvaluator(
     options, nullableSchema, nameOfCorruptRecord, timeZoneId, variantAllowDuplicateKeys)
 
   override def replacement: Expression = Invoke(
