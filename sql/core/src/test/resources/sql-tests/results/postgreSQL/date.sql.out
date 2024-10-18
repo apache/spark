@@ -687,10 +687,13 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "sqlState" : "22008",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Invalid date 'FEBRUARY 30'"
+    "badValue" : "'30'",
+    "range" : "1 ... 28/31",
+    "unit" : "DAY"
   }
 }
 
@@ -702,10 +705,13 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "sqlState" : "22008",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Invalid value for MonthOfYear (valid values 1 - 12): 13"
+    "badValue" : "'13'",
+    "range" : "1 ... 12",
+    "unit" : "MONTH"
   }
 }
 
@@ -717,10 +723,13 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "sqlState" : "22008",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Invalid value for DayOfMonth (valid values 1 - 28/31): -1"
+    "badValue" : "'-1'",
+    "range" : "1 ... 28/31",
+    "unit" : "DAY"
   }
 }
 
