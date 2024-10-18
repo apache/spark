@@ -24,7 +24,7 @@ import scala.beans.{BeanProperty, BooleanBeanProperty}
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.JavaTypeInferenceBeans.{JavaBeanWithGenericBase, JavaBeanWithGenericHierarchy, JavaBeanWithGenericsABC}
+import org.apache.spark.sql.catalyst.JavaTypeInferenceBeans.{CompanyWrapper, CompanyWrapperT, JavaBeanWithGenericBase, JavaBeanWithGenericHierarchy, JavaBeanWithGenericsABC, PersonData, PersonDataSerializable, Team, TeamT}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, UDTCaseClass, UDTForCaseClass}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.types.{DecimalType, MapType, Metadata, StringType, StructField, StructType}
@@ -276,6 +276,38 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
         encoderField("propertyA", StringEncoder),
         encoderField("propertyB", BoxedLongEncoder),
         encoderField("propertyC", BoxedIntEncoder)
+      ))
+    assert(encoder === expected)
+  }
+
+  test("SPARK-46679: resolve generics with multi-level inheritance different type names") {
+    val encoder = JavaTypeInference.encoderFor(classOf[CompanyWrapper])
+    val expected =
+      JavaBeanEncoder(ClassTag(classOf[CompanyWrapper]), Seq(
+        encoderField("name", StringEncoder),
+        encoderField("team", JavaBeanEncoder(ClassTag(classOf[Team[PersonData]]), Seq(
+          encoderField("name", StringEncoder),
+          encoderField("person", JavaBeanEncoder(ClassTag(classOf[PersonData]), Seq(
+            encoderField("firstName", StringEncoder),
+            encoderField("id", StringEncoder)
+          )))
+        )))
+      ))
+    assert(encoder === expected)
+  }
+
+  test("SPARK-46679: resolve generics with multi-level inheritance same type names") {
+    val encoder = JavaTypeInference.encoderFor(classOf[CompanyWrapperT])
+    val expected =
+      JavaBeanEncoder(ClassTag(classOf[CompanyWrapperT]), Seq(
+        encoderField("name", StringEncoder),
+        encoderField("team", JavaBeanEncoder(ClassTag(classOf[TeamT[PersonDataSerializable]]), Seq(
+          encoderField("name", StringEncoder),
+          encoderField("person", JavaBeanEncoder(ClassTag(classOf[PersonDataSerializable]), Seq(
+            encoderField("firstName", StringEncoder),
+            encoderField("id", StringEncoder)
+          )))
+        )))
       ))
     assert(encoder === expected)
   }
