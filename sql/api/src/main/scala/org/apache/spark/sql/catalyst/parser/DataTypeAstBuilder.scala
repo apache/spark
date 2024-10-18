@@ -226,9 +226,12 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   /**
    * Parse and verify IDENTITY column definition.
    *
-   * @param ctx      The parser context.
-   * @param dataType The data type of column defined as IDENTITY column. Used for verification.
-   * @return Tuple containing start, step and allowExplicitInsert.
+   * @param ctx
+   *   The parser context.
+   * @param dataType
+   *   The data type of column defined as IDENTITY column. Used for verification.
+   * @return
+   *   Tuple containing start, step and allowExplicitInsert.
    */
   protected def visitIdentityColumn(
       ctx: IdentityColumnContext,
