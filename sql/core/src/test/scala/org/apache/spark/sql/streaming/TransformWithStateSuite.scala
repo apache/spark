@@ -528,6 +528,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numValueStateVars") > 0)
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numRegisteredTimers") == 0)
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
         },
         AddData(inputData, "a", "b"),
         CheckNewAnswer(("a", "2"), ("b", "1")),
@@ -536,6 +537,10 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
         CheckNewAnswer(("b", "2")),
         StopStream,
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
+        },
         StartStream(),
         AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
         CheckNewAnswer(("a", "1"), ("c", "1"))
