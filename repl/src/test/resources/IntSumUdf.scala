@@ -15,29 +15,8 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+import org.apache.spark.sql.api.java.UDF2
 
-import java.io.File
-
-/**
- * Resolves paths to files added through `SparkContext.addFile()`.
- */
-object SparkFiles {
-
-  /**
-   * Get the absolute path of a file added through `SparkContext.addFile()`.
-   */
-  def get(filename: String): String = {
-    val jobArtifactUUID = JobArtifactSet
-      .getCurrentJobArtifactState.map(_.uuid).getOrElse("default")
-    val withUuid = if (jobArtifactUUID == "default") filename else s"$jobArtifactUUID/$filename"
-    new File(getRootDirectory(), withUuid).getAbsolutePath
-  }
-
-  /**
-   * Get the root directory that contains files added through `SparkContext.addFile()`.
-   */
-  def getRootDirectory(): String =
-    SparkEnv.get.driverTmpDir.getOrElse(".")
-
+class IntSumUdf extends UDF2[Long, Long, Long] {
+  override def call(t1: Long, t2: Long): Long = t1 + t2
 }

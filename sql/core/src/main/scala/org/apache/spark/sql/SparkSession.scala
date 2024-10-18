@@ -275,6 +275,7 @@ class SparkSession private(
       Map.empty,
       managedJobTags.asScala.toMap)
     result.sessionState // force copy of SessionState
+    result.sessionState.artifactManager // force copy of ArtifactManager and its resources
     result.managedJobTags // force copy of userDefinedToRealTagsMap
     result
   }
@@ -839,6 +840,7 @@ object SparkSession extends api.BaseSparkSessionCompanion with Logging {
     override def enableHiveSupport(): this.type = synchronized {
       if (hiveClassesArePresent) {
         super.enableHiveSupport()
+          .config("spark.session.isolate.artifacts", "false")
       } else {
         throw new IllegalArgumentException(
           "Unable to instantiate SparkSession with Hive support because " +

@@ -251,6 +251,7 @@ private[hive] class TestHiveSparkSession(
       Some(sessionState),
       loadTestTables)
     result.sessionState // force copy of SessionState
+    result.sessionState.artifactManager // force copy of ArtifactManager and its resources
     result
   }
 
@@ -629,7 +630,8 @@ private[hive] object TestHiveContext {
   val overrideConfs: Map[String, String] =
     Map(
       // Fewer shuffle partitions to speed up testing.
-      SQLConf.SHUFFLE_PARTITIONS.key -> "5"
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+      "spark.session.isolate.artifacts" -> "false"
     )
 
   def makeWarehouseDir(): File = {

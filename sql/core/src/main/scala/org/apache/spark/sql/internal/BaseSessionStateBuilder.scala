@@ -181,7 +181,7 @@ abstract class BaseSessionStateBuilder(
    * Note 1: The user-defined functions must be deterministic.
    * Note 2: This depends on the `functionRegistry` field.
    */
-  protected def udfRegistration: UDFRegistration = new UDFRegistration(functionRegistry)
+  protected def udfRegistration: UDFRegistration = new UDFRegistration(session, functionRegistry)
 
   protected def udtfRegistration: UDTFRegistration = new UDTFRegistration(tableFunctionRegistry)
 
@@ -371,7 +371,9 @@ abstract class BaseSessionStateBuilder(
    * Resource manager that handles the storage of artifacts as well as preparing the artifacts for
    * use.
    */
-  protected def artifactManager: ArtifactManager = new ArtifactManager(session)
+  protected def artifactManager: ArtifactManager = {
+    parentState.map(_.artifactManager.clone(session)).getOrElse(new ArtifactManager(session))
+  }
 
   /**
    * Function used to make clones of the session state.
