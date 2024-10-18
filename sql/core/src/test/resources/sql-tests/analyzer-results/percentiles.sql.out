@@ -156,7 +156,7 @@ FROM aggr
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+  "condition" : "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
   "sqlState" : "42000",
   "messageParameters" : {
     "prettyName" : "`round`",
@@ -179,7 +179,7 @@ FROM aggr
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+  "condition" : "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
   "sqlState" : "42000",
   "messageParameters" : {
     "prettyName" : "`round`",
@@ -202,7 +202,7 @@ FROM aggr
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+  "condition" : "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
   "sqlState" : "42000",
   "messageParameters" : {
     "prettyName" : "`percentile`",
@@ -225,7 +225,7 @@ FROM aggr
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+  "condition" : "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
   "sqlState" : "42000",
   "messageParameters" : {
     "prettyName" : "`percentile`",
@@ -248,7 +248,7 @@ FROM aggr
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_UNSUPPORTED",
+  "condition" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_UNSUPPORTED",
   "sqlState" : "42K0K",
   "messageParameters" : {
     "funcName" : "`percentile_cont`"
@@ -270,7 +270,7 @@ FROM aggr
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_UNSUPPORTED",
+  "condition" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_UNSUPPORTED",
   "sqlState" : "42K0K",
   "messageParameters" : {
     "funcName" : "`percentile_cont`"
@@ -292,7 +292,7 @@ FROM aggr
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
@@ -317,7 +317,7 @@ FROM aggr
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
@@ -342,7 +342,7 @@ FROM aggr
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WITHIN_GROUP_MISSING",
+  "condition" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WITHIN_GROUP_MISSING",
   "sqlState" : "42K0K",
   "messageParameters" : {
     "funcName" : "`percentile_cont`"
@@ -364,7 +364,7 @@ FROM aggr
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WITHIN_GROUP_MISSING",
+  "condition" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WITHIN_GROUP_MISSING",
   "sqlState" : "42K0K",
   "messageParameters" : {
     "funcName" : "`percentile_cont`"
@@ -386,7 +386,7 @@ FROM aggr
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WRONG_NUM_ORDERINGS",
+  "condition" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WRONG_NUM_ORDERINGS",
   "sqlState" : "42K0K",
   "messageParameters" : {
     "actualNum" : "2",
@@ -410,7 +410,7 @@ FROM aggr
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "2",
@@ -485,7 +485,7 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "condition" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_cont(salary, 0.25)\""
@@ -512,7 +512,7 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "condition" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_disc(salary, 0.25)\""
@@ -538,7 +538,7 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "condition" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"median(salary)\""
@@ -565,7 +565,7 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "condition" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_cont(salary, 0.25)\""
@@ -592,7 +592,7 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "condition" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_disc(salary, 0.25)\""
@@ -618,7 +618,7 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "condition" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"median(salary)\""
@@ -701,7 +701,7 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "condition" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_cont(salary, 0.25)\""
@@ -729,7 +729,7 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "condition" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_disc(salary, 0.25)\""
@@ -756,7 +756,7 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "condition" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"median(salary)\""
@@ -784,7 +784,7 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "condition" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_cont(salary, 0.25)\""
@@ -812,7 +812,7 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "condition" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_disc(salary, 0.25)\""
@@ -839,7 +839,7 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "condition" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"median(salary)\""
@@ -1166,7 +1166,7 @@ FROM values (12, 0.25), (13, 0.25), (22, 0.25) as v(a, b)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "condition" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"b\"",

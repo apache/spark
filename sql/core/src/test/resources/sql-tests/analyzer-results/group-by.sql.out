@@ -17,7 +17,7 @@ SELECT a, COUNT(b) FROM testData
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_GROUP_BY",
+  "condition" : "MISSING_GROUP_BY",
   "sqlState" : "42803",
   "queryContext" : [ {
     "objectType" : "",
@@ -58,7 +58,7 @@ SELECT a, COUNT(b) FROM testData GROUP BY b
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_AGGREGATION",
+  "condition" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"a\"",
@@ -147,7 +147,7 @@ SELECT a + 2, COUNT(b) FROM testData GROUP BY a + 1
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_AGGREGATION",
+  "condition" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"a\"",
@@ -232,7 +232,7 @@ SELECT a AS k, COUNT(non_existing) FROM testData GROUP BY k
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`non_existing`",
@@ -253,7 +253,7 @@ SELECT COUNT(b) AS k FROM testData GROUP BY k
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "GROUP_BY_AGGREGATE",
+  "condition" : "GROUP_BY_AGGREGATE",
   "sqlState" : "42903",
   "messageParameters" : {
     "sqlExpr" : "count(testdata.b)"
@@ -284,7 +284,7 @@ SELECT k AS a, COUNT(v) FROM testDataHasSameNameWithAlias GROUP BY a
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_AGGREGATION",
+  "condition" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"k\"",
@@ -304,7 +304,7 @@ SELECT a AS k, COUNT(b) FROM testData GROUP BY k
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`k`",
@@ -412,7 +412,7 @@ SELECT id FROM range(10) HAVING id > 0
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_GROUP_BY",
+  "condition" : "MISSING_GROUP_BY",
   "sqlState" : "42803",
   "queryContext" : [ {
     "objectType" : "",
@@ -443,7 +443,7 @@ SELECT 1 FROM range(10) HAVING MAX(id) > 0
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WHERE_CONDITION",
+  "condition" : "INVALID_WHERE_CONDITION",
   "sqlState" : "42903",
   "messageParameters" : {
     "condition" : "\"(max(id) > 0)\"",
@@ -630,7 +630,7 @@ SELECT every(1)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
@@ -654,7 +654,7 @@ SELECT some(1S)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
@@ -678,7 +678,7 @@ SELECT any(1L)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
@@ -702,7 +702,7 @@ SELECT every("true")
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"true\"",
@@ -726,7 +726,7 @@ SELECT bool_and(1.0)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1.0\"",
@@ -750,7 +750,7 @@ SELECT bool_or(1.0D)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1.0\"",
@@ -890,7 +890,7 @@ SELECT count(*) FROM test_agg WHERE count(*) > 1L
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WHERE_CONDITION",
+  "condition" : "INVALID_WHERE_CONDITION",
   "sqlState" : "42903",
   "messageParameters" : {
     "condition" : "\"(count(1) > 1)\"",
@@ -911,7 +911,7 @@ SELECT count(*) FROM test_agg WHERE count(*) + 1L > 1L
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WHERE_CONDITION",
+  "condition" : "INVALID_WHERE_CONDITION",
   "sqlState" : "42903",
   "messageParameters" : {
     "condition" : "\"((count(1) + 1) > 1)\"",
@@ -932,7 +932,7 @@ SELECT count(*) FROM test_agg WHERE k = 1 or k = 2 or count(*) + 1L > 1L or max(
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WHERE_CONDITION",
+  "condition" : "INVALID_WHERE_CONDITION",
   "sqlState" : "42903",
   "messageParameters" : {
     "condition" : "\"(((k = 1) OR (k = 2)) OR (((count(1) + 1) > 1) OR (max(k) > 1)))\"",

@@ -40,7 +40,7 @@ CREATE TABLE view_base_table (key int /* PRIMARY KEY */, data varchar(20)) USING
 -- !query analysis
 org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 {
-  "errorClass" : "TABLE_OR_VIEW_ALREADY_EXISTS",
+  "condition" : "TABLE_OR_VIEW_ALREADY_EXISTS",
   "sqlState" : "42P07",
   "messageParameters" : {
     "relationName" : "`spark_catalog`.`default`.`view_base_table`"
@@ -54,7 +54,7 @@ CREATE VIEW key_dependent_view AS
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_AGGREGATION",
+  "condition" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"data\"",
@@ -69,7 +69,7 @@ CREATE VIEW key_dependent_view_no_cols AS
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`FROM`"
@@ -269,7 +269,7 @@ CREATE VIEW v1_temp AS SELECT * FROM temp_table
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -315,7 +315,7 @@ CREATE VIEW temp_view_test.v3_temp AS SELECT * FROM temp_table
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -360,7 +360,7 @@ CREATE VIEW v4_temp AS
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -379,7 +379,7 @@ CREATE VIEW v5_temp AS
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -491,7 +491,7 @@ CREATE VIEW v6_temp AS SELECT * FROM base_table WHERE id IN (SELECT id FROM temp
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -507,7 +507,7 @@ CREATE VIEW v7_temp AS SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM tem
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -523,7 +523,7 @@ CREATE VIEW v8_temp AS SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM temp
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -539,7 +539,7 @@ CREATE VIEW v9_temp AS SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM 
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -555,7 +555,7 @@ CREATE VIEW v10_temp AS SELECT * FROM v7_temp
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`v7_temp`"
@@ -575,7 +575,7 @@ CREATE VIEW v11_temp AS SELECT t1.id, t2.a FROM base_table t1, v10_temp t2
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`v10_temp`"
@@ -595,7 +595,7 @@ CREATE VIEW v12_temp AS SELECT true FROM v11_temp
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`v11_temp`"
@@ -670,7 +670,7 @@ CREATE VIEW temporal1 AS SELECT * FROM t1 CROSS JOIN tt
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -704,7 +704,7 @@ CREATE VIEW temporal2 AS SELECT * FROM t1 INNER JOIN tt ON t1.num = tt.num2
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -738,7 +738,7 @@ CREATE VIEW temporal3 AS SELECT * FROM t1 LEFT JOIN tt ON t1.num = tt.num2
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -772,7 +772,7 @@ CREATE VIEW temporal4 AS SELECT * FROM t1 LEFT JOIN tt ON t1.num = tt.num2 AND t
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
@@ -788,7 +788,7 @@ CREATE VIEW temporal5 AS SELECT * FROM t1 WHERE num IN (SELECT num FROM t1 WHERE
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "condition" : "INVALID_TEMP_OBJ_REFERENCE",
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",

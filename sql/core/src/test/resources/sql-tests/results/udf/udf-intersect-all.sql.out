@@ -96,7 +96,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -125,7 +125,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "NUM_COLUMNS_MISMATCH",
+  "condition" : "NUM_COLUMNS_MISMATCH",
   "sqlState" : "42826",
   "messageParameters" : {
     "firstNumColumns" : "1",

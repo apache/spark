@@ -133,7 +133,7 @@ select cast(a as array<string>) from t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "sqlExpr" : "\"a\"",
@@ -155,7 +155,7 @@ select cast(a as struct<s:string>) from t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "sqlExpr" : "\"a\"",
@@ -177,7 +177,7 @@ select cast(a as map<string, string>) from t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "sqlExpr" : "\"a\"",

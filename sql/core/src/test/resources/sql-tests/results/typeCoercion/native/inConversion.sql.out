@@ -78,7 +78,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TINYINT\", \"BINARY\"]",
@@ -102,7 +102,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TINYINT\", \"BOOLEAN\"]",
@@ -126,7 +126,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TINYINT\", \"TIMESTAMP\"]",
@@ -150,7 +150,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TINYINT\", \"DATE\"]",
@@ -238,7 +238,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"SMALLINT\", \"BINARY\"]",
@@ -262,7 +262,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"SMALLINT\", \"BOOLEAN\"]",
@@ -286,7 +286,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"SMALLINT\", \"TIMESTAMP\"]",
@@ -310,7 +310,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"SMALLINT\", \"DATE\"]",
@@ -398,7 +398,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"INT\", \"BINARY\"]",
@@ -422,7 +422,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"INT\", \"BOOLEAN\"]",
@@ -446,7 +446,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"INT\", \"TIMESTAMP\"]",
@@ -470,7 +470,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"INT\", \"DATE\"]",
@@ -558,7 +558,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BIGINT\", \"BINARY\"]",
@@ -582,7 +582,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BIGINT\", \"BOOLEAN\"]",
@@ -606,7 +606,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BIGINT\", \"TIMESTAMP\"]",
@@ -630,7 +630,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BIGINT\", \"DATE\"]",
@@ -718,7 +718,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"FLOAT\", \"BINARY\"]",
@@ -742,7 +742,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"FLOAT\", \"BOOLEAN\"]",
@@ -766,7 +766,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"FLOAT\", \"TIMESTAMP\"]",
@@ -790,7 +790,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"FLOAT\", \"DATE\"]",
@@ -878,7 +878,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DOUBLE\", \"BINARY\"]",
@@ -902,7 +902,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DOUBLE\", \"BOOLEAN\"]",
@@ -926,7 +926,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DOUBLE\", \"TIMESTAMP\"]",
@@ -950,7 +950,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DOUBLE\", \"DATE\"]",
@@ -1038,7 +1038,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DECIMAL(10,0)\", \"BINARY\"]",
@@ -1062,7 +1062,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DECIMAL(10,0)\", \"BOOLEAN\"]",
@@ -1086,7 +1086,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DECIMAL(10,0)\", \"TIMESTAMP\"]",
@@ -1110,7 +1110,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DECIMAL(10,0)\", \"DATE\"]",
@@ -1198,7 +1198,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"STRING\", \"BINARY\"]",
@@ -1222,7 +1222,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"STRING\", \"BOOLEAN\"]",
@@ -1262,7 +1262,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"TINYINT\"]",
@@ -1286,7 +1286,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"SMALLINT\"]",
@@ -1310,7 +1310,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"INT\"]",
@@ -1334,7 +1334,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"BIGINT\"]",
@@ -1358,7 +1358,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"FLOAT\"]",
@@ -1382,7 +1382,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"DOUBLE\"]",
@@ -1406,7 +1406,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"DECIMAL(10,0)\"]",
@@ -1430,7 +1430,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"STRING\"]",
@@ -1462,7 +1462,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"BOOLEAN\"]",
@@ -1486,7 +1486,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"TIMESTAMP\"]",
@@ -1510,7 +1510,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"DATE\"]",
@@ -1534,7 +1534,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"TINYINT\"]",
@@ -1558,7 +1558,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"SMALLINT\"]",
@@ -1582,7 +1582,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"INT\"]",
@@ -1606,7 +1606,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"BIGINT\"]",
@@ -1630,7 +1630,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"FLOAT\"]",
@@ -1654,7 +1654,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"DOUBLE\"]",
@@ -1678,7 +1678,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"DECIMAL(10,0)\"]",
@@ -1702,7 +1702,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"STRING\"]",
@@ -1726,7 +1726,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"BINARY\"]",
@@ -1758,7 +1758,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"TIMESTAMP\"]",
@@ -1782,7 +1782,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"DATE\"]",
@@ -1806,7 +1806,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"TINYINT\"]",
@@ -1830,7 +1830,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"SMALLINT\"]",
@@ -1854,7 +1854,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"INT\"]",
@@ -1878,7 +1878,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"BIGINT\"]",
@@ -1902,7 +1902,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"FLOAT\"]",
@@ -1926,7 +1926,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"DOUBLE\"]",
@@ -1950,7 +1950,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"DECIMAL(10,0)\"]",
@@ -1982,7 +1982,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"BINARY\"]",
@@ -2006,7 +2006,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"BOOLEAN\"]",
@@ -2046,7 +2046,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"TINYINT\"]",
@@ -2070,7 +2070,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"SMALLINT\"]",
@@ -2094,7 +2094,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"INT\"]",
@@ -2118,7 +2118,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"BIGINT\"]",
@@ -2142,7 +2142,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"FLOAT\"]",
@@ -2166,7 +2166,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"DOUBLE\"]",
@@ -2190,7 +2190,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"DECIMAL(10,0)\"]",
@@ -2222,7 +2222,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"BINARY\"]",
@@ -2246,7 +2246,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"BOOLEAN\"]",
@@ -2350,7 +2350,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TINYINT\", \"TINYINT\", \"BINARY\"]",
@@ -2374,7 +2374,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TINYINT\", \"TINYINT\", \"BOOLEAN\"]",
@@ -2398,7 +2398,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TINYINT\", \"TINYINT\", \"TIMESTAMP\"]",
@@ -2422,7 +2422,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TINYINT\", \"TINYINT\", \"DATE\"]",
@@ -2510,7 +2510,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"SMALLINT\", \"SMALLINT\", \"BINARY\"]",
@@ -2534,7 +2534,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"SMALLINT\", \"SMALLINT\", \"BOOLEAN\"]",
@@ -2558,7 +2558,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"SMALLINT\", \"SMALLINT\", \"TIMESTAMP\"]",
@@ -2582,7 +2582,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"SMALLINT\", \"SMALLINT\", \"DATE\"]",
@@ -2670,7 +2670,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"INT\", \"INT\", \"BINARY\"]",
@@ -2694,7 +2694,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"INT\", \"INT\", \"BOOLEAN\"]",
@@ -2718,7 +2718,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"INT\", \"INT\", \"TIMESTAMP\"]",
@@ -2742,7 +2742,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"INT\", \"INT\", \"DATE\"]",
@@ -2830,7 +2830,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BIGINT\", \"BIGINT\", \"BINARY\"]",
@@ -2854,7 +2854,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BIGINT\", \"BIGINT\", \"BOOLEAN\"]",
@@ -2878,7 +2878,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BIGINT\", \"BIGINT\", \"TIMESTAMP\"]",
@@ -2902,7 +2902,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BIGINT\", \"BIGINT\", \"DATE\"]",
@@ -2990,7 +2990,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"FLOAT\", \"FLOAT\", \"BINARY\"]",
@@ -3014,7 +3014,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"FLOAT\", \"FLOAT\", \"BOOLEAN\"]",
@@ -3038,7 +3038,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"FLOAT\", \"FLOAT\", \"TIMESTAMP\"]",
@@ -3062,7 +3062,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"FLOAT\", \"FLOAT\", \"DATE\"]",
@@ -3150,7 +3150,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DOUBLE\", \"DOUBLE\", \"BINARY\"]",
@@ -3174,7 +3174,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DOUBLE\", \"DOUBLE\", \"BOOLEAN\"]",
@@ -3198,7 +3198,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DOUBLE\", \"DOUBLE\", \"TIMESTAMP\"]",
@@ -3222,7 +3222,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DOUBLE\", \"DOUBLE\", \"DATE\"]",
@@ -3310,7 +3310,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DECIMAL(10,0)\", \"DECIMAL(10,0)\", \"BINARY\"]",
@@ -3334,7 +3334,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DECIMAL(10,0)\", \"DECIMAL(10,0)\", \"BOOLEAN\"]",
@@ -3358,7 +3358,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DECIMAL(10,0)\", \"DECIMAL(10,0)\", \"TIMESTAMP\"]",
@@ -3382,7 +3382,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DECIMAL(10,0)\", \"DECIMAL(10,0)\", \"DATE\"]",
@@ -3470,7 +3470,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"STRING\", \"STRING\", \"BINARY\"]",
@@ -3494,7 +3494,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"STRING\", \"STRING\", \"BOOLEAN\"]",
@@ -3534,7 +3534,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"BINARY\", \"TINYINT\"]",
@@ -3558,7 +3558,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"BINARY\", \"SMALLINT\"]",
@@ -3582,7 +3582,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"BINARY\", \"INT\"]",
@@ -3606,7 +3606,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"BINARY\", \"BIGINT\"]",
@@ -3630,7 +3630,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"BINARY\", \"FLOAT\"]",
@@ -3654,7 +3654,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"BINARY\", \"DOUBLE\"]",
@@ -3678,7 +3678,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"BINARY\", \"DECIMAL(10,0)\"]",
@@ -3702,7 +3702,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"BINARY\", \"STRING\"]",
@@ -3734,7 +3734,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"BINARY\", \"BOOLEAN\"]",
@@ -3758,7 +3758,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"BINARY\", \"TIMESTAMP\"]",
@@ -3782,7 +3782,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"BINARY\", \"DATE\"]",
@@ -3806,7 +3806,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"BOOLEAN\", \"TINYINT\"]",
@@ -3830,7 +3830,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"BOOLEAN\", \"SMALLINT\"]",
@@ -3854,7 +3854,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"BOOLEAN\", \"INT\"]",
@@ -3878,7 +3878,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"BOOLEAN\", \"BIGINT\"]",
@@ -3902,7 +3902,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"BOOLEAN\", \"FLOAT\"]",
@@ -3926,7 +3926,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"BOOLEAN\", \"DOUBLE\"]",
@@ -3950,7 +3950,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"BOOLEAN\", \"DECIMAL(10,0)\"]",
@@ -3974,7 +3974,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"BOOLEAN\", \"STRING\"]",
@@ -3998,7 +3998,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"BOOLEAN\", \"BINARY\"]",
@@ -4030,7 +4030,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"BOOLEAN\", \"TIMESTAMP\"]",
@@ -4054,7 +4054,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"BOOLEAN\", \"DATE\"]",
@@ -4078,7 +4078,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"TIMESTAMP\", \"TINYINT\"]",
@@ -4102,7 +4102,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"TIMESTAMP\", \"SMALLINT\"]",
@@ -4126,7 +4126,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"TIMESTAMP\", \"INT\"]",
@@ -4150,7 +4150,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"TIMESTAMP\", \"BIGINT\"]",
@@ -4174,7 +4174,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"TIMESTAMP\", \"FLOAT\"]",
@@ -4198,7 +4198,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"TIMESTAMP\", \"DOUBLE\"]",
@@ -4222,7 +4222,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"TIMESTAMP\", \"DECIMAL(10,0)\"]",
@@ -4254,7 +4254,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"TIMESTAMP\", \"BINARY\"]",
@@ -4278,7 +4278,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"TIMESTAMP\", \"BOOLEAN\"]",
@@ -4318,7 +4318,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"DATE\", \"TINYINT\"]",
@@ -4342,7 +4342,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"DATE\", \"SMALLINT\"]",
@@ -4366,7 +4366,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"DATE\", \"INT\"]",
@@ -4390,7 +4390,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"DATE\", \"BIGINT\"]",
@@ -4414,7 +4414,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"DATE\", \"FLOAT\"]",
@@ -4438,7 +4438,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"DATE\", \"DOUBLE\"]",
@@ -4462,7 +4462,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"DATE\", \"DECIMAL(10,0)\"]",
@@ -4494,7 +4494,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"DATE\", \"BINARY\"]",
@@ -4518,7 +4518,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"DATE\", \"BOOLEAN\"]",

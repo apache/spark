@@ -217,7 +217,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`outermost`"
@@ -360,7 +360,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "condition" : "UNSUPPORTED_DATATYPE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "typeName" : "\"BAZ\""
@@ -382,7 +382,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "condition" : "UNSUPPORTED_DATATYPE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "typeName" : "\"ORDINALITY\""
@@ -412,7 +412,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`test`"

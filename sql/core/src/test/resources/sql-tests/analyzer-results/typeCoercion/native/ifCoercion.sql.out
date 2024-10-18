@@ -100,7 +100,7 @@ SELECT IF(true, cast(1 as tinyint), cast('2' as binary)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TINYINT\", \"BINARY\"]",
@@ -122,7 +122,7 @@ SELECT IF(true, cast(1 as tinyint), cast(2 as boolean)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TINYINT\", \"BOOLEAN\"]",
@@ -144,7 +144,7 @@ SELECT IF(true, cast(1 as tinyint), cast('2017-12-11 09:30:00.0' as timestamp)) 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TINYINT\", \"TIMESTAMP\"]",
@@ -166,7 +166,7 @@ SELECT IF(true, cast(1 as tinyint), cast('2017-12-11 09:30:00' as date)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TINYINT\", \"DATE\"]",
@@ -276,7 +276,7 @@ SELECT IF(true, cast(1 as smallint), cast('2' as binary)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"SMALLINT\", \"BINARY\"]",
@@ -298,7 +298,7 @@ SELECT IF(true, cast(1 as smallint), cast(2 as boolean)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"SMALLINT\", \"BOOLEAN\"]",
@@ -320,7 +320,7 @@ SELECT IF(true, cast(1 as smallint), cast('2017-12-11 09:30:00.0' as timestamp))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"SMALLINT\", \"TIMESTAMP\"]",
@@ -342,7 +342,7 @@ SELECT IF(true, cast(1 as smallint), cast('2017-12-11 09:30:00' as date)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"SMALLINT\", \"DATE\"]",
@@ -452,7 +452,7 @@ SELECT IF(true, cast(1 as int), cast('2' as binary)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"INT\", \"BINARY\"]",
@@ -474,7 +474,7 @@ SELECT IF(true, cast(1 as int), cast(2 as boolean)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"INT\", \"BOOLEAN\"]",
@@ -496,7 +496,7 @@ SELECT IF(true, cast(1 as int), cast('2017-12-11 09:30:00.0' as timestamp)) FROM
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"INT\", \"TIMESTAMP\"]",
@@ -518,7 +518,7 @@ SELECT IF(true, cast(1 as int), cast('2017-12-11 09:30:00' as date)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"INT\", \"DATE\"]",
@@ -628,7 +628,7 @@ SELECT IF(true, cast(1 as bigint), cast('2' as binary)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BIGINT\", \"BINARY\"]",
@@ -650,7 +650,7 @@ SELECT IF(true, cast(1 as bigint), cast(2 as boolean)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BIGINT\", \"BOOLEAN\"]",
@@ -672,7 +672,7 @@ SELECT IF(true, cast(1 as bigint), cast('2017-12-11 09:30:00.0' as timestamp)) F
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BIGINT\", \"TIMESTAMP\"]",
@@ -694,7 +694,7 @@ SELECT IF(true, cast(1 as bigint), cast('2017-12-11 09:30:00' as date)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BIGINT\", \"DATE\"]",
@@ -804,7 +804,7 @@ SELECT IF(true, cast(1 as float), cast('2' as binary)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"FLOAT\", \"BINARY\"]",
@@ -826,7 +826,7 @@ SELECT IF(true, cast(1 as float), cast(2 as boolean)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"FLOAT\", \"BOOLEAN\"]",
@@ -848,7 +848,7 @@ SELECT IF(true, cast(1 as float), cast('2017-12-11 09:30:00.0' as timestamp)) FR
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"FLOAT\", \"TIMESTAMP\"]",
@@ -870,7 +870,7 @@ SELECT IF(true, cast(1 as float), cast('2017-12-11 09:30:00' as date)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"FLOAT\", \"DATE\"]",
@@ -980,7 +980,7 @@ SELECT IF(true, cast(1 as double), cast('2' as binary)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DOUBLE\", \"BINARY\"]",
@@ -1002,7 +1002,7 @@ SELECT IF(true, cast(1 as double), cast(2 as boolean)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DOUBLE\", \"BOOLEAN\"]",
@@ -1024,7 +1024,7 @@ SELECT IF(true, cast(1 as double), cast('2017-12-11 09:30:00.0' as timestamp)) F
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DOUBLE\", \"TIMESTAMP\"]",
@@ -1046,7 +1046,7 @@ SELECT IF(true, cast(1 as double), cast('2017-12-11 09:30:00' as date)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DOUBLE\", \"DATE\"]",
@@ -1156,7 +1156,7 @@ SELECT IF(true, cast(1 as decimal(10, 0)), cast('2' as binary)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DECIMAL(10,0)\", \"BINARY\"]",
@@ -1178,7 +1178,7 @@ SELECT IF(true, cast(1 as decimal(10, 0)), cast(2 as boolean)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DECIMAL(10,0)\", \"BOOLEAN\"]",
@@ -1200,7 +1200,7 @@ SELECT IF(true, cast(1 as decimal(10, 0)), cast('2017-12-11 09:30:00.0' as times
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DECIMAL(10,0)\", \"TIMESTAMP\"]",
@@ -1222,7 +1222,7 @@ SELECT IF(true, cast(1 as decimal(10, 0)), cast('2017-12-11 09:30:00' as date)) 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DECIMAL(10,0)\", \"DATE\"]",
@@ -1332,7 +1332,7 @@ SELECT IF(true, cast(1 as string), cast('2' as binary)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"STRING\", \"BINARY\"]",
@@ -1354,7 +1354,7 @@ SELECT IF(true, cast(1 as string), cast(2 as boolean)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"STRING\", \"BOOLEAN\"]",
@@ -1398,7 +1398,7 @@ SELECT IF(true, cast('1' as binary), cast(2 as tinyint)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"TINYINT\"]",
@@ -1420,7 +1420,7 @@ SELECT IF(true, cast('1' as binary), cast(2 as smallint)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"SMALLINT\"]",
@@ -1442,7 +1442,7 @@ SELECT IF(true, cast('1' as binary), cast(2 as int)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"INT\"]",
@@ -1464,7 +1464,7 @@ SELECT IF(true, cast('1' as binary), cast(2 as bigint)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"BIGINT\"]",
@@ -1486,7 +1486,7 @@ SELECT IF(true, cast('1' as binary), cast(2 as float)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"FLOAT\"]",
@@ -1508,7 +1508,7 @@ SELECT IF(true, cast('1' as binary), cast(2 as double)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"DOUBLE\"]",
@@ -1530,7 +1530,7 @@ SELECT IF(true, cast('1' as binary), cast(2 as decimal(10, 0))) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"DECIMAL(10,0)\"]",
@@ -1552,7 +1552,7 @@ SELECT IF(true, cast('1' as binary), cast(2 as string)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"STRING\"]",
@@ -1585,7 +1585,7 @@ SELECT IF(true, cast('1' as binary), cast(2 as boolean)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"BOOLEAN\"]",
@@ -1607,7 +1607,7 @@ SELECT IF(true, cast('1' as binary), cast('2017-12-11 09:30:00.0' as timestamp))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"TIMESTAMP\"]",
@@ -1629,7 +1629,7 @@ SELECT IF(true, cast('1' as binary), cast('2017-12-11 09:30:00' as date)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BINARY\", \"DATE\"]",
@@ -1651,7 +1651,7 @@ SELECT IF(true, cast(1 as boolean), cast(2 as tinyint)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"TINYINT\"]",
@@ -1673,7 +1673,7 @@ SELECT IF(true, cast(1 as boolean), cast(2 as smallint)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"SMALLINT\"]",
@@ -1695,7 +1695,7 @@ SELECT IF(true, cast(1 as boolean), cast(2 as int)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"INT\"]",
@@ -1717,7 +1717,7 @@ SELECT IF(true, cast(1 as boolean), cast(2 as bigint)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"BIGINT\"]",
@@ -1739,7 +1739,7 @@ SELECT IF(true, cast(1 as boolean), cast(2 as float)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"FLOAT\"]",
@@ -1761,7 +1761,7 @@ SELECT IF(true, cast(1 as boolean), cast(2 as double)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"DOUBLE\"]",
@@ -1783,7 +1783,7 @@ SELECT IF(true, cast(1 as boolean), cast(2 as decimal(10, 0))) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"DECIMAL(10,0)\"]",
@@ -1805,7 +1805,7 @@ SELECT IF(true, cast(1 as boolean), cast(2 as string)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"STRING\"]",
@@ -1827,7 +1827,7 @@ SELECT IF(true, cast(1 as boolean), cast('2' as binary)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"BINARY\"]",
@@ -1860,7 +1860,7 @@ SELECT IF(true, cast(1 as boolean), cast('2017-12-11 09:30:00.0' as timestamp)) 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"TIMESTAMP\"]",
@@ -1882,7 +1882,7 @@ SELECT IF(true, cast(1 as boolean), cast('2017-12-11 09:30:00' as date)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"BOOLEAN\", \"DATE\"]",
@@ -1904,7 +1904,7 @@ SELECT IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast(2 as tinyint)) 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"TINYINT\"]",
@@ -1926,7 +1926,7 @@ SELECT IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast(2 as smallint))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"SMALLINT\"]",
@@ -1948,7 +1948,7 @@ SELECT IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast(2 as int)) FROM
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"INT\"]",
@@ -1970,7 +1970,7 @@ SELECT IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast(2 as bigint)) F
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"BIGINT\"]",
@@ -1992,7 +1992,7 @@ SELECT IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast(2 as float)) FR
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"FLOAT\"]",
@@ -2014,7 +2014,7 @@ SELECT IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast(2 as double)) F
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"DOUBLE\"]",
@@ -2036,7 +2036,7 @@ SELECT IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast(2 as decimal(10
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"DECIMAL(10,0)\"]",
@@ -2069,7 +2069,7 @@ SELECT IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast('2' as binary))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"BINARY\"]",
@@ -2091,7 +2091,7 @@ SELECT IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast(2 as boolean)) 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"TIMESTAMP\", \"BOOLEAN\"]",
@@ -2135,7 +2135,7 @@ SELECT IF(true, cast('2017-12-12 09:30:00' as date), cast(2 as tinyint)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"TINYINT\"]",
@@ -2157,7 +2157,7 @@ SELECT IF(true, cast('2017-12-12 09:30:00' as date), cast(2 as smallint)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"SMALLINT\"]",
@@ -2179,7 +2179,7 @@ SELECT IF(true, cast('2017-12-12 09:30:00' as date), cast(2 as int)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"INT\"]",
@@ -2201,7 +2201,7 @@ SELECT IF(true, cast('2017-12-12 09:30:00' as date), cast(2 as bigint)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"BIGINT\"]",
@@ -2223,7 +2223,7 @@ SELECT IF(true, cast('2017-12-12 09:30:00' as date), cast(2 as float)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"FLOAT\"]",
@@ -2245,7 +2245,7 @@ SELECT IF(true, cast('2017-12-12 09:30:00' as date), cast(2 as double)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"DOUBLE\"]",
@@ -2267,7 +2267,7 @@ SELECT IF(true, cast('2017-12-12 09:30:00' as date), cast(2 as decimal(10, 0))) 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"DECIMAL(10,0)\"]",
@@ -2300,7 +2300,7 @@ SELECT IF(true, cast('2017-12-12 09:30:00' as date), cast('2' as binary)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"BINARY\"]",
@@ -2322,7 +2322,7 @@ SELECT IF(true, cast('2017-12-12 09:30:00' as date), cast(2 as boolean)) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "[\"DATE\", \"BOOLEAN\"]",

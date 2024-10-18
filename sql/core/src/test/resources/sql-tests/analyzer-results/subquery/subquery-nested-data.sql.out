@@ -244,7 +244,7 @@ select * from x join lateral (select xm[1], sum(ym[1]), xm[1] - sum(ym[1]) from 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "condition" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "sqlExprs" : "\"xm[1]\",\"xm[1] AS `outer(spark_catalog.default.x.xm)[1]`\",\"(xm[1] - sum(ym[1])) AS `(outer(spark_catalog.default.x.xm)[1] - sum(ym[1]))`\""

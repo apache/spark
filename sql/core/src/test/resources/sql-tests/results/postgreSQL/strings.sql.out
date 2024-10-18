@@ -444,7 +444,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+  "condition" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
   "sqlState" : "42601",
   "messageParameters" : {
     "char" : "'a'",
@@ -460,7 +460,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+  "condition" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
   "sqlState" : "42601",
   "messageParameters" : {
     "char" : "'a'",
@@ -476,7 +476,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+  "condition" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
   "sqlState" : "42601",
   "messageParameters" : {
     "char" : "'a'",
@@ -492,7 +492,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+  "condition" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
   "sqlState" : "42601",
   "messageParameters" : {
     "char" : "'a'",
@@ -508,7 +508,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+  "condition" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
   "sqlState" : "42601",
   "messageParameters" : {
     "char" : "'e'",
@@ -524,7 +524,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+  "condition" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
   "sqlState" : "42601",
   "messageParameters" : {
     "char" : "'e'",
@@ -540,7 +540,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+  "condition" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
   "sqlState" : "42601",
   "messageParameters" : {
     "char" : "'e'",
@@ -556,7 +556,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+  "condition" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
   "sqlState" : "42601",
   "messageParameters" : {
     "char" : "'e'",

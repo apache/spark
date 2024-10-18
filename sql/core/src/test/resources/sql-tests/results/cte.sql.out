@@ -22,7 +22,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`s`"
@@ -45,7 +45,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`r`"
@@ -77,7 +77,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`s2`"
@@ -169,7 +169,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "')'",
@@ -188,7 +188,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0038",
+  "condition" : "_LEGACY_ERROR_TEMP_0038",
   "messageParameters" : {
     "duplicateNames" : "'t'"
   },
@@ -210,7 +210,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`non_existing_table`"
@@ -271,7 +271,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "condition" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
   "sqlState" : "42000",
   "messageParameters" : {
     "expr" : "\"outer(t.id)\""
@@ -303,7 +303,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "condition" : "AMBIGUOUS_REFERENCE",
   "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`same_name`.`x`",
@@ -336,7 +336,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`id`",
@@ -361,7 +361,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`r2`"
@@ -410,7 +410,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`q`"
@@ -497,7 +497,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0038",
+  "condition" : "_LEGACY_ERROR_TEMP_0038",
   "messageParameters" : {
     "duplicateNames" : "'cte1'"
   },
@@ -527,7 +527,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`va`"
@@ -549,7 +549,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`cte`"

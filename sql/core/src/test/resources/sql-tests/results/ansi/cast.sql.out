@@ -6,7 +6,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1.23'",
@@ -30,7 +30,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1.23'",
@@ -54,7 +54,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'-4.56'",
@@ -78,7 +78,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'-4.56'",
@@ -102,7 +102,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'abc'",
@@ -126,7 +126,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'abc'",
@@ -150,7 +150,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'abc'",
@@ -174,7 +174,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'abc'",
@@ -198,7 +198,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1234567890123'",
@@ -222,7 +222,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'12345678901234567890123'",
@@ -246,7 +246,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "''",
@@ -270,7 +270,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "''",
@@ -294,7 +294,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "''",
@@ -318,7 +318,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "''",
@@ -358,7 +358,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'123.a'",
@@ -382,7 +382,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'123.a'",
@@ -406,7 +406,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'123.a'",
@@ -430,7 +430,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'123.a'",
@@ -462,7 +462,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'-2147483649'",
@@ -494,7 +494,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'2147483648'",
@@ -526,7 +526,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'-9223372036854775809'",
@@ -558,7 +558,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'9223372036854775808'",
@@ -590,7 +590,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -616,7 +616,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -642,7 +642,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -668,7 +668,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -694,7 +694,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -720,7 +720,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -746,7 +746,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -772,7 +772,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -847,7 +847,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
+  "condition" : "_LEGACY_ERROR_TEMP_0029",
   "messageParameters" : {
     "literal" : "interval 3 month 1 hour"
   },
@@ -948,7 +948,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1中文'",
@@ -972,7 +972,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1中文'",
@@ -996,7 +996,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1中文'",
@@ -1020,7 +1020,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'中文1'",
@@ -1044,7 +1044,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1中文'",
@@ -1086,7 +1086,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'\t\n xyz \t\r'",
@@ -1118,7 +1118,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "condition" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -1143,7 +1143,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'xyz'",
@@ -1175,7 +1175,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'a'",
@@ -1207,7 +1207,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'a'",
@@ -1239,7 +1239,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'a'",
@@ -1263,7 +1263,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "Infinity",
@@ -1287,7 +1287,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "Infinity",
@@ -1343,7 +1343,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CAST_OVERFLOW",
+  "condition" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "sourceType" : "\"INTERVAL HOUR TO SECOND\"",
@@ -1376,7 +1376,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CAST_OVERFLOW",
+  "condition" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "sourceType" : "\"INTERVAL MONTH\"",
@@ -1393,7 +1393,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CAST_OVERFLOW",
+  "condition" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "sourceType" : "\"INTERVAL SECOND\"",
@@ -1482,7 +1482,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CAST_OVERFLOW",
+  "condition" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "sourceType" : "\"INT\"",
@@ -1499,7 +1499,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CAST_OVERFLOW",
+  "condition" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "sourceType" : "\"BIGINT\"",
@@ -1572,7 +1572,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "condition" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -1629,7 +1629,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1.23'",
@@ -1653,7 +1653,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'abc'",
@@ -1677,7 +1677,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'12345678901234567890123'",
@@ -1701,7 +1701,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "''",
@@ -1733,7 +1733,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'123.a'",
@@ -1773,7 +1773,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -1880,7 +1880,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1.23'",
@@ -1904,7 +1904,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CAST_OVERFLOW",
+  "condition" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "sourceType" : "\"BIGINT\"",
@@ -1921,7 +1921,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CAST_OVERFLOW",
+  "condition" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "sourceType" : "\"BIGINT\"",
@@ -1946,7 +1946,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "condition" : "UNSUPPORTED_DATATYPE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "typeName" : "\"BINT\""
@@ -1968,7 +1968,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "condition" : "UNSUPPORTED_DATATYPE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "typeName" : "\"SELECT\""
@@ -1990,7 +1990,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'::'",

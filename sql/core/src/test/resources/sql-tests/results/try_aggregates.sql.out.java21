@@ -118,7 +118,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_DIVIDED_BY_ZERO",
+  "condition" : "INTERVAL_DIVIDED_BY_ZERO",
   "sqlState" : "22012",
   "queryContext" : [ {
     "objectType" : "",
@@ -137,7 +137,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_DIVIDED_BY_ZERO",
+  "condition" : "INTERVAL_DIVIDED_BY_ZERO",
   "sqlState" : "22012",
   "queryContext" : [ {
     "objectType" : "",
@@ -268,7 +268,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_DIVIDED_BY_ZERO",
+  "condition" : "INTERVAL_DIVIDED_BY_ZERO",
   "sqlState" : "22012",
   "queryContext" : [ {
     "objectType" : "",
@@ -287,7 +287,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_DIVIDED_BY_ZERO",
+  "condition" : "INTERVAL_DIVIDED_BY_ZERO",
   "sqlState" : "22012",
   "queryContext" : [ {
     "objectType" : "",

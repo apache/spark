@@ -70,7 +70,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "condition" : "AMBIGUOUS_REFERENCE",
   "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`i1`",
@@ -93,7 +93,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "condition" : "AMBIGUOUS_REFERENCE",
   "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`t1`.`i1`",
@@ -116,7 +116,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "condition" : "AMBIGUOUS_REFERENCE",
   "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`mydb1`.`t1`.`i1`",
@@ -139,7 +139,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "condition" : "AMBIGUOUS_REFERENCE",
   "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`i1`",
@@ -162,7 +162,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "condition" : "AMBIGUOUS_REFERENCE",
   "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`t1`.`i1`",
@@ -193,7 +193,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "condition" : "AMBIGUOUS_REFERENCE",
   "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`i1`",
@@ -216,7 +216,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "condition" : "AMBIGUOUS_REFERENCE",
   "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`t1`.`i1`",
@@ -239,7 +239,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "condition" : "AMBIGUOUS_REFERENCE",
   "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`i1`",
@@ -262,7 +262,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "condition" : "AMBIGUOUS_REFERENCE",
   "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`t1`.`i1`",
@@ -285,7 +285,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`db1`.`t1`.`i1`",
@@ -324,7 +324,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`mydb1`.`t1`",
@@ -347,7 +347,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CANNOT_RESOLVE_STAR_EXPAND",
+  "condition" : "CANNOT_RESOLVE_STAR_EXPAND",
   "sqlState" : "42704",
   "messageParameters" : {
     "columns" : "`i1`",
@@ -370,7 +370,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`t1`",
@@ -401,7 +401,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`mydb1`.`t1`.`i1`",
@@ -456,7 +456,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
+  "condition" : "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
   "sqlState" : "51024",
   "messageParameters" : {
     "actualCols" : "[]",
@@ -507,7 +507,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
+  "condition" : "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
   "sqlState" : "51024",
   "messageParameters" : {
     "actualCols" : "[]",

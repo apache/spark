@@ -97,7 +97,7 @@ select * from values ("one", rand(5)), ("two", 3.0D) as data(a, b)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "condition" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
   "sqlState" : "42000",
   "messageParameters" : {
     "expr" : "\"rand(5)\""
@@ -117,7 +117,7 @@ select * from values ("one", 2.0), ("two") as data(a, b)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_INLINE_TABLE.NUM_COLUMNS_MISMATCH",
+  "condition" : "INVALID_INLINE_TABLE.NUM_COLUMNS_MISMATCH",
   "sqlState" : "42000",
   "messageParameters" : {
     "actualNumCols" : "1",
@@ -139,7 +139,7 @@ select * from values ("one", array(0, 1)), ("two", struct(1, 2)) as data(a, b)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_INLINE_TABLE.INCOMPATIBLE_TYPES_IN_INLINE_TABLE",
+  "condition" : "INVALID_INLINE_TABLE.INCOMPATIBLE_TYPES_IN_INLINE_TABLE",
   "sqlState" : "42000",
   "messageParameters" : {
     "colName" : "`b`"
@@ -159,7 +159,7 @@ select * from values ("one"), ("two") as data(a, b)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_INLINE_TABLE.NUM_COLUMNS_MISMATCH",
+  "condition" : "INVALID_INLINE_TABLE.NUM_COLUMNS_MISMATCH",
   "sqlState" : "42000",
   "messageParameters" : {
     "actualNumCols" : "1",
@@ -181,7 +181,7 @@ select * from values ("one", random_not_exist_func(1)), ("two", 2) as data(a, b)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_ROUTINE",
+  "condition" : "UNRESOLVED_ROUTINE",
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`random_not_exist_func`",
@@ -202,7 +202,7 @@ select * from values ("one", count(1)), ("two", 2) as data(a, b)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "condition" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
   "sqlState" : "42000",
   "messageParameters" : {
     "expr" : "\"count(1)\""
