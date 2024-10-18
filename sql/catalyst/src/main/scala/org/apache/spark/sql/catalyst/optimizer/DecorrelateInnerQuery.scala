@@ -773,7 +773,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
               orderSpec = newOrderSpec, newChild)
             (newWindow, joinCond, outerReferenceMap)
 
-          case a @ Aggregate(groupingExpressions, aggregateExpressions, child) =>
+          case a @ Aggregate(groupingExpressions, aggregateExpressions, child, _) =>
             val outerReferences = collectOuterReferences(a.expressions)
             val newOuterReferences = parentOuterReferences ++ outerReferences
             val (newChild, joinCond, outerReferenceMap) =
