@@ -35,9 +35,11 @@ import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.FileFormat._
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
+import org.apache.spark.sql.execution.metric.{SQLMetric, VariantConstructionMetrics}
 import org.apache.spark.sql.execution.vectorized.{ColumnVectorUtils, ConstantColumnVector}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
+import org.apache.spark.types.variant.VariantMetrics
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.NextIterator
 
@@ -73,8 +75,36 @@ case class PartitionedFile(
 }
 
 /**
+ * Class used to store statistical data that is collected during a file scan and could be used to
+ * update the SQL metrics of the scan node. More members could be added to this class to collect
+ * metrics related to new features.
+ *
+ * @param topLevelVariantMetrics Object containing the metrics collected from the top level variants
+ *                               constructed during the file scan.
+ * @param nestedVariantMetrics Object containing the metrics collected from the nested variants
+ *                             constructed during the file scan.
+ * @param sqlMetrics Mapping from metric name to the SQLMetrics object which is reported as a result
+ *                   of the scan to the driver.
+ */
+case class FileScanMetrics(
+    topLevelVariantMetrics: VariantMetrics,
+    nestedVariantMetrics: VariantMetrics,
+    sqlMetrics: Map[String, SQLMetric]) {
+
+  // Update SQL metrics with the data in the metrics collected in this class.
+  def updateSQLMetrics(): Unit = {
+    // Update the variant metrics. This function also resets the topLevelVariantMetrics and
+    // nestedVariantMetrics objects once their data has been collected.
+    VariantConstructionMetrics.updateSQLMetrics(topLevelVariantMetrics, nestedVariantMetrics,
+      sqlMetrics)
+  }
+}
+
+/**
  * An RDD that scans a list of file partitions.
  * @param metadataColumns File-constant metadata columns to append to end of schema.
+ * @param fileScanMetrics An optional object containing any data used to update metrics during
+ *                        the scan as well as the SQL metrics being reported themselves.
  */
 class FileScanRDD(
     @transient private val sparkSession: SparkSession,
@@ -83,7 +113,8 @@ class FileScanRDD(
     val readSchema: StructType,
     val metadataColumns: Seq[AttributeReference] = Seq.empty,
     metadataExtractors: Map[String, PartitionedFile => Any] = Map.empty,
-    options: FileSourceOptions = new FileSourceOptions(CaseInsensitiveMap(Map.empty)))
+    options: FileSourceOptions = new FileSourceOptions(CaseInsensitiveMap(Map.empty)),
+    fileScanMetrics: Option[FileScanMetrics] = None)
   extends RDD[InternalRow](sparkSession.sparkContext, Nil) {
 
   private val ignoreCorruptFiles = options.ignoreCorruptFiles
@@ -230,6 +261,10 @@ class FileScanRDD(
 
       /** Advances to the next file. Returns true if a new non-empty iterator is available. */
       private def nextIterator(): Boolean = {
+        // This function is called at the end of each file and before the first file. Therefore,
+        // we update the metrics at the end of each JSON file and reset them to process the next
+        // file.
+        fileScanMetrics.foreach(_.updateSQLMetrics())
         if (files.hasNext) {
           currentFile = files.next()
           updateMetadataRow()

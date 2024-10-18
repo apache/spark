@@ -49,7 +49,9 @@ class JacksonParser(
     schema: DataType,
     val options: JSONOptions,
     allowArrayAsStructs: Boolean,
-    filters: Seq[Filter] = Seq.empty) extends Logging {
+    filters: Seq[Filter] = Seq.empty,
+    topLevelVariantMetrics: Option[VariantMetrics] = None,
+    nestedVariantMetrics: Option[VariantMetrics] = None) extends Logging {
 
   import JacksonUtils._
   import com.fasterxml.jackson.core.JsonToken._
@@ -109,7 +111,7 @@ class JacksonParser(
   private def makeRootConverter(dt: DataType): JsonParser => Iterable[InternalRow] = {
     dt match {
       case _: StructType if options.singleVariantColumn.isDefined => (parser: JsonParser) => {
-        Some(InternalRow(parseVariant(parser)))
+        Some(InternalRow(parseVariant(isTopLevel = true)(parser)))
       }
       case st: StructType => makeStructRootConverter(st)
       case mt: MapType => makeMapRootConverter(mt)
@@ -119,7 +121,8 @@ class JacksonParser(
 
   private val variantAllowDuplicateKeys = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)
 
-  protected final def parseVariant(parser: JsonParser): VariantVal = {
+  // isTopLevel helps in distinguishing between top level variant and nested variants for metrics.
+  private final def parseVariant(isTopLevel: Boolean)(parser: JsonParser): VariantVal = {
     // Skips `FIELD_NAME` at the beginning. This check is adapted from `parseJsonToken`, but we
     // cannot directly use the function here because it also handles the `VALUE_NULL` token and
     // returns null (representing a SQL NULL). Instead, we want to return a variant null.
@@ -127,7 +130,9 @@ class JacksonParser(
       parser.nextToken()
     }
     try {
-      val v = VariantBuilder.parseJson(parser, variantAllowDuplicateKeys)
+      val vm = if (isTopLevel) topLevelVariantMetrics else nestedVariantMetrics
+      val v = VariantBuilder.parseJson(parser, variantAllowDuplicateKeys,
+        vm.getOrElse(new VariantMetrics()))
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
       case _: VariantSizeLimitException =>
@@ -136,8 +141,9 @@ class JacksonParser(
   }
 
   private def makeStructRootConverter(st: StructType): JsonParser => Iterable[InternalRow] = {
-    val elementConverter = makeConverter(st)
-    val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
+    val elementConverter = makeConverter(st, isRoot = true, isChildOfRoot = false)
+    val fieldConverters = st.map(_.dataType)
+      .map(d => makeConverter(d, isRoot = false, isChildOfRoot = true)).toArray
     val jsonFilters = if (SQLConf.get.jsonFilterPushDown) {
       new JsonFilters(filters, st)
     } else {
@@ -224,8 +230,17 @@ class JacksonParser(
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
    * to a value according to a desired schema.
+   *
+   * @param isRoot Whether this converter is for the root schema or not.
+   * @param isChildOfRoot Whether this converter is an immediate child of the root schema or not.
+   *                      This information is important because singleVariantColumn schemas have
+   *                      VariantType at the root, but schemas where VariantType is an immediate
+   *                      child of the root struct schema should also be treated as containing top
+   *                      level variants even though the Variant is not the absolute root of the
+   *                      schema.
    */
-  def makeConverter(dataType: DataType): ValueConverter = dataType match {
+  def makeConverter(dataType: DataType, isRoot: Boolean,
+                    isChildOfRoot: Boolean): ValueConverter = dataType match {
     case BooleanType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Boolean](parser, dataType) {
         case VALUE_TRUE => true
@@ -434,7 +449,8 @@ class JacksonParser(
       }
 
     case st: StructType =>
-      val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
+      val fieldConverters = st.map(_.dataType)
+        .map(d => makeConverter(d, isRoot = false, isRoot)).toArray
       (parser: JsonParser) => parseJsonToken[InternalRow](parser, dataType) {
         case START_OBJECT => convertObject(parser, st, fieldConverters).get
       }
@@ -459,11 +475,18 @@ class JacksonParser(
         case _ => null
       }
 
-    case _: VariantType => parseVariant
+    // If the top level DDL schema is something like `i int, v variant`, then v is a child
+    // of the root which is `struct<i int, v variant>`. Therefore, it should be treated as a top
+    // level variant. However, if the schema is something like `i int, s struct<v variant>`, then v
+    // is not an immediate child of the root and should not be treated as a nested variant.
+    case _: VariantType => parseVariant(isTopLevel = isChildOfRoot)
 
     // We don't actually hit this exception though, we keep it for understandability
     case _ => throw ExecutionErrors.unsupportedDataTypeError(dataType)
   }
+
+  def makeConverter(dataType: DataType): ValueConverter =
+    makeConverter(dataType, isRoot = false, isChildOfRoot = false)
 
   /**
    * This method skips `FIELD_NAME`s at the beginning, and handles nulls ahead before trying
