@@ -537,8 +537,11 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0043", ctx)
   }
 
-  def intervalValueOutOfRangeError(ctx: IntervalContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0044", ctx)
+  def intervalValueOutOfRangeError(input: String, ctx: IntervalContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
+      messageParameters = Map("input" -> input),
+      ctx)
   }
 
   def invalidTimeZoneDisplacementValueError(ctx: SetTimeZoneContext): Throwable = {

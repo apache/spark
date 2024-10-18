@@ -2631,7 +2631,7 @@ class Frame(object, metaclass=ABCMeta):
         500    5.0
         dtype: float64
 
-        >>> s.first_valid_index()
+        >>> int(s.first_valid_index())
         300
 
         Support for MultiIndex
@@ -2950,7 +2950,7 @@ class Frame(object, metaclass=ABCMeta):
         20  1  b
         20  2  b
 
-        >>> df.x.get(10)
+        >>> int(df.x.get(10))
         0
 
         >>> df.x.get(20)
@@ -3008,7 +3008,7 @@ class Frame(object, metaclass=ABCMeta):
         0    2
         dtype: int64
 
-        >>> even_primes.squeeze()
+        >>> int(even_primes.squeeze())
         2
 
         Squeezing objects with more than one value in every axis does nothing:
@@ -3066,7 +3066,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Squeezing all axes will project directly into a scalar:
 
-        >>> df_1a.squeeze()
+        >>> int(df_1a.squeeze())
         3
         """
         if axis is not None:
