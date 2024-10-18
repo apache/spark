@@ -1721,7 +1721,7 @@ org.apache.spark.SparkNumberFormatException
 -- !query
 SELECT NULL :: int
 -- !query schema
-struct<CAST(NULL AS INT):int>
+struct<NULL::INT:int>
 -- !query output
 NULL
 
@@ -1753,7 +1753,7 @@ org.apache.spark.SparkNumberFormatException
 -- !query
 SELECT '-2147483648' :: int
 -- !query schema
-struct<CAST(-2147483648 AS INT):int>
+struct<-2147483648::INT:int>
 -- !query output
 -2147483648
 
@@ -1761,7 +1761,7 @@ struct<CAST(-2147483648 AS INT):int>
 -- !query
 SELECT HEX('abc' :: binary)
 -- !query schema
-struct<hex(CAST(abc AS BINARY)):string>
+struct<hex(abc::BINARY):string>
 -- !query output
 616263
 
@@ -1778,7 +1778,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "configVal" : "'false'",
-    "sqlExpr" : "\"CAST(CAST(123 AS TINYINT) AS BINARY)\"",
+    "sqlExpr" : "\"123::TINYINT::BINARY\"",
     "srcType" : "\"TINYINT\"",
     "targetType" : "\"BINARY\""
   },
@@ -1795,7 +1795,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT 'interval 3 month 1 hour' :: interval
 -- !query schema
-struct<CAST(interval 3 month 1 hour AS INTERVAL):interval>
+struct<interval 3 month 1 hour::INTERVAL:interval>
 -- !query output
 3 months 1 hours
 
@@ -1803,7 +1803,7 @@ struct<CAST(interval 3 month 1 hour AS INTERVAL):interval>
 -- !query
 SELECT interval 3 day 1 second :: string
 -- !query schema
-struct<CAST(INTERVAL '3 00:00:01' DAY TO SECOND AS STRING):string>
+struct<INTERVAL '3 00:00:01' DAY TO SECOND::STRING:string>
 -- !query output
 INTERVAL '3 00:00:01' DAY TO SECOND
 
@@ -1811,7 +1811,7 @@ INTERVAL '3 00:00:01' DAY TO SECOND
 -- !query
 select ' 1 ' :: DOUBLE
 -- !query schema
-struct<CAST( 1  AS DOUBLE):double>
+struct< 1 ::DOUBLE:double>
 -- !query output
 1.0
 
@@ -1819,7 +1819,7 @@ struct<CAST( 1  AS DOUBLE):double>
 -- !query
 select '1.0 ' :: DEC
 -- !query schema
-struct<CAST(1.0  AS DECIMAL(10,0)):decimal(10,0)>
+struct<1.0 ::DECIMAL(10,0):decimal(10,0)>
 -- !query output
 1
 
@@ -1827,8 +1827,8 @@ struct<CAST(1.0  AS DECIMAL(10,0)):decimal(10,0)>
 -- !query
 select '\t\t true \n\r ' :: boolean
 -- !query schema
-struct<CAST(		 true 
-  AS BOOLEAN):boolean>
+struct<		 true 
+ ::BOOLEAN:boolean>
 -- !query output
 true
 
@@ -1836,7 +1836,7 @@ true
 -- !query
 select '2022-01-01 00:00:00' :: timestamp
 -- !query schema
-struct<CAST(2022-01-01 00:00:00 AS TIMESTAMP):timestamp>
+struct<2022-01-01 00:00:00::TIMESTAMP:timestamp>
 -- !query output
 2022-01-01 00:00:00
 
@@ -1844,7 +1844,7 @@ struct<CAST(2022-01-01 00:00:00 AS TIMESTAMP):timestamp>
 -- !query
 select interval '-10-2' year to month :: smallint
 -- !query schema
-struct<CAST(INTERVAL '-10-2' YEAR TO MONTH AS SMALLINT):smallint>
+struct<INTERVAL '-10-2' YEAR TO MONTH::SMALLINT:smallint>
 -- !query output
 -122
 
@@ -1852,7 +1852,7 @@ struct<CAST(INTERVAL '-10-2' YEAR TO MONTH AS SMALLINT):smallint>
 -- !query
 select -10L :: interval second
 -- !query schema
-struct<CAST(-10 AS INTERVAL SECOND):interval second>
+struct<-10::INTERVAL SECOND:interval second>
 -- !query output
 -0 00:00:10.000000000
 
@@ -1860,7 +1860,7 @@ struct<CAST(-10 AS INTERVAL SECOND):interval second>
 -- !query
 select interval '08:11:10.001' hour to second :: decimal(10, 4)
 -- !query schema
-struct<CAST(INTERVAL '08:11:10.001' HOUR TO SECOND AS DECIMAL(10,4)):decimal(10,4)>
+struct<INTERVAL '08:11:10.001' HOUR TO SECOND::DECIMAL(10,4):decimal(10,4)>
 -- !query output
 29470.0010
 
@@ -1868,7 +1868,7 @@ struct<CAST(INTERVAL '08:11:10.001' HOUR TO SECOND AS DECIMAL(10,4)):decimal(10,
 -- !query
 select 10.123456BD :: interval day to second
 -- !query schema
-struct<CAST(10.123456 AS INTERVAL DAY TO SECOND):interval day to second>
+struct<10.123456::INTERVAL DAY TO SECOND:interval day to second>
 -- !query output
 0 00:00:10.123456000
 
@@ -1934,7 +1934,7 @@ org.apache.spark.SparkArithmeticException
 -- !query
 SELECT map(1, '123', 2, '456')[1] :: int
 -- !query schema
-struct<CAST(map(1, 123, 2, 456)[1] AS INT):int>
+struct<map(1, 123, 2, 456)[1]::INT:int>
 -- !query output
 123
 
