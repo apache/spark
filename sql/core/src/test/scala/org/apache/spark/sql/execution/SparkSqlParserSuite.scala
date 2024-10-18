@@ -955,6 +955,17 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       checkExcept("TABLE t |> MINUS DISTINCT TABLE t")
       checkIntersect("TABLE t |> INTERSECT ALL TABLE t")
       checkUnion("TABLE t |> UNION ALL TABLE t")
+      // Sorting and distributing operators.
+      def checkSort(query: String): Unit = check(query, Seq(SORT))
+      def checkRepartition(query: String): Unit = check(query, Seq(REPARTITION_OPERATION))
+      def checkLimit(query: String): Unit = check(query, Seq(LIMIT))
+      checkSort("TABLE t |> ORDER BY x")
+      checkSort("TABLE t |> SELECT x |> SORT BY x")
+      checkLimit("TABLE t |> LIMIT 1")
+      checkLimit("TABLE t |> LIMIT 2 OFFSET 1")
+      checkRepartition("TABLE t |> DISTRIBUTE BY x |> WHERE x = 1")
+      checkRepartition("TABLE t |> CLUSTER BY x |> TABLESAMPLE (100 PERCENT)")
+      checkRepartition("TABLE t |> SORT BY x DISTRIBUTE BY x")
     }
   }
 }
