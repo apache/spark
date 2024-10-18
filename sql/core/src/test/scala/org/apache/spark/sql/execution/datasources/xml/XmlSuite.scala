@@ -36,7 +36,7 @@ import org.apache.hadoop.fs.FSDataInputStream
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.{DebugFilesystem, SparkException}
+import org.apache.spark.{DebugFilesystem, SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
@@ -51,7 +51,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-class XmlSuite
+abstract class XmlSuite
     extends QueryTest
     with SharedSparkSession
     with CommonFileDataSourceSuite
@@ -3058,6 +3058,7 @@ class XmlSuite
           .option("rowTag", "row")
           .xml(path)
 
+        XmlSuiteDebugFileSystem.reset()
         // Serialized file read for Schema inference
         val dfRead = spark.read
           .option("rowTag", "row")
@@ -3409,4 +3410,18 @@ object XmlSuiteDebugFileSystem {
   def totalFiles() : Int = {
     maxFilesPerThread.values().asScala.sum
   }
+}
+
+class XmlV1Suite extends XmlSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "xml")
+}
+
+class XmlV2Suite extends XmlSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }
