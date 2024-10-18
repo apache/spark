@@ -17,7 +17,7 @@
 from enum import Enum
 import os
 import socket
-from typing import Any, List, Union, Optional, cast, Tuple
+from typing import Any, List, Union, Optional, cast, Tuple, Iterator
 
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
@@ -38,7 +38,8 @@ class StatefulProcessorHandleState(Enum):
     CREATED = 1
     INITIALIZED = 2
     DATA_PROCESSED = 3
-    CLOSED = 4
+    TIMER_PROCESSED = 4
+    CLOSED = 5
 
 
 class StatefulProcessorApiClient:
@@ -63,6 +64,8 @@ class StatefulProcessorApiClient:
             proto_state = stateMessage.INITIALIZED
         elif state == StatefulProcessorHandleState.DATA_PROCESSED:
             proto_state = stateMessage.DATA_PROCESSED
+        elif state == StatefulProcessorHandleState.TIMER_PROCESSED:
+            proto_state = stateMessage.TIMER_PROCESSED
         else:
             proto_state = stateMessage.CLOSED
         set_handle_state = stateMessage.SetHandleState(state=proto_state)
@@ -152,7 +155,126 @@ class StatefulProcessorApiClient:
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(f"Error initializing value state: " f"{response_message[1]}")
+            raise PySparkRuntimeError(f"Error initializing list state: " f"{response_message[1]}")
+
+    def register_timer(self, expiry_time_stamp_ms: int) -> None:
+        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+
+        register_call = stateMessage.RegisterTimer(expiryTimestampMs=expiry_time_stamp_ms)
+        state_call_command = stateMessage.TimerStateCallCommand(register=register_call)
+        call = stateMessage.StatefulProcessorCall(timerStateCall=state_call_command)
+        message = stateMessage.StateRequest(statefulProcessorCall=call)
+
+        self._send_proto_message(message.SerializeToString())
+        response_message = self._receive_proto_message()
+        status = response_message[0]
+        if status != 0:
+            # TODO(SPARK-49233): Classify user facing errors.
+            raise PySparkRuntimeError(f"Error register timer: " f"{response_message[1]}")
+
+    def delete_timer(self, expiry_time_stamp_ms: int) -> None:
+        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+
+        delete_call = stateMessage.DeleteTimer(expiryTimestampMs=expiry_time_stamp_ms)
+        state_call_command = stateMessage.TimerStateCallCommand(delete=delete_call)
+        call = stateMessage.StatefulProcessorCall(timerStateCall=state_call_command)
+        message = stateMessage.StateRequest(statefulProcessorCall=call)
+
+        self._send_proto_message(message.SerializeToString())
+        response_message = self._receive_proto_message()
+        status = response_message[0]
+        if status != 0:
+            # TODO(SPARK-49233): Classify user facing errors.
+            raise PySparkRuntimeError(f"Error deleting timer: " f"{response_message[1]}")
+
+    def list_timers(self) -> Iterator[list[int]]:
+        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        while True:
+            list_call = stateMessage.ListTimers()
+            state_call_command = stateMessage.TimerStateCallCommand(list=list_call)
+            call = stateMessage.StatefulProcessorCall(timerStateCall=state_call_command)
+            message = stateMessage.StateRequest(statefulProcessorCall=call)
+
+            self._send_proto_message(message.SerializeToString())
+            response_message = self._receive_proto_message()
+            status = response_message[0]
+            if status == 1:
+                break
+            elif status == 0:
+                iterator = self._read_arrow_state()
+                result_list = []
+                for batch in iterator:
+                    batch_df = batch.to_pandas()
+                    for i in range(batch.num_rows):
+                        timestamp = batch_df.at[i, 'timestamp'].item()
+                        result_list.append(timestamp)
+                yield result_list
+            else:
+                # TODO(SPARK-49233): Classify user facing errors.
+                raise PySparkRuntimeError(f"Error getting expiry timers: " f"{response_message[1]}")
+
+    def get_expiry_timers_iterator(self, expiry_timestamp: int) -> Iterator[list[Tuple, int]]:
+        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        while True:
+            expiry_timer_call = stateMessage.ExpiryTimerRequest(expiryTimestampMs=expiry_timestamp)
+            timer_request = stateMessage.TimerRequest(expiryTimerRequest=expiry_timer_call)
+            message = stateMessage.StateRequest(timerRequest=timer_request)
+
+            self._send_proto_message(message.SerializeToString())
+            response_message = self._receive_proto_message()
+            status = response_message[0]
+            if status == 1:
+                break
+            elif status == 0:
+                result_list = []
+                iterator = self._read_arrow_state()
+                # handles multiple batches from jvm
+                for batch in iterator:
+                    batch_df = batch.to_pandas()
+                    for i in range(batch.num_rows):
+                        deserialized_key = self.pickleSer.loads(batch_df.at[i, 'key'])
+                        timestamp = batch_df.at[i, 'timestamp'].item()
+                        result_list.append((tuple(deserialized_key), timestamp))
+                yield result_list
+            else:
+                # TODO(SPARK-49233): Classify user facing errors.
+                raise PySparkRuntimeError(f"Error getting expiry timers: " f"{response_message[1]}")
+
+    def get_batch_timestamp(self) -> int:
+        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+
+        get_processing_time_call = stateMessage.GetProcessingTime()
+        timer_value_call = stateMessage.TimerValueRequest(getProcessingTimer=get_processing_time_call)
+        timer_request = stateMessage.TimerRequest(timerValueRequest=timer_value_call)
+        message = stateMessage.StateRequest(timerRequest=timer_request)
+
+        self._send_proto_message(message.SerializeToString())
+        response_message = self._receive_proto_message_with_long_value()
+        status = response_message[0]
+        if status != 0:
+            # TODO(SPARK-49233): Classify user facing errors.
+            raise PySparkRuntimeError(f"Error getting processing timestamp: " f"{response_message[1]}")
+        else:
+            timestamp = response_message[2]
+            return timestamp
+
+    def get_watermark_timestamp(self) -> int:
+        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+
+        get_watermark_call = stateMessage.GetWatermark()
+        timer_value_call = stateMessage.TimerValueRequest(getWatermark=get_watermark_call)
+        timer_request = stateMessage.TimerRequest(timerValueRequest=timer_value_call)
+        message = stateMessage.StateRequest(timerRequest=timer_request)
+
+        self._send_proto_message(message.SerializeToString())
+        response_message = self._receive_proto_message_with_long_value()
+        status = response_message[0]
+        if status != 0:
+            # TODO(SPARK-49233): Classify user facing errors.
+            raise PySparkRuntimeError(f"Error getting eventtime timestamp: " f"{response_message[1]}")
+        else:
+            timestamp = response_message[2]
+            return timestamp
 
     def _send_proto_message(self, message: bytes) -> None:
         # Writing zero here to indicate message version. This allows us to evolve the message
@@ -168,6 +290,15 @@ class StatefulProcessorApiClient:
         length = read_int(self.sockfile)
         bytes = self.sockfile.read(length)
         message = stateMessage.StateResponse()
+        message.ParseFromString(bytes)
+        return message.statusCode, message.errorMessage, message.value
+
+    def _receive_proto_message_with_long_value(self) -> Tuple[int, str, int]:
+        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+
+        length = read_int(self.sockfile)
+        bytes = self.sockfile.read(length)
+        message = stateMessage.StateResponseWithLongTypeVal()
         message.ParseFromString(bytes)
         return message.statusCode, message.errorMessage, message.value
 

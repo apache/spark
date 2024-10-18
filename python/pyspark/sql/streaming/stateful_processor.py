@@ -69,6 +69,60 @@ class ValueState:
         self._value_state_client.clear(self._state_name)
 
 
+class TimerValues:
+    """
+    Class used for arbitrary stateful operations with transformWithState to access processing
+    time or event time for current batch.
+
+    .. versionadded:: 4.0.0
+    """
+    def __init__(
+            self,
+            current_processing_time_in_ms: int = -1,
+            current_watermark_in_ms: int = -1) -> None:
+        self._current_processing_time_in_ms = current_processing_time_in_ms
+        self._current_watermark_in_ms = current_watermark_in_ms
+
+    """
+    Get processing time for current batch, return timestamp in millisecond.
+    """
+    def get_current_processing_time_in_ms(self) -> int:
+        return self._current_processing_time_in_ms
+
+    """
+    Get watermark for current batch, return timestamp in millisecond.
+    """
+    def get_current_watermark_in_ms(self) -> int:
+        return self._current_watermark_in_ms
+
+
+class ExpiredTimerInfo:
+    """
+    Class used for arbitrary stateful operations with transformWithState to access expired timer
+    info. When is_valid is false, the expiry timestamp is invalid.
+
+    .. versionadded:: 4.0.0
+    """
+    def __init__(
+            self,
+            is_valid: bool,
+            expiry_time_in_ms: int = -1) -> None:
+        self._is_valid = is_valid
+        self._expiry_time_in_ms = expiry_time_in_ms
+
+    """
+    Whether the expiry info is valid.
+    """
+    def is_valid(self) -> bool:
+        return self._is_valid
+
+    """
+    Get the timestamp for expired timer, return timestamp in millisecond.
+    """
+    def get_expiry_time_in_ms(self) -> int:
+        return self._expiry_time_in_ms
+
+
 class ListState:
     """
     Class used for arbitrary stateful operations with transformWithState to capture list value
@@ -180,6 +234,24 @@ class StatefulProcessorHandle:
         self.stateful_processor_api_client.get_list_state(state_name, schema, ttl_duration_ms)
         return ListState(ListStateClient(self.stateful_processor_api_client), state_name, schema)
 
+    def registerTimer(self, expiry_time_stamp_ms: int) -> None:
+        """
+        Register a timer for a given expiry timestamp in milliseconds for the grouping key.
+        """
+        self.stateful_processor_api_client.register_timer(expiry_time_stamp_ms)
+
+    def deleteTimer(self, expiry_time_stamp_ms: int) -> None:
+        """
+        Delete a timer for a given expiry timestamp in milliseconds for the grouping key.
+        """
+        self.stateful_processor_api_client.delete_timer(expiry_time_stamp_ms)
+
+    def listTimers(self) -> Iterator[list[int]]:
+        """
+        List all timers of their expiry timestamps in milliseconds for the grouping key.
+        """
+        return self.stateful_processor_api_client.list_timers()
+
 
 class StatefulProcessor(ABC):
     """
@@ -205,8 +277,9 @@ class StatefulProcessor(ABC):
 
     @abstractmethod
     def handleInputRows(
-        self, key: Any, rows: Iterator["PandasDataFrameLike"]
-    ) -> Iterator["PandasDataFrameLike"]:
+        self, key: Any, rows: Iterator["PandasDataFrameLike"],
+        timer_values: TimerValues,
+        expired_timer_info: ExpiredTimerInfo) -> Iterator["PandasDataFrameLike"]:
         """
         Function that will allow users to interact with input data rows along with the grouping key.
         It should take parameters (key, Iterator[`pandas.DataFrame`]) and return another
@@ -224,6 +297,11 @@ class StatefulProcessor(ABC):
             grouping key.
         rows : iterable of :class:`pandas.DataFrame`
             iterator of input rows associated with grouping key
+        timer_values: TimerValues
+                      Timer value for the current batch that process the input rows.
+                      Users can get the processing or event time timestamp from TimerValues.
+        expired_timer_info: ExpiredTimerInfo
+                            Timestamp of expired timers on the grouping key.
         """
         ...
 
