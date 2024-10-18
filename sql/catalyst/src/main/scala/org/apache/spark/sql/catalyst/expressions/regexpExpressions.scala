@@ -22,6 +22,7 @@ import java.util.regex.{Matcher, MatchResult, Pattern, PatternSyntaxException}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import org.apache.commons.text.StringEscapeUtils
 
@@ -701,7 +702,13 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       m.region(position, source.length)
       result.delete(0, result.length())
       while (m.find) {
-        m.appendReplacement(result, lastReplacement)
+        try {
+          m.appendReplacement(result, lastReplacement)
+        } catch {
+          case NonFatal(e) =>
+            throw QueryExecutionErrors.invalidRegexpReplaceError(s.toString,
+              p.toString, r.toString, i.asInstanceOf[Int], e)
+        }
       }
       m.appendTail(result)
       UTF8String.fromString(result.toString)
@@ -728,6 +735,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
     val termLastReplacement = ctx.addMutableState("String", "lastReplacement")
     val termLastReplacementInUTF8 = ctx.addMutableState("UTF8String", "lastReplacementInUTF8")
+    val nonFatal = ctx.addMutableState("scala.util.control.NonFatal", "nonFatal")
 
     val setEvNotNull = if (nullable) {
       s"${ev.isNull} = false;"
@@ -750,7 +758,16 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
         $matcher.region($position, $source.length());
 
         while ($matcher.find()) {
-          $matcher.appendReplacement($termResult, $termLastReplacement);
+          try {
+            $matcher.appendReplacement($termResult, $termLastReplacement);
+          } catch (Exception e) {
+            if ($nonFatal.apply(e)) {
+              throw QueryExecutionErrors.invalidRegexpReplaceError($source, $regexp.toString(),
+                $rep.toString(), $pos, e);
+            } else {
+              throw e;
+            }
+          }
         }
         $matcher.appendTail($termResult);
         ${ev.value} = UTF8String.fromString($termResult.toString());
