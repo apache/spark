@@ -99,21 +99,27 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       ("UTF8_BINARY_AI","UTF8_BINARY"),
       ("UTF8_BINARY_CI_AI","UTF8_BINARY"),
       ("UTF8_BINARY_AI_CI","UTF8_BINARY"),
+      ("UTF8_BINARY_AI_RTRIM", "UTF8_BINARY_RTRIM"),
+      ("UTF8_BINARY_CI_RTRIM","UTF8_BINARY_RTRIM"),
+      ("UTF8_BINARY_AI_CI_RTRIM","UTF8_BINARY_RTRIM"),
       ("UTF8_BS","UTF8_LCASE"),
       ("BINARY_UTF8","ar_SAU"),
       ("UTF8_BINARY_A","UTF8_BINARY"),
       ("UNICODE_X","UNICODE"),
       ("UNICODE_CI_X","UNICODE"),
       ("UNICODE_LCASE_X","UNICODE"),
+      ("UNICODE_RTRIM_LCASE_X","UNICODE"),
       ("UTF8_UNICODE","UTF8_LCASE"),
       ("UTF8_BINARY_UNICODE","UTF8_BINARY"),
       ("CI_UNICODE", "UNICODE"),
       ("LCASE_UNICODE", "UNICODE"),
+      ("RTRIM_UNICODE", "UNICODE"),
       ("UNICODE_UNSPECIFIED", "UNICODE"),
       ("UNICODE_CI_UNSPECIFIED", "UNICODE"),
       ("UNICODE_UNSPECIFIED_CI_UNSPECIFIED", "UNICODE"),
       ("UNICODE_INDETERMINATE", "UNICODE"),
-      ("UNICODE_CI_INDETERMINATE", "UNICODE")
+      ("UNICODE_CI_INDETERMINATE", "UNICODE"),
+      ("UNICODE_RTRIM_INDETERMINATE", "UNICODE"),
     ).foreach{case (collationName, proposals) =>
       checkCollationNameError(collationName, proposals)
     }
@@ -352,15 +358,23 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       ("CI_en", "ceb"),
       ("USA_CI_en", "UNICODE"),
       ("en_CI_USA", "en_USA"),
+      ("en_RTRIM_USA", "en_USA"),
       ("CI_sr_Cyrl_SRB", "sr_Cyrl_SRB"),
+      ("RTRIM_sr_Cyrl_SRB", "sr_Cyrl_SRB"),
       ("sr_CI_Cyrl_SRB", "sr_Cyrl_SRB"),
+      ("sr_RTRIM_Cyrl_SRB", "sr_Cyrl_SRB"),
       ("sr_Cyrl_CI_SRB", "sr_Cyrl_SRB"),
+      ("sr_Cyrl_RTRIM_SRB", "sr_Cyrl_SRB"),
       ("CI_Cyrl_sr", "sr_Cyrl_SRB"),
+      ("RTRIM_Cyrl_sr", "sr_Cyrl_SRB"),
       ("Cyrl_CI_sr", "he_ISR"),
       ("Cyrl_CI_sr_SRB", "sr_Cyrl_SRB"),
+      ("Cyrl_RTRIM_sr_SRB", "sr_Cyrl_SRB"),
       ("Cyrl_sr_CI_SRB", "sr_Cyrl_SRB"),
+      ("Cyrl_sr_RTRIM_SRB", "sr_Cyrl_SRB"),
       // no locale specified
       ("_CI_AI", "af_CI_AI, am_CI_AI, ar_CI_AI"),
+      ("_CI_AI_RTRIM", "af_CI_AI_RTRIM, am_CI_AI_RTRIM, ar_CI_AI_RTRIM"),
       ("", "af, am, ar")
     ).foreach { case (collationName, proposals) =>
       checkCollationNameError(collationName, proposals)
@@ -454,6 +468,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       ("UTF8_LCASE_LCASE", "UTF8_LCASE"),
       ("UNICODE_CS_CS", "UNICODE_CS"),
       ("UNICODE_CI_CI", "UNICODE_CI"),
+      ("UNICODE_RTRIM_RTRIM", "UNICODE_RTRIM"),
       ("UNICODE_CI_CS", "UNICODE_CS"),
       ("UNICODE_CS_CI", "UNICODE_CS"),
       ("UNICODE_AS_AS", "UNICODE_AS"),
@@ -465,6 +480,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       ("UNICODE_CS_AS_CI_AI", "UNICODE_CS_AS"),
       ("UNICODE__CS__AS", "UNICODE_AS"),
       ("UNICODE-CS-AS", "UNICODE"),
+      ("UNICODE__CS__RTRIM", "UNICODE_RTRIM"),
       ("UNICODECSAS", "UNICODE"),
       ("_CS_AS_UNICODE", "UNICODE")
     ).foreach { case (collationName, proposals) =>
