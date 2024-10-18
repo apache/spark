@@ -1491,13 +1491,18 @@ class CollationStringExpressionsSuite
         result: R)
     val testCases = Seq(
       StringTrimLeftTestCase("xxasdxx", Some("x"), "UTF8_BINARY", "asdxx"),
-      StringTrimLeftTestCase("xxasdxx", Some("x  "), "UTF8_BINARY_RTRIM", "asdxx"),
+      StringTrimLeftTestCase("  xxasdxx", Some("x"), "UTF8_BINARY_RTRIM", "  xxasdxx"),
+      StringTrimLeftTestCase("  xxasdxx", Some("x "), "UTF8_BINARY_RTRIM", "asdxx"),
+      StringTrimLeftTestCase("  xxasdxx  ", Some("x "), "UTF8_BINARY_RTRIM", "asdxx  "),
       StringTrimLeftTestCase("xxasdxx", Some("X"), "UTF8_LCASE", "asdxx"),
-      StringTrimLeftTestCase("xxasdxx", Some("X "), "UTF8_LCASE_RTRIM", "asdxx"),
+      StringTrimLeftTestCase("xxasdxx  ", Some("X "), "UTF8_LCASE_RTRIM", "asdxx  "),
+      StringTrimLeftTestCase("xxasdxx  ", Some("X"), "UTF8_LCASE_RTRIM", "asdxx  "),
+      StringTrimLeftTestCase(" xxasdxx  ", Some("X "), "UTF8_LCASE_RTRIM", "asdxx  "),
       StringTrimLeftTestCase("xxasdxx", Some("y"), "UNICODE", "xxasdxx"),
-      StringTrimLeftTestCase("xxasdxx  ", Some("y "), "UNICODE_RTRIM", "xxasdxx  "),
+      StringTrimLeftTestCase("xxasdxx", Some("y"), "UNICODE_RTRIM", "xxasdxx"),
+      StringTrimLeftTestCase("  asd  ", None, "UNICODE_RTRIM", "asd  "),
       StringTrimLeftTestCase("  asd  ", None, "UNICODE_CI", "asd  "),
-      StringTrimLeftTestCase("  asd  ", None, "UNICODE_CI_RTRIM", "asd  ")
+      StringTrimLeftTestCase("  asd  ", Some("A"), "UNICODE_CI_RTRIM", "  asd  ")
     )
     val unsupportedTestCase = StringTrimLeftTestCase("xxasdxx", Some("x"), "UNICODE_AI", null)
     testCases.foreach(t => {
@@ -1542,9 +1547,20 @@ class CollationStringExpressionsSuite
         result: R)
     val testCases = Seq(
       StringTrimRightTestCase("  xxasdxx", Some("x  "), "UTF8_BINARY", "  xxasd"),
+      StringTrimRightTestCase("xxasdxx  ", Some("x "), "UTF8_BINARY_RTRIM", "xxasd"),
+      StringTrimRightTestCase("xxasdxx  ", Some("x"), "UTF8_BINARY_RTRIM", "xxasd  "),
+      StringTrimRightTestCase(" xxasdxx   ", Some("x "), "UTF8_BINARY_RTRIM", " xxasd"),
+      StringTrimRightTestCase(" xxasdxx", Some("x"), "UTF8_BINARY_RTRIM", " xxasd"),
       StringTrimRightTestCase("xxasdxx", Some("X"), "UTF8_LCASE", "xxasd"),
+      StringTrimRightTestCase("xxasdxx  ", Some("X "), "UTF8_LCASE_RTRIM", "xxasd"),
+      StringTrimRightTestCase("xxasdxx  ", Some("X"), "UTF8_LCASE_RTRIM", "xxasd  "),
+      StringTrimRightTestCase(" xxasdxx   ", Some("X "), "UTF8_LCASE_RTRIM", " xxasd"),
+      StringTrimRightTestCase(" xxasdxx", Some("x"), "UTF8_LCASE_RTRIM", " xxasd"),
       StringTrimRightTestCase("xxasdxx", Some("y"), "UNICODE", "xxasdxx"),
-      StringTrimRightTestCase("  asd  ", None, "UNICODE_CI", "  asd")
+      StringTrimRightTestCase("xxasdxx", Some("y"), "UNICODE_RTRIM", "xxasdxx"),
+      StringTrimRightTestCase("  asd  ", None, "UNICODE_RTRIM", "  asd"),
+      StringTrimRightTestCase("  asd  ", None, "UNICODE_CI", "  asd"),
+      StringTrimRightTestCase("  asd  ", Some("D"), "UNICODE_CI_RTRIM", "  as  ")
     )
     val unsupportedTestCase = StringTrimRightTestCase("xxasdxx", Some("x"), "UNICODE_AI", "xxasd")
     testCases.foreach(t => {

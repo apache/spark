@@ -589,31 +589,7 @@ public final class CollationSupport {
     }
     public static UTF8String exec(
             final UTF8String srcString,
-            final UTF8String trimString,
-            final int collationId) {
-      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
-
-      if (!collation.supportsSpaceTrimming) {
-        return applyTrimingFunction(srcString, trimString, collationId);
-      } else {
-        UTF8String collationTrimmedSrcString =
-                CollationFactory.applyTrimmingPolicy(srcString, collationId);
-        UTF8String functionTrimmedSrcString = applyTrimingFunction(
-                collationTrimmedSrcString, trimString, collationId);
-
-        if (trimString.contains(UTF8String.SPACE_UTF8)) {
-          return  functionTrimmedSrcString;
-        } else {
-          UTF8String trailingSpaces = srcString.substring(
-                  collationTrimmedSrcString.numBytes(),
-                  srcString.numBytes());
-          return UTF8String.concat(functionTrimmedSrcString, trailingSpaces);
-        }
-      }
-    }
-    public static UTF8String applyTrimingFunction(
-            final UTF8String srcString,
-            final UTF8String trimString,
+            UTF8String trimString,
             final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.isUtf8BinaryType) {
