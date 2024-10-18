@@ -94,3 +94,33 @@ def require_minimum_pyarrow_version() -> None:
             errorClass="ARROW_LEGACY_IPC_FORMAT",
             messageParameters={},
         )
+
+
+def require_minimum_numpy_version() -> None:
+    """Raise ImportError if minimum version of NumPy is not installed"""
+    minimum_numpy_version = "1.21"
+
+    try:
+        import numpy
+
+        have_numpy = True
+    except ImportError as error:
+        have_numpy = False
+        raised_error = error
+    if not have_numpy:
+        raise PySparkImportError(
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={
+                "package_name": "NumPy",
+                "minimum_version": str(minimum_numpy_version),
+            },
+        ) from raised_error
+    if LooseVersion(numpy.__version__) < LooseVersion(minimum_numpy_version):
+        raise PySparkImportError(
+            errorClass="UNSUPPORTED_PACKAGE_VERSION",
+            messageParameters={
+                "package_name": "NumPy",
+                "minimum_version": str(minimum_numpy_version),
+                "current_version": str(numpy.__version__),
+            },
+        )
