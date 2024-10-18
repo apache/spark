@@ -24,11 +24,11 @@ import org.apache.avro.generic.GenericDatumReader
 import org.apache.avro.io.{BinaryDecoder, DecoderFactory}
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, SpecificInternalRow, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.core.avro.{AvroDeserializer, AvroOptions, SchemaConverters}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
 private[sql] case class AvroDataToCatalyst(
@@ -81,12 +81,9 @@ private[sql] case class AvroDataToCatalyst(
   @transient private lazy val parseMode: ParseMode = {
     val mode = avroOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
-      throw new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_3085",
-        messageParameters = Map(
-          "name" -> mode.name,
-          "permissiveMode" -> PermissiveMode.name,
-          "failFastMode" -> FailFastMode.name))
+      throw QueryCompilationErrors.parseModeUnsupportedError(
+        prettyName, mode
+      )
     }
     mode
   }
@@ -124,12 +121,9 @@ private[sql] case class AvroDataToCatalyst(
             s"Current parse Mode: ${FailFastMode.name}. To process malformed records as null " +
             "result, try setting the option 'mode' as 'PERMISSIVE'.", e)
         case _ =>
-          throw new AnalysisException(
-            errorClass = "_LEGACY_ERROR_TEMP_3085",
-            messageParameters = Map(
-              "name" -> parseMode.name,
-              "permissiveMode" -> PermissiveMode.name,
-              "failFastMode" -> FailFastMode.name))
+          throw QueryCompilationErrors.parseModeUnsupportedError(
+            prettyName, parseMode
+          )
       }
     }
   }

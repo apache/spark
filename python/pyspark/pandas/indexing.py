@@ -122,7 +122,7 @@ class AtIndexer(IndexerLike):
 
     Get value at specified row/column pair
 
-    >>> psdf.at[4, 'B']
+    >>> int(psdf.at[4, 'B'])
     2
 
     Get array if an index occurs multiple times
@@ -202,7 +202,7 @@ class iAtIndexer(IndexerLike):
 
     Get value at specified row/column pair
 
-    >>> df.iat[1, 2]
+    >>> int(df.iat[1, 2])
     1
 
     Get value within a series
@@ -214,7 +214,7 @@ class iAtIndexer(IndexerLike):
     30    3
     dtype: int64
 
-    >>> psser.iat[1]
+    >>> int(psser.iat[1])
     2
     """
 
@@ -853,7 +853,7 @@ class LocIndexer(LocIndexerLike):
 
     Single label for column.
 
-    >>> df.loc['cobra', 'shield']
+    >>> int(df.loc['cobra', 'shield'])
     2
 
     List of labels for row.

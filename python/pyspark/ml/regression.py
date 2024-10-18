@@ -266,7 +266,7 @@ class LinearRegression(
     True
     >>> abs(model.transform(test0).head().newPrediction - (-1.0)) < 0.001
     True
-    >>> abs(model.coefficients[0] - 1.0) < 0.001
+    >>> bool(abs(model.coefficients[0] - 1.0) < 0.001)
     True
     >>> abs(model.intercept - 0.0) < 0.001
     True
@@ -283,11 +283,11 @@ class LinearRegression(
     >>> model_path = temp_path + "/lr_model"
     >>> model.save(model_path)
     >>> model2 = LinearRegressionModel.load(model_path)
-    >>> model.coefficients[0] == model2.coefficients[0]
+    >>> bool(model.coefficients[0] == model2.coefficients[0])
     True
-    >>> model.intercept == model2.intercept
+    >>> bool(model.intercept == model2.intercept)
     True
-    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
+    >>> bool(model.transform(test0).take(1) == model2.transform(test0).take(1))
     True
     >>> model.numFeatures
     1
@@ -2542,7 +2542,7 @@ class GeneralizedLinearRegression(
     >>> model2 = GeneralizedLinearRegressionModel.load(model_path)
     >>> model.intercept == model2.intercept
     True
-    >>> model.coefficients[0] == model2.coefficients[0]
+    >>> bool(model.coefficients[0] == model2.coefficients[0])
     True
     >>> model.transform(df).take(1) == model2.transform(df).take(1)
     True

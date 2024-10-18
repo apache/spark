@@ -247,6 +247,17 @@ trait StateStore extends ReadStateStore {
   def metrics: StateStoreMetrics
 
   /**
+   * Return information on recently generated checkpoints
+   * The information should only be usable when checkpoint format version 2 is used and
+   * underlying state store supports it.
+   * If it is not the case, the method can return a dummy result. The result eventually won't
+   * be sent to the driver, but not all the stateful operator is able to figure out whether
+   * the function should be called to now. They would anyway call it and pass it to
+   * StatefulOperator.setStateStoreCheckpointInfo(), where it will be ignored.
+   * */
+  def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo
+
+  /**
    * Whether all updates have been committed
    */
   def hasCommitted: Boolean
@@ -330,6 +341,21 @@ case class StateStoreMetrics(
     numKeys: Long,
     memoryUsedBytes: Long,
     customMetrics: Map[StateStoreCustomMetric, Long])
+
+/**
+ * State store checkpoint information, used to pass checkpointing information from executors
+ * to the driver after execution.
+ * @param stateStoreCkptId The checkpoint ID for a checkpoint at `batchVersion`. This is used to
+ *                         identify the checkpoint
+ * @param baseStateStoreCkptId The checkpoint ID for `batchVersion` - 1, that is used to finish this
+ *                             batch. This is used to validate the batch is processed based on the
+ *                             correct checkpoint.
+ */
+case class StateStoreCheckpointInfo(
+    partitionId: Int,
+    batchVersion: Long,
+    stateStoreCkptId: Option[String],
+    baseStateStoreCkptId: Option[String])
 
 object StateStoreMetrics {
   def combine(allMetrics: Seq[StateStoreMetrics]): StateStoreMetrics = {
@@ -451,6 +477,11 @@ case class RangeKeyScanStateEncoderSpec(
  *   version of the data can be accessed. It is the responsible of the provider to populate
  *   this store with context information like the schema of keys and values, etc.
  *
+ *   If the checkpoint format version 2 is used, an additional argument `checkpointID` may be
+ *   provided as part of `getStore(version, checkpointID)`. The provider needs to guarantee
+ *   that the loaded version is of this unique ID. It needs to load the version for this specific
+ *   ID from the checkpoint if needed.
+ *
  * - After the streaming query is stopped, the created provider instances are lazily disposed off.
  */
 trait StateStoreProvider {
@@ -492,17 +523,23 @@ trait StateStoreProvider {
   /** Called when the provider instance is unloaded from the executor */
   def close(): Unit
 
-  /** Return an instance of [[StateStore]] representing state data of the given version */
-  def getStore(version: Long): StateStore
+  /**
+   * Return an instance of [[StateStore]] representing state data of the given version.
+   * If `stateStoreCkptId` is provided, the instance also needs to match the ID.
+   * */
+  def getStore(
+      version: Long,
+      stateStoreCkptId: Option[String] = None): StateStore
 
   /**
-   * Return an instance of [[ReadStateStore]] representing state data of the given version.
+   * Return an instance of [[ReadStateStore]] representing state data of the given version
+   * and uniqueID if provided.
    * By default it will return the same instance as getStore(version) but wrapped to prevent
    * modification. Providers can override and return optimized version of [[ReadStateStore]]
    * based on the fact the instance will be only used for reading.
    */
-  def getReadStore(version: Long): ReadStateStore =
-    new WrappedReadStateStore(getStore(version))
+  def getReadStore(version: Long, uniqueId: Option[String] = None): ReadStateStore =
+    new WrappedReadStateStore(getStore(version, uniqueId))
 
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
   def doMaintenance(): Unit = { }
@@ -802,6 +839,7 @@ object StateStore extends Logging {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
+      stateStoreCkptId: Option[String],
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
@@ -811,7 +849,7 @@ object StateStore extends Logging {
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
       keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
-    storeProvider.getReadStore(version)
+    storeProvider.getReadStore(version, stateStoreCkptId)
   }
 
   /** Get or create a store associated with the id. */
@@ -821,6 +859,7 @@ object StateStore extends Logging {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
+      stateStoreCkptId: Option[String],
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
@@ -830,7 +869,7 @@ object StateStore extends Logging {
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
       keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
-    storeProvider.getStore(version)
+    storeProvider.getStore(version, stateStoreCkptId)
   }
 
   private def getStateStoreProvider(

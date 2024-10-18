@@ -100,4 +100,8 @@ class MemoryStateStore extends StateStore() {
   override def byteArrayIter(colFamilyName: String): Iterator[ByteArrayPair] = {
     throw new UnsupportedOperationException("Doesn't support bytearray operations")
   }
+
+  override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {
+    StateStoreCheckpointInfo(id.partitionId, version + 1, None, None)
+  }
 }

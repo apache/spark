@@ -117,6 +117,12 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-connect-client-jvm_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-connect-shims_${scala.binary.version}</artifactId>
+        </exclusion>
+      </exclusions>
       <scope>provided</scope>
     </dependency>
 

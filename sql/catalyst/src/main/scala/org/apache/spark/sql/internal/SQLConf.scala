@@ -782,7 +782,7 @@ object SQLConf {
             CollationFactory.fetchCollation(collationName)
             true
           } catch {
-            case e: SparkException if e.getErrorClass == "COLLATION_INVALID_NAME" => false
+            case e: SparkException if e.getCondition == "COLLATION_INVALID_NAME" => false
           }
         },
         "DEFAULT_COLLATION",
@@ -2203,6 +2203,15 @@ object SQLConf {
       .version("4.0.0")
       .intConf
       .createWithDefault(3)
+
+  // The feature is still in development, so it is still internal.
+  val STATE_STORE_CHECKPOINT_FORMAT_VERSION =
+    buildConf("spark.sql.streaming.stateStore.checkpointFormatVersion")
+      .internal()
+      .doc("The version of the approach of doing state store checkpoint")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(1)
 
   val STREAMING_STATE_STORE_USE_AVRO_ENCODING =
     buildConf("spark.sql.streaming.stateStore.useAvroEncoding")
@@ -5531,6 +5540,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def streamingMaintenanceInterval: Long = getConf(STREAMING_MAINTENANCE_INTERVAL)
 
   def stateStoreCompressionCodec: String = getConf(STATE_STORE_COMPRESSION_CODEC)
+
+  def stateStoreCheckpointFormatVersion: Int = getConf(STATE_STORE_CHECKPOINT_FORMAT_VERSION)
 
   def checkpointRenamedFileCheck: Boolean = getConf(CHECKPOINT_RENAMEDFILE_CHECK_ENABLED)
 
