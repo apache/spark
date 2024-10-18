@@ -1482,4 +1482,7 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   override def toJavaRDD: JavaRDD[T] = throwRddNotSupportedException()
+
+  /** @inheritdoc */
+  override def transform[U](t: DS[T] => DS[U]): Dataset[U] = t(this.asInstanceOf[DS[T]])
 }
