@@ -2150,6 +2150,12 @@
     },
     "sqlState" : "22022"
   },
+  "INVALID_CORRUPT_RECORD_TYPE" : {
+    "message" : [
+      "The column <columnName> for corrupt records must have the nullable STRING type, but got <actualType>."
+    ],
+    "sqlState" : "42804"
+  },
   "INVALID_CURSOR" : {
     "message" : [
       "The cursor is invalid."
@@ -6041,11 +6047,6 @@
       "Column statistics serialization is not supported for column <colName> of data type: <dataType>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1097" : {
-    "message" : [
-      "The field for corrupt records must be string type and nullable."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1098" : {
     "message" : [
       "DataType '<x>' is not supported by <className>."
@@ -6518,11 +6519,6 @@
   "_LEGACY_ERROR_TEMP_1251" : {
     "message" : [
       "<action> is not allowed on <tableName> since its partition metadata is not stored in the Hive metastore. To import this information into the metastore, run `msck repair table <tableName>`."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1252" : {
-    "message" : [
-      "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead."
     ]
   },
   "_LEGACY_ERROR_TEMP_1253" : {
@@ -7260,11 +7256,6 @@
   "_LEGACY_ERROR_TEMP_2164" : {
     "message" : [
       "Initial type <dataType> must be an <arrayType>, a <structType> or a <mapType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2165" : {
-    "message" : [
-      "Malformed records are detected in schema inference. Parse Mode: <failFastMode>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2166" : {

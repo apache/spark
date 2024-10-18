@@ -792,13 +792,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   }
 
   test("verify corrupt column") {
-    checkExceptionInExpression[AnalysisException](
+    checkErrorInExpression[AnalysisException](
       JsonToStructs(
         schema = StructType.fromDDL("i int, _unparsed boolean"),
         options = Map("columnNameOfCorruptRecord" -> "_unparsed"),
         child = Literal.create("""{"i":"a"}"""),
-        timeZoneId = UTC_OPT),
-      expectedErrMsg = "The field for corrupt records must be string type and nullable")
+        timeZoneId = UTC_OPT), null, "INVALID_CORRUPT_RECORD_TYPE",
+      Map("columnName" -> "`_unparsed`", "actualType" -> "\"BOOLEAN\""))
   }
 
   def decimalInput(langTag: String): (Decimal, String) = {

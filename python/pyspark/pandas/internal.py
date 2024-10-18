@@ -930,19 +930,7 @@ class InternalFrame:
         |       2|  c|
         +--------+---+
         """
-        if len(sdf.columns) > 0:
-            return sdf.select(
-                SF.distributed_sequence_id().alias(column_name),
-                "*",
-            )
-        else:
-            cnt = sdf.count()
-            if cnt > 0:
-                return default_session().range(cnt).toDF(column_name)
-            else:
-                return default_session().createDataFrame(
-                    [], schema=StructType().add(column_name, data_type=LongType(), nullable=False)
-                )
+        return sdf.select(SF.distributed_sequence_id().alias(column_name), "*")
 
     def spark_column_for(self, label: Label) -> PySparkColumn:
         """Return Spark Column for the given column label."""
