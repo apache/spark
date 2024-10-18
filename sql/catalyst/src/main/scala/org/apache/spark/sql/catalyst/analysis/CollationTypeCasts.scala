@@ -159,8 +159,8 @@ object CollationTypeCasts extends TypeCoercionRule {
    * any expressions, but will only be affected by collated StringTypes or
    * complex DataTypes with collated StringTypes (e.g. ArrayType)
    */
-  def getOutputCollation(expressions: Seq[Expression]): StringType = {
-    val explicitTypes = expressions.filter {
+  def getOutputCollation(expr: Seq[Expression]): StringType = {
+    val explicitTypes = expr.filter {
         case _: Collate => true
         case _ => false
       }
@@ -178,7 +178,7 @@ object CollationTypeCasts extends TypeCoercionRule {
           )
       // Only implicit or default collations present
       case 0 =>
-        val implicitTypes = expressions.filter {
+        val implicitTypes = expr.filter {
             case Literal(_, _: StringType) => false
             case cast: Cast if cast.getTagValue(Cast.USER_SPECIFIED_CAST).isEmpty =>
               cast.child.dataType.isInstanceOf[StringType]
