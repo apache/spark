@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeSet, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.trees.LeafLike
@@ -30,6 +31,7 @@ import org.apache.spark.sql.execution.SparkPlan
  * Any V2 commands that do not require triggering a spark job should extend this class.
  */
 abstract class V2CommandExec extends SparkPlan {
+  implicit val withRelations: Set[RelationWrapper] = Set.empty
 
   /**
    * Abstract method that each concrete command needs to implement to compute the result.

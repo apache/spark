@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.write.{PhysicalWriteInfo, WriterCommitMessage}
@@ -66,6 +67,7 @@ class ConsoleWrite(schema: StructType, options: CaseInsensitiveStringMap)
     println(printMessage)
     println("-------------------------------------------")
     // scalastyle:off println
+    implicit val withRelations: Set[RelationWrapper] = Set.empty
     Dataset.ofRows(spark, LocalRelation(toAttributes(schema), rows.toImmutableArraySeq))
       .show(numRowsToShow, isTruncated)
   }

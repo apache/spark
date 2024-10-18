@@ -21,7 +21,7 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
+import org.apache.spark.sql.catalyst.analysis.{RelationWrapper, UnresolvedAlias}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -57,6 +57,8 @@ class RelationalGroupedDataset protected[sql](
 
   import RelationalGroupedDataset._
   import df.sparkSession._
+
+  private implicit def getRelations: Set[RelationWrapper] = df.queryExecution.getRelations
 
   override protected def toDF(aggCols: Seq[Column]): DataFrame = {
     val aggExprs = aggCols.map(expression).map { e =>
@@ -524,7 +526,8 @@ private[sql] object RelationalGroupedDataset {
   private[sql] def handleGroupingExpression(
       logicalPlan: LogicalPlan,
       sparkSession: SparkSession,
-      groupingExprs: Seq[Expression]): (QueryExecution, Seq[Attribute]) = {
+      groupingExprs: Seq[Expression])(implicit withRelations: Set[RelationWrapper] = Set.empty):
+  (QueryExecution, Seq[Attribute]) = {
     // Resolves grouping expressions.
     val dummyPlan = Project(groupingExprs.map(alias), LocalRelation(logicalPlan.output))
     val analyzedPlan = sparkSession.sessionState.analyzer.execute(dummyPlan)

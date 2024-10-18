@@ -50,7 +50,7 @@ import org.apache.spark.util.ArrayImplicits._
 class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   private def sessionCatalog: SessionCatalog = sparkSession.sessionState.catalog
-
+  implicit val withRelations: Set[RelationWrapper] = Set.empty
   /**
    * Helper function for parsing identifiers.
    * @param fallbackOnException if true, when parsing fails, return the original name.

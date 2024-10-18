@@ -346,7 +346,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
     val multipartIdentifier =
       sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     Dataset.ofRows(sparkSession, UnresolvedRelation(multipartIdentifier,
-      new CaseInsensitiveStringMap(extraOptions.toMap.asJava)))
+      new CaseInsensitiveStringMap(extraOptions.toMap.asJava)))(Set.empty)
   }
 
   /** @inheritdoc */
