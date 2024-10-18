@@ -45,7 +45,9 @@ class SparkUncaughtExceptionHandlerSuite extends SparkFunSuite {
     (ThrowableTypes.NestedSparkFatalException, true, SparkExitCode.OOM),
     (ThrowableTypes.NestedSparkFatalException, false, SparkExitCode.OOM),
     (ThrowableTypes.NonFatalNestedErrors, true, SparkExitCode.UNCAUGHT_EXCEPTION),
-    (ThrowableTypes.NonFatalNestedErrors, false, 0)
+    (ThrowableTypes.NonFatalNestedErrors, false, 0),
+    (ThrowableTypes.DeepNestedOOMError, true, SparkExitCode.UNCAUGHT_EXCEPTION),
+    (ThrowableTypes.DeepNestedOOMError, false, 0)
   ).foreach {
     case (throwable: ThrowableTypes.ThrowableTypesVal,
     exitOnUncaughtException: Boolean, expectedExitCode) =>
@@ -105,6 +107,18 @@ object ThrowableTypes extends Enumeration {
       new RuntimeException("Nonfatal Level 2",
         new RuntimeException("Nonfatal Level 3",
           new RuntimeException("Nonfatal Level 4")))
+    )
+  )
+
+  // Should not report as OOM when its depth is greater than killOnFatalErrorDepth
+  val DeepNestedOOMError = ThrowableTypesVal(
+    "NonFatalNestedErrors",
+    new RuntimeException("Nonfatal Level 1",
+      new RuntimeException("Nonfatal Level 2",
+        new RuntimeException("Nonfatal Level 3",
+          new RuntimeException("Nonfatal Level 4",
+            new RuntimeException("Nonfatal Level 5",
+              new OutOfMemoryError()))))
     )
   )
 

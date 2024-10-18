@@ -44,13 +44,10 @@ private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: 
   // SPARK-50034: When this handler is called, there is a fatal error in the cause chain within
   // the specified depth. We should identify that fatal error and exit with the
   // correct exit code.
-  private val killOnFatalErrorDepth: Int = {
+  private val killOnFatalErrorDepth: Int =
     // At this point SparkEnv might be None
-    Option(SparkEnv.get) match {
-      case Some(env) => env.conf.get(EXECUTOR_KILL_ON_FATAL_ERROR_DEPTH)
-      case None => 5
-    }
-  }
+    Option(SparkEnv.get).map(_.conf.get(EXECUTOR_KILL_ON_FATAL_ERROR_DEPTH)).getOrElse(5)
+
 
   override def uncaughtException(thread: Thread, exception: Throwable): Unit = {
     try {
