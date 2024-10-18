@@ -53,6 +53,7 @@ class StatefulProcessorApiClient:
         self.utf8_deserializer = UTF8Deserializer()
         self.pickleSer = CPickleSerializer()
         self.serializer = ArrowStreamSerializer()
+        self._init_state_list: List[Tuple, "PandasDataFrameLike"] = []
 
     def set_handle_state(self, state: StatefulProcessorHandleState) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
@@ -153,6 +154,25 @@ class StatefulProcessorApiClient:
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error initializing value state: " f"{response_message[1]}")
+
+    def is_first_batch(self) -> bool:
+        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+
+        is_first_batch = stateMessage.IsFirstBatch()
+        request = stateMessage.UtilsCallCommand(isFirstBatch=is_first_batch)
+        stateful_processor_call = stateMessage.StatefulProcessorCall(utilsCall=request)
+        message = stateMessage.StateRequest(statefulProcessorCall=stateful_processor_call)
+
+        self._send_proto_message(message.SerializeToString())
+        response_message = self._receive_proto_message()
+        status = response_message[0]
+        if status == 0:
+            return True
+        elif status == 1:
+            return False
+        else:
+            # TODO(SPARK-49233): Classify user facing errors.
+            raise PySparkRuntimeError(f"Error checking if it is first batch: " f"{response_message[1]}")
 
     def _send_proto_message(self, message: bytes) -> None:
         # Writing zero here to indicate message version. This allows us to evolve the message
