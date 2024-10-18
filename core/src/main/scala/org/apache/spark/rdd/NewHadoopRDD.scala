@@ -75,7 +75,7 @@ private[spark] class NewHadoopPartition(
  */
 @DeveloperApi
 class NewHadoopRDD[K, V](
-    sc: SparkContext,
+    sc : SparkContext,
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
