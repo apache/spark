@@ -336,8 +336,11 @@ private[sql] object CatalogV2Util {
         return struct
       } else {
         throw new SparkIllegalArgumentException(
-          errorClass = "_LEGACY_ERROR_TEMP_3227",
-          messageParameters = Map("fieldName" -> fieldNames.head))
+          errorClass = "FIELD_NOT_FOUND",
+          messageParameters = Map(
+            "fieldName" -> toSQLId(fieldNames.head),
+            "fields" -> struct.fields.map(f => toSQLId(f.name)).mkString(", "))
+        )
       }
     }
 
