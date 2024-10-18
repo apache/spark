@@ -20,6 +20,15 @@ import logging
 import json
 from typing import cast, Optional
 
+SPARK_LOG_SCHEMA = (
+    "ts TIMESTAMP, "
+    "level STRING, "
+    "msg STRING, "
+    "context map<STRING, STRING>, "
+    "exception STRUCT<class STRING, msg STRING, "
+    "stacktrace ARRAY<STRUCT<class STRING, method STRING, file STRING,line STRING>>>,"
+    "logger STRING"
+)
 
 class JSONFormatter(logging.Formatter):
     """

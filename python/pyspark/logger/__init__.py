@@ -20,8 +20,10 @@ PySpark logging
 """
 from pyspark.logger.logger import (  # noqa: F401
     PySparkLogger,
+    SPARK_LOG_SCHEMA
 )
 
 __all__ = [
     "PySparkLogger",
+    "SPARK_LOG_SCHEMA"
 ]
