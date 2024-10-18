@@ -4020,10 +4020,11 @@ class DataFrame:
         ids : str, Column, tuple, list
             Column(s) to use as identifiers. Can be a single column or column name,
             or a list or tuple for multiple columns.
-        values : str, Column, tuple, list, optional
-            Column(s) to unpivot. Can be a single column or column name, or a list or tuple
-            for multiple columns. If specified, must not be empty. If not specified, uses all
-            columns that are not set as `ids`.
+            
+        values : str, Column, tuple, list
+        Identifies the columns to unpivot. Accepts a single column, a Column object, or a collection (list or tuple) of columns.
+        Must be explicitly provided and not left empty. Use to specify the columns for transformation, excluding any ids
+            
         variableColumnName : str
             Name of the variable column.
         valueColumnName : str
@@ -4090,10 +4091,9 @@ class DataFrame:
         ids : str, Column, tuple, list, optional
             Column(s) to use as identifiers. Can be a single column or column name,
             or a list or tuple for multiple columns.
-        values : str, Column, tuple, list, optional
+        values : str, Column, tuple, list
             Column(s) to unpivot. Can be a single column or column name, or a list or tuple
-            for multiple columns. If not specified or empty, use all columns that
-            are not set as `ids`.
+            for multiple columns. 
         variableColumnName : str
             Name of the variable column.
         valueColumnName : str
