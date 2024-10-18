@@ -355,6 +355,7 @@ class CollationStringExpressionsSuite
     val testCases = Seq(
       FindInSetTestCase("AB", "abc,b,ab,c,def", "UTF8_BINARY", 0),
       FindInSetTestCase("b ", "abc,b,ab,c,def", "UTF8_BINARY_RTRIM", 2),
+      FindInSetTestCase("def", "abc,b,ab,c,def ", "UTF8_BINARY_RTRIM", 5),
       FindInSetTestCase("C", "abc,b,ab,c,def", "UTF8_LCASE", 4),
       FindInSetTestCase("C ", "abc,b,ab,c  ,def", "UTF8_LCASE_RTRIM", 4),
       FindInSetTestCase("d,ef", "abc,b,ab,c,def", "UNICODE", 0),
@@ -1541,13 +1542,9 @@ class CollationStringExpressionsSuite
         result: R)
     val testCases = Seq(
       StringTrimRightTestCase("  xxasdxx", Some("x  "), "UTF8_BINARY", "  xxasd"),
-      StringTrimRightTestCase("  xxasdxx", Some("x  "), "UTF8_BINARY_RTRIM", "  xxasd"),
       StringTrimRightTestCase("xxasdxx", Some("X"), "UTF8_LCASE", "xxasd"),
-      StringTrimRightTestCase("xxasdxx  ", Some("X "), "UTF8_LCASE_RTRIM", "xxasdxx  "),
       StringTrimRightTestCase("xxasdxx", Some("y"), "UNICODE", "xxasdxx"),
-      StringTrimRightTestCase("xxasdxx", Some("y  "), "UNICODE_RTRIM", "xxasdxx"),
-      StringTrimRightTestCase("  asd  ", None, "UNICODE_CI", "  asd"),
-      StringTrimRightTestCase("  asd  ", Some("asd "), "UNICODE_CI_RTRIM", "  asd  ")
+      StringTrimRightTestCase("  asd  ", None, "UNICODE_CI", "  asd")
     )
     val unsupportedTestCase = StringTrimRightTestCase("xxasdxx", Some("x"), "UNICODE_AI", "xxasd")
     testCases.foreach(t => {
@@ -1593,13 +1590,20 @@ class CollationStringExpressionsSuite
         result: R)
     val testCases = Seq(
       StringTrimTestCase("xxasdxx", Some("x"), "UTF8_BINARY", "asd"),
-      StringTrimTestCase("xxasdxx  ", Some("x "), "UTF8_BINARY_RTRIM", "asdxx  "),
+      StringTrimTestCase("xxasdxx  ", Some("x "), "UTF8_BINARY_RTRIM", "asd"),
+      StringTrimTestCase("xxasdxx  ", Some("x"), "UTF8_BINARY_RTRIM", "asd  "),
+      StringTrimTestCase(" xxasdxx   ", Some("x "), "UTF8_BINARY_RTRIM", "asd"),
+      StringTrimTestCase(" xxasdxx", Some("x"), "UTF8_BINARY_RTRIM", " xxasd"),
       StringTrimTestCase("xxasdxx", Some("X"), "UTF8_LCASE", "asd"),
-      StringTrimTestCase("xxasdxx", Some("X   "), "UTF8_LCASE_RTRIM", "asd"),
+      StringTrimTestCase("xxasdxx  ", Some("X "), "UTF8_LCASE_RTRIM", "asd"),
+      StringTrimTestCase("xxasdxx  ", Some("X"), "UTF8_LCASE_RTRIM", "asd  "),
+      StringTrimTestCase(" xxasdxx   ", Some("X "), "UTF8_LCASE_RTRIM", "asd"),
+      StringTrimTestCase(" xxasdxx", Some("x"), "UTF8_LCASE_RTRIM", " xxasd"),
       StringTrimTestCase("xxasdxx", Some("y"), "UNICODE", "xxasdxx"),
-      StringTrimTestCase("xxasdxx", Some("  x"), "UNICODE_RTRIM", "asd"),
+      StringTrimTestCase("xxasdxx", Some("y"), "UNICODE_RTRIM", "xxasdxx"),
+      StringTrimTestCase("  asd  ", None, "UNICODE_RTRIM", "asd"),
       StringTrimTestCase("  asd  ", None, "UNICODE_CI", "asd"),
-      StringTrimTestCase("  asd  ", None, "UNICODE_CI_RTRIM", "asd")
+      StringTrimTestCase("  asd  ", Some("D"), "UNICODE_CI_RTRIM", "  as  ")
     )
     val unsupportedTestCase = StringTrimTestCase("xxasdxx", Some("x"), "UNICODE_AI", "asd")
     testCases.foreach(t => {
@@ -1644,9 +1648,20 @@ class CollationStringExpressionsSuite
         result: R)
     val testCases = Seq(
       StringTrimBothTestCase("xxasdxx", Some("x"), "UTF8_BINARY", "asd"),
+      StringTrimBothTestCase("xxasdxx  ", Some("x "), "UTF8_BINARY_RTRIM", "asd"),
+      StringTrimBothTestCase("xxasdxx  ", Some("x"), "UTF8_BINARY_RTRIM", "asd  "),
+      StringTrimBothTestCase(" xxasdxx   ", Some("x "), "UTF8_BINARY_RTRIM", "asd"),
+      StringTrimBothTestCase(" xxasdxx", Some("x"), "UTF8_BINARY_RTRIM", " xxasd"),
       StringTrimBothTestCase("xxasdxx", Some("X"), "UTF8_LCASE", "asd"),
+      StringTrimBothTestCase("xxasdxx  ", Some("X "), "UTF8_LCASE_RTRIM", "asd"),
+      StringTrimBothTestCase("xxasdxx  ", Some("X"), "UTF8_LCASE_RTRIM", "asd  "),
+      StringTrimBothTestCase(" xxasdxx   ", Some("X "), "UTF8_LCASE_RTRIM", "asd"),
+      StringTrimBothTestCase(" xxasdxx", Some("x"), "UTF8_LCASE_RTRIM", " xxasd"),
       StringTrimBothTestCase("xxasdxx", Some("y"), "UNICODE", "xxasdxx"),
-      StringTrimBothTestCase("  asd  ", None, "UNICODE_CI", "asd")
+      StringTrimBothTestCase("xxasdxx", Some("y"), "UNICODE_RTRIM", "xxasdxx"),
+      StringTrimBothTestCase("  asd  ", None, "UNICODE_RTRIM", "asd"),
+      StringTrimBothTestCase("  asd  ", None, "UNICODE_CI", "asd"),
+      StringTrimBothTestCase("  asd  ", Some("D"), "UNICODE_CI_RTRIM", "  as  ")
     )
     testCases.foreach(t => {
       // Unit test.
