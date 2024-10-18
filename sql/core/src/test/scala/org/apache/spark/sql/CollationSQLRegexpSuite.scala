@@ -112,7 +112,11 @@ class CollationSQLRegexpSuite
     val tableNameLcase = "T_LCASE"
     withTable(tableNameLcase) {
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_LCASE") {
-        sql(s"CREATE TABLE IF NOT EXISTS $tableNameLcase(c STRING) using PARQUET")
+        sql(s"""
+             |CREATE TABLE IF NOT EXISTS $tableNameLcase(
+             |  c STRING COLLATE UTF8_LCASE
+             |) using PARQUET
+             |""".stripMargin)
         sql(s"INSERT INTO $tableNameLcase(c) VALUES('ABC')")
         checkAnswer(sql(s"select c like 'ab%' FROM $tableNameLcase"), Row(true))
         checkAnswer(sql(s"select c like '%bc' FROM $tableNameLcase"), Row(true))

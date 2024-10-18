@@ -21,6 +21,7 @@ import org.json4s.JsonAST.{JString, JValue}
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.internal.SqlApiConf
 
 /**
  * The data type representing `String` values. Please use the singleton `DataTypes.StringType`.
@@ -30,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
  *   The id of collation for this StringType.
  */
 @Stable
-class StringType private (val collationId: Int) extends AtomicType with Serializable {
+class StringType private[sql] (val collationId: Int) extends AtomicType with Serializable {
 
   /**
    * Support for Binary Equality implies that strings are considered equal only if they are byte
@@ -77,6 +78,10 @@ class StringType private (val collationId: Int) extends AtomicType with Serializ
     if (isUTF8BinaryCollation) "string"
     else s"string collate ${CollationFactory.fetchCollation(collationId).collationName}"
 
+  override def toString: String =
+    if (isUTF8BinaryCollation) "StringType"
+    else s"StringType($collationId)"
+
   // Due to backwards compatibility and compatibility with other readers
   // all string types are serialized in json as regular strings and
   // the collation information is written to struct field metadata
@@ -107,5 +112,21 @@ case object StringType extends StringType(0) {
   def apply(collation: String): StringType = {
     val collationId = CollationFactory.collationNameToId(collation)
     new StringType(collationId)
+  }
+}
+
+/**
+ * The result type of literals, column definitions without explicit collation, casts to string and
+ * some expressions that produce strings but whose output type is not based on the types of its
+ * children. Idea is to have this behave like a string with the default collation of the session,
+ * but that we can still differentiate it from a regular string type, because in some places
+ * default string is not the one with the session collation (e.g. in DDL commands).
+ */
+private[spark] class DefaultStringType private (collationId: Int)
+    extends StringType(collationId) {}
+
+private[spark] object DefaultStringType {
+  def apply(): DefaultStringType = {
+    new DefaultStringType(SqlApiConf.get.defaultStringType.collationId)
   }
 }
