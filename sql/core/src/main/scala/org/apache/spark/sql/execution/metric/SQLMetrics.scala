@@ -96,9 +96,12 @@ class SQLMetric(
 
   def +=(v: Long): Unit = add(v)
 
-  // _value may be uninitialized, in many cases being -1. We should not expose it to the user
-  // and instead return 0.
-  override def value: Long = if (isZero) 0 else _value
+  // We use -1 as initial value of the SIZE and TIMIMG accumulators (0 is a valid metric value).
+  // We need to return it as it is so that the SQL UI can filter out the invalid accumulator
+  // values in `SQLMetrics.stringValue` when calculating min, max, etc.
+  // However, users accessing the values in the physical plan programmatically still gets -1. They
+  // may use `SQLMetric.isZero` before consuming this value.
+  override def value: Long = _value
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
