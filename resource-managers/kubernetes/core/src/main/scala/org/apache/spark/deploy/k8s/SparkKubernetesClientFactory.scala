@@ -25,6 +25,7 @@ import io.fabric8.kubernetes.client.{ConfigBuilder, KubernetesClient, Kubernetes
 import io.fabric8.kubernetes.client.Config.KUBERNETES_REQUEST_RETRY_BACKOFFLIMIT_SYSTEM_PROPERTY
 import io.fabric8.kubernetes.client.Config.autoConfigure
 import io.fabric8.kubernetes.client.okhttp.OkHttpClientFactory
+import io.fabric8.kubernetes.client.utils.HttpClientUtils
 import io.fabric8.kubernetes.client.utils.Utils.getSystemPropertyOrEnvVar
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
@@ -78,10 +79,6 @@ object SparkKubernetesClientFactory extends Logging {
       .getOption(s"$kubernetesAuthConfPrefix.$CLIENT_KEY_FILE_CONF_SUFFIX")
     val clientCertFile = sparkConf
       .getOption(s"$kubernetesAuthConfPrefix.$CLIENT_CERT_FILE_CONF_SUFFIX")
-    // TODO(SPARK-37687): clean up direct usage of OkHttpClient, see also:
-    // https://github.com/fabric8io/kubernetes-client/issues/3547
-    val dispatcher = new Dispatcher(
-      ThreadUtils.newDaemonCachedThreadPool("kubernetes-dispatcher"))
 
     // Allow for specifying a context used to auto-configure from the users K8S config file
     val kubeContext = sparkConf.get(KUBERNETES_CONTEXT).filter(_.nonEmpty)
@@ -116,18 +113,24 @@ object SparkKubernetesClientFactory extends Logging {
         (file, configBuilder) => configBuilder.withClientCertFile(file)
       }.withOption(namespace) {
         (ns, configBuilder) => configBuilder.withNamespace(ns)
-      }.build()
-    val factoryWithCustomDispatcher = new OkHttpClientFactory() {
-      override protected def additionalConfig(builder: OkHttpClient.Builder): Unit = {
-        builder.dispatcher(dispatcher)
       }
-    }
-    logDebug("Kubernetes client config: " +
-      new ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(config))
-    new KubernetesClientBuilder()
-      .withHttpClientFactory(factoryWithCustomDispatcher)
-      .withConfig(config)
       .build()
+    logDebug("Kubernetes client config: " +
+        new ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(config))
+    val clientFactory = HttpClientUtils.getHttpClientFactory
+    val clientBuilder = new KubernetesClientBuilder().withConfig(config)
+    clientFactory match {
+      case _: OkHttpClientFactory =>
+        val dispatcher = new Dispatcher(
+          ThreadUtils.newDaemonCachedThreadPool("kubernetes-dispatcher"))
+        val factory = new OkHttpClientFactory() {
+          override def additionalConfig(builder: OkHttpClient.Builder): Unit = {
+            builder.dispatcher(dispatcher)
+          }
+        }
+        clientBuilder.withHttpClientFactory(factory).build()
+      case _ => clientBuilder.build()
+    }
   }
 
   private implicit class OptionConfigurableConfigBuilder(val configBuilder: ConfigBuilder)
