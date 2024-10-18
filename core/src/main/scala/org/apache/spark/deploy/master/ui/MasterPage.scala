@@ -21,6 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
+import org.apache.commons.lang3.StringUtils
 import org.json4s.JValue
 
 import org.apache.spark.deploy.DeployMessages.{KillDriverResponse, MasterStateResponse, RequestKillDriver, RequestMasterState}
@@ -289,7 +290,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       </td>
       <td>
         {
-          if (app.isFinished) {
+          if (app.isFinished || StringUtils.isBlank(app.desc.appUiUrl)) {
             app.desc.name
           } else {
             <a href={UIUtils.makeHref(parent.master.reverseProxy,
