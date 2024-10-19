@@ -58,7 +58,6 @@ jobs:
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
       image_url: ${{ steps.infra-image-outputs.outputs.image_url }}
-      image_docs_url: ${{ steps.infra-image-docs-outputs.outputs.image_docs_url }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -135,14 +134,6 @@ jobs:
         IMG_NAME="apache-spark-ci-image:${{ inputs.branch }}-${{ github.run_id }}"
         IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
         echo "image_url=$IMG_URL" >> $GITHUB_OUTPUT
-    - name: Generate infra image URL (Documentation)
-      id: infra-image-docs-outputs
-      run: |
-        # Convert to lowercase to meet Docker repo name requirement
-        REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-        IMG_NAME="apache-spark-ci-image-docs:${{ inputs.branch }}-${{ github.run_id }}"
-        IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
-        echo "image_docs_url=$IMG_URL" >> $GITHUB_OUTPUT
 
   # Build: build Spark and run the tests for specified modules.
   build:
@@ -354,23 +345,12 @@ jobs:
         id: docker_build
         uses: docker/build-push-action@v6
         with:
-          context: ./dev/infra/base/
+          context: ./dev/infra/
           push: true
           tags: |
             ${{ needs.precondition.outputs.image_url }}
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ inputs.branch }}
-      - name: Build and push (Documentation)
-        id: docker_build_docs
-        uses: docker/build-push-action@v6
-        with:
-          context: ./dev/infra/docs/
-          push: true
-          tags: |
-            ${{ needs.precondition.outputs.image_docs_url }}
-          # Use the infra image cache to speed up
-          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:${{ inputs.branch }}
-
 
   pyspark:
     needs: [precondition, infra-image]
@@ -803,7 +783,7 @@ jobs:
       PYSPARK_PYTHON: python3.9
       GITHUB_PREV_SHA: ${{ github.event.before }}
     container:
-      image: ${{ needs.precondition.outputs.image_docs_url }}
+      image: ${{ needs.precondition.outputs.image_url }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -853,8 +833,18 @@ jobs:
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
-    - name: List Python packages
-      run: python3.9 -m pip list
+    - name: Install Python dependencies for python linter and documentation generation
+      if: inputs.branch != 'branch-3.4' && inputs.branch != 'branch-3.5'
+      run: |
+        # Should unpin 'sphinxcontrib-*' after upgrading sphinx>5
+        # See 'ipython_genutils' in SPARK-38517
+        # See 'docutils<0.18.0' in SPARK-39421
+        python3.9 -m pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13' sphinx-copybutton nbsphinx numpydoc jinja2 markupsafe 'pyzmq<24.0.0' \
+          ipython ipython_genutils sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8' 'docutils<0.18.0' \
+          'flake8==3.9.0' 'mypy==1.8.0' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' 'black==23.9.1' \
+          'pandas-stubs==1.2.0.53' 'grpcio==1.62.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0' \
+          'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' 'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' 'sphinxcontrib-serializinghtml==1.1.5'
+        python3.9 -m pip list
     - name: Install dependencies for documentation generation for branch-3.4, branch-3.5
       if: inputs.branch == 'branch-3.4' || inputs.branch == 'branch-3.5'
       run: |

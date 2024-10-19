@@ -146,6 +146,9 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
         ),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 3)
+        },
         // get ttl values
         AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1, null)),
         AdvanceManualClock(1 * 1000),
@@ -157,15 +160,17 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
           OutputEvent("k1", 5, isTTLValue = true, 109000),
           OutputEvent("k1", 6, isTTLValue = true, 109000)
         ),
+        AddData(inputStream, InputEvent("k1", "get", -1, null)),
         // advance clock to expire the first three elements
         AdvanceManualClock(15 * 1000), // batch timestamp: 65000
-        AddData(inputStream, InputEvent("k1", "get", -1, null)),
-        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(
           OutputEvent("k1", 4, isTTLValue = false, -1),
           OutputEvent("k1", 5, isTTLValue = false, -1),
           OutputEvent("k1", 6, isTTLValue = false, -1)
         ),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 3)
+        },
         // ensure that expired elements are no longer in state
         AddData(inputStream, InputEvent("k1", "get_without_enforcing_ttl", -1, null)),
         AdvanceManualClock(1 * 1000),
