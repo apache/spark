@@ -87,7 +87,7 @@ private[spark] case class SSLOptions(
   /**
    * Creates a Jetty SSL context factory according to the SSL settings represented by this object.
    */
-  def createJettySslContextFactory(): Option[SslContextFactory] = {
+  def createJettySslContextFactoryServer(): Option[SslContextFactory.Server] = {
     if (enabled) {
       val sslContextFactory = new SslContextFactory.Server()
 

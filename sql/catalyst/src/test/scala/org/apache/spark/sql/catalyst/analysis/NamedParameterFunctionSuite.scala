@@ -98,36 +98,36 @@ class NamedParameterFunctionSuite extends AnalysisTest {
   }
 
   test("DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT") {
-    val errorClass =
+    val condition =
       "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.BOTH_POSITIONAL_AND_NAMED"
     checkError(
       exception = parseRearrangeException(
         signature, Seq(k1Arg, k2Arg, k3Arg, k4Arg, namedK1Arg), "foo"),
-      errorClass = errorClass,
-      parameters = Map("functionName" -> toSQLId("foo"), "parameterName" -> toSQLId("k1"))
+      condition = condition,
+      parameters = Map("routineName" -> toSQLId("foo"), "parameterName" -> toSQLId("k1"))
     )
     checkError(
       exception = parseRearrangeException(
         signature, Seq(k1Arg, k2Arg, k3Arg, k4Arg, k4Arg), "foo"),
-      errorClass = "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
-      parameters = Map("functionName" -> toSQLId("foo"), "parameterName" -> toSQLId("k4"))
+      condition = "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+      parameters = Map("routineName" -> toSQLId("foo"), "parameterName" -> toSQLId("k4"))
     )
   }
 
   test("REQUIRED_PARAMETER_NOT_FOUND") {
     checkError(
       exception = parseRearrangeException(signature, Seq(k1Arg, k2Arg, k3Arg), "foo"),
-      errorClass = "REQUIRED_PARAMETER_NOT_FOUND",
+      condition = "REQUIRED_PARAMETER_NOT_FOUND",
       parameters = Map(
-        "functionName" -> toSQLId("foo"), "parameterName" -> toSQLId("k4"), "index" -> "2"))
+        "routineName" -> toSQLId("foo"), "parameterName" -> toSQLId("k4"), "index" -> "2"))
   }
 
   test("UNRECOGNIZED_PARAMETER_NAME") {
     checkError(
       exception = parseRearrangeException(signature,
         Seq(k1Arg, k2Arg, k3Arg, k4Arg, NamedArgumentExpression("k5", Literal("k5"))), "foo"),
-      errorClass = "UNRECOGNIZED_PARAMETER_NAME",
-      parameters = Map("functionName" -> toSQLId("foo"), "argumentName" -> toSQLId("k5"),
+      condition = "UNRECOGNIZED_PARAMETER_NAME",
+      parameters = Map("routineName" -> toSQLId("foo"), "argumentName" -> toSQLId("k5"),
         "proposal" -> (toSQLId("k1") + " " + toSQLId("k2") + " " + toSQLId("k3")))
     )
   }
@@ -136,18 +136,18 @@ class NamedParameterFunctionSuite extends AnalysisTest {
     checkError(
       exception = parseRearrangeException(signature,
         Seq(k2Arg, k3Arg, k1Arg, k4Arg), "foo"),
-      errorClass = "UNEXPECTED_POSITIONAL_ARGUMENT",
-      parameters = Map("functionName" -> toSQLId("foo"), "parameterName" -> toSQLId("k3"))
+      condition = "UNEXPECTED_POSITIONAL_ARGUMENT",
+      parameters = Map("routineName" -> toSQLId("foo"), "parameterName" -> toSQLId("k3"))
     )
   }
 
   test("INTERNAL_ERROR: Enforce optional arguments after required arguments") {
-    val errorMessage = s"Function foo has an unexpected required argument for the provided" +
-      s" function signature ${illegalSignature}. All required arguments should come before" +
-      s" optional arguments."
+    val errorMessage = s"Routine ${toSQLId("foo")} has an unexpected required argument for" +
+      s" the provided routine signature ${illegalSignature.parameters.mkString("[", ", ", "]")}." +
+      s" All required arguments should come before optional arguments."
     checkError(
       exception = parseRearrangeException(illegalSignature, args, "foo"),
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" -> errorMessage)
     )
   }

@@ -62,7 +62,7 @@ private[spark] object Worker {
   val WORKER_CLEANUP_ENABLED = ConfigBuilder("spark.worker.cleanup.enabled")
     .version("1.0.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val WORKER_CLEANUP_INTERVAL = ConfigBuilder("spark.worker.cleanup.interval")
     .version("1.0.0")

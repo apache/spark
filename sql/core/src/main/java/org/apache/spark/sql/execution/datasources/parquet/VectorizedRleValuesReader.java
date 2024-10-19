@@ -29,6 +29,7 @@ import org.apache.parquet.column.values.bitpacking.Packer;
 import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.parquet.io.api.Binary;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
 /**
@@ -709,43 +710,43 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   @Override
   public void readUnsignedIntegers(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
   public void readUnsignedLongs(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
   public void readIntegersWithRebase(
       int total, WritableColumnVector c, int rowId, boolean failIfRebase) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
   public byte readByte() {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
   public short readShort() {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
   public void readBytes(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
   public void readShorts(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
   public void readLongs(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
@@ -755,12 +756,12 @@ public final class VectorizedRleValuesReader extends ValuesReader
       int rowId,
       boolean failIfRebase,
       String timeZone) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
   public void readBinary(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
@@ -786,17 +787,17 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   @Override
   public void readFloats(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
   public void readDoubles(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
   public Binary readBinary(int len) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
@@ -811,37 +812,37 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   @Override
   public void skipBytes(int total) {
-    throw new UnsupportedOperationException("only skipIntegers is valid");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3188");
   }
 
   @Override
   public void skipShorts(int total) {
-    throw new UnsupportedOperationException("only skipIntegers is valid");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3188");
   }
 
   @Override
   public void skipLongs(int total) {
-    throw new UnsupportedOperationException("only skipIntegers is valid");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3188");
   }
 
   @Override
   public void skipFloats(int total) {
-    throw new UnsupportedOperationException("only skipIntegers is valid");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3188");
   }
 
   @Override
   public void skipDoubles(int total) {
-    throw new UnsupportedOperationException("only skipIntegers is valid");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3188");
   }
 
   @Override
   public void skipBinary(int total) {
-    throw new UnsupportedOperationException("only skipIntegers is valid");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3188");
   }
 
   @Override
   public void skipFixedLenByteArray(int total, int len) {
-    throw new UnsupportedOperationException("only skipIntegers is valid");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3188");
   }
 
   /**

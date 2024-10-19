@@ -37,7 +37,8 @@ import org.apache.hadoop.hive.ql.processors.{CommandProcessor, CommandProcessorF
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, CONFIG3}
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
@@ -368,16 +369,16 @@ private[client] class Shim_v2_0 extends Shim with Logging {
           hive.getPartitionsByFilter(table, filter)
         } catch {
           case ex: MetaException if shouldFallback =>
-            logWarning("Caught Hive MetaException attempting to get partition metadata by " +
-              "filter from Hive. Falling back to fetching all partition metadata, which will " +
-              "degrade performance. Modifying your Hive metastore configuration to set " +
-              s"${tryDirectSqlConfVar.varname} to true (if it is not true already) may resolve " +
-              "this problem. Or you can enable " +
-              s"${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK.key} " +
-              "to alleviate performance downgrade. " +
-              "Otherwise, to avoid degraded performance you can set " +
-              s"${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key} " +
-              " to false and let the query fail instead.", ex)
+            logWarning(log"Caught Hive MetaException attempting to get partition metadata by " +
+              log"filter from Hive. Falling back to fetching all partition metadata, which will " +
+              log"degrade performance. Modifying your Hive metastore configuration to set " +
+              log"${MDC(CONFIG, tryDirectSqlConfVar.varname)} to true " +
+              log"(if it is not true already) may resolve this problem. Or you can enable " +
+              log"${MDC(CONFIG2, SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK.key)} " +
+              log"to alleviate performance downgrade. Otherwise, to avoid degraded performance " +
+              log"you can set ${MDC(CONFIG3,
+                SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key)} " +
+              log"to false and let the query fail instead.", ex)
             // HiveShim clients are expected to handle a superset of the requested partitions
             prunePartitionsFastFallback(hive, table, catalogTable, predicates)
           case ex: MetaException =>
@@ -923,13 +924,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       tableName: String,
       throwException: Boolean): Table = {
     recordHiveCall()
-    val table = try {
-      hive.getTable(dbName, tableName, throwException)
-    } catch {
-      // Hive may have bugs and still throw an exception even if `throwException` is false.
-      case e: HiveException if !throwException =>
-        null
-    }
+    val table = hive.getTable(dbName, tableName, throwException)
     if (table != null) {
       table.getTTable.setTableName(tableName)
       table.getTTable.setDbName(dbName)

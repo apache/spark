@@ -2,26 +2,26 @@
 byte array comparisons
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 Byte Array compareTo:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-2-7 byte                                            419            421           2        156.4           6.4       1.0X
-8-16 byte                                           833            840           5         78.7          12.7       0.5X
-16-32 byte                                          834            837           1         78.5          12.7       0.5X
-512-1024 byte                                      1119           1122           2         58.5          17.1       0.4X
-512 byte slow                                      2465           2493          23         26.6          37.6       0.2X
-2-7 byte                                            460            461           3        142.4           7.0       0.9X
+2-7 byte                                            254            257           1        257.8           3.9       1.0X
+8-16 byte                                           409            437          37        160.3           6.2       0.6X
+16-32 byte                                          415            416           1        158.0           6.3       0.6X
+512-1024 byte                                       540            542           1        121.3           8.2       0.5X
+512 byte slow                                      1524           1553          23         43.0          23.3       0.2X
+2-7 byte                                            313            314           1        209.5           4.8       0.8X
 
 
 ================================================================================================
 byte array equals
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 Byte Array equals:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Byte Array equals                                  1267           1269           1        126.3           7.9       1.0X
+Byte Array equals                                   538            541           8        297.6           3.4       1.0X
 
 

@@ -38,7 +38,7 @@ CreateViewCommand `basic_pays`, SELECT * FROM VALUES
 ('Pamela Castillo','SCM',11303),
 ('Larry Bott','SCM',11798),
 ('Barry Jones','SCM',10586)
-AS basic_pays(employee_name, department, salary), false, true, LocalTempView, true
+AS basic_pays(employee_name, department, salary), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [employee_name#x, department#x, salary#x]
       +- SubqueryAlias basic_pays
          +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -49,7 +49,7 @@ SELECT mode(department), mode(salary) FROM basic_pays
 -- !query analysis
 Aggregate [mode(department#x, 0, 0, None) AS mode(department)#x, mode(salary#x, 0, 0, None) AS mode(salary)#x]
 +- SubqueryAlias basic_pays
-   +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+   +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
       +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
          +- Project [employee_name#x, department#x, salary#x]
             +- SubqueryAlias basic_pays
@@ -62,7 +62,7 @@ SELECT department, mode(salary) FROM basic_pays GROUP BY department ORDER BY dep
 Sort [department#x ASC NULLS FIRST], true
 +- Aggregate [department#x], [department#x, mode(salary#x, 0, 0, None) AS mode(salary)#x]
    +- SubqueryAlias basic_pays
-      +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+      +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
          +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
             +- Project [employee_name#x, department#x, salary#x]
                +- SubqueryAlias basic_pays
@@ -75,7 +75,7 @@ SELECT department, mode(DISTINCT salary) FROM basic_pays GROUP BY department ORD
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_UNSUPPORTED",
-  "sqlState" : "ID001",
+  "sqlState" : "42K0K",
   "messageParameters" : {
     "funcName" : "`mode`"
   },
@@ -124,7 +124,7 @@ org.apache.spark.sql.AnalysisException
     "functionName" : "`mode`",
     "inputSql" : "\"true\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
@@ -225,7 +225,7 @@ WHERE salary > 20000
 Aggregate [mode(salary#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY salary DESC)#x, mode(salary#x, 0, 0, Some(false)) AS mode() WITHIN GROUP (ORDER BY salary)#x]
 +- Filter (salary#x > 20000)
    +- SubqueryAlias basic_pays
-      +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+      +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
          +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
             +- Project [employee_name#x, department#x, salary#x]
                +- SubqueryAlias basic_pays
@@ -240,7 +240,7 @@ FROM basic_pays
 -- !query analysis
 Aggregate [mode(salary#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY salary DESC)#x, mode(salary#x, 0, 0, Some(false)) AS mode() WITHIN GROUP (ORDER BY salary)#x]
 +- SubqueryAlias basic_pays
-   +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+   +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
       +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
          +- Project [employee_name#x, department#x, salary#x]
             +- SubqueryAlias basic_pays
@@ -255,7 +255,7 @@ FROM basic_pays
 -- !query analysis
 Aggregate [mode(salary#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY salary DESC)#x, mode(salary#x, 0, 0, Some(true)) FILTER (WHERE (salary#x > 10000)) AS mode() WITHIN GROUP (ORDER BY salary DESC) FILTER (WHERE (salary > 10000))#x]
 +- SubqueryAlias basic_pays
-   +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+   +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
       +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
          +- Project [employee_name#x, department#x, salary#x]
             +- SubqueryAlias basic_pays
@@ -274,7 +274,7 @@ ORDER BY department
 Sort [department#x ASC NULLS FIRST], true
 +- Aggregate [department#x], [department#x, mode(salary#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY salary DESC)#x, mode(salary#x, 0, 0, Some(true)) FILTER (WHERE (salary#x > 10000)) AS mode() WITHIN GROUP (ORDER BY salary DESC) FILTER (WHERE (salary > 10000))#x]
    +- SubqueryAlias basic_pays
-      +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+      +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
          +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
             +- Project [employee_name#x, department#x, salary#x]
                +- SubqueryAlias basic_pays
@@ -296,7 +296,7 @@ Sort [salary#x ASC NULLS FIRST], true
       +- Window [mode(salary#x, 0, 0, Some(true)) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x], [department#x]
          +- Project [employee_name#x, department#x, salary#x]
             +- SubqueryAlias basic_pays
-               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+               +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
                   +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
@@ -318,7 +318,7 @@ Sort [salary#x ASC NULLS FIRST], true
       +- Window [mode(salary#x, 0, 0, Some(true)) windowspecdefinition(department#x, salary#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [department#x], [salary#x ASC NULLS FIRST]
          +- Project [employee_name#x, department#x, salary#x]
             +- SubqueryAlias basic_pays
-               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+               +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
                   +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
@@ -340,7 +340,7 @@ Sort [salary#x ASC NULLS FIRST], true
       +- Window [mode(salary#x, 0, 0, Some(true)) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x], [department#x]
          +- Project [employee_name#x, department#x, salary#x]
             +- SubqueryAlias basic_pays
-               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+               +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
                   +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
@@ -365,7 +365,7 @@ Sort [salary#x ASC NULLS FIRST], true
          +- Project [employee_name#x, department#x, salary#x]
             +- Filter (salary#x > 8900)
                +- SubqueryAlias basic_pays
-                  +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+                  +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
                      +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                         +- Project [employee_name#x, department#x, salary#x]
                            +- SubqueryAlias basic_pays
@@ -380,7 +380,7 @@ FROM basic_pays
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_UNSUPPORTED",
-  "sqlState" : "ID001",
+  "sqlState" : "42K0K",
   "messageParameters" : {
     "funcName" : "`mode`"
   },
@@ -402,7 +402,7 @@ FROM basic_pays
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WITHIN_GROUP_MISSING",
-  "sqlState" : "ID001",
+  "sqlState" : "42K0K",
   "messageParameters" : {
     "funcName" : "`mode`"
   },
@@ -424,7 +424,7 @@ FROM basic_pays
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WRONG_NUM_ORDERINGS",
-  "sqlState" : "ID001",
+  "sqlState" : "42K0K",
   "messageParameters" : {
     "actualNum" : "1",
     "expectedNum" : "0",
@@ -471,7 +471,7 @@ CreateViewCommand `intervals`, SELECT * FROM VALUES
 (2, INTERVAL '30' MONTH, INTERVAL '30' SECOND, INTERVAL '30' MINUTE),
 (3, INTERVAL '60' MONTH, INTERVAL '60' SECOND, INTERVAL '60' MINUTE),
 (4, null, null, null)
-AS intervals(k, dt, ym, dt2), false, true, LocalTempView, true
+AS intervals(k, dt, ym, dt2), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, dt#x, ym#x, dt2#x]
       +- SubqueryAlias intervals
          +- LocalRelation [k#x, dt#x, ym#x, dt2#x]
@@ -485,7 +485,7 @@ FROM intervals
 -- !query analysis
 Aggregate [mode(dt#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY dt DESC)#x, mode(dt#x, 0, 0, Some(false)) AS mode() WITHIN GROUP (ORDER BY dt)#x]
 +- SubqueryAlias intervals
-   +- View (`intervals`, [k#x,dt#x,ym#x,dt2#x])
+   +- View (`intervals`, [k#x, dt#x, ym#x, dt2#x])
       +- Project [cast(k#x as int) AS k#x, cast(dt#x as interval month) AS dt#x, cast(ym#x as interval second) AS ym#x, cast(dt2#x as interval minute) AS dt2#x]
          +- Project [k#x, dt#x, ym#x, dt2#x]
             +- SubqueryAlias intervals
@@ -504,7 +504,7 @@ ORDER BY k
 Sort [k#x ASC NULLS FIRST], true
 +- Aggregate [k#x], [k#x, mode(ym#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY ym DESC)#x, mode(dt#x, 0, 0, Some(false)) AS mode() WITHIN GROUP (ORDER BY dt)#x]
    +- SubqueryAlias intervals
-      +- View (`intervals`, [k#x,dt#x,ym#x,dt2#x])
+      +- View (`intervals`, [k#x, dt#x, ym#x, dt2#x])
          +- Project [cast(k#x as int) AS k#x, cast(dt#x as interval month) AS dt#x, cast(ym#x as interval second) AS ym#x, cast(dt2#x as interval minute) AS dt2#x]
             +- Project [k#x, dt#x, ym#x, dt2#x]
                +- SubqueryAlias intervals

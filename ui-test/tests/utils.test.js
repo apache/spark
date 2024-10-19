@@ -67,3 +67,10 @@ test('errorSummary', function () {
   const e2 = "java.lang.RuntimeException: random text";
   expect(utils.errorSummary(e2).toString()).toBe('java.lang.RuntimeException,true');
 });
+
+test('stringAbbreviate', function () {
+  expect(utils.stringAbbreviate(null, 10)).toBe(null);
+  expect(utils.stringAbbreviate('1234567890', 10)).toBe('1234567890');
+  expect(utils.stringAbbreviate('12345678901', 10)).toContain('1234567890...');
+  expect(utils.stringAbbreviate('12345678901', 10)).toContain('<pre>12345678901</pre>')
+});

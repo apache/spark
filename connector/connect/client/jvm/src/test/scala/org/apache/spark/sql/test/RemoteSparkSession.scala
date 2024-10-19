@@ -23,7 +23,10 @@ import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration.FiniteDuration
 
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfterAll, Suite}
+import org.scalatest.concurrent.Eventually.eventually
+import org.scalatest.concurrent.Futures.timeout
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkBuildInfo
 import org.apache.spark.sql.SparkSession
@@ -36,14 +39,7 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * An util class to start a local spark connect server in a different process for local E2E tests.
  * Pre-running the tests, the spark connect artifact needs to be built using e.g. `build/sbt
- * package`. It is designed to start the server once but shared by all tests. It is equivalent to
- * use the following command to start the connect server via command line:
- *
- * {{{
- * bin/spark-shell \
- * --jars `ls connector/connect/server/target/**/spark-connect*SNAPSHOT.jar | paste -sd ',' -` \
- * --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
- * }}}
+ * package`. It is designed to start the server once but shared by all tests.
  *
  * Set system property `spark.test.home` or env variable `SPARK_HOME` if the test is not executed
  * from the Spark project top folder. Set system property `spark.debug.sc.jvm.client=true` or
@@ -51,6 +47,9 @@ import org.apache.spark.util.ArrayImplicits._
  * console to debug server start stop problems.
  */
 object SparkConnectServerUtils {
+
+  // The equivalent command to start the connect server via command line:
+  // bin/spark-shell --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
 
   // Server port
   val port: Int =
@@ -63,10 +62,8 @@ object SparkConnectServerUtils {
 
   private lazy val sparkConnect: java.lang.Process = {
     debug("Starting the Spark Connect Server...")
-    val connectJar = findJar(
-      "connector/connect/server",
-      "spark-connect-assembly",
-      "spark-connect").getCanonicalPath
+    val connectJar =
+      findJar("sql/connect/server", "spark-connect-assembly", "spark-connect").getCanonicalPath
 
     val command = Seq.newBuilder[String]
     command += "bin/spark-submit"
@@ -127,6 +124,8 @@ object SparkConnectServerUtils {
       // to make the tests exercise reattach.
       "spark.connect.execute.reattachable.senderMaxStreamDuration=1s",
       "spark.connect.execute.reattachable.senderMaxStreamSize=123",
+      // Testing SPARK-49673, setting maxBatchSize to 10MiB
+      s"spark.connect.grpc.arrow.maxBatchSize=${10 * 1024 * 1024}",
       // Disable UI
       "spark.ui.enabled=false")
     Seq("--jars", catalystTestJar) ++ confs.flatMap(v => "--conf" :: v :: Nil)
@@ -145,7 +144,7 @@ object SparkConnectServerUtils {
       consoleOut.flush()
       consoleOut.close()
       if (!sparkConnect.waitFor(2, TimeUnit.SECONDS)) {
-        sparkConnect.destroyForcibly()
+        sparkConnect.destroyForcibly().waitFor(2, TimeUnit.SECONDS)
       }
       val code = sparkConnect.exitValue()
       debug(s"Spark Connect Server is stopped with exit code: $code")
@@ -190,12 +189,14 @@ object SparkConnectServerUtils {
           .port(port)
           .retryPolicy(RetryPolicy
             .defaultPolicy()
-            .copy(maxRetries = Some(7), maxBackoff = Some(FiniteDuration(10, "s"))))
+            .copy(maxRetries = Some(10), maxBackoff = Some(FiniteDuration(30, "s"))))
           .build())
       .create()
 
     // Execute an RPC which will get retried until the server is up.
-    assert(spark.version == SparkBuildInfo.spark_version)
+    eventually(timeout(1.minute)) {
+      assert(spark.version == SparkBuildInfo.spark_version)
+    }
 
     // Auto-sync dependencies.
     SparkConnectServerUtils.syncTestDependencies(spark)
@@ -204,7 +205,7 @@ object SparkConnectServerUtils {
   }
 }
 
-trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
+trait RemoteSparkSession extends BeforeAndAfterAll { self: Suite =>
   import SparkConnectServerUtils._
   var spark: SparkSession = _
   protected lazy val serverPort: Int = port

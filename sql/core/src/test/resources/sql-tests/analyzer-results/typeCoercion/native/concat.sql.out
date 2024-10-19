@@ -11,8 +11,8 @@ FROM (
 -- !query analysis
 Project [concat(concat(cast(col1#xL as string), col2#x), cast(col3#x as string)) AS col#x]
 +- SubqueryAlias __auto_generated_subquery_name
-   +- Project [id#xL AS col1#xL, cast((id#xL + cast(1 as bigint)) as string) AS col2#x, encode(cast((id#xL + cast(2 as bigint)) as string), utf-8, false) AS col3#x]
-      +- Range (0, 10, step=1, splits=None)
+   +- Project [id#xL AS col1#xL, cast((id#xL + cast(1 as bigint)) as string) AS col2#x, encode(cast((id#xL + cast(2 as bigint)) as string), utf-8) AS col3#x]
+      +- Range (0, 10, step=1)
 
 
 -- !query
@@ -29,8 +29,8 @@ FROM (
 -- !query analysis
 Project [concat(concat(concat(col1#x, cast(col2#xL as string)), concat(col3#x, cast(col4#x as string))), cast(col5#x as string)) AS col#x]
 +- SubqueryAlias __auto_generated_subquery_name
-   +- Project [prefix_ AS col1#x, id#xL AS col2#xL, cast((id#xL + cast(1 as bigint)) as string) AS col3#x, encode(cast((id#xL + cast(2 as bigint)) as string), utf-8, false) AS col4#x, cast(id#xL as double) AS col5#x]
-      +- Range (0, 10, step=1, splits=None)
+   +- Project [prefix_ AS col1#x, id#xL AS col2#xL, cast((id#xL + cast(1 as bigint)) as string) AS col3#x, encode(cast((id#xL + cast(2 as bigint)) as string), utf-8) AS col4#x, cast(id#xL as double) AS col5#x]
+      +- Range (0, 10, step=1)
 
 
 -- !query
@@ -46,8 +46,8 @@ FROM (
 -- !query analysis
 Project [concat(concat(col1#x, col2#x), cast(concat(col3#x, col4#x) as string)) AS col#x]
 +- SubqueryAlias __auto_generated_subquery_name
-   +- Project [cast(id#xL as string) AS col1#x, cast((id#xL + cast(1 as bigint)) as string) AS col2#x, encode(cast((id#xL + cast(2 as bigint)) as string), utf-8, false) AS col3#x, encode(cast((id#xL + cast(3 as bigint)) as string), utf-8, false) AS col4#x]
-      +- Range (0, 10, step=1, splits=None)
+   +- Project [cast(id#xL as string) AS col1#x, cast((id#xL + cast(1 as bigint)) as string) AS col2#x, encode(cast((id#xL + cast(2 as bigint)) as string), utf-8) AS col3#x, encode(cast((id#xL + cast(3 as bigint)) as string), utf-8) AS col4#x]
+      +- Range (0, 10, step=1)
 
 
 -- !query
@@ -67,8 +67,8 @@ FROM (
 -- !query analysis
 Project [concat(cast(col1#x as string), cast(col2#x as string)) AS col#x]
 +- SubqueryAlias __auto_generated_subquery_name
-   +- Project [encode(cast(id#xL as string), utf-8, false) AS col1#x, encode(cast((id#xL + cast(1 as bigint)) as string), utf-8, false) AS col2#x]
-      +- Range (0, 10, step=1, splits=None)
+   +- Project [encode(cast(id#xL as string), utf-8) AS col1#x, encode(cast((id#xL + cast(1 as bigint)) as string), utf-8) AS col2#x]
+      +- Range (0, 10, step=1)
 
 
 -- !query
@@ -84,8 +84,8 @@ FROM (
 -- !query analysis
 Project [concat(concat(concat(cast(col1#x as string), cast(col2#x as string)), cast(col3#x as string)), cast(col4#x as string)) AS col#x]
 +- SubqueryAlias __auto_generated_subquery_name
-   +- Project [encode(cast(id#xL as string), utf-8, false) AS col1#x, encode(cast((id#xL + cast(1 as bigint)) as string), utf-8, false) AS col2#x, encode(cast((id#xL + cast(2 as bigint)) as string), utf-8, false) AS col3#x, encode(cast((id#xL + cast(3 as bigint)) as string), utf-8, false) AS col4#x]
-      +- Range (0, 10, step=1, splits=None)
+   +- Project [encode(cast(id#xL as string), utf-8) AS col1#x, encode(cast((id#xL + cast(1 as bigint)) as string), utf-8) AS col2#x, encode(cast((id#xL + cast(2 as bigint)) as string), utf-8) AS col3#x, encode(cast((id#xL + cast(3 as bigint)) as string), utf-8) AS col4#x]
+      +- Range (0, 10, step=1)
 
 
 -- !query
@@ -101,8 +101,8 @@ FROM (
 -- !query analysis
 Project [concat(concat(cast(col1#x as string), cast(col2#x as string)), concat(cast(col3#x as string), cast(col4#x as string))) AS col#x]
 +- SubqueryAlias __auto_generated_subquery_name
-   +- Project [encode(cast(id#xL as string), utf-8, false) AS col1#x, encode(cast((id#xL + cast(1 as bigint)) as string), utf-8, false) AS col2#x, encode(cast((id#xL + cast(2 as bigint)) as string), utf-8, false) AS col3#x, encode(cast((id#xL + cast(3 as bigint)) as string), utf-8, false) AS col4#x]
-      +- Range (0, 10, step=1, splits=None)
+   +- Project [encode(cast(id#xL as string), utf-8) AS col1#x, encode(cast((id#xL + cast(1 as bigint)) as string), utf-8) AS col2#x, encode(cast((id#xL + cast(2 as bigint)) as string), utf-8) AS col3#x, encode(cast((id#xL + cast(3 as bigint)) as string), utf-8) AS col4#x]
+      +- Range (0, 10, step=1)
 
 
 -- !query
@@ -122,8 +122,8 @@ FROM (
 -- !query analysis
 Project [concat(col1#x, col2#x) AS col#x]
 +- SubqueryAlias __auto_generated_subquery_name
-   +- Project [encode(cast(id#xL as string), utf-8, false) AS col1#x, encode(cast((id#xL + cast(1 as bigint)) as string), utf-8, false) AS col2#x]
-      +- Range (0, 10, step=1, splits=None)
+   +- Project [encode(cast(id#xL as string), utf-8) AS col1#x, encode(cast((id#xL + cast(1 as bigint)) as string), utf-8) AS col2#x]
+      +- Range (0, 10, step=1)
 
 
 -- !query
@@ -139,8 +139,8 @@ FROM (
 -- !query analysis
 Project [concat(concat(concat(col1#x, col2#x), col3#x), col4#x) AS col#x]
 +- SubqueryAlias __auto_generated_subquery_name
-   +- Project [encode(cast(id#xL as string), utf-8, false) AS col1#x, encode(cast((id#xL + cast(1 as bigint)) as string), utf-8, false) AS col2#x, encode(cast((id#xL + cast(2 as bigint)) as string), utf-8, false) AS col3#x, encode(cast((id#xL + cast(3 as bigint)) as string), utf-8, false) AS col4#x]
-      +- Range (0, 10, step=1, splits=None)
+   +- Project [encode(cast(id#xL as string), utf-8) AS col1#x, encode(cast((id#xL + cast(1 as bigint)) as string), utf-8) AS col2#x, encode(cast((id#xL + cast(2 as bigint)) as string), utf-8) AS col3#x, encode(cast((id#xL + cast(3 as bigint)) as string), utf-8) AS col4#x]
+      +- Range (0, 10, step=1)
 
 
 -- !query
@@ -156,8 +156,8 @@ FROM (
 -- !query analysis
 Project [concat(concat(col1#x, col2#x), concat(col3#x, col4#x)) AS col#x]
 +- SubqueryAlias __auto_generated_subquery_name
-   +- Project [encode(cast(id#xL as string), utf-8, false) AS col1#x, encode(cast((id#xL + cast(1 as bigint)) as string), utf-8, false) AS col2#x, encode(cast((id#xL + cast(2 as bigint)) as string), utf-8, false) AS col3#x, encode(cast((id#xL + cast(3 as bigint)) as string), utf-8, false) AS col4#x]
-      +- Range (0, 10, step=1, splits=None)
+   +- Project [encode(cast(id#xL as string), utf-8) AS col1#x, encode(cast((id#xL + cast(1 as bigint)) as string), utf-8) AS col2#x, encode(cast((id#xL + cast(2 as bigint)) as string), utf-8) AS col3#x, encode(cast((id#xL + cast(3 as bigint)) as string), utf-8) AS col4#x]
+      +- Range (0, 10, step=1)
 
 
 -- !query
@@ -225,7 +225,7 @@ CreateViewCommand `various_arrays`, SELECT * FROM VALUES (
   array_array1, array_array2,
   struct_array1, struct_array2,
   map_array1, map_array2
-), false, false, LocalTempView, true
+), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [boolean_array1#x, boolean_array2#x, tinyint_array1#x, tinyint_array2#x, smallint_array1#x, smallint_array2#x, int_array1#x, int_array2#x, bigint_array1#x, bigint_array2#x, decimal_array1#x, decimal_array2#x, double_array1#x, double_array2#x, float_array1#x, float_array2#x, date_array1#x, data_array2#x, timestamp_array1#x, timestamp_array2#x, string_array1#x, string_array2#x, array_array1#x, array_array2#x, ... 4 more fields]
       +- SubqueryAlias various_arrays
          +- LocalRelation [boolean_array1#x, boolean_array2#x, tinyint_array1#x, tinyint_array2#x, smallint_array1#x, smallint_array2#x, int_array1#x, int_array2#x, bigint_array1#x, bigint_array2#x, decimal_array1#x, decimal_array2#x, double_array1#x, double_array2#x, float_array1#x, float_array2#x, date_array1#x, data_array2#x, timestamp_array1#x, timestamp_array2#x, string_array1#x, string_array2#x, array_array1#x, array_array2#x, ... 4 more fields]
@@ -251,7 +251,7 @@ FROM various_arrays
 -- !query analysis
 Project [concat(boolean_array1#x, boolean_array2#x) AS boolean_array#x, concat(tinyint_array1#x, tinyint_array2#x) AS tinyint_array#x, concat(smallint_array1#x, smallint_array2#x) AS smallint_array#x, concat(int_array1#x, int_array2#x) AS int_array#x, concat(bigint_array1#x, bigint_array2#x) AS bigint_array#x, concat(decimal_array1#x, decimal_array2#x) AS decimal_array#x, concat(double_array1#x, double_array2#x) AS double_array#x, concat(float_array1#x, float_array2#x) AS float_array#x, concat(date_array1#x, data_array2#x) AS data_array#x, concat(timestamp_array1#x, timestamp_array2#x) AS timestamp_array#x, concat(string_array1#x, string_array2#x) AS string_array#x, concat(array_array1#x, array_array2#x) AS array_array#x, concat(struct_array1#x, struct_array2#x) AS struct_array#x, concat(map_array1#x, map_array2#x) AS map_array#x]
 +- SubqueryAlias various_arrays
-   +- View (`various_arrays`, [boolean_array1#x,boolean_array2#x,tinyint_array1#x,tinyint_array2#x,smallint_array1#x,smallint_array2#x,int_array1#x,int_array2#x,bigint_array1#x,bigint_array2#x,decimal_array1#x,decimal_array2#x,double_array1#x,double_array2#x,float_array1#x,float_array2#x,date_array1#x,data_array2#x,timestamp_array1#x,timestamp_array2#x,string_array1#x,string_array2#x,array_array1#x,array_array2#x,struct_array1#x,struct_array2#x,map_array1#x,map_array2#x])
+   +- View (`various_arrays`, [boolean_array1#x, boolean_array2#x, tinyint_array1#x, tinyint_array2#x, smallint_array1#x, smallint_array2#x, int_array1#x, int_array2#x, bigint_array1#x, bigint_array2#x, decimal_array1#x, decimal_array2#x, double_array1#x, double_array2#x, float_array1#x, float_array2#x, date_array1#x, data_array2#x, timestamp_array1#x, timestamp_array2#x, string_array1#x, string_array2#x, array_array1#x, array_array2#x, ... 4 more fields])
       +- Project [cast(boolean_array1#x as array<boolean>) AS boolean_array1#x, cast(boolean_array2#x as array<boolean>) AS boolean_array2#x, cast(tinyint_array1#x as array<tinyint>) AS tinyint_array1#x, cast(tinyint_array2#x as array<tinyint>) AS tinyint_array2#x, cast(smallint_array1#x as array<smallint>) AS smallint_array1#x, cast(smallint_array2#x as array<smallint>) AS smallint_array2#x, cast(int_array1#x as array<int>) AS int_array1#x, cast(int_array2#x as array<int>) AS int_array2#x, cast(bigint_array1#x as array<bigint>) AS bigint_array1#x, cast(bigint_array2#x as array<bigint>) AS bigint_array2#x, cast(decimal_array1#x as array<decimal(19,0)>) AS decimal_array1#x, cast(decimal_array2#x as array<decimal(19,0)>) AS decimal_array2#x, cast(double_array1#x as array<double>) AS double_array1#x, cast(double_array2#x as array<double>) AS double_array2#x, cast(float_array1#x as array<float>) AS float_array1#x, cast(float_array2#x as array<float>) AS float_array2#x, cast(date_array1#x as array<date>) AS date_array1#x, cast(data_array2#x as array<date>) AS data_array2#x, cast(timestamp_array1#x as array<timestamp>) AS timestamp_array1#x, cast(timestamp_array2#x as array<timestamp>) AS timestamp_array2#x, cast(string_array1#x as array<string>) AS string_array1#x, cast(string_array2#x as array<string>) AS string_array2#x, cast(array_array1#x as array<array<string>>) AS array_array1#x, cast(array_array2#x as array<array<string>>) AS array_array2#x, ... 4 more fields]
          +- Project [boolean_array1#x, boolean_array2#x, tinyint_array1#x, tinyint_array2#x, smallint_array1#x, smallint_array2#x, int_array1#x, int_array2#x, bigint_array1#x, bigint_array2#x, decimal_array1#x, decimal_array2#x, double_array1#x, double_array2#x, float_array1#x, float_array2#x, date_array1#x, data_array2#x, timestamp_array1#x, timestamp_array2#x, string_array1#x, string_array2#x, array_array1#x, array_array2#x, ... 4 more fields]
             +- SubqueryAlias various_arrays
@@ -273,7 +273,7 @@ FROM various_arrays
 -- !query analysis
 Project [concat(cast(tinyint_array1#x as array<smallint>), smallint_array2#x) AS ts_array#x, concat(cast(smallint_array1#x as array<int>), int_array2#x) AS si_array#x, concat(cast(int_array1#x as array<bigint>), bigint_array2#x) AS ib_array#x, concat(cast(bigint_array1#x as array<decimal(20,0)>), cast(decimal_array2#x as array<decimal(20,0)>)) AS bd_array#x, concat(cast(decimal_array1#x as array<double>), double_array2#x) AS dd_array#x, concat(double_array1#x, cast(float_array2#x as array<double>)) AS df_array#x, concat(string_array1#x, cast(data_array2#x as array<string>)) AS std_array#x, concat(cast(timestamp_array1#x as array<string>), string_array2#x) AS tst_array#x, concat(string_array1#x, cast(int_array2#x as array<string>)) AS sti_array#x]
 +- SubqueryAlias various_arrays
-   +- View (`various_arrays`, [boolean_array1#x,boolean_array2#x,tinyint_array1#x,tinyint_array2#x,smallint_array1#x,smallint_array2#x,int_array1#x,int_array2#x,bigint_array1#x,bigint_array2#x,decimal_array1#x,decimal_array2#x,double_array1#x,double_array2#x,float_array1#x,float_array2#x,date_array1#x,data_array2#x,timestamp_array1#x,timestamp_array2#x,string_array1#x,string_array2#x,array_array1#x,array_array2#x,struct_array1#x,struct_array2#x,map_array1#x,map_array2#x])
+   +- View (`various_arrays`, [boolean_array1#x, boolean_array2#x, tinyint_array1#x, tinyint_array2#x, smallint_array1#x, smallint_array2#x, int_array1#x, int_array2#x, bigint_array1#x, bigint_array2#x, decimal_array1#x, decimal_array2#x, double_array1#x, double_array2#x, float_array1#x, float_array2#x, date_array1#x, data_array2#x, timestamp_array1#x, timestamp_array2#x, string_array1#x, string_array2#x, array_array1#x, array_array2#x, ... 4 more fields])
       +- Project [cast(boolean_array1#x as array<boolean>) AS boolean_array1#x, cast(boolean_array2#x as array<boolean>) AS boolean_array2#x, cast(tinyint_array1#x as array<tinyint>) AS tinyint_array1#x, cast(tinyint_array2#x as array<tinyint>) AS tinyint_array2#x, cast(smallint_array1#x as array<smallint>) AS smallint_array1#x, cast(smallint_array2#x as array<smallint>) AS smallint_array2#x, cast(int_array1#x as array<int>) AS int_array1#x, cast(int_array2#x as array<int>) AS int_array2#x, cast(bigint_array1#x as array<bigint>) AS bigint_array1#x, cast(bigint_array2#x as array<bigint>) AS bigint_array2#x, cast(decimal_array1#x as array<decimal(19,0)>) AS decimal_array1#x, cast(decimal_array2#x as array<decimal(19,0)>) AS decimal_array2#x, cast(double_array1#x as array<double>) AS double_array1#x, cast(double_array2#x as array<double>) AS double_array2#x, cast(float_array1#x as array<float>) AS float_array1#x, cast(float_array2#x as array<float>) AS float_array2#x, cast(date_array1#x as array<date>) AS date_array1#x, cast(data_array2#x as array<date>) AS data_array2#x, cast(timestamp_array1#x as array<timestamp>) AS timestamp_array1#x, cast(timestamp_array2#x as array<timestamp>) AS timestamp_array2#x, cast(string_array1#x as array<string>) AS string_array1#x, cast(string_array2#x as array<string>) AS string_array2#x, cast(array_array1#x as array<array<string>>) AS array_array1#x, cast(array_array2#x as array<array<string>>) AS array_array2#x, ... 4 more fields]
          +- Project [boolean_array1#x, boolean_array2#x, tinyint_array1#x, tinyint_array2#x, smallint_array1#x, smallint_array2#x, int_array1#x, int_array2#x, bigint_array1#x, bigint_array2#x, decimal_array1#x, decimal_array2#x, double_array1#x, double_array2#x, float_array1#x, float_array2#x, date_array1#x, data_array2#x, timestamp_array1#x, timestamp_array2#x, string_array1#x, string_array2#x, array_array1#x, array_array2#x, ... 4 more fields]
             +- SubqueryAlias various_arrays

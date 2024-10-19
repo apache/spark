@@ -504,6 +504,25 @@ class SparkSubmitSuite
     }
   }
 
+  test("SPARK-47495: Not to add primary resource to jars again" +
+    " in k8s client mode & driver runs inside a POD") {
+    val clArgs = Seq(
+      "--deploy-mode", "client",
+      "--proxy-user", "test.user",
+      "--master", "k8s://host:port",
+      "--executor-memory", "1g",
+      "--class", "org.SomeClass",
+      "--driver-memory", "1g",
+      "--conf", "spark.kubernetes.submitInDriver=true",
+      "--jars", "src/test/resources/TestUDTF.jar",
+      "/home/jarToIgnore.jar",
+      "arg1")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (_, _, sparkConf, _) = submit.prepareSubmitEnvironment(appArgs)
+    sparkConf.get("spark.jars").contains("jarToIgnore") shouldBe false
+    sparkConf.get("spark.jars").contains("TestUDTF") shouldBe true
+  }
+
   test("SPARK-33782: handles k8s files download to current directory") {
     val clArgs = Seq(
       "--deploy-mode", "client",
@@ -537,6 +556,48 @@ class SparkSubmitSuite
     Files.delete(Paths.get("test_metrics_system.properties"))
     Files.delete(Paths.get("log4j2.properties"))
     Files.delete(Paths.get("TestUDTF.jar"))
+  }
+
+  test("SPARK-47475: Avoid jars download if scheme matches " +
+    "spark.kubernetes.jars.avoidDownloadSchemes " +
+    "in k8s client mode & driver runs inside a POD") {
+    val hadoopConf = new Configuration()
+    updateConfWithFakeS3Fs(hadoopConf)
+    withTempDir { tmpDir =>
+      val notToDownload = File.createTempFile("NotToDownload", ".jar", tmpDir)
+      val remoteJarFile = s"s3a://${notToDownload.getAbsolutePath}"
+
+      val clArgs = Seq(
+        "--deploy-mode", "client",
+        "--proxy-user", "test.user",
+        "--master", "k8s://host:port",
+        "--class", "org.SomeClass",
+        "--conf", "spark.kubernetes.submitInDriver=true",
+        "--conf", "spark.kubernetes.jars.avoidDownloadSchemes=s3a",
+        "--conf", "spark.hadoop.fs.s3a.impl=org.apache.spark.deploy.TestFileSystem",
+        "--conf", "spark.hadoop.fs.s3a.impl.disable.cache=true",
+        "--files", "src/test/resources/test_metrics_config.properties",
+        "--py-files", "src/test/resources/test_metrics_system.properties",
+        "--archives", "src/test/resources/log4j2.properties",
+        "--jars", s"src/test/resources/TestUDTF.jar,$remoteJarFile",
+        "/home/jarToIgnore.jar",
+        "arg1")
+      val appArgs = new SparkSubmitArguments(clArgs)
+      val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs, Some(hadoopConf))
+      conf.get("spark.master") should be("k8s://https://host:port")
+      conf.get("spark.jars").contains(remoteJarFile) shouldBe true
+      conf.get("spark.jars").contains("TestUDTF") shouldBe true
+
+      Files.exists(Paths.get("test_metrics_config.properties")) should be(true)
+      Files.exists(Paths.get("test_metrics_system.properties")) should be(true)
+      Files.exists(Paths.get("log4j2.properties")) should be(true)
+      Files.exists(Paths.get("TestUDTF.jar")) should be(true)
+      Files.exists(Paths.get(notToDownload.getName)) should be(false)
+      Files.delete(Paths.get("test_metrics_config.properties"))
+      Files.delete(Paths.get("test_metrics_system.properties"))
+      Files.delete(Paths.get("log4j2.properties"))
+      Files.delete(Paths.get("TestUDTF.jar"))
+    }
   }
 
   test("SPARK-43014: Set `spark.app.submitTime` if missing ") {
@@ -1046,9 +1107,46 @@ class SparkSubmitSuite
         "--master", "local",
         unusedJar.toString)
       val appArgs = new SparkSubmitArguments(args, env = Map("SPARK_CONF_DIR" -> path))
-      assert(appArgs.propertiesFile != null)
-      assert(appArgs.propertiesFile.startsWith(path))
       appArgs.executorMemory should be ("3g")
+    }
+  }
+
+  test("SPARK-48392: load spark-defaults.conf when --load-spark-defaults is set") {
+    forConfDir(Map("spark.executor.memory" -> "3g", "spark.driver.memory" -> "3g")) { path =>
+      withPropertyFile("spark-conf.properties",
+          Map("spark.executor.cores" -> "16", "spark.driver.memory" -> "4g")) { propsFile =>
+        val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+        val args = Seq(
+          "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
+          "--name", "testApp",
+          "--master", "local",
+          "--properties-file", propsFile,
+          "--load-spark-defaults",
+          unusedJar.toString)
+        val appArgs = new SparkSubmitArguments(args, env = Map("SPARK_CONF_DIR" -> path))
+        appArgs.executorCores should be("16")
+        appArgs.executorMemory should be("3g")
+        appArgs.driverMemory should be("4g")
+      }
+    }
+  }
+
+  test("SPARK-48392: should skip spark-defaults.conf when --load-spark-defaults is not set") {
+    forConfDir(Map("spark.executor.memory" -> "3g", "spark.driver.memory" -> "3g")) { path =>
+      withPropertyFile("spark-conf.properties",
+        Map("spark.executor.cores" -> "16", "spark.driver.memory" -> "4g")) { propsFile =>
+        val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+        val args = Seq(
+          "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
+          "--name", "testApp",
+          "--master", "local",
+          "--properties-file", propsFile,
+          unusedJar.toString)
+        val appArgs = new SparkSubmitArguments(args, env = Map("SPARK_CONF_DIR" -> path))
+        appArgs.executorCores should be("16")
+        appArgs.driverMemory should be("4g")
+        appArgs.executorMemory should be(null)
+      }
     }
   }
 
@@ -1562,6 +1660,22 @@ class SparkSubmitSuite
     }
   }
 
+  private def withPropertyFile(fileName: String, conf: Map[String, String])(f: String => Unit) = {
+    withTempDir { tmpDir =>
+      val props = new java.util.Properties()
+      val propsFile = File.createTempFile(fileName, "", tmpDir)
+      val propsOutputStream = new FileOutputStream(propsFile)
+      try {
+        conf.foreach { case (k, v) => props.put(k, v) }
+        props.store(propsOutputStream, "")
+      } finally {
+        propsOutputStream.close()
+      }
+
+      f(propsFile.getPath)
+    }
+  }
+
   private def updateConfWithFakeS3Fs(conf: Configuration): Unit = {
     conf.set("fs.s3a.impl", classOf[TestFileSystem].getCanonicalName)
     conf.set("fs.s3a.impl.disable.cache", "true")
@@ -1633,40 +1747,31 @@ class SparkSubmitSuite
     val infixDelimFromFile = s"${delimKey}infixDelimFromFile" -> s"${CR}blah${LF}"
     val nonDelimSpaceFromFile = s"${delimKey}nonDelimSpaceFromFile" -> " blah\f"
 
-    val testProps = Seq(leadingDelimKeyFromFile, trailingDelimKeyFromFile, infixDelimFromFile,
+    val testProps = Map(leadingDelimKeyFromFile, trailingDelimKeyFromFile, infixDelimFromFile,
       nonDelimSpaceFromFile)
 
-    val props = new java.util.Properties()
-    val propsFile = File.createTempFile("test-spark-conf", ".properties",
-      Utils.createTempDir())
-    val propsOutputStream = new FileOutputStream(propsFile)
-    try {
-      testProps.foreach { case (k, v) => props.put(k, v) }
-      props.store(propsOutputStream, "test whitespace")
-    } finally {
-      propsOutputStream.close()
+    withPropertyFile("test-spark-conf.properties", testProps) { propsFile =>
+      val clArgs = Seq(
+        "--class", "org.SomeClass",
+        "--conf", s"${lineFeedFromCommandLine._1}=${lineFeedFromCommandLine._2}",
+        "--conf", "spark.master=yarn",
+        "--properties-file", propsFile,
+        "thejar.jar")
+
+      val appArgs = new SparkSubmitArguments(clArgs)
+      val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
+
+      Seq(
+        lineFeedFromCommandLine,
+        leadingDelimKeyFromFile,
+        trailingDelimKeyFromFile,
+        infixDelimFromFile
+      ).foreach { case (k, v) =>
+        conf.get(k) should be (v)
+      }
+
+      conf.get(nonDelimSpaceFromFile._1) should be ("blah")
     }
-
-    val clArgs = Seq(
-      "--class", "org.SomeClass",
-      "--conf", s"${lineFeedFromCommandLine._1}=${lineFeedFromCommandLine._2}",
-      "--conf", "spark.master=yarn",
-      "--properties-file", propsFile.getPath,
-      "thejar.jar")
-
-    val appArgs = new SparkSubmitArguments(clArgs)
-    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
-
-    Seq(
-      lineFeedFromCommandLine,
-      leadingDelimKeyFromFile,
-      trailingDelimKeyFromFile,
-      infixDelimFromFile
-    ).foreach { case (k, v) =>
-      conf.get(k) should be (v)
-    }
-
-    conf.get(nonDelimSpaceFromFile._1) should be ("blah")
   }
 
   test("get a Spark configuration from arguments") {
@@ -1696,6 +1801,23 @@ class SparkSubmitSuite
     val appArgs = new SparkSubmitArguments(clArgs)
     val (_, classpath, _, _) = submit.prepareSubmitEnvironment(appArgs)
     assert(classpath.contains("."))
+  }
+
+  // Requires Python dependencies for Spark Connect. Should be enabled by default.
+  ignore("Spark Connect application submission (Python)") {
+    val pyFile = File.createTempFile("remote_test", ".py")
+    pyFile.deleteOnExit()
+    val content =
+      "from pyspark.sql import SparkSession;" +
+        "spark = SparkSession.builder.getOrCreate();" +
+        "assert 'connect' in str(type(spark));" +
+        "assert spark.range(1).first()[0] == 0"
+    FileUtils.write(pyFile, content, StandardCharsets.UTF_8)
+    val args = Seq(
+      "--name", "testPyApp",
+      "--remote", "local",
+      pyFile.getAbsolutePath)
+    runSparkSubmit(args)
   }
 }
 

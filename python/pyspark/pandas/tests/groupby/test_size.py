@@ -54,7 +54,10 @@ class SizeTestsMixin:
         )
 
 
-class SizeTests(SizeTestsMixin, PandasOnSparkTestCase):
+class SizeTests(
+    SizeTestsMixin,
+    PandasOnSparkTestCase,
+):
     pass
 
 

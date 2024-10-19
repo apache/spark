@@ -25,17 +25,14 @@ import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
 
-private case object DatabricksDialect extends JdbcDialect {
+private case class DatabricksDialect() extends JdbcDialect with NoLegacyJDBCError {
 
   override def canHandle(url: String): Boolean = {
     url.startsWith("jdbc:databricks")
   }
 
   override def getCatalystType(
-      sqlType: Int,
-      typeName: String,
-      size: Int,
-      md: MetadataBuilder): Option[DataType] = {
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     sqlType match {
       case java.sql.Types.TINYINT => Some(ByteType)
       case java.sql.Types.SMALLINT => Some(ShortType)

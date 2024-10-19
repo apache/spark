@@ -162,7 +162,7 @@ EXPLAIN FORMATTED
   CREATE VIEW explain_view AS
     SELECT key, val FROM explain_temp1
 -- !query analysis
-ExplainCommand 'CreateView SELECT key, val FROM explain_temp1, false, false, FormattedMode
+ExplainCommand 'CreateView SELECT key, val FROM explain_temp1, false, false, COMPENSATION, FormattedMode
 
 
 -- !query
@@ -196,7 +196,7 @@ ExplainCommand 'Aggregate ['key], ['key, unresolvedalias('MIN('val))], Formatted
 -- !query
 EXPLAIN EXTENDED INSERT INTO TABLE explain_temp5 SELECT * FROM explain_temp4
 -- !query analysis
-ExplainCommand 'InsertIntoStatement 'UnresolvedRelation [explain_temp5], [], false, false, false, false, ExtendedMode
+ExplainCommand 'InsertIntoStatement 'UnresolvedRelation [explain_temp5], [__required_write_privileges__=INSERT], false, false, false, false, ExtendedMode
 
 
 -- !query

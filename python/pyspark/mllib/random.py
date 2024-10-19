@@ -26,8 +26,8 @@ from typing import Any, Callable, Optional
 import numpy as np
 
 from pyspark.mllib.common import callMLlibFunc
-from pyspark.context import SparkContext
-from pyspark.rdd import RDD
+from pyspark.core.context import SparkContext
+from pyspark.core.rdd import RDD
 from pyspark.mllib.linalg import Vector
 
 
@@ -134,9 +134,9 @@ class RandomRDDs:
         >>> stats = x.stats()
         >>> stats.count()
         1000
-        >>> abs(stats.mean() - 0.0) < 0.1
+        >>> bool(abs(stats.mean() - 0.0) < 0.1)
         True
-        >>> abs(stats.stdev() - 1.0) < 0.1
+        >>> bool(abs(stats.stdev() - 1.0) < 0.1)
         True
         """
         return callMLlibFunc("normalRDD", sc._jsc, size, numPartitions, seed)
@@ -186,10 +186,10 @@ class RandomRDDs:
         >>> stats = x.stats()
         >>> stats.count()
         1000
-        >>> abs(stats.mean() - expMean) < 0.5
+        >>> bool(abs(stats.mean() - expMean) < 0.5)
         True
         >>> from math import sqrt
-        >>> abs(stats.stdev() - expStd) < 0.5
+        >>> bool(abs(stats.stdev() - expStd) < 0.5)
         True
         """
         return callMLlibFunc(
@@ -238,7 +238,7 @@ class RandomRDDs:
         >>> abs(stats.mean() - mean) < 0.5
         True
         >>> from math import sqrt
-        >>> abs(stats.stdev() - sqrt(mean)) < 0.5
+        >>> bool(abs(stats.stdev() - sqrt(mean)) < 0.5)
         True
         """
         return callMLlibFunc("poissonRDD", sc._jsc, float(mean), size, numPartitions, seed)
@@ -285,7 +285,7 @@ class RandomRDDs:
         >>> abs(stats.mean() - mean) < 0.5
         True
         >>> from math import sqrt
-        >>> abs(stats.stdev() - sqrt(mean)) < 0.5
+        >>> bool(abs(stats.stdev() - sqrt(mean)) < 0.5)
         True
         """
         return callMLlibFunc("exponentialRDD", sc._jsc, float(mean), size, numPartitions, seed)
@@ -336,9 +336,9 @@ class RandomRDDs:
         >>> stats = x.stats()
         >>> stats.count()
         1000
-        >>> abs(stats.mean() - expMean) < 0.5
+        >>> bool(abs(stats.mean() - expMean) < 0.5)
         True
-        >>> abs(stats.stdev() - expStd) < 0.5
+        >>> bool(abs(stats.stdev() - expStd) < 0.5)
         True
         """
         return callMLlibFunc(
@@ -384,7 +384,7 @@ class RandomRDDs:
         >>> mat = np.matrix(RandomRDDs.uniformVectorRDD(sc, 10, 10).collect())
         >>> mat.shape
         (10, 10)
-        >>> mat.max() <= 1.0 and mat.min() >= 0.0
+        >>> bool(mat.max() <= 1.0 and mat.min() >= 0.0)
         True
         >>> RandomRDDs.uniformVectorRDD(sc, 10, 10, 4).getNumPartitions()
         4
@@ -430,9 +430,9 @@ class RandomRDDs:
         >>> mat = np.matrix(RandomRDDs.normalVectorRDD(sc, 100, 100, seed=1).collect())
         >>> mat.shape
         (100, 100)
-        >>> abs(mat.mean() - 0.0) < 0.1
+        >>> bool(abs(mat.mean() - 0.0) < 0.1)
         True
-        >>> abs(mat.std() - 1.0) < 0.1
+        >>> bool(abs(mat.std() - 1.0) < 0.1)
         True
         """
         return callMLlibFunc("normalVectorRDD", sc._jsc, numRows, numCols, numPartitions, seed)
@@ -488,9 +488,9 @@ class RandomRDDs:
         >>> mat = np.matrix(m)
         >>> mat.shape
         (100, 100)
-        >>> abs(mat.mean() - expMean) < 0.1
+        >>> bool(abs(mat.mean() - expMean) < 0.1)
         True
-        >>> abs(mat.std() - expStd) < 0.1
+        >>> bool(abs(mat.std() - expStd) < 0.1)
         True
         """
         return callMLlibFunc(
@@ -545,13 +545,13 @@ class RandomRDDs:
         >>> import numpy as np
         >>> mean = 100.0
         >>> rdd = RandomRDDs.poissonVectorRDD(sc, mean, 100, 100, seed=1)
-        >>> mat = np.mat(rdd.collect())
+        >>> mat = np.asmatrix(rdd.collect())
         >>> mat.shape
         (100, 100)
-        >>> abs(mat.mean() - mean) < 0.5
+        >>> bool(abs(mat.mean() - mean) < 0.5)
         True
         >>> from math import sqrt
-        >>> abs(mat.std() - sqrt(mean)) < 0.5
+        >>> bool(abs(mat.std() - sqrt(mean)) < 0.5)
         True
         """
         return callMLlibFunc(
@@ -599,13 +599,13 @@ class RandomRDDs:
         >>> import numpy as np
         >>> mean = 0.5
         >>> rdd = RandomRDDs.exponentialVectorRDD(sc, mean, 100, 100, seed=1)
-        >>> mat = np.mat(rdd.collect())
+        >>> mat = np.asmatrix(rdd.collect())
         >>> mat.shape
         (100, 100)
-        >>> abs(mat.mean() - mean) < 0.5
+        >>> bool(abs(mat.mean() - mean) < 0.5)
         True
         >>> from math import sqrt
-        >>> abs(mat.std() - sqrt(mean)) < 0.5
+        >>> bool(abs(mat.std() - sqrt(mean)) < 0.5)
         True
         """
         return callMLlibFunc(
@@ -662,9 +662,9 @@ class RandomRDDs:
         >>> mat = np.matrix(RandomRDDs.gammaVectorRDD(sc, shape, scale, 100, 100, seed=1).collect())
         >>> mat.shape
         (100, 100)
-        >>> abs(mat.mean() - expMean) < 0.1
+        >>> bool(abs(mat.mean() - expMean) < 0.1)
         True
-        >>> abs(mat.std() - expStd) < 0.1
+        >>> bool(abs(mat.std() - expStd) < 0.1)
         True
         """
         return callMLlibFunc(

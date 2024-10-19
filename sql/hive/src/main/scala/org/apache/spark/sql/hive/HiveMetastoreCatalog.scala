@@ -25,12 +25,14 @@ import com.google.common.util.concurrent.Striped
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
 import org.apache.spark.sql.internal.SQLConf
@@ -66,6 +68,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {
     val key = QualifiedTableName(
       // scalastyle:off caselocale
+      table.catalog.getOrElse(CatalogManager.SESSION_CATALOG_NAME).toLowerCase,
       table.database.getOrElse(sessionState.catalog.getCurrentDatabase).toLowerCase,
       table.table.toLowerCase)
       // scalastyle:on caselocale
@@ -104,19 +107,26 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
               None
             }
           case _ =>
-            logWarning(s"Table $tableIdentifier should be stored as $expectedFileFormat. " +
-              s"However, we are getting a ${relation.fileFormat} from the metastore cache. " +
-              "This cached entry will be invalidated.")
+            logWarningUnexpectedFileFormat(tableIdentifier, expectedFileFormat,
+              relation.fileFormat.toString)
             catalogProxy.invalidateCachedTable(tableIdentifier)
             None
         }
       case other =>
-        logWarning(s"Table $tableIdentifier should be stored as $expectedFileFormat. " +
-          s"However, we are getting a $other from the metastore cache. " +
-          "This cached entry will be invalidated.")
+        logWarningUnexpectedFileFormat(tableIdentifier, expectedFileFormat, other.toString)
         catalogProxy.invalidateCachedTable(tableIdentifier)
         None
     }
+  }
+
+  private def logWarningUnexpectedFileFormat(
+      tableIdentifier: QualifiedTableName,
+      expectedFileFormat: Class[_ <: FileFormat],
+      actualFileFormat: String): Unit = {
+    logWarning(log"Table ${MDC(TABLE_NAME, tableIdentifier)} should be stored as " +
+      log"${MDC(FILE_FORMAT, expectedFileFormat)}. However, we are getting a " +
+      log"${MDC(FILE_FORMAT2, actualFileFormat)} from the metastore cache. " +
+      log"This cached entry will be invalidated.")
   }
 
   // Return true for Apache ORC and Hive ORC-related configuration names.
@@ -191,8 +201,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       fileType: String,
       isWrite: Boolean): LogicalRelation = {
     val metastoreSchema = relation.tableMeta.schema
-    val tableIdentifier =
-      QualifiedTableName(relation.tableMeta.database, relation.tableMeta.identifier.table)
+    val tableIdentifier = QualifiedTableName(relation.tableMeta.identifier.catalog.get,
+      relation.tableMeta.database, relation.tableMeta.identifier.table)
 
     val lazyPruningEnabled = sparkSession.sessionState.conf.manageFilesourcePartitions
     val tablePath = new Path(relation.tableMeta.location)
@@ -331,8 +341,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     val shouldInfer = (inferenceMode != NEVER_INFER) && !relation.tableMeta.schemaPreservesCase
     val tableName = relation.tableMeta.identifier.unquotedString
     if (shouldInfer) {
-      logInfo(s"Inferring case-sensitive schema for table $tableName (inference mode: " +
-        s"$inferenceMode)")
+      logInfo(log"Inferring case-sensitive schema for table ${MDC(TABLE_NAME, tableName)} " +
+        log"(inference mode:  ${MDC(INFERENCE_MODE, inferenceMode)})})")
       val fileIndex = fileIndexOpt.getOrElse {
         val rootPath = new Path(relation.tableMeta.location)
         new InMemoryFileIndex(sparkSession, Seq(rootPath), options, None)
@@ -353,8 +363,9 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           val newSchema = StructType(dataSchema ++ relation.tableMeta.partitionSchema)
           relation.tableMeta.copy(schema = newSchema)
         case None =>
-          logWarning(s"Unable to infer schema for table $tableName from file format " +
-            s"$fileFormat (inference mode: $inferenceMode). Using metastore schema.")
+          logWarning(log"Unable to infer schema for table ${MDC(TABLE_NAME, tableName)} from " +
+            log"file format ${MDC(FILE_FORMAT, fileFormat)} (inference mode: " +
+            log"${MDC(INFERENCE_MODE, inferenceMode)}). Using metastore schema.")
           relation.tableMeta
       }
     } else {
@@ -363,11 +374,13 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   }
 
   private def updateDataSchema(identifier: TableIdentifier, newDataSchema: StructType): Unit = try {
-    logInfo(s"Saving case-sensitive schema for table ${identifier.unquotedString}")
+    logInfo(
+      log"Saving case-sensitive schema for table ${MDC(TABLE_NAME, identifier.unquotedString)}")
     sparkSession.sessionState.catalog.alterTableDataSchema(identifier, newDataSchema)
   } catch {
     case NonFatal(ex) =>
-      logWarning(s"Unable to save case-sensitive schema for table ${identifier.unquotedString}", ex)
+      logWarning(log"Unable to save case-sensitive schema for table " +
+        log"${MDC(TABLE_NAME, identifier.unquotedString)}", ex)
   }
 }
 

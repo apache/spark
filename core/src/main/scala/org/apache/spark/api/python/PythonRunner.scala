@@ -30,7 +30,9 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
+import org.apache.spark.api.python.PythonFunction.PythonAccumulator
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.LogKeys.TASK_NAME
 import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES, Python}
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.rdd.InputFileBlockHolder
@@ -59,6 +61,7 @@ private[spark] object PythonEvalType {
   val SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE = 208
   val SQL_GROUPED_MAP_ARROW_UDF = 209
   val SQL_COGROUPED_MAP_ARROW_UDF = 210
+  val SQL_TRANSFORM_WITH_STATE_PANDAS_UDF = 211
 
   val SQL_TABLE_UDF = 300
   val SQL_ARROW_TABLE_UDF = 301
@@ -80,6 +83,7 @@ private[spark] object PythonEvalType {
     case SQL_COGROUPED_MAP_ARROW_UDF => "SQL_COGROUPED_MAP_ARROW_UDF"
     case SQL_TABLE_UDF => "SQL_TABLE_UDF"
     case SQL_ARROW_TABLE_UDF => "SQL_ARROW_TABLE_UDF"
+    case SQL_TRANSFORM_WITH_STATE_PANDAS_UDF => "SQL_TRANSFORM_WITH_STATE_PANDAS_UDF"
   }
 }
 
@@ -87,7 +91,7 @@ private object BasePythonRunner {
 
   private lazy val faultHandlerLogDir = Utils.createTempDir(namePrefix = "faulthandler")
 
-  private def faultHandlerLogPath(pid: Long): Path = {
+  private def faultHandlerLogPath(pid: Int): Path = {
     new File(faultHandlerLogDir, pid.toString).toPath
   }
 }
@@ -129,9 +133,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   private val daemonModule =
     conf.get(PYTHON_DAEMON_MODULE).map { value =>
       logInfo(
-        s"Python daemon module in PySpark is set to [$value] in '${PYTHON_DAEMON_MODULE.key}', " +
-        "using this to start the daemon up. Note that this configuration only has an effect when " +
-        s"'${PYTHON_USE_DAEMON.key}' is enabled and the platform is not Windows.")
+        log"Python daemon module in PySpark is set to " +
+        log"[${MDC(LogKeys.VALUE, value)}] in '${MDC(LogKeys.CONFIG,
+          PYTHON_DAEMON_MODULE.key)}', using this to start the daemon up. Note that this " +
+          log"configuration only has an effect when '${MDC(LogKeys.CONFIG2,
+            PYTHON_USE_DAEMON.key)}' is enabled and the platform is not Windows.")
       value
     }.getOrElse("pyspark.daemon")
 
@@ -139,17 +145,19 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   private val workerModule =
     conf.get(PYTHON_WORKER_MODULE).map { value =>
       logInfo(
-        s"Python worker module in PySpark is set to [$value] in '${PYTHON_WORKER_MODULE.key}', " +
-        "using this to start the worker up. Note that this configuration only has an effect when " +
-        s"'${PYTHON_USE_DAEMON.key}' is disabled or the platform is Windows.")
+        log"Python worker module in PySpark is set to ${MDC(LogKeys.VALUE, value)} " +
+        log"in ${MDC(LogKeys.CONFIG, PYTHON_WORKER_MODULE.key)}, " +
+        log"using this to start the worker up. Note that this configuration only has " +
+        log"an effect when ${MDC(LogKeys.CONFIG2, PYTHON_USE_DAEMON.key)} " +
+        log"is disabled or the platform is Windows.")
       value
     }.getOrElse("pyspark.worker")
 
   // TODO: support accumulator in multiple UDF
-  protected val accumulator: PythonAccumulatorV2 = funcs.head.funcs.head.accumulator
+  protected val accumulator: PythonAccumulator = funcs.head.funcs.head.accumulator
 
   // Python accumulator is always set in production except in tests. See SPARK-27893
-  private val maybeAccumulator: Option[PythonAccumulatorV2] = Option(accumulator)
+  private val maybeAccumulator: Option[PythonAccumulator] = Option(accumulator)
 
   // Expose a ServerSocket to support method calls via socket from Python side. Only relevant for
   // for tasks that are a part of barrier stage, refer [[BarrierTaskContext]] for details.
@@ -203,7 +211,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
 
-    val (worker: PythonWorker, pid: Option[Long]) = env.createPythonWorker(
+    val (worker: PythonWorker, pid: Option[Int]) = env.createPythonWorker(
       pythonExec, workerModule, daemonModule, envVars.asScala.toMap)
     // Whether is the worker released into idle pool or closed. When any codes try to release or
     // close a worker, they should use `releasedOrClosed.compareAndSet` to flip the state to make
@@ -256,7 +264,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       startTime: Long,
       env: SparkEnv,
       worker: PythonWorker,
-      pid: Option[Long],
+      pid: Option[Int],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[OUT]
 
@@ -464,7 +472,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       startTime: Long,
       env: SparkEnv,
       worker: PythonWorker,
-      pid: Option[Long],
+      pid: Option[Int],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext)
     extends Iterator[OUT] {
@@ -507,8 +515,10 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       val init = initTime - bootTime
       val finish = finishTime - initTime
       val total = finishTime - startTime
-      logInfo("Times: total = %s, boot = %s, init = %s, finish = %s".format(total, boot,
-        init, finish))
+      logInfo(log"Times: total = ${MDC(LogKeys.TOTAL_TIME, total)}, " +
+        log"boot = ${MDC(LogKeys.BOOT_TIME, boot)}, " +
+        log"init = ${MDC(LogKeys.INIT_TIME, init)}, " +
+        log"finish = ${MDC(LogKeys.FINISH_TIME, finish)}")
       val memoryBytesSpilled = stream.readLong()
       val diskBytesSpilled = stream.readLong()
       context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
@@ -591,7 +601,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             // Mimic the task name used in `Executor` to help the user find out the task to blame.
             val taskName = s"${context.partitionId()}.${context.attemptNumber()} " +
               s"in stage ${context.stageId()} (TID ${context.taskAttemptId()})"
-            logWarning(s"Incomplete task $taskName interrupted: Attempting to kill Python Worker")
+            logWarning(log"Incomplete task ${MDC(TASK_NAME, taskName)} " +
+              log"interrupted: Attempting to kill Python Worker")
             env.destroyPythonWorker(
               pythonExec, workerModule, daemonModule, envVars.asScala.toMap, worker)
           } catch {
@@ -841,7 +852,7 @@ private[spark] class PythonRunner(
       startTime: Long,
       env: SparkEnv,
       worker: PythonWorker,
-      pid: Option[Long],
+      pid: Option[Int],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[Array[Byte]] = {
     new ReaderIterator(

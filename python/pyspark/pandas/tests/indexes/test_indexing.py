@@ -21,7 +21,7 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -34,6 +34,10 @@ class FrameIndexingMixin:
             {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
             index=np.random.rand(9),
         )
+
+    @property
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
 
     @property
     def df_pair(self):
@@ -231,7 +235,9 @@ class FrameIndexingMixin:
         self.assert_eq(psdf.sort_index(), pdf.sort_index(), almost=True)
 
         psser = ps.Series([4, 5, 6])
-        self.assertRaises(ValueError, lambda: psdf.insert(0, "y", psser))
+        with ps.option_context("compute.ops_on_diff_frames", False):
+            self.assertRaises(ValueError, lambda: psdf.insert(0, "y", psser))
+
         self.assertRaisesRegex(
             ValueError, "cannot insert b, already exists", lambda: psdf.insert(1, "b", 10)
         )
@@ -252,7 +258,9 @@ class FrameIndexingMixin:
         )
 
         self.assertRaises(ValueError, lambda: psdf.insert(0, "e", [7, 8, 9, 10]))
-        self.assertRaises(ValueError, lambda: psdf.insert(0, "f", ps.Series([7, 8])))
+        with ps.option_context("compute.ops_on_diff_frames", False):
+            self.assertRaises(ValueError, lambda: psdf.insert(0, "f", ps.Series([7, 8])))
+
         self.assertRaises(AssertionError, lambda: psdf.insert(100, "y", psser))
         self.assertRaises(AssertionError, lambda: psdf.insert(1, "y", psser, allow_duplicates=True))
 
@@ -411,7 +419,11 @@ class FrameIndexingMixin:
             self.assert_eq(value_psdf, value_pdf)
 
 
-class FrameIndexingTests(FrameIndexingMixin, ComparisonTestBase, SQLTestUtils):
+class FrameIndexingTests(
+    FrameIndexingMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

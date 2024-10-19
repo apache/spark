@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types.{DataType, Decimal, StructType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
@@ -25,7 +26,8 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
  * An [[InternalRow]] that projects particular columns from another [[InternalRow]] without copying
  * the underlying data.
  */
-case class ProjectingInternalRow(schema: StructType, colOrdinals: Seq[Int]) extends InternalRow {
+case class ProjectingInternalRow(schema: StructType,
+    colOrdinals: IndexedSeq[Int]) extends InternalRow {
   assert(schema.size == colOrdinals.size)
 
   private var row: InternalRow = _
@@ -36,13 +38,9 @@ case class ProjectingInternalRow(schema: StructType, colOrdinals: Seq[Int]) exte
     this.row = row
   }
 
-  override def setNullAt(i: Int): Unit = {
-    throw new UnsupportedOperationException(s"Cannot modify ${getClass.getName}")
-  }
+  override def setNullAt(i: Int): Unit = throw SparkUnsupportedOperationException()
 
-  override def update(i: Int, value: Any): Unit = {
-    throw new UnsupportedOperationException(s"Cannot modify ${getClass.getName}")
-  }
+  override def update(i: Int, value: Any): Unit = throw SparkUnsupportedOperationException()
 
   override def copy(): InternalRow = {
     val newRow = if (row != null) row.copy() else null
@@ -117,5 +115,11 @@ case class ProjectingInternalRow(schema: StructType, colOrdinals: Seq[Int]) exte
 
   override def get(ordinal: Int, dataType: DataType): AnyRef = {
     row.get(colOrdinals(ordinal), dataType)
+  }
+}
+
+object ProjectingInternalRow {
+  def apply(schema: StructType, colOrdinals: Seq[Int]): ProjectingInternalRow = {
+    new ProjectingInternalRow(schema, colOrdinals.toIndexedSeq)
   }
 }

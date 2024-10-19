@@ -17,10 +17,10 @@
 
 package org.apache.spark.ui.storage
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.collection.SortedMap
 import scala.xml.Node
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.status.{AppStatusStore, StreamBlockData}
 import org.apache.spark.status.api.v1
@@ -49,7 +49,7 @@ private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends
             onClick="collapseTable('collapse-aggregated-rdds','aggregated-rdds')">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
-            <a>RDDs</a>
+            <a>RDDs ({rdds.length})</a>
           </h4>
         </span>
         <div class="aggregated-rdds collapsible-table">

@@ -26,10 +26,12 @@ import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.LongType
+import org.apache.spark.tags.ExtendedSQLTest
 
 /**
  * Query tests for the Bloom filter aggregate and filter function.
  */
+@ExtendedSQLTest
 class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
@@ -96,7 +98,7 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
             }
             checkError(
               exception = exception,
-              errorClass = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+              condition = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
               parameters = Map(
                 "exprName" -> "estimatedNumItems",
                 "valueRange" -> "[0, positive]",
@@ -124,7 +126,7 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
             }
             checkError(
               exception = exception,
-              errorClass = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+              condition = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
               parameters = Map(
                 "exprName" -> "numBits",
                 "valueRange" -> "[0, positive]",
@@ -157,7 +159,7 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = exception1,
-      errorClass = "DATATYPE_MISMATCH.BLOOM_FILTER_WRONG_TYPE",
+      condition = "DATATYPE_MISMATCH.BLOOM_FILTER_WRONG_TYPE",
       parameters = Map(
         "functionName" -> "`bloom_filter_agg`",
         "sqlExpr" -> "\"bloom_filter_agg(a, 1000000, 8388608)\"",
@@ -180,7 +182,7 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = exception2,
-      errorClass = "DATATYPE_MISMATCH.BLOOM_FILTER_WRONG_TYPE",
+      condition = "DATATYPE_MISMATCH.BLOOM_FILTER_WRONG_TYPE",
       parameters = Map(
         "functionName" -> "`bloom_filter_agg`",
         "sqlExpr" -> "\"bloom_filter_agg(a, 2, (2 * 8))\"",
@@ -203,7 +205,7 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = exception3,
-      errorClass = "DATATYPE_MISMATCH.BLOOM_FILTER_WRONG_TYPE",
+      condition = "DATATYPE_MISMATCH.BLOOM_FILTER_WRONG_TYPE",
       parameters = Map(
         "functionName" -> "`bloom_filter_agg`",
         "sqlExpr" -> "\"bloom_filter_agg(a, CAST(2 AS BIGINT), 5)\"",
@@ -226,7 +228,7 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = exception4,
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
       parameters = Map(
         "exprName" -> "estimatedNumItems or numBits",
         "sqlExpr" -> "\"bloom_filter_agg(a, NULL, 5)\""
@@ -246,7 +248,7 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = exception5,
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
       parameters = Map(
         "exprName" -> "estimatedNumItems or numBits",
         "sqlExpr" -> "\"bloom_filter_agg(a, 5, NULL)\""
@@ -266,7 +268,7 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = exception1,
-      errorClass = "DATATYPE_MISMATCH.BLOOM_FILTER_WRONG_TYPE",
+      condition = "DATATYPE_MISMATCH.BLOOM_FILTER_WRONG_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"might_contain(1.0, 1)\"",
         "functionName" -> "`might_contain`",
@@ -287,7 +289,7 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = exception2,
-      errorClass = "DATATYPE_MISMATCH.BLOOM_FILTER_WRONG_TYPE",
+      condition = "DATATYPE_MISMATCH.BLOOM_FILTER_WRONG_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"might_contain(NULL, 0.1)\"",
         "functionName" -> "`might_contain`",
@@ -312,7 +314,7 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = exception1,
-      errorClass = "DATATYPE_MISMATCH.BLOOM_FILTER_BINARY_OP_WRONG_TYPE",
+      condition = "DATATYPE_MISMATCH.BLOOM_FILTER_BINARY_OP_WRONG_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"might_contain(CAST(a AS BINARY), CAST(5 AS BIGINT))\"",
         "functionName" -> "`might_contain`",
@@ -333,7 +335,7 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = exception2,
-      errorClass = "DATATYPE_MISMATCH.BLOOM_FILTER_BINARY_OP_WRONG_TYPE",
+      condition = "DATATYPE_MISMATCH.BLOOM_FILTER_BINARY_OP_WRONG_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"might_contain(scalarsubquery(a), CAST(5 AS BIGINT))\"",
         "functionName" -> "`might_contain`",

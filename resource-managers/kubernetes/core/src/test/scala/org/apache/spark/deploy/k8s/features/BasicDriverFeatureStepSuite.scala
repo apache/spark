@@ -29,17 +29,19 @@ import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.TestReso
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.resource.{ResourceID, ResourceProfile}
+import org.apache.spark.resource.ResourceID
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.util.Utils
 
 class BasicDriverFeatureStepSuite extends SparkFunSuite {
 
-  private val CUSTOM_DRIVER_LABELS = Map("labelkey" -> "labelvalue")
+  private val CUSTOM_DRIVER_LABELS = Map(
+    "labelkey" -> "labelvalue",
+    "customAppIdLabelKey" -> "{{APP_ID}}")
   private val CONTAINER_IMAGE_PULL_POLICY = "IfNotPresent"
   private val DRIVER_ANNOTATIONS = Map(
     "customAnnotation" -> "customAnnotationValue",
-    "yunikorn.apache.org/app-id" -> "{{APPID}}")
+    "customAppIdAnnotation" -> "{{APP_ID}}")
   private val DRIVER_ENVS = Map(
     "customDriverEnv1" -> "customDriverEnv1Value",
     "customDriverEnv2" -> "customDriverEnv2Value")
@@ -121,10 +123,11 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(driverPodMetadata.getName === "spark-driver-pod")
 
     // Check custom and preset labels are as expected
+    val labels = driverPodMetadata.getLabels
     CUSTOM_DRIVER_LABELS.foreach { case (k, v) =>
-      assert(driverPodMetadata.getLabels.get(k) === v)
+      assert(labels.get(k) === Utils.substituteAppNExecIds(v, KubernetesTestConf.APP_ID, ""))
     }
-    assert(driverPodMetadata.getLabels === kubernetesConf.labels.asJava)
+    assert(labels === kubernetesConf.labels.asJava)
 
     val annotations = driverPodMetadata.getAnnotations.asScala
     DRIVER_ANNOTATIONS.foreach { case (k, v) =>
@@ -205,7 +208,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     test(s"memory overhead factor new config: $name") {
       // Choose a driver memory where the default memory overhead is > MEMORY_OVERHEAD_MIN_MIB
       val driverMem =
-        ResourceProfile.MEMORY_OVERHEAD_MIN_MIB / DRIVER_MEMORY_OVERHEAD_FACTOR.defaultValue.get * 2
+        DRIVER_MIN_MEMORY_OVERHEAD.defaultValue.get /
+          DRIVER_MEMORY_OVERHEAD_FACTOR.defaultValue.get * 2
 
       // main app resource, overhead factor
       val sparkConf = new SparkConf(false)
@@ -235,7 +239,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     test(s"memory overhead factor old config: $name") {
       // Choose a driver memory where the default memory overhead is > MEMORY_OVERHEAD_MIN_MIB
       val driverMem =
-        ResourceProfile.MEMORY_OVERHEAD_MIN_MIB / MEMORY_OVERHEAD_FACTOR.defaultValue.get * 2
+        DRIVER_MIN_MEMORY_OVERHEAD.defaultValue.get / MEMORY_OVERHEAD_FACTOR.defaultValue.get * 2
 
       // main app resource, overhead factor
       val sparkConf = new SparkConf(false)
@@ -259,7 +263,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
   test(s"SPARK-38194: memory overhead factor precendence") {
     // Choose a driver memory where the default memory overhead is > MEMORY_OVERHEAD_MIN_MIB
     val driverMem =
-      ResourceProfile.MEMORY_OVERHEAD_MIN_MIB / DRIVER_MEMORY_OVERHEAD_FACTOR.defaultValue.get * 2
+      DRIVER_MIN_MEMORY_OVERHEAD.defaultValue.get /
+        DRIVER_MEMORY_OVERHEAD_FACTOR.defaultValue.get * 2
 
     // main app resource, overhead factor
     val sparkConf = new SparkConf(false)
@@ -288,7 +293,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
   test(s"SPARK-38194: old memory factor settings is applied if new one isn't given") {
     // Choose a driver memory where the default memory overhead is > MEMORY_OVERHEAD_MIN_MIB
     val driverMem =
-      ResourceProfile.MEMORY_OVERHEAD_MIN_MIB / DRIVER_MEMORY_OVERHEAD_FACTOR.defaultValue.get * 2
+      DRIVER_MIN_MEMORY_OVERHEAD.defaultValue.get /
+        DRIVER_MEMORY_OVERHEAD_FACTOR.defaultValue.get * 2
 
     // main app resource, overhead factor
     val sparkConf = new SparkConf(false)
@@ -371,6 +377,78 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(sparkJars.exists(path =>
       path.startsWith(FILE_UPLOAD_PATH) && path.endsWith("some-local-jar.jar")))
   }
+
+  test("SPARK-47208: User can override the minimum memory overhead of the driver") {
+    val sparkConf = new SparkConf()
+      .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
+      .set(DRIVER_MEMORY.key, "256M")
+      .set(DRIVER_MIN_MEMORY_OVERHEAD, 500L)
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+    val kubernetesConf: KubernetesDriverConf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf,
+      labels = CUSTOM_DRIVER_LABELS,
+      environment = DRIVER_ENVS,
+      annotations = DRIVER_ANNOTATIONS)
+
+    val featureStep = new BasicDriverFeatureStep(kubernetesConf)
+    val basePod = SparkPod.initialPod()
+    val configuredPod = featureStep.configurePod(basePod)
+
+    val resourceRequirements = configuredPod.container.getResources
+    val requests = resourceRequirements.getRequests.asScala
+    assert(amountAndFormat(requests("memory")) === "756Mi")
+    val limits = resourceRequirements.getLimits.asScala
+    assert(amountAndFormat(limits("memory")) === "756Mi")
+  }
+
+  test("SPARK-47208: Explicit overhead takes precedence over minimum overhead") {
+    val sparkConf = new SparkConf()
+      .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
+      .set(DRIVER_MEMORY.key, "256M")
+      .set(DRIVER_MIN_MEMORY_OVERHEAD, 500L)
+      .set(DRIVER_MEMORY_OVERHEAD, 200L)
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+    val kubernetesConf: KubernetesDriverConf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf,
+      labels = CUSTOM_DRIVER_LABELS,
+      environment = DRIVER_ENVS,
+      annotations = DRIVER_ANNOTATIONS)
+
+    val featureStep = new BasicDriverFeatureStep(kubernetesConf)
+    val basePod = SparkPod.initialPod()
+    val configuredPod = featureStep.configurePod(basePod)
+
+    val resourceRequirements = configuredPod.container.getResources
+    val requests = resourceRequirements.getRequests.asScala
+    assert(amountAndFormat(requests("memory")) === "456Mi")
+    val limits = resourceRequirements.getLimits.asScala
+    assert(amountAndFormat(limits("memory")) === "456Mi")
+  }
+
+  test("SPARK-47208: Overhead is maximum between factor of memory and min base overhead") {
+    val sparkConf = new SparkConf()
+      .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
+      .set(DRIVER_MEMORY.key, "5000M")
+      .set(DRIVER_MIN_MEMORY_OVERHEAD, 200L)
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+    val kubernetesConf: KubernetesDriverConf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf,
+      labels = CUSTOM_DRIVER_LABELS,
+      environment = DRIVER_ENVS,
+      annotations = DRIVER_ANNOTATIONS)
+
+    val featureStep = new BasicDriverFeatureStep(kubernetesConf)
+    val basePod = SparkPod.initialPod()
+    val configuredPod = featureStep.configurePod(basePod)
+
+    val resourceRequirements = configuredPod.container.getResources
+    val requests = resourceRequirements.getRequests.asScala
+    // mem = 5000 + max(overhead_factor[0.1] * 5000, 200)
+    assert(amountAndFormat(requests("memory")) === "5500Mi")
+    val limits = resourceRequirements.getLimits.asScala
+    assert(amountAndFormat(limits("memory")) === "5500Mi")
+  }
+
 
   def containerPort(name: String, portNumber: Int): ContainerPort =
     new ContainerPortBuilder()

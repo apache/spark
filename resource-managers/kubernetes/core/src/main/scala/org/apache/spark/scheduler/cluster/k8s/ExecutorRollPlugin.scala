@@ -26,9 +26,11 @@ import org.apache.spark.SparkContext
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.deploy.k8s.Config.{EXECUTOR_ROLL_INTERVAL, EXECUTOR_ROLL_POLICY, ExecutorRollPolicy, MINIMUM_TASKS_PER_EXECUTOR_BEFORE_ROLLING}
 import org.apache.spark.executor.ExecutorMetrics
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, CONFIG, EXECUTOR_ID, INTERVAL}
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.scheduler.ExecutorDecommissionInfo
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.status.api.v1
 import org.apache.spark.util.ThreadUtils
 
@@ -60,9 +62,10 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
   override def init(sc: SparkContext, ctx: PluginContext): JMap[String, String] = {
     val interval = sc.conf.get(EXECUTOR_ROLL_INTERVAL)
     if (interval <= 0) {
-      logWarning(s"Disabled due to invalid interval value, '$interval'")
+      logWarning(log"Disabled due to invalid interval value, " +
+        log"'${MDC(INTERVAL, interval * MILLIS_PER_SECOND)}'")
     } else if (!sc.conf.get(DECOMMISSION_ENABLED)) {
-      logWarning(s"Disabled because ${DECOMMISSION_ENABLED.key} is false.")
+      logWarning(log"Disabled because ${MDC(CONFIG, DECOMMISSION_ENABLED.key)} is false.")
     } else {
       minTasks = sc.conf.get(MINIMUM_TASKS_PER_EXECUTOR_BEFORE_ROLLING)
       // Scheduler is not created yet
@@ -79,7 +82,7 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
               choose(executorSummaryList, policy) match {
                 case Some(id) =>
                   // Use decommission to be safe.
-                  logInfo(s"Ask to decommission executor $id")
+                  logInfo(log"Ask to decommission executor ${MDC(EXECUTOR_ID, id)}")
                   val now = System.currentTimeMillis()
                   scheduler.decommissionExecutor(
                     id,
@@ -89,8 +92,8 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
                   logInfo("There is nothing to roll.")
               }
             case _ =>
-              logWarning("This plugin expects " +
-                s"${classOf[KubernetesClusterSchedulerBackend].getSimpleName}.")
+              logWarning(log"This plugin expects " +
+                log"${MDC(CLASS_NAME, classOf[KubernetesClusterSchedulerBackend].getSimpleName)}.")
           }
         } catch {
           case e: Throwable => logError("Error in rolling thread", e)

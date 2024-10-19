@@ -179,7 +179,7 @@ def _parallelFitTasks(
                 # Active session is thread-local variable, in background thread the active session
                 # is not set, the following line sets it as the main thread active session.
                 active_session._jvm.SparkSession.setActiveSession(  # type: ignore[union-attr]
-                    active_session._jsparkSession  # type: ignore[union-attr]
+                    active_session._jsparkSession
                 )
 
             model = estimator.fit(train, param_map)

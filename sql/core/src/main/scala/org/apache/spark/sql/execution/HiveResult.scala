@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution
 
-import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.time._
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.expressions.ToStringBase
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.HIVE_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths, toDayTimeIntervalString, toYearMonthIntervalString}
@@ -35,7 +36,7 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * Runs a query returning the result in Hive compatible form.
  */
-object HiveResult {
+object HiveResult extends SQLConfHelper {
   case class TimeFormatters(date: DateFormatter, timestamp: TimestampFormatter)
 
   def getTimeFormatters: TimeFormatters = {
@@ -43,6 +44,16 @@ object HiveResult {
     val timestampFormatter = TimestampFormatter.getFractionFormatter(
       DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
     TimeFormatters(dateFormatter, timestampFormatter)
+  }
+
+  type BinaryFormatter = Array[Byte] => String
+
+  def getBinaryFormatter: BinaryFormatter = {
+    if (conf.getConf(SQLConf.BINARY_OUTPUT_STYLE).isEmpty) {
+      // Keep the legacy behavior for compatibility.
+      conf.setConf(SQLConf.BINARY_OUTPUT_STYLE, Some("UTF-8"))
+    }
+    ToStringBase.getBinaryFormatter(_).toString
   }
 
   private def stripRootCommandResult(executedPlan: SparkPlan): SparkPlan = executedPlan match {
@@ -74,11 +85,12 @@ object HiveResult {
         executedPlan.executeCollect().map(_.getString(1)).toImmutableArraySeq
       case other =>
         val timeFormatters = getTimeFormatters
+        val binaryFormatter = getBinaryFormatter
         val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toImmutableArraySeq
         // We need the types so we can output struct field names
         val types = executedPlan.output.map(_.dataType)
         // Reformat to match hive tab delimited output.
-        result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters)))
+        result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters, binaryFormatter)))
           .map(_.mkString("\t"))
     }
 
@@ -95,7 +107,8 @@ object HiveResult {
   def toHiveString(
       a: (Any, DataType),
       nested: Boolean,
-      formatters: TimeFormatters): String = a match {
+      formatters: TimeFormatters,
+      binaryFormatter: BinaryFormatter): String = a match {
     case (null, _) => if (nested) "null" else "NULL"
     case (b, BooleanType) => b.toString
     case (d: Date, DateType) => formatters.date.format(d)
@@ -103,21 +116,22 @@ object HiveResult {
     case (t: Timestamp, TimestampType) => formatters.timestamp.format(t)
     case (i: Instant, TimestampType) => formatters.timestamp.format(i)
     case (l: LocalDateTime, TimestampNTZType) => formatters.timestamp.format(l)
-    case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
+    case (bin: Array[Byte], BinaryType) => binaryFormatter(bin)
     case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
     case (n, _: NumericType) => n.toString
-    case (s: String, StringType) => if (nested) "\"" + s + "\"" else s
+    case (s: String, _: StringType) => if (nested) "\"" + s + "\"" else s
     case (interval: CalendarInterval, CalendarIntervalType) => interval.toString
     case (seq: scala.collection.Seq[_], ArrayType(typ, _)) =>
-      seq.map(v => (v, typ)).map(e => toHiveString(e, true, formatters)).mkString("[", ",", "]")
+      seq.map(v => (v, typ)).map(e => toHiveString(e, true, formatters, binaryFormatter))
+        .mkString("[", ",", "]")
     case (m: Map[_, _], MapType(kType, vType, _)) =>
       m.map { case (key, value) =>
-        toHiveString((key, kType), true, formatters) + ":" +
-          toHiveString((value, vType), true, formatters)
+        toHiveString((key, kType), true, formatters, binaryFormatter) + ":" +
+          toHiveString((value, vType), true, formatters, binaryFormatter)
       }.toSeq.sorted.mkString("{", ",", "}")
     case (struct: Row, StructType(fields)) =>
       struct.toSeq.zip(fields).map { case (v, t) =>
-        s""""${t.name}":${toHiveString((v, t.dataType), true, formatters)}"""
+        s""""${t.name}":${toHiveString((v, t.dataType), true, formatters, binaryFormatter)}"""
       }.mkString("{", ",", "}")
     case (period: Period, YearMonthIntervalType(startField, endField)) =>
       toYearMonthIntervalString(

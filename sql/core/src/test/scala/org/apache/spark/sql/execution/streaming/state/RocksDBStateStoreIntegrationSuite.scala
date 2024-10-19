@@ -34,7 +34,8 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
   with AlsoTestWithChangelogCheckpointingEnabled {
   import testImplicits._
 
-  test("RocksDBStateStore") {
+  testWithColumnFamilies("RocksDBStateStore",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     withTempDir { dir =>
       val input = MemoryStream[Int]
       val conf = Map(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
@@ -59,7 +60,9 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
     }
   }
 
-  test("SPARK-36236: query progress contains only the expected RocksDB store custom metrics") {
+  testWithColumnFamilies("SPARK-36236: query progress contains only the " +
+    s"expected RocksDB store custom metrics",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     // fails if any new custom metrics are added to remind the author of API changes
     import testImplicits._
 
@@ -90,7 +93,8 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
           eventually(timeout(Span(1, Minute))) {
             val nextProgress = query.lastProgress
             assert(nextProgress != null, "progress is not yet available")
-            assert(nextProgress.stateOperators.length > 0, "state operators are missing in metrics")
+            assert(nextProgress.stateOperators.length > 0,
+              "state operators are missing in metrics")
             val stateOperatorMetrics = nextProgress.stateOperators(0)
             assert(stateOperatorMetrics.customMetrics.keySet.asScala === Set(
               "rocksdbGetLatency", "rocksdbCommitCompactLatency", "rocksdbBytesCopied",
@@ -103,7 +107,8 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
               "rocksdbTotalBytesReadByCompaction", "rocksdbTotalBytesWrittenByCompaction",
               "rocksdbTotalCompactionLatencyMs", "rocksdbWriterStallLatencyMs",
               "rocksdbTotalBytesReadThroughIterator", "rocksdbTotalBytesWrittenByFlush",
-              "rocksdbPinnedBlocksMemoryUsage"))
+              "rocksdbPinnedBlocksMemoryUsage", "rocksdbNumExternalColumnFamilies",
+              "rocksdbNumInternalColumnFamilies"))
           }
         } finally {
           query.stop()
@@ -112,12 +117,13 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
     }
   }
 
-  testQuietly("SPARK-36519: store RocksDB format version in the checkpoint") {
-    def getFormatVersion(query: StreamingQuery): Int = {
-      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.sparkSession
-        .conf.get(SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION)
-    }
+  private def getFormatVersion(query: StreamingQuery): Int = {
+    query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.sparkSession
+      .sessionState.conf.getConf(SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION)
+  }
 
+  testWithColumnFamilies("SPARK-36519: store RocksDB format version in the checkpoint",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
       withTempDir { dir =>
@@ -154,7 +160,8 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
     }
   }
 
-  testQuietly("SPARK-36519: RocksDB format version can be set by the SQL conf") {
+  testWithColumnFamilies("SPARK-36519: RocksDB format version can be set by the SQL conf",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
       // Set an unsupported RocksDB format version and the query should fail if it's passed down
@@ -171,11 +178,13 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
         .start()
       inputData.addData(1, 2)
       val e = intercept[StreamingQueryException](query.processAllAvailable())
-      assert(e.getCause.getMessage.contains("Unsupported BlockBasedTable format_version"))
+      assert(e.getCause.getCause.getMessage.contains("Unsupported BlockBasedTable format_version"))
     }
   }
 
-  test("SPARK-37224: numRowsTotal = 0 when trackTotalNumberOfRows is turned off") {
+  testWithColumnFamilies("SPARK-37224: numRowsTotal = 0 when " +
+    s"trackTotalNumberOfRows is turned off",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     withTempDir { dir =>
       withSQLConf(
         (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName),

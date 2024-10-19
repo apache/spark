@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build using Maven (master, Scala 2.13, Hadoop 3, JDK 17)"
+name: "Build / Maven (master, Scala 2.13, Hadoop 3, JDK 17)"
 
 on:
   schedule:
@@ -30,8 +30,3 @@ jobs:
     name: Run
     uses: ./.github/workflows/maven_test.yml
     if: github.repository == 'apache/spark'
-    with:
-      envs: >-
-        {
-          "SKIP_SPARK_RELEASE_VERSIONS": "3.3.4,3.4.2,3.5.0"
-        }

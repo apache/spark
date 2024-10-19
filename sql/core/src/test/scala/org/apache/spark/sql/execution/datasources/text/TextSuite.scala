@@ -24,7 +24,7 @@ import java.nio.file.Files
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.{SparkConf, TestUtils}
+import org.apache.spark.{SparkConf, SparkIllegalArgumentException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.{BZIP2, DEFLATE, GZIP, NONE}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
@@ -105,12 +105,18 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
         verifyFrame(spark.read.text(tempDirPath))
     }
 
-    val errMsg = intercept[IllegalArgumentException] {
-      val tempDirPath = Utils.createTempDir().getAbsolutePath
-      testDf.write.option("compression", "illegal").mode(SaveMode.Overwrite).text(tempDirPath)
+    withTempDir { dir =>
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          testDf.write.option("compression", "illegal").mode(
+            SaveMode.Overwrite).text(dir.getAbsolutePath)
+        },
+        condition = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+        parameters = Map(
+          "codecName" -> "illegal",
+          "availableCodecs" -> "bzip2, deflate, uncompressed, snappy, none, lz4, gzip")
+      )
     }
-    assert(errMsg.getMessage.contains("Codec [illegal] is not available. " +
-      "Known codecs are"))
   }
 
   test("SPARK-13543 Write the output as uncompressed via option()") {

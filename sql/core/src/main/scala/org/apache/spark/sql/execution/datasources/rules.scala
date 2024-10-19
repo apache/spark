@@ -19,6 +19,10 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import scala.collection.mutable.{HashMap, HashSet}
+import scala.jdk.CollectionConverters._
+
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
@@ -30,10 +34,11 @@ import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.connector.expressions.{FieldReference, RewritableTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.command.ViewHelper.generateViewProperties
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.sources.InsertableRelation
-import org.apache.spark.sql.types.{AtomicType, StructType}
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
@@ -48,7 +53,11 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
   private def resolveDataSource(unresolved: UnresolvedRelation): DataSource = {
     val ident = unresolved.multipartIdentifier
-    val dataSource = DataSource(sparkSession, paths = Seq(ident.last), className = ident.head)
+    val dataSource = DataSource(
+      sparkSession,
+      paths = Seq(CatalogUtils.stringToURI(ident.last).toString),
+      className = ident.head,
+      options = unresolved.options.asScala.toMap)
     // `dataSource.providingClass` may throw ClassNotFoundException, the caller side will try-catch
     // it and return the original plan, so that the analyzer can report table not found later.
     val isFileFormat = classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
@@ -80,6 +89,11 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         LogicalRelation(ds.resolveRelation())
       } catch {
         case _: ClassNotFoundException => u
+        case e: SparkIllegalArgumentException if e.getCondition != null =>
+          u.failAnalysis(
+            errorClass = e.getCondition,
+            messageParameters = e.getMessageParameters.asScala.toMap,
+            cause = e)
         case e: Exception if !e.isInstanceOf[AnalysisException] =>
           // the provider is valid, but failed to create a logical plan
           u.failAnalysis(
@@ -190,6 +204,18 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
           tableName, specifiedBucketString, existingBucketString)
       }
 
+      // Check if the specified clustering columns match the existing table.
+      val specifiedClusterBySpec = tableDesc.clusterBySpec
+      val existingClusterBySpec = existingTable.clusterBySpec
+      if (specifiedClusterBySpec != existingClusterBySpec) {
+        val specifiedClusteringString =
+          specifiedClusterBySpec.map(_.toString).getOrElse("")
+        val existingClusteringString =
+          existingClusterBySpec.map(_.toString).getOrElse("")
+        throw QueryCompilationErrors.mismatchedTableClusteringError(
+          tableName, specifiedClusteringString, existingClusteringString)
+      }
+
       val newQuery = if (adjustedColumns != query.output) {
         Project(adjustedColumns, query)
       } else {
@@ -222,10 +248,14 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         DDLUtils.checkTableColumns(tableDesc.copy(schema = analyzedQuery.schema))
 
         val output = analyzedQuery.output
+
+        val outputByName = HashMap(output.map(o => o.name -> o): _*)
         val partitionAttrs = normalizedTable.partitionColumnNames.map { partCol =>
-          output.find(_.name == partCol).get
+          outputByName(partCol)
         }
-        val newOutput = output.filterNot(partitionAttrs.contains) ++ partitionAttrs
+        val partitionAttrsSet = HashSet(partitionAttrs: _*)
+        val newOutput = output.filterNot(partitionAttrsSet.contains) ++ partitionAttrs
+
         val reorderedQuery = if (newOutput == output) {
           analyzedQuery
         } else {
@@ -237,12 +267,14 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         DDLUtils.checkTableColumns(tableDesc)
         val normalizedTable = normalizeCatalogTable(tableDesc.schema, tableDesc)
 
+        val normalizedSchemaByName = HashMap(normalizedTable.schema.map(s => s.name -> s): _*)
         val partitionSchema = normalizedTable.partitionColumnNames.map { partCol =>
-          normalizedTable.schema.find(_.name == partCol).get
+          normalizedSchemaByName(partCol)
         }
-
-        val reorderedSchema =
-          StructType(normalizedTable.schema.filterNot(partitionSchema.contains) ++ partitionSchema)
+        val partitionSchemaSet = HashSet(partitionSchema: _*)
+        val reorderedSchema = StructType(
+          normalizedTable.schema.filterNot(partitionSchemaSet.contains) ++ partitionSchema
+        )
 
         c.copy(tableDesc = normalizedTable.copy(schema = reorderedSchema))
       }
@@ -311,7 +343,12 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       }
     }
 
-    table.copy(partitionColumnNames = normalizedPartCols, bucketSpec = normalizedBucketSpec)
+    val normalizedProperties = table.properties ++ table.clusterBySpec.map { spec =>
+      ClusterBySpec.toProperty(schema, spec, conf.resolver)
+    }
+
+    table.copy(partitionColumnNames = normalizedPartCols, bucketSpec = normalizedBucketSpec,
+      properties = normalizedProperties)
   }
 
   private def normalizePartitionColumns(schema: StructType, table: CatalogTable): Seq[String] = {
@@ -329,10 +366,14 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         messageParameters = Map.empty)
     }
 
-    schema.filter(f => normalizedPartitionCols.contains(f.name)).map(_.dataType).foreach {
-      case _: AtomicType => // OK
-      case other => failAnalysis(s"Cannot use ${other.catalogString} for partition column")
-    }
+    val normalizedPartitionColsSet = HashSet(normalizedPartitionCols: _*)
+    schema
+      .filter(f => normalizedPartitionColsSet.contains(f.name))
+      .foreach { field =>
+        if (!PartitioningUtils.canPartitionOn(field.dataType)) {
+          throw QueryCompilationErrors.invalidPartitionColumnDataTypeError(field)
+        }
+      }
 
     normalizedPartitionCols
   }
@@ -357,6 +398,13 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
           case dt if RowOrdering.isOrderable(dt) => // OK
           case other => failAnalysis(s"Cannot use ${other.catalogString} for sorting column")
         }
+
+        schema.filter(f => normalizedBucketSpec.bucketColumnNames.contains(f.name))
+          .foreach { field =>
+            if (!BucketingUtils.canBucketOn(field.dataType)) {
+              throw QueryCompilationErrors.invalidBucketColumnDataTypeError(field.dataType)
+            }
+          }
 
         Some(normalizedBucketSpec)
 
@@ -421,8 +469,8 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
         supportColDefaultValue = true)
     } catch {
       case e: AnalysisException if staticPartCols.nonEmpty &&
-        (e.getErrorClass == "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS" ||
-          e.getErrorClass == "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS") =>
+        (e.getCondition == "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS" ||
+          e.getCondition == "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS") =>
         val newException = e.copy(
           errorClass = Some("INSERT_PARTITION_COLUMN_ARITY_MISMATCH"),
           messageParameters = e.messageParameters ++ Map(
@@ -589,5 +637,66 @@ case class QualifyLocationWithWarehouse(catalog: SessionCatalog) extends Rule[Lo
         storage = tableDesc.storage.copy(locationUri = Some(newLocation))
       )
       c.copy(tableDesc = newTable)
+  }
+}
+
+/**
+ * This rule checks for references to views WITH SCHEMA [TYPE] EVOLUTION and synchronizes the
+ * catalog if evolution was detected.
+ * It does so by walking the resolved plan looking for View operators for persisted views.
+ */
+object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
+  def apply(plan: LogicalPlan): Unit = {
+    plan.foreach {
+      case View(metaData, false, viewQuery)
+        if (metaData.viewSchemaMode == SchemaTypeEvolution ||
+          metaData.viewSchemaMode == SchemaEvolution) =>
+        val viewSchemaMode = metaData.viewSchemaMode
+        val viewFields = metaData.schema.fields
+        val viewQueryFields = viewQuery.schema.fields
+        val session = SparkSession.getActiveSession.get
+        val redoSignature =
+          viewSchemaMode == SchemaEvolution && viewFields.length != viewQueryFields.length
+        val fieldNames = viewQuery.schema.fieldNames
+
+        val redo = redoSignature || viewFields.zipWithIndex.exists { case (field, index) =>
+          val planField = viewQueryFields(index)
+          (field.dataType != planField.dataType ||
+            field.nullable != planField.nullable ||
+            (viewSchemaMode == SchemaEvolution && (
+              field.getComment() != planField.getComment() ||
+              field.name != planField.name)))
+        }
+
+        if (redo) {
+          val newProperties = if (viewSchemaMode == SchemaEvolution) {
+            generateViewProperties(
+              metaData.properties,
+              session,
+              fieldNames,
+              fieldNames,
+              metaData.viewSchemaMode)
+          } else {
+            metaData.properties
+          }
+          val newSchema = if (viewSchemaMode == SchemaTypeEvolution) {
+            val newFields = viewQuery.schema.map {
+              case StructField(name, dataType, nullable, _) =>
+                StructField(name, dataType, nullable,
+                  viewFields.find(_.name == name).get.metadata)
+            }
+            StructType(newFields)
+          } else {
+            viewQuery.schema
+          }
+          SchemaUtils.checkColumnNameDuplication(fieldNames.toImmutableArraySeq,
+            session.sessionState.conf.resolver)
+          val updatedViewMeta = metaData.copy(
+            properties = newProperties,
+            schema = newSchema)
+          session.sessionState.catalog.alterTable(updatedViewMeta)
+        }
+      case _ => // OK
+    }
   }
 }

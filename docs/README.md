@@ -28,39 +28,36 @@ whichever version of Spark you currently have checked out of revision control.
 
 ## Prerequisites
 
-The Spark documentation build uses a number of tools to build HTML docs and API docs in Scala, Java,
-Python, R and SQL.
+The Spark documentation build uses a number of tools to build HTML docs and API docs in Scala, Java, Python, R, and SQL.
 
-You need to have [Ruby](https://www.ruby-lang.org/en/documentation/installation/) and
-[Python](https://docs.python.org/2/using/unix.html#getting-and-installing-the-latest-version-of-python)
-installed. Make sure the `bundle` command is available, if not install the Gem containing it:
+You need to have [Ruby 3][ruby] and [Python 3][python] installed. Make sure the `bundle` command is available. If not, install it as follows:
+
+[ruby]: https://www.ruby-lang.org/en/documentation/installation/
+[python]: https://www.python.org/downloads/
 
 ```sh
-$ sudo gem install bundler
+$ gem install bundler -v 2.4.22
 ```
 
-After this all the required ruby dependencies can be installed from the `docs/` directory via the Bundler:
+After this all the required Ruby dependencies can be installed from the `docs/` directory via Bundler:
 
 ```sh
-$ cd docs
+$ cd "$SPARK_HOME"/docs
 $ bundle install
 ```
 
-Note: If you are on a system with both Ruby 1.9 and Ruby 2.0 you may need to replace gem with gem2.0.
+And the required Python dependencies can be installed using pip:
 
-### SQL and Python API Documentation (Optional)
-
-To generate SQL and Python API docs, you'll need to install these libraries:
-
-Run the following command from $SPARK_HOME:
 ```sh
+$ cd "$SPARK_HOME"
 $ pip install --upgrade -r dev/requirements.txt
 ```
 
+To generate the Python or R API docs, you'll also need to [install Pandoc](https://pandoc.org/installing.html).
+
 ### R API Documentation (Optional)
 
-If you'd like to generate R API documentation, you'll need to [install Pandoc](https://pandoc.org/installing.html)
-and install these libraries:
+If you'd like to generate R API documentation, install these libraries:
 
 ```sh
 $ sudo Rscript -e 'install.packages(c("knitr", "devtools", "testthat", "rmarkdown"), repos="https://cloud.r-project.org/")'
@@ -122,6 +119,10 @@ The jekyll plugin also generates the PySpark docs using [Sphinx](http://sphinx-d
 using [roxygen2](https://cran.r-project.org/web/packages/roxygen2/index.html) and SQL docs
 using [MkDocs](https://www.mkdocs.org/).
 
-NOTE: To skip the step of building and copying over the Scala, Java, Python, R and SQL API docs, run `SKIP_API=1
-bundle exec jekyll build`. In addition, `SKIP_SCALADOC=1`, `SKIP_PYTHONDOC=1`, `SKIP_RDOC=1` and `SKIP_SQLDOC=1` can be used
-to skip a single step of the corresponding language. `SKIP_SCALADOC` indicates skipping both the Scala and Java docs.
+To control what API docs get built, you can set any combination of the following shell variables before you run `bundle exec jekyll build`:
+* `SKIP_API=1`: Skip building all the API docs.
+* `SKIP_SCALADOC=1`: Skip the Scala and Java API docs.
+* `SKIP_PYTHONDOC=1`: Skip the Python API docs.
+* `SKIP_RDOC=1`: Skip the R API docs.
+* `SKIP_SQLDOC=1`: Skip the SQL API docs.
+

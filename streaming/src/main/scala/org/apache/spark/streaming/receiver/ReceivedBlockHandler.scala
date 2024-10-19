@@ -24,7 +24,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{EFFECTIVE_STORAGE_LEVEL, STORAGE_LEVEL, STORAGE_LEVEL_DESERIALIZED, STORAGE_LEVEL_REPLICATION}
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver.WriteAheadLogBasedBlockHandler._
@@ -137,20 +138,23 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
 
   private val effectiveStorageLevel = {
     if (storageLevel.deserialized) {
-      logWarning(s"Storage level serialization ${storageLevel.deserialized} is not supported when" +
-        s" write ahead log is enabled, change to serialization false")
+      logWarning(log"Storage level serialization " +
+        log"${MDC(STORAGE_LEVEL_DESERIALIZED, storageLevel.deserialized)} is not " +
+        log"supported when write ahead log is enabled, change to serialization false")
     }
     if (storageLevel.replication > 1) {
-      logWarning(s"Storage level replication ${storageLevel.replication} is unnecessary when " +
-        s"write ahead log is enabled, change to replication 1")
+      logWarning(log"Storage level replication " +
+        log"${MDC(STORAGE_LEVEL_REPLICATION, storageLevel.replication)} is unnecessary when " +
+        log"write ahead log is enabled, change to replication 1")
     }
 
     StorageLevel(storageLevel.useDisk, storageLevel.useMemory, storageLevel.useOffHeap, false, 1)
   }
 
   if (storageLevel != effectiveStorageLevel) {
-    logWarning(s"User defined storage level $storageLevel is changed to effective storage level " +
-      s"$effectiveStorageLevel when write ahead log is enabled")
+    logWarning(log"User defined storage level ${MDC(STORAGE_LEVEL, storageLevel)} is changed to " +
+      log"effective storage level ${MDC(EFFECTIVE_STORAGE_LEVEL, effectiveStorageLevel)} when " +
+      log"write ahead log is enabled")
   }
 
   // Write ahead log manages

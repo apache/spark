@@ -23,7 +23,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{BATCH_ID, ERROR, PATH}
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions._
@@ -48,8 +49,8 @@ object FileStreamSink extends Logging {
 
     path match {
       case Seq(singlePath) =>
-        val hdfsPath = new Path(singlePath)
         try {
+          val hdfsPath = new Path(singlePath)
           val fs = hdfsPath.getFileSystem(hadoopConf)
           if (fs.getFileStatus(hdfsPath).isDirectory) {
             val metadataPath = getMetadataLogPath(fs, hdfsPath, sqlConf)
@@ -60,8 +61,8 @@ object FileStreamSink extends Logging {
         } catch {
           case e: SparkException => throw e
           case NonFatal(e) =>
-            logWarning(s"Assume no metadata directory. Error while looking for " +
-              s"metadata directory in the path: $singlePath.", e)
+            logWarning(log"Assume no metadata directory. Error while looking for " +
+              log"metadata directory in the path: ${MDC(PATH, singlePath)}.", e)
             false
         }
       case _ => false
@@ -84,7 +85,7 @@ object FileStreamSink extends Logging {
         } catch {
           case NonFatal(e) =>
             // We may not have access to this directory. Don't fail the query if that happens.
-            logWarning(e.getMessage, e)
+            logWarning(log"${MDC(ERROR, e.getMessage)}", e)
             false
         }
       if (legacyMetadataPathExists) {
@@ -145,7 +146,7 @@ class FileStreamSink(
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
     if (batchId <= fileLog.getLatestBatchId().getOrElse(-1L)) {
-      logInfo(s"Skipping already committed batch $batchId")
+      logInfo(log"Skipping already committed batch ${MDC(BATCH_ID, batchId)}")
     } else {
       val committer = FileCommitProtocol.instantiate(
         className = sparkSession.sessionState.conf.streamingFileCommitProtocolClass,

@@ -22,7 +22,7 @@ from typing import Union, TYPE_CHECKING
 
 from pyspark.errors import PySparkTypeError
 from pyspark.sql import functions as pysparkfuncs
-from pyspark.sql.connect.column import Column
+from pyspark.sql.column import Column
 from pyspark.sql.connect.functions.builtin import _to_col, _invoke_function_over_columns
 from pyspark.sql.connect.functions.builtin import lit, _invoke_function
 
@@ -38,8 +38,8 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
         _numBuckets = numBuckets
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INT",
-            message_parameters={
+            errorClass="NOT_COLUMN_OR_INT",
+            messageParameters={
                 "arg_name": "numBuckets",
                 "arg_type": type(numBuckets).__name__,
             },
@@ -81,6 +81,7 @@ hours.__doc__ = pysparkfuncs.partitioning.hours.__doc__
 
 def _test() -> None:
     import sys
+    import os
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.connect.functions.partitioning
@@ -89,7 +90,7 @@ def _test() -> None:
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.functions tests")
-        .remote("local[4]")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
         .getOrCreate()
     )
 

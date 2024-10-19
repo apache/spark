@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.hadoop.mapreduce.Job
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, PhysicalWriteInfo, WriterCommitMessage}
 import org.apache.spark.sql.execution.datasources.{WriteJobDescription, WriteTaskResult}
@@ -33,14 +33,15 @@ class FileBatchWrite(
   extends BatchWrite with Logging {
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
     val results = messages.map(_.asInstanceOf[WriteTaskResult])
-    logInfo(s"Start to commit write Job ${description.uuid}.")
+    logInfo(log"Start to commit write Job ${MDC(LogKeys.UUID, description.uuid)}.")
     val (_, duration) = Utils
       .timeTakenMs { committer.commitJob(job, results.map(_.commitMsg).toImmutableArraySeq) }
-    logInfo(s"Write Job ${description.uuid} committed. Elapsed time: $duration ms.")
+    logInfo(log"Write Job ${MDC(LogKeys.UUID, description.uuid)} committed. " +
+      log"Elapsed time: ${MDC(LogKeys.ELAPSED_TIME, duration)} ms.")
 
     processStats(
       description.statsTrackers, results.map(_.summary.stats).toImmutableArraySeq, duration)
-    logInfo(s"Finished processing stats for write job ${description.uuid}.")
+    logInfo(log"Finished processing stats for write job ${MDC(LogKeys.UUID, description.uuid)}.")
   }
 
   override def useCommitCoordinator(): Boolean = false

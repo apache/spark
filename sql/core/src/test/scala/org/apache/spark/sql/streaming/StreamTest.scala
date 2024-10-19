@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.plans.physical.AllTuples
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
-import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, EpochCoordinatorRef, IncrementAndGetEpoch}
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
@@ -284,7 +284,11 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
   /** Assert that a condition on the active query is true */
   class AssertOnQuery(val condition: StreamExecution => Boolean, val message: String)
     extends StreamAction with StreamMustBeRunning {
-    override def toString: String = s"AssertOnQuery(<condition>, $message)"
+    override def toString: String = if (message == "") {
+      "AssertOnQuery(<condition>)"
+    } else {
+      s"AssertOnQuery(<condition>, $message)"
+    }
   }
 
   object AssertOnQuery {
@@ -342,7 +346,8 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
   def testStream(
       _stream: Dataset[_],
       outputMode: OutputMode = OutputMode.Append,
-      extraOptions: Map[String, String] = Map.empty)(actions: StreamAction*): Unit = synchronized {
+      extraOptions: Map[String, String] = Map.empty,
+      sink: MemorySink = new MemorySink())(actions: StreamAction*): Unit = synchronized {
     import org.apache.spark.sql.streaming.util.StreamManualClock
 
     // `synchronized` is added to prevent the user from calling multiple `testStream`s concurrently
@@ -355,7 +360,6 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
     var currentStream: StreamExecution = null
     var lastStream: StreamExecution = null
     val awaiting = new mutable.HashMap[Int, OffsetV2]() // source index -> offset to wait for
-    val sink = new MemorySink
     val resetConfValues = mutable.Map[String, Option[String]]()
     val defaultCheckpointLocation =
       Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
@@ -538,10 +542,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
           val metadataRoot = Option(checkpointLocation).getOrElse(defaultCheckpointLocation)
 
           additionalConfs.foreach(pair => {
-            val value =
-              if (sparkSession.conf.contains(pair._1)) {
-                Some(sparkSession.conf.get(pair._1))
-              } else None
+            val value = sparkSession.conf.getOption(pair._1)
             resetConfValues(pair._1) = value
             sparkSession.conf.set(pair._1, pair._2)
           })
@@ -702,7 +703,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
                   // v1 source
                   case r: StreamingExecutionRelation => r.source
                   // v2 source
-                  case r: StreamingDataSourceV2Relation => r.stream
+                  case r: StreamingDataSourceV2ScanRelation => r.stream
                   // We can add data to memory stream before starting it. Then the input plan has
                   // not been processed by the streaming engine and contains `StreamingRelationV2`.
                   case r: StreamingRelationV2 if r.sourceName == "memory" =>
@@ -809,6 +810,13 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
         case (key, None) => sparkSession.conf.unset(key)
       }
       sparkSession.streams.removeListener(listener)
+      // The state store is stopped here to unload all state stores and terminate all maintenance
+      // threads. It is necessary because the temp directory used by the checkpoint directory
+      // may be deleted soon after, and the maintenance thread may see unexpected error and
+      // cause unexpected behavior. Doing it after a test finishes might be too late because
+      // sometimes the checkpoint directory is under `withTempDir`, and in this case the temp
+      // directory is deleted before the test finishes.
+      StateStore.stop()
     }
   }
 

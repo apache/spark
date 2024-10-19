@@ -41,7 +41,7 @@ import org.apache.spark.network.util.TransportConf
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.ShuffleBlockPusher.PushRequest
 import org.apache.spark.storage._
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{SslTestUtils, ThreadUtils}
 
 class ShuffleBlockPusherSuite extends SparkFunSuite {
 
@@ -51,7 +51,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite {
   @Mock(answer = RETURNS_SMART_NULLS) private var executorBackend: CoarseGrainedExecutorBackend = _
 
   private var conf: SparkConf = _
-  private var pushedBlocks = new ArrayBuffer[String]
+  private val pushedBlocks = new ArrayBuffer[String]
 
   def createSparkConf(): SparkConf = {
     new SparkConf(loadDefaults = false)

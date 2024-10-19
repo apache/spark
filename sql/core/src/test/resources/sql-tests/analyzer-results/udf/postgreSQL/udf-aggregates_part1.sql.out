@@ -154,70 +154,70 @@ Aggregate [stddev_pop(cast(cast(udf(cast(cast(3.0 as decimal(38,0)) as string)) 
 select sum(udf(CAST(null AS int))) from range(1,4)
 -- !query analysis
 Aggregate [sum(cast(udf(cast(cast(null as int) as string)) as int)) AS sum(udf(CAST(NULL AS INT)))#xL]
-+- Range (1, 4, step=1, splits=None)
++- Range (1, 4, step=1)
 
 
 -- !query
 select sum(udf(CAST(null AS long))) from range(1,4)
 -- !query analysis
 Aggregate [sum(cast(udf(cast(cast(null as bigint) as string)) as bigint)) AS sum(udf(CAST(NULL AS BIGINT)))#xL]
-+- Range (1, 4, step=1, splits=None)
++- Range (1, 4, step=1)
 
 
 -- !query
 select sum(udf(CAST(null AS Decimal(38,0)))) from range(1,4)
 -- !query analysis
 Aggregate [sum(cast(udf(cast(cast(null as decimal(38,0)) as string)) as decimal(38,0))) AS sum(udf(CAST(NULL AS DECIMAL(38,0))))#x]
-+- Range (1, 4, step=1, splits=None)
++- Range (1, 4, step=1)
 
 
 -- !query
 select sum(udf(CAST(null AS DOUBLE))) from range(1,4)
 -- !query analysis
 Aggregate [sum(cast(udf(cast(cast(null as double) as string)) as double)) AS sum(udf(CAST(NULL AS DOUBLE)))#x]
-+- Range (1, 4, step=1, splits=None)
++- Range (1, 4, step=1)
 
 
 -- !query
 select avg(udf(CAST(null AS int))) from range(1,4)
 -- !query analysis
 Aggregate [avg(cast(udf(cast(cast(null as int) as string)) as int)) AS avg(udf(CAST(NULL AS INT)))#x]
-+- Range (1, 4, step=1, splits=None)
++- Range (1, 4, step=1)
 
 
 -- !query
 select avg(udf(CAST(null AS long))) from range(1,4)
 -- !query analysis
 Aggregate [avg(cast(udf(cast(cast(null as bigint) as string)) as bigint)) AS avg(udf(CAST(NULL AS BIGINT)))#x]
-+- Range (1, 4, step=1, splits=None)
++- Range (1, 4, step=1)
 
 
 -- !query
 select avg(udf(CAST(null AS Decimal(38,0)))) from range(1,4)
 -- !query analysis
 Aggregate [avg(cast(udf(cast(cast(null as decimal(38,0)) as string)) as decimal(38,0))) AS avg(udf(CAST(NULL AS DECIMAL(38,0))))#x]
-+- Range (1, 4, step=1, splits=None)
++- Range (1, 4, step=1)
 
 
 -- !query
 select avg(udf(CAST(null AS DOUBLE))) from range(1,4)
 -- !query analysis
 Aggregate [avg(cast(udf(cast(cast(null as double) as string)) as double)) AS avg(udf(CAST(NULL AS DOUBLE)))#x]
-+- Range (1, 4, step=1, splits=None)
++- Range (1, 4, step=1)
 
 
 -- !query
 select sum(CAST(udf('NaN') AS DOUBLE)) from range(1,4)
 -- !query analysis
 Aggregate [sum(cast(cast(udf(cast(NaN as string)) as string) as double)) AS sum(CAST(udf(NaN) AS DOUBLE))#x]
-+- Range (1, 4, step=1, splits=None)
++- Range (1, 4, step=1)
 
 
 -- !query
 select avg(CAST(udf('NaN') AS DOUBLE)) from range(1,4)
 -- !query analysis
 Aggregate [avg(cast(cast(udf(cast(NaN as string)) as string) as double)) AS avg(CAST(udf(NaN) AS DOUBLE))#x]
-+- Range (1, 4, step=1, splits=None)
++- Range (1, 4, step=1)
 
 
 -- !query
@@ -345,7 +345,7 @@ Aggregate [corr(cast(b#x as double), cast(cast(udf(cast(a#x as string)) as int) 
 -- !query
 CREATE TEMPORARY VIEW regr_test AS SELECT * FROM VALUES (10,150),(20,250),(30,350),(80,540),(100,200) AS regr_test (x, y)
 -- !query analysis
-CreateViewCommand `regr_test`, SELECT * FROM VALUES (10,150),(20,250),(30,350),(80,540),(100,200) AS regr_test (x, y), false, false, LocalTempView, true
+CreateViewCommand `regr_test`, SELECT * FROM VALUES (10,150),(20,250),(30,350),(80,540),(100,200) AS regr_test (x, y), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [x#x, y#x]
       +- SubqueryAlias regr_test
          +- LocalRelation [x#x, y#x]
@@ -358,7 +358,7 @@ FROM regr_test WHERE x IN (10,20,30,80)
 Aggregate [count(1) AS count(1)#xL, sum(x#x) AS sum(x)#xL, regr_sxx(cast(y#x as double), cast(x#x as double)) AS regr_sxx(y, x)#x, sum(y#x) AS sum(y)#xL, regr_syy(cast(y#x as double), cast(x#x as double)) AS regr_syy(y, x)#x, regr_sxy(cast(y#x as double), cast(x#x as double)) AS regr_sxy(y, x)#x]
 +- Filter x#x IN (10,20,30,80)
    +- SubqueryAlias regr_test
-      +- View (`regr_test`, [x#x,y#x])
+      +- View (`regr_test`, [x#x, y#x])
          +- Project [cast(x#x as int) AS x#x, cast(y#x as int) AS y#x]
             +- Project [x#x, y#x]
                +- SubqueryAlias regr_test
@@ -371,7 +371,7 @@ FROM regr_test
 -- !query analysis
 Aggregate [count(1) AS count(1)#xL, sum(x#x) AS sum(x)#xL, regr_sxx(cast(y#x as double), cast(x#x as double)) AS regr_sxx(y, x)#x, sum(y#x) AS sum(y)#xL, regr_syy(cast(y#x as double), cast(x#x as double)) AS regr_syy(y, x)#x, regr_sxy(cast(y#x as double), cast(x#x as double)) AS regr_sxy(y, x)#x]
 +- SubqueryAlias regr_test
-   +- View (`regr_test`, [x#x,y#x])
+   +- View (`regr_test`, [x#x, y#x])
       +- Project [cast(x#x as int) AS x#x, cast(y#x as int) AS y#x]
          +- Project [x#x, y#x]
             +- SubqueryAlias regr_test
@@ -385,7 +385,7 @@ FROM regr_test WHERE x IN (10,20,30)
 Aggregate [count(1) AS count(1)#xL, sum(x#x) AS sum(x)#xL, regr_sxx(cast(y#x as double), cast(x#x as double)) AS regr_sxx(y, x)#x, sum(y#x) AS sum(y)#xL, regr_syy(cast(y#x as double), cast(x#x as double)) AS regr_syy(y, x)#x, regr_sxy(cast(y#x as double), cast(x#x as double)) AS regr_sxy(y, x)#x]
 +- Filter x#x IN (10,20,30)
    +- SubqueryAlias regr_test
-      +- View (`regr_test`, [x#x,y#x])
+      +- View (`regr_test`, [x#x, y#x])
          +- Project [cast(x#x as int) AS x#x, cast(y#x as int) AS y#x]
             +- Project [x#x, y#x]
                +- SubqueryAlias regr_test
@@ -399,7 +399,7 @@ FROM regr_test WHERE x IN (80,100)
 Aggregate [count(1) AS count(1)#xL, sum(x#x) AS sum(x)#xL, regr_sxx(cast(y#x as double), cast(x#x as double)) AS regr_sxx(y, x)#x, sum(y#x) AS sum(y)#xL, regr_syy(cast(y#x as double), cast(x#x as double)) AS regr_syy(y, x)#x, regr_sxy(cast(y#x as double), cast(x#x as double)) AS regr_sxy(y, x)#x]
 +- Filter x#x IN (80,100)
    +- SubqueryAlias regr_test
-      +- View (`regr_test`, [x#x,y#x])
+      +- View (`regr_test`, [x#x, y#x])
          +- Project [cast(x#x as int) AS x#x, cast(y#x as int) AS y#x]
             +- Project [x#x, y#x]
                +- SubqueryAlias regr_test

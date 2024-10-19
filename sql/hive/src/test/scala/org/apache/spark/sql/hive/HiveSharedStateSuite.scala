@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.FileUtils
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.internal.config.UI
@@ -50,9 +49,9 @@ class HiveSharedStateSuite extends SparkFunSuite {
     // cross sessions.
     val initialConfigs = Map("spark.foo" -> "bar",
       WAREHOUSE_PATH.key -> warehousePath,
-      ConfVars.METASTOREWAREHOUSE.varname -> warehousePath,
+      "hive.metastore.warehouse.dir" -> warehousePath,
       CATALOG_IMPLEMENTATION.key -> "hive",
-      ConfVars.METASTORECONNECTURLKEY.varname ->
+      "javax.jdo.option.ConnectionURL" ->
         s"jdbc:derby:;databaseName=$metastorePath/metastore_db;create=true",
       GLOBAL_TEMP_DATABASE.key -> tmpDb)
 
@@ -64,7 +63,7 @@ class HiveSharedStateSuite extends SparkFunSuite {
       FileUtils.makeQualified(new Path(warehousePath), sc.hadoopConfiguration).toString
     assert(sc.conf.get(WAREHOUSE_PATH.key) === qualifiedWHPath,
       "initial warehouse conf in session options can affect application wide spark conf")
-    assert(sc.hadoopConfiguration.get(ConfVars.METASTOREWAREHOUSE.varname) === qualifiedWHPath,
+    assert(sc.hadoopConfiguration.get("hive.metastore.warehouse.dir") === qualifiedWHPath,
       "initial warehouse conf in session options can affect application wide hadoop conf")
 
     assert(!state.sparkContext.conf.contains("spark.foo"),
@@ -74,20 +73,20 @@ class HiveSharedStateSuite extends SparkFunSuite {
     val client = state.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
     assert(client.getConf("spark.foo", "") === "bar",
       "session level conf should be passed to catalog")
-    assert(client.getConf(ConfVars.METASTOREWAREHOUSE.varname, "") === qualifiedWHPath,
+    assert(client.getConf("hive.metastore.warehouse.dir", "") === qualifiedWHPath,
       "session level conf should be passed to catalog")
 
-    assert(state.globalTempViewManager.database === tmpDb)
+    assert(state.globalTempDB === tmpDb)
 
    val ss2 =
      builder.config("spark.foo", "bar2222").config(WAREHOUSE_PATH.key, invalidPath).getOrCreate()
 
     assert(!ss2.sparkContext.conf.get(WAREHOUSE_PATH.key).contains(invalidPath),
       "warehouse conf in session options can't affect application wide spark conf")
-    assert(ss2.sparkContext.hadoopConfiguration.get(ConfVars.METASTOREWAREHOUSE.varname) !==
+    assert(ss2.sparkContext.hadoopConfiguration.get("hive.metastore.warehouse.dir") !==
       invalidPath, "warehouse conf in session options can't affect application wide hadoop conf")
     assert(ss.conf.get("spark.foo") === "bar2222", "session level conf should be passed to catalog")
-    assert(!ss.conf.get(WAREHOUSE_PATH).contains(invalidPath),
+    assert(!ss.conf.get(WAREHOUSE_PATH.key).contains(invalidPath),
       "session level conf should be passed to catalog")
   }
 

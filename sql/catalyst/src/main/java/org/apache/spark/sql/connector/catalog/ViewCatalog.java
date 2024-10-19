@@ -115,7 +115,7 @@ public interface ViewCatalog extends CatalogPlugin {
    * Create a view in the catalog.
    *
    * @param viewInfo the info class holding all view information
-   * @return the view created
+   * @return the created view. This can be null if getting the metadata for the view is expensive
    * @throws ViewAlreadyExistsException If a view or table already exists for the identifier
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */
@@ -129,10 +129,12 @@ public interface ViewCatalog extends CatalogPlugin {
    *
    * @param viewInfo the info class holding all view information
    * @param orCreate create the view if it doesn't exist
+   * @return the created/replaced view. This can be null if getting the metadata
+   *         for the view is expensive
    * @throws NoSuchViewException If the view doesn't exist or is a table
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */
-  default void replaceView(
+  default View replaceView(
       ViewInfo viewInfo,
       boolean orCreate)
       throws NoSuchViewException, NoSuchNamespaceException {
@@ -143,7 +145,7 @@ public interface ViewCatalog extends CatalogPlugin {
     }
 
     try {
-      createView(viewInfo);
+      return createView(viewInfo);
     } catch (ViewAlreadyExistsException e) {
       throw new RuntimeException("Race condition when creating/replacing view", e);
     }

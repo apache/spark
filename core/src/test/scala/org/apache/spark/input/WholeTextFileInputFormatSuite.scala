@@ -19,8 +19,6 @@ package org.apache.spark.input
 
 import java.io.{DataOutputStream, File, FileOutputStream}
 
-import scala.collection.immutable.IndexedSeq
-
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
 /**

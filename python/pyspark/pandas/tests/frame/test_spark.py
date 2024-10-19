@@ -29,7 +29,7 @@ from pyspark import pandas as ps
 from pyspark.pandas.frame import CachedDataFrame
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.missing.frame import MissingPandasLikeDataFrame
-from pyspark.testing.pandasutils import ComparisonTestBase, SPARK_CONF_ARROW_ENABLED
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, SPARK_CONF_ARROW_ENABLED
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -42,6 +42,10 @@ class FrameSparkMixin:
             {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
             index=np.random.rand(9),
         )
+
+    @property
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
 
     def test_empty_dataframe(self):
         pdf = pd.DataFrame({"a": pd.Series([], dtype="i1"), "b": pd.Series([], dtype="str")})
@@ -287,7 +291,11 @@ class FrameSparkMixin:
                 getattr(psdf, name)
 
 
-class FrameSparkTests(FrameSparkMixin, ComparisonTestBase, SQLTestUtils):
+class FrameSparkTests(
+    FrameSparkMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

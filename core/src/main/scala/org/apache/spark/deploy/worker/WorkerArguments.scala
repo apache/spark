@@ -22,6 +22,7 @@ import java.lang.management.ManagementFactory
 import scala.annotation.tailrec
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Worker._
 import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 
@@ -59,6 +60,9 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
 
   // This mutates the SparkConf, so all accesses to it must be made after this line
   propertiesFile = Utils.loadDefaultSparkProperties(conf, propertiesFile)
+  // Initialize logging system again after `spark.log.structuredLogging.enabled` takes effect
+  Utils.resetStructuredLogging(conf)
+  Logging.uninitialize()
 
   conf.get(WORKER_UI_PORT).foreach { webUiPort = _ }
 
@@ -148,20 +152,13 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
   }
 
   def inferDefaultMemory(): Int = {
-    val ibmVendor = System.getProperty("java.vendor").contains("IBM")
     var totalMb = 0
     try {
       // scalastyle:off classforname
       val bean = ManagementFactory.getOperatingSystemMXBean()
-      if (ibmVendor) {
-        val beanClass = Class.forName("com.ibm.lang.management.OperatingSystemMXBean")
-        val method = beanClass.getDeclaredMethod("getTotalPhysicalMemory")
-        totalMb = (method.invoke(bean).asInstanceOf[Long] / 1024 / 1024).toInt
-      } else {
-        val beanClass = Class.forName("com.sun.management.OperatingSystemMXBean")
-        val method = beanClass.getDeclaredMethod("getTotalPhysicalMemorySize")
-        totalMb = (method.invoke(bean).asInstanceOf[Long] / 1024 / 1024).toInt
-      }
+      val beanClass = Class.forName("com.sun.management.OperatingSystemMXBean")
+      val method = beanClass.getDeclaredMethod("getTotalMemorySize")
+      totalMb = (method.invoke(bean).asInstanceOf[Long] / 1024 / 1024).toInt
       // scalastyle:on classforname
     } catch {
       case e: Exception =>

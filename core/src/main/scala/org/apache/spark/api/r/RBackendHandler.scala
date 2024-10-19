@@ -26,7 +26,8 @@ import io.netty.handler.timeout.ReadTimeoutException
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.api.r.SerDe._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.R._
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -76,7 +77,7 @@ private[r] class RBackendHandler(server: RBackend)
             writeObject(dos, null, server.jvmObjectTracker)
           } catch {
             case e: Exception =>
-              logError(s"Removing $objId failed", e)
+              logError(log"Removing ${MDC(OBJECT_ID, objId)} failed", e)
               writeInt(dos, -1)
               writeString(dos, s"Removing $objId failed: ${e.getMessage}")
           }
@@ -154,10 +155,11 @@ private[r] class RBackendHandler(server: RBackend)
           args)
 
         if (index.isEmpty) {
-          logWarning(s"cannot find matching method ${cls}.$methodName. "
-            + s"Candidates are:")
+          logWarning(log"cannot find matching method " +
+            log"${MDC(CLASS_NAME, cls)}.${MDC(METHOD_NAME, methodName)}. Candidates are:")
           selectedMethods.foreach { method =>
-            logWarning(s"$methodName(${method.getParameterTypes.mkString(",")})")
+            logWarning(log"${MDC(METHOD_NAME, methodName)}(" +
+              log"${MDC(METHOD_PARAM_TYPES, method.getParameterTypes.mkString(","))})")
           }
           throw new Exception(s"No matched method found for $cls.$methodName")
         }
@@ -175,10 +177,11 @@ private[r] class RBackendHandler(server: RBackend)
           args)
 
         if (index.isEmpty) {
-          logWarning(s"cannot find matching constructor for ${cls}. "
-            + s"Candidates are:")
+          logWarning(log"cannot find matching constructor for ${MDC(CLASS_NAME, cls)}. "
+            + log"Candidates are:")
           ctors.foreach { ctor =>
-            logWarning(s"$cls(${ctor.getParameterTypes.mkString(",")})")
+            logWarning(log"${MDC(CLASS_NAME, cls)}(" +
+              log"${MDC(METHOD_PARAM_TYPES, ctor.getParameterTypes.mkString(","))})")
           }
           throw new Exception(s"No matched constructor found for $cls")
         }
@@ -192,7 +195,7 @@ private[r] class RBackendHandler(server: RBackend)
       }
     } catch {
       case e: Exception =>
-        logError(s"$methodName on $objId failed", e)
+        logError(log"${MDC(METHOD_NAME, methodName)} on ${MDC(OBJECT_ID, objId)} failed", e)
         writeInt(dos, -1)
         // Writing the error message of the cause for the exception. This will be returned
         // to user in the R process.

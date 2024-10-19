@@ -57,7 +57,7 @@ object ExpectsInputTypes extends QueryErrorsBase {
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> (idx + 1).toString,
+            "paramIndex" -> ordinalNumber(idx),
             "requiredType" -> toSQLType(expected),
             "inputSql" -> toSQLExpr(input),
             "inputType" -> toSQLType(input.dataType)))

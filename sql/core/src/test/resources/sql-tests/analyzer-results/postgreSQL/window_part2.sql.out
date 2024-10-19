@@ -90,7 +90,7 @@ Project [id#xL, y#xL, first(y) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN (
                :- Union false, false
                :  :- Project [id#xL, id#xL AS y#xL]
                :  :  +- SubqueryAlias x
-               :  :     +- Range (1, 6, step=1, splits=None)
+               :  :     +- Range (1, 6, step=1)
                :  +- Project [cast(NULL#x as bigint) AS NULL#xL, cast(42#x as bigint) AS 42#xL]
                :     +- Project [null AS NULL#x, 42 AS 42#x]
                :        +- OneRowRelation
@@ -119,7 +119,7 @@ Project [id#xL, y#xL, first(y) OVER (ORDER BY id ASC NULLS LAST RANGE BETWEEN (-
                :- Union false, false
                :  :- Project [id#xL, id#xL AS y#xL]
                :  :  +- SubqueryAlias x
-               :  :     +- Range (1, 6, step=1, splits=None)
+               :  :     +- Range (1, 6, step=1)
                :  +- Project [cast(NULL#x as bigint) AS NULL#xL, cast(42#x as bigint) AS 42#xL]
                :     +- Project [null AS NULL#x, 42 AS 42#x]
                :        +- OneRowRelation
@@ -148,7 +148,7 @@ Project [id#xL, y#xL, first(y) OVER (ORDER BY id DESC NULLS FIRST RANGE BETWEEN 
                :- Union false, false
                :  :- Project [id#xL, id#xL AS y#xL]
                :  :  +- SubqueryAlias x
-               :  :     +- Range (1, 6, step=1, splits=None)
+               :  :     +- Range (1, 6, step=1)
                :  +- Project [cast(NULL#x as bigint) AS NULL#xL, cast(42#x as bigint) AS 42#xL]
                :     +- Project [null AS NULL#x, 42 AS 42#x]
                :        +- OneRowRelation
@@ -177,7 +177,7 @@ Project [id#xL, y#xL, first(y) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN (
                :- Union false, false
                :  :- Project [id#xL, id#xL AS y#xL]
                :  :  +- SubqueryAlias x
-               :  :     +- Range (1, 6, step=1, splits=None)
+               :  :     +- Range (1, 6, step=1)
                :  +- Project [cast(NULL#x as bigint) AS NULL#xL, cast(42#x as bigint) AS 42#xL]
                :     +- Project [null AS NULL#x, 42 AS 42#x]
                :        +- OneRowRelation
@@ -195,7 +195,7 @@ Project [id#xL, last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT
    +- Window [last(id#xL, false) windowspecdefinition(id#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), cast(2147450884 as bigint))) AS last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2147450884 FOLLOWING)#xL], [id#xL ASC NULLS FIRST]
       +- Project [id#xL]
          +- SubqueryAlias x
-            +- Range (32764, 32767, step=1, splits=None)
+            +- Range (32764, 32767, step=1)
 
 
 -- !query
@@ -207,7 +207,7 @@ Project [id#xL, last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT
    +- Window [last(id#xL, false) windowspecdefinition(id#xL DESC NULLS LAST, specifiedwindowframe(RangeFrame, currentrow$(), cast(2147450885 as bigint))) AS last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 2147450885 FOLLOWING)#xL], [id#xL DESC NULLS LAST]
       +- Project [id#xL]
          +- SubqueryAlias x
-            +- Range (-32766, -32765, step=1, splits=None)
+            +- Range (-32766, -32765, step=1)
 
 
 -- !query
@@ -219,7 +219,7 @@ Project [id#xL, last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT
    +- Window [last(id#xL, false) windowspecdefinition(id#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), cast(4 as bigint))) AS last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 4 FOLLOWING)#xL], [id#xL ASC NULLS FIRST]
       +- Project [id#xL]
          +- SubqueryAlias x
-            +- Range (2147483644, 2147483647, step=1, splits=None)
+            +- Range (2147483644, 2147483647, step=1)
 
 
 -- !query
@@ -231,7 +231,7 @@ Project [id#xL, last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT
    +- Window [last(id#xL, false) windowspecdefinition(id#xL DESC NULLS LAST, specifiedwindowframe(RangeFrame, currentrow$(), cast(5 as bigint))) AS last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 5 FOLLOWING)#xL], [id#xL DESC NULLS LAST]
       +- Project [id#xL]
          +- SubqueryAlias x
-            +- Range (-2147483646, -2147483645, step=1, splits=None)
+            +- Range (-2147483646, -2147483645, step=1)
 
 
 -- !query
@@ -243,7 +243,7 @@ Project [id#xL, last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT
    +- Window [last(id#xL, false) windowspecdefinition(id#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), cast(4 as bigint))) AS last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 4 FOLLOWING)#xL], [id#xL ASC NULLS FIRST]
       +- Project [id#xL]
          +- SubqueryAlias x
-            +- Range (9223372036854775804, 9223372036854775807, step=1, splits=None)
+            +- Range (9223372036854775804, 9223372036854775807, step=1)
 
 
 -- !query
@@ -255,7 +255,7 @@ Project [id#xL, last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT
    +- Window [last(id#xL, false) windowspecdefinition(id#xL DESC NULLS LAST, specifiedwindowframe(RangeFrame, currentrow$(), cast(5 as bigint))) AS last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 5 FOLLOWING)#xL], [id#xL DESC NULLS LAST]
       +- Project [id#xL]
          +- SubqueryAlias x
-            +- Range (-9223372036854775806, -9223372036854775805, step=1, splits=None)
+            +- Range (-9223372036854775806, -9223372036854775805, step=1)
 
 
 -- !query
@@ -449,7 +449,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'NaN'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""

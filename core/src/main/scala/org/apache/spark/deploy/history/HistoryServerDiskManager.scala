@@ -25,7 +25,9 @@ import scala.collection.mutable.{HashMap, ListBuffer}
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.History.HybridStoreDiskBackend.ROCKSDB
 import org.apache.spark.status.KVUtils
@@ -57,7 +59,7 @@ private class HistoryServerDiskManager(
     throw new IllegalArgumentException(s"Failed to create app directory ($appStoreDir).")
   }
   private val extension =
-    if (conf.get(HYBRID_STORE_DISK_BACKEND) == ROCKSDB.toString) ".rdb" else ".ldb"
+    if (conf.get(History.HYBRID_STORE_DISK_BACKEND) == ROCKSDB.toString) ".rdb" else ".ldb"
 
   private val tmpStoreDir = new File(path, "temp")
   if (!tmpStoreDir.isDirectory() && !tmpStoreDir.mkdir()) {
@@ -99,9 +101,9 @@ private class HistoryServerDiskManager(
       }
     }
 
-    logInfo("Initialized disk manager: " +
-      s"current usage = ${Utils.bytesToString(currentUsage.get())}, " +
-      s"max usage = ${Utils.bytesToString(maxUsage)}")
+    logInfo(log"Initialized disk manager:" +
+      log" current usage = ${MDC(NUM_BYTES_CURRENT, Utils.bytesToString(currentUsage.get()))}," +
+      log" max usage = ${MDC(NUM_BYTES_MAX, Utils.bytesToString(maxUsage))}")
   }
 
   /**
@@ -126,8 +128,9 @@ private class HistoryServerDiskManager(
     updateUsage(needed)
     val current = currentUsage.get()
     if (current > maxUsage) {
-      logInfo(s"Lease of ${Utils.bytesToString(needed)} may cause usage to exceed max " +
-        s"(${Utils.bytesToString(current)} > ${Utils.bytesToString(maxUsage)})")
+      logInfo(log"Lease of ${MDC(NUM_BYTES, Utils.bytesToString(needed))} may cause" +
+        log" usage to exceed max (${MDC(NUM_BYTES_CURRENT, Utils.bytesToString(current))}" +
+        log" > ${MDC(NUM_BYTES_MAX, Utils.bytesToString(maxUsage))})")
     }
 
     new Lease(tmp, needed)
@@ -237,16 +240,19 @@ private class HistoryServerDiskManager(
 
       if (evicted.nonEmpty) {
         val freed = evicted.map { info =>
-          logInfo(s"Deleting store for ${info.appId}/${info.attemptId}.")
+          logInfo(log"Deleting store for" +
+            log" ${MDC(APP_ID, info.appId)}/${MDC(APP_ATTEMPT_ID, info.attemptId)}.")
           deleteStore(new File(info.path))
           updateUsage(-info.size, committed = true)
           info.size
         }.sum
 
-        logInfo(s"Deleted ${evicted.size} store(s) to free ${Utils.bytesToString(freed)} " +
-          s"(target = ${Utils.bytesToString(size)}).")
+        logInfo(log"Deleted ${MDC(NUM_BYTES_EVICTED, evicted.size)} store(s)" +
+          log" to free ${MDC(NUM_BYTES_TO_FREE, Utils.bytesToString(freed))}" +
+          log" (target = ${MDC(NUM_BYTES, Utils.bytesToString(size))}).")
       } else {
-        logWarning(s"Unable to free any space to make room for ${Utils.bytesToString(size)}.")
+        logWarning(log"Unable to free any space to make room for " +
+          log"${MDC(NUM_BYTES, Utils.bytesToString(size))}.")
       }
     }
   }
@@ -312,8 +318,9 @@ private class HistoryServerDiskManager(
       if (committedUsage.get() > maxUsage) {
         val current = Utils.bytesToString(committedUsage.get())
         val max = Utils.bytesToString(maxUsage)
-        logWarning(s"Commit of application $appId / $attemptId causes maximum disk usage to be " +
-          s"exceeded ($current > $max)")
+        logWarning(log"Commit of application ${MDC(APP_ID, appId)} / " +
+          log"${MDC(APP_ATTEMPT_ID, attemptId)} causes maximum disk usage to be " +
+          log"exceeded (${MDC(NUM_BYTES, current)} > ${MDC(NUM_BYTES_MAX, max)}")
       }
 
       updateApplicationStoreInfo(appId, attemptId, newSize)

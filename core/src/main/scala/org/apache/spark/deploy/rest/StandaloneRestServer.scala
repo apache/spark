@@ -18,7 +18,8 @@
 package org.apache.spark.deploy.rest
 
 import java.io.File
-import javax.servlet.http.HttpServletResponse
+
+import jakarta.servlet.http.HttpServletResponse
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
@@ -70,6 +71,8 @@ private[deploy] class StandaloneRestServer(
     new StandaloneStatusRequestServlet(masterEndpoint, masterConf)
   protected override val clearRequestServlet =
     new StandaloneClearRequestServlet(masterEndpoint, masterConf)
+  protected override val readyzRequestServlet =
+    new StandaloneReadyzRequestServlet(masterEndpoint, masterConf)
 }
 
 /**
@@ -147,6 +150,22 @@ private[rest] class StandaloneClearRequestServlet(masterEndpoint: RpcEndpointRef
 }
 
 /**
+ * A servlet for handling readyz requests passed to the [[StandaloneRestServer]].
+ */
+private[rest] class StandaloneReadyzRequestServlet(masterEndpoint: RpcEndpointRef, conf: SparkConf)
+  extends ReadyzRequestServlet {
+
+  protected def handleReadyz(): ReadyzResponse = {
+    val success = masterEndpoint.askSync[Boolean](DeployMessages.RequestReadyz)
+    val r = new ReadyzResponse
+    r.serverSparkVersion = sparkVersion
+    r.message = ""
+    r.success = success
+    r
+  }
+}
+
+/**
  * A servlet for handling submit requests passed to the [[StandaloneRestServer]].
  */
 private[rest] class StandaloneSubmitRequestServlet(
@@ -154,6 +173,11 @@ private[rest] class StandaloneSubmitRequestServlet(
     masterUrl: String,
     conf: SparkConf)
   extends SubmitRequestServlet {
+
+  private def replacePlaceHolder(variable: String) = variable match {
+    case s"{{$name}}" if System.getenv(name) != null => System.getenv(name)
+    case _ => variable
+  }
 
   /**
    * Build a driver description from the fields specified in the submit request.
@@ -177,6 +201,7 @@ private[rest] class StandaloneSubmitRequestServlet(
 
     // Optional fields
     val sparkProperties = request.sparkProperties
+      .map(x => (x._1, replacePlaceHolder(x._2)))
     val driverMemory = sparkProperties.get(config.DRIVER_MEMORY.key)
     val driverCores = sparkProperties.get(config.DRIVER_CORES.key)
     val driverDefaultJavaOptions = sparkProperties.get(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS)
@@ -193,10 +218,13 @@ private[rest] class StandaloneSubmitRequestServlet(
     val (_, masterPort) = Utils.extractHostPortFromSparkUrl(masterUrl)
     val updatedMasters = masters.map(
       _.replace(s":$masterRestPort", s":$masterPort")).getOrElse(masterUrl)
-    val appArgs = request.appArgs
+    val appArgs = Option(request.appArgs).getOrElse(Array[String]())
     // Filter SPARK_LOCAL_(IP|HOSTNAME) environment variables from being set on the remote system.
+    // In addition, the placeholders are replaced into the values of environment variables.
     val environmentVariables =
-      request.environmentVariables.filterNot(x => x._1.matches("SPARK_LOCAL_(IP|HOSTNAME)"))
+      Option(request.environmentVariables).getOrElse(Map.empty[String, String])
+        .filterNot(x => x._1.matches("SPARK_LOCAL_(IP|HOSTNAME)"))
+        .map(x => (x._1, replacePlaceHolder(x._2)))
 
     // Construct driver description
     val conf = new SparkConf(false)

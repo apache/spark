@@ -760,9 +760,6 @@ class TorchDistributor(Distributor):
         *args: Any,
         **kwargs: Any,
     ) -> Optional[Any]:
-        if not framework_wrapper_fn:
-            raise RuntimeError("Unknown combination of parameters")
-
         log_streaming_server = LogStreamingServer()
         self.driver_address = _get_conf(self.spark, "spark.driver.host", "")
         assert self.driver_address != ""
@@ -850,7 +847,7 @@ class TorchDistributor(Distributor):
         partition_data_iterator: Iterator[Any], input_schema_json: Dict[str, Any]
     ) -> Iterator[Any]:
         from pyspark.sql.pandas.serializers import ArrowStreamSerializer
-        from pyspark.files import SparkFiles
+        from pyspark.core.files import SparkFiles
         import json
 
         if input_schema_json is None:

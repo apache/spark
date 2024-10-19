@@ -25,10 +25,11 @@ import net.razorvine.pickle.Pickler
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, SortOrder, UnresolvedPolymorphicPythonUDTF}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -63,9 +64,11 @@ case class UserDefinedPythonFunction(
     }
   }
 
+  def builderWithColumns(e: Seq[Column]): Expression = builder(e.map(expression))
+
   /** Returns a [[Column]] that will evaluate to calling this UDF with the given input. */
   def apply(exprs: Column*): Column = {
-    fromUDFExpr(builder(exprs.map(_.expr)))
+    fromUDFExpr(builder(exprs.map(expression)))
   }
 
   /**
@@ -73,8 +76,8 @@ case class UserDefinedPythonFunction(
    */
   def fromUDFExpr(expr: Expression): Column = {
     expr match {
-      case udaf: PythonUDAF => Column(udaf.toAggregateExpression())
-      case _ => Column(expr)
+      case udaf: PythonUDAF => udaf.toAggregateExpression()
+      case _ => expr
     }
   }
 }
@@ -157,7 +160,7 @@ case class UserDefinedPythonTableFunction(
 
   /** Returns a [[DataFrame]] that will evaluate to calling this UDTF with the given input. */
   def apply(session: SparkSession, exprs: Column*): DataFrame = {
-    val udtf = builder(exprs.map(_.expr), session.sessionState.sqlParser)
+    val udtf = builder(exprs.map(session.expression), session.sessionState.sqlParser)
     Dataset.ofRows(session, udtf)
   }
 }
@@ -276,11 +279,24 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
         case 2 => orderBy.append(SortOrder(parsed, direction, NullsLast, Seq.empty))
       }
     }
+    // Receive the list of requested input columns to select, if specified.
+    val numSelectedInputExpressions = dataIn.readInt()
+    val selectedInputExpressions = ArrayBuffer.empty[PythonUDTFSelectedExpression]
+    for (_ <- 0 until numSelectedInputExpressions) {
+      val expressionSql: String = PythonWorkerUtils.readUTF(dataIn)
+      val parsed: Expression = parser.parseExpression(expressionSql)
+      val alias: String = PythonWorkerUtils.readUTF(dataIn)
+      selectedInputExpressions.append(
+        PythonUDTFSelectedExpression(
+          parsed,
+          if (alias.nonEmpty) Some(alias) else None))
+    }
     PythonUDTFAnalyzeResult(
       schema = schema,
       withSinglePartition = withSinglePartition,
       partitionByExpressions = partitionByExpressions.toSeq,
       orderByExpressions = orderBy.toSeq,
+      selectedInputExpressions = selectedInputExpressions.toSeq,
       pickledAnalyzeResult = pickledAnalyzeResult)
   }
 }

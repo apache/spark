@@ -20,6 +20,7 @@ package org.apache.spark.sql.sources
 import scala.util.Random
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
@@ -31,10 +32,10 @@ import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
-import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, LongType}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.collection.BitSet
 
@@ -53,7 +54,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    spark.conf.set(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING, true)
+    spark.conf.set(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING.key, true)
   }
 
   protected override def afterAll(): Unit = {
@@ -222,12 +223,13 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
         df)
 
       // Case 4: InSet
-      val inSetExpr = expressions.InSet($"j".expr,
+      val inSetExpr = expressions.InSet(
+        UnresolvedAttribute("j"),
         Set(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3))
       checkPrunedAnswers(
         bucketSpec,
         bucketValues = Seq(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3),
-        filterCondition = Column(inSetExpr),
+        filterCondition = column(inSetExpr),
         df)
     }
   }
@@ -1086,70 +1088,6 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
             |        FROM   t1 JOIN t3 ON t1.i = t3.i AND t1.j = t3.j) t
             |       JOIN t2 ON t.t1i = t2.i AND t.t1j = t2.j
             |""".stripMargin, 0, Some(4))
-      }
-    }
-  }
-
-  test("SPARK-46219: Unwrap cast in join condition") {
-    def verify(
-        query: String,
-        expectedNumShuffles: Int,
-        numPartitions: Option[Int] = None,
-        partitioningKeyTypes: Option[Seq[DataType]] = None): Unit = {
-      Seq(true, false).foreach { ansiEnabled =>
-        Seq(true, false).foreach { aqeEnabled =>
-          withSQLConf(
-            SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString,
-            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
-            val df = sql(query)
-            val plan = df.queryExecution.executedPlan
-            val shuffles = collect(plan) {
-              case s: ShuffleExchangeExec => s
-            }
-            assert(shuffles.size === expectedNumShuffles)
-            if (shuffles.size == 1) {
-              val outputPartitioning = shuffles.head.outputPartitioning
-              assert(outputPartitioning.numPartitions === numPartitions.get)
-              assert(outputPartitioning.asInstanceOf[HashPartitioning]
-                .expressions.map(_.dataType) === partitioningKeyTypes.get)
-
-              collect(plan) { case s: SortMergeJoinExec => s }.flatMap(_.expressions).foreach {
-                case c: Cast => assert(c.evalMode === EvalMode.TRY) // The EvalMode should be try.
-                case _ =>
-              }
-
-              checkAnswer(df, Row(1, 1) :: Nil)
-            }
-          }
-        }
-      }
-    }
-
-    withTable("t1", "t2", "t3", "t4") {
-      sql(
-        s"""
-           |CREATE TABLE t1 USING parquet CLUSTERED BY (i) INTO 8 buckets AS
-           |SELECT CAST(v AS int) AS i FROM values(1), (${Int.MaxValue}) AS data(v)
-           |""".stripMargin)
-      sql(
-        s"""
-           |CREATE TABLE t2 USING parquet CLUSTERED BY (i) INTO 8 buckets AS
-           |SELECT CAST(v AS bigint) AS i FROM values(1), (${Long.MaxValue}) AS data(v)
-           |""".stripMargin)
-      sql(
-        s"""
-           |CREATE TABLE t3 USING parquet CLUSTERED BY (i) INTO 4 buckets AS
-           |SELECT CAST(v AS decimal(18, 0)) AS i FROM values(1), (${"9" * 18}) AS data(v)
-           |""".stripMargin)
-      spark.table("t2").write.saveAsTable("t4")
-
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
-        SQLConf.UNWRAP_CAST_IN_JOIN_CONDITION_ENABLED.key -> "true") {
-        verify("SELECT * FROM t2 JOIN t3 ON t2.i = t3.i", 1, Some(8), Some(Seq(LongType)))
-        verify("SELECT * FROM t1 JOIN t4 ON t1.i = t4.i", 1, Some(8), Some(Seq(IntegerType)))
-        verify("SELECT * FROM t3 JOIN t4 ON t3.i = t4.i", 1, Some(4), Some(Seq(DecimalType(18, 0))))
-        // Do not unwrap cast if it is added by user.
-        verify("SELECT * FROM t2 JOIN t3 ON cast(t2.i as int) = cast(t3.i as int)", 2)
       }
     }
   }

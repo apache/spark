@@ -18,21 +18,27 @@
 package org.apache.spark.metrics.sink
 
 import java.util.Properties
-import javax.servlet.http.HttpServletRequest
 
 import com.codahale.metrics.MetricRegistry
+import jakarta.servlet.http.HttpServletRequest
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.SparkConf
+import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.ui.JettyUtils._
 
 /**
+ * :: DeveloperApi ::
  * This exposes the metrics of the given registry with Prometheus format.
  *
  * The output is consistent with /metrics/json result in terms of item ordering
  * and with the previous result of Spark JMX Sink + Prometheus JMX Converter combination
  * in terms of key string format.
+ *
+ * This is used by Spark MetricsSystem internally and Spark K8s operator.
  */
+@Unstable
+@DeveloperApi
 private[spark] class PrometheusServlet(
     val property: Properties, val registry: MetricRegistry) extends Sink {
 
@@ -47,7 +53,10 @@ private[spark] class PrometheusServlet(
     )
   }
 
-  def getMetricsSnapshot(request: HttpServletRequest): String = {
+  def getMetricsSnapshot(request: HttpServletRequest): String = getMetricsSnapshot()
+
+  @Since("4.0.0")
+  def getMetricsSnapshot(): String = {
     import scala.jdk.CollectionConverters._
 
     val gaugesLabel = """{type="gauges"}"""

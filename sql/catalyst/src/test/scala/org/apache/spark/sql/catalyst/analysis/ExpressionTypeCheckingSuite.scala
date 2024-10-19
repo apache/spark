@@ -53,7 +53,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
       exception = analysisException(expr),
-      errorClass = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+      condition = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
       parameters = messageParameters)
   }
 
@@ -61,7 +61,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
       exception = analysisException(expr),
-      errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+      condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
       parameters = messageParameters)
   }
 
@@ -69,7 +69,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
       exception = analysisException(expr),
-      errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+      condition = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
       parameters = messageParameters)
   }
 
@@ -77,14 +77,14 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
       exception = analysisException(expr),
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = messageParameters)
   }
 
   private def assertForWrongType(expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
       exception = analysisException(expr),
-      errorClass = "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+      condition = "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
       parameters = messageParameters)
   }
 
@@ -93,10 +93,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(BitwiseNot($"stringField"))
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"~stringField\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> ordinalNumber(0),
         "inputSql" -> "\"stringField\"",
         "inputType" -> "\"STRING\"",
         "requiredType" -> "\"INTEGRAL\""))
@@ -340,7 +340,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(BooleanType),
           "inputSql" -> "\"1\"",
           "inputType" -> "\"INT\""
@@ -385,7 +385,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "2",
+          "paramIndex" -> ordinalNumber(1),
           "requiredType" -> "\"BOOLEAN\"",
           "inputSql" -> "\"2\"",
           "inputType" -> "\"INT\""
@@ -426,10 +426,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(Sum($"booleanField"))
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"sum(booleanField)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> ordinalNumber(0),
         "inputSql" -> "\"booleanField\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\""))
@@ -437,10 +437,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(Average($"booleanField"))
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"avg(booleanField)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> ordinalNumber(0),
         "inputSql" -> "\"booleanField\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\""))
@@ -469,7 +469,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(coalesce)
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> toSQLId(coalesce.prettyName),
         "expectedNum" -> "> 0",
@@ -481,7 +481,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(murmur3Hash)
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> toSQLId(murmur3Hash.prettyName),
         "expectedNum" -> "> 0",
@@ -493,7 +493,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(xxHash64)
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> toSQLId(xxHash64.prettyName),
         "expectedNum" -> "> 0",
@@ -504,10 +504,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(Explode($"intField"))
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"explode(intField)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> ordinalNumber(0),
         "inputSql" -> "\"intField\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "(\"ARRAY\" or \"MAP\")"))
@@ -516,10 +516,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(PosExplode($"intField"))
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"posexplode(intField)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> ordinalNumber(0),
         "inputSql" -> "\"intField\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "(\"ARRAY\" or \"MAP\")")
@@ -529,7 +529,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
   test("check types for CreateNamedStruct") {
     checkError(
       exception = analysisException(CreateNamedStruct(Seq("a", "b", 2.0))),
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`named_struct`",
         "expectedNum" -> "2n (n > 0)",
@@ -538,21 +538,21 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
     )
     checkError(
       exception = analysisException(CreateNamedStruct(Seq(1, "a", "b", 2.0))),
-      errorClass = "DATATYPE_MISMATCH.CREATE_NAMED_STRUCT_WITHOUT_FOLDABLE_STRING",
+      condition = "DATATYPE_MISMATCH.CREATE_NAMED_STRUCT_WITHOUT_FOLDABLE_STRING",
       parameters = Map(
         "sqlExpr" -> "\"named_struct(1, a, b, 2.0)\"",
         "inputExprs" -> "[\"1\"]")
     )
     checkError(
       exception = analysisException(CreateNamedStruct(Seq($"a".string.at(0), "a", "b", 2.0))),
-      errorClass = "DATATYPE_MISMATCH.CREATE_NAMED_STRUCT_WITHOUT_FOLDABLE_STRING",
+      condition = "DATATYPE_MISMATCH.CREATE_NAMED_STRUCT_WITHOUT_FOLDABLE_STRING",
       parameters = Map(
         "sqlExpr" -> "\"named_struct(boundreference(), a, b, 2.0)\"",
         "inputExprs" -> "[\"boundreference()\"]")
     )
     checkError(
       exception = analysisException(CreateNamedStruct(Seq(Literal.create(null, StringType), "a"))),
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
       parameters = Map(
         "sqlExpr" -> "\"named_struct(NULL, a)\"",
         "exprName" -> "[\"NULL\"]")
@@ -562,7 +562,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
   test("check types for CreateMap") {
     checkError(
       exception = analysisException(CreateMap(Seq("a", "b", 2.0))),
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`map`",
         "expectedNum" -> "2n (n > 0)",
@@ -572,7 +572,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
     checkError(
       exception = analysisException(CreateMap(Seq(Literal(1),
         Literal("a"), Literal(true), Literal("b")))),
-      errorClass = "DATATYPE_MISMATCH.CREATE_MAP_KEY_DIFF_TYPES",
+      condition = "DATATYPE_MISMATCH.CREATE_MAP_KEY_DIFF_TYPES",
       parameters = Map(
         "sqlExpr" -> "\"map(1, a, true, b)\"",
         "functionName" -> "`map`",
@@ -582,7 +582,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
     checkError(
       exception = analysisException(CreateMap(Seq(Literal("a"),
         Literal(1), Literal("b"), Literal(true)))),
-      errorClass = "DATATYPE_MISMATCH.CREATE_MAP_VALUE_DIFF_TYPES",
+      condition = "DATATYPE_MISMATCH.CREATE_MAP_VALUE_DIFF_TYPES",
       parameters = Map(
         "sqlExpr" -> "\"map(a, 1, b, true)\"",
         "functionName" -> "`map`",
@@ -599,7 +599,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(Round($"intField", $"intField"))
       },
-      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
         "sqlExpr" -> "\"round(intField, intField)\"",
         "inputName" -> "`scale`",
@@ -610,10 +610,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(Round($"intField", $"booleanField"))
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"round(intField, booleanField)\"",
-        "paramIndex" -> "2",
+        "paramIndex" -> ordinalNumber(1),
         "inputSql" -> "\"booleanField\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" -> "\"INT\""))
@@ -621,10 +621,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(Round($"intField", $"mapField"))
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"round(intField, mapField)\"",
-        "paramIndex" -> "2",
+        "paramIndex" -> ordinalNumber(1),
         "inputSql" -> "\"mapField\"",
         "inputType" -> "\"MAP<STRING, BIGINT>\"",
         "requiredType" -> "\"INT\""))
@@ -632,10 +632,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(Round($"booleanField", $"intField"))
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"round(booleanField, intField)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> ordinalNumber(0),
         "inputSql" -> "\"booleanField\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" -> "\"NUMERIC\""))
@@ -646,7 +646,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(BRound($"intField", $"intField"))
       },
-      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
         "sqlExpr" -> "\"bround(intField, intField)\"",
         "inputName" -> "`scale`",
@@ -656,10 +656,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(BRound($"intField", $"booleanField"))
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"bround(intField, booleanField)\"",
-        "paramIndex" -> "2",
+        "paramIndex" -> ordinalNumber(1),
         "inputSql" -> "\"booleanField\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" -> "\"INT\""))
@@ -667,10 +667,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(BRound($"intField", $"mapField"))
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"bround(intField, mapField)\"",
-        "paramIndex" -> "2",
+        "paramIndex" -> ordinalNumber(1),
         "inputSql" -> "\"mapField\"",
         "inputType" -> "\"MAP<STRING, BIGINT>\"",
         "requiredType" -> "\"INT\""))
@@ -678,10 +678,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(BRound($"booleanField", $"intField"))
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"bround(booleanField, intField)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> ordinalNumber(0),
         "inputSql" -> "\"booleanField\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" -> "\"NUMERIC\""))
@@ -747,6 +747,17 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
     )
   }
 
+  test("hash expressions are prohibited on VariantType elements") {
+    val argument = Literal.create(null, VariantType)
+    val murmur3Hash = new Murmur3Hash(Seq(argument))
+    assert(murmur3Hash.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "HASH_VARIANT_TYPE",
+        messageParameters = Map("functionName" -> toSQLId(murmur3Hash.prettyName))
+      )
+    )
+  }
+
   test("check types for Lag") {
     val lag = Lag(Literal(1), NonFoldableLiteral(10), Literal(null), true)
     assert(lag.checkInputDataTypes() ==
@@ -795,9 +806,14 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[SparkException] {
         wsd.checkInputDataTypes()
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" -> ("Cannot use an UnspecifiedFrame. " +
         "This should have been converted during analysis."))
     )
+  }
+
+  test("check that current time is foldable") {
+    val rnd = Rand(Month(CurrentDate()))
+    assert(rnd.checkInputDataTypes().isSuccess)
   }
 }

@@ -19,8 +19,6 @@ package org.apache.spark.sql.hive.client
 
 import java.net.URI
 
-import scala.collection.immutable.IndexedSeq
-
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.Suite
 
@@ -57,16 +55,18 @@ class HiveClientSuites extends SparkFunSuite with HiveClientVersions {
     assert("success" === client.getConf("test", null))
   }
 
-  test("override useless and side-effect hive configurations ") {
-    val hadoopConf = new Configuration()
-    // These hive flags should be reset by spark
-    hadoopConf.setBoolean("hive.cbo.enable", true)
-    hadoopConf.setBoolean("hive.session.history.enabled", true)
-    hadoopConf.set("hive.execution.engine", "tez")
-    val client = buildClient(HiveUtils.builtinHiveVersion, hadoopConf)
-    assert(!client.getConf("hive.cbo.enable", "true").toBoolean)
-    assert(!client.getConf("hive.session.history.enabled", "true").toBoolean)
-    assert(client.getConf("hive.execution.engine", "tez") === "mr")
+  test("override useless and side-effect hive configurations") {
+    Seq("spark", "tez").foreach { hiveExecEngine =>
+      val hadoopConf = new Configuration()
+      // These hive flags should be reset by spark
+      hadoopConf.setBoolean("hive.cbo.enable", true)
+      hadoopConf.setBoolean("hive.session.history.enabled", true)
+      hadoopConf.set("hive.execution.engine", hiveExecEngine)
+      val client = buildClient(HiveUtils.builtinHiveVersion, hadoopConf)
+      assert(!client.getConf("hive.cbo.enable", "true").toBoolean)
+      assert(!client.getConf("hive.session.history.enabled", "true").toBoolean)
+      assert(client.getConf("hive.execution.engine", hiveExecEngine) === "mr")
+    }
   }
 
   private def getNestedMessages(e: Throwable): String = {
@@ -91,6 +91,6 @@ class HiveClientSuites extends SparkFunSuite with HiveClientVersions {
   }
 
   override def nestedSuites: IndexedSeq[Suite] = {
-    versions.map(new HiveClientSuite(_, versions))
+    versions.map(new HiveClientSuite(_))
   }
 }

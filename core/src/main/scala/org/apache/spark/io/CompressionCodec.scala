@@ -22,13 +22,14 @@ import java.util.Locale
 
 import com.github.luben.zstd.{NoPool, RecyclingBufferPool, ZstdInputStreamNoFinalizer, ZstdOutputStreamNoFinalizer}
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
+import com.ning.compress.lzf.parallel.PLZFOutputStream
 import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream, LZ4Factory}
 import net.jpountz.xxhash.XXHashFactory
 import org.xerial.snappy.{Snappy, SnappyInputStream, SnappyOutputStream}
 
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.errors.SparkCoreErrors.{toConf, toConfVal}
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
@@ -92,12 +93,7 @@ private[spark] object CompressionCodec {
     } catch {
       case _: ClassNotFoundException | _: IllegalArgumentException => None
     }
-    codec.getOrElse(throw new SparkIllegalArgumentException(
-      errorClass = "CODEC_NOT_AVAILABLE",
-      messageParameters = Map(
-        "codecName" -> codecName,
-        "configKey" -> toConf(IO_COMPRESSION_CODEC.key),
-        "configVal" -> toConfVal(FALLBACK_COMPRESSION_CODEC))))
+    codec.getOrElse(throw SparkCoreErrors.codecNotAvailableError(codecName))
   }
 
   /**
@@ -105,8 +101,9 @@ private[spark] object CompressionCodec {
    * If it is already a short name, just return it.
    */
   def getShortName(codecName: String): String = {
-    if (shortCompressionCodecNames.contains(codecName)) {
-      codecName
+    val lowercasedCodec = codecName.toLowerCase(Locale.ROOT)
+    if (shortCompressionCodecNames.contains(lowercasedCodec)) {
+      lowercasedCodec
     } else {
       shortCompressionCodecNames
         .collectFirst { case (k, v) if v == codecName => k }
@@ -175,9 +172,14 @@ class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
  */
 @DeveloperApi
 class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
+  private val parallelCompression = conf.get(IO_COMPRESSION_LZF_PARALLEL)
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
-    new LZFOutputStream(s).setFinishBlockOnFlush(true)
+    if (parallelCompression) {
+      new PLZFOutputStream(s)
+    } else {
+      new LZFOutputStream(s).setFinishBlockOnFlush(true)
+    }
   }
 
   override def compressedInputStream(s: InputStream): InputStream = new LZFInputStream(s)

@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.hadoop.fs.FileStatus
 
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.MDC
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.SQLConf
@@ -101,7 +103,7 @@ class FileStreamSinkLog(
 
   val retentionMs: Long = _retentionMs match {
     case Some(retention) =>
-      logInfo(s"Retention is set to $retention ms")
+      logInfo(log"Retention is set to ${MDC(TIME_UNITS, retention)} ms")
       retention
 
     case _ => Long.MaxValue

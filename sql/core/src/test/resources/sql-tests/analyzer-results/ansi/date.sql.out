@@ -2,7 +2,7 @@
 -- !query
 create temporary view date_view as select '2011-11-11' date_str, '1' int_str
 -- !query analysis
-CreateViewCommand `date_view`, select '2011-11-11' date_str, '1' int_str, false, false, LocalTempView, true
+CreateViewCommand `date_view`, select '2011-11-11' date_str, '1' int_str, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [2011-11-11 AS date_str#x, 1 AS int_str#x]
       +- OneRowRelation
 
@@ -290,7 +290,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"BIGINT\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
     "sqlExpr" : "\"date_add(2011-11-11, 1)\""
   },
@@ -314,7 +314,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1.0\"",
     "inputType" : "\"DECIMAL(2,1)\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
     "sqlExpr" : "\"date_add(2011-11-11, 1.0)\""
   },
@@ -338,7 +338,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"10.0\"",
     "inputType" : "\"DOUBLE\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
     "sqlExpr" : "\"date_add(2011-11-11, 10.0)\""
   },
@@ -428,7 +428,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"BIGINT\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
     "sqlExpr" : "\"date_sub(2011-11-11, 1)\""
   },
@@ -452,7 +452,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1.0\"",
     "inputType" : "\"DECIMAL(2,1)\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
     "sqlExpr" : "\"date_sub(2011-11-11, 1.0)\""
   },
@@ -476,7 +476,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"10.0\"",
     "inputType" : "\"DOUBLE\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
     "sqlExpr" : "\"date_sub(2011-11-11, 10.0)\""
   },
@@ -532,7 +532,7 @@ select date_add('2011-11-11', int_str) from date_view
 -- !query analysis
 Project [date_add(cast(2011-11-11 as date), cast(int_str#x as int)) AS date_add(2011-11-11, int_str)#x]
 +- SubqueryAlias date_view
-   +- View (`date_view`, [date_str#x,int_str#x])
+   +- View (`date_view`, [date_str#x, int_str#x])
       +- Project [cast(date_str#x as string) AS date_str#x, cast(int_str#x as string) AS int_str#x]
          +- Project [2011-11-11 AS date_str#x, 1 AS int_str#x]
             +- OneRowRelation
@@ -543,7 +543,7 @@ select date_sub('2011-11-11', int_str) from date_view
 -- !query analysis
 Project [date_sub(cast(2011-11-11 as date), cast(int_str#x as int)) AS date_sub(2011-11-11, int_str)#x]
 +- SubqueryAlias date_view
-   +- View (`date_view`, [date_str#x,int_str#x])
+   +- View (`date_view`, [date_str#x, int_str#x])
       +- Project [cast(date_str#x as string) AS date_str#x, cast(int_str#x as string) AS int_str#x]
          +- Project [2011-11-11 AS date_str#x, 1 AS int_str#x]
             +- OneRowRelation
@@ -554,7 +554,7 @@ select date_add(date_str, 1) from date_view
 -- !query analysis
 Project [date_add(cast(date_str#x as date), 1) AS date_add(date_str, 1)#x]
 +- SubqueryAlias date_view
-   +- View (`date_view`, [date_str#x,int_str#x])
+   +- View (`date_view`, [date_str#x, int_str#x])
       +- Project [cast(date_str#x as string) AS date_str#x, cast(int_str#x as string) AS int_str#x]
          +- Project [2011-11-11 AS date_str#x, 1 AS int_str#x]
             +- OneRowRelation
@@ -565,7 +565,7 @@ select date_sub(date_str, 1) from date_view
 -- !query analysis
 Project [date_sub(cast(date_str#x as date), 1) AS date_sub(date_str, 1)#x]
 +- SubqueryAlias date_view
-   +- View (`date_view`, [date_str#x,int_str#x])
+   +- View (`date_view`, [date_str#x, int_str#x])
       +- Project [cast(date_str#x as string) AS date_str#x, cast(int_str#x as string) AS int_str#x]
          +- Project [2011-11-11 AS date_str#x, 1 AS int_str#x]
             +- OneRowRelation
@@ -581,7 +581,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"10.0\"",
     "inputType" : "\"DOUBLE\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
     "sqlExpr" : "\"date_add(DATE '2011-11-11', 10.0)\""
   },
@@ -665,7 +665,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"DATE\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
     "sqlExpr" : "\"date_add(DATE '2011-11-11', 1)\""
   },
@@ -689,7 +689,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"DATE '2011-11-11'\"",
     "inputType" : "\"DATE\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
     "sqlExpr" : "\"date_add(1, DATE '2011-11-11')\""
   },
@@ -736,7 +736,7 @@ Project [to_date(26/October/2015, Some(dd/MMMMM/yyyy), Some(America/Los_Angeles)
 -- !query
 select from_json('{"d":"26/October/2015"}', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'))
 -- !query analysis
-Project [from_json(StructField(d,DateType,true), (dateFormat,dd/MMMMM/yyyy), {"d":"26/October/2015"}, Some(America/Los_Angeles)) AS from_json({"d":"26/October/2015"})#x]
+Project [from_json(StructField(d,DateType,true), (dateFormat,dd/MMMMM/yyyy), {"d":"26/October/2015"}, Some(America/Los_Angeles), false) AS from_json({"d":"26/October/2015"})#x]
 +- OneRowRelation
 
 

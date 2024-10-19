@@ -6,7 +6,7 @@ AS testData(a, b)
 -- !query analysis
 CreateViewCommand `testData`, SELECT * FROM VALUES
 (1, 1), (1, 2), (2, 1), (1, 1), (null, 2), (1, null), (null, null)
-AS testData(a, b), false, true, LocalTempView, true
+AS testData(a, b), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias testData
          +- LocalRelation [a#x, b#x]
@@ -19,7 +19,7 @@ FROM testData
 -- !query analysis
 Aggregate [cast(udf(cast(count(1) as string)) as bigint) AS udf(count(1))#xL, cast(udf(cast(count(1) as string)) as bigint) AS udf(count(1))#xL, cast(udf(cast(count(null) as string)) as bigint) AS udf(count(NULL))#xL, cast(udf(cast(count(a#x) as string)) as bigint) AS udf(count(a))#xL, cast(udf(cast(count(b#x) as string)) as bigint) AS udf(count(b))#xL, cast(udf(cast(count((a#x + b#x)) as string)) as bigint) AS udf(count((a + b)))#xL, cast(udf(cast(count(named_struct(a, a#x, b, b#x)) as string)) as bigint) AS udf(count(named_struct(a, a, b, b)))#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -38,7 +38,7 @@ FROM testData
 -- !query analysis
 Aggregate [cast(udf(cast(count(distinct 1) as string)) as bigint) AS udf(count(DISTINCT 1))#xL, cast(udf(cast(count(distinct null) as string)) as bigint) AS udf(count(DISTINCT NULL))#xL, cast(udf(cast(count(distinct a#x) as string)) as bigint) AS udf(count(DISTINCT a))#xL, cast(udf(cast(count(distinct b#x) as string)) as bigint) AS udf(count(DISTINCT b))#xL, cast(udf(cast(count(distinct (a#x + b#x)) as string)) as bigint) AS udf(count(DISTINCT (a + b)))#xL, cast(udf(cast(count(distinct named_struct(a, a#x, b, b#x)) as string)) as bigint) AS udf(count(DISTINCT named_struct(a, a, b, b)))#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -50,7 +50,7 @@ SELECT udf(count(a, b)), udf(count(b, a)), udf(count(testData.*, testData.*)) FR
 -- !query analysis
 Aggregate [cast(udf(cast(count(a#x, b#x) as string)) as bigint) AS udf(count(a, b))#xL, cast(udf(cast(count(b#x, a#x) as string)) as bigint) AS udf(count(b, a))#xL, cast(udf(cast(count(a#x, b#x, a#x, b#x) as string)) as bigint) AS udf(count(a, b, a, b))#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -64,7 +64,7 @@ FROM testData
 -- !query analysis
 Aggregate [cast(udf(cast(count(distinct a#x, b#x) as string)) as bigint) AS udf(count(DISTINCT a, b))#xL, cast(udf(cast(count(distinct b#x, a#x) as string)) as bigint) AS udf(count(DISTINCT b, a))#xL, cast(udf(cast(count(distinct a#x, b#x) as string)) as bigint) AS udf(count(DISTINCT a, b))#xL, cast(udf(cast(count(distinct a#x, b#x, a#x, b#x) as string)) as bigint) AS udf(count(DISTINCT a, b, a, b))#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData

@@ -72,11 +72,13 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
     queryRunId: UUID,
     operatorId: Long,
     storeVersion: Long,
+    stateStoreCkptIds: Option[Array[Array[String]]],
     keySchema: StructType,
     valueSchema: StructType,
-    numColsPrefixKey: Int,
+    keyStateEncoderSpec: KeyStateEncoderSpec,
     sessionState: SessionState,
     @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
+    useColumnFamilies: Boolean = false,
     extraOptions: Map[String, String] = Map.empty)
   extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,
     sessionState, storeCoordinator, extraOptions) {
@@ -88,8 +90,9 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
 
     val inputIter = dataRDD.iterator(partition, ctxt)
     val store = StateStore.getReadOnly(
-      storeProviderId, keySchema, valueSchema, numColsPrefixKey, storeVersion,
-      storeConf, hadoopConfBroadcast.value.value)
+      storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
+      stateStoreCkptIds.map(_.apply(partition.index).head),
+      useColumnFamilies, storeConf, hadoopConfBroadcast.value.value)
     storeReadFunction(store, inputIter)
   }
 }
@@ -106,12 +109,15 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     queryRunId: UUID,
     operatorId: Long,
     storeVersion: Long,
+    uniqueId: Option[Array[Array[String]]],
     keySchema: StructType,
     valueSchema: StructType,
-    numColsPrefixKey: Int,
+    keyStateEncoderSpec: KeyStateEncoderSpec,
     sessionState: SessionState,
     @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
-    extraOptions: Map[String, String] = Map.empty)
+    useColumnFamilies: Boolean = false,
+    extraOptions: Map[String, String] = Map.empty,
+    useMultipleValuesPerKey: Boolean = false)
   extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,
     sessionState, storeCoordinator, extraOptions) {
 
@@ -122,8 +128,10 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
 
     val inputIter = dataRDD.iterator(partition, ctxt)
     val store = StateStore.get(
-      storeProviderId, keySchema, valueSchema, numColsPrefixKey, storeVersion,
-      storeConf, hadoopConfBroadcast.value.value)
+      storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
+      uniqueId.map(_.apply(partition.index).head),
+      useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
+      useMultipleValuesPerKey)
     storeUpdateFunction(store, inputIter)
   }
 }

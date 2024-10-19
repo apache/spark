@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -470,8 +470,13 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
 
     // unsupported cases
 
-    val msg = intercept[Exception](RangeShuffleSpec(10, distribution)
-      .createPartitioning(distribution.clustering))
-    assert(msg.getMessage.contains("Operation unsupported"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        RangeShuffleSpec(10, distribution).createPartitioning(distribution.clustering)
+      },
+      condition = "UNSUPPORTED_CALL.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "methodName" -> "createPartitioning$",
+        "className" -> "org.apache.spark.sql.catalyst.plans.physical.ShuffleSpec"))
   }
 }

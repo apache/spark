@@ -17,7 +17,7 @@
 package org.apache.spark.deploy.k8s.integrationtest
 
 import java.io.File
-import java.net.{URI, URL}
+import java.net.URI
 import java.nio.file.Files
 
 import scala.jdk.CollectionConverters._
@@ -38,6 +38,7 @@ import org.apache.spark.deploy.k8s.integrationtest.DepsTestsSuite.{DEPS_TIMEOUT,
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite._
 import org.apache.spark.deploy.k8s.integrationtest.Utils.getExamplesJarName
 import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.Minikube
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.internal.config.{ARCHIVES, PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
 
 private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
@@ -326,7 +327,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
         s3client.createBucket(createBucketRequest)
       } catch {
         case e: Exception =>
-          logError(s"Failed to create bucket $BUCKET", e)
+          logError(log"Failed to create bucket ${MDC(LogKeys.BUCKET, BUCKET)}", e)
           throw new SparkException(s"Failed to create bucket $BUCKET.", e)
       }
     }
@@ -370,7 +371,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
   }
 
   private def getServiceHostAndPort(minioUrlStr : String) : (String, Int) = {
-    val minioUrl = new URL(minioUrlStr)
+    val minioUrl = new URI(minioUrlStr).toURL
     (minioUrl.getHost, minioUrl.getPort)
   }
 
@@ -386,7 +387,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       .set("spark.kubernetes.file.upload.path", s"s3a://$BUCKET")
       .set("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
       .set("spark.jars.packages", packages)
-      .set("spark.driver.extraJavaOptions", "-Divy.cache.dir=/tmp -Divy.home=/tmp")
+      .set("spark.jars.ivy", "/tmp")
   }
 
   private def tryDepsTest(runTest: => Unit): Unit = {

@@ -123,14 +123,14 @@ will compile against built-in Hive and use those classes for internal execution 
 
 The following options can be used to configure the version of Hive that is used to retrieve metadata:
 
-<table>
+<table class="spark-config">
   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>spark.sql.hive.metastore.version</code></td>
-    <td><code>2.3.9</code></td>
+    <td><code>2.3.10</code></td>
     <td>
       Version of the Hive metastore. Available
-      options are <code>2.0.0</code> through <code>2.3.9</code> and <code>3.0.0</code> through <code>3.1.3</code>.
+      options are <code>2.0.0</code> through <code>2.3.10</code> and <code>3.0.0</code> through <code>3.1.3</code>.
     </td>
     <td>1.4.0</td>
   </tr>
@@ -142,9 +142,9 @@ The following options can be used to configure the version of Hive that is used 
       property can be one of four options:
       <ol>
         <li><code>builtin</code></li>
-        Use Hive 2.3.9, which is bundled with the Spark assembly when <code>-Phive</code> is
+        Use Hive 2.3.10, which is bundled with the Spark assembly when <code>-Phive</code> is
         enabled. When this option is chosen, <code>spark.sql.hive.metastore.version</code> must be
-        either <code>2.3.9</code> or not defined.
+        either <code>2.3.10</code> or not defined.
         <li><code>maven</code></li>
         Use Hive jars of specified version downloaded from Maven repositories. This configuration
         is not generally recommended for production deployments.

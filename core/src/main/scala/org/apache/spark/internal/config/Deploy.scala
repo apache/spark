@@ -26,20 +26,6 @@ private[spark] object Deploy {
     .stringConf
     .createWithDefault("NONE")
 
-  object RecoverySerializer extends Enumeration {
-    val JAVA, KRYO = Value
-  }
-
-  val RECOVERY_SERIALIZER = ConfigBuilder("spark.deploy.recoverySerializer")
-    .doc("Serializer for writing/reading objects to/from persistence engines; " +
-      "JAVA or KRYO. Java serializer has been the default mode since Spark 0.8.1." +
-      "KRYO serializer is a new fast and compact mode from Spark 4.0.0.")
-    .version("4.0.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(RecoverySerializer.values.map(_.toString))
-    .createWithDefault(RecoverySerializer.JAVA.toString)
-
   val RECOVERY_COMPRESSION_CODEC = ConfigBuilder("spark.deploy.recoveryCompressionCodec")
     .doc("A compression codec for persistence engines. none (default), lz4, lzf, snappy, and " +
       "zstd. Currently, only FILESYSTEM mode supports this configuration.")
@@ -97,10 +83,34 @@ private[spark] object Deploy {
     .intConf
     .createWithDefault(10)
 
-  val SPREAD_OUT_APPS = ConfigBuilder("spark.deploy.spreadOut")
-    .version("0.6.1")
+  val SPREAD_OUT_DRIVERS = ConfigBuilder("spark.deploy.spreadOutDrivers")
+    .version("4.0.0")
     .booleanConf
     .createWithDefault(true)
+
+  val SPREAD_OUT_APPS = ConfigBuilder("spark.deploy.spreadOutApps")
+    .version("0.6.1")
+    .withAlternative("spark.deploy.spreadOut")
+    .booleanConf
+    .createWithDefault(true)
+
+  object WorkerSelectionPolicy extends Enumeration {
+    val CORES_FREE_ASC, CORES_FREE_DESC, MEMORY_FREE_ASC, MEMORY_FREE_DESC, WORKER_ID = Value
+  }
+
+  val WORKER_SELECTION_POLICY = ConfigBuilder("spark.deploy.workerSelectionPolicy")
+    .doc("A policy to assign executors on one of the assignable workers; " +
+      "CORES_FREE_ASC to choose a worker with the least free cores, " +
+      "CORES_FREE_DESC to choose a worker with the most free cores, " +
+      "MEMORY_FREE_ASC to choose a worker with the least free memory, " +
+      "MEMORY_FREE_DESC to choose a worker with the most free memory, " +
+      "WORKER_ID to choose a worker with the smallest worker id. " +
+      "CORES_FREE_DESC is the default behavior.")
+    .version("4.0.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(WorkerSelectionPolicy.values.map(_.toString))
+    .createWithDefault(WorkerSelectionPolicy.CORES_FREE_DESC.toString)
 
   val DEFAULT_CORES = ConfigBuilder("spark.deploy.defaultCores")
     .version("0.9.0")

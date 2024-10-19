@@ -128,6 +128,14 @@ struct<to_timestamp(99, DD):timestamp>
 
 
 -- !query
+select to_timestamp('100', 'DD')
+-- !query schema
+struct<to_timestamp(100, DD):timestamp>
+-- !query output
+1970-04-10 00:00:00
+
+
+-- !query
 select to_timestamp('009', 'DDD')
 -- !query schema
 struct<to_timestamp(009, DDD):timestamp>

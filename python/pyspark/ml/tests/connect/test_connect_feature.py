@@ -15,19 +15,33 @@
 # limitations under the License.
 #
 
+import os
 import unittest
 
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
+have_sklearn = True
+sklearn_requirement_message = None
+try:
+    from sklearn.datasets import load_breast_cancer  # noqa: F401
+except ImportError:
+    have_sklearn = False
+    sklearn_requirement_message = "No sklearn found"
+
 if should_test_connect:
     from pyspark.ml.tests.connect.test_legacy_mode_feature import FeatureTestsMixin
 
 
-@unittest.skipIf(not should_test_connect, connect_requirement_message)
+@unittest.skipIf(
+    not should_test_connect or not have_sklearn,
+    connect_requirement_message or sklearn_requirement_message,
+)
 class FeatureTestsOnConnect(FeatureTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
-        self.spark = SparkSession.builder.remote("local[2]").getOrCreate()
+        self.spark = SparkSession.builder.remote(
+            os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
+        ).getOrCreate()
 
     def tearDown(self) -> None:
         self.spark.stop()

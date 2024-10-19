@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.MULTI_COMMUTATIVE_OP_OPT_THRESHOLD
-import org.apache.spark.sql.types.{BooleanType, Decimal, DecimalType, IntegerType, LongType, StringType, StructField, StructType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{BooleanType, Decimal, DecimalType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampNTZType, TimestampType}
 
 class CanonicalizeSuite extends SparkFunSuite {
 
@@ -350,5 +350,133 @@ class CanonicalizeSuite extends SparkFunSuite {
     val op = Add(literal1, Add(literal2, literal3))
     assert(op.canonicalized.toJSON.nonEmpty)
     SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, default.toString)
+  }
+
+  test("canonicalization of With expressions with one common expression") {
+    val expr = Divide(Literal.create(1, IntegerType), AttributeReference("a", IntegerType)())
+    val common1 = IsNull(With(expr.copy()) { case Seq(expr) =>
+      If(EqualTo(expr, Literal.create(0.0, DoubleType)), Literal.create(0.0, DoubleType), expr)
+    })
+    val common2 = IsNull(With(expr.copy()) { case Seq(expr) =>
+      If(EqualTo(expr, Literal.create(0.0, DoubleType)), Literal.create(0.0, DoubleType), expr)
+    })
+    // Check that canonicalization is consistent across multiple executions.
+    assert(common1.canonicalized == common2.canonicalized)
+    // Check that CommonExpressionDef starts ID'ing at 1 and that its child is canonicalized.
+    assert(common1.canonicalized.exists {
+      case d: CommonExpressionDef => d.id.id == 1 && d.child == expr.canonicalized
+      case _ => false
+    })
+    // Check that CommonExpressionRef ID corresponds to the def.
+    assert(common1.canonicalized.exists {
+      case r: CommonExpressionRef => r.id.id == 1
+      case _ => false
+    })
+  }
+
+  test("canonicalization of With expressions with multiple common expressions") {
+    val expr1 = Divide(Literal.create(1, IntegerType), AttributeReference("a", IntegerType)())
+    val expr2 = Multiply(Literal.create(2, IntegerType), AttributeReference("a", IntegerType)())
+    val common1 = With(expr1.copy(), expr2.copy()) { case Seq(expr1, expr2) =>
+      If(EqualTo(expr1, expr2), expr1, expr2)
+    }
+    val common2 = With(expr1.copy(), expr2.copy()) { case Seq(expr1, expr2) =>
+      If(EqualTo(expr1, expr2), expr1, expr2)
+    }
+    // Check that canonicalization is consistent across multiple executions.
+    assert(common1.canonicalized == common2.canonicalized)
+    // Check that CommonExpressionDef starts ID'ing at 1 and that its child is canonicalized.
+    assert(common1.canonicalized.exists {
+      case d: CommonExpressionDef => d.id.id == 1 && d.child == expr1.canonicalized
+      case _ => false
+    })
+    assert(common1.canonicalized.exists {
+      case d: CommonExpressionDef => d.id.id == 2 && d.child == expr2.canonicalized
+      case _ => false
+    })
+    // Check that CommonExpressionRef ID corresponds to the def.
+    assert(common1.canonicalized.exists {
+      case r: CommonExpressionRef => r.id.id == 1
+      case _ => false
+    })
+    assert(common1.canonicalized.exists {
+      case r: CommonExpressionRef => r.id.id == 2
+      case _ => false
+    })
+  }
+
+  test("canonicalization of With expressions with nested common expressions") {
+    val expr1 = AttributeReference("a", BooleanType)()
+    val expr2 = AttributeReference("b", BooleanType)()
+
+    val common1 = With(expr1) { case Seq(expr1) =>
+      Or(With(expr2) { case Seq(expr2) =>
+        And(EqualTo(expr1, expr2), EqualTo(expr1, expr2))
+      }, expr1)
+    }
+    val common2 = With(expr1) { case Seq(expr1) =>
+      Or(With(expr2) { case Seq(expr2) =>
+        And(EqualTo(expr1, expr2), EqualTo(expr1, expr2))
+      }, expr1)
+    }
+    // Check that canonicalization is consistent across multiple executions.
+    assert(common1.canonicalized == common2.canonicalized)
+    // Check that CommonExpressionDef starts ID'ing at 1 and that its child is canonicalized.
+    assert(common1.canonicalized.exists {
+      case d: CommonExpressionDef => d.id.id == 1 && d.child == expr2.canonicalized
+      case _ => false
+    })
+    assert(common1.canonicalized.exists {
+      case d: CommonExpressionDef => d.id.id == 2 && d.child == expr1.canonicalized
+      case _ => false
+    })
+    // Check that CommonExpressionRef ID corresponds to the def.
+    assert(common1.canonicalized.exists {
+      case r: CommonExpressionRef => r.id.id == 1
+      case _ => false
+    })
+    assert(common1.canonicalized.exists {
+      case r: CommonExpressionRef => r.id.id == 2
+      case _ => false
+    })
+
+    val common3 = With(expr1.newInstance()) { case Seq(expr1) =>
+      Or(With(expr2.newInstance()) { case Seq(expr2) =>
+        And(EqualTo(expr1, expr2), EqualTo(expr1, expr2))
+      }, expr1)
+    }
+    val common4 = With(expr1.newInstance()) { case Seq(expr1) =>
+      Or(With(expr2.newInstance()) { case Seq(expr2) =>
+        And(EqualTo(expr2, expr1), EqualTo(expr2, expr1))
+      }, expr1)
+    }
+    // Check that canonicalization for two different expressions with similar structures is
+    // different.
+    assert(common3.canonicalized != common4.canonicalized)
+  }
+
+  test("SPARK-48035: Add/Multiply operator canonicalization should take into account the" +
+    "evaluation mode of the operands before operand reordering") {
+    Seq(1, 10) map { multiCommutativeOpOptThreshold =>
+        val default = SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)
+        SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key,
+          multiCommutativeOpOptThreshold.toString)
+        try {
+          val l1 = Literal(1)
+          val l2 = Literal(2)
+          val l3 = Literal(3)
+
+          val expr1 = Add(Add(l1, l2), l3)
+          val expr2 = Add(Add(l2, l1, EvalMode.TRY), l3)
+          assert(!expr1.semanticEquals(expr2))
+
+          val expr3 = Multiply(Multiply(l1, l2), l3)
+          val expr4 = Multiply(Multiply(l2, l1, EvalMode.TRY), l3)
+          assert(!expr3.semanticEquals(expr4))
+        } finally {
+          SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key,
+            default.toString)
+        }
+    }
   }
 }

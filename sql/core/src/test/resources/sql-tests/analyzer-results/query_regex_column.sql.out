@@ -12,7 +12,7 @@ AS testData(key, value1, value2)
 -- !query analysis
 CreateViewCommand `testData`, SELECT * FROM VALUES
 (1, "1", "11"), (2, "2", "22"), (3, "3", "33"), (4, "4", "44"), (5, "5", "55"), (6, "6", "66")
-AS testData(key, value1, value2), false, true, LocalTempView, true
+AS testData(key, value1, value2), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [key#x, value1#x, value2#x]
       +- SubqueryAlias testData
          +- LocalRelation [key#x, value1#x, value2#x]
@@ -25,7 +25,7 @@ AS testData2(A, B, c, d)
 -- !query analysis
 CreateViewCommand `testData2`, SELECT * FROM VALUES
 (1, 1, 1, 2), (1, 2, 1, 2), (2, 1, 2, 3), (2, 2, 2, 3), (3, 1, 3, 4), (3, 2, 3, 4)
-AS testData2(A, B, c, d), false, true, LocalTempView, true
+AS testData2(A, B, c, d), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [A#x, B#x, c#x, d#x]
       +- SubqueryAlias testData2
          +- LocalRelation [A#x, B#x, c#x, d#x]
@@ -169,7 +169,7 @@ SELECT `(a)?+.+` FROM testData2 WHERE a = 1
 Project [B#x, c#x, d#x]
 +- Filter (a#x = 1)
    +- SubqueryAlias testdata2
-      +- View (`testData2`, [A#x,B#x,c#x,d#x])
+      +- View (`testData2`, [A#x, B#x, c#x, d#x])
          +- Project [cast(A#x as int) AS A#x, cast(B#x as int) AS B#x, cast(c#x as int) AS c#x, cast(d#x as int) AS d#x]
             +- Project [A#x, B#x, c#x, d#x]
                +- SubqueryAlias testData2
@@ -182,7 +182,7 @@ SELECT `(A)?+.+` FROM testData2 WHERE a = 1
 Project [B#x, c#x, d#x]
 +- Filter (a#x = 1)
    +- SubqueryAlias testdata2
-      +- View (`testData2`, [A#x,B#x,c#x,d#x])
+      +- View (`testData2`, [A#x, B#x, c#x, d#x])
          +- Project [cast(A#x as int) AS A#x, cast(B#x as int) AS B#x, cast(c#x as int) AS c#x, cast(d#x as int) AS d#x]
             +- Project [A#x, B#x, c#x, d#x]
                +- SubqueryAlias testData2
@@ -196,7 +196,7 @@ Project [B#x, c#x, d#x]
 +- Filter (a#x = 1)
    +- SubqueryAlias t
       +- SubqueryAlias testdata2
-         +- View (`testData2`, [A#x,B#x,c#x,d#x])
+         +- View (`testData2`, [A#x, B#x, c#x, d#x])
             +- Project [cast(A#x as int) AS A#x, cast(B#x as int) AS B#x, cast(c#x as int) AS c#x, cast(d#x as int) AS d#x]
                +- Project [A#x, B#x, c#x, d#x]
                   +- SubqueryAlias testData2
@@ -210,7 +210,7 @@ Project [B#x, c#x, d#x]
 +- Filter (a#x = 1)
    +- SubqueryAlias t
       +- SubqueryAlias testdata2
-         +- View (`testData2`, [A#x,B#x,c#x,d#x])
+         +- View (`testData2`, [A#x, B#x, c#x, d#x])
             +- Project [cast(A#x as int) AS A#x, cast(B#x as int) AS B#x, cast(c#x as int) AS c#x, cast(d#x as int) AS d#x]
                +- Project [A#x, B#x, c#x, d#x]
                   +- SubqueryAlias testData2
@@ -223,7 +223,7 @@ SELECT `(a|B)` FROM testData2 WHERE a = 2
 Project [A#x, B#x]
 +- Filter (a#x = 2)
    +- SubqueryAlias testdata2
-      +- View (`testData2`, [A#x,B#x,c#x,d#x])
+      +- View (`testData2`, [A#x, B#x, c#x, d#x])
          +- Project [cast(A#x as int) AS A#x, cast(B#x as int) AS B#x, cast(c#x as int) AS c#x, cast(d#x as int) AS d#x]
             +- Project [A#x, B#x, c#x, d#x]
                +- SubqueryAlias testData2
@@ -236,7 +236,7 @@ SELECT `(A|b)` FROM testData2 WHERE a = 2
 Project [A#x, B#x]
 +- Filter (a#x = 2)
    +- SubqueryAlias testdata2
-      +- View (`testData2`, [A#x,B#x,c#x,d#x])
+      +- View (`testData2`, [A#x, B#x, c#x, d#x])
          +- Project [cast(A#x as int) AS A#x, cast(B#x as int) AS B#x, cast(c#x as int) AS c#x, cast(d#x as int) AS d#x]
             +- Project [A#x, B#x, c#x, d#x]
                +- SubqueryAlias testData2
@@ -249,7 +249,7 @@ SELECT `(a|B)?+.+` FROM testData2 WHERE a = 2
 Project [c#x, d#x]
 +- Filter (a#x = 2)
    +- SubqueryAlias testdata2
-      +- View (`testData2`, [A#x,B#x,c#x,d#x])
+      +- View (`testData2`, [A#x, B#x, c#x, d#x])
          +- Project [cast(A#x as int) AS A#x, cast(B#x as int) AS B#x, cast(c#x as int) AS c#x, cast(d#x as int) AS d#x]
             +- Project [A#x, B#x, c#x, d#x]
                +- SubqueryAlias testData2
@@ -262,7 +262,7 @@ SELECT `(A|b)?+.+` FROM testData2 WHERE a = 2
 Project [c#x, d#x]
 +- Filter (a#x = 2)
    +- SubqueryAlias testdata2
-      +- View (`testData2`, [A#x,B#x,c#x,d#x])
+      +- View (`testData2`, [A#x, B#x, c#x, d#x])
          +- Project [cast(A#x as int) AS A#x, cast(B#x as int) AS B#x, cast(c#x as int) AS c#x, cast(d#x as int) AS d#x]
             +- Project [A#x, B#x, c#x, d#x]
                +- SubqueryAlias testData2
@@ -274,7 +274,7 @@ SELECT `(e|f)` FROM testData2
 -- !query analysis
 Project
 +- SubqueryAlias testdata2
-   +- View (`testData2`, [A#x,B#x,c#x,d#x])
+   +- View (`testData2`, [A#x, B#x, c#x, d#x])
       +- Project [cast(A#x as int) AS A#x, cast(B#x as int) AS B#x, cast(c#x as int) AS c#x, cast(d#x as int) AS d#x]
          +- Project [A#x, B#x, c#x, d#x]
             +- SubqueryAlias testData2
@@ -287,7 +287,7 @@ SELECT t.`(e|f)` FROM testData2 t
 Project
 +- SubqueryAlias t
    +- SubqueryAlias testdata2
-      +- View (`testData2`, [A#x,B#x,c#x,d#x])
+      +- View (`testData2`, [A#x, B#x, c#x, d#x])
          +- Project [cast(A#x as int) AS A#x, cast(B#x as int) AS B#x, cast(c#x as int) AS c#x, cast(d#x as int) AS d#x]
             +- Project [A#x, B#x, c#x, d#x]
                +- SubqueryAlias testData2
@@ -302,13 +302,13 @@ Project [value1#x, value2#x, b#x, A#x, c#x, d#x]
    +- Join Inner, (key#x = a#x)
       :- SubqueryAlias p
       :  +- SubqueryAlias testdata
-      :     +- View (`testData`, [key#x,value1#x,value2#x])
+      :     +- View (`testData`, [key#x, value1#x, value2#x])
       :        +- Project [cast(key#x as int) AS key#x, cast(value1#x as string) AS value1#x, cast(value2#x as string) AS value2#x]
       :           +- Project [key#x, value1#x, value2#x]
       :              +- SubqueryAlias testData
       :                 +- LocalRelation [key#x, value1#x, value2#x]
       +- SubqueryAlias testdata2
-         +- View (`testData2`, [A#x,B#x,c#x,d#x])
+         +- View (`testData2`, [A#x, B#x, c#x, d#x])
             +- Project [cast(A#x as int) AS A#x, cast(B#x as int) AS B#x, cast(c#x as int) AS c#x, cast(d#x as int) AS d#x]
                +- Project [A#x, B#x, c#x, d#x]
                   +- SubqueryAlias testData2
@@ -323,13 +323,13 @@ Project [value1#x, value2#x, b#x, A#x, c#x, d#x]
    +- Join Inner, (key#x = a#x)
       :- SubqueryAlias p
       :  +- SubqueryAlias testdata
-      :     +- View (`testData`, [key#x,value1#x,value2#x])
+      :     +- View (`testData`, [key#x, value1#x, value2#x])
       :        +- Project [cast(key#x as int) AS key#x, cast(value1#x as string) AS value1#x, cast(value2#x as string) AS value2#x]
       :           +- Project [key#x, value1#x, value2#x]
       :              +- SubqueryAlias testData
       :                 +- LocalRelation [key#x, value1#x, value2#x]
       +- SubqueryAlias testdata2
-         +- View (`testData2`, [A#x,B#x,c#x,d#x])
+         +- View (`testData2`, [A#x, B#x, c#x, d#x])
             +- Project [cast(A#x as int) AS A#x, cast(B#x as int) AS B#x, cast(c#x as int) AS c#x, cast(d#x as int) AS d#x]
                +- Project [A#x, B#x, c#x, d#x]
                   +- SubqueryAlias testData2
@@ -349,7 +349,7 @@ AS testdata3(a, b)
 -- !query analysis
 CreateViewCommand `testdata3`, SELECT * FROM VALUES
 (0, 1), (1, 2), (2, 3), (3, 4)
-AS testdata3(a, b), false, true, LocalTempView, true
+AS testdata3(a, b), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias testdata3
          +- LocalRelation [a#x, b#x]
@@ -360,7 +360,7 @@ SELECT `(A)?+.+` FROM testdata3
 -- !query analysis
 Project [a#x, b#x]
 +- SubqueryAlias testdata3
-   +- View (`testdata3`, [a#x,b#x])
+   +- View (`testdata3`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testdata3
@@ -372,7 +372,7 @@ SELECT `(a)?+.+` FROM testdata3
 -- !query analysis
 Project [b#x]
 +- SubqueryAlias testdata3
-   +- View (`testdata3`, [a#x,b#x])
+   +- View (`testdata3`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testdata3
@@ -385,7 +385,7 @@ SELECT `(A)?+.+` FROM testdata3 WHERE a > 1
 Project [a#x, b#x]
 +- Filter (a#x > 1)
    +- SubqueryAlias testdata3
-      +- View (`testdata3`, [a#x,b#x])
+      +- View (`testdata3`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias testdata3
@@ -398,7 +398,7 @@ SELECT `(a)?+.+` FROM testdata3 where `a` > 1
 Project [b#x]
 +- Filter (a#x > 1)
    +- SubqueryAlias testdata3
-      +- View (`testdata3`, [a#x,b#x])
+      +- View (`testdata3`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias testdata3
@@ -410,7 +410,7 @@ SELECT SUM(`a`) FROM testdata3
 -- !query analysis
 Aggregate [sum(a#x) AS sum(a)#xL]
 +- SubqueryAlias testdata3
-   +- View (`testdata3`, [a#x,b#x])
+   +- View (`testdata3`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testdata3
@@ -422,7 +422,7 @@ SELECT SUM(`(a)`) FROM testdata3
 -- !query analysis
 Aggregate [sum(a#x) AS sum(a)#xL]
 +- SubqueryAlias testdata3
-   +- View (`testdata3`, [a#x,b#x])
+   +- View (`testdata3`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testdata3
@@ -434,7 +434,7 @@ SELECT SUM(`(a)?+.+`) FROM testdata3
 -- !query analysis
 Aggregate [sum(b#x) AS sum(b)#xL]
 +- SubqueryAlias testdata3
-   +- View (`testdata3`, [a#x,b#x])
+   +- View (`testdata3`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testdata3
@@ -446,7 +446,7 @@ SELECT SUM(a) FROM testdata3 GROUP BY `a`
 -- !query analysis
 Aggregate [a#x], [sum(a#x) AS sum(a)#xL]
 +- SubqueryAlias testdata3
-   +- View (`testdata3`, [a#x,b#x])
+   +- View (`testdata3`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testdata3

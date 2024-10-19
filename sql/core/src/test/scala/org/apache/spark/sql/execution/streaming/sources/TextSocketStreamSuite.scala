@@ -27,11 +27,12 @@ import java.util.concurrent.TimeUnit._
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest}
@@ -59,7 +60,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
         "Cannot add data when there is no query for finding the active socket source")
 
       val sources = query.get.logicalPlan.collect {
-        case r: StreamingDataSourceV2Relation
+        case r: StreamingDataSourceV2ScanRelation
             if r.stream.isInstanceOf[TextSocketMicroBatchStream] =>
           r.stream.asInstanceOf[TextSocketMicroBatchStream]
       }
@@ -193,11 +194,12 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
       StructField("name", StringType) ::
       StructField("area", StringType) :: Nil)
     val params = Map("host" -> "localhost", "port" -> "1234")
-    val exception = intercept[UnsupportedOperationException] {
-      spark.readStream.schema(userSpecifiedSchema).format("socket").options(params).load()
-    }
-    assert(exception.getMessage.contains(
-      "TextSocketSourceProvider source does not support user-specified schema"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        spark.readStream.schema(userSpecifiedSchema).format("socket").options(params).load()
+      },
+      condition = "_LEGACY_ERROR_TEMP_2242",
+      parameters = Map("provider" -> "TextSocketSourceProvider"))
   }
 
   test("input row metrics") {

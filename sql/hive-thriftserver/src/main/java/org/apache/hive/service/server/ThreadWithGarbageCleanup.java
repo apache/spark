@@ -22,8 +22,9 @@ import java.util.Map;
 
 import org.apache.hadoop.hive.metastore.HiveMetaStore;
 import org.apache.hadoop.hive.metastore.RawStore;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 
 /**
  * A HiveServer2 thread used to construct new server threads.
@@ -31,7 +32,7 @@ import org.slf4j.LoggerFactory;
  * when killed by its corresponding ExecutorService.
  */
 public class ThreadWithGarbageCleanup extends Thread {
-  private static final Logger LOG = LoggerFactory.getLogger(ThreadWithGarbageCleanup.class);
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(ThreadWithGarbageCleanup.class);
 
   Map<Long, RawStore> threadRawStoreMap =
       ThreadFactoryWithGarbageCleanup.getThreadRawStoreMap();

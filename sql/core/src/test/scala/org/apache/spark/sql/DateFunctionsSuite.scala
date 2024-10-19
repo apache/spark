@@ -23,7 +23,7 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkConf, SparkException, SparkUpgradeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkConf, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CEST, LA}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
@@ -54,7 +54,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         sql("SELECT CURDATE(1)")
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`curdate`",
         "expectedNum" -> "0",
@@ -265,6 +265,30 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.selectExpr("weekday(a)", "weekday(b)", "weekday(c)"),
       Row(2, 2, 0))
+  }
+
+  test("monthname") {
+    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(monthname($"a"), monthname($"b"), monthname($"c")),
+      Row("Apr", "Apr", "Apr"))
+
+    checkAnswer(
+      df.selectExpr("monthname(a)", "monthname(b)", "monthname(c)"),
+      Row("Apr", "Apr", "Apr"))
+  }
+
+  test("dayname") {
+    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(dayname($"a"), dayname($"b"), dayname($"c")),
+      Row("Wed", "Wed", "Mon"))
+
+    checkAnswer(
+      df.selectExpr("dayname(a)", "dayname(b)", "dayname(c)"),
+      Row("Wed", "Wed", "Mon"))
   }
 
   test("extract") {
@@ -570,9 +594,9 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   def checkExceptionMessage(df: DataFrame): Unit = {
-    val message = intercept[SparkException] {
+    val message = intercept[SparkUpgradeException] {
       df.collect()
-    }.getCause.getMessage
+    }.getMessage
     assert(message.contains("Fail to parse"))
   }
 

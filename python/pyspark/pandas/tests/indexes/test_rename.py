@@ -16,10 +16,11 @@
 #
 import unittest
 
+import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -226,8 +227,82 @@ class FrameRenameMixin:
             psdf.rename_axis(index=str.upper, columns=str.upper).sort_index(),
         )
 
+    def test_multi_index_rename(self):
+        arrays = [[1, 1, 2, 2], ["red", "blue", "red", "blue"]]
+        idx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
+        pdf = pd.DataFrame(np.random.randn(4, 5), idx)
+        psdf = ps.from_pandas(pdf)
 
-class FrameRenameTests(FrameRenameMixin, ComparisonTestBase, SQLTestUtils):
+        pmidx = pdf.index
+        psmidx = psdf.index
+
+        self.assert_eq(psmidx.rename(["n", "c"]), pmidx.rename(["n", "c"]))
+        self.assert_eq(psdf.index.names, pdf.index.names)
+
+        # non-string names
+        self.assert_eq(psmidx.rename([0, 1]), pmidx.rename([0, 1]))
+        self.assert_eq(
+            psmidx.rename([("x", "a"), ("y", "b")]), pmidx.rename([("x", "a"), ("y", "b")])
+        )
+
+        psmidx.rename(["num", "col"], inplace=True)
+        pmidx.rename(["num", "col"], inplace=True)
+
+        self.assert_eq(psmidx, pmidx)
+        self.assert_eq(psdf.index.names, pdf.index.names)
+
+        self.assert_eq(psmidx.rename([None, None]), pmidx.rename([None, None]))
+        self.assert_eq(psdf.index.names, pdf.index.names)
+
+        self.assertRaises(TypeError, lambda: psmidx.rename("number"))
+        self.assertRaises(TypeError, lambda: psmidx.rename(None))
+        self.assertRaises(ValueError, lambda: psmidx.rename(["number"]))
+
+    def test_multiindex_rename(self):
+        pidx = pd.MultiIndex.from_tuples([("a", "x", 1), ("b", "y", 2), ("c", "z", 3)])
+        psidx = ps.from_pandas(pidx)
+
+        pidx = pidx.rename(list("ABC"))
+        psidx = psidx.rename(list("ABC"))
+        self.assert_eq(pidx, psidx)
+
+        pidx = pidx.rename(["my", "name", "is"])
+        psidx = psidx.rename(["my", "name", "is"])
+        self.assert_eq(pidx, psidx)
+
+    def test_index_rename(self):
+        pdf = pd.DataFrame(
+            np.random.randn(10, 5), index=pd.Index([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], name="x")
+        )
+        psdf = ps.from_pandas(pdf)
+
+        pidx = pdf.index
+        psidx = psdf.index
+
+        self.assert_eq(psidx.rename("y"), pidx.rename("y"))
+        self.assert_eq(psdf.index.names, pdf.index.names)
+
+        # non-string names
+        self.assert_eq(psidx.rename(0), pidx.rename(0))
+        self.assert_eq(psidx.rename(("y", 0)), pidx.rename(("y", 0)))
+
+        psidx.rename("z", inplace=True)
+        pidx.rename("z", inplace=True)
+
+        self.assert_eq(psidx, pidx)
+        self.assert_eq(psdf.index.names, pdf.index.names)
+
+        self.assert_eq(psidx.rename(None), pidx.rename(None))
+        self.assert_eq(psdf.index.names, pdf.index.names)
+
+        self.assertRaises(TypeError, lambda: psidx.rename(["x", "y"]))
+
+
+class FrameRenameTests(
+    FrameRenameMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

@@ -26,12 +26,12 @@ import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
-import org.apache.spark.sql.connector.catalog.{Identifier, NamespaceChange}
+import org.apache.spark.sql.connector.catalog.{Column, Identifier, NamespaceChange}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
@@ -39,9 +39,9 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerInte
   val catalog = new JDBCTableCatalog()
 
   private val emptyProps: util.Map[String, String] = Collections.emptyMap[String, String]
-  private val schema: StructType = new StructType()
-    .add("id", IntegerType)
-    .add("data", StringType)
+  private val columns: Array[Column] = Array(
+    Column.create("id", IntegerType),
+    Column.create("data", StringType))
 
   def builtinNamespaces: Array[Array[String]]
 
@@ -92,7 +92,7 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerInte
       catalog.listNamespaces(Array("foo"))
     }
     checkError(e,
-      errorClass = "SCHEMA_NOT_FOUND",
+      condition = "SCHEMA_NOT_FOUND",
       parameters = Map("schemaName" -> "`foo`"))
   }
 
@@ -116,7 +116,7 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerInte
     // Drop non empty namespace without cascade
     catalog.createNamespace(Array("foo"), commentMap.asJava)
     assert(catalog.namespaceExists(Array("foo")) === true)
-    catalog.createTable(ident1, schema, Array.empty[Transform], emptyProps)
+    catalog.createTable(ident1, columns, Array.empty[Transform], emptyProps)
     if (supportsDropSchemaRestrict) {
       intercept[NonEmptyNamespaceException] {
         catalog.dropNamespace(Array("foo"), cascade = false)

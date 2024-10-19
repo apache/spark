@@ -91,7 +91,7 @@ run it with `--help`. Here are a few examples of common options:
 # Run application locally on 8 cores
 ./bin/spark-submit \
   --class org.apache.spark.examples.SparkPi \
-  --master local[8] \
+  --master "local[8]" \
   /path/to/examples.jar \
   100
 
@@ -178,9 +178,13 @@ The master URL passed to Spark can be in one of the following formats:
 # Loading Configuration from a File
 
 The `spark-submit` script can load default [Spark configuration values](configuration.html) from a
-properties file and pass them on to your application. By default, it will read options
-from `conf/spark-defaults.conf` in the Spark directory. For more detail, see the section on
-[loading default configurations](configuration.html#loading-default-configurations).
+properties file and pass them on to your application. The file can be specified via the `--properties-file`
+parameter. When this is not specified, by default Spark will read options from `conf/spark-defaults.conf`
+in the `SPARK_HOME` directory.
+
+An additional flag `--load-spark-defaults` can be used to tell Spark to load configurations from `conf/spark-defaults.conf`
+even when a property file is provided via `--properties-file`. This is useful, for instance, when users
+want to put system-wide default settings in the former while user/cluster specific settings in the latter.
 
 Loading default Spark configurations this way can obviate the need for certain flags to
 `spark-submit`. For instance, if the `spark.master` property is set, you can safely omit the

@@ -60,16 +60,6 @@
       <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>com.google.protobuf</groupId>
-      <artifactId>protobuf-java</artifactId>
-      <version>2.6.1</version>
-      <!-- 
-         We are being explicit about version here and overriding the 
-         spark default of 2.5.0 because KCL appears to have introduced 
-         a dependency on protobuf 2.6.1 somewhere between KCL 1.4.0 and 1.6.1.
-       -->
-    </dependency>
-    <dependency>
       <groupId>org.glassfish.jersey.core</groupId>
       <artifactId>jersey-client</artifactId>
       <scope>provided</scope>
@@ -173,15 +163,6 @@
             <include>*:*</include>
           </includes>
         </artifactSet>
-        <relocations>
-          <relocation>
-            <pattern>com.google.protobuf</pattern>
-            <shadedPattern>kinesis.protobuf</shadedPattern>
-            <includes>
-              <include>com.google.protobuf.**</include>
-            </includes>
-          </relocation>
-        </relocations>
         <filters>
           <filter>
             <artifact>*:*</artifact>

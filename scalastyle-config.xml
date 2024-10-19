@@ -150,6 +150,11 @@ This file is divided into 3 sections:
       // scalastyle:on println]]></customMessage>
   </check>
 
+  <check customId="invalidMDC" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">s".*\$\{MDC\(</parameter></parameters>
+    <customMessage><![CDATA[MDC should be used in string interpolation log"..." instead of s"..."]]></customMessage>
+  </check>
+
   <check customId="hadoopconfiguration" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">spark(.sqlContext)?.sparkContext.hadoopConfiguration</parameter></parameters>
     <customMessage><![CDATA[
@@ -281,6 +286,11 @@ This file is divided into 3 sections:
     <parameters><parameter name="regex">org\.apache\.commons\.lang\.</parameter></parameters>
     <customMessage>Use Commons Lang 3 classes (package org.apache.commons.lang3.*) instead
     of Commons Lang 2 (package org.apache.commons.lang.*)</customMessage>
+  </check>
+
+  <check customId="uribuilder" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">UriBuilder\.fromUri</parameter></parameters>
+    <customMessage>Use Utils.getUriBuilder instead.</customMessage>
   </check>
 
   <check customId="executioncontextglobal" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
@@ -462,11 +472,36 @@ This file is divided into 3 sections:
     </customMessage>
   </check>
 
+  <check customId="GuavaFileBackedOutputStream" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">FileBackedOutputStream</parameter></parameters>
+    <customMessage>Avoid using FileBackedOutputStream due to CVE-2023-2976.</customMessage>
+  </check>
+
+  <check customId="GuavaAtomicDoubleArray" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">AtomicDoubleArray</parameter></parameters>
+    <customMessage>Avoid using AtomicDoubleArray due to CVE-2018-10237.</customMessage>
+  </check>
+
+  <check customId="GuavaCompoundOrdering" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">CompoundOrdering</parameter></parameters>
+    <customMessage>Avoid using CompoundOrdering due to CVE-2018-10237.</customMessage>
+  </check>
+
+  <check customId="byteCountToDisplaySize" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">byteCountToDisplaySize</parameter></parameters>
+    <customMessage>Use Utils.bytesToString instead of byteCountToDisplaySize for consistency.</customMessage>
+  </check>
+
   <check customId="pathfromuri" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">new Path\(new URI\(</parameter></parameters>
     <customMessage><![CDATA[
       Are you sure that this string is uri encoded? Please be careful when converting hadoop Paths
       and URIs to and from String. If possible, please use SparkPath.
     ]]></customMessage>
+  </check>
+
+  <check customId="URLConstructor" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">new URL\(</parameter></parameters>
+    <customMessage>Use URI.toURL or URL.of instead of URL constructors.</customMessage>
   </check>
 </scalastyle>

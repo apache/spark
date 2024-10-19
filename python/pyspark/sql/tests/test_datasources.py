@@ -21,7 +21,9 @@ import uuid
 import os
 
 from pyspark.sql import Row
+from pyspark.sql.datasource import InputPartition, DataSource
 from pyspark.sql.types import IntegerType, StructField, StructType, LongType, StringType
+from pyspark.errors import PySparkNotImplementedError
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -210,6 +212,7 @@ class DataSourcesTestsMixin:
             )
             df = (
                 self.spark.read.option("header", "true")
+                .option("quote", None)
                 .schema(schema)
                 .csv(path, enforceSchema=False)
             )
@@ -282,6 +285,54 @@ class DataSourcesTestsMixin:
                 self.spark.read.format("jdbc").options(
                     url=f"{url};drop=true", dbtable=dbtable
                 ).load().collect()
+
+    def test_custom_data_source(self):
+        class MyCustomDataSource(DataSource):
+            pass
+
+        custom_data_source = MyCustomDataSource(options={"path": "/path/to/custom/data"})
+
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            custom_data_source.schema()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "schema"},
+        )
+
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            custom_data_source.reader(schema=None)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "reader"},
+        )
+
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            custom_data_source.writer(schema=None, overwrite=False)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "writer"},
+        )
+
+    def test_input_partition(self):
+        partition = InputPartition(1)
+        expected_repr = "InputPartition(value=1)"
+        actual_repr = repr(partition)
+        self.assertEqual(expected_repr, actual_repr)
+
+        class RangeInputPartition(InputPartition):
+            def __init__(self, start, end):
+                super().__init__((start, end))
+
+        partition = RangeInputPartition(1, 3)
+        expected_repr = "RangeInputPartition(value=(1, 3))"
+        actual_repr = repr(partition)
+        self.assertEqual(expected_repr, actual_repr)
 
 
 class DataSourcesTests(DataSourcesTestsMixin, ReusedSQLTestCase):

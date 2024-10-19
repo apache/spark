@@ -19,7 +19,9 @@ package org.apache.spark.ml.feature
 
 import scala.collection.mutable.ArrayBuilder
 
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg._
@@ -116,7 +118,7 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       }
 
     val mappedOutputCols = inputColNames.zip(tds).map { case (colName, td) =>
-      dataset.schema(colName).dataType match {
+      SchemaUtils.getSchemaField(dataset.schema, colName).dataType match {
         case DoubleType =>
           when(!col(colName).isNaN && col(colName) > td, lit(1.0))
             .otherwise(lit(0.0))
@@ -139,8 +141,9 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
           }.apply(col(colName))
 
         case _: VectorUDT if td < 0 =>
-          this.logWarning(s"Binarization operations on sparse dataset with negative threshold " +
-            s"$td will build a dense output, so take care when applying to sparse input.")
+          logWarning(log"Binarization operations on sparse dataset with negative threshold " +
+            log"${MDC(LogKeys.THRESHOLD, td)} will build a dense output, so take care when " +
+            log"applying to sparse input.")
           udf { vector: Vector =>
             val values = Array.fill(vector.size)(1.0)
             var nnz = vector.size
@@ -197,7 +200,16 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     inputColNames.zip(outputColNames).foreach { case (inputColName, outputColName) =>
       require(!schema.fieldNames.contains(outputColName),
         s"Output column $outputColName already exists.")
-      val inputType = schema(inputColName).dataType
+
+      val inputType = try {
+        SchemaUtils.getSchemaFieldType(schema, inputColName)
+      } catch {
+        case e: SparkIllegalArgumentException if e.getCondition == "FIELD_NOT_FOUND" =>
+          throw new SparkException(s"Input column $inputColName does not exist.")
+        case e: Exception =>
+          throw e
+      }
+
       val outputField = inputType match {
         case DoubleType =>
           BinaryAttribute.defaultAttr.withName(outputColName).toStructField()

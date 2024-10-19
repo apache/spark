@@ -19,8 +19,6 @@ package org.apache.spark.util
 
 import java.io.PrintStream
 
-import scala.collection.immutable.IndexedSeq
-
 /**
  * Util for getting some stats from a small sample of numeric values, with some handy
  * summary functions.

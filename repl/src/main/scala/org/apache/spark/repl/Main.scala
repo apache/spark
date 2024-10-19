@@ -19,7 +19,6 @@ package org.apache.spark.repl
 
 import java.io.File
 import java.net.URI
-import java.util.Locale
 
 import scala.tools.nsc.GenericRunnerSettings
 
@@ -104,9 +103,7 @@ object Main extends Logging {
       }
 
       val builder = SparkSession.builder().config(conf)
-      if (conf
-            .get(CATALOG_IMPLEMENTATION.key, "hive")
-            .toLowerCase(Locale.ROOT) == "hive") {
+      if (conf.get(CATALOG_IMPLEMENTATION.key, "hive") == "hive") {
         if (SparkSession.hiveClassesArePresent) {
           // In the case that the property is not set at all, builder's config
           // does not have this value set to 'hive' yet. The original default
@@ -129,11 +126,6 @@ object Main extends Logging {
       sparkContext = sparkSession.sparkContext
       sparkSession
     } catch {
-      case e: ClassNotFoundException if isShellSession && e.getMessage.contains(
-        "org.apache.spark.sql.connect.SparkConnectPlugin") =>
-        logError("Failed to load spark connect plugin.")
-        logError("You need to build Spark with -Pconnect.")
-        sys.exit(1)
       case e: Exception if isShellSession =>
         logError("Failed to initialize Spark session.", e)
         sys.exit(1)

@@ -4,8 +4,6 @@ cache
 .gitattributes
 .project
 .classpath
-.mima-excludes
-.generated-mima-excludes
 .generated-mima-class-excludes
 .generated-mima-member-excludes
 .rat-excludes
@@ -33,12 +31,13 @@ graphlib-dot.min.js
 sorttable.js
 vis-timeline-graph2d.min.js
 vis-timeline-graph2d.min.css
-dataTables.bootstrap4.*.min.css
-dataTables.bootstrap4.*.min.js
+dataTables.bootstrap4.min.css
+dataTables.bootstrap4.min.js
 dataTables.rowsGroup.js
 jquery.blockUI.min.js
 jquery.cookies.2.2.0.min.js
-jquery.dataTables.*.min.js
+jquery.dataTables.min.css
+jquery.dataTables.min.js
 jquery.mustache.js
 .*\.avsc
 .*\.txt
@@ -48,15 +47,7 @@ jquery.mustache.js
 pyspark-coverage-site/*
 cloudpickle/*
 join.py
-SparkExprTyper.scala
 SparkILoop.scala
-SparkILoopInit.scala
-SparkIMain.scala
-SparkImports.scala
-SparkJLineCompletion.scala
-SparkJLineReader.scala
-SparkMemberHandlers.scala
-SparkReplReporter.scala
 sbt
 sbt-launch-lib.bash
 plugins.sbt
@@ -148,3 +139,5 @@ people.xml
 ui-test/package.json
 ui-test/package-lock.json
 core/src/main/resources/org/apache/spark/ui/static/package.json
+.*\.har
+.nojekyll

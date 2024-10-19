@@ -2,7 +2,7 @@
 -- !query
 CREATE TEMPORARY VIEW t AS SELECT 1
 -- !query analysis
-CreateViewCommand `t`, SELECT 1, false, false, LocalTempView, true
+CreateViewCommand `t`, SELECT 1, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [1 AS 1#x]
       +- OneRowRelation
 

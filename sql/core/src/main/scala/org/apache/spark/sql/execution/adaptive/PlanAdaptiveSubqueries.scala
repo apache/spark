@@ -30,7 +30,7 @@ case class PlanAdaptiveSubqueries(
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressionsWithPruning(
       _.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY, DYNAMIC_PRUNING_SUBQUERY)) {
-      case expressions.ScalarSubquery(_, _, exprId, _, _, _) =>
+      case expressions.ScalarSubquery(_, _, exprId, _, _, _, _) =>
         val subquery = SubqueryExec.createForScalarSubquery(
           s"subquery#${exprId.id}", subqueryMap(exprId.id))
         execution.ScalarSubquery(subquery, exprId)
@@ -47,9 +47,9 @@ case class PlanAdaptiveSubqueries(
         val subquery = SubqueryExec(s"subquery#${exprId.id}", subqueryMap(exprId.id))
         InSubqueryExec(expr, subquery, exprId, isDynamicPruning = false)
       case expressions.DynamicPruningSubquery(value, buildPlan,
-          buildKeys, broadcastKeyIndex, onlyInBroadcast, exprId, _) =>
+          buildKeys, broadcastKeyIndices, onlyInBroadcast, exprId, _) =>
         val name = s"dynamicpruning#${exprId.id}"
-        val subquery = SubqueryAdaptiveBroadcastExec(name, broadcastKeyIndex, onlyInBroadcast,
+        val subquery = SubqueryAdaptiveBroadcastExec(name, broadcastKeyIndices, onlyInBroadcast,
           buildPlan, buildKeys, subqueryMap(exprId.id))
         DynamicPruningExpression(InSubqueryExec(value, subquery, exprId))
     }

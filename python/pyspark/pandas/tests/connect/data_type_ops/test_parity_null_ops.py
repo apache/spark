@@ -17,13 +17,16 @@
 import unittest
 
 from pyspark.pandas.tests.data_type_ops.test_null_ops import NullOpsTestsMixin
-from pyspark.pandas.tests.connect.data_type_ops.testing_utils import OpsTestBase
+from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class NullOpsParityTests(
-    NullOpsTestsMixin, PandasOnSparkTestUtils, OpsTestBase, ReusedConnectTestCase
+    NullOpsTestsMixin,
+    PandasOnSparkTestUtils,
+    OpsTestBase,
+    ReusedConnectTestCase,
 ):
     pass
 

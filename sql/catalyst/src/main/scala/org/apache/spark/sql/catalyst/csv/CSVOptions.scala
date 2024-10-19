@@ -26,8 +26,10 @@ import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, Unescape
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.EXISTS_DEFAULT_COLUMN_METADATA_KEY
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
+import org.apache.spark.sql.types.StructType
 
 class CSVOptions(
     @transient val parameters: CaseInsensitiveMap[String],
@@ -103,8 +105,9 @@ class CSVOptions(
     parameters.getOrElse(SEP, parameters.getOrElse(DELIMITER, ",")))
   val parseMode: ParseMode =
     parameters.get(MODE).map(ParseMode.fromString).getOrElse(PermissiveMode)
-  val charset = parameters.getOrElse(ENCODING,
-    parameters.getOrElse(CHARSET, StandardCharsets.UTF_8.name()))
+  val charset = parameters.get(ENCODING).orElse(parameters.get(CHARSET))
+    .map(CharsetProvider.forName(_, SQLConf.get.legacyJavaCharsets, caller = "CSVOptions"))
+    .getOrElse(StandardCharsets.UTF_8).name()
 
   val quote = getChar(QUOTE, '\"')
   val escape = getChar(ESCAPE, '\\')
@@ -184,12 +187,8 @@ class CSVOptions(
     } else {
       parameters.get(TIMESTAMP_FORMAT)
     }
-  val timestampFormatInWrite: String = parameters.getOrElse(TIMESTAMP_FORMAT,
-    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
-      s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"
-    } else {
-      s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
-    })
+  val timestampFormatInWrite: String =
+    parameters.getOrElse(TIMESTAMP_FORMAT, commonTimestampFormat)
 
   val timestampNTZFormatInRead: Option[String] = parameters.get(TIMESTAMP_NTZ_FORMAT)
   val timestampNTZFormatInWrite: String = parameters.getOrElse(TIMESTAMP_NTZ_FORMAT,
@@ -276,6 +275,26 @@ class CSVOptions(
    */
   val unescapedQuoteHandling: UnescapedQuoteHandling = UnescapedQuoteHandling.valueOf(parameters
     .getOrElse(UNESCAPED_QUOTE_HANDLING, "STOP_AT_DELIMITER").toUpperCase(Locale.ROOT))
+
+  /**
+   * Returns true if column pruning is enabled and there are no existence column default values in
+   * the [[schema]].
+   *
+   * The column pruning feature can be enabled either via the CSV option `columnPruning` or
+   * in non-multiline mode via initialization of CSV options by the SQL config:
+   * `spark.sql.csv.parser.columnPruning.enabled`.
+   * The feature is disabled in the `multiLine` mode because of the issue:
+   * https://github.com/uniVocity/univocity-parsers/issues/529
+   *
+   * We disable column pruning when there are any column defaults, instead preferring to reach in
+   * each row and then post-process it to substitute the default values after.
+   */
+  def isColumnPruningEnabled(schema: StructType): Boolean =
+    isColumnPruningOptionEnabled &&
+      !schema.exists(_.metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY))
+
+  private val isColumnPruningOptionEnabled: Boolean =
+    getBool(COLUMN_PRUNING, !multiLine && columnPruning)
 
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
@@ -376,4 +395,5 @@ object CSVOptions extends DataSourceOptions {
   val SEP = "sep"
   val DELIMITER = "delimiter"
   newOption(SEP, DELIMITER)
+  val COLUMN_PRUNING = newOption("columnPruning")
 }

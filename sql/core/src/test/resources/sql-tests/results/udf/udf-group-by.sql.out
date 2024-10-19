@@ -451,7 +451,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"udf(1)\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"every(udf(1))\""
   },
@@ -477,7 +477,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"udf(1)\"",
     "inputType" : "\"SMALLINT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"some(udf(1))\""
   },
@@ -503,7 +503,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"udf(1)\"",
     "inputType" : "\"BIGINT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"any(udf(1))\""
   },
@@ -529,7 +529,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"true\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"every(true)\""
   },

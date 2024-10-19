@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -224,7 +224,11 @@ class SeriesMissingDataMixin:
         self.assert_eq(pdf, psdf)
 
 
-class SeriesMissingDataTests(SeriesMissingDataMixin, ComparisonTestBase, SQLTestUtils):
+class SeriesMissingDataTests(
+    SeriesMissingDataMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

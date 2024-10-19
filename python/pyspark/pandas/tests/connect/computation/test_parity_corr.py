@@ -16,13 +16,16 @@
 #
 import unittest
 
-from pyspark import pandas as ps
 from pyspark.pandas.tests.computation.test_corr import FrameCorrMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class FrameParityCorrTests(FrameCorrMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
+class FrameParityCorrTests(
+    FrameCorrMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
+):
     pass
 
 

@@ -22,12 +22,12 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkException, SparkRuntimeException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.functions._
@@ -43,7 +43,7 @@ class RateStreamProviderSuite extends StreamTest {
     override def addData(query: Option[StreamExecution]): (SparkDataStream, Offset) = {
       assert(query.nonEmpty)
       val rateSource = query.get.logicalPlan.collect {
-        case r: StreamingDataSourceV2Relation
+        case r: StreamingDataSourceV2ScanRelation
             if r.stream.isInstanceOf[RateStreamMicroBatchStream] =>
           r.stream.asInstanceOf[RateStreamMicroBatchStream]
       }.head
@@ -208,7 +208,7 @@ class RateStreamProviderSuite extends StreamTest {
 
     checkError(
       exception = e,
-      errorClass = "INCORRECT_RAMP_UP_RATE",
+      condition = "INCORRECT_RAMP_UP_RATE",
       parameters = Map(
         "rowsPerSecond" -> Long.MaxValue.toString,
         "maxSeconds" -> "1",
@@ -229,7 +229,7 @@ class RateStreamProviderSuite extends StreamTest {
 
       checkError(
         exception = e,
-        errorClass = "INTERNAL_ERROR",
+        condition = "INTERNAL_ERROR",
         parameters = Map(
           ("message" ->
             ("Max offset with 100 rowsPerSecond is 92233720368547758, " +
@@ -345,14 +345,15 @@ class RateStreamProviderSuite extends StreamTest {
   }
 
   test("user-specified schema given") {
-    val exception = intercept[UnsupportedOperationException] {
-      spark.readStream
-        .format("rate")
-        .schema(spark.range(1).schema)
-        .load()
-    }
-    assert(exception.getMessage.contains(
-      "RateStreamProvider source does not support user-specified schema"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        spark.readStream
+          .format("rate")
+          .schema(spark.range(1).schema)
+          .load()
+      },
+      condition = "_LEGACY_ERROR_TEMP_2242",
+      parameters = Map("provider" -> "RateStreamProvider"))
   }
 
   test("continuous data") {

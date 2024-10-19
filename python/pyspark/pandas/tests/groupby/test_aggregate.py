@@ -19,7 +19,7 @@ import unittest
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -270,7 +270,11 @@ class GroupbyAggregateMixin:
         self.assert_eq(agg_pdf, agg_psdf)
 
 
-class GroupbyAggregateTests(GroupbyAggregateMixin, ComparisonTestBase, SQLTestUtils):
+class GroupbyAggregateTests(
+    GroupbyAggregateMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

@@ -29,8 +29,9 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import org.iq80.leveldb.DBIterator;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 
 class LevelDBIterator<T> implements KVStoreIterator<T> {
 
@@ -126,7 +127,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
       try {
         close();
       } catch (IOException ioe) {
-        throw Throwables.propagate(ioe);
+        throw new RuntimeException(ioe);
       }
     }
     return next != null;
@@ -150,7 +151,8 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
       next = null;
       return ret;
     } catch (Exception e) {
-      throw Throwables.propagate(e);
+      Throwables.throwIfUnchecked(e);
+      throw new RuntimeException(e);
     }
   }
 
@@ -302,7 +304,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   }
 
   static class ResourceCleaner implements Runnable {
-    private static final Logger LOG = LoggerFactory.getLogger(ResourceCleaner.class);
+    private static final SparkLogger LOG = SparkLoggerFactory.getLogger(ResourceCleaner.class);
 
     private final DBIterator dbIterator;
 

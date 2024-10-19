@@ -24,6 +24,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, IntervalStringStyles, IntervalUtils, MapData, SparkStringUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -44,19 +46,17 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 
   protected def useDecimalPlainString: Boolean
 
-  protected def useHexFormatForBinary: Boolean
+  protected val binaryFormatter: BinaryFormatter = UTF8String.fromBytes
 
   // Makes the function accept Any type input by doing `asInstanceOf[T]`.
-  @inline private def acceptAny[T](func: T => Any): Any => Any = i => func(i.asInstanceOf[T])
+  @inline private def acceptAny[T](func: T => UTF8String): Any => UTF8String =
+    i => func(i.asInstanceOf[T])
 
   // Returns a function to convert a value to pretty string. The function assumes input is not null.
-  protected final def castToString(from: DataType): Any => Any = from match {
+  protected final def castToString(from: DataType): Any => UTF8String = from match {
     case CalendarIntervalType =>
       acceptAny[CalendarInterval](i => UTF8String.fromString(i.toString))
-    case BinaryType if useHexFormatForBinary =>
-      acceptAny[Array[Byte]](binary => UTF8String.fromString(SparkStringUtils.getHexString(binary)))
-    case BinaryType =>
-      acceptAny[Array[Byte]](UTF8String.fromBytes)
+    case BinaryType => acceptAny[Array[Byte]](binaryFormatter.apply)
     case DateType =>
       acceptAny[Int](d => UTF8String.fromString(dateFormatter.format(d)))
     case TimestampType =>
@@ -72,7 +72,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           if (array.isNullAt(0)) {
             if (nullString.nonEmpty) builder.append(nullString)
           } else {
-            builder.append(toUTF8String(array.get(0, et)).asInstanceOf[UTF8String])
+            builder.append(toUTF8String(array.get(0, et)))
           }
           var i = 1
           while (i < array.numElements()) {
@@ -81,7 +81,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
               if (nullString.nonEmpty) builder.append(" " + nullString)
             } else {
               builder.append(" ")
-              builder.append(toUTF8String(array.get(i, et)).asInstanceOf[UTF8String])
+              builder.append(toUTF8String(array.get(i, et)))
             }
             i += 1
           }
@@ -98,25 +98,24 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           val valueArray = map.valueArray()
           val keyToUTF8String = castToString(kt)
           val valueToUTF8String = castToString(vt)
-          builder.append(keyToUTF8String(keyArray.get(0, kt)).asInstanceOf[UTF8String])
+          builder.append(keyToUTF8String(keyArray.get(0, kt)))
           builder.append(" ->")
           if (valueArray.isNullAt(0)) {
             if (nullString.nonEmpty) builder.append(" " + nullString)
           } else {
             builder.append(" ")
-            builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
+            builder.append(valueToUTF8String(valueArray.get(0, vt)))
           }
           var i = 1
           while (i < map.numElements()) {
             builder.append(", ")
-            builder.append(keyToUTF8String(keyArray.get(i, kt)).asInstanceOf[UTF8String])
+            builder.append(keyToUTF8String(keyArray.get(i, kt)))
             builder.append(" ->")
             if (valueArray.isNullAt(i)) {
               if (nullString.nonEmpty) builder.append(" " + nullString)
             } else {
               builder.append(" ")
-              builder.append(valueToUTF8String(valueArray.get(i, vt))
-                .asInstanceOf[UTF8String])
+              builder.append(valueToUTF8String(valueArray.get(i, vt)))
             }
             i += 1
           }
@@ -134,7 +133,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           if (row.isNullAt(0)) {
             if (nullString.nonEmpty) builder.append(nullString)
           } else {
-            builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))).asInstanceOf[UTF8String])
+            builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))))
           }
           var i = 1
           while (i < row.numFields) {
@@ -143,7 +142,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
               if (nullString.nonEmpty) builder.append(" " + nullString)
             } else {
               builder.append(" ")
-              builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))).asInstanceOf[UTF8String])
+              builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))))
             }
             i += 1
           }
@@ -162,7 +161,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
         IntervalUtils.toDayTimeIntervalString(i, ANSI_STYLE, startField, endField)))
     case _: DecimalType if useDecimalPlainString =>
       acceptAny[Decimal](d => UTF8String.fromString(d.toPlainString))
-    case StringType => identity
+    case _: StringType => acceptAny[UTF8String](identity[UTF8String])
     case _ => o => UTF8String.fromString(o.toString)
   }
 
@@ -172,12 +171,11 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
   protected final def castToStringCode(
       from: DataType, ctx: CodegenContext): (ExprValue, ExprValue) => Block = {
     from match {
-      case BinaryType if useHexFormatForBinary =>
-        (c, evPrim) =>
-          val utilCls = SparkStringUtils.getClass.getName.stripSuffix("$")
-          code"$evPrim = UTF8String.fromString($utilCls.getHexString($c));"
       case BinaryType =>
-        (c, evPrim) => code"$evPrim = UTF8String.fromBytes($c);"
+        val bf = JavaCode.global(
+          ctx.addReferenceObj("binaryFormatter", binaryFormatter),
+          classOf[BinaryFormatter])
+        (c, evPrim) => code"$evPrim = $bf.apply($c);"
       case DateType =>
         val df = JavaCode.global(
           ctx.addReferenceObj("dateFormatter", dateFormatter),
@@ -257,7 +255,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       // notation if an exponent is needed.
       case _: DecimalType if useDecimalPlainString =>
         (c, evPrim) => code"$evPrim = UTF8String.fromString($c.toPlainString());"
-      case StringType =>
+      case _: StringType =>
         (c, evPrim) => code"$evPrim = $c;"
       case _ =>
         (c, evPrim) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
@@ -414,3 +412,25 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
      """.stripMargin
   }
 }
+
+object ToStringBase {
+  def getBinaryFormatter: BinaryFormatter = {
+    val style = SQLConf.get.getConf(SQLConf.BINARY_OUTPUT_STYLE)
+    style.map(BinaryOutputStyle.withName) match {
+      case Some(BinaryOutputStyle.UTF8) =>
+        (array: Array[Byte]) => UTF8String.fromBytes(array)
+      case Some(BinaryOutputStyle.BASIC) =>
+        (array: Array[Byte]) => UTF8String.fromString(array.mkString("[", ", ", "]"))
+      case Some(BinaryOutputStyle.BASE64) =>
+        (array: Array[Byte]) =>
+          UTF8String.fromString(java.util.Base64.getEncoder.withoutPadding().encodeToString(array))
+      case Some(BinaryOutputStyle.HEX) =>
+        (array: Array[Byte]) => Hex.hex(array)
+      case _ =>
+        (array: Array[Byte]) => UTF8String.fromString(SparkStringUtils.getHexString(array))
+    }
+  }
+}
+
+trait BinaryFormatter extends (Array[Byte] => UTF8String) with Serializable
+

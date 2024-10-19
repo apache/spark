@@ -40,22 +40,22 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
   // That is done in Java because Scala cannot create truly private classes.
 
   test("primitive types in encoders using Kryo serialization") {
-    intercept[UnsupportedOperationException] { Encoders.kryo[Int] }
-    intercept[UnsupportedOperationException] { Encoders.kryo[Long] }
-    intercept[UnsupportedOperationException] { Encoders.kryo[Char] }
+    intercept[SparkUnsupportedOperationException] { Encoders.kryo[Int] }
+    intercept[SparkUnsupportedOperationException] { Encoders.kryo[Long] }
+    intercept[SparkUnsupportedOperationException] { Encoders.kryo[Char] }
   }
 
   test("primitive types in encoders using Java serialization") {
-    intercept[UnsupportedOperationException] { Encoders.javaSerialization[Int] }
-    intercept[UnsupportedOperationException] { Encoders.javaSerialization[Long] }
-    intercept[UnsupportedOperationException] { Encoders.javaSerialization[Char] }
+    intercept[SparkUnsupportedOperationException] { Encoders.javaSerialization[Int] }
+    intercept[SparkUnsupportedOperationException] { Encoders.javaSerialization[Long] }
+    intercept[SparkUnsupportedOperationException] { Encoders.javaSerialization[Char] }
   }
 
   test("nice error message for missing encoder") {
     checkError(
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable1]()),
-      errorClass = "ENCODER_NOT_FOUND",
+      condition = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
         "docroot" -> SPARK_DOC_ROOT)
@@ -64,7 +64,7 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
     checkError(
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable2]()),
-      errorClass = "ENCODER_NOT_FOUND",
+      condition = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
         "docroot" -> SPARK_DOC_ROOT)
@@ -73,7 +73,7 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
     checkError(
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable3]()),
-      errorClass = "ENCODER_NOT_FOUND",
+      condition = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
         "docroot" -> SPARK_DOC_ROOT)
@@ -82,7 +82,7 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
     checkError(
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable4]()),
-      errorClass = "ENCODER_NOT_FOUND",
+      condition = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
         "docroot" -> SPARK_DOC_ROOT)
@@ -91,7 +91,7 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
     checkError(
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable5]()),
-      errorClass = "ENCODER_NOT_FOUND",
+      condition = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
         "docroot" -> SPARK_DOC_ROOT)

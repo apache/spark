@@ -19,12 +19,12 @@ import unittest
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class GroupbySplitApplyMixin:
-    def test_split_apply_combine_on_series(self):
+class GroupbySplitApplyTestingFuncMixin:
+    def _test_split_apply_func(self, funcs):
         # TODO(SPARK-45228): Enabling string type columns for `test_split_apply_combine_on_series`
         #  when Pandas regression is fixed
         # There is a regression in Pandas 2.1.0,
@@ -42,11 +42,14 @@ class GroupbySplitApplyMixin:
         psdf = ps.from_pandas(pdf)
 
         funcs = [
-            ((True, False), ["sum", "min", "max", "count", "first", "last"]),
-            ((True, True), ["mean"]),
-            ((False, False), ["var", "std", "skew"]),
+            (
+                check_exact,
+                almost,
+                f,
+            )
+            for (check_exact, almost), fs in funcs
+            for f in fs
         ]
-        funcs = [(check_exact, almost, f) for (check_exact, almost), fs in funcs for f in fs]
 
         for as_index in [True, False]:
             if as_index:
@@ -155,7 +158,20 @@ class GroupbySplitApplyMixin:
                     )
 
 
-class GroupbySplitApplyTests(GroupbySplitApplyMixin, ComparisonTestBase, SQLTestUtils):
+class GroupbySplitApplyMixin(GroupbySplitApplyTestingFuncMixin):
+    def test_split_apply_combine_on_series(self):
+        funcs = [
+            ((True, False), ["sum"]),
+            ((True, True), ["mean"]),
+        ]
+        self._test_split_apply_func(funcs)
+
+
+class GroupbySplitApplyTests(
+    GroupbySplitApplyMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

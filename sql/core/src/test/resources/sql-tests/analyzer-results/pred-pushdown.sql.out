@@ -2,7 +2,7 @@
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW tbl_a AS VALUES (1, 1), (2, 1), (3, 6) AS T(c1, c2)
 -- !query analysis
-CreateViewCommand `tbl_a`, VALUES (1, 1), (2, 1), (3, 6) AS T(c1, c2), false, true, LocalTempView, true
+CreateViewCommand `tbl_a`, VALUES (1, 1), (2, 1), (3, 6) AS T(c1, c2), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias T
       +- LocalRelation [c1#x, c2#x]
 
@@ -10,7 +10,7 @@ CreateViewCommand `tbl_a`, VALUES (1, 1), (2, 1), (3, 6) AS T(c1, c2), false, tr
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW tbl_b AS VALUES 1 AS T(c1)
 -- !query analysis
-CreateViewCommand `tbl_b`, VALUES 1 AS T(c1), false, true, LocalTempView, true
+CreateViewCommand `tbl_b`, VALUES 1 AS T(c1), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias T
       +- LocalRelation [c1#x]
 
@@ -23,7 +23,7 @@ FROM   tbl_a
 Project [c1#x, c2#x]
 +- Join LeftAnti, (isnull((c1#x = c2#x)) OR (c1#x = c2#x))
    :- SubqueryAlias tbl_a
-   :  +- View (`tbl_a`, [c1#x,c2#x])
+   :  +- View (`tbl_a`, [c1#x, c2#x])
    :     +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
    :        +- SubqueryAlias T
    :           +- LocalRelation [c1#x, c2#x]
@@ -51,7 +51,7 @@ Project [c1#x, c2#x]
    :                       +- LocalRelation [c1#x]
    +- SubqueryAlias l
       +- SubqueryAlias tbl_a
-         +- View (`tbl_a`, [c1#x,c2#x])
+         +- View (`tbl_a`, [c1#x, c2#x])
             +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
                +- SubqueryAlias T
                   +- LocalRelation [c1#x, c2#x]

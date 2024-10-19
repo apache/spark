@@ -1,5 +1,6 @@
 -- A test suite for scalar subquery in predicate context
 
+--ONLY_IF spark
 CREATE OR REPLACE TEMPORARY VIEW p AS VALUES (1, 1) AS T(pk, pv);
 CREATE OR REPLACE TEMPORARY VIEW c AS VALUES (1, 1) AS T(ck, cv);
 
@@ -350,6 +351,28 @@ WHERE  t1c = (SELECT t2c
               WHERE  t2c = t1c
               ORDER BY t2c LIMIT 1);
 
+-- SPARK-46526: LIMIT over correlated predicate that references only the outer table.
+SELECT t1a, t1b
+FROM   t1
+WHERE  t1c = (SELECT t2c
+              FROM   t2
+              WHERE  t1b < t1d
+              ORDER BY t2c LIMIT 1);
+
+SELECT t1a, t1b
+FROM   t1
+WHERE  t1c = (SELECT MAX(t2c)
+              FROM   t2
+              WHERE  t1b < t1d
+              ORDER BY min(t2c) LIMIT 1);
+
+SELECT t1a, t1b
+FROM   t1
+WHERE  t1c = (SELECT DISTINCT t2c
+              FROM   t2
+              WHERE  t1b < t1d
+              ORDER BY t2c LIMIT 1);
+
 -- Set operations in correlation path
 
 CREATE OR REPLACE TEMP VIEW t0(t0a, t0b) AS VALUES (1, 1), (2, 0);
@@ -495,3 +518,17 @@ SELECT * FROM t0 WHERE t0a <
   FROM  t1 LEFT JOIN t2 ON (t1a = t0a AND t2b = t0b))
 );
 
+select *
+from range(1, 3) t1
+where (select t2.id c
+       from range (1, 2) t2 where t1.id = t2.id
+      ) between 1 and 2;
+
+SELECT *
+FROM t1
+WHERE (SELECT max(t2c)
+       FROM t2 WHERE t1b = t2b
+      ) between 1 and 2;
+
+
+SELECT * FROM t0 WHERE t0a = (SELECT distinct(t1c) FROM t1 WHERE t1a = t0a);

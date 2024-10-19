@@ -22,10 +22,11 @@ import scala.collection.mutable
 import org.json4s.JsonAST.{JArray, JString}
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{SQLConfHelper, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, GlobalTempView, LocalTempView, ViewType}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, GlobalTempView, LocalTempView, SchemaEvolution, SchemaUnsupported, ViewSchemaMode, ViewType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{AnalysisOnlyCommand, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
@@ -56,6 +57,7 @@ import org.apache.spark.util.ArrayImplicits._
  * @param replace if true, and if the view already exists, updates it; if false, and if the view
  *                already exists, throws analysis exception.
  * @param viewType the expected view type to be created with this command.
+ * @param viewSchemaMode the tolerance of the view towards schema changes
  * @param isAnalyzed whether this command is analyzed or not.
  */
 case class CreateViewCommand(
@@ -68,6 +70,7 @@ case class CreateViewCommand(
     allowExisting: Boolean,
     replace: Boolean,
     viewType: ViewType,
+    viewSchemaMode: ViewSchemaMode = SchemaUnsupported,
     isAnalyzed: Boolean = false,
     referredTempFunctions: Seq[String] = Seq.empty)
   extends RunnableCommand with AnalysisOnlyCommand with CTEInChildren {
@@ -106,6 +109,10 @@ case class CreateViewCommand(
         throw QueryCompilationErrors.cannotCreateViewTooManyColumnsError(
           name, userSpecifiedColumns.map(_._1), analyzedPlan)
       }
+      if (viewSchemaMode == SchemaEvolution) {
+        throw SparkException.internalError(
+          "View with user column list has viewSchemaMode EVOLUTION")
+      }
     }
 
     val catalog = sparkSession.sessionState.catalog
@@ -128,7 +135,7 @@ case class CreateViewCommand(
         referredTempFunctions)
       catalog.createTempView(name.table, tableDefinition, overrideIfExists = replace)
     } else if (viewType == GlobalTempView) {
-      val db = sparkSession.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+      val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
       val viewIdent = TableIdentifier(name.table, Option(db))
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       val tableDefinition = createTemporaryViewRelation(
@@ -155,7 +162,7 @@ case class CreateViewCommand(
 
         // uncache the cached data before replacing an exists view
         logDebug(s"Try to uncache ${viewIdent.quotedString} before replacing.")
-        CommandUtils.uncacheTableOrView(sparkSession, viewIdent.quotedString)
+        CommandUtils.uncacheTableOrView(sparkSession, viewIdent)
 
         // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
         // Nothing we need to retain from the old view, so just drop and create a new one
@@ -168,7 +175,7 @@ case class CreateViewCommand(
       }
     } else {
       // Create the view if it doesn't exist.
-      catalog.createTable(prepareTable(sparkSession, analyzedPlan), ignoreIfExists = false)
+      catalog.createTable(prepareTable(sparkSession, analyzedPlan), ignoreIfExists = allowExisting)
     }
     Seq.empty[Row]
   }
@@ -203,7 +210,7 @@ case class CreateViewCommand(
     val aliasedSchema = CharVarcharUtils.getRawSchema(
       aliasPlan(session, analyzedPlan).schema, session.sessionState.conf)
     val newProperties = generateViewProperties(
-      properties, session, analyzedPlan, aliasedSchema.fieldNames)
+      properties, session, analyzedPlan.schema.fieldNames, aliasedSchema.fieldNames, viewSchemaMode)
 
     CatalogTable(
       identifier = name,
@@ -298,10 +305,14 @@ case class AlterViewAsCommand(
     checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
 
     logDebug(s"Try to uncache ${viewIdent.quotedString} before replacing.")
-    CommandUtils.uncacheTableOrView(session, viewIdent.quotedString)
+    CommandUtils.uncacheTableOrView(session, viewIdent)
 
     val newProperties = generateViewProperties(
-      viewMeta.properties, session, analyzedPlan, analyzedPlan.schema.fieldNames)
+      viewMeta.properties,
+      session,
+      analyzedPlan.schema.fieldNames, // The query output column names
+      analyzedPlan.schema.fieldNames, // Will match the view schema names
+      viewMeta.viewSchemaMode)
 
     val newSchema = CharVarcharUtils.getRawSchema(analyzedPlan.schema)
     val updatedViewMeta = viewMeta.copy(
@@ -315,6 +326,50 @@ case class AlterViewAsCommand(
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
     copy(query = WithCTE(query, cteDefs))
+  }
+}
+
+/**
+ * Alter a view with given schema binding. If the view name contains database prefix, this command
+ * will alter a permanent view matching the given name, or throw an exception if view not exist.
+ * Else, this command will try to alter a temporary view first, if view not exist, try permanent
+ * view next, if still not exist, throw an exception.
+ *
+ * @param name the name of this view.
+ * @param viewSchemaMode The new schema binding mode.
+ */
+case class AlterViewSchemaBindingCommand(name: TableIdentifier, viewSchemaMode: ViewSchemaMode)
+  extends LeafRunnableCommand {
+
+  import ViewHelper._
+
+  override def run(session: SparkSession): Seq[Row] = {
+    val isTemporary = session.sessionState.catalog.isTempView(name)
+    if (isTemporary) {
+      throw QueryCompilationErrors.cannotAlterTempViewWithSchemaBindingError()
+    }
+    alterPermanentView(session, viewSchemaMode)
+    Seq.empty[Row]
+  }
+
+  private def alterPermanentView(session: SparkSession, viewSchemaMode: ViewSchemaMode): Unit = {
+    val viewMeta = session.sessionState.catalog.getTableMetadata(name)
+
+    val viewIdent = viewMeta.identifier
+
+    logDebug(s"Try to uncache ${viewIdent.quotedString} before replacing.")
+    CommandUtils.uncacheTableOrView(session, viewIdent)
+
+    val newProperties = generateViewProperties(
+      viewMeta.properties,
+      session,
+      viewMeta.viewQueryColumnNames.toArray,
+      viewMeta.schema.fieldNames,
+      viewSchemaMode)
+
+    val updatedViewMeta = viewMeta.copy(properties = newProperties)
+
+    session.sessionState.catalog.alterTable(updatedViewMeta)
   }
 }
 
@@ -360,6 +415,7 @@ object ViewHelper extends SQLConfHelper with Logging {
     "spark.sql.hive.convertMetastoreParquet",
     "spark.sql.hive.convertMetastoreOrc",
     "spark.sql.hive.convertInsertingPartitionedTable",
+    "spark.sql.hive.convertInsertingUnpartitionedTable",
     "spark.sql.hive.convertMetastoreCtas",
     SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.key)
 
@@ -437,6 +493,20 @@ object ViewHelper extends SQLConfHelper with Logging {
   }
 
   /**
+   * Convert the viewSchemaMode to `properties`.
+   * If the mode UNSUPPORTED do not store anything for backward compatibility.
+   */
+  private def viewSchemaModeToProps(viewSchemaMode: ViewSchemaMode): Map[String, String] = {
+    if (viewSchemaMode == SchemaUnsupported) {
+      Map.empty
+    } else {
+      val props = new mutable.HashMap[String, String]
+      props.put(VIEW_SCHEMA_MODE, viewSchemaMode.toString)
+      props.toMap
+    }
+  }
+
+  /**
    * Convert the temporary object names to `properties`.
    */
   private def referredTempNamesToProps(
@@ -485,13 +555,12 @@ object ViewHelper extends SQLConfHelper with Logging {
   def generateViewProperties(
       properties: Map[String, String],
       session: SparkSession,
-      analyzedPlan: LogicalPlan,
+      queryOutput: Array[String],
       fieldNames: Array[String],
+      viewSchemaMode: ViewSchemaMode,
       tempViewNames: Seq[Seq[String]] = Seq.empty,
       tempFunctionNames: Seq[String] = Seq.empty,
       tempVariableNames: Seq[Seq[String]] = Seq.empty): Map[String, String] = {
-    // for createViewCommand queryOutput may be different from fieldNames
-    val queryOutput = analyzedPlan.schema.fieldNames
 
     val conf = session.sessionState.conf
 
@@ -506,7 +575,8 @@ object ViewHelper extends SQLConfHelper with Logging {
         manager.currentCatalog.name, manager.currentNamespace.toImmutableArraySeq) ++
       sqlConfigsToProps(conf) ++
       generateQueryColumnNames(queryOutput.toImmutableArraySeq) ++
-      referredTempNamesToProps(tempViewNames, tempFunctionNames, tempVariableNames)
+      referredTempNamesToProps(tempViewNames, tempFunctionNames, tempVariableNames) ++
+      viewSchemaModeToProps(viewSchemaMode)
   }
 
   /**
@@ -667,7 +737,7 @@ object ViewHelper extends SQLConfHelper with Logging {
         // view is already converted to the underlying tables. So no cyclic views.
         checkCyclicViewReference(analyzedPlan, Seq(name), name)
       }
-      CommandUtils.uncacheTableOrView(session, name.quotedString)
+      CommandUtils.uncacheTableOrView(session, name)
     }
     if (!storeAnalyzedPlanForView) {
       TemporaryViewRelation(
@@ -718,8 +788,8 @@ object ViewHelper extends SQLConfHelper with Logging {
     // TBLPROPERTIES is not allowed for temporary view, so we don't use it for
     // generating temporary view properties
     val newProperties = generateViewProperties(
-      Map.empty, session, analyzedPlan, viewSchema.fieldNames, tempViews,
-      tempFunctions, tempVariables)
+      Map.empty, session, analyzedPlan.schema.fieldNames, viewSchema.fieldNames, SchemaUnsupported,
+      tempViews, tempFunctions, tempVariables)
 
     CatalogTable(
       identifier = viewName,

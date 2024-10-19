@@ -23,7 +23,7 @@ from pyspark.errors import (
     IllegalArgumentException,
     PySparkAssertionError,
 )
-from pyspark.sql.connect.column import Column
+from pyspark.sql.column import Column
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.observation import Observation as PySparkObservation
 import pyspark.sql.connect.plan as plan
@@ -37,13 +37,13 @@ class Observation:
         if name is not None:
             if not isinstance(name, str):
                 raise PySparkTypeError(
-                    error_class="NOT_STR",
-                    message_parameters={"arg_name": "name", "arg_type": type(name).__name__},
+                    errorClass="NOT_STR",
+                    messageParameters={"arg_name": "name", "arg_type": type(name).__name__},
                 )
             if name == "":
                 raise PySparkValueError(
-                    error_class="VALUE_NOT_NON_EMPTY_STR",
-                    message_parameters={"arg_name": "name", "arg_value": name},
+                    errorClass="VALUE_NOT_NON_EMPTY_STR",
+                    messageParameters={"arg_name": "name", "arg_value": name},
                 )
         self._name = name
         self._result: Optional[Dict[str, Any]] = None
@@ -52,15 +52,15 @@ class Observation:
 
     def _on(self, df: DataFrame, *exprs: Column) -> DataFrame:
         if self._result is not None:
-            raise PySparkAssertionError(error_class="REUSE_OBSERVATION", message_parameters={})
+            raise PySparkAssertionError(errorClass="REUSE_OBSERVATION", messageParameters={})
 
         if self._name is None:
             self._name = str(uuid.uuid4())
 
         if df.isStreaming:
             raise IllegalArgumentException(
-                error_class="UNSUPPORTED_OPERATION",
-                message_parameters={"operation": "Streaming DataFrame with Observation"},
+                errorClass="UNSUPPORTED_OPERATION",
+                messageParameters={"operation": "Streaming DataFrame with Observation"},
             )
 
         self._result = {}
@@ -71,7 +71,7 @@ class Observation:
     @property
     def get(self) -> Dict[str, Any]:
         if self._result is None:
-            raise PySparkAssertionError(error_class="NO_OBSERVE_BEFORE_GET", message_parameters={})
+            raise PySparkAssertionError(errorClass="NO_OBSERVE_BEFORE_GET", messageParameters={})
 
         return self._result
 
@@ -82,6 +82,7 @@ Observation.__doc__ = PySparkObservation.__doc__
 
 
 def _test() -> None:
+    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
@@ -90,7 +91,7 @@ def _test() -> None:
     globs = pyspark.sql.connect.observation.__dict__.copy()
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.observation tests")
-        .remote("local[4]")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
         .getOrCreate()
     )
 

@@ -40,7 +40,7 @@ CreateTempViewUsing [tableIdent:`show_t3` StructType(StructField(e,IntegerType,t
 -- !query
 CREATE GLOBAL TEMP VIEW show_t4 AS SELECT 1 as col1
 -- !query analysis
-CreateViewCommand `show_t4`, SELECT 1 as col1, false, false, GlobalTempView, true
+CreateViewCommand `show_t4`, SELECT 1 as col1, false, false, GlobalTempView, UNSUPPORTED, true
    +- Project [1 AS col1#x]
       +- OneRowRelation
 

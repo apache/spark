@@ -30,17 +30,21 @@ import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
+import org.apache.logging.log4j.CloseableThreadContext
 
 import org.apache.spark.{JobArtifactSet, SparkContext, SparkException, SparkThrowable}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CHECKPOINT_PATH, CHECKPOINT_ROOT, LOGICAL_PLAN, PATH, PRETTY_ID_STRING, QUERY_ID, RUN_ID, SPARK_DATA_STREAM}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit, SparkDataStream}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate, Write}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
-import org.apache.spark.sql.execution.datasources.v2.StreamWriterCommitProgress
+import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchUserFuncException, ForeachUserFuncException}
+import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataV2FileManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.streaming._
@@ -74,7 +78,7 @@ abstract class StreamExecution(
     val triggerClock: Clock,
     val outputMode: OutputMode,
     deleteCheckpointOnStop: Boolean)
-  extends StreamingQuery with ProgressReporter with Logging {
+  extends StreamingQuery with Logging {
 
   import org.apache.spark.sql.streaming.StreamingQueryListener._
 
@@ -89,11 +93,11 @@ abstract class StreamExecution(
   protected val awaitProgressLock = new ReentrantLock(true)
   protected val awaitProgressLockCondition = awaitProgressLock.newCondition()
 
+  protected var loggingThreadContext: CloseableThreadContext.Instance = _
+
   private val initializationLatch = new CountDownLatch(1)
   private val startLatch = new CountDownLatch(1)
   private val terminationLatch = new CountDownLatch(1)
-
-  def logicalPlan: LogicalPlan
 
   /**
    * Tracks how much data we have processed and committed to the sink or state store from each
@@ -102,33 +106,50 @@ abstract class StreamExecution(
    * Other threads should make a shallow copy if they are going to access this field more than
    * once, since the field's value may change at any time.
    */
-  @volatile
-  var committedOffsets = new StreamProgress
+  @volatile var committedOffsets = new StreamProgress
 
   /**
-   * Tracks the offsets that are available to be processed, but have not yet be committed to the
-   * sink.
-   * Only the scheduler thread should modify this field, and only in atomic steps.
-   * Other threads should make a shallow copy if they are going to access this field more than
-   * once, since the field's value may change at any time.
+   * Get the latest execution context .
    */
-  @volatile
-  var availableOffsets = new StreamProgress
+  def getLatestExecutionContext(): StreamExecutionContext
 
   /**
-   * Tracks the latest offsets for each input source.
-   * Only the scheduler thread should modify this field, and only in atomic steps.
-   * Other threads should make a shallow copy if they are going to access this field more than
-   * once, since the field's value may change at any time.
+   * Get the start offsets of the latest batch that has been planned
    */
-  @volatile
-  var latestOffsets = new StreamProgress
+  def getStartOffsetsOfLatestBatch: StreamProgress = {
+    getLatestExecutionContext().startOffsets
+  }
 
-  @volatile
-  var sinkCommitProgress: Option[StreamWriterCommitProgress] = None
+  /**
+   * Get the end or formerly know as "available" offsets of the latest batch that has been planned
+   */
+  def availableOffsets: StreamProgress = {
+    getLatestExecutionContext().endOffsets
+  }
 
-  /** The current batchId or -1 if execution has not yet been initialized. */
-  protected var currentBatchId: Long = -1
+  def latestOffsets: StreamProgress = {
+    getLatestExecutionContext().latestOffsets
+  }
+
+  override def status: StreamingQueryStatus = {
+    getLatestExecutionContext().currentStatus
+  }
+
+  override def recentProgress: Array[StreamingQueryProgress] = progressReporter.recentProgress
+
+  override def lastProgress: StreamingQueryProgress = progressReporter.lastProgress
+
+  /**
+   * The base logical plan which will be used across batch runs. Once the value is set, it should
+   * not be modified.
+   */
+  def logicalPlan: LogicalPlan
+
+  /**
+   * The list of stream instances which will be used across batch runs. Once the value is set,
+   * it should not be modified.
+   */
+  protected def sources: Seq[SparkDataStream]
 
   /** Metadata associated with the whole query */
   protected val streamMetadata: StreamMetadata = {
@@ -140,10 +161,6 @@ abstract class StreamExecution(
       newMetadata
     }
   }
-
-  /** Metadata associated with the offset seq of a batch in the query. */
-  protected var offsetSeqMetadata = OffsetSeqMetadata(
-    batchWatermarkMs = 0, batchTimestampMs = 0, sparkSession.conf)
 
   /**
    * A map of current watermarks, keyed by the position of the watermark operator in the
@@ -158,6 +175,9 @@ abstract class StreamExecution(
   override val id: UUID = UUID.fromString(streamMetadata.id)
 
   override val runId: UUID = UUID.randomUUID
+
+  protected val progressReporter = new ProgressReporter(sparkSession, triggerClock,
+    () => logicalPlan)
 
   /**
    * Pretty identified string of printing in logs. Format is
@@ -174,11 +194,7 @@ abstract class StreamExecution(
   /** Defines the internal state of execution */
   protected val state = new AtomicReference[State](INITIALIZING)
 
-  @volatile
-  var lastExecution: IncrementalExecution = _
-
-  /** Holds the most recent input data for each source. */
-  protected var newData: Map[SparkDataStream, LogicalPlan] = _
+  def lastExecution: IncrementalExecution = getLatestExecutionContext().executionPlan
 
   @volatile
   protected var streamDeathCause: StreamingQueryException = null
@@ -194,7 +210,7 @@ abstract class StreamExecution(
     this, s"spark.streaming.${Option(name).getOrElse(id)}")
 
   /** Isolated spark session to run the batches with. */
-  private val sparkSessionForStream = sparkSession.cloneSession()
+  protected val sparkSessionForStream = sparkSession.cloneSession()
 
   /**
    * The thread that runs the micro-batches of this stream. Note that this thread must be
@@ -250,7 +266,8 @@ abstract class StreamExecution(
    * has been posted to all the listeners.
    */
   def start(): Unit = {
-    logInfo(s"Starting $prettyIdString. Use $resolvedCheckpointRoot to store the query checkpoint.")
+    logInfo(log"Starting ${MDC(PRETTY_ID_STRING, prettyIdString)}. " +
+      log"Use ${MDC(CHECKPOINT_ROOT, resolvedCheckpointRoot)} to store the query checkpoint.")
     queryExecutionThread.setDaemon(true)
     queryExecutionThread.start()
     startLatch.await()  // Wait until thread started and QueryStart event has been posted
@@ -270,17 +287,24 @@ abstract class StreamExecution(
    * `start()` method returns.
    */
   private def runStream(): Unit = {
+    var errorClassOpt: Option[String] = None
     try {
       sparkSession.sparkContext.setJobGroup(runId.toString, getBatchDescriptionString,
         interruptOnCancel = true)
       sparkSession.sparkContext.setLocalProperty(StreamExecution.QUERY_ID_KEY, id.toString)
+      loggingThreadContext = CloseableThreadContext.putAll(
+        Map(
+          QUERY_ID.name -> id.toString,
+          RUN_ID.name -> runId.toString
+        ).asJava)
       if (sparkSession.sessionState.conf.streamingMetricsEnabled) {
         sparkSession.sparkContext.env.metricsSystem.registerSource(streamMetrics)
       }
 
       // `postEvent` does not throw non fatal exception.
       val startTimestamp = triggerClock.getTimeMillis()
-      postEvent(new QueryStartedEvent(id, runId, name, formatTimestamp(startTimestamp)))
+      postEvent(
+        new QueryStartedEvent(id, runId, name, progressReporter.formatTimestamp(startTimestamp)))
 
       // Unblock starting thread
       startLatch.countDown()
@@ -298,18 +322,22 @@ abstract class StreamExecution(
         sparkSessionForStream.conf.set(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key,
           "false")
 
-        updateStatusMessage("Initializing sources")
+        getLatestExecutionContext().updateStatusMessage("Initializing sources")
         // force initialization of the logical plan so that the sources can be created
         logicalPlan
 
-        offsetSeqMetadata = OffsetSeqMetadata(
+        getLatestExecutionContext().offsetSeqMetadata = OffsetSeqMetadata(
           batchWatermarkMs = 0, batchTimestampMs = 0, sparkSessionForStream.conf)
 
         if (state.compareAndSet(INITIALIZING, ACTIVE)) {
+          // Log logical plan at the start of the query to help debug issues related to
+          // plan changes.
+          logInfo(log"Finish initializing with logical plan:\n${MDC(LOGICAL_PLAN, logicalPlan)}")
+
           // Unblock `awaitInitialization`
           initializationLatch.countDown()
           runActivatedStream(sparkSessionForStream)
-          updateStatusMessage("Stopped")
+          getLatestExecutionContext().updateStatusMessage("Stopped")
         } else {
           // `stop()` is already called. Let `finally` finish the cleanup.
         }
@@ -317,25 +345,45 @@ abstract class StreamExecution(
     } catch {
       case e if isInterruptedByStop(e, sparkSession.sparkContext) =>
         // interrupted by stop()
-        updateStatusMessage("Stopped")
+        getLatestExecutionContext().updateStatusMessage("Stopped")
       case e: Throwable =>
         val message = if (e.getMessage == null) "" else e.getMessage
+        val cause = if (e.isInstanceOf[ForeachBatchUserFuncException] ||
+          e.isInstanceOf[ForeachUserFuncException]) {
+          // We want to maintain the current way users get the causing exception
+          // from the StreamingQueryException.
+          // Hence the ForeachBatch/Foreach exception is unwrapped here.
+          e.getCause
+        } else {
+          e
+        }
+
         streamDeathCause = new StreamingQueryException(
           toDebugString(includeLogicalPlan = isInitialized),
-          cause = e,
-          committedOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString,
-          availableOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString,
+          cause = cause,
+          getLatestExecutionContext().startOffsets
+            .toOffsetSeq(sources.toSeq, getLatestExecutionContext().offsetSeqMetadata)
+            .toString,
+          getLatestExecutionContext().endOffsets
+            .toOffsetSeq(sources.toSeq, getLatestExecutionContext().offsetSeqMetadata)
+            .toString,
           errorClass = "STREAM_FAILED",
           messageParameters = Map(
             "id" -> id.toString,
             "runId" -> runId.toString,
             "message" -> message))
-        logError(s"Query $prettyIdString terminated with error", e)
-        updateStatusMessage(s"Terminated with exception: $message")
+
+        errorClassOpt = e match {
+          case t: SparkThrowable => Option(t.getCondition)
+          case _ => None
+        }
+
+        logError(log"Query ${MDC(PRETTY_ID_STRING, prettyIdString)} terminated with error", e)
+        getLatestExecutionContext().updateStatusMessage(s"Terminated with exception: $message")
         // Rethrow the fatal errors to allow the user using `Thread.UncaughtExceptionHandler` to
         // handle them
-        if (!NonFatal(e)) {
-          throw e
+        if (!NonFatal(cause)) {
+          throw cause
         }
     } finally queryExecutionThread.runUninterruptibly {
       // The whole `finally` block must run inside `runUninterruptibly` to avoid being interrupted
@@ -351,22 +399,21 @@ abstract class StreamExecution(
         stopSources()
         cleanup()
         state.set(TERMINATED)
-        currentStatus = status.copy(isTriggerActive = false, isDataAvailable = false)
+        getLatestExecutionContext().currentStatus =
+          status.copy(isTriggerActive = false, isDataAvailable = false)
 
         // Update metrics and status
         sparkSession.sparkContext.env.metricsSystem.removeSource(streamMetrics)
 
         // Notify others
         sparkSession.streams.notifyQueryTermination(StreamExecution.this)
-        val errorClassOpt = exception.flatMap {
-          _.cause match {
-            case t: SparkThrowable => Some(t.getErrorClass)
-            case _ => None
-          }
-        }
         postEvent(
           new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString),
             errorClassOpt))
+
+        if (loggingThreadContext != null) {
+          loggingThreadContext.close()
+        }
 
         // Delete the temp checkpoint when either force delete enabled or the query didn't fail
         if (deleteCheckpointOnStop &&
@@ -374,13 +421,13 @@ abstract class StreamExecution(
               .getConf(SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION) || exception.isEmpty)) {
           val checkpointPath = new Path(resolvedCheckpointRoot)
           try {
-            logInfo(s"Deleting checkpoint $checkpointPath.")
+            logInfo(log"Deleting checkpoint ${MDC(CHECKPOINT_PATH, checkpointPath)}.")
             fileManager.delete(checkpointPath)
           } catch {
             case NonFatal(e) =>
               // Deleting temp checkpoint folder is best effort, don't throw non fatal exceptions
               // when we cannot delete them.
-              logWarning(s"Cannot delete $checkpointPath", e)
+              logWarning(log"Cannot delete ${MDC(PATH, checkpointPath)}", e)
           }
         }
       } finally {
@@ -404,7 +451,7 @@ abstract class StreamExecution(
     }
   }
 
-  override protected def postEvent(event: StreamingQueryListener.Event): Unit = {
+  protected def postEvent(event: StreamingQueryListener.Event): Unit = {
     sparkSession.streams.postListenerEvent(event)
   }
 
@@ -415,7 +462,8 @@ abstract class StreamExecution(
         source.stop()
       } catch {
         case NonFatal(e) =>
-          logWarning(s"Failed to stop streaming source: $source. Resources may have leaked.", e)
+          logWarning(log"Failed to stop streaming source: ${MDC(SPARK_DATA_STREAM, source)}. " +
+            log"Resources may have leaked.", e)
       }
     }
   }
@@ -435,7 +483,7 @@ abstract class StreamExecution(
   @throws[TimeoutException]
   protected def interruptAndAwaitExecutionThreadTermination(): Unit = {
     val timeout = math.max(
-      sparkSession.conf.get(SQLConf.STREAMING_STOP_TIMEOUT), 0)
+      sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_STOP_TIMEOUT), 0)
     queryExecutionThread.interrupt()
     queryExecutionThread.join(timeout)
     if (queryExecutionThread.isAlive) {
@@ -588,8 +636,8 @@ abstract class StreamExecution(
     val debugString =
       s"""|=== Streaming Query ===
           |Identifier: $prettyIdString
-          |Current Committed Offsets: $committedOffsets
-          |Current Available Offsets: $availableOffsets
+          |Current Committed Offsets: ${getLatestExecutionContext().startOffsets}
+          |Current Available Offsets: ${getLatestExecutionContext().endOffsets}
           |
           |Current State: $state
           |Thread State: ${queryExecutionThread.getState}""".stripMargin
@@ -601,7 +649,8 @@ abstract class StreamExecution(
   }
 
   protected def getBatchDescriptionString: String = {
-    val batchDescription = if (currentBatchId < 0) "init" else currentBatchId.toString
+    val batchDescription = if (getLatestExecutionContext().batchId < 0) "init"
+    else getLatestExecutionContext().batchId.toString
     s"""|${Option(name).getOrElse("")}
         |id = $id
         |runId = $runId
@@ -639,6 +688,31 @@ abstract class StreamExecution(
     offsetLog.purge(threshold)
     commitLog.purge(threshold)
   }
+
+  protected def purgeStatefulMetadata(plan: SparkPlan): Unit = {
+    plan.collect { case statefulOperator: StatefulOperator =>
+      statefulOperator match {
+        case ssw: StateStoreWriter =>
+          ssw.operatorStateMetadataVersion match {
+            case 2 =>
+              // checkpointLocation of the operator is runId/state, and commitLog path is
+              // runId/commits, so we want the parent of the checkpointLocation to get the
+              // commit log path.
+              val parentCheckpointLocation =
+                new Path(statefulOperator.getStateInfo.checkpointLocation).getParent
+
+              val fileManager = new OperatorStateMetadataV2FileManager(
+                parentCheckpointLocation,
+                sparkSession,
+                ssw
+              )
+              fileManager.purgeMetadataFiles()
+            case _ =>
+          }
+        case _ =>
+      }
+    }
+  }
 }
 
 object StreamExecution {
@@ -650,42 +724,49 @@ object StreamExecution {
     classOf[ClosedByInterruptException].getName)
   val PROXY_ERROR = (
     "py4j.protocol.Py4JJavaError: An error occurred while calling" +
-    s".+(\\r\\n|\\r|\\n): (${IO_EXCEPTION_NAMES.mkString("|")})").r
+      s"((.|\\r\\n|\\r|\\n)*)(${IO_EXCEPTION_NAMES.mkString("|")})").r
 
   @scala.annotation.tailrec
-  def isInterruptionException(e: Throwable, sc: SparkContext): Boolean = e match {
-    // InterruptedIOException - thrown when an I/O operation is interrupted
-    // ClosedByInterruptException - thrown when an I/O operation upon a channel is interrupted
-    case _: InterruptedException | _: InterruptedIOException | _: ClosedByInterruptException =>
-      true
-    // The cause of the following exceptions may be one of the above exceptions:
-    //
-    // UncheckedIOException - thrown by codes that cannot throw a checked IOException, such as
-    //                        BiFunction.apply
-    // ExecutionException - thrown by codes running in a thread pool and these codes throw an
-    //                      exception
-    // UncheckedExecutionException - thrown by codes that cannot throw a checked
-    //                               ExecutionException, such as BiFunction.apply
-    case e2 @ (_: UncheckedIOException | _: ExecutionException | _: UncheckedExecutionException)
-        if e2.getCause != null =>
-      isInterruptionException(e2.getCause, sc)
-    case se: SparkException =>
+  def isInterruptionException(e: Throwable, sc: SparkContext): Boolean = {
+    def isCancelledJobGroup(errorMsg: String): Boolean = {
       val jobGroup = sc.getLocalProperty("spark.jobGroup.id")
       if (jobGroup == null) return false
-      val errorMsg = se.getMessage
-      if (errorMsg.contains("cancelled") && errorMsg.contains(jobGroup) && se.getCause == null) {
+      errorMsg.contains("cancelled") && errorMsg.contains(jobGroup)
+    }
+
+    e match {
+      // InterruptedIOException - thrown when an I/O operation is interrupted
+      // ClosedByInterruptException - thrown when an I/O operation upon a channel is interrupted
+      case _: InterruptedException | _: InterruptedIOException | _: ClosedByInterruptException =>
         true
-      } else if (se.getCause != null) {
-        isInterruptionException(se.getCause, sc)
-      } else {
+      // The cause of the following exceptions may be one of the above exceptions:
+      //
+      // UncheckedIOException - thrown by codes that cannot throw a checked IOException, such as
+      //                        BiFunction.apply
+      // ExecutionException - thrown by codes running in a thread pool and these codes throw an
+      //                      exception
+      // UncheckedExecutionException - thrown by codes that cannot throw a checked
+      //                               ExecutionException, such as BiFunction.apply
+      case e2 @ (_: UncheckedIOException | _: ExecutionException | _: UncheckedExecutionException)
+          if e2.getCause != null =>
+        isInterruptionException(e2.getCause, sc)
+      case fe: ForeachBatchUserFuncException => isInterruptionException(fe.getCause, sc)
+      case fes: ForeachUserFuncException => isInterruptionException(fes.getCause, sc)
+      case se: SparkException =>
+        if (se.getCause == null) {
+          isCancelledJobGroup(se.getMessage)
+        } else {
+          isInterruptionException(se.getCause, sc)
+        }
+      // py4j.Py4JException - with pinned thread mode on, the exception can be interrupted by Py4J
+      //                      access, for example, in `DataFrameWriter.foreachBatch`. See also
+      //                      SPARK-39218.
+      case e: py4j.Py4JException =>
+        PROXY_ERROR.findFirstIn(e.getMessage).isDefined || (e.getMessage
+          .contains("org.apache.spark.SparkException") && isCancelledJobGroup(e.getMessage))
+      case _ =>
         false
-      }
-    // py4j.Py4JException - with pinned thread mode on, the exception can be interrupted by Py4J
-    //                      access, for example, in `DataFrameWriter.foreachBatch`. See also
-    //                      SPARK-39218.
-    case e: py4j.Py4JException => PROXY_ERROR.findFirstIn(e.getMessage).isDefined
-    case _ =>
-      false
+    }
   }
 
   /** Whether the path contains special chars that will be escaped when converting to a `URI`. */

@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CONFIG, HASH_MAP_SIZE, OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -174,10 +175,12 @@ class ObjectAggregationIterator(
         // The hash map gets too large, makes a sorted spill and clear the map.
         if (hashMap.size >= fallbackCountThreshold && inputRows.hasNext) {
           logInfo(
-            s"Aggregation hash map size ${hashMap.size} reaches threshold " +
-              s"capacity ($fallbackCountThreshold entries), spilling and falling back to sort" +
-              " based aggregation. You may change the threshold by adjust option " +
-              SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key
+            log"Aggregation hash map size ${MDC(HASH_MAP_SIZE, hashMap.size)} reaches threshold " +
+              log"capacity " +
+              log"(${MDC(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD, fallbackCountThreshold)}" +
+              log" entries), spilling and falling back to sort based aggregation. You may change " +
+              log"the threshold by adjust option " +
+              log"${MDC(CONFIG, SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key)}"
           )
 
           // Falls back to sort-based aggregation

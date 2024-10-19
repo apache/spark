@@ -34,7 +34,7 @@ import sys
 from typing import Tuple
 
 from pyspark import SparkContext
-from pyspark.rdd import RDD
+from pyspark import RDD
 from pyspark.streaming import DStream, StreamingContext
 
 

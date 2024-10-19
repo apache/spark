@@ -557,7 +557,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"every(1)\""
   },
@@ -583,7 +583,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"SMALLINT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"some(1)\""
   },
@@ -609,7 +609,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"BIGINT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"any(1)\""
   },
@@ -635,7 +635,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"true\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"every(true)\""
   },
@@ -661,7 +661,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1.0\"",
     "inputType" : "\"DECIMAL(2,1)\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"bool_and(1.0)\""
   },
@@ -687,7 +687,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1.0\"",
     "inputType" : "\"DOUBLE\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"bool_or(1.0)\""
   },
@@ -1101,4 +1101,169 @@ GROUP BY c
 struct<d:int>
 -- !query output
 0
+2
+
+
+-- !query
+SELECT col1, count(*) AS cnt
+FROM VALUES
+  (0.0),
+  (-0.0),
+  (double('NaN')),
+  (double('NaN')),
+  (double('Infinity')),
+  (double('Infinity')),
+  (-double('Infinity')),
+  (-double('Infinity'))
+GROUP BY col1
+ORDER BY col1
+-- !query schema
+struct<col1:double,cnt:bigint>
+-- !query output
+-Infinity	2
+0.0	2
+Infinity	2
+NaN	2
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (ARRAY(MAP(1, 2, 2, 3), MAP(1, 3))), (ARRAY(MAP(2, 3), MAP(1, 3))), (ARRAY(MAP(2, 3, 1, 2), MAP(1, 3))) as t(a)
+GROUP BY a
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+1
+2
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (named_struct('b', map(1, 2, 2, 3))), (named_struct('b', map(1, 3))), (named_struct('b', map(2, 3, 1, 2))) as t(a)
+GROUP BY a
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+1
+2
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (named_struct('b', map(1, 2, 2, 3))), (named_struct('b', map(1, 3))), (named_struct('b', map(2, 3, 1, 2))) as t(a)
+GROUP BY a.b
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+1
+2
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (named_struct('b', array(map(1, 2, 2, 3), map(1, 3)))), (named_struct('b', array(map(2, 3), map(1, 3)))), (named_struct('b', array(map(2, 3, 1, 2), map(1, 3)))) as t(a)
+GROUP BY a
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+1
+2
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (ARRAY(named_struct('b', map(1, 2, 2, 3)), named_struct('b', map(1, 3)))), (ARRAY(named_struct('b', map(2, 3)), named_struct('b', map(1, 3)))), (ARRAY(named_struct('b', map(2, 3, 1, 2)), named_struct('b', map(1, 3)))) as t(a)
+group BY a
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+1
+2
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (map(array(1, 2), 2, array(2, 3), 3)), (map(array(1, 3), 3)), (map(array(2, 3), 3, array(1, 2), 2)) as t(a)
+group BY a
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+1
+2
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (map(array(1, 2, 3), 3)), (map(array(3, 2, 1), 3)) as t(a)
+group BY a
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+1
+1
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (ARRAY(map(array(1, 2), 2, array(2, 3), 3))), (ARRAY(MAP(ARRAY(1, 3), 3))), (ARRAY(map(array(2, 3), 3, array(1, 2), 2))) as t(a)
+group BY a
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+1
+2
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (map(named_struct('b', 1), 2, named_struct('b', 2), 3)), (map(named_struct('b', 1), 3)), (map(named_struct('b', 2), 3, named_struct('b', 1), 2)) as t(a)
+group BY a
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+1
+2
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (named_struct('b', map(named_struct('c', 1), 2, named_struct('c', 2), 3))), (named_struct('b', map(named_struct('c', 1), 3))), (named_struct('b', map(named_struct('c', 2), 3, named_struct('c', 1), 2))) as t(a)
+group BY a
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+1
+2
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (named_struct('b', map(named_struct('c', 1), 2, named_struct('c', 2), 3))), (named_struct('b', map(named_struct('c', 1), 3))), (named_struct('b', map(named_struct('c', 2), 3, named_struct('c', 1), 2))) as t(a)
+group BY a.b
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+1
+2
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (Map(1, Map(1,2), 2, Map(2, 3, 1, 2))), (Map(2, Map(1, 2, 2,3), 1, Map(1, 2))), (Map(1, Map(1,2), 2, Map(2, 4))) as t(a)
+GROUP BY a
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+1
+2
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (Map(1, Array(Map(1,2)), 2, Array(Map(2, 3, 1, 2)))), (Map(2, Array(Map(1, 2, 2,3)), 1, Array(Map(1, 2)))), (Map(1, Array(Map(1,2)), 2, Array(Map(2, 4)))) as t(a)
+GROUP BY a
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+1
 2

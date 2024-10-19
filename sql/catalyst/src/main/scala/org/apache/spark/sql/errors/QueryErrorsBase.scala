@@ -47,10 +47,6 @@ private[sql] trait QueryErrorsBase extends DataTypeErrorsBase {
     quoteByDefault(conf)
   }
 
-  def toDSOption(option: String): String = {
-    quoteByDefault(option)
-  }
-
   def toSQLExpr(e: Expression): String = {
     quoteByDefault(toPrettySQL(e))
   }
@@ -69,6 +65,13 @@ private[sql] trait QueryErrorsBase extends DataTypeErrorsBase {
       else if (v.isNegInfinity) "-Infinity"
       else l.sql
     case l => l.sql
+  }
+
+  def ordinalNumber(i: Int): String = i match {
+    case 0 => "first"
+    case 1 => "second"
+    case 2 => "third"
+    case i => s"${i + 1}th"
   }
 }
 

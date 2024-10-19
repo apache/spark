@@ -333,6 +333,11 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         from pyspark.sql.connect.observation import Observation
 
         class MockDF(DataFrame):
+            def __new__(cls, df: DataFrame) -> "DataFrame":
+                self = object.__new__(cls)
+                self.__init__(df)  # type: ignore[misc]
+                return self
+
             def __init__(self, df: DataFrame):
                 super().__init__(df._plan, df._session)
 
@@ -438,7 +443,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(plan.root.sample.lower_bound, 0.0)
         self.assertEqual(plan.root.sample.upper_bound, 0.3)
         self.assertEqual(plan.root.sample.with_replacement, False)
-        self.assertEqual(plan.root.sample.HasField("seed"), False)
+        self.assertEqual(plan.root.sample.HasField("seed"), True)
         self.assertEqual(plan.root.sample.deterministic_order, False)
 
         plan = (
@@ -651,8 +656,8 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
 
         self.check_error(
             exception=pe.exception,
-            error_class="VALUE_NOT_POSITIVE",
-            message_parameters={"arg_name": "numPartitions", "arg_value": "-1"},
+            errorClass="VALUE_NOT_POSITIVE",
+            messageParameters={"arg_name": "numPartitions", "arg_value": "-1"},
         )
 
         with self.assertRaises(PySparkValueError) as pe:
@@ -660,8 +665,8 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
 
         self.check_error(
             exception=pe.exception,
-            error_class="VALUE_NOT_POSITIVE",
-            message_parameters={"arg_name": "numPartitions", "arg_value": "-1"},
+            errorClass="VALUE_NOT_POSITIVE",
+            messageParameters={"arg_name": "numPartitions", "arg_value": "-1"},
         )
 
     def test_repartition_by_expression(self):
@@ -756,7 +761,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         # SPARK-41717: test print
         self.assertEqual(
             self.connect.sql("SELECT 1")._plan.print().strip(),
-            "<SQL query='SELECT 1', args='None'>",
+            "<SQL query='SELECT 1', args='None', named_args='None', views='None'>",
         )
         self.assertEqual(
             self.connect.range(1, 10)._plan.print().strip(),

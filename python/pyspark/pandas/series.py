@@ -54,7 +54,12 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 )
 from pandas.tseries.frequencies import DateOffset
 
-from pyspark.sql import functions as F, Column as PySparkColumn, DataFrame as SparkDataFrame
+from pyspark.sql import (
+    functions as F,
+    Column as PySparkColumn,
+    DataFrame as SparkDataFrame,
+    Window as PySparkWindow,
+)
 from pyspark.sql.types import (
     ArrayType,
     BooleanType,
@@ -70,7 +75,6 @@ from pyspark.sql.types import (
     NullType,
 )
 from pyspark.sql.window import Window
-from pyspark.sql.utils import get_column_class, get_window_class
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T
 from pyspark.pandas.accessors import PandasOnSparkSeriesMethods
@@ -392,8 +396,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     ):
         assert data is not None
 
-        self._anchor: DataFrame
-        self._col_label: Label
+        self._anchor: DataFrame  # type: ignore[annotation-unchecked]
+        self._col_label: Label  # type: ignore[annotation-unchecked]
         if isinstance(data, DataFrame):
             assert dtype is None
             assert name is None
@@ -1889,7 +1893,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         index: array-like, optional
             New labels / index to conform to, should be specified using keywords.
             Preferably an Index object to avoid duplicating data
-        fill_value : scalar, default np.NaN
+        fill_value : scalar, default np.nan
             Value to use for missing values. Defaults to NaN, but can be any
             "compatible" value.
 
@@ -2231,6 +2235,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         limit_direction: Optional[str] = None,
         limit_area: Optional[str] = None,
     ) -> "Series":
+        if self.dtype == "object":
+            warnings.warn(
+                "Series.interpolate with object dtype is deprecated and will raise in a "
+                "future version. Convert to a specific numeric type before interpolating.",
+                FutureWarning,
+            )
         if method not in ["linear"]:
             raise NotImplementedError("interpolate currently works only for method='linear'")
         if (limit is not None) and (not limit > 0):
@@ -2251,15 +2261,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         last_non_null = F.last(scol, True)
         null_index = SF.null_index(scol)
 
-        Window = get_window_class()
-        window_forward = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
-            Window.unboundedPreceding, Window.currentRow
+        window_forward = PySparkWindow.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
+            PySparkWindow.unboundedPreceding, PySparkWindow.currentRow
         )
         last_non_null_forward = last_non_null.over(window_forward)
         null_index_forward = null_index.over(window_forward)
 
-        window_backward = Window.orderBy(F.desc(NATURAL_ORDER_COLUMN_NAME)).rowsBetween(
-            Window.unboundedPreceding, Window.currentRow
+        window_backward = PySparkWindow.orderBy(F.desc(NATURAL_ORDER_COLUMN_NAME)).rowsBetween(
+            PySparkWindow.unboundedPreceding, PySparkWindow.currentRow
         )
         last_non_null_backward = last_non_null.over(window_backward)
         null_index_backward = null_index.over(window_backward)
@@ -4165,11 +4174,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if self._internal.index_level > 1:
             raise NotImplementedError("rank do not support MultiIndex now")
 
-        Column = get_column_class()
         if ascending:
-            asc_func = Column.asc
+            asc_func = PySparkColumn.asc
         else:
-            asc_func = Column.desc
+            asc_func = PySparkColumn.desc
 
         if method == "first":
             window = (
@@ -4550,7 +4558,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         C    2
         dtype: int64
 
-        >>> s.pop('A')
+        >>> int(s.pop('A'))
         0
 
         >>> s
@@ -5813,7 +5821,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         A scalar `where`.
 
-        >>> s.asof(20)
+        >>> float(s.asof(20))
         2.0
 
         For a sequence `where`, a Series is returned. The first value is
@@ -5828,12 +5836,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Missing values are not considered. The following is ``2.0``, not
         NaN, even though NaN is at the index location for ``30``.
 
-        >>> s.asof(30)
+        >>> float(s.asof(30))
         2.0
 
         >>> s = ps.Series([1, 2, np.nan, 4], index=[10, 30, 20, 40])
         >>> with ps.option_context("compute.eager_check", False):
-        ...     s.asof(20)
+        ...     float(s.asof(20))
         ...
         1.0
         """
@@ -5864,7 +5872,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     # then return monotonically_increasing_id. This will let max by
                     # to return last index value, which is the behaviour of pandas
                     else spark_column.isNotNull(),
-                    monotonically_increasing_id_column,
+                    F.col(monotonically_increasing_id_column),
                 ),
             )
             for index in where
@@ -7086,15 +7094,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ----------
         rule : str
             The offset string or object representing target conversion.
-            Currently, supported units are {'Y', 'A', 'M', 'D', 'H',
-            'T', 'MIN', 'S'}.
+            Currently, supported units are {'YE', 'A', 'ME', 'D', 'h',
+            'min', 'MIN', 's'}.
         closed : {{'right', 'left'}}, default None
             Which side of bin interval is closed. The default is 'left'
-            for all frequency offsets except for 'A', 'Y' and 'M' which all
+            for all frequency offsets except for 'A', 'YE' and 'ME' which all
             have a default of 'right'.
         label : {{'right', 'left'}}, default None
             Which bin edge label to label bucket with. The default is 'left'
-            for all frequency offsets except for 'A', 'Y' and 'M' which all
+            for all frequency offsets except for 'A', 'YE' and 'ME' which all
             have a default of 'right'.
         on : Series, optional
             For a DataFrame, column to use instead of index for resampling.

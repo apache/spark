@@ -20,6 +20,7 @@ package org.apache.spark.internal.plugin
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.util.{Map => JMap}
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.concurrent.duration._
@@ -36,9 +37,11 @@ import org.apache.spark.TestUtils._
 import org.apache.spark.api.plugin._
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.resource.ResourceUtils.GPU
 import org.apache.spark.resource.TestResourceIDs.{DRIVER_GPU_ID, EXECUTOR_GPU_ID, WORKER_GPU_ID}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.util.Utils
 
 class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
@@ -228,6 +231,92 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
       assert(driverResources.get(GPU).name === GPU)
     }
   }
+
+  test("memory override in plugin") {
+    val conf = new SparkConf()
+      .setAppName(getClass().getName())
+      .set(SparkLauncher.SPARK_MASTER, "local-cluster[2,1,1024]")
+      .set(PLUGINS, Seq(classOf[MemoryOverridePlugin].getName()))
+
+    var sc: SparkContext = null
+    try {
+      sc = new SparkContext(conf)
+      val memoryManager = sc.env.memoryManager
+
+      assert(memoryManager.tungstenMemoryMode == MemoryMode.OFF_HEAP)
+      assert(memoryManager.maxOffHeapStorageMemory == MemoryOverridePlugin.offHeapMemory)
+
+      // Ensure all executors has started
+      TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
+
+      // Check executor memory is also updated
+      val execInfo = sc.statusTracker.getExecutorInfos.head
+      assert(execInfo.totalOffHeapStorageMemory() == MemoryOverridePlugin.offHeapMemory)
+    } finally {
+      if (sc != null) {
+        sc.stop()
+      }
+    }
+  }
+
+  test("The plugin should be shutdown before the listener bus is stopped") {
+
+    val conf = new SparkConf()
+      .setAppName(getClass().getName())
+      .set(SparkLauncher.SPARK_MASTER, "local[1]")
+      .set(PLUGINS, Seq(classOf[TestSparkPlugin].getName()))
+
+    val sc = new SparkContext(conf)
+
+    val countDownLatch = new CountDownLatch(1)
+    sc.addSparkListener(new SparkListener {
+
+      override def onOtherEvent(event: SparkListenerEvent): Unit = {
+        event match {
+          case _: TestSparkPluginEvent =>
+            // Count down upon receiving the event sent from the plugin during shutdown.
+            countDownLatch.countDown()
+        }
+      }
+    })
+
+    TestSparkPlugin.driverPluginShutdownHook = () => {
+      // The listener bus should still be active when the plugin is shutdown
+      sc.listenerBus.post(TestSparkPluginEvent())
+    }
+
+    // Stop the context
+    sc.stop()
+    countDownLatch.await()
+    // The listener should receive the event posted by the plugin on shutdown.
+    // If the listener bus is stopped before the plugin is shutdown,
+    // then the event will be dropped and won't be delivered to the listener.
+  }
+}
+
+class MemoryOverridePlugin extends SparkPlugin {
+  override def driverPlugin(): DriverPlugin = {
+    new DriverPlugin {
+      override def init(sc: SparkContext, pluginContext: PluginContext): JMap[String, String] = {
+        // Take the original executor memory, and set `spark.memory.offHeap.size` to be the
+        // same value. Also set `spark.memory.offHeap.enabled` to true.
+        val originalExecutorMemBytes =
+          sc.conf.getSizeAsMb(EXECUTOR_MEMORY.key, EXECUTOR_MEMORY.defaultValueString)
+        sc.conf.set(MEMORY_OFFHEAP_ENABLED.key, "true")
+        sc.conf.set(MEMORY_OFFHEAP_SIZE.key, s"${originalExecutorMemBytes}M")
+        MemoryOverridePlugin.offHeapMemory = sc.conf.getSizeAsBytes(MEMORY_OFFHEAP_SIZE.key)
+        Map.empty[String, String].asJava
+      }
+    }
+  }
+
+  override def executorPlugin(): ExecutorPlugin = {
+    new ExecutorPlugin {}
+  }
+}
+
+object MemoryOverridePlugin {
+  var offHeapMemory: Long = _
 }
 
 class NonLocalModeSparkPlugin extends SparkPlugin {
@@ -294,7 +383,7 @@ object NonLocalModeSparkPlugin {
       resources: Map[String, ResourceInformation]): Unit = {
     val path = conf.get(TEST_PATH_CONF)
     val strToWrite = createFileStringWithGpuAddrs(id, resources)
-    Files.write(strToWrite, new File(path, s"$filePrefix$id"), StandardCharsets.UTF_8)
+    Files.asCharSink(new File(path, s"$filePrefix$id"), StandardCharsets.UTF_8).write(strToWrite)
   }
 
   def reset(): Unit = {
@@ -339,6 +428,12 @@ private class TestDriverPlugin extends DriverPlugin {
     case other => throw new IllegalArgumentException(s"unknown: $other")
   }
 
+  override def shutdown(): Unit = {
+    if (TestSparkPlugin.driverPluginShutdownHook != null) {
+      TestSparkPlugin.driverPluginShutdownHook()
+    }
+  }
+
 }
 
 private class TestExecutorPlugin extends ExecutorPlugin {
@@ -367,9 +462,12 @@ private class TestExecutorPlugin extends ExecutorPlugin {
   }
 }
 
+case class TestSparkPluginEvent() extends SparkListenerEvent
+
 private object TestSparkPlugin {
   var driverPlugin: TestDriverPlugin = _
   var driverContext: PluginContext = _
+  var driverPluginShutdownHook: () => Unit = _
 
   var executorPlugin: TestExecutorPlugin = _
   var executorContext: PluginContext = _
@@ -379,6 +477,7 @@ private object TestSparkPlugin {
   def reset(): Unit = {
     driverPlugin = null
     driverContext = null
+    driverPluginShutdownHook = null
     executorPlugin = null
     executorContext = null
     extraConf = null

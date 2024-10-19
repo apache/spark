@@ -22,8 +22,8 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkContext}
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
@@ -111,8 +111,8 @@ private[scheduler] class HealthTracker (
       val execsToInclude = executorIdToExcludedStatus.filter(_._2.expiryTime < now).keys
       if (execsToInclude.nonEmpty) {
         // Include any executors that have been excluded longer than the excludeOnFailure timeout.
-        logInfo(s"Removing executors $execsToInclude from exclude list because the " +
-          s"the executors have reached the timed out")
+        logInfo(log"Removing executors ${MDC(EXECUTOR_IDS, execsToInclude)} from " +
+          log"exclude list because the executors have reached the timed out")
         execsToInclude.foreach { exec =>
           val status = executorIdToExcludedStatus.remove(exec).get
           val failedExecsOnNode = nodeToExcludedExecs(status.node)
@@ -128,8 +128,8 @@ private[scheduler] class HealthTracker (
       val nodesToInclude = nodeIdToExcludedExpiryTime.filter(_._2 < now).keys
       if (nodesToInclude.nonEmpty) {
         // Include any nodes that have been excluded longer than the excludeOnFailure timeout.
-        logInfo(s"Removing nodes $nodesToInclude from exclude list because the " +
-          s"nodes have reached has timed out")
+        logInfo(log"Removing nodes ${MDC(NODES, nodesToInclude)} from exclude list because the " +
+          log"nodes have reached has timed out")
         nodesToInclude.foreach { node =>
           nodeIdToExcludedExpiryTime.remove(node)
           // post both to keep backwards compatibility
@@ -173,8 +173,8 @@ private[scheduler] class HealthTracker (
             force = true)
         }
       case None =>
-        logInfo(s"Not attempting to kill excluded executor id $exec " +
-          s"since allocation client is not defined.")
+        logInfo(log"Not attempting to kill excluded executor id ${MDC(EXECUTOR_ID, exec)}" +
+          log" since allocation client is not defined.")
     }
   }
 
@@ -196,21 +196,23 @@ private[scheduler] class HealthTracker (
       allocationClient match {
         case Some(a) =>
           if (EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED) {
-            logInfo(s"Decommissioning all executors on excluded host $node " +
-              s"since ${config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key} is set.")
+            logInfo(log"Decommissioning all executors on excluded host ${MDC(HOST, node)} " +
+              log"since ${MDC(CONFIG, config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key)} " +
+              log"is set.")
             if (!a.decommissionExecutorsOnHost(node)) {
-              logError(s"Decommissioning executors on $node failed.")
+              logError(log"Decommissioning executors on ${MDC(HOST, node)} failed.")
             }
           } else {
-            logInfo(s"Killing all executors on excluded host $node " +
-              s"since ${config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key} is set.")
+            logInfo(log"Killing all executors on excluded host ${MDC(HOST, node)} " +
+              log"since ${MDC(CONFIG, config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key)} is set.")
             if (!a.killExecutorsOnHost(node)) {
-              logError(s"Killing executors on node $node failed.")
+              logError(log"Killing executors on node ${MDC(HOST, node)} failed.")
             }
           }
         case None =>
-          logWarning(s"Not attempting to kill executors on excluded host $node " +
-            s"since allocation client is not defined.")
+          logWarning(
+            log"Not attempting to kill executors on excluded host ${MDC(HOST_PORT, node)} " +
+              log"since allocation client is not defined.")
       }
     }
   }
@@ -230,7 +232,8 @@ private[scheduler] class HealthTracker (
 
       if (conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
         if (!nodeIdToExcludedExpiryTime.contains(host)) {
-          logInfo(s"excluding node $host due to fetch failure of external shuffle service")
+          logInfo(log"excluding node ${MDC(HOST, host)} due to fetch failure of " +
+            log"external shuffle service")
 
           nodeIdToExcludedExpiryTime.put(host, expiryTimeForNewExcludes)
           // post both to keep backwards compatibility
@@ -241,7 +244,7 @@ private[scheduler] class HealthTracker (
           updateNextExpiryTime()
         }
       } else if (!executorIdToExcludedStatus.contains(exec)) {
-        logInfo(s"Excluding executor $exec due to fetch failure")
+        logInfo(log"Excluding executor ${MDC(EXECUTOR_ID, exec)} due to fetch failure")
 
         executorIdToExcludedStatus.put(exec, ExcludedExecutor(host, expiryTimeForNewExcludes))
         // We hardcoded number of failure tasks to 1 for fetch failure, because there's no
@@ -279,8 +282,8 @@ private[scheduler] class HealthTracker (
       // some of the logic around expiry times a little more confusing.  But it also wouldn't be a
       // problem to re-exclude, with a later expiry time.
       if (newTotal >= MAX_FAILURES_PER_EXEC && !executorIdToExcludedStatus.contains(exec)) {
-        logInfo(s"Excluding executor id: $exec because it has $newTotal" +
-          s" task failures in successful task sets")
+        logInfo(log"Excluding executor id: ${MDC(EXECUTOR_ID, exec)} because it has " +
+          log"${MDC(TOTAL, newTotal)} task failures in successful task sets")
         val node = failuresInTaskSet.node
         executorIdToExcludedStatus.put(exec, ExcludedExecutor(node, expiryTimeForNewExcludes))
         // post both to keep backwards compatibility
@@ -298,8 +301,9 @@ private[scheduler] class HealthTracker (
         // time.
         if (excludedExecsOnNode.size >= MAX_FAILED_EXEC_PER_NODE &&
             !nodeIdToExcludedExpiryTime.contains(node)) {
-          logInfo(s"Excluding node $node because it has ${excludedExecsOnNode.size} " +
-            s"executors excluded: ${excludedExecsOnNode}")
+          logInfo(log"Excluding node ${MDC(HOST, node)} because it has " +
+            log"${MDC(NUM_EXECUTORS, excludedExecsOnNode.size)} executors " +
+            log"excluded: ${MDC(EXECUTOR_IDS, excludedExecsOnNode)}")
           nodeIdToExcludedExpiryTime.put(node, expiryTimeForNewExcludes)
           // post both to keep backwards compatibility
           listenerBus.post(SparkListenerNodeBlacklisted(now, node, excludedExecsOnNode.size))
@@ -421,14 +425,16 @@ private[spark] object HealthTracker extends Logging {
   private val DEFAULT_TIMEOUT = "1h"
 
   /**
-   * Returns true if the excludeOnFailure is enabled, based on checking the configuration
-   * in the following order:
-   * 1. Is it specifically enabled or disabled?
-   * 2. Is it enabled via the legacy timeout conf?
-   * 3. Default is off
+   * Returns true if the excludeOnFailure is enabled on the application level,
+   * based on checking the configuration in the following order:
+   * 1. Is application level exclusion specifically enabled or disabled?
+   * 2. Is overall exclusion feature enabled or disabled?
+   * 3. Is it enabled via the legacy timeout conf?
+   * 4. Default is off
    */
   def isExcludeOnFailureEnabled(conf: SparkConf): Boolean = {
-    conf.get(config.EXCLUDE_ON_FAILURE_ENABLED) match {
+    conf.get(config.EXCLUDE_ON_FAILURE_ENABLED_APPLICATION)
+      .orElse(conf.get(config.EXCLUDE_ON_FAILURE_ENABLED)) match {
       case Some(enabled) =>
         enabled
       case None =>
@@ -437,10 +443,12 @@ private[spark] object HealthTracker extends Logging {
         val legacyKey = config.EXCLUDE_ON_FAILURE_LEGACY_TIMEOUT_CONF.key
         conf.get(config.EXCLUDE_ON_FAILURE_LEGACY_TIMEOUT_CONF).exists { legacyTimeout =>
           if (legacyTimeout == 0) {
-            logWarning(s"Turning off excludeOnFailure due to legacy configuration: $legacyKey == 0")
+            logWarning(log"Turning off excludeOnFailure due to legacy configuration: " +
+              log"${MDC(CONFIG, legacyKey)} == 0")
             false
           } else {
-            logWarning(s"Turning on excludeOnFailure due to legacy configuration: $legacyKey > 0")
+            logWarning(log"Turning on excludeOnFailure due to legacy configuration: " +
+              log"${MDC(CONFIG, legacyKey)} > 0")
             true
           }
         }

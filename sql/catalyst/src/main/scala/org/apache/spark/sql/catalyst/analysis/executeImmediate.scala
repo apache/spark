@@ -91,7 +91,13 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
         // Call eval with null value passed instead of a row.
         // This is ok as this is variable and invoking eval should
         // be independent of row value.
-        varReference.eval(null).toString
+        val varReferenceValue = varReference.eval(null)
+
+        if (varReferenceValue == null) {
+          throw QueryCompilationErrors.nullSQLStringExecuteImmediate(u.name)
+        }
+
+        varReferenceValue.toString
     }
   }
 
@@ -122,11 +128,14 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
               resolveArguments(expressions))
           } else {
             val aliases = expressions.collect {
-              case (e: Alias) => e
+              case e: Alias => e
+              case u: UnresolvedAttribute => Alias(u, u.nameParts.last)()
             }
-            val nonAliases = expressions.filter(!_.isInstanceOf[Alias])
 
-            if (nonAliases.nonEmpty) {
+            if (aliases.size != expressions.size) {
+              val nonAliases = expressions.filter(attr =>
+                !attr.isInstanceOf[Alias] && !attr.isInstanceOf[UnresolvedAttribute])
+
               throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(nonAliases)
             }
 
@@ -177,7 +186,7 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
 
   private def getVariableReference(expr: Expression, nameParts: Seq[String]): VariableReference = {
     lookupVariable(nameParts) match {
-      case Some(variable) => variable.copy(canFold = false)
+      case Some(variable) => variable
       case _ =>
         throw QueryCompilationErrors
           .unresolvedVariableError(

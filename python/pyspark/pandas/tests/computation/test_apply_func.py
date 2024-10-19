@@ -25,7 +25,7 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.loose_version import LooseVersion
 from pyspark.pandas.config import option_context
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -39,6 +39,10 @@ class FrameApplyFunctionMixin:
             {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
             index=np.random.rand(9),
         )
+
+    @property
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
 
     def test_apply(self):
         pdf = pd.DataFrame(
@@ -553,7 +557,11 @@ class FrameApplyFunctionMixin:
         self.assertRaises(ValueError, lambda: psdf.agg(("sum", "min")))
 
 
-class FrameApplyFunctionTests(FrameApplyFunctionMixin, ComparisonTestBase, SQLTestUtils):
+class FrameApplyFunctionTests(
+    FrameApplyFunctionMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

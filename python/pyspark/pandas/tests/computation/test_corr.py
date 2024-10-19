@@ -160,8 +160,9 @@ class FrameCorrMixin:
         psser1 = ps.from_pandas(pser1)
         psser2 = ps.from_pandas(pser2)
 
-        with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            psser1.corr(psser2)
+        with ps.option_context("compute.ops_on_diff_frames", False):
+            with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
+                psser1.corr(psser2)
 
         for method in ["pearson", "spearman", "kendall"]:
             with ps.option_context("compute.ops_on_diff_frames", True):
@@ -206,7 +207,11 @@ class FrameCorrMixin:
             self.assert_eq(psdf.corr(), pdf.corr(numeric_only=True), check_exact=False)
 
 
-class FrameCorrTests(FrameCorrMixin, PandasOnSparkTestCase, SQLTestUtils):
+class FrameCorrTests(
+    FrameCorrMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

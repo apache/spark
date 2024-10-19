@@ -22,7 +22,8 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.History._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.Utils
@@ -39,9 +40,9 @@ private class HistoryServerMemoryManager(
   private[history] val active = new HashMap[(String, Option[String]), Long]()
 
   def initialize(): Unit = {
-    logInfo("Initialized memory manager: " +
-      s"current usage = ${Utils.bytesToString(currentUsage.get())}, " +
-      s"max usage = ${Utils.bytesToString(maxUsage)}")
+    logInfo(log"Initialized memory manager: " +
+      log"current usage = ${MDC(NUM_BYTES_CURRENT, Utils.bytesToString(currentUsage.get()))}, " +
+      log"max usage = ${MDC(NUM_BYTES_MAX, Utils.bytesToString(maxUsage))}")
   }
 
   def lease(
@@ -58,8 +59,8 @@ private class HistoryServerMemoryManager(
       active(appId -> attemptId) = memoryUsage
     }
     currentUsage.addAndGet(memoryUsage)
-    logInfo(s"Leasing ${Utils.bytesToString(memoryUsage)} memory usage for " +
-      s"app $appId / $attemptId")
+    logInfo(log"Leasing ${MDC(NUM_BYTES, Utils.bytesToString(memoryUsage))} memory usage for " +
+      log"app ${MDC(APP_ID, appId)} / ${MDC(APP_ATTEMPT_ID, attemptId)}")
   }
 
   def release(appId: String, attemptId: Option[String]): Unit = {
@@ -68,8 +69,8 @@ private class HistoryServerMemoryManager(
     memoryUsage match {
       case Some(m) =>
         currentUsage.addAndGet(-m)
-        logInfo(s"Released ${Utils.bytesToString(m)} memory usage for " +
-          s"app $appId / $attemptId")
+        logInfo(log"Released ${MDC(NUM_BYTES, Utils.bytesToString(m))} memory usage for " +
+          log"app ${MDC(APP_ID, appId)} / ${MDC(APP_ATTEMPT_ID, attemptId)}")
       case None =>
     }
   }

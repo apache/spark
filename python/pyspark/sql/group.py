@@ -19,14 +19,13 @@ import sys
 
 from typing import Callable, List, Optional, TYPE_CHECKING, overload, Dict, Union, cast, Tuple
 
-from py4j.java_gateway import JavaObject
-
-from pyspark.sql.column import Column, _to_seq
+from pyspark.sql.column import Column
 from pyspark.sql.session import SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.pandas.group_ops import PandasGroupedOpsMixin
 
 if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
     from pyspark.sql._typing import LiteralType
 
 __all__ = ["GroupedData"]
@@ -45,6 +44,8 @@ def dfapi(f: Callable[..., DataFrame]) -> Callable[..., DataFrame]:
 
 def df_varargs_api(f: Callable[..., DataFrame]) -> Callable[..., DataFrame]:
     def _api(self: "GroupedData", *cols: str) -> DataFrame:
+        from pyspark.sql.classic.column import _to_seq
+
         name = f.__name__
         jdf = getattr(self._jgd, name)(_to_seq(self.session._sc, cols))
         return DataFrame(jdf, self.session)
@@ -65,7 +66,7 @@ class GroupedData(PandasGroupedOpsMixin):
         Supports Spark Connect.
     """
 
-    def __init__(self, jgd: JavaObject, df: DataFrame):
+    def __init__(self, jgd: "JavaObject", df: DataFrame):
         self._jgd = jgd
         self._df = df
         self.session: SparkSession = df.sparkSession
@@ -176,6 +177,8 @@ class GroupedData(PandasGroupedOpsMixin):
         |  Bob|           5|
         +-----+------------+
         """
+        from pyspark.sql.classic.column import _to_seq
+
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
             jdf = self._jgd.agg(exprs[0])
@@ -187,7 +190,7 @@ class GroupedData(PandasGroupedOpsMixin):
         return DataFrame(jdf, self.session)
 
     @dfapi
-    def count(self) -> DataFrame:
+    def count(self) -> DataFrame:  # type: ignore[empty-body]
         """Counts the number of records for each group.
 
         .. versionadded:: 1.3.0
@@ -221,7 +224,7 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    def mean(self, *cols: str) -> DataFrame:
+    def mean(self, *cols: str) -> DataFrame:  # type: ignore[empty-body]
         """Computes average values for each numeric columns for each group.
 
         :func:`mean` is an alias for :func:`avg`.
@@ -238,7 +241,7 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    def avg(self, *cols: str) -> DataFrame:
+    def avg(self, *cols: str) -> DataFrame:  # type: ignore[empty-body]
         """Computes average values for each numeric columns for each group.
 
         :func:`mean` is an alias for :func:`avg`.
@@ -289,7 +292,7 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    def max(self, *cols: str) -> DataFrame:
+    def max(self, *cols: str) -> DataFrame:  # type: ignore[empty-body]
         """Computes the max value for each numeric columns for each group.
 
         .. versionadded:: 1.3.0
@@ -333,7 +336,7 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    def min(self, *cols: str) -> DataFrame:
+    def min(self, *cols: str) -> DataFrame:  # type: ignore[empty-body]
         """Computes the min value for each numeric column for each group.
 
         .. versionadded:: 1.3.0
@@ -382,7 +385,7 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    def sum(self, *cols: str) -> DataFrame:
+    def sum(self, *cols: str) -> DataFrame:  # type: ignore[empty-body]
         """Computes the sum for each numeric columns for each group.
 
         .. versionadded:: 1.3.0
@@ -432,11 +435,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
     def pivot(self, pivot_col: str, values: Optional[List["LiteralType"]] = None) -> "GroupedData":
         """
-        Pivots a column of the current :class:`DataFrame` and perform the specified aggregation.
-        There are two versions of the pivot function: one that requires the caller
-        to specify the list of distinct values to pivot on, and one that does not.
-        The latter is more concise but less efficient,
-        because Spark needs to first compute the list of distinct values internally.
+        Pivots a column of the current :class:`DataFrame` and performs the specified aggregation.
 
         .. versionadded:: 1.6.0
 
@@ -449,6 +448,10 @@ class GroupedData(PandasGroupedOpsMixin):
             Name of the column to pivot.
         values : list, optional
             List of values that will be translated to columns in the output DataFrame.
+
+            If ``values`` is not provided, Spark will eagerly compute the distinct values in
+            ``pivot_col`` so it can determine the resulting schema of the transformation. To avoid
+            any eager computations, provide an explicit list of values.
 
         Examples
         --------
@@ -490,7 +493,8 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Compute the sum of earnings for each year by course with each course as a separate column
 
-        >>> df1.groupBy("year").pivot("course", ["dotNET", "Java"]).sum("earnings").show()
+        >>> df1.groupBy("year").pivot(
+        ...     "course", ["dotNET", "Java"]).sum("earnings").sort("year").show()
         +----+------+-----+
         |year|dotNET| Java|
         +----+------+-----+
@@ -500,14 +504,15 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Or without specifying column values (less efficient)
 
-        >>> df1.groupBy("year").pivot("course").sum("earnings").show()
+        >>> df1.groupBy("year").pivot("course").sum("earnings").sort("year").show()
         +----+-----+------+
         |year| Java|dotNET|
         +----+-----+------+
         |2012|20000| 15000|
         |2013|30000| 48000|
         +----+-----+------+
-        >>> df2.groupBy("sales.year").pivot("sales.course").sum("sales.earnings").show()
+        >>> df2.groupBy(
+        ...     "sales.year").pivot("sales.course").sum("sales.earnings").sort("year").show()
         ... # doctest: +SKIP
         +----+-----+------+
         |year| Java|dotNET|

@@ -18,7 +18,7 @@
 import unittest
 from typing import cast
 
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.sql import Row
 from pyspark.sql.functions import (
     array,
@@ -40,7 +40,7 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import QuietTest, assertDataFrameEqual
+from pyspark.testing.utils import assertDataFrameEqual
 
 
 if have_pandas:
@@ -176,7 +176,7 @@ class GroupedAggPandasUDFTestsMixin:
         assert_frame_equal(expected4.toPandas(), result4.toPandas())
 
     def test_unsupported_types(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_unsupported_types()
 
     def check_unsupported_types(self):
@@ -189,8 +189,8 @@ class GroupedAggPandasUDFTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={
                 "feature": "Invalid return type with grouped aggregate Pandas UDFs: "
                 "ArrayType(ArrayType(YearMonthIntervalType(0, 1), True), True)"
             },
@@ -204,8 +204,8 @@ class GroupedAggPandasUDFTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={
                 "feature": "Invalid return type with grouped aggregate Pandas UDFs: "
                 "StructType([StructField('mean', DoubleType(), True), "
                 "StructField('std', DoubleType(), True)])"
@@ -220,8 +220,8 @@ class GroupedAggPandasUDFTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={
                 "feature": "Invalid return type with grouped aggregate Pandas UDFs: "
                 "ArrayType(YearMonthIntervalType(0, 1), True)"
             },
@@ -501,7 +501,7 @@ class GroupedAggPandasUDFTestsMixin:
         self.assertEqual(result1.first()["v2"], [1.0, 2.0])
 
     def test_invalid_args(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_invalid_args()
 
     def check_invalid_args(self):
@@ -538,11 +538,11 @@ class GroupedAggPandasUDFTestsMixin:
         data = [Row(id=1, x=2), Row(id=1, x=3), Row(id=2, x=4)]
         expected = [Row(id=1, sum=5), Row(id=2, x=4)]
         num_parts = len(data) + 1
-        df = self.spark.createDataFrame(self.sc.parallelize(data, numSlices=num_parts))
+        df = self.spark.createDataFrame(data).repartition(num_parts)
 
         f = pandas_udf(lambda x: x.sum(), "int", PandasUDFType.GROUPED_AGG)
 
-        result = df.groupBy("id").agg(f(df["x"]).alias("sum")).collect()
+        result = df.groupBy("id").agg(f(df["x"]).alias("sum")).sort("id").collect()
         self.assertEqual(result, expected)
 
     def test_grouped_without_group_by_clause(self):

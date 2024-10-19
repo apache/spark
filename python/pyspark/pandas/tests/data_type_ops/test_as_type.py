@@ -22,6 +22,7 @@ import numpy as np
 from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
@@ -54,10 +55,7 @@ class AsTypeTestsMixin:
                         lambda: psser.astype(int_type),
                     )
 
-            # TODO(SPARK-37039): the np.nan series.astype(bool) should be True
-            if not pser.hasnans:
-                self.assert_eq(pser.astype(bool), psser.astype(bool))
-
+            self.assert_eq(pser.astype(bool), psser.astype(bool))
             self.assert_eq(pser.astype(float), psser.astype(float))
             self.assert_eq(pser.astype(np.float32), psser.astype(np.float32))
             self.assert_eq(pser.astype(str), psser.astype(str))
@@ -87,7 +85,11 @@ class AsTypeTestsMixin:
             psser.astype(int)
 
 
-class AsTypeTests(AsTypeTestsMixin, OpsTestBase):
+class AsTypeTests(
+    AsTypeTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
     pass
 
 

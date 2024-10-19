@@ -189,7 +189,7 @@ class SparkPlanGraphNode(
     } else {
       // SPARK-30684: when there is no metrics, add empty lines to increase the height of the node,
       // so that there won't be gaps between an edge and a small node.
-      s"<br><b>$name</b><br><br>"
+      s"<br><b>${StringEscapeUtils.escapeJava(name)}</b><br><br>"
     }
     s"""  $id [id="$nodeId" labelType="html" label="$labelStr" tooltip="$tooltip"];"""
 

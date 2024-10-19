@@ -25,7 +25,7 @@ import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{JsonTestUtils, SparkFunSuite}
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
-import org.apache.spark.deploy.master.{ApplicationInfo, RecoveryState}
+import org.apache.spark.deploy.master.{ApplicationInfo, RecoveryState, WorkerInfo}
 import org.apache.spark.deploy.worker.ExecutorRunner
 
 class JsonProtocolSuite extends SparkFunSuite with JsonTestUtils {
@@ -103,6 +103,35 @@ class JsonProtocolSuite extends SparkFunSuite with JsonTestUtils {
     val output = JsonProtocol.writeWorkerState(stateResponse)
     assertValidJson(output)
     assertValidDataInJson(output, JsonMethods.parse(JsonConstants.workerStateJsonStr))
+  }
+
+  test("SPARK-46883: writeClusterUtilization") {
+    val workers = Array(createWorkerInfo(), createWorkerInfo())
+    val activeApps = Array(createAppInfo())
+    val completedApps = Array.empty[ApplicationInfo]
+    val activeDrivers = Array(createDriverInfo())
+    val completedDrivers = Array(createDriverInfo())
+    val stateResponse = new MasterStateResponse(
+      "host", 8080, None, workers, activeApps, completedApps,
+      activeDrivers, completedDrivers, RecoveryState.ALIVE)
+    val output = JsonProtocol.writeClusterUtilization(stateResponse)
+    assertValidJson(output)
+    assertValidDataInJson(output, JsonMethods.parse(JsonConstants.clusterUtilizationJsonStr))
+  }
+
+  test("SPARK-46883: writeClusterUtilization without workers") {
+    val workers = Array.empty[WorkerInfo]
+    val activeApps = Array(createAppInfo())
+    val completedApps = Array.empty[ApplicationInfo]
+    val activeDrivers = Array(createDriverInfo())
+    val completedDrivers = Array(createDriverInfo())
+    val stateResponse = new MasterStateResponse(
+      "host", 8080, None, workers, activeApps, completedApps,
+      activeDrivers, completedDrivers, RecoveryState.ALIVE)
+    val output = JsonProtocol.writeClusterUtilization(stateResponse)
+    assertValidJson(output)
+    assertValidDataInJson(output,
+      JsonMethods.parse(JsonConstants.clusterUtilizationWithoutWorkersJsonStr))
   }
 
   def assertValidJson(json: JValue): Unit = {
@@ -206,4 +235,18 @@ object JsonConstants {
       |"executors":[],
       |"finishedexecutors":[%s,%s]}
     """.format(executorRunnerJsonStr, executorRunnerJsonStr).stripMargin
+
+  val clusterUtilizationJsonStr =
+    """
+      |{"waitingDrivers":1,
+      |"cores":8,"coresused":0,"coresutilization":0,
+      |"memory":2468,"memoryused":0,"memoryutilization":0}
+    """.stripMargin
+
+  val clusterUtilizationWithoutWorkersJsonStr =
+    """
+      |{"waitingDrivers":1,
+      |"cores":0,"coresused":0,"coresutilization":100,
+      |"memory":0,"memoryused":0,"memoryutilization":100}
+    """.stripMargin
 }

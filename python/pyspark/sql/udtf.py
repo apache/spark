@@ -24,16 +24,14 @@ import sys
 import warnings
 from typing import Any, Type, TYPE_CHECKING, Optional, Sequence, Union
 
-from py4j.java_gateway import JavaObject
-
 from pyspark.errors import PySparkAttributeError, PySparkPicklingError, PySparkTypeError
-from pyspark.rdd import PythonEvalType
-from pyspark.sql.column import _to_java_column, _to_java_expr, _to_seq
+from pyspark.util import PythonEvalType
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import DataType, StructType, _parse_datatype_string
 from pyspark.sql.udf import _wrap_function
 
 if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
     from pyspark.sql._typing import ColumnOrName
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.session import SparkSession
@@ -43,6 +41,7 @@ __all__ = [
     "AnalyzeResult",
     "PartitioningColumn",
     "OrderingColumn",
+    "SelectedColumn",
     "SkipRestOfInputTableException",
     "UDTFRegistration",
 ]
@@ -61,11 +60,18 @@ class AnalyzeArgument:
         The calculated value if the argument is foldable; otherwise None
     isTable : bool
         If True, the argument is a table argument.
+    isConstantExpression : bool
+        If True, the argument is a constant-foldable scalar expression. Then the 'value' field
+        contains None if the argument is a NULL literal, or a non-None value if the argument is a
+        non-NULL literal. In this way, we can distinguish between a literal NULL argument and other
+        types of arguments such as complex expression trees or table arguments where the 'value'
+        field is always None.
     """
 
     dataType: DataType
     value: Optional[Any]
     isTable: bool
+    isConstantExpression: bool
 
 
 @dataclass(frozen=True)
@@ -108,6 +114,26 @@ class OrderingColumn:
     overrideNullsFirst: Optional[bool] = None
 
 
+@dataclass(frozen=True)
+class SelectedColumn:
+    """
+    Represents an expression that the UDTF is specifying for Catalyst to evaluate against the
+    columns in the input TABLE argument. The UDTF then receives one input column for each expression
+    in the list, in the order they are listed.
+
+    Parameters
+    ----------
+    name : str
+        The contents of the selected column name or expression represented as a SQL string.
+    alias : str, default ''
+        If non-empty, this is the alias for the column or expression as visible from the UDTF's
+        'eval' method. This is required if the expression is not a simple column reference.
+    """
+
+    name: str
+    alias: str = ""
+
+
 # Note: this class is a "dataclass" for purposes of convenience, but it is not marked "frozen"
 # because the intention is that users may create subclasses of it for purposes of returning custom
 # information from the "analyze" method.
@@ -118,13 +144,13 @@ class AnalyzeResult:
 
     Parameters
     ----------
-    schema : :class:`StructType`
+    schema: :class:`StructType`
         The schema that the Python UDTF will return.
-    withSinglePartition : bool
+    withSinglePartition: bool
         If true, the UDTF is specifying for Catalyst to repartition all rows of the input TABLE
         argument to one collection for consumption by exactly one instance of the corresponding
         UDTF class.
-    partitionBy : sequence of :class:`PartitioningColumn`
+    partitionBy: sequence of :class:`PartitioningColumn`
         If non-empty, this is a sequence of expressions that the UDTF is specifying for Catalyst to
         partition the input TABLE argument by. In this case, calls to the UDTF may not include any
         explicit PARTITION BY clause, in which case Catalyst will return an error. This option is
@@ -133,12 +159,17 @@ class AnalyzeResult:
         If non-empty, this is a sequence of expressions that the UDTF is specifying for Catalyst to
         sort the input TABLE argument by. Note that the 'partitionBy' list must also be non-empty
         in this case.
+    select: sequence of :class:`SelectedColumn`
+        If non-empty, this is a sequence of expressions that the UDTF is specifying for Catalyst to
+        evaluate against the columns in the input TABLE argument. The UDTF then receives one input
+        attribute for each name in the list, in the order they are listed.
     """
 
     schema: StructType
     withSinglePartition: bool = False
     partitionBy: Sequence[PartitioningColumn] = field(default_factory=tuple)
     orderBy: Sequence[OrderingColumn] = field(default_factory=tuple)
+    select: Sequence[SelectedColumn] = field(default_factory=tuple)
 
 
 class SkipRestOfInputTableException(Exception):
@@ -216,12 +247,12 @@ def _validate_udtf_handler(cls: Any, returnType: Optional[Union[StructType, str]
 
     if not isinstance(cls, type):
         raise PySparkTypeError(
-            error_class="INVALID_UDTF_HANDLER_TYPE", message_parameters={"type": type(cls).__name__}
+            errorClass="INVALID_UDTF_HANDLER_TYPE", messageParameters={"type": type(cls).__name__}
         )
 
     if not hasattr(cls, "eval"):
         raise PySparkAttributeError(
-            error_class="INVALID_UDTF_NO_EVAL", message_parameters={"name": cls.__name__}
+            errorClass="INVALID_UDTF_NO_EVAL", messageParameters={"name": cls.__name__}
         )
 
     has_analyze = hasattr(cls, "analyze")
@@ -230,12 +261,12 @@ def _validate_udtf_handler(cls: Any, returnType: Optional[Union[StructType, str]
     )
     if returnType is None and not has_analyze_staticmethod:
         raise PySparkAttributeError(
-            error_class="INVALID_UDTF_RETURN_TYPE", message_parameters={"name": cls.__name__}
+            errorClass="INVALID_UDTF_RETURN_TYPE", messageParameters={"name": cls.__name__}
         )
     if returnType is not None and has_analyze:
         raise PySparkAttributeError(
-            error_class="INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE",
-            message_parameters={"name": cls.__name__},
+            errorClass="INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE",
+            messageParameters={"name": cls.__name__},
         )
 
 
@@ -285,8 +316,8 @@ class UserDefinedTableFunction:
                 parsed = self._returnType
             if not isinstance(parsed, StructType):
                 raise PySparkTypeError(
-                    error_class="UDTF_RETURN_TYPE_MISMATCH",
-                    message_parameters={
+                    errorClass="UDTF_RETURN_TYPE_MISMATCH",
+                    messageParameters={
                         "name": self._name,
                         "return_type": f"{parsed}",
                     },
@@ -295,12 +326,12 @@ class UserDefinedTableFunction:
         return self._returnType_placeholder
 
     @property
-    def _judtf(self) -> JavaObject:
+    def _judtf(self) -> "JavaObject":
         if self._judtf_placeholder is None:
             self._judtf_placeholder = self._create_judtf(self.func)
         return self._judtf_placeholder
 
-    def _create_judtf(self, func: Type) -> JavaObject:
+    def _create_judtf(self, func: Type) -> "JavaObject":
         from pyspark.sql import SparkSession
 
         spark = SparkSession._getActiveSessionOrCreate()
@@ -311,8 +342,8 @@ class UserDefinedTableFunction:
         except pickle.PicklingError as e:
             if "CONTEXT_ONLY_VALID_ON_DRIVER" in str(e):
                 raise PySparkPicklingError(
-                    error_class="UDTF_SERIALIZATION_ERROR",
-                    message_parameters={
+                    errorClass="UDTF_SERIALIZATION_ERROR",
+                    messageParameters={
                         "name": self._name,
                         "message": "it appears that you are attempting to reference SparkSession "
                         "inside a UDTF. SparkSession can only be used on the driver, "
@@ -321,8 +352,8 @@ class UserDefinedTableFunction:
                     },
                 ) from None
             raise PySparkPicklingError(
-                error_class="UDTF_SERIALIZATION_ERROR",
-                message_parameters={
+                errorClass="UDTF_SERIALIZATION_ERROR",
+                messageParameters={
                     "name": self._name,
                     "message": "Please check the stack trace and make sure the "
                     "function is serializable.",
@@ -342,6 +373,8 @@ class UserDefinedTableFunction:
         return judtf
 
     def __call__(self, *args: "ColumnOrName", **kwargs: "ColumnOrName") -> "DataFrame":
+        from pyspark.sql.classic.column import _to_java_column, _to_seq
+
         from pyspark.sql import DataFrame, SparkSession
 
         spark = SparkSession._getActiveSessionOrCreate()
@@ -349,11 +382,7 @@ class UserDefinedTableFunction:
 
         assert sc._jvm is not None
         jcols = [_to_java_column(arg) for arg in args] + [
-            sc._jvm.Column(
-                sc._jvm.org.apache.spark.sql.catalyst.expressions.NamedArgumentExpression(
-                    key, _to_java_expr(value)
-                )
-            )
+            sc._jvm.PythonSQLUtils.namedArgumentExpression(key, _to_java_column(value))
             for key, value in kwargs.items()
         ]
 
@@ -428,10 +457,18 @@ class UDTFRegistration:
         >>> spark.sql("SELECT * FROM VALUES (0, 1), (1, 2) t(x, y), LATERAL plus_one(x)").collect()
         [Row(x=0, y=1, c1=0, c2=1), Row(x=1, y=2, c1=1, c2=2)]
         """
+        if not isinstance(f, UserDefinedTableFunction):
+            raise PySparkTypeError(
+                errorClass="CANNOT_REGISTER_UDTF",
+                messageParameters={
+                    "name": name,
+                },
+            )
+
         if f.evalType not in [PythonEvalType.SQL_TABLE_UDF, PythonEvalType.SQL_ARROW_TABLE_UDF]:
             raise PySparkTypeError(
-                error_class="INVALID_UDTF_EVAL_TYPE",
-                message_parameters={
+                errorClass="INVALID_UDTF_EVAL_TYPE",
+                messageParameters={
                     "name": name,
                     "eval_type": "SQL_TABLE_UDF, SQL_ARROW_TABLE_UDF",
                 },

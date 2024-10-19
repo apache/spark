@@ -18,7 +18,7 @@ import os
 
 from typing import Any, Dict, List, Optional, Tuple, Type, Union, cast, TYPE_CHECKING
 
-from pyspark import keyword_only, since, SparkContext
+from pyspark import keyword_only, since
 from pyspark.ml.base import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import (
@@ -35,11 +35,13 @@ from pyspark.ml.util import (
 )
 from pyspark.ml.wrapper import JavaParams
 from pyspark.ml.common import inherit_doc
+from pyspark.sql import SparkSession
 from pyspark.sql.dataframe import DataFrame
 
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap, PipelineStage
     from py4j.java_gateway import JavaObject
+    from pyspark.core.context import SparkContext
 
 
 @inherit_doc
@@ -200,6 +202,7 @@ class Pipeline(Estimator["PipelineModel"], MLReadable["Pipeline"], MLWritable):
         py4j.java_gateway.JavaObject
             Java object equivalent to this instance.
         """
+        from pyspark.core.context import SparkContext
 
         gateway = SparkContext._gateway
         assert gateway is not None and SparkContext._jvm is not None
@@ -228,7 +231,7 @@ class PipelineWriter(MLWriter):
     def saveImpl(self, path: str) -> None:
         stages = self.instance.getStages()
         PipelineSharedReadWrite.validateStages(stages)
-        PipelineSharedReadWrite.saveImpl(self.instance, stages, self.sc, path)
+        PipelineSharedReadWrite.saveImpl(self.instance, stages, self.sparkSession, path)
 
 
 @inherit_doc
@@ -242,11 +245,11 @@ class PipelineReader(MLReader[Pipeline]):
         self.cls = cls
 
     def load(self, path: str) -> Pipeline:
-        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
         if "language" not in metadata["paramMap"] or metadata["paramMap"]["language"] != "Python":
             return JavaMLReader(cast(Type["JavaMLReadable[Pipeline]"], self.cls)).load(path)
         else:
-            uid, stages = PipelineSharedReadWrite.load(metadata, self.sc, path)
+            uid, stages = PipelineSharedReadWrite.load(metadata, self.sparkSession, path)
             return Pipeline(stages=stages)._resetUid(uid)
 
 
@@ -264,7 +267,7 @@ class PipelineModelWriter(MLWriter):
         stages = self.instance.stages
         PipelineSharedReadWrite.validateStages(cast(List["PipelineStage"], stages))
         PipelineSharedReadWrite.saveImpl(
-            self.instance, cast(List["PipelineStage"], stages), self.sc, path
+            self.instance, cast(List["PipelineStage"], stages), self.sparkSession, path
         )
 
 
@@ -279,11 +282,11 @@ class PipelineModelReader(MLReader["PipelineModel"]):
         self.cls = cls
 
     def load(self, path: str) -> "PipelineModel":
-        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
         if "language" not in metadata["paramMap"] or metadata["paramMap"]["language"] != "Python":
             return JavaMLReader(cast(Type["JavaMLReadable[PipelineModel]"], self.cls)).load(path)
         else:
-            uid, stages = PipelineSharedReadWrite.load(metadata, self.sc, path)
+            uid, stages = PipelineSharedReadWrite.load(metadata, self.sparkSession, path)
             return PipelineModel(stages=cast(List[Transformer], stages))._resetUid(uid)
 
 
@@ -353,6 +356,7 @@ class PipelineModel(Model, MLReadable["PipelineModel"], MLWritable):
 
         :return: Java object equivalent to this instance.
         """
+        from pyspark.core.context import SparkContext
 
         gateway = SparkContext._gateway
         assert gateway is not None and SparkContext._jvm is not None
@@ -400,7 +404,7 @@ class PipelineSharedReadWrite:
     def saveImpl(
         instance: Union[Pipeline, PipelineModel],
         stages: List["PipelineStage"],
-        sc: SparkContext,
+        sc: Union["SparkContext", SparkSession],
         path: str,
     ) -> None:
         """
@@ -419,7 +423,9 @@ class PipelineSharedReadWrite:
 
     @staticmethod
     def load(
-        metadata: Dict[str, Any], sc: SparkContext, path: str
+        metadata: Dict[str, Any],
+        sc: Union["SparkContext", SparkSession],
+        path: str,
     ) -> Tuple[str, List["PipelineStage"]]:
         """
         Load metadata and stages for a :py:class:`Pipeline` or :py:class:`PipelineModel`

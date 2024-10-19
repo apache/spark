@@ -43,6 +43,8 @@ import org.apache.spark.util.SerializableConfiguration
 private[sql] class AvroFileFormat extends FileFormat
   with DataSourceRegister with Logging with Serializable {
 
+  AvroFileFormat.registerCustomAvroTypes()
+
   override def equals(other: Any): Boolean = other match {
     case _: AvroFileFormat => true
     case _ => false
@@ -142,7 +144,9 @@ private[sql] class AvroFileFormat extends FileFormat
             parsedOptions.positionalFieldMatching,
             datetimeRebaseMode,
             avroFilters,
-            parsedOptions.useStableIdForUnionType)
+            parsedOptions.useStableIdForUnionType,
+            parsedOptions.stableIdPrefixForUnionType,
+            parsedOptions.recursiveFieldMaxDepth)
           override val stopPosition = file.start + file.length
 
           override def hasNext: Boolean = hasNextRow
@@ -172,10 +176,17 @@ private[sql] class AvroFileFormat extends FileFormat
 private[avro] object AvroFileFormat {
   val IgnoreFilesWithoutExtensionProperty = "avro.mapred.ignore.inputs.without.extension"
 
-  // Register the customized decimal type backed by long.
-  LogicalTypes.register(CustomDecimal.TYPE_NAME, new LogicalTypes.LogicalTypeFactory {
-    override def fromSchema(schema: Schema): LogicalType = {
-      new CustomDecimal(schema)
-    }
-  })
+  /**
+   * Register Spark defined custom Avro types.
+   */
+  def registerCustomAvroTypes(): Unit = {
+    // Register the customized decimal type backed by long.
+    LogicalTypes.register(CustomDecimal.TYPE_NAME, new LogicalTypes.LogicalTypeFactory {
+      override def fromSchema(schema: Schema): LogicalType = {
+        new CustomDecimal(schema)
+      }
+    })
+  }
+
+  registerCustomAvroTypes()
 }

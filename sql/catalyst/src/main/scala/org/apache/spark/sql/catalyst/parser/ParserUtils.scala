@@ -34,6 +34,10 @@ object ParserUtils extends SparkParserUtils {
     throw QueryParsingErrors.operationNotAllowedError(message, ctx)
   }
 
+  def invalidStatement(statement: String, ctx: ParserRuleContext): Nothing = {
+    throw QueryParsingErrors.invalidStatementError(statement, ctx)
+  }
+
   def checkDuplicateClauses[T](
       nodes: util.List[T], clauseName: String, ctx: ParserRuleContext): Unit = {
     if (nodes.size() > 1) {

@@ -22,6 +22,7 @@ import java.sql.{Date, Timestamp}
 import java.util.Arrays
 
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.classTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
@@ -29,6 +30,7 @@ import org.apache.spark.sql.{Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, TransformingEncoder}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, NaNvl}
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -248,77 +250,6 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       useFallback = true)
   }
 
-  object OuterLevelWithVeryVeryVeryLongClassName1 {
-    object OuterLevelWithVeryVeryVeryLongClassName2 {
-      object OuterLevelWithVeryVeryVeryLongClassName3 {
-        object OuterLevelWithVeryVeryVeryLongClassName4 {
-          object OuterLevelWithVeryVeryVeryLongClassName5 {
-            object OuterLevelWithVeryVeryVeryLongClassName6 {
-              object OuterLevelWithVeryVeryVeryLongClassName7 {
-                object OuterLevelWithVeryVeryVeryLongClassName8 {
-                  object OuterLevelWithVeryVeryVeryLongClassName9 {
-                    object OuterLevelWithVeryVeryVeryLongClassName10 {
-                      object OuterLevelWithVeryVeryVeryLongClassName11 {
-                        object OuterLevelWithVeryVeryVeryLongClassName12 {
-                          object OuterLevelWithVeryVeryVeryLongClassName13 {
-                            object OuterLevelWithVeryVeryVeryLongClassName14 {
-                              object OuterLevelWithVeryVeryVeryLongClassName15 {
-                                object OuterLevelWithVeryVeryVeryLongClassName16 {
-                                  object OuterLevelWithVeryVeryVeryLongClassName17 {
-                                    object OuterLevelWithVeryVeryVeryLongClassName18 {
-                                      object OuterLevelWithVeryVeryVeryLongClassName19 {
-                                        object OuterLevelWithVeryVeryVeryLongClassName20 {
-                                          case class MalformedNameExample(x: Int)
-                                        }}}}}}}}}}}}}}}}}}}}
-
-  {
-    OuterScopes.addOuterScope(
-      OuterLevelWithVeryVeryVeryLongClassName1
-        .OuterLevelWithVeryVeryVeryLongClassName2
-        .OuterLevelWithVeryVeryVeryLongClassName3
-        .OuterLevelWithVeryVeryVeryLongClassName4
-        .OuterLevelWithVeryVeryVeryLongClassName5
-        .OuterLevelWithVeryVeryVeryLongClassName6
-        .OuterLevelWithVeryVeryVeryLongClassName7
-        .OuterLevelWithVeryVeryVeryLongClassName8
-        .OuterLevelWithVeryVeryVeryLongClassName9
-        .OuterLevelWithVeryVeryVeryLongClassName10
-        .OuterLevelWithVeryVeryVeryLongClassName11
-        .OuterLevelWithVeryVeryVeryLongClassName12
-        .OuterLevelWithVeryVeryVeryLongClassName13
-        .OuterLevelWithVeryVeryVeryLongClassName14
-        .OuterLevelWithVeryVeryVeryLongClassName15
-        .OuterLevelWithVeryVeryVeryLongClassName16
-        .OuterLevelWithVeryVeryVeryLongClassName17
-        .OuterLevelWithVeryVeryVeryLongClassName18
-        .OuterLevelWithVeryVeryVeryLongClassName19
-        .OuterLevelWithVeryVeryVeryLongClassName20)
-    encodeDecodeTest(
-      OuterLevelWithVeryVeryVeryLongClassName1
-        .OuterLevelWithVeryVeryVeryLongClassName2
-        .OuterLevelWithVeryVeryVeryLongClassName3
-        .OuterLevelWithVeryVeryVeryLongClassName4
-        .OuterLevelWithVeryVeryVeryLongClassName5
-        .OuterLevelWithVeryVeryVeryLongClassName6
-        .OuterLevelWithVeryVeryVeryLongClassName7
-        .OuterLevelWithVeryVeryVeryLongClassName8
-        .OuterLevelWithVeryVeryVeryLongClassName9
-        .OuterLevelWithVeryVeryVeryLongClassName10
-        .OuterLevelWithVeryVeryVeryLongClassName11
-        .OuterLevelWithVeryVeryVeryLongClassName12
-        .OuterLevelWithVeryVeryVeryLongClassName13
-        .OuterLevelWithVeryVeryVeryLongClassName14
-        .OuterLevelWithVeryVeryVeryLongClassName15
-        .OuterLevelWithVeryVeryVeryLongClassName16
-        .OuterLevelWithVeryVeryVeryLongClassName17
-        .OuterLevelWithVeryVeryVeryLongClassName18
-        .OuterLevelWithVeryVeryVeryLongClassName19
-        .OuterLevelWithVeryVeryVeryLongClassName20
-        .MalformedNameExample(42),
-      "deeply nested Scala class should work",
-      useFallback = true)
-  }
-
   productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
 
   productTest(
@@ -390,29 +321,29 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(
     1 -> 10L,
     "tuple with 2 flat encoders")(
-    ExpressionEncoder.tuple(ExpressionEncoder[Int](), ExpressionEncoder[Long]()))
+    encoderFor(Encoders.tuple(Encoders.scalaInt, Encoders.scalaLong)))
 
   encodeDecodeTest(
     (PrimitiveData(1, 1, 1, 1, 1, 1, true), (3, 30L)),
     "tuple with 2 product encoders")(
-    ExpressionEncoder.tuple(ExpressionEncoder[PrimitiveData](), ExpressionEncoder[(Int, Long)]()))
+    encoderFor(Encoders.tuple(Encoders.product[PrimitiveData], Encoders.product[(Int, Long)])))
 
   encodeDecodeTest(
     (PrimitiveData(1, 1, 1, 1, 1, 1, true), 3),
     "tuple with flat encoder and product encoder")(
-    ExpressionEncoder.tuple(ExpressionEncoder[PrimitiveData](), ExpressionEncoder[Int]()))
+    encoderFor(Encoders.tuple(Encoders.product[PrimitiveData], Encoders.scalaInt)))
 
   encodeDecodeTest(
     (3, PrimitiveData(1, 1, 1, 1, 1, 1, true)),
     "tuple with product encoder and flat encoder")(
-    ExpressionEncoder.tuple(ExpressionEncoder[Int](), ExpressionEncoder[PrimitiveData]()))
+    encoderFor(Encoders.tuple(Encoders.scalaInt, Encoders.product[PrimitiveData])))
 
   encodeDecodeTest(
     (1, (10, 100L)),
     "nested tuple encoder") {
-    val intEnc = ExpressionEncoder[Int]()
-    val longEnc = ExpressionEncoder[Long]()
-    ExpressionEncoder.tuple(intEnc, ExpressionEncoder.tuple(intEnc, longEnc))
+    val intEnc = Encoders.scalaInt
+    val longEnc = Encoders.scalaLong
+    encoderFor(Encoders.tuple(intEnc, Encoders.tuple(intEnc, longEnc)))
   }
 
   // test for value classes
@@ -504,7 +435,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       implicitly[ExpressionEncoder[Foo]])
     checkError(
       exception = exception,
-      errorClass = "ENCODER_NOT_FOUND",
+      condition = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "Any",
         "docroot" -> SPARK_DOC_ROOT)
@@ -537,9 +468,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
     // test for tupled encoders
     {
-      val schema = ExpressionEncoder.tuple(
-        ExpressionEncoder[Int](),
-        ExpressionEncoder[(String, Int)]()).schema
+      val encoder = encoderFor(Encoders.tuple(Encoders.scalaInt, Encoders.product[(String, Int)]))
+      val schema = encoder.schema
       assert(schema(0).nullable === false)
       assert(schema(1).nullable)
       assert(schema(1).dataType.asInstanceOf[StructType](0).nullable)
@@ -565,7 +495,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     assert(e.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
       exception = e.getCause.asInstanceOf[SparkRuntimeException],
-      errorClass = "NULL_MAP_KEY",
+      condition = "NULL_MAP_KEY",
       parameters = Map.empty
     )
   }
@@ -576,18 +506,20 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     assert(e.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
       exception = e.getCause.asInstanceOf[SparkRuntimeException],
-      errorClass = "NULL_MAP_KEY",
+      condition = "NULL_MAP_KEY",
       parameters = Map.empty
     )
   }
 
   test("throw exception for tuples with more than 22 elements") {
-    val encoders = (0 to 22).map(_ => Encoders.scalaInt.asInstanceOf[ExpressionEncoder[_]])
+    val encoders = (0 to 22).map(_ => Encoders.scalaInt)
 
-    val e = intercept[UnsupportedOperationException] {
-      ExpressionEncoder.tuple(encoders)
-    }
-    assert(e.getMessage.contains("tuple with more than 22 elements are not supported"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        Encoders.tupleEncoder(encoders: _*)
+      },
+      condition = "_LEGACY_ERROR_TEMP_2150",
+      parameters = Map.empty)
   }
 
   test("throw exception for unexpected serializer") {
@@ -598,11 +530,11 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     val encoder = ExpressionEncoder(schema, lenient = true)
     val unexpectedSerializer = NaNvl(encoder.objSerializer, encoder.objSerializer)
     val exception = intercept[org.apache.spark.SparkRuntimeException] {
-      new ExpressionEncoder[Row](unexpectedSerializer, encoder.objDeserializer, encoder.clsTag)
+      new ExpressionEncoder[Row](encoder.encoder, unexpectedSerializer, encoder.objDeserializer)
     }
     checkError(
       exception = exception,
-      errorClass = "UNEXPECTED_SERIALIZER_FOR_CLASS",
+      condition = "UNEXPECTED_SERIALIZER_FOR_CLASS",
       parameters = Map(
         "className" -> Utils.getSimpleName(encoder.clsTag.runtimeClass),
         "expr" -> toSQLExpr(unexpectedSerializer))
@@ -618,6 +550,24 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     useFallback = true)
   encodeDecodeTest(FooClassWithEnum(1, FooEnum.E1), "case class with Int and scala Enum")
   encodeDecodeTest(FooEnum.E1, "scala Enum")
+
+
+  private def testTransformingEncoder(
+      name: String,
+      provider: () => Codec[Any, Array[Byte]]): Unit = test(name) {
+    val encoder = ExpressionEncoder(TransformingEncoder(
+      classTag[(Long, Long)],
+      BinaryEncoder,
+      provider))
+      .resolveAndBind()
+    assert(encoder.schema == new StructType().add("value", BinaryType))
+    val toRow = encoder.createSerializer()
+    val fromRow = encoder.createDeserializer()
+    assert(fromRow(toRow((11, 14))) == (11, 14))
+  }
+
+  testTransformingEncoder("transforming java serialization encoder", JavaSerializationCodec)
+  testTransformingEncoder("transforming kryo encoder", KryoSerializationCodec)
 
   // Scala / Java big decimals ----------------------------------------------------------
 

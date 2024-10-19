@@ -30,9 +30,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.common.annotations.VisibleForTesting;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 
 /**
  * A {@link TrustManager} implementation that reloads its configuration when
@@ -46,7 +45,8 @@ import org.slf4j.LoggerFactory;
 public final class ReloadingX509TrustManager
         implements X509TrustManager, Runnable {
 
-  private static final Logger logger = LoggerFactory.getLogger(ReloadingX509TrustManager.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ReloadingX509TrustManager.class);
 
   private final String type;
   private final File file;
@@ -61,7 +61,6 @@ public final class ReloadingX509TrustManager
   protected volatile int needsReloadCheckCounts;
   private final AtomicReference<X509TrustManager> trustManagerRef;
 
-  private volatile boolean running;
   private Thread reloader;
 
   /**
@@ -98,7 +97,6 @@ public final class ReloadingX509TrustManager
   public void init() {
     reloader = new Thread(this, "Truststore reloader thread");
     reloader.setDaemon(true);
-    running = true;
     reloader.start();
   }
 
@@ -106,7 +104,6 @@ public final class ReloadingX509TrustManager
    * Stops the reloader thread.
    */
   public void destroy() throws InterruptedException {
-    running = false;
     reloader.interrupt();
     reloader.join();
   }
@@ -200,11 +197,12 @@ public final class ReloadingX509TrustManager
 
   @Override
   public void run() {
+    boolean running = true;
     while (running) {
       try {
         Thread.sleep(reloadInterval);
       } catch (InterruptedException e) {
-        //NOP
+        running = false;
       }
       try {
         if (running && needsReload()) {
@@ -213,13 +211,13 @@ public final class ReloadingX509TrustManager
             this.reloadCount += 1;
           } catch (Exception ex) {
             logger.warn(
-              "Could not load truststore (keep using existing one) : " + ex.toString(),
+              "Could not load truststore (keep using existing one) : ",
               ex
             );
           }
         }
       } catch (IOException ex) {
-       logger.warn("Could not check whether truststore needs reloading: " + ex.toString(), ex);
+       logger.warn("Could not check whether truststore needs reloading: ", ex);
       }
       needsReloadCheckCounts++;
     }

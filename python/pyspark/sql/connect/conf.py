@@ -19,7 +19,7 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
-from typing import Any, Optional, Union, cast
+from typing import Any, Dict, Optional, Union, cast
 import warnings
 
 from pyspark import _NoValue
@@ -68,6 +68,19 @@ class RuntimeConf:
 
     get.__doc__ = PySparkRuntimeConfig.get.__doc__
 
+    @property
+    def getAll(self) -> Dict[str, str]:
+        op_get_all = proto.ConfigRequest.GetAll()
+        operation = proto.ConfigRequest.Operation(get_all=op_get_all)
+        result = self._client.config(operation)
+        confs: Dict[str, str] = dict()
+        for key, value in result.pairs:
+            assert value is not None
+            confs[key] = value
+        return confs
+
+    getAll.__doc__ = PySparkRuntimeConfig.getAll.__doc__
+
     def unset(self, key: str) -> None:
         op_unset = proto.ConfigRequest.Unset(keys=[key])
         operation = proto.ConfigRequest.Operation(unset=op_unset)
@@ -87,8 +100,8 @@ class RuntimeConf:
             return False
         else:
             raise PySparkValueError(
-                error_class="VALUE_NOT_ALLOWED",
-                message_parameters={"arg_name": "result", "allowed_values": "'true' or 'false'"},
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={"arg_name": "result", "allowed_values": "'true' or 'false'"},
             )
 
     isModifiable.__doc__ = PySparkRuntimeConfig.isModifiable.__doc__
@@ -97,8 +110,8 @@ class RuntimeConf:
         """Assert that an object is of type str."""
         if not isinstance(obj, str):
             raise PySparkTypeError(
-                error_class="NOT_STR",
-                message_parameters={
+                errorClass="NOT_STR",
+                messageParameters={
                     "arg_name": identifier,
                     "arg_type": type(obj).__name__,
                 },
@@ -109,6 +122,7 @@ RuntimeConf.__doc__ = PySparkRuntimeConfig.__doc__
 
 
 def _test() -> None:
+    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
@@ -116,7 +130,9 @@ def _test() -> None:
 
     globs = pyspark.sql.connect.conf.__dict__.copy()
     globs["spark"] = (
-        PySparkSession.builder.appName("sql.connect.conf tests").remote("local[4]").getOrCreate()
+        PySparkSession.builder.appName("sql.connect.conf tests")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
+        .getOrCreate()
     )
 
     (failure_count, test_count) = doctest.testmod(

@@ -29,6 +29,7 @@ import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 object ExecutorLifecycleTestUtils {
 
   val TEST_SPARK_APP_ID = "spark-app-id"
+  val TEST_SPARK_EXECUTOR_CONTAINER_NAME = "spark-executor"
 
   def failedExecutorWithoutDeletion(
       executorId: Long, rpId: Int = DEFAULT_RESOURCE_PROFILE_ID): Pod = {
@@ -37,7 +38,7 @@ object ExecutorLifecycleTestUtils {
         .withPhase("failed")
         .withStartTime(Instant.now.toString)
         .addNewContainerStatus()
-          .withName("spark-executor")
+          .withName(TEST_SPARK_EXECUTOR_CONTAINER_NAME)
           .withImage("k8s-spark")
           .withNewState()
             .withNewTerminated()
@@ -49,6 +50,38 @@ object ExecutorLifecycleTestUtils {
         .addNewContainerStatus()
           .withName("spark-executor-sidecar")
           .withImage("k8s-spark-sidecar")
+          .withNewState()
+            .withNewTerminated()
+              .withMessage("Failed")
+              .withExitCode(2)
+              .endTerminated()
+            .endState()
+          .endContainerStatus()
+        .withMessage("Executor failed.")
+        .withReason("Executor failed because of a thrown error.")
+        .endStatus()
+      .build()
+  }
+
+  def failedExecutorWithSidecarStatusListedFirst(
+      executorId: Long, rpId: Int = DEFAULT_RESOURCE_PROFILE_ID): Pod = {
+    new PodBuilder(podWithAttachedContainerForId(executorId, rpId))
+      .editOrNewStatus()
+        .withPhase("failed")
+        .withStartTime(Instant.now.toString)
+        .addNewContainerStatus() // sidecar status listed before executor's container status
+          .withName("spark-executor-sidecar")
+          .withImage("k8s-spark-sidecar")
+          .withNewState()
+            .withNewTerminated()
+              .withMessage("Failed")
+              .withExitCode(2)
+              .endTerminated()
+            .endState()
+          .endContainerStatus()
+        .addNewContainerStatus()
+          .withName(TEST_SPARK_EXECUTOR_CONTAINER_NAME)
+          .withImage("k8s-spark")
           .withNewState()
             .withNewTerminated()
               .withMessage("Failed")
@@ -200,7 +233,7 @@ object ExecutorLifecycleTestUtils {
       .endSpec()
       .build()
     val container = new ContainerBuilder()
-      .withName("spark-executor")
+      .withName(TEST_SPARK_EXECUTOR_CONTAINER_NAME)
       .withImage("k8s-spark")
       .build()
     SparkPod(pod, container)
@@ -228,7 +261,7 @@ object ExecutorLifecycleTestUtils {
       .withNewSpec()
         .withStorageClassName(storageClass)
         .withAccessModes("ReadWriteOnce")
-        .withResources(new ResourceRequirementsBuilder()
+        .withResources(new VolumeResourceRequirementsBuilder()
           .withRequests(Map("storage" -> new Quantity(size)).asJava).build())
         .endSpec()
       .build()

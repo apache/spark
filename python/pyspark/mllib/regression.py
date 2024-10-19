@@ -37,8 +37,8 @@ from pyspark.streaming.dstream import DStream
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py, inherit_doc
 from pyspark.mllib.linalg import _convert_to_vector
 from pyspark.mllib.util import Saveable, Loader
-from pyspark.rdd import RDD
-from pyspark.context import SparkContext
+from pyspark.core.rdd import RDD
+from pyspark.core.context import SparkContext
 from pyspark.mllib.linalg import Vector
 
 if TYPE_CHECKING:
@@ -144,9 +144,9 @@ class LinearRegressionModelBase(LinearModel):
     --------
     >>> from pyspark.mllib.linalg import SparseVector
     >>> lrmb = LinearRegressionModelBase(np.array([1.0, 2.0]), 0.1)
-    >>> abs(lrmb.predict(np.array([-1.03, 7.777])) - 14.624) < 1e-6
+    >>> bool(abs(lrmb.predict(np.array([-1.03, 7.777])) - 14.624) < 1e-6)
     True
-    >>> abs(lrmb.predict(SparseVector(2, {0: -1.03, 1: 7.777})) - 14.624) < 1e-6
+    >>> bool(abs(lrmb.predict(SparseVector(2, {0: -1.03, 1: 7.777})) - 14.624) < 1e-6)
     True
     """
 
@@ -190,23 +190,23 @@ class LinearRegressionModel(LinearRegressionModelBase):
     ... ]
     >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), iterations=10,
     ...     initialWeights=np.array([1.0]))
-    >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
+    >>> bool(abs(lrm.predict(np.array([0.0])) - 0) < 0.5)
     True
-    >>> abs(lrm.predict(np.array([1.0])) - 1) < 0.5
+    >>> bool(abs(lrm.predict(np.array([1.0])) - 1) < 0.5)
     True
-    >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    >>> bool(abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5)
     True
-    >>> abs(lrm.predict(sc.parallelize([[1.0]])).collect()[0] - 1) < 0.5
+    >>> bool(abs(lrm.predict(sc.parallelize([[1.0]])).collect()[0] - 1) < 0.5)
     True
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
     >>> lrm.save(sc, path)
     >>> sameModel = LinearRegressionModel.load(sc, path)
-    >>> abs(sameModel.predict(np.array([0.0])) - 0) < 0.5
+    >>> bool(abs(sameModel.predict(np.array([0.0])) - 0) < 0.5)
     True
-    >>> abs(sameModel.predict(np.array([1.0])) - 1) < 0.5
+    >>> bool(abs(sameModel.predict(np.array([1.0])) - 1) < 0.5)
     True
-    >>> abs(sameModel.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    >>> bool(abs(sameModel.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5)
     True
     >>> from shutil import rmtree
     >>> try:
@@ -221,16 +221,16 @@ class LinearRegressionModel(LinearRegressionModelBase):
     ... ]
     >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), iterations=10,
     ...     initialWeights=np.array([1.0]))
-    >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
+    >>> bool(abs(lrm.predict(np.array([0.0])) - 0) < 0.5)
     True
-    >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    >>> bool(abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5)
     True
     >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), iterations=10, step=1.0,
     ...    miniBatchFraction=1.0, initialWeights=np.array([1.0]), regParam=0.1, regType="l2",
     ...    intercept=True, validateData=True)
-    >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
+    >>> bool(abs(lrm.predict(np.array([0.0])) - 0) < 0.5)
     True
-    >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    >>> bool(abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5)
     True
     """
 
@@ -402,23 +402,23 @@ class LassoModel(LinearRegressionModelBase):
     ... ]
     >>> lrm = LassoWithSGD.train(
     ...     sc.parallelize(data), iterations=10, initialWeights=np.array([1.0]))
-    >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
+    >>> bool(abs(lrm.predict(np.array([0.0])) - 0) < 0.5)
     True
-    >>> abs(lrm.predict(np.array([1.0])) - 1) < 0.5
+    >>> bool(abs(lrm.predict(np.array([1.0])) - 1) < 0.5)
     True
-    >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    >>> bool(abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5)
     True
-    >>> abs(lrm.predict(sc.parallelize([[1.0]])).collect()[0] - 1) < 0.5
+    >>> bool(abs(lrm.predict(sc.parallelize([[1.0]])).collect()[0] - 1) < 0.5)
     True
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
     >>> lrm.save(sc, path)
     >>> sameModel = LassoModel.load(sc, path)
-    >>> abs(sameModel.predict(np.array([0.0])) - 0) < 0.5
+    >>> bool(abs(sameModel.predict(np.array([0.0])) - 0) < 0.5)
     True
-    >>> abs(sameModel.predict(np.array([1.0])) - 1) < 0.5
+    >>> bool(abs(sameModel.predict(np.array([1.0])) - 1) < 0.5)
     True
-    >>> abs(sameModel.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    >>> bool(abs(sameModel.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5)
     True
     >>> from shutil import rmtree
     >>> try:
@@ -433,16 +433,16 @@ class LassoModel(LinearRegressionModelBase):
     ... ]
     >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), iterations=10,
     ...     initialWeights=np.array([1.0]))
-    >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
+    >>> bool(abs(lrm.predict(np.array([0.0])) - 0) < 0.5)
     True
-    >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    >>> bool(abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5)
     True
     >>> lrm = LassoWithSGD.train(sc.parallelize(data), iterations=10, step=1.0,
     ...     regParam=0.01, miniBatchFraction=1.0, initialWeights=np.array([1.0]), intercept=True,
     ...     validateData=True)
-    >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
+    >>> bool(abs(lrm.predict(np.array([0.0])) - 0) < 0.5)
     True
-    >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    >>> bool(abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5)
     True
     """
 
@@ -580,23 +580,23 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     ... ]
     >>> lrm = RidgeRegressionWithSGD.train(sc.parallelize(data), iterations=10,
     ...     initialWeights=np.array([1.0]))
-    >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
+    >>> bool(abs(lrm.predict(np.array([0.0])) - 0) < 0.5)
     True
-    >>> abs(lrm.predict(np.array([1.0])) - 1) < 0.5
+    >>> bool(abs(lrm.predict(np.array([1.0])) - 1) < 0.5)
     True
-    >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    >>> bool(abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5)
     True
-    >>> abs(lrm.predict(sc.parallelize([[1.0]])).collect()[0] - 1) < 0.5
+    >>> bool(abs(lrm.predict(sc.parallelize([[1.0]])).collect()[0] - 1) < 0.5)
     True
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
     >>> lrm.save(sc, path)
     >>> sameModel = RidgeRegressionModel.load(sc, path)
-    >>> abs(sameModel.predict(np.array([0.0])) - 0) < 0.5
+    >>> bool(abs(sameModel.predict(np.array([0.0])) - 0) < 0.5)
     True
-    >>> abs(sameModel.predict(np.array([1.0])) - 1) < 0.5
+    >>> bool(abs(sameModel.predict(np.array([1.0])) - 1) < 0.5)
     True
-    >>> abs(sameModel.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    >>> bool(abs(sameModel.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5)
     True
     >>> from shutil import rmtree
     >>> try:
@@ -611,16 +611,16 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     ... ]
     >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), iterations=10,
     ...     initialWeights=np.array([1.0]))
-    >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
+    >>> bool(abs(lrm.predict(np.array([0.0])) - 0) < 0.5)
     True
-    >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    >>> bool(abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5)
     True
     >>> lrm = RidgeRegressionWithSGD.train(sc.parallelize(data), iterations=10, step=1.0,
     ...     regParam=0.01, miniBatchFraction=1.0, initialWeights=np.array([1.0]), intercept=True,
     ...     validateData=True)
-    >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
+    >>> bool(abs(lrm.predict(np.array([0.0])) - 0) < 0.5)
     True
-    >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    >>> bool(abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5)
     True
     """
 
@@ -764,19 +764,19 @@ class IsotonicRegressionModel(Saveable, Loader["IsotonicRegressionModel"]):
     --------
     >>> data = [(1, 0, 1), (2, 1, 1), (3, 2, 1), (1, 3, 1), (6, 4, 1), (17, 5, 1), (16, 6, 1)]
     >>> irm = IsotonicRegression.train(sc.parallelize(data))
-    >>> irm.predict(3)
+    >>> float(irm.predict(3))
     2.0
-    >>> irm.predict(5)
+    >>> float(irm.predict(5))
     16.5
-    >>> irm.predict(sc.parallelize([3, 5])).collect()
+    >>> list(map(float, irm.predict(sc.parallelize([3, 5])).collect()))
     [2.0, 16.5]
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
     >>> irm.save(sc, path)
     >>> sameModel = IsotonicRegressionModel.load(sc, path)
-    >>> sameModel.predict(3)
+    >>> float(sameModel.predict(3))
     2.0
-    >>> sameModel.predict(5)
+    >>> float(sameModel.predict(5))
     16.5
     >>> from shutil import rmtree
     >>> try:

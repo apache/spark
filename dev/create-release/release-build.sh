@@ -80,6 +80,9 @@ done
 export LC_ALL=C.UTF-8
 export LANG=C.UTF-8
 
+export PYSPARK_PYTHON=/usr/local/bin/python
+export PYSPARK_DRIVER_PYTHON=/usr/local/bin/python
+
 # Commit ref to checkout when building
 GIT_REF=${GIT_REF:-master}
 
@@ -95,8 +98,8 @@ init_java
 init_maven_sbt
 
 if [[ "$1" == "finalize" ]]; then
-  if [[ -z "$PYPI_PASSWORD" ]]; then
-    error 'The environment variable PYPI_PASSWORD is not set. Exiting.'
+  if [[ -z "$PYPI_API_TOKEN" ]]; then
+    error 'The environment variable PYPI_API_TOKEN is not set. Exiting.'
   fi
 
   git config --global user.name "$GIT_NAME"
@@ -104,25 +107,36 @@ if [[ "$1" == "finalize" ]]; then
 
   # Create the git tag for the new release
   echo "Creating the git tag for the new release"
-  rm -rf spark
-  git clone "https://$ASF_USERNAME:$ASF_PASSWORD@$ASF_SPARK_REPO" -b master
-  cd spark
-  git tag "v$RELEASE_VERSION" "$RELEASE_TAG"
-  git push origin "v$RELEASE_VERSION"
-  cd ..
-  rm -rf spark
-  echo "git tag v$RELEASE_VERSION created"
+  if check_for_tag "v$RELEASE_VERSION"; then
+    echo "v$RELEASE_VERSION already exists. Skip creating it."
+  else
+    rm -rf spark
+    git clone "https://$ASF_USERNAME:$ASF_PASSWORD@$ASF_SPARK_REPO" -b master
+    cd spark
+    git tag "v$RELEASE_VERSION" "$RELEASE_TAG"
+    git push origin "v$RELEASE_VERSION"
+    cd ..
+    rm -rf spark
+    echo "git tag v$RELEASE_VERSION created"
+  fi
 
   # download PySpark binary from the dev directory and upload to PyPi.
   echo "Uploading PySpark to PyPi"
   svn co --depth=empty "$RELEASE_STAGING_LOCATION/$RELEASE_TAG-bin" svn-spark
   cd svn-spark
-  svn update "pyspark-$RELEASE_VERSION.tar.gz"
-  svn update "pyspark-$RELEASE_VERSION.tar.gz.asc"
-  TWINE_USERNAME=spark-upload TWINE_PASSWORD="$PYPI_PASSWORD" twine upload \
+  PYSPARK_VERSION=`echo "$RELEASE_VERSION" |  sed -e "s/-/./" -e "s/preview/dev/"`
+  svn update "pyspark-$PYSPARK_VERSION.tar.gz"
+  svn update "pyspark-$PYSPARK_VERSION.tar.gz.asc"
+  twine upload -u __token__  -p $PYPI_API_TOKEN \
     --repository-url https://upload.pypi.org/legacy/ \
-    "pyspark-$RELEASE_VERSION.tar.gz" \
-    "pyspark-$RELEASE_VERSION.tar.gz.asc"
+    "pyspark-$PYSPARK_VERSION.tar.gz" \
+    "pyspark-$PYSPARK_VERSION.tar.gz.asc"
+  svn update "pyspark_connect-$PYSPARK_VERSION.tar.gz"
+  svn update "pyspark_connect-$PYSPARK_VERSION.tar.gz.asc"
+  twine upload -u __token__  -p $PYPI_API_TOKEN \
+    --repository-url https://upload.pypi.org/legacy/ \
+    "pyspark_connect-$PYSPARK_VERSION.tar.gz" \
+    "pyspark_connect-$PYSPARK_VERSION.tar.gz.asc"
   cd ..
   rm -rf svn-spark
   echo "PySpark uploaded"
@@ -188,6 +202,8 @@ fi
 PUBLISH_SCALA_2_12=1
 if [[ $SPARK_VERSION > "3.5.99" ]]; then
   PUBLISH_SCALA_2_12=0
+  # There is no longer scala-2.13 profile since 4.0.0
+  SCALA_2_13_PROFILES=""
 fi
 SCALA_2_12_PROFILES="-Pscala-2.12"
 
@@ -195,7 +211,7 @@ SCALA_2_12_PROFILES="-Pscala-2.12"
 HIVE_PROFILES="-Phive -Phive-thriftserver"
 # Profiles for publishing snapshots and release to Maven Central
 # We use Apache Hive 2.3 for publishing
-PUBLISH_PROFILES="$BASE_PROFILES $HIVE_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl -Phadoop-cloud"
+PUBLISH_PROFILES="$BASE_PROFILES $HIVE_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl -Phadoop-cloud -Pjvm-profiler"
 # Profiles for building binary releases
 BASE_RELEASE_PROFILES="$BASE_PROFILES -Psparkr"
 
@@ -272,12 +288,7 @@ if [[ "$1" == "package" ]]; then
     # Write out the VERSION to PySpark version info we rewrite the - into a . and SNAPSHOT
     # to dev0 to be closer to PEP440.
     PYSPARK_VERSION=`echo "$SPARK_VERSION" |  sed -e "s/-/./" -e "s/SNAPSHOT/dev0/" -e "s/preview/dev/"`
-
-    if [[ $SPARK_VERSION == 3.0* ]] || [[ $SPARK_VERSION == 3.1* ]] || [[ $SPARK_VERSION == 3.2* ]]; then
-      echo "__version__ = '$PYSPARK_VERSION'" > python/pyspark/version.py
-    else
-      echo "__version__: str = '$PYSPARK_VERSION'" > python/pyspark/version.py
-    fi
+    echo "__version__: str = '$PYSPARK_VERSION'" > python/pyspark/version.py
 
     # Get maven home set by MVN
     MVN_HOME=`$MVN -version 2>&1 | grep 'Maven home' | awk '{print $NF}'`
@@ -307,6 +318,14 @@ if [[ "$1" == "package" ]]; then
         --output $PYTHON_DIST_NAME.asc \
         --detach-sig $PYTHON_DIST_NAME
       shasum -a 512 $PYTHON_DIST_NAME > $PYTHON_DIST_NAME.sha512
+
+      PYTHON_CONNECT_DIST_NAME=pyspark_connect-$PYSPARK_VERSION.tar.gz
+      cp spark-$SPARK_VERSION-bin-$NAME/python/dist/$PYTHON_CONNECT_DIST_NAME .
+
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
+        --output $PYTHON_CONNECT_DIST_NAME.asc \
+        --detach-sig $PYTHON_CONNECT_DIST_NAME
+      shasum -a 512 $PYTHON_CONNECT_DIST_NAME > $PYTHON_CONNECT_DIST_NAME.sha512
     fi
 
     echo "Copying and signing regular binary distribution"
@@ -336,21 +355,25 @@ if [[ "$1" == "package" ]]; then
   declare -A BINARY_PKGS_EXTRA
   BINARY_PKGS_EXTRA["hadoop3"]="withpip,withr"
 
-  if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
-    key="hadoop3-scala2.13"
+  # This is dead code as Scala 2.12 is no longer supported, but we keep it as a template for
+  # adding new Scala version support in the future. This secondary Scala version only has one
+  # binary package to avoid doubling the number of final packages. It doesn't build PySpark and
+  # SparkR as the primary Scala version will build them.
+  if [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
+    key="hadoop3-scala2.12"
     args="-Phadoop-3 $HIVE_PROFILES"
     extra=""
-    if ! make_binary_release "$key" "$SCALA_2_13_PROFILES $args" "$extra" "2.13"; then
+    if ! make_binary_release "$key" "$SCALA_2_12_PROFILES $args" "$extra" "2.12"; then
       error "Failed to build $key package. Check logs for details."
     fi
   fi
 
-  if [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
+  if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
     echo "Packages to build: ${!BINARY_PKGS_ARGS[@]}"
     for key in ${!BINARY_PKGS_ARGS[@]}; do
       args=${BINARY_PKGS_ARGS[$key]}
       extra=${BINARY_PKGS_EXTRA[$key]}
-      if ! make_binary_release "$key" "$SCALA_2_12_PROFILES $args" "$extra" "2.12"; then
+      if ! make_binary_release "$key" "$SCALA_2_13_PROFILES $args" "$extra" "2.13"; then
         error "Failed to build $key package. Check logs for details."
       fi
     done
@@ -365,8 +388,8 @@ if [[ "$1" == "package" ]]; then
 
     echo "Copying release tarballs"
     cp spark-* "svn-spark/${DEST_DIR_NAME}-bin/"
-    cp pyspark-* "svn-spark/${DEST_DIR_NAME}-bin/"
-    cp SparkR_* "svn-spark/${DEST_DIR_NAME}-bin/"
+    cp pyspark* "svn-spark/${DEST_DIR_NAME}-bin/"
+    cp SparkR* "svn-spark/${DEST_DIR_NAME}-bin/"
     svn add "svn-spark/${DEST_DIR_NAME}-bin"
 
     cd svn-spark
@@ -513,7 +536,7 @@ if [[ "$1" == "publish-release" ]]; then
       file_short=$(echo $file | sed -e "s/\.\///")
       dest_url="$nexus_upload/org/apache/spark/$file_short"
       echo "  Uploading $file_short"
-      curl -u $ASF_USERNAME:$ASF_PASSWORD --upload-file $file_short $dest_url
+      curl --retry 3 --retry-all-errors -u $ASF_USERNAME:$ASF_PASSWORD --upload-file $file_short $dest_url
     done
 
     echo "Closing nexus staging repository"

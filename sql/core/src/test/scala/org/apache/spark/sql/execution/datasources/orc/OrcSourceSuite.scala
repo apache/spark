@@ -231,13 +231,12 @@ abstract class OrcSuite
   protected def testMergeSchemasInParallel(
       schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType]): Unit = {
     testMergeSchemasInParallel(true, schemaReader)
-    checkError(
+    checkErrorMatchPVals(
       exception = intercept[SparkException] {
         testMergeSchemasInParallel(false, schemaReader)
       }.getCause.getCause.asInstanceOf[SparkException],
-      errorClass = "CANNOT_READ_FILE_FOOTER",
-      parameters = Map("file" -> "file:.*"),
-      matchPVals = true
+      condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+      parameters = Map("path" -> "file:.*")
     )
   }
 
@@ -332,8 +331,9 @@ abstract class OrcSuite
 
   test("SPARK-21839: Add SQL config for ORC compression") {
     val conf = spark.sessionState.conf
-    // Test if the default of spark.sql.orc.compression.codec is snappy
-    assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == SNAPPY.name())
+    // Test if the default of spark.sql.orc.compression.codec is used.
+    assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec ==
+        SQLConf.ORC_COMPRESSION.defaultValueString.toUpperCase(Locale.ROOT))
 
     // OrcOptions's parameters have a higher priority than SQL configuration.
     // `compression` -> `orc.compression` -> `spark.sql.orc.compression.codec`
@@ -447,18 +447,11 @@ abstract class OrcSuite
 
       // with schema merging, there should throw exception
       withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "true") {
-        val exception = intercept[SparkException] {
+        val ex = intercept[SparkException] {
           spark.read.orc(basePath).columns.length
-        }.getCause
-
-        val innerException = orcImp match {
-          case "native" => exception
-          case "hive" => exception.getCause
-          case impl =>
-            throw new UnsupportedOperationException(s"Unknown ORC implementation: $impl")
         }
-
-        assert(innerException.asInstanceOf[SparkException].getErrorClass ===
+        assert(ex.getCondition == "CANNOT_MERGE_SCHEMAS")
+        assert(ex.getCause.asInstanceOf[SparkException].getCondition ===
           "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE")
       }
 
@@ -484,13 +477,12 @@ abstract class OrcSuite
 
         // don't ignore corrupt files
         withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
-          checkError(
+          checkErrorMatchPVals(
             exception = intercept[SparkException] {
               spark.read.orc(basePath).columns.length
             }.getCause.getCause.asInstanceOf[SparkException],
-            errorClass = "CANNOT_READ_FILE_FOOTER",
-            parameters = Map("file" -> "file:.*"),
-            matchPVals = true
+            condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+            parameters = Map("path" -> "file:.*")
           )
         }
       }

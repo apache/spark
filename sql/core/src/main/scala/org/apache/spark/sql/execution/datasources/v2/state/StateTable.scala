@@ -25,22 +25,25 @@ import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsMetadataC
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
-import org.apache.spark.sql.execution.streaming.state.StateStoreConf
-import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
+import org.apache.spark.sql.execution.streaming.TransformWithStateVariableInfo
+import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, StateStoreColFamilySchema, StateStoreConf}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.ArrayImplicits._
 
 /** An implementation of [[Table]] with [[SupportsRead]] for State Store data source. */
 class StateTable(
     session: SparkSession,
     override val schema: StructType,
     sourceOptions: StateSourceOptions,
-    stateConf: StateStoreConf)
+    stateConf: StateStoreConf,
+    keyStateEncoderSpec: KeyStateEncoderSpec,
+    stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
+    stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema])
   extends Table with SupportsRead with SupportsMetadataColumns {
 
   import StateTable._
 
-  if (!isValidSchema(schema)) {
+  if (!SchemaUtil.isValidSchema(sourceOptions, schema, stateVariableInfoOpt)) {
     throw StateDataSourceErrors.internalError(
       s"Invalid schema is provided. Provided schema: $schema for " +
         s"checkpoint location: ${sourceOptions.stateCheckpointLocation} , operatorId: " +
@@ -49,38 +52,38 @@ class StateTable(
   }
 
   override def name(): String = {
-    val desc = s"StateTable " +
+    var desc = s"StateTable " +
       s"[stateCkptLocation=${sourceOptions.stateCheckpointLocation}]" +
       s"[batchId=${sourceOptions.batchId}][operatorId=${sourceOptions.operatorId}]" +
       s"[storeName=${sourceOptions.storeName}]"
 
     if (sourceOptions.joinSide != JoinSideValues.none) {
-      desc + s"[joinSide=${sourceOptions.joinSide}]"
-    } else {
-      desc
+      desc += s"[joinSide=${sourceOptions.joinSide}]"
     }
+    sourceOptions.fromSnapshotOptions match {
+      case Some(fromSnapshotOptions) =>
+        desc += s"[snapshotStartBatchId=${fromSnapshotOptions.snapshotStartBatchId}]"
+        desc += s"[snapshotPartitionId=${fromSnapshotOptions.snapshotPartitionId}]"
+      case _ =>
+    }
+    sourceOptions.readChangeFeedOptions match {
+      case Some(fromSnapshotOptions) =>
+        desc += s"[changeStartBatchId=${fromSnapshotOptions.changeStartBatchId}"
+        desc += s"[changeEndBatchId=${fromSnapshotOptions.changeEndBatchId}"
+      case _ =>
+    }
+    desc
   }
 
   override def capabilities(): util.Set[TableCapability] = CAPABILITY
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
-    new StateScanBuilder(session, schema, sourceOptions, stateConf)
+    new StateScanBuilder(session, schema, sourceOptions, stateConf, keyStateEncoderSpec,
+      stateVariableInfoOpt, stateStoreColFamilySchemaOpt)
 
   override def properties(): util.Map[String, String] = Map.empty[String, String].asJava
 
-  private def isValidSchema(schema: StructType): Boolean = {
-    if (schema.fieldNames.toImmutableArraySeq != Seq("key", "value")) {
-      false
-    } else if (!SchemaUtil.getSchemaAsDataType(schema, "key").isInstanceOf[StructType]) {
-      false
-    } else if (!SchemaUtil.getSchemaAsDataType(schema, "value").isInstanceOf[StructType]) {
-      false
-    } else {
-      true
-    }
-  }
-
-  override def metadataColumns(): Array[MetadataColumn] = METADATA_COLUMNS.toArray
+  override def metadataColumns(): Array[MetadataColumn] = Array.empty
 }
 
 /**
@@ -89,18 +92,4 @@ class StateTable(
  */
 object StateTable {
   private val CAPABILITY = Set(TableCapability.BATCH_READ).asJava
-
-  val METADATA_COLUMNS: Seq[MetadataColumn] = Seq(PartitionId)
-
-  private object PartitionId extends MetadataColumn {
-    override def name(): String = "_partition_id"
-
-    override def dataType(): DataType = IntegerType
-
-    override def isNullable: Boolean = false
-
-    override def comment(): String = {
-      "Represents an ID for a physical state partition this row belongs to."
-    }
-  }
 }

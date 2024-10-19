@@ -33,7 +33,8 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.{DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION, OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION}
+import org.apache.spark.sql.internal.SQLConf.{DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION, OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION,
+  WRAP_EXISTS_IN_AGGREGATE_FUNCTION}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -248,24 +249,74 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     case u: UnaryNode if u.expressions.exists(
         SubqueryExpression.hasInOrCorrelatedExistsSubquery) =>
       var newChild = u.child
-      u.mapExpressions(expr => {
-        val (newExpr, p) = rewriteExistentialExpr(Seq(expr), newChild)
+      var introducedAttrs = Seq.empty[Attribute]
+      val updatedNode = u.mapExpressions(expr => {
+        val (newExpr, p, newAttrs) = rewriteExistentialExprWithAttrs(Seq(expr), newChild)
         newChild = p
+        introducedAttrs ++= newAttrs
         // The newExpr can not be None
         newExpr.get
       }).withNewChildren(Seq(newChild))
+      updatedNode match {
+        case a: Aggregate if conf.getConf(WRAP_EXISTS_IN_AGGREGATE_FUNCTION) =>
+          // If we have introduced new `exists`-attributes that are referenced by
+          // aggregateExpressions within a non-aggregateFunction expression, we wrap them in
+          // first() aggregate function. first() is Spark's executable version of any_value()
+          // aggregate function.
+          // We do this to keep the aggregation valid, i.e avoid references outside of aggregate
+          // functions that are not in grouping expressions.
+          // Note that the same `exists` attr will never appear in groupingExpressions due to
+          // PullOutGroupingExpressions rule.
+          // Also note: the value of `exists` is functionally determined by grouping expressions,
+          // so applying any aggregate function is semantically safe.
+          val aggFunctionReferences = a.aggregateExpressions.
+            flatMap(extractAggregateExpressions).
+            flatMap(_.references).toSet
+          val nonAggFuncReferences =
+            a.aggregateExpressions.flatMap(_.references).filterNot(aggFunctionReferences.contains)
+          val toBeWrappedExistsAttrs = introducedAttrs.filter(nonAggFuncReferences.contains)
+
+          // Replace all eligible `exists` by `First(exists)` among aggregateExpressions.
+          val newAggregateExpressions = a.aggregateExpressions.map { aggExpr =>
+            aggExpr.transformUp {
+              case attr: Attribute if toBeWrappedExistsAttrs.contains(attr) =>
+                new First(attr).toAggregateExpression()
+            }.asInstanceOf[NamedExpression]
+          }
+          a.copy(aggregateExpressions = newAggregateExpressions)
+        case _ => updatedNode
+      }
+  }
+
+  /**
+   * Extract all aggregate expressions from the expression tree routed at `expr`.
+   */
+  private def extractAggregateExpressions(expr: Expression): Seq[AggregateExpression] = {
+    expr match {
+      case a: AggregateExpression => Seq(a)
+      case e: Expression => e.children.flatMap(extractAggregateExpressions)
+    }
   }
 
   /**
    * Given a predicate expression and an input plan, it rewrites any embedded existential sub-query
-   * into an existential join. It returns the rewritten expression together with the updated plan.
+   * into an existential join. It returns the rewritten expression together with the updated plan,
+   * as well as the newly introduced attributes.
    * Currently, it does not support NOT IN nested inside a NOT expression. This case is blocked in
    * the Analyzer.
    */
   private def rewriteExistentialExpr(
-      exprs: Seq[Expression],
-      plan: LogicalPlan): (Option[Expression], LogicalPlan) = {
+    exprs: Seq[Expression],
+    plan: LogicalPlan): (Option[Expression], LogicalPlan) = {
+    val (newExpr, newPlan, _) = rewriteExistentialExprWithAttrs(exprs, plan)
+    (newExpr, newPlan)
+  }
+
+  private def rewriteExistentialExprWithAttrs(
+    exprs: Seq[Expression],
+    plan: LogicalPlan): (Option[Expression], LogicalPlan, Seq[Attribute]) = {
     var newPlan = plan
+    val introducedAttrs = ArrayBuffer.empty[Attribute]
     val newExprs = exprs.map { e =>
       e.transformDownWithPruning(_.containsAnyPattern(EXISTS_SUBQUERY, IN_SUBQUERY)) {
         case Exists(sub, _, _, conditions, subHint) =>
@@ -275,6 +326,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           newPlan =
             buildJoin(newPlan, rewriteDomainJoinsIfPresent(newPlan, sub, newCondition),
               existenceJoin, newCondition, subHint)
+          introducedAttrs += exists
           exists
         case Not(InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint))) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
@@ -299,6 +351,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           newPlan = Join(newPlan,
             rewriteDomainJoinsIfPresent(newPlan, newSub, Some(finalJoinCond)),
             ExistenceJoin(exists), Some(finalJoinCond), joinHint)
+          introducedAttrs += exists
           Not(exists)
         case InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint)) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
@@ -309,10 +362,11 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val joinHint = JoinHint(None, subHint)
           newPlan = Join(newPlan, rewriteDomainJoinsIfPresent(newPlan, newSub, newConditions),
             ExistenceJoin(exists), newConditions, joinHint)
+          introducedAttrs += exists
           exists
       }
     }
-    (newExprs.reduceOption(And), newPlan)
+    (newExprs.reduceOption(And), newPlan, introducedAttrs.toSeq)
   }
 }
 
@@ -402,6 +456,31 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     (newPlan, newCond)
   }
 
+   // Returns true if 'query' is guaranteed to return at most 1 row.
+   private def guaranteedToReturnOneRow(query: LogicalPlan): Boolean = {
+     if (query.maxRows.exists(_ <= 1)) {
+       return true
+     }
+     val aggNode = query match {
+       case havingPart@Filter(_, aggPart: Aggregate) => Some(aggPart)
+       case aggPart: Aggregate => Some(aggPart)
+       // LIMIT 1 is handled above, this is for all other types of LIMITs
+       case Limit(_, aggPart: Aggregate) => Some(aggPart)
+       case Project(_, aggPart: Aggregate) => Some(aggPart)
+       case _: LogicalPlan => None
+     }
+     if (!aggNode.isDefined) {
+       return false
+     }
+     val aggregates = aggNode.get.expressions.flatMap(_.collect {
+       case a: AggregateExpression => a
+     })
+     if (aggregates.isEmpty) {
+       return false
+     }
+     nonEquivalentGroupbyCols(query, aggNode.get).isEmpty
+   }
+
   private def rewriteSubQueries(plan: LogicalPlan): LogicalPlan = {
     /**
      * This function is used as a aid to enforce idempotency of pullUpCorrelatedPredicate rule.
@@ -427,7 +506,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     }
 
     plan.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
-      case ScalarSubquery(sub, children, exprId, conditions, hint, mayHaveCountBugOld)
+      case ScalarSubquery(sub, children, exprId, conditions, hint,
+      mayHaveCountBugOld, needSingleJoinOld)
         if children.nonEmpty =>
 
         def mayHaveCountBugAgg(a: Aggregate): Boolean = {
@@ -473,8 +553,13 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           val (topPart, havingNode, aggNode) = splitSubquery(sub)
           (aggNode.isDefined && aggNode.get.groupingExpressions.isEmpty)
         }
+        val needSingleJoin = if (needSingleJoinOld.isDefined) {
+          needSingleJoinOld.get
+        } else {
+          conf.getConf(SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN) && !guaranteedToReturnOneRow(sub)
+        }
         ScalarSubquery(newPlan, children, exprId, getJoinCondition(newCond, conditions),
-          hint, Some(mayHaveCountBug))
+          hint, Some(mayHaveCountBug), Some(needSingleJoin))
       case Exists(sub, children, exprId, conditions, hint) if children.nonEmpty =>
         val (newPlan, newCond) = if (SQLConf.get.decorrelateInnerQueryEnabledForExistsIn) {
           decorrelate(sub, plan, handleCountBug = true)
@@ -732,7 +817,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
       subqueries: ArrayBuffer[ScalarSubquery]): (LogicalPlan, AttributeMap[Attribute]) = {
     val subqueryAttrMapping = ArrayBuffer[(Attribute, Attribute)]()
     val newChild = subqueries.foldLeft(child) {
-      case (currentChild, ScalarSubquery(sub, _, _, conditions, subHint, mayHaveCountBug)) =>
+      case (currentChild, ScalarSubquery(sub, _, _, conditions, subHint, mayHaveCountBug,
+      needSingleJoin)) =>
         val query = DecorrelateInnerQuery.rewriteDomainJoins(currentChild, sub, conditions)
         val origOutput = query.output.head
         // The subquery appears on the right side of the join, hence add its hint to the right
@@ -740,14 +826,21 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         val joinHint = JoinHint(None, subHint)
 
         val resultWithZeroTups = evalSubqueryOnZeroTups(query)
+        val joinType = needSingleJoin match {
+          case Some(true) => LeftSingle
+          case _ => LeftOuter
+        }
         lazy val planWithoutCountBug = Project(
           currentChild.output :+ origOutput,
-          Join(currentChild, query, LeftOuter, conditions.reduceOption(And), joinHint))
+          Join(currentChild, query, joinType, conditions.reduceOption(And), joinHint))
 
         if (Utils.isTesting) {
           assert(mayHaveCountBug.isDefined)
         }
-        if (resultWithZeroTups.isEmpty) {
+        if (!SQLConf.get.legacyDuplicateBetweenInput && currentChild.output.contains(origOutput)) {
+          // If we had multiple of the same scalar subqueries they will resolve to the same aliases.
+          currentChild
+        } else if (resultWithZeroTups.isEmpty) {
           // CASE 1: Subquery guaranteed not to have the COUNT bug because it evaluates to NULL
           // with zero tuples.
           planWithoutCountBug
@@ -788,7 +881,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
                 currentChild.output :+ subqueryResultExpr,
                 Join(currentChild,
                   Project(query.output :+ alwaysTrueExpr, query),
-                  LeftOuter, conditions.reduceOption(And), joinHint))
+                  joinType, conditions.reduceOption(And), joinHint))
 
             } else {
               // CASE 3: Subquery with HAVING clause. Pull the HAVING clause above the join.
@@ -820,7 +913,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
                 currentChild.output :+ caseExpr,
                 Join(currentChild,
                   Project(subqueryRoot.output :+ alwaysTrueExpr, subqueryRoot),
-                  LeftOuter, conditions.reduceOption(And), joinHint))
+                  joinType, conditions.reduceOption(And), joinHint))
             }
           }
         }
@@ -971,7 +1064,7 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
 
     case p: LogicalPlan => p.transformExpressionsUpWithPruning(
       _.containsPattern(SCALAR_SUBQUERY)) {
-      case s @ ScalarSubquery(OneRowSubquery(p @ Project(_, _: OneRowRelation)), _, _, _, _, _)
+      case s @ ScalarSubquery(OneRowSubquery(p @ Project(_, _: OneRowRelation)), _, _, _, _, _, _)
           if !hasCorrelatedSubquery(s.plan) && s.joinCond.isEmpty =>
         assert(p.projectList.size == 1)
         stripOuterReferences(p.projectList).head

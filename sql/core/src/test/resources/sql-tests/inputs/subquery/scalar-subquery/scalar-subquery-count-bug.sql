@@ -1,6 +1,7 @@
 --CONFIG_DIM1 spark.sql.optimizer.decorrelateInnerQuery.enabled=true
 --CONFIG_DIM1 spark.sql.optimizer.decorrelateInnerQuery.enabled=false
 
+--ONLY_IF spark
 create temp view l (a, b)
 as values
     (1, 2.0),
@@ -49,6 +50,104 @@ select *, (select count(*) from r where l.a = r.c having count(*) <= 1) from l;
 
 -- Empty groups are filtered by HAVING and should evaluate to null
 select *, (select count(*) from r where l.a = r.c having count(*) >= 2) from l;
+
+
+CREATE TEMPORARY VIEW null_view(a, b) AS SELECT CAST(null AS int), CAST(null as int);
+
+-- SPARK-46743: count bug is still detected on top of the subquery that can be constant folded.
+SELECT
+  (
+    SELECT
+      COUNT(null_view.a) AS result
+    FROM
+      null_view
+    WHERE
+      null_view.a = l.a
+  )
+FROM
+  l;
+
+
+-- Same as above but with a filter (HAVING) above the aggregate
+SELECT
+  (
+    SELECT
+      COUNT(null_view.a) AS result
+    FROM
+      null_view
+    WHERE
+      null_view.a = l.a
+    having count(*) > -1
+  )
+FROM
+  l;
+
+-- Count bug over a subquery with an empty relation after optimization.
+SELECT
+  (
+    SELECT
+      COUNT(null_view.a) AS result
+    FROM
+      null_view
+    INNER JOIN r
+      ON r.c = null_view.a
+      AND r.c IS NOT NULL
+    WHERE
+      null_view.a = l.a
+  )
+FROM
+  l;
+
+-- Same as above but with a filter (HAVING) above the aggregate
+SELECT
+(
+  SELECT
+    COUNT(null_view.a) AS result
+  FROM
+    null_view
+  INNER JOIN r
+    ON r.c = null_view.a
+    AND r.c IS NOT NULL
+  WHERE
+    null_view.a = l.a
+  HAVING COUNT(*) > -1
+)
+FROM
+  l;
+
+-- Same as above but with intersect
+SELECT
+  (
+    SELECT
+      COUNT(f.a) AS result
+    FROM
+    (
+        SELECT a, b FROM null_view
+        INTERSECT
+        SELECT c, d FROM r WHERE c IS NOT NULL
+    ) AS f
+    WHERE
+      f.a = l.a
+  )
+FROM
+  l;
+
+SELECT
+(
+  SELECT
+    COUNT(f.a) AS result
+  FROM
+  (
+      SELECT a, b FROM null_view
+      INTERSECT
+      SELECT c, d FROM r WHERE c IS NOT NULL
+  ) AS f
+  WHERE
+    f.a = l.a
+  HAVING COUNT(*) > -1
+)
+FROM
+  l;
 
 
 set spark.sql.optimizer.decorrelateSubqueryLegacyIncorrectCountHandling.enabled = true;

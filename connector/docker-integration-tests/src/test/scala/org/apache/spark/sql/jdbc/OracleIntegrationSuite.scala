@@ -19,12 +19,11 @@ package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
+import java.time.{Duration, Period}
 import java.util.{Properties, TimeZone}
 
-import org.scalatest.time.SpanSugar._
-
-import org.apache.spark.SparkSQLException
-import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -55,31 +54,22 @@ import org.apache.spark.tags.DockerTest
  * A sequence of commands to build the Oracle Database Free container image:
  *  $ git clone https://github.com/oracle/docker-images.git
  *  $ cd docker-images/OracleDatabase/SingleInstance/dockerfiles
- *  $ ./buildContainerImage.sh -v 23.2.0 -f
- *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:23.2.0-free
+ *  $ ./buildContainerImage.sh -v 23.4.0 -f
+ *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:23.4.0-free
  *
- * This procedure has been validated with Oracle Database Free version 23.2.0,
- * and with Oracle Express Edition versions 18.4.0 and 21.3.0
+ * This procedure has been validated with Oracle Database Free version 23.4.0,
+ * and with Oracle Express Edition versions 18.4.0 and 21.4.0
  */
 @DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSparkSession {
   import testImplicits._
 
-  override val db = new DatabaseOnDocker {
-    lazy override val imageName =
-      sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "gvenzl/oracle-free:23.3")
-    val oracle_password = "Th1s1sThe0racle#Pass"
-    override val env = Map(
-      "ORACLE_PWD" -> oracle_password,      // oracle images uses this
-      "ORACLE_PASSWORD" -> oracle_password  // gvenzl/oracle-free uses this
-    )
-    override val usesIpc = false
-    override val jdbcPort: Int = 1521
-    override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:oracle:thin:system/$oracle_password@//$ip:$port/freepdb1"
-  }
+  override val db = new OracleDatabaseOnDocker
 
-  override val connectionTimeout = timeout(7.minutes)
+  private val rsOfTsWithTimezone = Seq(
+    Row(BigDecimal.valueOf(1), new Timestamp(944046000000L)),
+    Row(BigDecimal.valueOf(2), new Timestamp(944078400000L))
+  )
 
   override def dataPreparation(conn: Connection): Unit = {
     // In 18.4.0 Express Edition auto commit is enabled by default.
@@ -128,10 +118,11 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       """.stripMargin.replaceAll("\n", " "))
 
 
-    conn.prepareStatement("CREATE TABLE numerics (b DECIMAL(1), f DECIMAL(3, 2), i DECIMAL(10))")
+    conn.prepareStatement("CREATE TABLE numerics (b DECIMAL(1), f DECIMAL(3, 2), i DECIMAL(10)," +
+        "n NUMBER(7,-2))")
       .executeUpdate()
     conn.prepareStatement(
-      "INSERT INTO numerics VALUES (4, 1.23, 9999999999)").executeUpdate()
+      "INSERT INTO numerics VALUES (4, 1.23, 9999999999, 7456123.89)").executeUpdate()
     conn.commit()
 
     conn.prepareStatement("CREATE TABLE oracle_types (d BINARY_DOUBLE, f BINARY_FLOAT)")
@@ -157,26 +148,52 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
         |(4, {d '2018-07-12'}, {ts '2018-07-12 09:51:15'})
       """.stripMargin.replaceAll("\n", " ")).executeUpdate()
     conn.commit()
+
+    conn.prepareStatement("CREATE TABLE test_ltz(t TIMESTAMP WITH LOCAL TIME ZONE)")
+      .executeUpdate()
+    conn.prepareStatement(
+      "INSERT INTO test_ltz (t) VALUES (TIMESTAMP '2018-11-17 13:33:33')")
+      .executeUpdate()
+    conn.commit()
+
+    conn.prepareStatement(
+      "CREATE TABLE ch (c0 VARCHAR2(100 BYTE), c1 VARCHAR2(100 CHAR), c2 NCHAR(100)," +
+        "c3 NVARCHAR2(100))").executeUpdate()
+    // scalastyle:off nonascii
+    val statement = conn.prepareStatement("INSERT INTO ch VALUES (?,?,?,?)")
+    statement.setString(1, "上海")
+    statement.setString(2, "杭州")
+    statement.setString(3, "北京")
+    statement.setString(4, "广州")
+    statement.addBatch()
+    statement.setString(1, "한국")
+    statement.setString(2, "서울")
+    statement.setString(3, "부산")
+    statement.setString(4, "대구")
+    statement.addBatch()
+    statement.setString(1, "العربية")
+    statement.setString(2, "القاهرة")
+    statement.setString(3, "الجيزة")
+    statement.setString(4, "الإسكندرية")
+    statement.addBatch()
+    statement.executeBatch()
+    // insert a row with AL16UTF16 but not UTF8
+    // scalastyle:on nonascii
+    conn.commit()
   }
 
-  test("SPARK-16625 : Importing Oracle numeric types") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties)
-    val rows = df.collect()
-    assert(rows.length == 1)
-    val row = rows(0)
-    // The main point of the below assertions is not to make sure that these Oracle types are
-    // mapped to decimal types, but to make sure that the returned values are correct.
-    // A value > 1 from DECIMAL(1) is correct:
-    assert(row.getDecimal(0).compareTo(BigDecimal.valueOf(4)) == 0)
-    // A value with fractions from DECIMAL(3, 2) is correct:
-    assert(row.getDecimal(1).compareTo(BigDecimal.valueOf(1.23)) == 0)
-    // A value > Int.MaxValue from DECIMAL(10) is correct:
-    assert(row.getDecimal(2).compareTo(BigDecimal.valueOf(9999999999L)) == 0)
+  test("SPARK-16625: Importing Oracle numeric types") {
+    Seq("true", "false").foreach { flag =>
+      withSQLConf((SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key, flag)) {
+        val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties)
+        checkAnswer(df, Seq(Row(BigDecimal.valueOf(4), BigDecimal.valueOf(1.23),
+          BigDecimal.valueOf(9999999999L), BigDecimal.valueOf(7456100))))
+      }
+    }
   }
 
 
-  // SPARK-43049: Use CLOB instead of VARCHAR(255) for StringType for Oracle jdbc-am""
-  test("SPARK-12941: String datatypes to be mapped to CLOB in Oracle") {
+  test("SPARK-12941: String datatypes to be mapped to VARCHAR(255) in Oracle") {
     // create a sample dataframe with string type
     val df1 = sparkContext.parallelize(Seq(("foo"))).toDF("x")
     // write the dataframe to the oracle table tbl
@@ -281,7 +298,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     assert(types(1).equals("class java.sql.Timestamp"))
   }
 
-  test("Column type TIMESTAMP with SESSION_LOCAL_TIMEZONE is different from default") {
+  test("SPARK-47280: Remove timezone limitation for ORACLE TIMESTAMP WITH TIMEZONE") {
     val defaultJVMTimeZone = TimeZone.getDefault
     // Pick the timezone different from the current default time zone of JVM
     val sofiaTimeZone = TimeZone.getTimeZone("Europe/Sofia")
@@ -290,35 +307,20 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       if (defaultJVMTimeZone == shanghaiTimeZone) sofiaTimeZone else shanghaiTimeZone
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> localSessionTimeZone.getID) {
-      checkError(
-        exception = intercept[SparkSQLException] {
-          sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties).collect()
-        },
-        errorClass = "UNRECOGNIZED_SQL_TYPE",
-        parameters = Map("typeName" -> "TIMESTAMP WITH TIME ZONE", "jdbcType" -> "-101"))
+      checkAnswer(
+        sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties),
+        rsOfTsWithTimezone)
     }
   }
 
   test("Column TIMESTAMP with TIME ZONE(JVM timezone)") {
-    def checkRow(row: Row, ts: String): Unit = {
-      assert(row.getTimestamp(1).equals(Timestamp.valueOf(ts)))
-    }
-
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> TimeZone.getDefault.getID) {
       val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
-      withDefaultTimeZone(PST) {
-        assert(dfRead.collect().toSet ===
-          Set(
-            Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 03:00:00")),
-            Row(BigDecimal.valueOf(2), java.sql.Timestamp.valueOf("1999-12-01 12:00:00"))))
-      }
-
-      withDefaultTimeZone(UTC) {
-        assert(dfRead.collect().toSet ===
-          Set(
-            Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 11:00:00")),
-            Row(BigDecimal.valueOf(2), java.sql.Timestamp.valueOf("1999-12-01 20:00:00"))))
-      }
+      Seq(PST, UTC).foreach(timeZone => {
+        withDefaultTimeZone(timeZone) {
+          checkAnswer(dfRead, rsOfTsWithTimezone)
+        }
+      })
     }
   }
 
@@ -372,11 +374,12 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
 
   test("SPARK-20427/SPARK-20921: read table use custom schema by jdbc api") {
     // default will throw IllegalArgumentException
-    val e = intercept[org.apache.spark.SparkException] {
+    val e = intercept[org.apache.spark.SparkArithmeticException] {
       spark.read.jdbc(jdbcUrl, "tableWithCustomSchema", new Properties()).collect()
     }
-    assert(e.getCause().isInstanceOf[ArithmeticException])
-    assert(e.getMessage.contains("Decimal precision 39 exceeds max precision 38"))
+    assert(e.getMessage.contains(
+      "The 12312321321321312312312312123.0000000000 rounded half up from" +
+        " 12312321321321312312312312123 cannot be represented as Decimal(38, 10)"))
 
     // custom schema can read data
     val props = new Properties()
@@ -537,5 +540,77 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       .collect()
     assert(rows(0).getString(0).nonEmpty)
     assert(rows(1).getString(0) == null)
+  }
+
+  test("SPARK-42627: Support ORACLE TIMESTAMP WITH LOCAL TIME ZONE") {
+    Seq("true", "false").foreach { flag =>
+      withSQLConf((SQLConf.LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED.key, flag)) {
+        val df = spark.read.format("jdbc")
+          .option("url", jdbcUrl)
+          .option("dbtable", "test_ltz")
+          .load()
+        val row1 = df.collect().head.getTimestamp(0)
+        assert(df.count() === 1)
+        assert(row1 === Timestamp.valueOf("2018-11-17 13:33:33"))
+
+        df.write.format("jdbc")
+          .option("url", jdbcUrl)
+          .option("dbtable", "test_ltz" + flag)
+          .save()
+
+        val df2 = spark.read.format("jdbc")
+          .option("url", jdbcUrl)
+          .option("dbtable", "test_ltz" + flag)
+          .load()
+        checkAnswer(df2, Row(row1))
+      }
+    }
+  }
+
+  test("SPARK-47761: Reading ANSI INTERVAL Types") {
+    val df: String => DataFrame = query => spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", query)
+      .load()
+    checkAnswer(df("SELECT INTERVAL '1-2' YEAR(1) TO MONTH as i0 FROM dual"),
+      Row(Period.of(1, 2, 0)))
+    checkAnswer(df("SELECT INTERVAL '1-2' YEAR(2) TO MONTH as i1 FROM dual"),
+      Row(Period.of(1, 2, 0)))
+    checkAnswer(df("SELECT INTERVAL '12345-2' YEAR(9) TO MONTH as i2 FROM dual"),
+      Row(Period.of(12345, 2, 0)))
+    checkAnswer(df("SELECT INTERVAL '1 12:23:56' DAY(1) TO SECOND(0) as i3 FROM dual"),
+      Row(Duration.ofDays(1).plusHours(12).plusMinutes(23).plusSeconds(56)))
+    checkAnswer(df("SELECT INTERVAL '1 12:23:56.12' DAY TO SECOND(2) as i4 FROM dual"),
+      Row(Duration.ofDays(1).plusHours(12).plusMinutes(23).plusSeconds(56).plusMillis(120)))
+    checkAnswer(df("SELECT INTERVAL '1 12:23:56.1234' DAY TO SECOND(4) as i5 FROM dual"),
+      Row(Duration.ofDays(1).plusHours(12).plusMinutes(23).plusSeconds(56).plusMillis(123)
+        .plusNanos(400000)))
+    checkAnswer(df("SELECT INTERVAL '1 12:23:56.123456' DAY TO SECOND(6) as i6 FROM dual"),
+      Row(Duration.ofDays(1).plusHours(12).plusMinutes(23).plusSeconds(56).plusMillis(123)
+        .plusNanos(456000)))
+    checkAnswer(df("SELECT INTERVAL '1 12:23:56.12345678' DAY TO SECOND(8) as i7 FROM dual"),
+      Row(Duration.ofDays(1).plusHours(12).plusMinutes(23).plusSeconds(56).plusMillis(123)
+        .plusNanos(456000)))
+  }
+
+  test("SPARK-47856: NCHAR and NVARCHAR") {
+    val df = spark.read.jdbc(jdbcUrl, "ch", new Properties)
+    // scalastyle:off nonascii
+    checkAnswer(df, Seq(
+      Row("上海", "杭州", "北京".padTo(100, ' '), "广州"),
+      Row("한국", "서울", "부산".padTo(100, ' '), "대구"),
+      Row("العربية", "القاهرة", "الجيزة".padTo(100, ' '), "الإسكندرية")
+    ))
+    // scalastyle:on nonascii
+    val schema = df.schema
+    Seq(0, 1).foreach { i =>
+      assert(schema(i).dataType === StringType)
+      assert(schema(i).metadata.getString(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)
+        === VarcharType(100).catalogString)
+    }
+    Seq(2, 3).foreach { i =>
+      assert(schema(i).dataType === StringType)
+      assert(!schema(i).metadata.contains(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY))
+    }
   }
 }

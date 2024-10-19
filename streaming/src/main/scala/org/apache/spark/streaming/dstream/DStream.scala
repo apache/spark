@@ -26,7 +26,8 @@ import scala.reflect.ClassTag
 import scala.util.matching.Regex
 
 import org.apache.spark.{SparkContext, SparkException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.LogKeys.{FROM_TIME, SLIDE_DURATION, TO_TIME}
 import org.apache.spark.internal.io.SparkHadoopWriterUtils
 import org.apache.spark.rdd.{BlockRDD, RDD, RDDOperationScope}
 import org.apache.spark.storage.StorageLevel
@@ -200,7 +201,8 @@ abstract class DStream[T: ClassTag] (
     // Set the checkpoint interval to be slideDuration or 10 seconds, which ever is larger
     if (mustCheckpoint && checkpointDuration == null) {
       checkpointDuration = slideDuration * math.ceil(Seconds(10) / slideDuration).toInt
-      logInfo(s"Checkpoint interval automatically set to $checkpointDuration")
+      logInfo(log"Checkpoint interval automatically set to " +
+        log"${MDC(LogKeys.CHECKPOINT_INTERVAL, checkpointDuration)}")
     }
 
     // Set the minimum value of the rememberDuration if not already set
@@ -276,11 +278,11 @@ abstract class DStream[T: ClassTag] (
 
     dependencies.foreach(_.validateAtStart())
 
-    logInfo(s"Slide time = $slideDuration")
-    logInfo(s"Storage level = ${storageLevel.description}")
-    logInfo(s"Checkpoint interval = $checkpointDuration")
-    logInfo(s"Remember interval = $rememberDuration")
-    logInfo(s"Initialized and validated $this")
+    logInfo(log"Slide time = ${MDC(LogKeys.SLIDE_DURATION, slideDuration)}")
+    logInfo(log"Storage level = ${MDC(LogKeys.STORAGE_LEVEL, storageLevel.description)}")
+    logInfo(log"Checkpoint interval = ${MDC(LogKeys.CHECKPOINT_INTERVAL, checkpointDuration)}")
+    logInfo(log"Remember interval = ${MDC(LogKeys.INTERVAL, rememberDuration)}")
+    logInfo(log"Initialized and validated ${MDC(LogKeys.DSTREAM, this)}")
   }
 
   private[streaming] def setContext(s: StreamingContext): Unit = {
@@ -288,7 +290,7 @@ abstract class DStream[T: ClassTag] (
       throw new SparkException(s"Context must not be set again for $this")
     }
     ssc = s
-    logInfo(s"Set context for $this")
+    logInfo(log"Set context for ${MDC(LogKeys.STREAMING_CONTEXT, this)}")
     dependencies.foreach(_.setContext(ssc))
   }
 
@@ -303,7 +305,9 @@ abstract class DStream[T: ClassTag] (
   private[streaming] def remember(duration: Duration): Unit = {
     if (duration != null && (rememberDuration == null || duration > rememberDuration)) {
       rememberDuration = duration
-      logInfo(s"Duration for remembering RDDs set to $rememberDuration for $this")
+      logInfo(log"Duration for remembering RDDs set to " +
+        log"${MDC(LogKeys.DURATION, rememberDuration)} for " +
+        log"${MDC(LogKeys.DSTREAM, this.toString)}")
     }
     dependencies.foreach(_.remember(parentRememberDuration))
   }
@@ -313,8 +317,10 @@ abstract class DStream[T: ClassTag] (
     if (!isInitialized) {
       throw new SparkException (this.toString + " has not been initialized")
     } else if (time <= zeroTime || ! (time - zeroTime).isMultipleOf(slideDuration)) {
-      logInfo(s"Time $time is invalid as zeroTime is $zeroTime" +
-        s" , slideDuration is $slideDuration and difference is ${time - zeroTime}")
+      logInfo(log"Time ${MDC(LogKeys.TIME, time)} is invalid as zeroTime is " +
+        log"${MDC(LogKeys.ZERO_TIME, zeroTime)}, slideDuration is " +
+        log"${MDC(LogKeys.SLIDE_DURATION, slideDuration)} and difference is " +
+        log"${MDC(LogKeys.DURATION, time - zeroTime)}")
       false
     } else {
       logDebug(s"Time $time is valid")
@@ -352,7 +358,8 @@ abstract class DStream[T: ClassTag] (
           }
           if (checkpointDuration != null && (time - zeroTime).isMultipleOf(checkpointDuration)) {
             newRDD.checkpoint()
-            logInfo(s"Marking RDD ${newRDD.id} for time $time for checkpointing")
+            logInfo(log"Marking RDD ${MDC(LogKeys.RDD_ID, newRDD.id)} for time " +
+              log"${MDC(LogKeys.TIME, time)} for checkpointing")
           }
           generatedRDDs.put(time, newRDD)
         }
@@ -460,7 +467,8 @@ abstract class DStream[T: ClassTag] (
         // Explicitly remove blocks of BlockRDD
         rdd match {
           case b: BlockRDD[_] =>
-            logInfo(s"Removing blocks of RDD $b of time $time")
+            logInfo(log"Removing blocks of RDD ${MDC(LogKeys.RDD_ID, b)} " +
+              log"of time ${MDC(LogKeys.TIME, time)}")
             b.removeBlocks()
           case _ =>
         }
@@ -884,19 +892,23 @@ abstract class DStream[T: ClassTag] (
     val alignedToTime = if ((toTime - zeroTime).isMultipleOf(slideDuration)) {
       toTime
     } else {
-      logWarning(s"toTime ($toTime) is not a multiple of slideDuration ($slideDuration)")
+      logWarning(log"toTime (${MDC(TO_TIME, toTime)}) is not a multiple of slideDuration " +
+        log"(${MDC(SLIDE_DURATION, slideDuration)})")
       toTime.floor(slideDuration, zeroTime)
     }
 
     val alignedFromTime = if ((fromTime - zeroTime).isMultipleOf(slideDuration)) {
       fromTime
     } else {
-      logWarning(s"fromTime ($fromTime) is not a multiple of slideDuration ($slideDuration)")
+      logWarning(log"fromTime (${MDC(FROM_TIME, fromTime)}) is not a multiple of slideDuration " +
+        log"(${MDC(SLIDE_DURATION, slideDuration)})")
       fromTime.floor(slideDuration, zeroTime)
     }
 
-    logInfo(s"Slicing from $fromTime to $toTime" +
-      s" (aligned to $alignedFromTime and $alignedToTime)")
+    logInfo(log"Slicing from ${MDC(LogKeys.FROM_TIME, fromTime)} to " +
+      log"${MDC(LogKeys.TO_TIME, toTime)}" +
+      log" (aligned to ${MDC(LogKeys.ALIGNED_FROM_TIME, alignedFromTime)} and " +
+      log"${MDC(LogKeys.ALIGNED_TO_TIME, alignedToTime)})")
 
     alignedFromTime.to(alignedToTime, slideDuration).flatMap { time =>
       if (time >= zeroTime) getOrCompute(time) else None

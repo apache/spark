@@ -12,7 +12,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t`, false
 -- !query
 CREATE TEMPORARY VIEW temp_v AS SELECT * FROM t
 -- !query analysis
-CreateViewCommand `temp_v`, SELECT * FROM t, false, false, LocalTempView, true
+CreateViewCommand `temp_v`, SELECT * FROM t, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x, c#x, d#x]
       +- SubqueryAlias spark_catalog.default.t
          +- Relation spark_catalog.default.t[a#x,b#x,c#x,d#x] parquet
@@ -32,7 +32,7 @@ CreateTempViewUsing [tableIdent:`temp_Data_Source_View` replace:false provider:o
 -- !query
 CREATE VIEW v AS SELECT * FROM t
 -- !query analysis
-CreateViewCommand `spark_catalog`.`default`.`v`, SELECT * FROM t, false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`default`.`v`, SELECT * FROM t, false, false, PersistedView, COMPENSATION, true
    +- Project [a#x, b#x, c#x, d#x]
       +- SubqueryAlias spark_catalog.default.t
          +- Relation spark_catalog.default.t[a#x,b#x,c#x,d#x] parquet

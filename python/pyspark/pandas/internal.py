@@ -33,6 +33,7 @@ from pyspark.sql import (
     Window,
 )
 from pyspark.sql.types import (  # noqa: F401
+    _drop_metadata,
     BooleanType,
     DataType,
     LongType,
@@ -40,9 +41,9 @@ from pyspark.sql.types import (  # noqa: F401
     StructType,
     StringType,
 )
-from pyspark.sql.utils import is_timestamp_ntz_preferred
-from pyspark.sql.utils import is_remote, get_column_class, get_dataframe_class
+from pyspark.sql.utils import is_timestamp_ntz_preferred, is_remote
 from pyspark import pandas as ps
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas._typing import Label
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.data_type_ops.base import DataTypeOps
@@ -619,8 +620,7 @@ class InternalFrame:
         >>> internal.column_label_names
         [('column_labels_a',), ('column_labels_b',)]
         """
-        SparkDataFrame = get_dataframe_class()
-        assert isinstance(spark_frame, SparkDataFrame)
+        assert isinstance(spark_frame, PySparkDataFrame)
         assert not spark_frame.isStreaming, "pandas-on-Spark does not support Structured Streaming."
 
         if not index_spark_columns:
@@ -672,12 +672,12 @@ class InternalFrame:
         self._sdf = spark_frame
 
         # index_spark_columns
-        Column = get_column_class()
+
         assert all(
-            isinstance(index_scol, Column) for index_scol in index_spark_columns
+            isinstance(index_scol, PySparkColumn) for index_scol in index_spark_columns
         ), index_spark_columns
 
-        self._index_spark_columns: List[Column] = index_spark_columns  # type: ignore[valid-type]
+        self._index_spark_columns: List[PySparkColumn] = index_spark_columns
 
         # data_spark_columns
         if data_spark_columns is None:
@@ -691,9 +691,9 @@ class InternalFrame:
                 and col not in HIDDEN_COLUMNS
             ]
         else:
-            assert all(isinstance(scol, Column) for scol in data_spark_columns)
+            assert all(isinstance(scol, PySparkColumn) for scol in data_spark_columns)
 
-        self._data_spark_columns: List[Column] = data_spark_columns  # type: ignore[valid-type]
+        self._data_spark_columns: List[PySparkColumn] = data_spark_columns
 
         # fields
         if index_fields is None:
@@ -761,14 +761,8 @@ class InternalFrame:
                 # in a few tests when using Spark Connect. However, the function works properly.
                 # Therefore, we temporarily perform Spark Connect tests by excluding metadata
                 # until the issue is resolved.
-                def remove_metadata(struct_field: StructField) -> StructField:
-                    new_struct_field = StructField(
-                        struct_field.name, struct_field.dataType, struct_field.nullable
-                    )
-                    return new_struct_field
-
                 assert all(
-                    remove_metadata(index_field.struct_field) == remove_metadata(struct_field)
+                    _drop_metadata(index_field.struct_field) == _drop_metadata(struct_field)
                     for index_field, struct_field in zip(index_fields, struct_fields)
                 ), (index_fields, struct_fields)
             else:
@@ -795,14 +789,8 @@ class InternalFrame:
                 # in a few tests when using Spark Connect. However, the function works properly.
                 # Therefore, we temporarily perform Spark Connect tests by excluding metadata
                 # until the issue is resolved.
-                def remove_metadata(struct_field: StructField) -> StructField:
-                    new_struct_field = StructField(
-                        struct_field.name, struct_field.dataType, struct_field.nullable
-                    )
-                    return new_struct_field
-
                 assert all(
-                    remove_metadata(data_field.struct_field) == remove_metadata(struct_field)
+                    _drop_metadata(data_field.struct_field) == _drop_metadata(struct_field)
                     for data_field, struct_field in zip(data_fields, struct_fields)
                 ), (data_fields, struct_fields)
             else:
@@ -914,24 +902,14 @@ class InternalFrame:
 
     @staticmethod
     def attach_sequence_column(sdf: PySparkDataFrame, column_name: str) -> PySparkDataFrame:
-        scols = [scol_for(sdf, column) for column in sdf.columns]
         sequential_index = (
             F.row_number().over(Window.orderBy(F.monotonically_increasing_id())).cast("long") - 1
         )
-        return sdf.select(sequential_index.alias(column_name), *scols)
+        return sdf.select(sequential_index.alias(column_name), "*")
 
     @staticmethod
     def attach_distributed_column(sdf: PySparkDataFrame, column_name: str) -> PySparkDataFrame:
-        scols = [scol_for(sdf, column) for column in sdf.columns]
-        # Does not add an alias to avoid having some changes in protobuf definition for now.
-        # The alias is more for query strings in DataFrame.explain, and they are cosmetic changes.
-        if is_remote():
-            return sdf.select(F.monotonically_increasing_id().alias(column_name), *scols)
-        jvm = sdf.sparkSession._jvm
-        tag = jvm.org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS()
-        jexpr = F.monotonically_increasing_id()._jc.expr()
-        jexpr.setTagValue(tag, "distributed_index")
-        return sdf.select(PySparkColumn(jvm.Column(jexpr)).alias(column_name), *scols)
+        return sdf.select(SF.distributed_id().alias(column_name), "*")
 
     @staticmethod
     def attach_distributed_sequence_column(
@@ -952,28 +930,7 @@ class InternalFrame:
         |       2|  c|
         +--------+---+
         """
-        if len(sdf.columns) > 0:
-            if is_remote():
-                from pyspark.sql.connect.column import Column as ConnectColumn
-                from pyspark.sql.connect.expressions import DistributedSequenceID
-
-                return sdf.select(
-                    ConnectColumn(DistributedSequenceID()).alias(column_name),
-                    "*",  # type: ignore[call-overload]
-                )
-            else:
-                return PySparkDataFrame(
-                    sdf._jdf.toDF().withSequenceColumn(column_name),
-                    sdf.sparkSession,
-                )
-        else:
-            cnt = sdf.count()
-            if cnt > 0:
-                return default_session().range(cnt).toDF(column_name)
-            else:
-                return default_session().createDataFrame(
-                    [], schema=StructType().add(column_name, data_type=LongType(), nullable=False)
-                )
+        return sdf.select(SF.distributed_sequence_id().alias(column_name), "*")
 
     def spark_column_for(self, label: Label) -> PySparkColumn:
         """Return Spark Column for the given column label."""
@@ -985,27 +942,27 @@ class InternalFrame:
 
     def spark_column_name_for(self, label_or_scol: Union[Label, PySparkColumn]) -> str:
         """Return the actual Spark column name for the given column label."""
-        Column = get_column_class()
-        if isinstance(label_or_scol, Column):
+
+        if isinstance(label_or_scol, PySparkColumn):
             return self.spark_frame.select(label_or_scol).columns[0]
         else:
-            return self.field_for(label_or_scol).name  # type: ignore[arg-type]
+            return self.field_for(label_or_scol).name
 
     def spark_type_for(self, label_or_scol: Union[Label, PySparkColumn]) -> DataType:
         """Return DataType for the given column label."""
-        Column = get_column_class()
-        if isinstance(label_or_scol, Column):
+
+        if isinstance(label_or_scol, PySparkColumn):
             return self.spark_frame.select(label_or_scol).schema[0].dataType
         else:
-            return self.field_for(label_or_scol).spark_type  # type: ignore[arg-type]
+            return self.field_for(label_or_scol).spark_type
 
     def spark_column_nullable_for(self, label_or_scol: Union[Label, PySparkColumn]) -> bool:
         """Return nullability for the given column label."""
-        Column = get_column_class()
-        if isinstance(label_or_scol, Column):
+
+        if isinstance(label_or_scol, PySparkColumn):
             return self.spark_frame.select(label_or_scol).schema[0].nullable
         else:
-            return self.field_for(label_or_scol).nullable  # type: ignore[arg-type]
+            return self.field_for(label_or_scol).nullable
 
     def field_for(self, label: Label) -> InternalField:
         """Return InternalField for the given column label."""

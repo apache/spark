@@ -14,7 +14,7 @@ DropTableCommand `spark_catalog`.`default`.`t2`, true, true, false
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW t1 AS VALUES (0, 1), (1, 2) t(c1, c2)
 -- !query analysis
-CreateViewCommand `t1`, VALUES (0, 1), (1, 2) t(c1, c2), false, true, LocalTempView, true
+CreateViewCommand `t1`, VALUES (0, 1), (1, 2) t(c1, c2), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias t
       +- LocalRelation [c1#x, c2#x]
 
@@ -22,7 +22,7 @@ CreateViewCommand `t1`, VALUES (0, 1), (1, 2) t(c1, c2), false, true, LocalTempV
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW t2 AS VALUES (0, 1), (1, 2), (1, 3) t(partition_col, input)
 -- !query analysis
-CreateViewCommand `t2`, VALUES (0, 1), (1, 2), (1, 3) t(partition_col, input), false, true, LocalTempView, true
+CreateViewCommand `t2`, VALUES (0, 1), (1, 2), (1, 3) t(partition_col, input), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias t
       +- LocalRelation [partition_col#x, input#x]
 
@@ -110,7 +110,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "treeNode" : "LateralJoin lateral-subquery#x [], Inner\n:  +- Project [count#x, total#x, last#x]\n:     +- LateralJoin lateral-subquery#x [c#x], Inner\n:        :  +- SubqueryAlias __auto_generated_subquery_name_1\n:        :     +- Generate UDTFCountSumLast(outer(c#x))#x, false, [count#x, total#x, last#x]\n:        :        +- OneRowRelation\n:        +- SubqueryAlias __auto_generated_subquery_name_0\n:           +- Project [named_struct(partition_col, partition_col#x, input, input#x, partition_by_0, partition_by_0#x) AS c#x]\n:              +- Sort [partition_by_0#x ASC NULLS FIRST, input#x DESC NULLS LAST], false\n:                 +- RepartitionByExpression [partition_by_0#x]\n:                    +- Project [partition_col#x, input#x, partition_col#x AS partition_by_0#x]\n:                       +- SubqueryAlias t2\n:                          +- View (`t2`, [partition_col#x,input#x])\n:                             +- Project [cast(partition_col#x as int) AS partition_col#x, cast(input#x as int) AS input#x]\n:                                +- SubqueryAlias t\n:                                   +- LocalRelation [partition_col#x, input#x]\n+- SubqueryAlias t\n   +- LocalRelation [col#x]\n"
+    "treeNode" : "LateralJoin lateral-subquery#x [], Inner\n:  +- Project [count#x, total#x, last#x]\n:     +- LateralJoin lateral-subquery#x [c#x], Inner\n:        :  +- SubqueryAlias __auto_generated_subquery_name_1\n:        :     +- Generate UDTFCountSumLast(outer(c#x))#x, false, [count#x, total#x, last#x]\n:        :        +- OneRowRelation\n:        +- SubqueryAlias __auto_generated_subquery_name_0\n:           +- Project [named_struct(partition_col, partition_col#x, input, input#x, partition_by_0, partition_by_0#x) AS c#x]\n:              +- Sort [partition_by_0#x ASC NULLS FIRST, input#x DESC NULLS LAST], false\n:                 +- RepartitionByExpression [partition_by_0#x]\n:                    +- Project [partition_col#x, input#x, partition_col#x AS partition_by_0#x]\n:                       +- SubqueryAlias t2\n:                          +- View (`t2`, [partition_col#x, input#x])\n:                             +- Project [cast(partition_col#x as int) AS partition_col#x, cast(input#x as int) AS input#x]\n:                                +- SubqueryAlias t\n:                                   +- LocalRelation [partition_col#x, input#x]\n+- SubqueryAlias t\n   +- LocalRelation [col#x]\n"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -285,6 +285,85 @@ SELECT * FROM UDTFPartitionByOrderByComplexExpr(TABLE(t2))
 
 
 -- !query
+SELECT * FROM UDTFPartitionByOrderBySelectExpr(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM UDTFPartitionByOrderBySelectComplexExpr(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM UDTFPartitionByOrderBySelectExprOnlyPartitionColumn(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM UDTFInvalidSelectExprParseError(TABLE(t2))
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`unparsable`",
+    "proposal" : "`t2`.`input`, `partition_by_0`, `t2`.`partition_col`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 10,
+    "fragment" : "unparsable"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM UDTFInvalidSelectExprStringValue(TABLE(t2))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
+  "messageParameters" : {
+    "msg" : "Failed to evaluate the user-defined table function 'UDTFInvalidSelectExprStringValue' because the static 'analyze' method returned an 'AnalyzeResult' object with the 'select' field set to a value besides a list or tuple of 'SelectedColumn' objects. Please update the table function and then try the query again."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 57,
+    "fragment" : "UDTFInvalidSelectExprStringValue(TABLE(t2))"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM UDTFInvalidComplexSelectExprMissingAlias(TABLE(t2))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UDTF_INVALID_REQUESTED_SELECTED_EXPRESSION_FROM_ANALYZE_METHOD_REQUIRES_ALIAS",
+  "sqlState" : "42802",
+  "messageParameters" : {
+    "expression" : "(input + 1)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 65,
+    "fragment" : "UDTFInvalidComplexSelectExprMissingAlias(TABLE(t2))"
+  } ]
+}
+
+
+-- !query
 SELECT * FROM UDTFInvalidOrderByAscKeyword(TABLE(t2))
 -- !query analysis
 org.apache.spark.sql.AnalysisException
@@ -300,6 +379,26 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 15,
     "stopIndex" : 53,
     "fragment" : "UDTFInvalidOrderByAscKeyword(TABLE(t2))"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM UDTFInvalidOrderByStringList(TABLE(t2))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
+  "messageParameters" : {
+    "msg" : "Failed to evaluate the user-defined table function 'UDTFInvalidOrderByStringList' because the static 'analyze' method returned an 'AnalyzeResult' object with the 'orderBy' field set to a value besides a list or tuple of 'OrderingColumn' objects. Please update the table function and then try the query again."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 53,
+    "fragment" : "UDTFInvalidOrderByStringList(TABLE(t2))"
   } ]
 }
 
@@ -578,8 +677,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
   "sqlState" : "4274K",
   "messageParameters" : {
-    "functionName" : "`UDTFForwardStateFromAnalyzeWithKwargs`",
-    "parameterName" : "`argument`"
+    "parameterName" : "`argument`",
+    "routineName" : "`UDTFForwardStateFromAnalyzeWithKwargs`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -771,8 +870,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
   "sqlState" : "4274K",
   "messageParameters" : {
-    "functionName" : "`UDTFWithSinglePartition`",
-    "parameterName" : "`initial_count`"
+    "parameterName" : "`initial_count`",
+    "routineName" : "`UDTFWithSinglePartition`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -801,6 +900,47 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 1,
     "stopIndex" : 10,
     "fragment" : "unparsable"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM UDTFPartitionByIndexingBug(
+    TABLE(
+        SELECT
+            5 AS unused_col,
+            'hi' AS partition_col,
+            1.0 AS double_col
+
+        UNION ALL
+
+        SELECT
+            4 AS unused_col,
+            'hi' AS partition_col,
+            1.0 AS double_col
+    )
+)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM
+    InvalidEvalReturnsNoneToNonNullableColumnScalarType(TABLE(SELECT 1 AS X), unresolved_column)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`unresolved_column`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 93,
+    "stopIndex" : 109,
+    "fragment" : "unresolved_column"
   } ]
 }
 

@@ -16,13 +16,15 @@
 #
 
 import functools
+import platform
 import pydoc
 import shutil
 import tempfile
 import unittest
 import datetime
+import io
+from contextlib import redirect_stdout
 
-from pyspark import SparkContext, SQLContext
 from pyspark.sql import SparkSession, Column, Row
 from pyspark.sql.functions import col, udf, assert_true, lit, rand
 from pyspark.sql.udf import UserDefinedFunction
@@ -33,14 +35,21 @@ from pyspark.sql.types import (
     DoubleType,
     LongType,
     ArrayType,
+    MapType,
     StructType,
     StructField,
     TimestampNTZType,
     DayTimeIntervalType,
+    VariantType,
+    VariantVal,
 )
 from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
-from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled, test_not_compiled_message
-from pyspark.testing.utils import QuietTest, assertDataFrameEqual
+from pyspark.testing.sqlutils import (
+    ReusedSQLTestCase,
+    test_compiled,
+    test_not_compiled_message,
+)
+from pyspark.testing.utils import assertDataFrameEqual
 
 
 class BaseUDFTestsMixin(object):
@@ -75,6 +84,8 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(row[0], 5)
 
     def test_udf_on_sql_context(self):
+        from pyspark import SQLContext
+
         # This is to check if a deprecated 'SQLContext.registerFunction' can call its alias.
         sqlContext = SQLContext.getOrCreate(self.spark.sparkContext)
         sqlContext.registerFunction("oneArg", lambda x: len(x), IntegerType())
@@ -105,7 +116,7 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(row[0], 5)
 
     def test_udf_registration_return_type_not_none(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_udf_registration_return_type_not_none()
 
     def check_udf_registration_return_type_not_none(self):
@@ -117,8 +128,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_SPECIFY_RETURN_TYPE_FOR_UDF",
-            message_parameters={"arg_name": "f", "return_type": "StringType()"},
+            errorClass="CANNOT_SPECIFY_RETURN_TYPE_FOR_UDF",
+            messageParameters={"arg_name": "f", "return_type": "StringType()"},
         )
 
     def test_nondeterministic_udf(self):
@@ -164,7 +175,7 @@ class BaseUDFTestsMixin(object):
         self.assertFalse(deterministic)
 
     def test_nondeterministic_udf_in_aggregate(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_nondeterministic_udf_in_aggregate()
 
     def check_nondeterministic_udf_in_aggregate(self):
@@ -226,11 +237,12 @@ class BaseUDFTestsMixin(object):
         f = udf(lambda a, b: a == b, BooleanType())
         # The udf uses attributes from both sides of join, so it is pulled out as Filter +
         # Cross join.
-        df = left.join(right, f("a", "b"))
         with self.sql_conf({"spark.sql.crossJoin.enabled": False}):
+            df = left.join(right, f("a", "b"))
             with self.assertRaisesRegex(AnalysisException, "Detected implicit cartesian product"):
                 df.collect()
         with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
+            df = left.join(right, f("a", "b"))
             self.assertEqual(df.collect(), [Row(a=1, b=1)])
 
     def test_udf_in_left_outer_join_condition(self):
@@ -316,11 +328,74 @@ class BaseUDFTestsMixin(object):
 
     def test_udf_with_filter_function(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
-        from pyspark.sql.functions import col
 
         my_filter = udf(lambda a: a < 2, BooleanType())
         sel = df.select(col("key"), col("value")).filter((my_filter(col("key"))) & (df.value < "2"))
         self.assertEqual(sel.collect(), [Row(key=1, value="1")])
+
+    def test_udf_with_variant_input(self):
+        df = self.spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v")
+
+        u = udf(lambda u: str(u), StringType())
+        with self.assertRaises(AnalysisException) as ae:
+            df.select(u(col("v"))).collect()
+
+        self.check_error(
+            exception=ae.exception,
+            errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+            messageParameters={"sqlExpr": '"<lambda>(v)"', "dataType": "VARIANT"},
+        )
+
+    def test_udf_with_complex_variant_input(self):
+        df = self.spark.range(0, 10).selectExpr(
+            "named_struct('v', parse_json(cast(id as string))) struct_of_v"
+        )
+
+        u = udf(lambda u: str(u), StringType())
+
+        with self.assertRaises(AnalysisException) as ae:
+            df.select(u(col("struct_of_v"))).collect()
+
+        self.check_error(
+            exception=ae.exception,
+            errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+            messageParameters={
+                "sqlExpr": '"<lambda>(struct_of_v)"',
+                "dataType": "STRUCT<v: VARIANT NOT NULL>",
+            },
+        )
+
+    def test_udf_with_variant_output(self):
+        # The variant value returned corresponds to a JSON string of {"a": "b"}.
+        u = udf(
+            lambda: VariantVal(bytes([2, 1, 0, 0, 2, 5, 98]), bytes([1, 1, 0, 1, 97])),
+            VariantType(),
+        )
+
+        with self.assertRaises(AnalysisException) as ae:
+            self.spark.range(0, 10).select(u()).collect()
+
+        self.check_error(
+            exception=ae.exception,
+            errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+            messageParameters={"sqlExpr": '"<lambda>()"', "dataType": "VARIANT"},
+        )
+
+    def test_udf_with_complex_variant_output(self):
+        # The variant value returned corresponds to a JSON string of {"a": "b"}.
+        u = udf(
+            lambda: {"v", VariantVal(bytes([2, 1, 0, 0, 2, 5, 98]), bytes([1, 1, 0, 1, 97]))},
+            MapType(StringType(), VariantType()),
+        )
+
+        with self.assertRaises(AnalysisException) as ae:
+            self.spark.range(0, 10).select(u()).collect()
+
+        self.check_error(
+            exception=ae.exception,
+            errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+            messageParameters={"sqlExpr": '"<lambda>()"', "dataType": "MAP<STRING, VARIANT>"},
+        )
 
     def test_udf_with_aggregate_function(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
@@ -389,6 +464,8 @@ class BaseUDFTestsMixin(object):
         )
 
     def test_udf_registration_returns_udf_on_sql_context(self):
+        from pyspark import SQLContext
+
         df = self.spark.range(10)
 
         # This is to check if a 'SQLContext.udf' can call its alias.
@@ -431,7 +508,7 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(row.asDict(), Row(name="b", avg=102.0).asDict())
 
     def test_err_udf_registration(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_err_udf_registration()
 
     def check_err_udf_registration(self):
@@ -440,8 +517,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_CALLABLE",
-            message_parameters={"arg_name": "func", "arg_type": "str"},
+            errorClass="NOT_CALLABLE",
+            messageParameters={"arg_name": "func", "arg_type": "str"},
         )
 
     def test_non_existed_udf(self):
@@ -453,6 +530,8 @@ class BaseUDFTestsMixin(object):
         )
 
     def test_non_existed_udf_with_sql_context(self):
+        from pyspark import SQLContext
+
         # This is to check if a deprecated 'SQLContext.registerJavaFunction' can call its alias.
         sqlContext = SQLContext.getOrCreate(self.spark.sparkContext)
         self.assertRaisesRegex(
@@ -807,14 +886,16 @@ class BaseUDFTestsMixin(object):
         df = self.spark.range(1)
         df.select(udf(func)("id")).cache()
 
-        self.assertEqual(
-            df.select(udf(func)("id"))
-            ._jdf.queryExecution()
-            .withCachedData()
-            .getClass()
-            .getSimpleName(),
-            "InMemoryRelation",
-        )
+        with io.StringIO() as buf, redirect_stdout(buf):
+            df.select(udf(func)("id")).explain()
+            # == Physical Plan ==
+            # InMemoryTableScan [func(id)#30]
+            #    +- InMemoryRelation [func(id)#30], StorageLevel(...)
+            #          +- *(2) Project [pythonUDF0#5 AS func(id)#3]
+            #             +- BatchEvalPython [func(id#0L)#2], [pythonUDF0#5]
+            #                +- *(1) Range (0, 1, step=1, splits=12)
+            self.assertEqual(1, buf.getvalue().count("InMemoryTableScan"))
+            self.assertEqual(1, buf.getvalue().count("InMemoryRelation"))
 
     # SPARK-34545
     def test_udf_input_serialization_valuecompare_disabled(self):
@@ -890,7 +971,9 @@ class BaseUDFTestsMixin(object):
         df = self.spark.range(1).selectExpr("array(array(1, 2), array(3, 4)) as nested_array")
         # Input
         row = df.select(udf(lambda x: str(x))("nested_array")).first()
-        self.assertEqual(row[0], "[[1, 2], [3, 4]]")
+        self.assertIn(
+            row[0], ["[[1, 2], [3, 4]]", "[[np.int32(1), np.int32(2)], [np.int32(3), np.int32(4)]]"]
+        )
         # Output
 
         @udf(returnType=df.dtypes[0][1])
@@ -1039,6 +1122,9 @@ class BaseUDFTestsMixin(object):
         with self.assertRaisesRegex(PythonException, "StopIteration"):
             self.spark.range(10).select(test_udf(col("id"))).show()
 
+    @unittest.skipIf(
+        "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+    )
     def test_python_udf_segfault(self):
         with self.sql_conf({"spark.sql.execution.pyspark.udf.faulthandler.enabled": True}):
             with self.assertRaisesRegex(Exception, "Segmentation fault"):
@@ -1047,7 +1133,7 @@ class BaseUDFTestsMixin(object):
                 self.spark.range(1).select(udf(lambda x: ctypes.string_at(0))("id")).collect()
 
     def test_err_udf_init(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_err_udf_init()
 
     def check_err_udf_init(self):
@@ -1056,8 +1142,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_CALLABLE",
-            message_parameters={"arg_name": "func", "arg_type": "str"},
+            errorClass="NOT_CALLABLE",
+            messageParameters={"arg_name": "func", "arg_type": "str"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1065,8 +1151,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_DATATYPE_OR_STR",
-            message_parameters={"arg_name": "returnType", "arg_type": "int"},
+            errorClass="NOT_DATATYPE_OR_STR",
+            messageParameters={"arg_name": "returnType", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1074,8 +1160,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_INT",
-            message_parameters={"arg_name": "evalType", "arg_type": "str"},
+            errorClass="NOT_INT",
+            messageParameters={"arg_name": "evalType", "arg_type": "str"},
         )
 
 
@@ -1088,6 +1174,8 @@ class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
 
 class UDFInitializationTests(unittest.TestCase):
     def tearDown(self):
+        from pyspark import SparkContext
+
         if SparkSession._instantiatedSession is not None:
             SparkSession._instantiatedSession.stop()
 
@@ -1095,6 +1183,8 @@ class UDFInitializationTests(unittest.TestCase):
             SparkContext._active_spark_context.stop()
 
     def test_udf_init_should_not_initialize_context(self):
+        from pyspark import SparkContext
+
         UserDefinedFunction(lambda x: x, StringType())
 
         self.assertIsNone(

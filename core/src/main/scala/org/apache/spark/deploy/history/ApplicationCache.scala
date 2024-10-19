@@ -17,18 +17,19 @@
 
 package org.apache.spark.deploy.history
 
-import java.util.concurrent.ExecutionException
-import javax.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletException, ServletRequest, ServletResponse}
-import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
+import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, ExecutionException}
 
 import scala.jdk.CollectionConverters._
 
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, RemovalListener, RemovalNotification}
 import com.google.common.util.concurrent.UncheckedExecutionException
+import jakarta.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletException, ServletRequest, ServletResponse}
+import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.servlet.FilterHolder
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Clock
@@ -48,11 +49,24 @@ private[history] class ApplicationCache(
     val retainedApplications: Int,
     val clock: Clock) extends Logging {
 
+  /**
+   * Keep track of SparkUIs in [[ApplicationCache#appCache]] and SparkUIs removed from
+   * [[ApplicationCache#appCache]] but not detached yet.
+   */
+  private val loadedApps = new ConcurrentHashMap[CacheKey, CountDownLatch]()
+
   private val appLoader = new CacheLoader[CacheKey, CacheEntry] {
 
     /** the cache key doesn't match a cached entry, or the entry is out-of-date, so load it. */
     override def load(key: CacheKey): CacheEntry = {
-      loadApplicationEntry(key.appId, key.attemptId)
+      // Ensure old SparkUI has been detached before loading new one.
+      val removalLatch = loadedApps.get(key)
+      if (removalLatch != null) {
+        removalLatch.await()
+      }
+      val entry = loadApplicationEntry(key.appId, key.attemptId)
+      loadedApps.put(key, new CountDownLatch(1))
+      entry
     }
 
   }
@@ -63,11 +77,13 @@ private[history] class ApplicationCache(
      * Removal event notifies the provider to detach the UI.
      * @param rm removal notification
      */
-    override def onRemoval(rm: RemovalNotification[CacheKey, CacheEntry]): Unit = {
+    override def onRemoval(rm: RemovalNotification[CacheKey, CacheEntry]): Unit = try {
       metrics.evictionCount.inc()
       val key = rm.getKey
       logDebug(s"Evicting entry ${key}")
       operations.detachSparkUI(key.appId, key.attemptId, rm.getValue().loadedUI.ui)
+    } finally {
+      loadedApps.remove(rm.getKey()).countDown()
     }
   }
 
@@ -155,19 +171,19 @@ private[history] class ApplicationCache(
    */
   @throws[NoSuchElementException]
   private def loadApplicationEntry(appId: String, attemptId: Option[String]): CacheEntry = {
-    lazy val application = s"$appId/${attemptId.mkString}"
-    logDebug(s"Loading application Entry $application")
+    lazy val application = log"${MDC(APP_ID, appId)}/${MDC(APP_ATTEMPT_ID, attemptId.mkString)}"
+    logDebug(log"Loading application Entry " + application)
     metrics.loadCount.inc()
     val loadedUI = time(metrics.loadTimer) {
       metrics.lookupCount.inc()
       operations.getAppUI(appId, attemptId) match {
         case Some(loadedUI) =>
-          logDebug(s"Loaded application $application")
+          logDebug(log"Loaded application " + application)
           loadedUI
         case None =>
           metrics.lookupFailureCount.inc()
           // guava's cache logs via java.util log, so is of limited use. Hence: our own message
-          logInfo(s"Failed to load application attempt $application")
+          logInfo(log"Failed to load application attempt " + application)
           throw new NoSuchElementException(s"no application with application Id '$appId'" +
               attemptId.map { id => s" attemptId '$id'" }.getOrElse(" and no attempt Id"))
       }
@@ -182,7 +198,7 @@ private[history] class ApplicationCache(
       new CacheEntry(loadedUI, completed)
     } catch {
       case e: Exception =>
-        logWarning(s"Failed to initialize application UI for $application", e)
+        logWarning(log"Failed to initialize application UI for ${MDC(APP_ID, application)}", e)
         operations.detachSparkUI(appId, attemptId, loadedUI.ui)
         throw e
     }

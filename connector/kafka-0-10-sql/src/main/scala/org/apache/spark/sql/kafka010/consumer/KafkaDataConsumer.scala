@@ -30,8 +30,11 @@ import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaTokenUtil}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
+import org.apache.spark.sql.kafka010.KafkaExceptions
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer.{AvailableOffsetRange, UNKNOWN_OFFSET}
 import org.apache.spark.util.{ShutdownHookManager, UninterruptibleThread}
@@ -340,8 +343,11 @@ private[kafka010] class KafkaDataConsumer(
           releaseConsumer()
           fetchedData.reset()
 
-          reportDataLoss(topicPartition, groupId, failOnDataLoss,
-            s"Cannot fetch offset $toFetchOffset", e)
+          if (failOnDataLoss) {
+            throwOnDataLoss(toFetchOffset, untilOffset, topicPartition, groupId, e)
+          } else {
+            logOnDataLoss(topicPartition, groupId, s"Cannot fetch offset $toFetchOffset", e)
+          }
 
           val oldToFetchOffsetd = toFetchOffset
           toFetchOffset = getEarliestAvailableOffsetBetween(consumer, toFetchOffset, untilOffset)
@@ -386,10 +392,12 @@ private[kafka010] class KafkaDataConsumer(
       .getOrElse("")
     val walTime = System.nanoTime() - startTimestampNano
 
-    logInfo(
-      s"From Kafka $kafkaMeta read $totalRecordsRead records through $numPolls polls (polled " +
-      s" out $numRecordsPolled records), taking $totalTimeReadNanos nanos, during time span of " +
-      s"$walTime nanos."
+    logInfo(log"From Kafka ${MDC(CONSUMER, kafkaMeta)} read " +
+      log"${MDC(NUM_RECORDS_READ, totalRecordsRead)} records through " +
+      log"${MDC(NUM_KAFKA_PULLS, numPolls)} polls " +
+      log"(polled out ${MDC(NUM_KAFKA_RECORDS_PULLED, numRecordsPolled)} records), " +
+      log"taking ${MDC(TOTAL_TIME_READ, totalTimeReadNanos / NANOS_PER_MILLIS.toDouble)} ms, " +
+      log"during time span of ${MDC(TIME, walTime / NANOS_PER_MILLIS.toDouble)} ms."
     )
 
     releaseConsumer()
@@ -422,7 +430,8 @@ private[kafka010] class KafkaDataConsumer(
     val range = timeNanos {
       consumer.getAvailableOffsetRange()
     }
-    logWarning(s"Some data may be lost. Recovering from the earliest offset: ${range.earliest}")
+    logWarning(log"Some data may be lost. Recovering from the earliest offset: " +
+      log"${MDC(OFFSET, range.earliest)}")
 
     val topicPartition = consumer.topicPartition
     val groupId = consumer.groupId
@@ -440,11 +449,12 @@ private[kafka010] class KafkaDataConsumer(
       //      |          |              |                |
       //   offset   untilOffset   earliestOffset   latestOffset
       val warningMessage =
-      s"""
-         |The current available offset range is $range.
-         | Offset $offset is out of range, and records in [$offset, $untilOffset) will be
-         | skipped ${additionalMessage(topicPartition, groupId, failOnDataLoss = false)}
-        """.stripMargin
+      log"""
+         |The current available offset range is ${MDC(RANGE, range)}.
+         | Offset ${MDC(OFFSET, offset)} is out of range, and records in
+         | [${MDC(OFFSET, offset)}, ${MDC(UNTIL_OFFSET, untilOffset)}] will be
+         | skipped""".stripMargin +
+        additionalWarningMessage(topicPartition, groupId)
       logWarning(warningMessage)
       UNKNOWN_OFFSET
     } else if (offset >= range.earliest) {
@@ -456,8 +466,8 @@ private[kafka010] class KafkaDataConsumer(
       // This will happen when a topic is deleted and recreated, and new data are pushed very fast,
       // then we will see `offset` disappears first then appears again. Although the parameters
       // are same, the state in Kafka cluster is changed, so the outer loop won't be endless.
-      logWarning(s"Found a disappeared offset $offset. Some data may be lost " +
-        s"${additionalMessage(topicPartition, groupId, failOnDataLoss = false)}")
+      logWarning(log"Found a disappeared offset ${MDC(OFFSET, offset)}. Some data may be lost " +
+        additionalWarningMessage(topicPartition, groupId))
       offset
     } else {
       // ------------------------------------------------------------------------------
@@ -466,10 +476,11 @@ private[kafka010] class KafkaDataConsumer(
       //   offset   earliestOffset   min(untilOffset,latestOffset)   max(untilOffset, latestOffset)
       val warningMessage =
       s"""
-         |The current available offset range is $range.
-         | Offset ${offset} is out of range, and records in [$offset, ${range.earliest}) will be
-         | skipped ${additionalMessage(topicPartition, groupId, failOnDataLoss = false)}
-        """.stripMargin
+         |The current available offset range is ${MDC(RANGE, range)}.
+         | Offset ${MDC(OFFSET, offset)} is out of range, and records in
+         | [${MDC(OFFSET, offset)}, ${MDC(UNTIL_OFFSET, range.earliest)}] will be
+         | skipped""".stripMargin +
+        additionalWarningMessage(topicPartition, groupId)
       logWarning(warningMessage)
       range.earliest
     }
@@ -535,18 +546,17 @@ private[kafka010] class KafkaDataConsumer(
         }
         // This may happen when some records aged out but their offsets already got verified
         if (failOnDataLoss) {
-          reportDataLoss(consumer.topicPartition, consumer.groupId, failOnDataLoss = true,
-            s"Cannot fetch records in [$offset, ${record.offset})")
+          throwOnDataLoss(offset, record.offset, consumer.topicPartition, consumer.groupId)
           // Never happen as "reportDataLoss" will throw an exception
           throw new IllegalStateException(
             "reportDataLoss didn't throw an exception when 'failOnDataLoss' is true")
         } else if (record.offset >= untilOffset) {
-          reportDataLoss(consumer.topicPartition, consumer.groupId, failOnDataLoss = false,
+          logOnDataLoss(consumer.topicPartition, consumer.groupId,
             s"Skip missing records in [$offset, $untilOffset)")
           // Set `nextOffsetToFetch` to `untilOffset` to finish the current batch.
           fetchedRecord.withRecord(null, untilOffset)
         } else {
-          reportDataLoss(consumer.topicPartition, consumer.groupId, failOnDataLoss = false,
+          logOnDataLoss(consumer.topicPartition, consumer.groupId,
             s"Skip missing records in [$offset, ${record.offset})")
           fetchedRecord.withRecord(record, fetchedData.nextOffsetInFetchedData)
         }
@@ -624,31 +634,49 @@ private[kafka010] class KafkaDataConsumer(
   /**
    * Return an addition message including useful message and instruction.
    */
-  private def additionalMessage(
+  private def additionalWarningMessage(
       topicPartition: TopicPartition,
-      groupId: String,
-      failOnDataLoss: Boolean): String = {
-    if (failOnDataLoss) {
-      s"(GroupId: $groupId, TopicPartition: $topicPartition). " +
-        s"$INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE"
-    } else {
-      s"(GroupId: $groupId, TopicPartition: $topicPartition). " +
-        s"$INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE"
-    }
+      groupId: String): MessageWithContext = {
+    log"(GroupId: ${MDC(GROUP_ID, groupId)}, " +
+      log"TopicPartition: ${MDC(TOPIC_PARTITION, topicPartition)}). " +
+      log"${MDC(TIP, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE)}"
   }
 
   /**
-   * Throw an exception or log a warning as per `failOnDataLoss`.
+   * Throw an exception when data loss is detected.
    */
-  private def reportDataLoss(
+  private def throwOnDataLoss(
+      startOffset: Long,
+      endOffset: Long,
       topicPartition: TopicPartition,
       groupId: String,
-      failOnDataLoss: Boolean,
+      cause: Throwable = null): Unit = {
+    dataLoss += 1
+    throw KafkaExceptions.couldNotReadOffsetRange(
+      startOffset,
+      endOffset,
+      topicPartition,
+      groupId,
+      cause)
+  }
+
+  /**
+   * Log a warning when data loss is detected.
+   */
+  private def logOnDataLoss(
+      topicPartition: TopicPartition,
+      groupId: String,
       message: String,
       cause: Throwable = null): Unit = {
-    val finalMessage = s"$message ${additionalMessage(topicPartition, groupId, failOnDataLoss)}"
+    val finalMessage = log"${MDC(ERROR, message)}" +
+      additionalWarningMessage(topicPartition, groupId)
+
     dataLoss += 1
-    reportDataLoss0(failOnDataLoss, finalMessage, cause)
+    if (cause != null) {
+      logWarning(finalMessage, cause)
+    } else {
+      logWarning(finalMessage)
+    }
   }
 
   private def runUninterruptiblyIfPossible[T](body: => T): T = Thread.currentThread match {
@@ -714,24 +742,4 @@ private[kafka010] object KafkaDataConsumer extends Logging {
 
     new KafkaDataConsumer(topicPartition, kafkaParams, consumerPool, fetchedDataPool)
   }
-
-  private def reportDataLoss0(
-      failOnDataLoss: Boolean,
-      finalMessage: String,
-      cause: Throwable = null): Unit = {
-    if (failOnDataLoss) {
-      if (cause != null) {
-        throw new IllegalStateException(finalMessage, cause)
-      } else {
-        throw new IllegalStateException(finalMessage)
-      }
-    } else {
-      if (cause != null) {
-        logWarning(finalMessage, cause)
-      } else {
-        logWarning(finalMessage)
-      }
-    }
-  }
-
 }

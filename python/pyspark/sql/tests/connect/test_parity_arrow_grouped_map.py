@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import contextlib
+
 import unittest
 
 from pyspark.sql.tests.test_arrow_grouped_map import GroupedMapInArrowTestsMixin
@@ -22,9 +22,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class GroupedApplyInArrowParityTests(GroupedMapInArrowTestsMixin, ReusedConnectTestCase):
-    def quiet_test(self):
-        # No-op
-        return contextlib.nullcontext()
+    pass
 
 
 if __name__ == "__main__":

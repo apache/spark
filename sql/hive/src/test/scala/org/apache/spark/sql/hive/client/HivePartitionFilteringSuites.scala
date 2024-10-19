@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive.client
 
-import scala.collection.immutable.IndexedSeq
-
 import org.scalatest.Suite
 
 class HivePartitionFilteringSuites extends Suite with HiveClientVersions {

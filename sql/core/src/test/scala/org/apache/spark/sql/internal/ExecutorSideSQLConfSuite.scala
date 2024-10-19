@@ -21,7 +21,7 @@ import java.util.UUID
 
 import org.scalatest.Assertions._
 
-import org.apache.spark.{SparkException, SparkFunSuite, TaskContext}
+import org.apache.spark.{SparkFunSuite, SparkNoSuchElementException, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -127,8 +127,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
     }
     val dummyQueryExecution1 = FakeQueryExecution(spark, physicalPlan)
     // Without setting the configs assertions fail
-    val e = intercept[SparkException](dummyQueryExecution1.toRdd.collect())
-    assert(e.getCause.isInstanceOf[NoSuchElementException])
+    intercept[SparkNoSuchElementException](dummyQueryExecution1.toRdd.collect())
   }
 
   test("SPARK-30556 propagate local properties to subquery execution thread") {

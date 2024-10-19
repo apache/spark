@@ -24,7 +24,8 @@ import org.apache.hadoop.mapreduce.{OutputCommitter => MapReduceOutputCommitter}
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.executor.CommitDeniedException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{TASK_ATTEMPT_ID, TOTAL_TIME}
 import org.apache.spark.util.Utils
 
 object SparkHadoopMapRedUtil extends Logging {
@@ -49,10 +50,13 @@ object SparkHadoopMapRedUtil extends Logging {
     def performCommit(): Unit = {
       try {
         val (_, timeCost) = Utils.timeTakenMs(committer.commitTask(mrTaskContext))
-        logInfo(s"$mrTaskAttemptID: Committed. Elapsed time: $timeCost ms.")
+        logInfo(log"${MDC(TASK_ATTEMPT_ID, mrTaskAttemptID)}: Committed." +
+          log" Elapsed time: ${MDC(TOTAL_TIME, timeCost)} ms.")
       } catch {
         case cause: IOException =>
-          logError(s"Error committing the output of task: $mrTaskAttemptID", cause)
+          logError(
+            log"Error committing the output of task: ${MDC(TASK_ATTEMPT_ID, mrTaskAttemptID)}",
+            cause)
           committer.abortTask(mrTaskContext)
           throw cause
       }
@@ -77,12 +81,13 @@ object SparkHadoopMapRedUtil extends Logging {
         if (canCommit) {
           performCommit()
         } else {
-          val message =
-            s"$mrTaskAttemptID: Not committed because the driver did not authorize commit"
+          val message = log"${MDC(TASK_ATTEMPT_ID, mrTaskAttemptID)}: Not committed because" +
+            log" the driver did not authorize commit"
           logInfo(message)
           // We need to abort the task so that the driver can reschedule new attempts, if necessary
           committer.abortTask(mrTaskContext)
-          throw new CommitDeniedException(message, ctx.stageId(), splitId, ctx.attemptNumber())
+          throw new CommitDeniedException(message.message, ctx.stageId(), splitId,
+            ctx.attemptNumber())
         }
       } else {
         // Speculation is disabled or a user has chosen to manually bypass the commit coordination
@@ -90,7 +95,8 @@ object SparkHadoopMapRedUtil extends Logging {
       }
     } else {
       // Some other attempt committed the output, so we do nothing and signal success
-      logInfo(s"No need to commit output of task because needsTaskCommit=false: $mrTaskAttemptID")
+      logInfo(log"No need to commit output of task because needsTaskCommit=false:" +
+        log" ${MDC(TASK_ATTEMPT_ID, mrTaskAttemptID)}")
     }
   }
 }

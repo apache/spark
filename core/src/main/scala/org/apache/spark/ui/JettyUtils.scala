@@ -19,13 +19,13 @@ package org.apache.spark.ui
 
 import java.net.{URI, URL, URLDecoder}
 import java.util.EnumSet
-import javax.servlet.DispatcherType
-import javax.servlet.http._
 
 import scala.language.implicitConversions
 import scala.util.Try
 import scala.xml.Node
 
+import jakarta.servlet.DispatcherType
+import jakarta.servlet.http._
 import org.eclipse.jetty.client.HttpClient
 import org.eclipse.jetty.client.api.Response
 import org.eclipse.jetty.client.http.HttpClientTransportOverHTTP
@@ -40,7 +40,9 @@ import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
 
 import org.apache.spark.{SecurityManager, SparkConf, SSLOptions}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.util.Utils
 
@@ -84,7 +86,8 @@ private[spark] object JettyUtils extends Logging {
           case e: IllegalArgumentException =>
             response.sendError(HttpServletResponse.SC_BAD_REQUEST, e.getMessage)
           case e: Exception =>
-            logWarning(s"GET ${request.getRequestURI} failed: $e", e)
+            logWarning(log"GET ${MDC(LogKeys.URI, request.getRequestURI)} failed: " +
+              log"${MDC(ERROR, e)}", e)
             throw e
         }
       }
@@ -147,7 +150,10 @@ private[spark] object JettyUtils extends Logging {
       private def doRequest(request: HttpServletRequest, response: HttpServletResponse): Unit = {
         beforeRedirect(request)
         // Make sure we don't end up with "//" in the middle
-        val newUrl = new URL(new URL(request.getRequestURL.toString), prefixedDestPath).toString
+        val requestURL = new URI(request.getRequestURL.toString).toURL
+        // scalastyle:off URLConstructor
+        val newUrl = new URL(requestURL, prefixedDestPath).toString
+        // scalastyle:on URLConstructor
         response.sendRedirect(newUrl)
       }
       // SPARK-5983 ensure TRACE is not supported
@@ -204,7 +210,7 @@ private[spark] object JettyUtils extends Logging {
         // SPARK-21176: Use the Jetty logic to calculate the number of selector threads (#CPUs/2),
         // but limit it to 8 max.
         val numSelectors = math.max(1, math.min(8, Runtime.getRuntime().availableProcessors() / 2))
-        new HttpClient(new HttpClientTransportOverHTTP(numSelectors), null)
+        new HttpClient(new HttpClientTransportOverHTTP(numSelectors))
       }
 
       override def filterServerResponseHeader(
@@ -246,7 +252,9 @@ private[spark] object JettyUtils extends Logging {
       serverName: String = "",
       poolSize: Int = 200): ServerInfo = {
 
-    logInfo(s"Start Jetty $hostName:$port for $serverName")
+    val stopTimeout = conf.get(UI_JETTY_STOP_TIMEOUT)
+    logInfo(log"Start Jetty ${MDC(HOST, hostName)}:${MDC(PORT, port)}" +
+      log" for ${MDC(SERVER_NAME, serverName)}")
     // Start the server first, with no connectors.
     val pool = new QueuedThreadPool(poolSize)
     if (serverName.nonEmpty) {
@@ -276,6 +284,7 @@ private[spark] object JettyUtils extends Logging {
     val serverExecutor = new ScheduledExecutorScheduler(s"$serverName-JettyScheduler", true)
 
     try {
+      server.setStopTimeout(stopTimeout)
       server.start()
 
       // As each acceptor and each selector will use one thread, the number of threads should at
@@ -321,9 +330,17 @@ private[spark] object JettyUtils extends Logging {
       httpConfig.setSendXPoweredBy(false)
 
       // If SSL is configured, create the secure connector first.
-      val securePort = sslOptions.createJettySslContextFactory().map { factory =>
+      val securePort = sslOptions.createJettySslContextFactoryServer().map { factory =>
+
+        // SPARK-45522: SniHostCheck defaulted to true since Jetty 10,
+        // this will affect the standalone deployment.
+        val src = new SecureRequestCustomizer()
+        src.setSniHostCheck(false)
+        httpConfig.addCustomizer(src)
+
         val securePort = sslOptions.port.getOrElse(if (port > 0) Utils.userPort(port, 400) else 0)
         val secureServerName = if (serverName.nonEmpty) s"$serverName (HTTPS)" else serverName
+
         val connectionFactories = AbstractConnectionFactory.getFactories(factory,
           new HttpConnectionFactory(httpConfig))
 
@@ -545,7 +562,9 @@ private[spark] case class ServerInfo(
    */
   private def addFilters(handler: ServletContextHandler, securityMgr: SecurityManager): Unit = {
     conf.get(UI_FILTERS).foreach { filter =>
-      logInfo(s"Adding filter to ${handler.getContextPath()}: $filter")
+      logInfo(log"Adding filter to" +
+        log" ${MDC(SERVLET_CONTEXT_HANDLER_PATH, handler.getContextPath())}:" +
+        log" ${MDC(UI_FILTER, filter)}")
       val oldParams = conf.getOption(s"spark.$filter.params").toSeq
         .flatMap(Utils.stringToSeq)
         .flatMap { param =>

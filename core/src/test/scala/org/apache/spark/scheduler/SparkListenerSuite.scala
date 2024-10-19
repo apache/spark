@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
+import java.util.{Collections, IdentityHashMap}
 import java.util.concurrent.Semaphore
 
 import scala.collection.mutable
@@ -175,6 +176,52 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     assert(drained)
   }
 
+  test("allow bus.stop() to not wait for the event queue to completely drain") {
+    @volatile var drained = false
+
+    // When Listener has started
+    val listenerStarted = new Semaphore(0)
+
+    // Tells the listener to stop blocking
+    val listenerWait = new Semaphore(0)
+
+    // Make sure the event drained
+    val drainWait = new Semaphore(0)
+
+    class BlockingListener extends SparkListener {
+      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+        listenerStarted.release()
+        listenerWait.acquire()
+        drained = true
+        drainWait.release()
+      }
+    }
+
+    val sparkConf = new SparkConf().set(LISTENER_BUS_EXIT_TIMEOUT, 100L)
+    val bus = new LiveListenerBus(sparkConf)
+    val blockingListener = new BlockingListener
+
+    bus.addToSharedQueue(blockingListener)
+    bus.start(mockSparkContext, mockMetricsSystem)
+    bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
+
+    listenerStarted.acquire()
+    // if reach here, the dispatch thread should be blocked at onJobEnd
+
+    // stop the bus now, the queue will waiting for event drain with specified timeout
+    bus.stop()
+    // if reach here, the bus has exited without draining completely,
+    // otherwise it will hung here forever.
+
+    // the event dispatch thread should remain blocked after the bus has stopped.
+    // which means the bus exited upon reaching the timeout
+    // without all the events being completely drained
+    assert(!drained)
+
+    // unblock the dispatch thread
+    listenerWait.release()
+  }
+
   test("metrics for dropped listener events") {
     val bus = new LiveListenerBus(new SparkConf().set(LISTENER_BUS_EVENT_QUEUE_CAPACITY, 1))
 
@@ -287,6 +334,19 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     stageInfo.numTasks should be {2}
     stageInfo.rddInfos.size should be {2}
     stageInfo.rddInfos.forall(_.numPartitions == 4) should be {true}
+  }
+
+  test("SPARK-46383: Track TaskInfo objects") {
+    // Test that the same TaskInfo object is sent to the `DAGScheduler` in the `onTaskStart` and
+    // `onTaskEnd` events.
+    val conf = new SparkConf().set(DROP_TASK_INFO_ACCUMULABLES_ON_TASK_COMPLETION, true)
+    sc = new SparkContext("local", "SparkListenerSuite", conf)
+    val listener = new SaveActiveTaskInfos
+    sc.addSparkListener(listener)
+    val rdd1 = sc.parallelize(1 to 100, 4)
+    sc.runJob(rdd1, (items: Iterator[Int]) => items.size, Seq(0, 1))
+    sc.listenerBus.waitUntilEmpty()
+    listener.taskInfos.size should be { 0 }
   }
 
   test("local metrics") {
@@ -640,6 +700,27 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     override def onStageCompleted(stage: SparkListenerStageCompleted): Unit = {
       stageInfos(stage.stageInfo) = taskInfoMetrics.toSeq
       taskInfoMetrics = mutable.Buffer.empty
+    }
+  }
+
+  /**
+   * A simple listener that tracks task infos for all active tasks.
+   */
+  private class SaveActiveTaskInfos extends SparkListener {
+    // Use a set based on IdentityHashMap instead of a HashSet to track unique references of
+    // TaskInfo objects.
+    val taskInfos = Collections.newSetFromMap[TaskInfo](new IdentityHashMap)
+
+    override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+      val info = taskStart.taskInfo
+      if (info != null) {
+        taskInfos.add(info)
+      }
+    }
+
+    override def onTaskEnd(task: SparkListenerTaskEnd): Unit = {
+      val info = task.taskInfo
+      taskInfos.remove(info)
     }
   }
 

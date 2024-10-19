@@ -18,23 +18,145 @@
 import unittest
 import uuid
 from collections.abc import Generator
-from typing import Optional, Any
+from typing import Optional, Any, Union
 
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import eventually
 
 if should_test_connect:
     import grpc
+    from google.rpc import status_pb2
     import pandas as pd
     import pyarrow as pa
-    from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
+    from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
     from pyspark.sql.connect.client.retries import (
         Retrying,
         DefaultPolicy,
     )
     from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
-    from pyspark.errors import RetriesExceeded
+    from pyspark.errors import PySparkRuntimeError, RetriesExceeded
     import pyspark.sql.connect.proto as proto
+
+    class TestPolicy(DefaultPolicy):
+        def __init__(self):
+            super().__init__(
+                max_retries=3,
+                backoff_multiplier=4.0,
+                initial_backoff=10,
+                max_backoff=10,
+                jitter=10,
+                min_jitter_threshold=10,
+            )
+
+    class TestException(grpc.RpcError, grpc.Call):
+        """Exception mock to test retryable exceptions."""
+
+        def __init__(
+            self,
+            msg,
+            code=grpc.StatusCode.INTERNAL,
+            trailing_status: Union[status_pb2.Status, None] = None,
+        ):
+            self.msg = msg
+            self._code = code
+            self._trailer: dict[str, Any] = {}
+            if trailing_status is not None:
+                self._trailer["grpc-status-details-bin"] = trailing_status.SerializeToString()
+
+        def code(self):
+            return self._code
+
+        def __str__(self):
+            return self.msg
+
+        def details(self):
+            return self.msg
+
+        def trailing_metadata(self):
+            return None if not self._trailer else self._trailer.items()
+
+    class ResponseGenerator(Generator):
+        """This class is used to generate values that are returned by the streaming
+        iterator of the GRPC stub."""
+
+        def __init__(self, funs):
+            self._funs = funs
+            self._iterator = iter(self._funs)
+
+        def send(self, value: Any) -> proto.ExecutePlanResponse:
+            val = next(self._iterator)
+            if callable(val):
+                return val()
+            else:
+                return val
+
+        def throw(self, type: Any = None, value: Any = None, traceback: Any = None) -> Any:
+            super().throw(type, value, traceback)
+
+        def close(self) -> None:
+            return super().close()
+
+    class MockSparkConnectStub:
+        """Simple mock class for the GRPC stub used by the re-attachable execution."""
+
+        def __init__(self, execute_ops=None, attach_ops=None):
+            self._execute_ops = execute_ops
+            self._attach_ops = attach_ops
+            # Call counters
+            self.execute_calls = 0
+            self.release_calls = 0
+            self.release_until_calls = 0
+            self.attach_calls = 0
+
+        def ExecutePlan(self, *args, **kwargs):
+            self.execute_calls += 1
+            return self._execute_ops
+
+        def ReattachExecute(self, *args, **kwargs):
+            self.attach_calls += 1
+            return self._attach_ops
+
+        def ReleaseExecute(self, req: proto.ReleaseExecuteRequest, *args, **kwargs):
+            if req.HasField("release_all"):
+                self.release_calls += 1
+            elif req.HasField("release_until"):
+                print("increment")
+                self.release_until_calls += 1
+
+    class MockService:
+        # Simplest mock of the SparkConnectService.
+        # If this needs more complex logic, it needs to be replaced with Python mocking.
+
+        req: Optional[proto.ExecutePlanRequest]
+
+        def __init__(self, session_id: str):
+            self._session_id = session_id
+            self.req = None
+
+        def ExecutePlan(self, req: proto.ExecutePlanRequest, metadata):
+            self.req = req
+            resp = proto.ExecutePlanResponse()
+            resp.session_id = self._session_id
+
+            pdf = pd.DataFrame(data={"col1": [1, 2]})
+            schema = pa.Schema.from_pandas(pdf)
+            table = pa.Table.from_pandas(pdf)
+            sink = pa.BufferOutputStream()
+
+            writer = pa.ipc.new_stream(sink, schema=schema)
+            writer.write(table)
+            writer.close()
+
+            buf = sink.getvalue()
+            resp.arrow_batch.data = buf.to_pybytes()
+            resp.arrow_batch.row_count = 2
+            return [resp]
+
+        def Interrupt(self, req: proto.InterruptRequest, metadata):
+            self.req = req
+            resp = proto.InterruptResponse()
+            resp.session_id = self._session_id
+            return resp
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -72,7 +194,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertIsNone(client.token)
 
     def test_channel_builder(self):
-        class CustomChannelBuilder(ChannelBuilder):
+        class CustomChannelBuilder(DefaultChannelBuilder):
             @property
             def userId(self) -> Optional[str]:
                 return "abc"
@@ -129,21 +251,9 @@ class SparkConnectClientTestCase(unittest.TestCase):
 
     def test_channel_builder_with_session(self):
         dummy = str(uuid.uuid4())
-        chan = ChannelBuilder(f"sc://foo/;session_id={dummy}")
+        chan = DefaultChannelBuilder(f"sc://foo/;session_id={dummy}")
         client = SparkConnectClient(chan)
         self.assertEqual(client._session_id, chan.session_id)
-
-
-class TestPolicy(DefaultPolicy):
-    def __init__(self):
-        super().__init__(
-            max_retries=3,
-            backoff_multiplier=4.0,
-            initial_backoff=10,
-            max_backoff=10,
-            jitter=10,
-            min_jitter_threshold=10,
-        )
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -242,108 +352,82 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
 
         eventually(timeout=1, catch_assertions=True)(check)()
 
+    def test_not_found_recovers(self):
+        """SPARK-48056: Assert that the client recovers from session or operation not
+        found error if no partial responses were previously received.
+        """
 
-class TestException(grpc.RpcError, grpc.Call):
-    """Exception mock to test retryable exceptions."""
+        def not_found_recovers(error_code: str):
+            def not_found():
+                raise TestException(
+                    error_code,
+                    grpc.StatusCode.UNAVAILABLE,
+                    trailing_status=status_pb2.Status(code=14, message=error_code, details=""),
+                )
 
-    def __init__(self, msg, code=grpc.StatusCode.INTERNAL):
-        self.msg = msg
-        self._code = code
+            stub = self._stub_with([not_found, self.finished])
+            ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, [])
 
-    def code(self):
-        return self._code
+            for _ in ite:
+                pass
 
-    def __str__(self):
-        return self.msg
+            def checks():
+                self.assertEqual(2, stub.execute_calls)
+                self.assertEqual(0, stub.attach_calls)
+                self.assertEqual(0, stub.release_calls)
+                self.assertEqual(0, stub.release_until_calls)
 
-    def trailing_metadata(self):
-        return ()
+            eventually(timeout=1, catch_assertions=True)(checks)()
 
+        parameters = ["INVALID_HANDLE.SESSION_NOT_FOUND", "INVALID_HANDLE.OPERATION_NOT_FOUND"]
+        for b in parameters:
+            not_found_recovers(b)
 
-class ResponseGenerator(Generator):
-    """This class is used to generate values that are returned by the streaming
-    iterator of the GRPC stub."""
+    def test_not_found_fails(self):
+        """SPARK-48056: Assert that the client fails from session or operation not found error
+        if a partial response was previously received.
+        """
 
-    def __init__(self, funs):
-        self._funs = funs
-        self._iterator = iter(self._funs)
+        def not_found_fails(error_code: str):
+            def not_found():
+                raise TestException(
+                    error_code,
+                    grpc.StatusCode.UNAVAILABLE,
+                    trailing_status=status_pb2.Status(code=14, message=error_code, details=""),
+                )
 
-    def send(self, value: Any) -> proto.ExecutePlanResponse:
-        val = next(self._iterator)
-        if callable(val):
-            return val()
-        else:
-            return val
+            stub = self._stub_with([self.response], [not_found])
 
-    def throw(self, type: Any = None, value: Any = None, traceback: Any = None) -> Any:
-        super().throw(type, value, traceback)
+            with self.assertRaises(PySparkRuntimeError) as e:
+                ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, [])
+                for _ in ite:
+                    pass
 
-    def close(self) -> None:
-        return super().close()
+            self.assertTrue("RESPONSE_ALREADY_RECEIVED" in e.exception.getMessage())
 
+            def checks():
+                self.assertEqual(1, stub.execute_calls)
+                self.assertEqual(1, stub.attach_calls)
+                self.assertEqual(1, stub.release_calls)
+                self.assertEqual(1, stub.release_until_calls)
 
-class MockSparkConnectStub:
-    """Simple mock class for the GRPC stub used by the re-attachable execution."""
+            eventually(timeout=1, catch_assertions=True)(checks)()
 
-    def __init__(self, execute_ops=None, attach_ops=None):
-        self._execute_ops = execute_ops
-        self._attach_ops = attach_ops
-        # Call counters
-        self.execute_calls = 0
-        self.release_calls = 0
-        self.release_until_calls = 0
-        self.attach_calls = 0
+        parameters = ["INVALID_HANDLE.SESSION_NOT_FOUND", "INVALID_HANDLE.OPERATION_NOT_FOUND"]
+        for b in parameters:
+            not_found_fails(b)
 
-    def ExecutePlan(self, *args, **kwargs):
-        self.execute_calls += 1
-        return self._execute_ops
+    def test_observed_session_id(self):
+        stub = self._stub_with([self.response, self.finished])
+        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, [])
+        session_id = "test-session-id"
 
-    def ReattachExecute(self, *args, **kwargs):
-        self.attach_calls += 1
-        return self._attach_ops
+        reattach = ite._create_reattach_execute_request()
+        self.assertEqual(reattach.client_observed_server_side_session_id, "")
 
-    def ReleaseExecute(self, req: proto.ReleaseExecuteRequest, *args, **kwargs):
-        if req.HasField("release_all"):
-            self.release_calls += 1
-        elif req.HasField("release_until"):
-            print("increment")
-            self.release_until_calls += 1
-
-
-class MockService:
-    # Simplest mock of the SparkConnectService.
-    # If this needs more complex logic, it needs to be replaced with Python mocking.
-
-    req: Optional[proto.ExecutePlanRequest]
-
-    def __init__(self, session_id: str):
-        self._session_id = session_id
-        self.req = None
-
-    def ExecutePlan(self, req: proto.ExecutePlanRequest, metadata):
-        self.req = req
-        resp = proto.ExecutePlanResponse()
-        resp.session_id = self._session_id
-
-        pdf = pd.DataFrame(data={"col1": [1, 2]})
-        schema = pa.Schema.from_pandas(pdf)
-        table = pa.Table.from_pandas(pdf)
-        sink = pa.BufferOutputStream()
-
-        writer = pa.ipc.new_stream(sink, schema=schema)
-        writer.write(table)
-        writer.close()
-
-        buf = sink.getvalue()
-        resp.arrow_batch.data = buf.to_pybytes()
-        resp.arrow_batch.row_count = 2
-        return [resp]
-
-    def Interrupt(self, req: proto.InterruptRequest, metadata):
-        self.req = req
-        resp = proto.InterruptResponse()
-        resp.session_id = self._session_id
-        return resp
+        self.request.client_observed_server_side_session_id = session_id
+        reattach = ite._create_reattach_execute_request()
+        self.assertEqual(reattach.client_observed_server_side_session_id, session_id)
 
 
 if __name__ == "__main__":

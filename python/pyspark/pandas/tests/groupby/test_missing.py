@@ -128,7 +128,10 @@ class MissingTestsMixin:
                 getattr(psdf.a.groupby(psdf.a), name)
 
 
-class MissingTests(MissingTestsMixin, PandasOnSparkTestCase):
+class MissingTests(
+    MissingTestsMixin,
+    PandasOnSparkTestCase,
+):
     pass
 
 

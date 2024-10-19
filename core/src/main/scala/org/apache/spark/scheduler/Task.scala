@@ -93,7 +93,12 @@ private[spark] abstract class Task[T](
 
     require(cpus > 0, "CPUs per task should be > 0")
 
-    SparkEnv.get.blockManager.registerTask(taskAttemptId)
+    // Use the blockManager at start of the task through out the task - particularly in
+    // case of local mode, a SparkEnv can be initialized when spark context is restarted
+    // and we want to ensure the right env and block manager is used (given lazy initialization of
+    // block manager)
+    val blockManager = SparkEnv.get.blockManager
+    blockManager.registerTask(taskAttemptId)
     // TODO SPARK-24874 Allow create BarrierTaskContext based on partitions, instead of whether
     // the stage is barrier.
     val taskContext = new TaskContextImpl(
@@ -143,15 +148,15 @@ private[spark] abstract class Task[T](
       try {
         Utils.tryLogNonFatalError {
           // Release memory used by this thread for unrolling blocks
-          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP)
-          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(
-            MemoryMode.OFF_HEAP)
+          blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP)
+          blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.OFF_HEAP)
           // Notify any tasks waiting for execution memory to be freed to wake up and try to
           // acquire memory again. This makes impossible the scenario where a task sleeps forever
           // because there are no other tasks left to notify it. Since this is safe to do but may
           // not be strictly necessary, we should revisit whether we can remove this in the
           // future.
-          val memoryManager = SparkEnv.get.memoryManager
+
+          val memoryManager = blockManager.memoryManager
           memoryManager.synchronized { memoryManager.notifyAll() }
         }
       } finally {
@@ -210,7 +215,7 @@ private[spark] abstract class Task[T](
       context.taskMetrics().nonZeroInternalAccums() ++
         // zero value external accumulators may still be useful, e.g. SQLMetrics, we should not
         // filter them out.
-        context.taskMetrics().externalAccums.filter(a => !taskFailed || a.countFailedValues)
+        context.taskMetrics().withExternalAccums(_.filter(a => !taskFailed || a.countFailedValues))
     } else {
       Seq.empty
     }

@@ -24,7 +24,8 @@ import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.LogKeys.{PATH, TIME}
 import org.apache.spark.streaming.Time
 import org.apache.spark.util.Utils
 
@@ -88,14 +89,17 @@ class DStreamCheckpointData[T: ClassTag](dstream: DStream[T])
                 fileSystem = path.getFileSystem(dstream.ssc.sparkContext.hadoopConfiguration)
               }
               if (fileSystem.delete(path, true)) {
-                logInfo("Deleted checkpoint file '" + file + "' for time " + time)
+                logInfo(log"Deleted checkpoint file ${MDC(LogKeys.FILE_NAME, file)} " +
+                  log"for time ${MDC(LogKeys.TIME, time)}")
               } else {
-                logWarning(s"Error deleting old checkpoint file '$file' for time $time")
+                logWarning(log"Error deleting old checkpoint file '${MDC(PATH, file)}' for time " +
+                  log"${MDC(TIME, time)}")
               }
               timeToCheckpointFile -= time
             } catch {
               case e: Exception =>
-                logWarning("Error deleting old checkpoint file '" + file + "' for time " + time, e)
+                logWarning(log"Error deleting old checkpoint file '${MDC(PATH, file)}' for time " +
+                  log"${MDC(TIME, time)}", e)
                 fileSystem = null
             }
         }
@@ -113,7 +117,8 @@ class DStreamCheckpointData[T: ClassTag](dstream: DStream[T])
     // Create RDDs from the checkpoint data
     currentCheckpointFiles.foreach {
       case(time, file) =>
-        logInfo("Restoring checkpointed RDD for time " + time + " from file '" + file + "'")
+        logInfo(log"Restoring checkpointed RDD for time ${MDC(LogKeys.TIME, time)} from file " +
+          log"'${MDC(LogKeys.FILE_NAME, file)}'")
         dstream.generatedRDDs += ((time, dstream.context.sparkContext.checkpointFile[T](file)))
     }
   }

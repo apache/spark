@@ -61,6 +61,20 @@ object MathUtils {
     withOverflow(Math.multiplyExact(a, b), hint = "try_multiply", context)
   }
 
+  def negateExact(a: Byte): Byte = {
+    if (a == Byte.MinValue) { // if and only if x is Byte.MinValue, overflow can happen
+      throw ExecutionErrors.arithmeticOverflowError("byte overflow")
+    }
+    (-a).toByte
+  }
+
+  def negateExact(a: Short): Short = {
+    if (a == Short.MinValue) { // if and only if x is Short.MinValue, overflow can happen
+      throw ExecutionErrors.arithmeticOverflowError("short overflow")
+    }
+    (-a).toShort
+  }
+
   def negateExact(a: Int): Int = withOverflow(Math.negateExact(a))
 
   def negateExact(a: Long): Long = withOverflow(Math.negateExact(a))
@@ -75,10 +89,7 @@ object MathUtils {
 
   def floorMod(a: Long, b: Long): Long = withOverflow(Math.floorMod(a, b))
 
-  def withOverflow[A](
-      f: => A,
-      hint: String = "",
-      context: QueryContext = null): A = {
+  def withOverflow[A](f: => A, hint: String = "", context: QueryContext = null): A = {
     try {
       f
     } catch {

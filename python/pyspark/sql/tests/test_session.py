@@ -19,12 +19,16 @@ import os
 import unittest
 import unittest.mock
 from io import StringIO
-from lxml import etree
 
 from pyspark import SparkConf, SparkContext
-from pyspark.errors import PySparkRuntimeError
+from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.sql import SparkSession, SQLContext, Row
 from pyspark.sql.functions import col
+from pyspark.testing.connectutils import (
+    should_test_connect,
+    connect_requirement_message,
+)
+from pyspark.sql.profiler import Profile
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import PySparkTestCase, PySparkErrorTestUtils
 
@@ -83,8 +87,8 @@ class SparkSessionTests3(unittest.TestCase, PySparkErrorTestUtils):
 
         self.check_error(
             exception=pe1.exception,
-            error_class="NO_ACTIVE_OR_DEFAULT_SESSION",
-            message_parameters={},
+            errorClass="NO_ACTIVE_OR_DEFAULT_SESSION",
+            messageParameters={},
         )
 
         spark = SparkSession.builder.master("local").getOrCreate()
@@ -121,9 +125,14 @@ class SparkSessionTests3(unittest.TestCase, PySparkErrorTestUtils):
             self.assertEqual(spark.range(3).count(), 3)
 
             try:
-                etree.parse(StringIO(spark._repr_html_()), etree.HTMLParser(recover=False))
-            except Exception as e:
-                self.fail(f"Generated HTML from `_repr_html_` was invalid: {e}")
+                from lxml import etree
+
+                try:
+                    etree.parse(StringIO(spark._repr_html_()), etree.HTMLParser(recover=False))
+                except Exception as e:
+                    self.fail(f"Generated HTML from `_repr_html_` was invalid: {e}")
+            except ImportError:
+                pass
 
             # SPARK-37516: Only plain column references work as variable in SQL.
             self.assertEqual(
@@ -184,9 +193,6 @@ class SparkSessionTests3(unittest.TestCase, PySparkErrorTestUtils):
             session.range(5).collect()
 
     def test_active_session_with_None_and_not_None_context(self):
-        from pyspark.context import SparkContext
-        from pyspark.conf import SparkConf
-
         sc = None
         session = None
         try:
@@ -209,6 +215,7 @@ class SparkSessionTests3(unittest.TestCase, PySparkErrorTestUtils):
             if sc is not None:
                 sc.stop()
 
+    @unittest.skipIf(not should_test_connect, connect_requirement_message)
     def test_session_with_spark_connect_mode_enabled(self):
         with unittest.mock.patch.dict(os.environ, {"SPARK_CONNECT_MODE_ENABLED": "1"}):
             with self.assertRaisesRegex(RuntimeError, "Cannot create a Spark Connect session"):
@@ -234,8 +241,8 @@ class SparkSessionTests3(unittest.TestCase, PySparkErrorTestUtils):
 
                 self.check_error(
                     exception=pe1.exception,
-                    error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-                    message_parameters={"feature": f"SparkSession.{name}"},
+                    errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+                    messageParameters={"feature": f"SparkSession.{name}"},
                 )
 
 
@@ -403,8 +410,8 @@ class SparkSessionBuilderTests(unittest.TestCase, PySparkErrorTestUtils):
 
         self.check_error(
             exception=pe1.exception,
-            error_class="CANNOT_CONFIGURE_SPARK_CONNECT_MASTER",
-            message_parameters={"master_url": "x", "connect_url": "y"},
+            errorClass="CANNOT_CONFIGURE_SPARK_CONNECT_MASTER",
+            messageParameters={"master_url": "x", "connect_url": "y"},
         )
 
         with unittest.mock.patch.dict(
@@ -415,8 +422,8 @@ class SparkSessionBuilderTests(unittest.TestCase, PySparkErrorTestUtils):
 
             self.check_error(
                 exception=pe2.exception,
-                error_class="CANNOT_CONFIGURE_SPARK_CONNECT",
-                message_parameters={
+                errorClass="CANNOT_CONFIGURE_SPARK_CONNECT",
+                messageParameters={
                     "existing_url": "remote_url",
                     "new_url": "different_remote_url",
                 },
@@ -428,8 +435,8 @@ class SparkSessionBuilderTests(unittest.TestCase, PySparkErrorTestUtils):
 
         self.check_error(
             exception=pe2.exception,
-            error_class="CANNOT_CONFIGURE_SPARK_CONNECT_MASTER",
-            message_parameters={"connect_url": "2", "master_url": "1"},
+            errorClass="CANNOT_CONFIGURE_SPARK_CONNECT_MASTER",
+            messageParameters={"connect_url": "2", "master_url": "1"},
         )
 
         try:
@@ -440,8 +447,8 @@ class SparkSessionBuilderTests(unittest.TestCase, PySparkErrorTestUtils):
 
             self.check_error(
                 exception=pe2.exception,
-                error_class="CANNOT_CONFIGURE_SPARK_CONNECT",
-                message_parameters={
+                errorClass="CANNOT_CONFIGURE_SPARK_CONNECT",
+                messageParameters={
                     "new_url": "1",
                     "existing_url": "2",
                 },
@@ -450,14 +457,102 @@ class SparkSessionBuilderTests(unittest.TestCase, PySparkErrorTestUtils):
             del os.environ["SPARK_REMOTE"]
             del os.environ["SPARK_LOCAL_REMOTE"]
 
+    @unittest.skipIf(not should_test_connect, connect_requirement_message)
     def test_invalid_create(self):
         with self.assertRaises(PySparkRuntimeError) as pe2:
             SparkSession.builder.config("spark.remote", "local").create()
 
         self.check_error(
             exception=pe2.exception,
-            error_class="UNSUPPORTED_LOCAL_CONNECTION_STRING",
-            message_parameters={},
+            errorClass="UNSUPPORTED_LOCAL_CONNECTION_STRING",
+            messageParameters={},
+        )
+
+
+class SparkSessionProfileTests(unittest.TestCase, PySparkErrorTestUtils):
+    def setUp(self):
+        self.profiler_collector_mock = unittest.mock.Mock()
+        self.profile = Profile(self.profiler_collector_mock)
+
+    def test_show_memory_type(self):
+        self.profile.show(type="memory")
+        self.profiler_collector_mock.show_memory_profiles.assert_called_with(None)
+        self.profiler_collector_mock.show_perf_profiles.assert_not_called()
+
+    def test_show_perf_type(self):
+        self.profile.show(type="perf")
+        self.profiler_collector_mock.show_perf_profiles.assert_called_with(None)
+        self.profiler_collector_mock.show_memory_profiles.assert_not_called()
+
+    def test_show_no_type(self):
+        self.profile.show()
+        self.profiler_collector_mock.show_perf_profiles.assert_called_with(None)
+        self.profiler_collector_mock.show_memory_profiles.assert_called_with(None)
+
+    def test_show_invalid_type(self):
+        with self.assertRaises(PySparkValueError) as e:
+            self.profile.show(type="invalid")
+        self.check_error(
+            exception=e.exception,
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={
+                "arg_name": "type",
+                "allowed_values": str(["perf", "memory"]),
+            },
+        )
+
+    def test_dump_memory_type(self):
+        self.profile.dump("path/to/dump", type="memory")
+        self.profiler_collector_mock.dump_memory_profiles.assert_called_with("path/to/dump", None)
+        self.profiler_collector_mock.dump_perf_profiles.assert_not_called()
+
+    def test_dump_perf_type(self):
+        self.profile.dump("path/to/dump", type="perf")
+        self.profiler_collector_mock.dump_perf_profiles.assert_called_with("path/to/dump", None)
+        self.profiler_collector_mock.dump_memory_profiles.assert_not_called()
+
+    def test_dump_no_type(self):
+        self.profile.dump("path/to/dump")
+        self.profiler_collector_mock.dump_perf_profiles.assert_called_with("path/to/dump", None)
+        self.profiler_collector_mock.dump_memory_profiles.assert_called_with("path/to/dump", None)
+
+    def test_dump_invalid_type(self):
+        with self.assertRaises(PySparkValueError) as e:
+            self.profile.dump("path/to/dump", type="invalid")
+        self.check_error(
+            exception=e.exception,
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={
+                "arg_name": "type",
+                "allowed_values": str(["perf", "memory"]),
+            },
+        )
+
+    def test_clear_memory_type(self):
+        self.profile.clear(type="memory")
+        self.profiler_collector_mock.clear_memory_profiles.assert_called_once()
+        self.profiler_collector_mock.clear_perf_profiles.assert_not_called()
+
+    def test_clear_perf_type(self):
+        self.profile.clear(type="perf")
+        self.profiler_collector_mock.clear_perf_profiles.assert_called_once()
+        self.profiler_collector_mock.clear_memory_profiles.assert_not_called()
+
+    def test_clear_no_type(self):
+        self.profile.clear()
+        self.profiler_collector_mock.clear_perf_profiles.assert_called_once()
+        self.profiler_collector_mock.clear_memory_profiles.assert_called_once()
+
+    def test_clear_invalid_type(self):
+        with self.assertRaises(PySparkValueError) as e:
+            self.profile.clear(type="invalid")
+        self.check_error(
+            exception=e.exception,
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={
+                "arg_name": "type",
+                "allowed_values": str(["perf", "memory"]),
+            },
         )
 
 

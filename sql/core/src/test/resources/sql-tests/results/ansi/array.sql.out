@@ -134,7 +134,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"sort_array(array(b, d), 1)\""
   },
@@ -151,27 +151,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select sort_array(array('b', 'd'), cast(NULL as boolean))
 -- !query schema
-struct<>
+struct<sort_array(array(b, d), CAST(NULL AS BOOLEAN)):array<string>>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"CAST(NULL AS BOOLEAN)\"",
-    "inputType" : "\"BOOLEAN\"",
-    "paramIndex" : "2",
-    "requiredType" : "\"BOOLEAN\"",
-    "sqlExpr" : "\"sort_array(array(b, d), CAST(NULL AS BOOLEAN))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 57,
-    "fragment" : "sort_array(array('b', 'd'), cast(NULL as boolean))"
-  } ]
-}
+NULL
 
 
 -- !query
@@ -456,7 +438,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"map(a, 1, b, 2)\"",
     "inputType" : "\"MAP<STRING, INT>\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"ARRAY\"",
     "sqlExpr" : "\"array_size(map(a, 1, b, 2))\""
   },
@@ -711,7 +693,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"id\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"ARRAY\"",
     "sqlExpr" : "\"array_compact(id)\""
   },
@@ -907,3 +889,19 @@ select array_prepend(array(CAST(NULL AS String)), CAST(NULL AS String))
 struct<array_prepend(array(CAST(NULL AS STRING)), CAST(NULL AS STRING)):array<string>>
 -- !query output
 [null,null]
+
+
+-- !query
+select array_union(array(0.0, -0.0, DOUBLE("NaN")), array(0.0, -0.0, DOUBLE("NaN")))
+-- !query schema
+struct<array_union(array(0.0, 0.0, NaN), array(0.0, 0.0, NaN)):array<double>>
+-- !query output
+[0.0,NaN]
+
+
+-- !query
+select array_distinct(array(0.0, -0.0, -0.0, DOUBLE("NaN"), DOUBLE("NaN")))
+-- !query schema
+struct<array_distinct(array(0.0, 0.0, 0.0, NaN, NaN)):array<double>>
+-- !query output
+[0.0,NaN]

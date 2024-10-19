@@ -71,6 +71,12 @@
 
     <module name="NewlineAtEndOfFile"/>
 
+    <module name="Header">
+        <property name="charset" value="UTF-8" />
+        <property name="headerFile" value="dev/java-file-header" />
+        <property name="fileExtensions" value="java" />
+    </module>
+
     <module name="TreeWalker">
         <!--
         If you wish to turn off checking for a section of code, you can put a comment in the source
@@ -181,11 +187,33 @@
                 Use org.apache.spark.network.util.JavaUtils.createTempDir() instead." />
         </module>
         <module name="RegexpSinglelineJava">
+            <property name="format" value="FileBackedOutputStream"/>
+            <property name="message" value="Avoid using FileBackedOutputStream due to CVE-2023-2976." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="AtomicDoubleArray"/>
+            <property name="message" value="Avoid using AtomicDoubleArray due to CVE-2018-10237." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="CompoundOrdering"/>
+            <property name="message" value="Avoid using CompoundOrdering due to CVE-2018-10237." />
+        </module>
+        <module name="RegexpSinglelineJava">
             <property name="format" value="@Test\(expected"/>
             <property name="message" value="Please use the `assertThrows` method to test for exceptions." />
         </module>
         <module name="IllegalImport">
             <property name="illegalPkgs" value="org.apache.log4j" />
+            <property name="illegalPkgs" value="org.apache.commons.lang" />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="new URL\("/>
+            <property name="message" value="Use URI.toURL or URL.of instead of URL constructors." />
+        </module>
+        <!-- support structured logging -->
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="org\.slf4j\.(Logger|LoggerFactory)" />
+            <property name="message" value="Please use org.apache.spark.internal.(SparkLogger|SparkLoggerFactory) instead." />
         </module>
     </module>
 </module>

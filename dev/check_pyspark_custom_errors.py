@@ -176,6 +176,7 @@ if __name__ == "__main__":
     TARGET_PATHS = ["python/pyspark/sql"]
     EXCLUDE_PATHS = [
         "python/pyspark/sql/tests",
+        "python/pyspark/sql/connect/resource",
         "python/pyspark/sql/connect/proto",
     ]
 

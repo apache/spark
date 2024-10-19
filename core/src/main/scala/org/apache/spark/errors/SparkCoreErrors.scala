@@ -24,7 +24,9 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException, TaskNotSerializableException}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, TaskNotSerializableException}
+import org.apache.spark.internal.config.IO_COMPRESSION_CODEC
+import org.apache.spark.io.CompressionCodec.FALLBACK_COMPRESSION_CODEC
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.scheduler.{BarrierJobRunWithDynamicAllocationException, BarrierJobSlotsNumberCheckFailed, BarrierJobUnsupportedRDDChainException}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleManager}
@@ -79,15 +81,11 @@ private[spark] object SparkCoreErrors {
   }
 
   def histogramOnEmptyRDDOrContainingInfinityOrNaNError(): Throwable = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_3005", messageParameters = Map.empty
-    )
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3005")
   }
 
   def emptyRDDError(): Throwable = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_3006", messageParameters = Map.empty
-    )
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3006")
   }
 
   def pathNotSupportedError(path: String): Throwable = {
@@ -132,9 +130,7 @@ private[spark] object SparkCoreErrors {
   }
 
   def cannotChangeStorageLevelError(): Throwable = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_3012", messageParameters = Map.empty
-    )
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3012")
   }
 
   def canOnlyZipRDDsWithSamePartitionSizeError(): Throwable = {
@@ -144,9 +140,7 @@ private[spark] object SparkCoreErrors {
   }
 
   def emptyCollectionError(): Throwable = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_3014", messageParameters = Map.empty
-    )
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3014")
   }
 
   def countByValueApproxNotSupportArraysError(): Throwable = {
@@ -270,9 +264,7 @@ private[spark] object SparkCoreErrors {
   }
 
   def durationCalledOnUnfinishedTaskError(): Throwable = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_3026", messageParameters = Map.empty
-    )
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3026")
   }
 
   def unrecognizedSchedulerModePropertyError(
@@ -429,9 +421,7 @@ private[spark] object SparkCoreErrors {
   }
 
   def unsupportedOperationError(): Throwable = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_3041", messageParameters = Map.empty
-    )
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3041")
   }
 
   def noSuchElementError(): Throwable = {
@@ -500,6 +490,24 @@ private[spark] object SparkCoreErrors {
       errorClass = "UNSUPPORTED_ADD_FILE.DIRECTORY",
       messageParameters = Map("path" -> path.toString),
       cause = null)
+  }
+
+  def codecNotAvailableError(codecName: String): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "CODEC_NOT_AVAILABLE.WITH_CONF_SUGGESTION",
+      messageParameters = Map(
+        "codecName" -> codecName,
+        "configKey" -> toConf(IO_COMPRESSION_CODEC.key),
+        "configVal" -> toConfVal(FALLBACK_COMPRESSION_CODEC)))
+  }
+
+  def tooManyArrayElementsError(numElements: Long, maxRoundedArrayLength: Int): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.INITIALIZE",
+      messageParameters = Map(
+        "numberOfElements" -> numElements.toString,
+        "maxRoundedArrayLength" -> maxRoundedArrayLength.toString)
+    )
   }
 
   private def quoteByDefault(elem: String): String = {

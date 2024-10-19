@@ -707,6 +707,17 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
       df1.select(try_divide(make_interval(col("year"), col("month")), lit(0))))
   }
 
+  test("try_mod") {
+    val df = Seq((10, 3), (5, 5), (5, 0)).toDF("birth", "age")
+    checkAnswer(df.selectExpr("try_mod(birth, age)"), Seq(Row(1), Row(0), Row(null)))
+
+    val dfDecimal = Seq(
+      (BigDecimal(10), BigDecimal(3)),
+      (BigDecimal(5), BigDecimal(5)),
+      (BigDecimal(5), BigDecimal(0))).toDF("birth", "age")
+    checkAnswer(dfDecimal.selectExpr("try_mod(birth, age)"), Seq(Row(1), Row(0), Row(null)))
+  }
+
   test("try_element_at") {
     val df = Seq((Array(1, 2, 3), 2)).toDF("a", "b")
     checkAnswer(df.selectExpr("try_element_at(a, b)"), Seq(Row(2)))

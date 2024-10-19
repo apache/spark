@@ -23,7 +23,8 @@ import io.fabric8.kubernetes.client.Watcher.Action
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.KubernetesDriverConf
 import org.apache.spark.deploy.k8s.KubernetesUtils._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{APP_ID, APP_NAME, POD_PHASE, POD_STATE, STATUS, SUBMISSION_ID}
 
 private[k8s] trait LoggingPodStatusWatcher extends Watcher[Pod] {
   def watchOrStop(submissionId: String): Boolean
@@ -83,7 +84,8 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
   }
 
   private def logLongStatus(): Unit = {
-    logInfo("State changed, new state: " + pod.map(formatPodState).getOrElse("unknown"))
+    logInfo(log"State changed, new state: " +
+      log"${MDC(POD_STATE, pod.map(formatPodState).getOrElse("unknown"))}")
   }
 
   private def hasCompleted(): Boolean = {
@@ -96,22 +98,22 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
   }
 
   override def watchOrStop(sId: String): Boolean = {
-    logInfo(s"Waiting for application ${conf.appName} with application ID ${conf.appId} " +
-      s"and submission ID $sId to finish...")
+    logInfo(log"Waiting for application ${MDC(APP_NAME, conf.appName)}} with application ID " +
+      log"${MDC(APP_ID, appId)} and submission ID ${MDC(SUBMISSION_ID, sId)} to finish...")
     val interval = conf.get(REPORT_INTERVAL)
     synchronized {
       while (!podCompleted && !resourceTooOldReceived) {
         wait(interval)
-        logInfo(s"Application status for $appId (phase: $phase)")
+        logInfo(log"Application status for ${MDC(APP_ID, appId)} (phase: ${MDC(POD_PHASE, phase)})")
       }
     }
 
     if(podCompleted) {
       logInfo(
-        pod.map { p => s"Container final statuses:\n\n${containersDescription(p)}" }
-          .getOrElse("No containers were found in the driver pod."))
-      logInfo(s"Application ${conf.appName} with application ID ${conf.appId} " +
-        s"and submission ID $sId finished")
+        pod.map { p => log"Container final statuses:\n\n${MDC(STATUS, containersDescription(p))}" }
+          .getOrElse(log"No containers were found in the driver pod."))
+      logInfo(log"Application ${MDC(APP_NAME, conf.appName)} with application ID " +
+        log"${MDC(APP_ID, appId)} and submission ID ${MDC(SUBMISSION_ID, sId)} finished")
     }
     podCompleted
   }

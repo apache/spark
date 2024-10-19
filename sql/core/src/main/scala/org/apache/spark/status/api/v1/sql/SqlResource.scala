@@ -18,10 +18,11 @@
 package org.apache.spark.status.api.v1.sql
 
 import java.util.Date
-import javax.ws.rs._
-import javax.ws.rs.core.MediaType
 
 import scala.util.{Failure, Success, Try}
+
+import jakarta.ws.rs._
+import jakarta.ws.rs.core.MediaType
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SparkPlanGraphCluster, SparkPlanGraphNode, SQLAppStatusStore, SQLExecutionUIData}

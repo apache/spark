@@ -305,23 +305,17 @@ WHERE  NOT EXISTS (SELECT max(dept.dept_id) a
                    LIMIT 2
                    OFFSET 1)
 -- !query schema
-struct<>
+struct<emp_name:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (dept_id#x = outer(dept_id#x))\n+- SubqueryAlias dept\n   +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])\n      +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n         +- Project [dept_id#x, dept_name#x, state#x]\n            +- SubqueryAlias DEPT\n               +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 47,
-    "stopIndex" : 191,
-    "fragment" : "SELECT max(dept.dept_id) a\n                   FROM   dept\n                   WHERE  dept.dept_id = emp.dept_id\n                   GROUP  BY state"
-  } ]
-}
+emp 1
+emp 1
+emp 2
+emp 3
+emp 4
+emp 5
+emp 6 - no dept
+emp 7
+emp 8
 
 
 -- !query
@@ -409,6 +403,45 @@ struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
 -- !query
 SELECT *
 FROM   emp
+WHERE  EXISTS (SELECT max(dept.dept_id)
+               FROM   dept
+               WHERE  emp.salary > 200
+               LIMIT  1)
+-- !query schema
+struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
+-- !query output
+100	emp 1	2005-01-01	100.0	10
+100	emp 1	2005-01-01	100.0	10
+200	emp 2	2003-01-01	200.0	10
+300	emp 3	2002-01-01	300.0	20
+400	emp 4	2005-01-01	400.0	30
+500	emp 5	2001-01-01	400.0	NULL
+600	emp 6 - no dept	2001-01-01	400.0	100
+700	emp 7	2010-01-01	400.0	100
+800	emp 8	2016-01-01	150.0	70
+
+
+-- !query
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT state, max(dept.dept_name)
+               FROM   dept
+               WHERE  emp.salary > 200
+               GROUP BY state
+               LIMIT  1)
+-- !query schema
+struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
+-- !query output
+300	emp 3	2002-01-01	300.0	20
+400	emp 4	2005-01-01	400.0	30
+500	emp 5	2001-01-01	400.0	NULL
+600	emp 6 - no dept	2001-01-01	400.0	100
+700	emp 7	2010-01-01	400.0	100
+
+
+-- !query
+SELECT *
+FROM   emp
 WHERE  NOT EXISTS (SELECT dept.dept_name
                    FROM   dept
                    WHERE  dept.dept_id > 100
@@ -460,23 +493,16 @@ WHERE  EXISTS (SELECT dept.dept_name
                LIMIT  1
                OFFSET 2)
 -- !query schema
-struct<>
+struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter NOT (dept_id#x = outer(dept_id#x))\n+- SubqueryAlias dept\n   +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])\n      +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n         +- Project [dept_id#x, dept_name#x, state#x]\n            +- SubqueryAlias DEPT\n               +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 36,
-    "stopIndex" : 133,
-    "fragment" : "SELECT dept.dept_name\n               FROM   dept\n               WHERE  dept.dept_id <> emp.dept_id"
-  } ]
-}
+100	emp 1	2005-01-01	100.0	10
+100	emp 1	2005-01-01	100.0	10
+200	emp 2	2003-01-01	200.0	10
+300	emp 3	2002-01-01	300.0	20
+400	emp 4	2005-01-01	400.0	30
+600	emp 6 - no dept	2001-01-01	400.0	100
+700	emp 7	2010-01-01	400.0	100
+800	emp 8	2016-01-01	150.0	70
 
 
 -- !query

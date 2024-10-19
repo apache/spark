@@ -34,6 +34,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.datasources.DaysWritable
 import org.apache.spark.sql.types
 import org.apache.spark.sql.types._
@@ -744,7 +745,7 @@ private[hive] trait HiveInspectors {
         }
         data: Any => {
           if (data != null) {
-            InternalRow.fromSeq(unwrappers.map(_(data)).toSeq)
+            new GenericInternalRow(unwrappers.map(_(data)).toArray)
           } else {
             null
           }
@@ -1126,7 +1127,7 @@ private[hive] trait HiveInspectors {
     private def decimalTypeInfo(decimalType: DecimalType): TypeInfo = decimalType match {
       case DecimalType.Fixed(precision, scale) => new DecimalTypeInfo(precision, scale)
       case dt => throw new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_3094", messageParameters = Map("dt" -> dt.catalogString))
+        errorClass = "_LEGACY_ERROR_TEMP_3094", messageParameters = Map("dt" -> toSQLType(dt)))
     }
 
     def toTypeInfo: TypeInfo = dt match {
@@ -1155,7 +1156,7 @@ private[hive] trait HiveInspectors {
       case _: YearMonthIntervalType => intervalYearMonthTypeInfo
       case dt =>
         throw new AnalysisException(
-          errorClass = "_LEGACY_ERROR_TEMP_3095", messageParameters = Map("dt" -> dt.catalogString))
+          errorClass = "_LEGACY_ERROR_TEMP_3095", messageParameters = Map("dt" -> toSQLType(dt)))
     }
   }
 }

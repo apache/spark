@@ -5,6 +5,7 @@
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
 
+--ONLY_IF spark
 CREATE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
   (100, "emp 1", date "2005-01-01", 100.00D, 10),
   (100, "emp 1", date "2005-01-01", 100.00D, 10),
@@ -201,6 +202,24 @@ WHERE  EXISTS (SELECT max(dept.dept_id)
                FROM   dept
                WHERE  dept.dept_id <> emp.dept_id
                GROUP  BY state
+               LIMIT  1);
+
+-- SPARK-46526: LIMIT over correlated predicate that references only the outer table.
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT max(dept.dept_id)
+               FROM   dept
+               WHERE  emp.salary > 200
+               LIMIT  1);
+
+-- SPARK-46526: LIMIT over correlated predicate that references only the outer table,
+-- and a group by.
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT state, max(dept.dept_name)
+               FROM   dept
+               WHERE  emp.salary > 200
+               GROUP BY state
                LIMIT  1);
 
 -- limit and offset in the not exists subquery block.

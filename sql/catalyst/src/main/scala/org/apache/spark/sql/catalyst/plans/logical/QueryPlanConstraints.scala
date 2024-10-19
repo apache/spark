@@ -48,7 +48,7 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
    * canonicalized and filtered automatically to contain only those attributes that appear in the
    * [[outputSet]].
    *
-   * See [[Canonicalize]] for more details.
+   * See [[Expression#canonicalized]] for more details.
    */
   protected lazy val validConstraints: ExpressionSet = ExpressionSet()
 }

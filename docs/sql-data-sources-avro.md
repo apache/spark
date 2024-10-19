@@ -225,6 +225,24 @@ write.stream(
 {% endhighlight %}
 </div>
 
+<div data-lang="sql" markdown="1">
+{% highlight sql %}
+CREATE TABLE t AS
+  SELECT NAMED_STRUCT('u', NAMED_STRUCT('member0', member0, 'member1', member1)) AS s
+  FROM VALUES (1, NULL), (NULL,  'a') tab(member0, member1);
+DECLARE avro_schema STRING;
+SET VARIABLE avro_schema =
+  '{ "type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }] }';
+
+SELECT TO_AVRO(s, avro_schema) AS RESULT FROM t;
+
+SELECT FROM_AVRO(result, avro_schema, MAP()).u FROM (
+  SELECT TO_AVRO(s, avro_schema) AS RESULT FROM t);
+
+DROP TEMPORARY VARIABLE avro_schema;
+DROP TABLE t;
+{% endhighlight %}
+</div>
 </div>
 
 ## Data Source Option
@@ -233,8 +251,8 @@ Data source options of Avro can be set via:
  * the `.option` method on `DataFrameReader` or `DataFrameWriter`.
  * the `options` parameter in function `from_avro`.
 
-<table>
-  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th><th><b>Since Version</b></th></tr></thead>
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Scope</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>avroSchema</code></td>
     <td>None</td>
@@ -274,7 +292,7 @@ Data source options of Avro can be set via:
   <tr>
     <td><code>ignoreExtension</code></td>
     <td>true</td>
-    <td>The option controls ignoring of files without <code>.avro</code> extensions in read.<br> If the option is enabled, all files (with and without <code>.avro</code> extension) are loaded.<br> The option has been deprecated, and it will be removed in the future releases. Please use the general data source option <a href="./sql-data-sources-generic-options.html#path-global-filter">pathGlobFilter</a> for filtering file names.</td>
+    <td>The option controls ignoring of files without <code>.avro</code> extensions in read.<br> If the option is enabled, all files (with and without <code>.avro</code> extension) are loaded.<br> The option has been deprecated, and it will be removed in the future releases. Please use the general data source option <a href="./sql-data-sources-generic-options.html#path-glob-filter">pathGlobFilter</a> for filtering file names.</td>
     <td>read</td>
     <td>2.4.0</td>
   </tr>
@@ -327,12 +345,27 @@ Data source options of Avro can be set via:
     <td>If it is set to true, Avro schema is deserialized into Spark SQL schema, and the Avro Union type is transformed into a structure where the field names remain consistent with their respective types. The resulting field names are converted to lowercase, e.g. member_int or member_string. If two user-defined type names or a user-defined type name and a built-in type name are identical regardless of case, an exception will be raised. However, in other cases, the field names can be uniquely identified.</td>
     <td>read</td>
     <td>3.5.0</td>
-  </tr></table>
+  </tr>
+  <tr>
+    <td><code>stableIdentifierPrefixForUnionType</code></td>
+    <td>member_</td>
+    <td>When `enableStableIdentifiersForUnionType` is enabled, the option allows to configure the prefix for fields of Avro Union type.</td>
+    <td>read</td>
+    <td>4.0.0</td>
+  </tr>
+  <tr>
+    <td><code>recursiveFieldMaxDepth</code></td>
+    <td>-1</td>
+    <td>If this option is specified to negative or is set to 0, recursive fields are not permitted. Setting it to 1 drops all recursive fields, 2 allows recursive fields to be recursed once, and 3 allows it to be recursed twice and so on, up to 15. Values larger than 15 are not allowed in order to avoid inadvertently creating very large schemas. If an avro message has depth beyond this limit, the Spark struct returned is truncated after the recursion limit. An example of usage can be found in section <a href="#handling-circular-references-of-avro-fields">Handling circular references of Avro fields</a></td>
+    <td>read</td>
+    <td>4.0.0</td>
+  </tr>
+</table>
 
 ## Configuration
 Configuration of Avro can be done via `spark.conf.set` or by running `SET key=value` commands using SQL.
-<table>
-  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Since Version</b></th></tr></thead>
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td>spark.sql.legacy.replaceDatabricksSparkAvro.enabled</td>
     <td>true</td>
@@ -348,7 +381,7 @@ Configuration of Avro can be done via `spark.conf.set` or by running `SET key=va
     <td>snappy</td>
     <td>
       Compression codec used in writing of AVRO files. Supported codecs: uncompressed, deflate,
-      snappy, bzip2 and xz. Default codec is snappy.
+      snappy, bzip2, xz and zstandard. Default codec is snappy.
     </td>
     <td>2.4.0</td>
   </tr>
@@ -361,6 +394,32 @@ Configuration of Avro can be done via `spark.conf.set` or by running `SET key=va
       in the current implementation.
     </td>
     <td>2.4.0</td>
+  </tr>
+  <tr>
+    <td>spark.sql.avro.xz.level</td>
+    <td>6</td>
+    <td>
+      Compression level for the xz codec used in writing of AVRO files. Valid value must be in
+      the range of from 1 to 9 inclusive. The default value is 6 in the current implementation.
+    </td>
+    <td>4.0.0</td>
+  </tr>
+  <tr>
+    <td>spark.sql.avro.zstandard.level</td>
+    <td>3</td>
+    <td>
+      Compression level for the zstandard codec used in writing of AVRO files.
+      The default value is 3 in the current implementation.
+    </td>
+    <td>4.0.0</td>
+  </tr>
+  <tr>
+    <td>spark.sql.avro.zstandard.bufferPool.enabled</td>
+    <td>false</td>
+    <td>
+      If true, enable buffer pool of ZSTD JNI library when writing of AVRO files.
+    </td>
+    <td>4.0.0</td>
   </tr>
   <tr>
     <td>spark.sql.avro.datetimeRebaseModeInRead</td>
@@ -412,9 +471,10 @@ built-in but external module, both implicit classes are removed. Please use `.fo
 
 If you prefer using your own build of `spark-avro` jar file, you can simply disable the configuration
 `spark.sql.legacy.replaceDatabricksSparkAvro.enabled`, and use the option `--jars` on deploying your
-applications. Read the [Advanced Dependency Management](https://spark.apache
-.org/docs/latest/submitting-applications.html#advanced-dependency-management) section in Application
+applications. Read the [Advanced Dependency Management][adm] section in the Application
 Submission Guide for more details.
+
+[adm]: submitting-applications.html#advanced-dependency-management
 
 ## Supported types for Avro -> Spark SQL conversion
 Currently Spark supports reading all [primitive types](https://avro.apache.org/docs/1.11.3/specification/#primitive-types) and [complex types](https://avro.apache.org/docs/1.11.3/specification/#complex-types) under records of Avro.
@@ -575,3 +635,41 @@ You can also specify the whole output Avro schema with the option `avroSchema`, 
     <td>decimal</td>
   </tr>
 </table>
+
+## Handling circular references of Avro fields
+In Avro, a circular reference occurs when the type of a field is defined in one of the parent records. This can cause issues when parsing the data, as it can result in infinite loops or other unexpected behavior.
+To read Avro data with schema that has circular reference, users can use the `recursiveFieldMaxDepth` option to specify the maximum number of levels of recursion to allow when parsing the schema. By default, Spark Avro data source will not permit recursive fields by setting `recursiveFieldMaxDepth` to -1. However, you can set this option to 1 to 15 if needed.
+
+Setting `recursiveFieldMaxDepth` to 1 drops all recursive fields, setting it to 2 allows it to be recursed once, and setting it to 3 allows it to be recursed twice. A `recursiveFieldMaxDepth` value greater than 15 is not allowed, as it can lead to performance issues and even stack overflows.
+
+SQL Schema for the below Avro message will vary based on the value of `recursiveFieldMaxDepth`.
+
+<div data-lang="avro" markdown="1">
+<div class="d-none">
+This div is only used to make markdown editor/viewer happy and does not display on web
+
+```avro
+</div>
+
+{% highlight avro %}
+{
+  "type": "record",
+  "name": "Node",
+  "fields": [
+    {"name": "Id", "type": "int"},
+    {"name": "Next", "type": ["null", "Node"]}
+  ]
+}
+
+// The Avro schema defined above, would be converted into a Spark SQL columns with the following
+// structure based on `recursiveFieldMaxDepth` value.
+
+1: struct<Id: int>
+2: struct<Id: int, Next: struct<Id: int>>
+3: struct<Id: int, Next: struct<Id: int, Next: struct<Id: int>>>
+
+{% endhighlight %}
+<div class="d-none">
+```
+</div>
+</div>

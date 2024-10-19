@@ -36,6 +36,7 @@ jobs:
       hadoop: hadoop3
       envs: >-
         {
+          "PYTHON_TO_TEST": "python3.11",
           "PYSPARK_CODECOV": "true"
         }
       jobs: >-

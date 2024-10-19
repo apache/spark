@@ -24,17 +24,17 @@ import java.util.Locale
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference, NullOrdering, SortDirection}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
-import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, FloatType, LongType, MetadataBuilder, StringType}
+import org.apache.spark.sql.types._
 
-private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
+private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with NoLegacyJDBCError {
 
   override def canHandle(url : String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:mysql")
@@ -45,12 +45,33 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
   // See https://dev.mysql.com/doc/refman/8.0/en/aggregate-functions.html
   private val supportedAggregateFunctions =
     Set("MAX", "MIN", "SUM", "COUNT", "AVG") ++ distinctUnsupportedAggregateFunctions
-  private val supportedFunctions = supportedAggregateFunctions
+  private val supportedFunctions = supportedAggregateFunctions ++ Set("DATE_ADD", "DATE_DIFF")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
   class MySQLSQLBuilder extends JDBCSQLBuilder {
+    override def visitExtract(field: String, source: String): String = {
+      field match {
+        case "DAY_OF_YEAR" => s"DAYOFYEAR($source)"
+        case "YEAR_OF_WEEK" => s"EXTRACT(YEAR FROM $source)"
+        // WEEKDAY uses Monday = 0, Tuesday = 1, ... and ISO standard is Monday = 1, ...,
+        // so we use the formula (WEEKDAY + 1) to follow the ISO standard.
+        case "DAY_OF_WEEK" => s"(WEEKDAY($source) + 1)"
+        case _ => super.visitExtract(field, source)
+      }
+    }
+
+    override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
+      funcName match {
+        case "DATE_ADD" =>
+          s"DATE_ADD(${inputs(0)}, INTERVAL ${inputs(1)} DAY)"
+        case "DATE_DIFF" =>
+          s"DATEDIFF(${inputs(0)}, ${inputs(1)})"
+        case _ => super.visitSQLFunction(funcName, inputs)
+      }
+    }
+
     override def visitSortOrder(
         sortKey: String, sortDirection: SortDirection, nullOrdering: NullOrdering): String = {
       (sortDirection, nullOrdering) match {
@@ -65,11 +86,29 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       }
     }
 
+    override def visitStartsWith(l: String, r: String): String = {
+      val value = r.substring(1, r.length() - 1)
+      s"$l LIKE '${escapeSpecialCharsForLikePattern(value)}%' ESCAPE '\\\\'"
+    }
+
+    override def visitEndsWith(l: String, r: String): String = {
+      val value = r.substring(1, r.length() - 1)
+      s"$l LIKE '%${escapeSpecialCharsForLikePattern(value)}' ESCAPE '\\\\'"
+    }
+
+    override def visitContains(l: String, r: String): String = {
+      val value = r.substring(1, r.length() - 1)
+      s"$l LIKE '%${escapeSpecialCharsForLikePattern(value)}%' ESCAPE '\\\\'"
+    }
+
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
-        throw new UnsupportedOperationException(s"${this.getClass.getSimpleName} does not " +
-          s"support aggregate function: $funcName with DISTINCT");
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3184",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> funcName))
       } else {
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
@@ -88,23 +127,59 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
-    if (sqlType == Types.VARBINARY && typeName.equals("BIT") && size != 1) {
-      // This could instead be a BinaryType if we'd rather return bit-vectors of up to 64 bits as
-      // byte arrays instead of longs.
+    def getCatalystTypeForBitArray: Option[DataType] = {
       md.putLong("binarylong", 1)
-      Option(LongType)
-    } else if (sqlType == Types.BIT && typeName.equals("TINYINT")) {
-      Option(BooleanType)
-    } else if ("TINYTEXT".equalsIgnoreCase(typeName)) {
-      // TINYTEXT is Types.VARCHAR(63) from mysql jdbc, but keep it AS-IS for historical reason
-      Some(StringType)
-    } else if (sqlType == Types.VARCHAR && typeName.equals("JSON")) {
-      // Some MySQL JDBC drivers converts JSON type into Types.VARCHAR with a precision of -1.
-      // Explicitly converts it into StringType here.
-      Some(StringType)
-    } else if (sqlType == Types.TINYINT && typeName.equals("TINYINT")) {
-      Some(ByteType)
-    } else None
+      if (conf.legacyMySqlBitArrayMappingEnabled) {
+        Some(LongType)
+      } else {
+        Some(BinaryType)
+      }
+    }
+    sqlType match {
+      case Types.VARBINARY if "BIT".equalsIgnoreCase(typeName) && size != 1 =>
+        // MariaDB connector behaviour
+        getCatalystTypeForBitArray
+      case Types.BIT if size > 1 =>
+        // MySQL connector behaviour
+        getCatalystTypeForBitArray
+      case Types.VARCHAR if "TINYTEXT".equalsIgnoreCase(typeName) =>
+        // TINYTEXT is Types.VARCHAR(63) from mysql jdbc, but keep it AS-IS for historical reason
+        Some(StringType)
+      case Types.VARCHAR | Types.CHAR if "JSON".equalsIgnoreCase(typeName) =>
+        // scalastyle:off line.size.limit
+        // Some MySQL JDBC drivers convert JSON type into Types.VARCHAR(-1) or Types.CHAR(Int.Max).
+        // MySQL Connector/J 5.x as an example:
+        // https://github.com/mysql/mysql-connector-j/blob/release/5.1/src/com/mysql/jdbc/MysqlDefs.java#L295
+        // Explicitly converts it into StringType here.
+        // scalastyle:on line.size.limit
+        Some(StringType)
+      case Types.TINYINT =>
+        if (md.build().getBoolean("isSigned")) {
+          Some(ByteType)
+        } else {
+          Some(ShortType)
+        }
+      case Types.SMALLINT =>
+        if (md.build().getBoolean("isSigned")) {
+          Some(ShortType)
+        } else {
+          Some(IntegerType)
+        }
+      case Types.INTEGER if "MEDIUMINT UNSIGNED".equalsIgnoreCase(typeName) =>
+        // Signed values in [-8388608, 8388607] and unsigned values in [0, 16777215],
+        // both of them fit IntegerType
+        Some(IntegerType)
+      case Types.REAL | Types.FLOAT =>
+        if (md.build().getBoolean("isSigned")) Some(FloatType) else Some(DoubleType)
+      case Types.TIMESTAMP if "DATETIME".equalsIgnoreCase(typeName) =>
+        // scalastyle:off line.size.limit
+        // In MYSQL, DATETIME is TIMESTAMP WITHOUT TIME ZONE
+        // https://github.com/mysql/mysql-connector-j/blob/8.3.0/src/main/core-api/java/com/mysql/cj/MysqlType.java#L251
+        // scalastyle:on line.size.limit
+        Some(getTimestampType(md.build()))
+      case Types.TIMESTAMP if !conf.legacyMySqlTimestampNTZMappingEnabled => Some(TimestampType)
+      case _ => None
+    }
   }
 
   override def quoteIdentifier(colName: String): String = {
@@ -128,10 +203,6 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
         logWarning("Cannot show schemas.")
     }
     schemaBuilder.result()
-  }
-
-  override def getTableExistsQuery(table: String): String = {
-    s"SELECT 1 FROM $table LIMIT 1"
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
@@ -187,6 +258,13 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     case FloatType => Option(JdbcType("FLOAT", java.sql.Types.FLOAT))
     case StringType => Option(JdbcType("LONGTEXT", java.sql.Types.LONGVARCHAR))
     case ByteType => Option(JdbcType("TINYINT", java.sql.Types.TINYINT))
+    case ShortType => Option(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
+    // scalastyle:off line.size.limit
+    // In MYSQL, DATETIME is TIMESTAMP WITHOUT TIME ZONE
+    // https://github.com/mysql/mysql-connector-j/blob/8.3.0/src/main/core-api/java/com/mysql/cj/MysqlType.java#L251
+    // scalastyle:on line.size.limit
+    case TimestampNTZType if !conf.legacyMySqlTimestampNTZMappingEnabled =>
+      Option(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
     case _ => JdbcUtils.getCommonJDBCType(dt)
   }
 
@@ -273,11 +351,16 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
   override def classifyException(
       e: Throwable,
       errorClass: String,
-      messageParameters: Map[String, String]): AnalysisException = {
+      messageParameters: Map[String, String],
+      description: String,
+      isRuntime: Boolean): Throwable with SparkThrowable = {
     e match {
       case sqlException: SQLException =>
         sqlException.getErrorCode match {
           // ER_DUP_KEYNAME
+          case 1050 if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
+            val newTable = messageParameters("newName")
+            throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
           case 1061 if errorClass == "FAILED_JDBC.CREATE_INDEX" =>
             val indexName = messageParameters("indexName")
             val tableName = messageParameters("tableName")
@@ -286,10 +369,11 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
             val indexName = messageParameters("indexName")
             val tableName = messageParameters("tableName")
             throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
-          case _ => super.classifyException(e, errorClass, messageParameters)
+          case _ =>
+            super.classifyException(e, errorClass, messageParameters, description, isRuntime)
         }
       case unsupported: UnsupportedOperationException => throw unsupported
-      case _ => super.classifyException(e, errorClass, messageParameters)
+      case _ => super.classifyException(e, errorClass, messageParameters, description, isRuntime)
     }
   }
 

@@ -41,7 +41,6 @@ class MissingPandasLikeDataFrameGroupBy:
     # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     # Properties
-    corr = _unsupported_property("corr")
     corrwith = _unsupported_property("corrwith")
     cov = _unsupported_property("cov")
     dtypes = _unsupported_property("dtypes")

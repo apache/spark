@@ -2,25 +2,25 @@
 Add 2 columns and drop 2 columns at 3 different depths of nesting
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 Add 2 columns and drop 2 columns at 3 different depths of nesting:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------------------
-To non-nullable StructTypes using performant method                            3              4           2          0.0      Infinity       1.0X
-To nullable StructTypes using performant method                                2              2           1          0.0      Infinity       1.4X
-To non-nullable StructTypes using non-performant method                       28             30           3          0.0      Infinity       0.1X
-To nullable StructTypes using non-performant method                          877            941          63          0.0      Infinity       0.0X
+To non-nullable StructTypes using performant method                            3              4           1          0.0      Infinity       1.0X
+To nullable StructTypes using performant method                                1              2           0          0.0      Infinity       1.9X
+To non-nullable StructTypes using non-performant method                       18             21           2          0.0      Infinity       0.1X
+To nullable StructTypes using non-performant method                          792            836          39          0.0      Infinity       0.0X
 
 
 ================================================================================================
 Add 50 columns and drop 50 columns at 100 different depths of nesting
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 Add 50 columns and drop 50 columns at 100 different depths of nesting:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------------------------------
-To non-nullable StructTypes using performant method                             2204           2361         221          0.0      Infinity       1.0X
-To nullable StructTypes using performant method                                 2011           2038          37          0.0      Infinity       1.1X
+To non-nullable StructTypes using performant method                             1088           1112          34          0.0      Infinity       1.0X
+To nullable StructTypes using performant method                                 1150           1151           1          0.0      Infinity       0.9X
 
 

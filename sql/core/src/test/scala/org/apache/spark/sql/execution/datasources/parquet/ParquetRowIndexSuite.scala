@@ -25,6 +25,7 @@ import org.apache.parquet.column.ParquetProperties._
 import org.apache.parquet.hadoop.{ParquetFileReader, ParquetOutputFormat}
 import org.apache.parquet.hadoop.ParquetWriter.DEFAULT_BLOCK_SIZE
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.FileFormat
@@ -317,8 +318,10 @@ class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
             .schema(schemaWithRowIdx)
             .load(path.getAbsolutePath)
 
-          val exception = intercept[Exception](dfRead.collect())
-          assert(exception.getMessage.contains(ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME))
+          val exception = intercept[SparkException](dfRead.collect())
+          assert(exception.getCondition.startsWith("FAILED_READ_FILE"))
+          assert(exception.getCause.getMessage.contains(
+            ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME))
         }
       }
     }

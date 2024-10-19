@@ -22,7 +22,6 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
@@ -462,22 +461,6 @@ object DecorrelateInnerQuery extends PredicateHelper {
       p.mapChildren(rewriteDomainJoins(outerPlan, _, conditions))
   }
 
-  private def isCountBugFree(aggregateExpressions: Seq[NamedExpression]): Boolean = {
-    // The COUNT bug only appears if an aggregate expression returns a non-NULL result on an empty
-    // input.
-    // Typical example (hence the name) is COUNT(*) that returns 0 from an empty result.
-    // However, SUM(x) IS NULL is another case that returns 0, and in general any IS/NOT IS and CASE
-    // expressions are suspect (and the combination of those).
-    // For now we conservatively accept only those expressions that are guaranteed to be safe.
-    aggregateExpressions.forall {
-      case _ : AttributeReference => true
-      case Alias(_: AttributeReference, _) => true
-      case Alias(_: Literal, _) => true
-      case Alias(a: AggregateExpression, _) if a.aggregateFunction.defaultResult == None => true
-      case _ => false
-    }
-  }
-
   def apply(
       innerPlan: LogicalPlan,
       outerPlan: LogicalPlan,
@@ -672,38 +655,104 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val newProject = Project(newProjectList ++ referencesToAdd, newChild)
             (newProject, joinCond, outerReferenceMap)
 
-          case Limit(limit, input) =>
-            // LIMIT K (with potential ORDER BY) is decorrelated by computing K rows per every
-            // domain value via a row_number() window function. For example, for a subquery
-            // (SELECT T2.a FROM T2 WHERE T2.b = OuterReference(x) ORDER BY T2.c LIMIT 3)
-            // -- we need to get top 3 values of T2.a (ordering by T2.c) for every value of x.
-            // Following our general decorrelation procedure, 'x' is then replaced by T2.b, so the
-            // subquery is decorrelated as:
-            // SELECT * FROM (
-            //   SELECT T2.a, row_number() OVER (PARTITION BY T2.b ORDER BY T2.c) AS rn FROM T2)
-            // WHERE rn <= 3
+          case Offset(offset, input) =>
+            // OFFSET K is decorrelated by skipping top k rows per every domain value
+            // via a row_number() window function, which is similar to limit decorrelation.
+            // Limit and Offset situation are handled by limit branch as offset is the child
+            // of limit in that case. This branch is for the case where there's no limit operator
+            // above offset.
             val (child, ordering) = input match {
               case Sort(order, _, child) => (child, order)
               case _ => (input, Seq())
             }
             val (newChild, joinCond, outerReferenceMap) =
+              decorrelate(input, parentOuterReferences, aggregated = true, underSetOp)
+            val collectedChildOuterReferences = collectOuterReferencesInPlanTree(child)
+            // Add outer references to the PARTITION BY clause
+            val partitionFields = collectedChildOuterReferences
+              .filter(outerReferenceMap.contains(_))
+              .map(outerReferenceMap(_)).toSeq
+            if (partitionFields.isEmpty) {
+              // Underlying subquery has no predicates connecting inner and outer query.
+              // In this case, offset can be computed over the inner query directly.
+              (Offset(offset, newChild), joinCond, outerReferenceMap)
+            } else {
+              val orderByFields = replaceOuterReferences(ordering, outerReferenceMap)
+
+              val rowNumber = WindowExpression(RowNumber(),
+                WindowSpecDefinition(partitionFields, orderByFields,
+                  SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
+              val rowNumberAlias = Alias(rowNumber, "rn")()
+              // Window function computes row_number() when partitioning by correlated references,
+              // and projects all the other fields from the input.
+              val window = Window(Seq(rowNumberAlias),
+                partitionFields, orderByFields, newChild)
+              val filter = Filter(GreaterThan(rowNumberAlias.toAttribute, offset), window)
+              val project = Project(newChild.output, filter)
+              (project, joinCond, outerReferenceMap)
+            }
+
+          case Limit(limit, input) =>
+            // LIMIT K (with potential ORDER BY or OFFSET) is decorrelated by computing
+            // K rows per every domain value via a row_number() window function.
+            // For example, for a subquery
+            // (SELECT T2.a FROM T2 WHERE T2.b = OuterReference(x) ORDER BY T2.c LIMIT 3 OFFSET 2)
+            // -- we need to get top 3 values of T2.a (ordering by T2.c) for every value of x with
+            // an offset 2.
+            // Following our general decorrelation procedure, 'x' is then replaced by T2.b, so the
+            // subquery is decorrelated as:
+            // SELECT * FROM (
+            //   SELECT T2.a, row_number() OVER (PARTITION BY T2.b ORDER BY T2.c) AS rn FROM T2)
+            // WHERE rn > 2 AND rn <= 2+3
+            val (child, ordering, offsetExpr) = input match {
+              case Sort(order, _, child) => (child, order, Literal(0))
+              case Offset(offsetExpr, offsetChild@(Sort(order, _, child))) =>
+                (child, order, offsetExpr)
+              case Offset(offsetExpr, child) =>
+                (child, Seq(), offsetExpr)
+              case _ => (input, Seq(), Literal(0))
+            }
+            val (newChild, joinCond, outerReferenceMap) =
               decorrelate(child, parentOuterReferences, aggregated = true, underSetOp)
             val collectedChildOuterReferences = collectOuterReferencesInPlanTree(child)
             // Add outer references to the PARTITION BY clause
-            val partitionFields = collectedChildOuterReferences.map(outerReferenceMap(_)).toSeq
-            val orderByFields = replaceOuterReferences(ordering, outerReferenceMap)
+            val partitionFields = collectedChildOuterReferences
+              .filter(outerReferenceMap.contains(_))
+              .map(outerReferenceMap(_)).toSeq
+            if (partitionFields.isEmpty) {
+              // Underlying subquery has no predicates connecting inner and outer query.
+              // In this case, limit can be computed over the inner query directly.
+              offsetExpr match {
+                case IntegerLiteral(0) => (Limit(limit, newChild), joinCond, outerReferenceMap)
+                case _ => (Limit(limit, Offset(offsetExpr, newChild)), joinCond, outerReferenceMap)
+              }
+            } else {
+              val orderByFields = replaceOuterReferences(ordering, outerReferenceMap)
 
-            val rowNumber = WindowExpression(RowNumber(),
-              WindowSpecDefinition(partitionFields, orderByFields,
-                SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
-            val rowNumberAlias = Alias(rowNumber, "rn")()
-            // Window function computes row_number() when partitioning by correlated references,
-            // and projects all the other fields from the input.
-            val window = Window(Seq(rowNumberAlias),
-              partitionFields, orderByFields, newChild)
-            val filter = Filter(LessThanOrEqual(rowNumberAlias.toAttribute, limit), window)
-            val project = Project(newChild.output, filter)
-            (project, joinCond, outerReferenceMap)
+              val rowNumber = WindowExpression(RowNumber(),
+                WindowSpecDefinition(partitionFields, orderByFields,
+                  SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
+              val rowNumberAlias = Alias(rowNumber, "rn")()
+              // Window function computes row_number() when partitioning by correlated references,
+              // and projects all the other fields from the input.
+              val window = Window(Seq(rowNumberAlias),
+                partitionFields, orderByFields, newChild)
+              val filter = offsetExpr match {
+                case IntegerLiteral(0) =>
+                  // If there is no offset, we can directly use the row number to filter the rows.
+                  Filter(LessThanOrEqual(rowNumberAlias.toAttribute, limit), window)
+                case _ =>
+                  Filter(
+                    And(
+                      GreaterThan(rowNumberAlias.toAttribute, offsetExpr),
+                      LessThanOrEqual(rowNumberAlias.toAttribute, Add(offsetExpr, limit))
+                    ),
+                    window
+                  )
+              }
+              val project = Project(newChild.output, filter)
+              (project, joinCond, outerReferenceMap)
+            }
 
           case w @ Window(projectList, partitionSpec, orderSpec, child) =>
             val outerReferences = collectOuterReferences(w.expressions)
@@ -727,8 +776,6 @@ object DecorrelateInnerQuery extends PredicateHelper {
           case a @ Aggregate(groupingExpressions, aggregateExpressions, child) =>
             val outerReferences = collectOuterReferences(a.expressions)
             val newOuterReferences = parentOuterReferences ++ outerReferences
-            val countBugSusceptible = groupingExpressions.isEmpty &&
-              !isCountBugFree(aggregateExpressions)
             val (newChild, joinCond, outerReferenceMap) =
               decorrelate(child, newOuterReferences, aggregated = true, underSetOp)
             // Replace all outer references in grouping and aggregate expressions, and keep
@@ -791,8 +838,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             // | 0 | 2    | true       | 2                              |
             // | 0 | null | null       | 0                              |  <--- correct result
             // +---+------+------------+--------------------------------+
-            // TODO(a.gubichev): retire the 'handleCountBug' parameter.
-            if (countBugSusceptible && handleCountBug) {
+            if (groupingExpressions.isEmpty && handleCountBug) {
               // Evaluate the aggregate expressions with zero tuples.
               val resultMap = RewriteCorrelatedScalarSubquery.evalAggregateOnZeroTups(newAggregate)
               val alwaysTrue = Alias(Literal.TrueLiteral, "alwaysTrue")()
@@ -1018,7 +1064,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
                 // Project, they could get added at the beginning or the end of the output columns
                 // depending on the child plan.
                 // The inner expressions for the domain are the values of newOuterReferenceMap.
-                val domainProjections = collectedChildOuterReferences.map(newOuterReferenceMap(_))
+                val domainProjections = newOuterReferences.map(newOuterReferenceMap(_))
                 val newChild = Project(child.output ++ domainProjections, decorrelatedChild)
                 (newChild, newJoinCond, newOuterReferenceMap)
               }

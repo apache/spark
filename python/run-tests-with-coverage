@@ -41,11 +41,8 @@ mkdir -p "$COVERAGE_DIR/coverage_data"
 # Current directory are added in the python path so that it doesn't refer our built
 # pyspark zip library first.
 export PYTHONPATH="$FWDIR:$PYTHONPATH"
-# Also, our sitecustomize.py and coverage_daemon.py are included in the path.
+# Also, our sitecustomize.py is included in the path.
 export PYTHONPATH="$COVERAGE_DIR:$PYTHONPATH"
-
-# We use 'spark.python.daemon.module' configuration to insert the coverage supported workers.
-export SPARK_CONF_DIR="$COVERAGE_DIR/conf"
 
 # This environment variable enables the coverage.
 export COVERAGE_PROCESS_START="$FWDIR/.coveragerc"
@@ -60,10 +57,10 @@ find $COVERAGE_DIR/coverage_data -size 0 -print0 | xargs -0 rm -fr
 echo "Combining collected coverage data under $COVERAGE_DIR/coverage_data"
 $COV_EXEC combine
 echo "Creating XML report file at python/coverage.xml"
-$COV_EXEC xml --ignore-errors --include "pyspark/*" --omit "pyspark/cloudpickle/*" --omit "pyspark/sql/connect/proto/*" --omit "python/pyspark/loose_version.py"
+$COV_EXEC xml --ignore-errors --include "pyspark/*" --omit "*/pyspark/cloudpickle/*,*/pyspark/sql/connect/proto/*,*/python/pyspark/loose_version.py"
 echo "Reporting the coverage data at $COVERAGE_DIR/coverage_data/coverage"
-$COV_EXEC report --include "pyspark/*" --omit "pyspark/cloudpickle/*" --omit "pyspark/sql/connect/proto/*" --omit "python/pyspark/loose_version.py"
+$COV_EXEC report --include "pyspark/*" --omit "*/pyspark/cloudpickle/*,*/pyspark/sql/connect/proto/*,*/python/pyspark/loose_version.py"
 echo "Generating HTML files for PySpark coverage under $COVERAGE_DIR/htmlcov"
-$COV_EXEC html --ignore-errors --include "pyspark/*" --directory "$COVERAGE_DIR/htmlcov" --omit "pyspark/cloudpickle/*" --omit "pyspark/sql/connect/proto/*" --omit "python/pyspark/loose_version.py"
+$COV_EXEC html --ignore-errors --include "pyspark/*" --directory "$COVERAGE_DIR/htmlcov" --omit "*/pyspark/cloudpickle/*,*/pyspark/sql/connect/proto/*,*/python/pyspark/loose_version.py"
 
 popd

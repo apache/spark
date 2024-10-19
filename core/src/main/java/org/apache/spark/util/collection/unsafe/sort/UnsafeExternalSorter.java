@@ -28,11 +28,13 @@ import java.util.function.Supplier;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.io.IOUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
@@ -50,7 +52,8 @@ import org.apache.spark.util.Utils;
  */
 public final class UnsafeExternalSorter extends MemoryConsumer {
 
-  private static final Logger logger = LoggerFactory.getLogger(UnsafeExternalSorter.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(UnsafeExternalSorter.class);
 
   @Nullable
   private final PrefixComparator prefixComparator;
@@ -217,10 +220,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
 
     logger.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
-      Thread.currentThread().getId(),
-      Utils.bytesToString(getMemoryUsage()),
-      spillWriters.size(),
-      spillWriters.size() > 1 ? " times" : " time");
+      MDC.of(LogKeys.THREAD_ID$.MODULE$, Thread.currentThread().getId()),
+      MDC.of(LogKeys.MEMORY_SIZE$.MODULE$, Utils.bytesToString(getMemoryUsage())),
+      MDC.of(LogKeys.NUM_SPILL_WRITERS$.MODULE$, spillWriters.size()),
+      MDC.of(LogKeys.SPILL_TIMES$.MODULE$, spillWriters.size() > 1 ? "times" : "time"));
 
     ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
 
@@ -335,7 +338,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       File file = spill.getFile();
       if (file != null && file.exists()) {
         if (!file.delete()) {
-          logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
+          logger.error("Was unable to delete spill file {}",
+            MDC.of(LogKeys.PATH$.MODULE$, file.getAbsolutePath()));
         }
       }
     }
@@ -476,8 +480,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     assert(inMemSorter != null);
     if (inMemSorter.numRecords() >= numElementsForSpillThreshold) {
-      logger.info("Spilling data because number of spilledRecords crossed the threshold " +
-        numElementsForSpillThreshold);
+      logger.info("Spilling data because number of spilledRecords crossed the threshold {}",
+        MDC.of(LogKeys.NUM_ELEMENTS_SPILL_THRESHOLD$.MODULE$, numElementsForSpillThreshold));
       spill();
     }
 

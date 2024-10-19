@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkException
+import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
@@ -784,6 +785,16 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
   }
 
   test("SPARK-26680: Stream in groupBy does not cause StackOverflowError") {
+    @scala.annotation.nowarn("cat=deprecation")
+    val groupByCols = Stream(col("key"))
+    val df = Seq((1, 2), (2, 3), (1, 3)).toDF("key", "value")
+      .groupBy(groupByCols: _*)
+      .max("value")
+
+    checkAnswer(df, Seq(Row(1, 3), Row(2, 3)))
+  }
+
+  test("SPARK-45685: LazyList in groupBy does not cause StackOverflowError") {
     val groupByCols = LazyList(col("key"))
     val df = Seq((1, 2), (2, 3), (1, 3)).toDF("key", "value")
       .groupBy(groupByCols: _*)
@@ -867,7 +878,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
             exception = intercept[SparkException] {
               sql(query).collect()
             },
-            errorClass = "INTERNAL_ERROR",
+            condition = "INTERNAL_ERROR",
             parameters = Map("message" -> expectedErrMsg),
             matchPVals = true)
         }
@@ -892,10 +903,44 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
             exception = intercept[SparkException] {
               sql(query).collect()
             },
-            errorClass = "INTERNAL_ERROR",
+            condition = "INTERNAL_ERROR",
             parameters = Map("message" -> expectedErrMsg),
             matchPVals = true)
         }
+      }
+    }
+  }
+
+  test("SPARK-47238: Test broadcast threshold for generated code") {
+    // case 1: threshold is -1, shouldn't broadcast since smaller than 0 means disabled.
+    // case 2: threshold is a larger number, shouldn't broadcast since not yet exceeded.
+    // case 3: threshold is 0, should broadcast since it's always smaller than generated code size.
+    Seq((-1, false), (1000000000, false), (0, true)).foreach { case (threshold, shouldBroadcast) =>
+      withSQLConf(SQLConf.WHOLESTAGE_BROADCAST_CLEANED_SOURCE_THRESHOLD.key -> threshold.toString,
+        SQLConf.USE_PARTITION_EVALUATOR.key -> "true") {
+        val df = Seq(0, 1, 2).toDF().groupBy("value").sum()
+        // Invoke WholeStageCodegenExec.execute and cast the rdd, and then get
+        // the evaluatorFactory to check whether it uses broadcast as expected.
+        val wscgExec = df.queryExecution.executedPlan.collectFirst {
+          case exec: WholeStageCodegenExec => exec
+        }
+        assert(wscgExec match {
+          case Some(exec) =>
+            val rdd = exec.execute().asInstanceOf[MapPartitionsWithEvaluatorRDD[_, _]]
+            val evaluatorFactoryField = rdd.getClass.getDeclaredField("evaluatorFactory")
+            evaluatorFactoryField.setAccessible(true)
+            val evaluatorFactory = evaluatorFactoryField.get(rdd)
+            val cleanedSourceOptField = evaluatorFactory.getClass.getDeclaredField(
+              "org$apache$spark$sql$execution$WholeStageCodegenEvaluatorFactory$$cleanedSourceOpt")
+            cleanedSourceOptField.setAccessible(true)
+            cleanedSourceOptField.get(evaluatorFactory).asInstanceOf[Either[_, _]] match {
+              case Left(_) => shouldBroadcast
+              case Right(_) => !shouldBroadcast
+            }
+          case None => false
+        })
+        // Execute and validate that the executor side still yields the correct result.
+        checkAnswer(df, Seq(Row(0, 0), Row(1, 1), Row(2, 2)))
       }
     }
   }

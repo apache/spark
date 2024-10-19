@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{LOGICAL_PLAN_COLUMNS, OPTIMIZED_PLAN_COLUMNS}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Encoder, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -81,7 +82,7 @@ case class ExternalRDDScanExec[T](
   }
 
   override def simpleString(maxFields: Int): String = {
-    s"$nodeName${output.mkString("[", ",", "]")}"
+    s"$nodeName${truncatedString(output, "[", ", ", "]", maxFields)}"
   }
 }
 
@@ -150,6 +151,13 @@ case class LogicalRDD(
   }
 
   override lazy val constraints: ExpressionSet = originConstraints.getOrElse(ExpressionSet())
+    // Subqueries can have non-deterministic results even when they only contain deterministic
+    // expressions (e.g. consider a LIMIT 1 subquery without an ORDER BY). Propagating predicates
+    // containing a subquery causes the subquery to be executed twice (as the result of the subquery
+    // in the checkpoint computation cannot be reused), which could result in incorrect results.
+    // Therefore we assume that all subqueries are non-deterministic, and we do not expose any
+    // constraints that contain a subquery.
+    .filterNot(SubqueryExpression.hasSubquery)
 }
 
 object LogicalRDD extends Logging {
@@ -219,10 +227,11 @@ object LogicalRDD extends Logging {
       (Some(rewrittenStatistics), Some(rewrittenConstraints))
     }.getOrElse {
       // can't rewrite stats and constraints, give up
-      logWarning("The output columns are expected to the same (for name and type) for output " +
-        "between logical plan and optimized plan, but they aren't. output in logical plan: " +
-        s"${logicalPlan.output.map(_.simpleString(10))} / output in optimized plan: " +
-        s"${optimizedPlan.output.map(_.simpleString(10))}")
+      logWarning(log"The output columns are expected to the same (for name and type) for output " +
+        log"between logical plan and optimized plan, but they aren't. output in logical plan: " +
+        log"${MDC(LOGICAL_PLAN_COLUMNS, logicalPlan.output.map(_.simpleString(10)))} " +
+        log"/ output in optimized plan: " +
+        log"${MDC(OPTIMIZED_PLAN_COLUMNS, optimizedPlan.output.map(_.simpleString(10)))}")
 
       (None, None)
     }

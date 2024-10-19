@@ -22,7 +22,7 @@ CreateViewCommand `testData`, SELECT * FROM VALUES
 (3, 2147483650L, 100.001D, date("2020-12-31"), timestamp_seconds(1609372800), "b"),
 (null, null, null, null, null, null),
 (3, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), null)
-AS testData(val, val_long, val_double, val_date, val_timestamp, cate), false, true, LocalTempView, true
+AS testData(val, val_long, val_double, val_date, val_timestamp, cate), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
       +- SubqueryAlias testData
          +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -39,7 +39,7 @@ Project [udf(val)#x, cate#x, count(val) OVER (PARTITION BY cate ORDER BY udf(val
          +- Window [count(val#x) windowspecdefinition(cate#x, _w1#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), currentrow$())) AS count(val) OVER (PARTITION BY cate ORDER BY udf(val) ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND CURRENT ROW)#xL], [cate#x], [_w1#x ASC NULLS FIRST]
             +- Project [cast(udf(cast(val#x as string)) as int) AS udf(val)#x, cate#x, val#x, cast(udf(cast(val#x as string)) as int) AS _w1#x]
                +- SubqueryAlias testdata
-                  +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                  +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                      +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                         +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                            +- SubqueryAlias testData
@@ -57,7 +57,7 @@ Project [udf(val)#x, cate#x, sum(val) OVER (PARTITION BY cate ORDER BY udf(val) 
          +- Window [sum(val#x) windowspecdefinition(cate#x, _w1#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS sum(val) OVER (PARTITION BY cate ORDER BY udf(val) ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#xL], [cate#x], [_w1#x ASC NULLS FIRST]
             +- Project [cast(udf(cast(val#x as string)) as int) AS udf(val)#x, cate#x, val#x, cast(udf(cast(val#x as string)) as int) AS _w1#x]
                +- SubqueryAlias testdata
-                  +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                  +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                      +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                         +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                            +- SubqueryAlias testData
@@ -99,7 +99,7 @@ Project [udf(val)#x, cate#x, count(val) OVER (PARTITION BY udf(cate) ORDER BY va
          +- Window [count(val#x) windowspecdefinition(_w1#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -1, currentrow$())) AS count(val) OVER (PARTITION BY udf(cate) ORDER BY val ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CURRENT ROW)#xL], [_w1#x], [val#x ASC NULLS FIRST]
             +- Project [cast(udf(cast(val#x as string)) as int) AS udf(val)#x, cate#x, val#x, cast(udf(cast(cate#x as string)) as string) AS _w1#x]
                +- SubqueryAlias testdata
-                  +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                  +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                      +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                         +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                            +- SubqueryAlias testData
@@ -117,7 +117,7 @@ Project [val#x, udf(cate)#x, sum(val) OVER (PARTITION BY udf(cate) ORDER BY val 
          +- Window [sum(val#x) windowspecdefinition(_w0#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), 1)) AS sum(val) OVER (PARTITION BY udf(cate) ORDER BY val ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)#xL], [_w0#x], [val#x ASC NULLS FIRST]
             +- Project [val#x, cast(udf(cast(cate#x as string)) as string) AS udf(cate)#x, cast(udf(cast(cate#x as string)) as string) AS _w0#x, cate#x]
                +- SubqueryAlias testdata
-                  +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                  +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                      +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                         +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                            +- SubqueryAlias testData
@@ -135,7 +135,7 @@ Project [val_long#xL, udf(cate)#x, sum(val_long) OVER (PARTITION BY udf(cate) OR
          +- Window [sum(val_long#xL) windowspecdefinition(_w0#x, val_long#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), 2147483648)) AS sum(val_long) OVER (PARTITION BY udf(cate) ORDER BY val_long ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2147483648 FOLLOWING)#xL], [_w0#x], [val_long#xL ASC NULLS FIRST]
             +- Project [val_long#xL, cast(udf(cast(cate#x as string)) as string) AS udf(cate)#x, cast(udf(cast(cate#x as string)) as string) AS _w0#x, cate#x]
                +- SubqueryAlias testdata
-                  +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                  +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                      +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                         +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                            +- SubqueryAlias testData
@@ -153,7 +153,7 @@ Project [val_double#x, udf(cate)#x, sum(val_double) OVER (PARTITION BY udf(cate)
          +- Window [sum(val_double#x) windowspecdefinition(_w0#x, val_double#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), cast(2.5 as double))) AS sum(val_double) OVER (PARTITION BY udf(cate) ORDER BY val_double ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2.5 FOLLOWING)#x], [_w0#x], [val_double#x ASC NULLS FIRST]
             +- Project [val_double#x, cast(udf(cast(cate#x as string)) as string) AS udf(cate)#x, cast(udf(cast(cate#x as string)) as string) AS _w0#x, cate#x]
                +- SubqueryAlias testdata
-                  +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                  +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                      +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                         +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                            +- SubqueryAlias testData
@@ -171,7 +171,7 @@ Project [val_date#x, udf(cate)#x, max(val_date) OVER (PARTITION BY udf(cate) ORD
          +- Window [max(val_date#x) windowspecdefinition(_w0#x, val_date#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), 2)) AS max(val_date) OVER (PARTITION BY udf(cate) ORDER BY val_date ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2 FOLLOWING)#x], [_w0#x], [val_date#x ASC NULLS FIRST]
             +- Project [val_date#x, cast(udf(cast(cate#x as string)) as string) AS udf(cate)#x, cast(udf(cast(cate#x as string)) as string) AS _w0#x, cate#x]
                +- SubqueryAlias testdata
-                  +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                  +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                      +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                         +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                            +- SubqueryAlias testData
@@ -190,7 +190,7 @@ Project [val_timestamp#x, udf(cate)#x, avg(val_timestamp) OVER (PARTITION BY udf
          +- Window [avg(_w0#x) windowspecdefinition(_w1#x, val_timestamp#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), INTERVAL '23 04' DAY TO HOUR)) AS avg(val_timestamp) OVER (PARTITION BY udf(cate) ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '23 04' DAY TO HOUR FOLLOWING)#x], [_w1#x], [val_timestamp#x ASC NULLS FIRST]
             +- Project [val_timestamp#x, cast(udf(cast(cate#x as string)) as string) AS udf(cate)#x, cast(val_timestamp#x as double) AS _w0#x, cast(udf(cast(cate#x as string)) as string) AS _w1#x, cate#x]
                +- SubqueryAlias testdata
-                  +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                  +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                      +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                         +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                            +- SubqueryAlias testData
@@ -208,7 +208,7 @@ Project [val#x, udf(cate)#x, sum(val) OVER (PARTITION BY cate ORDER BY val DESC 
          +- Window [sum(val#x) windowspecdefinition(cate#x, val#x DESC NULLS LAST, specifiedwindowframe(RangeFrame, currentrow$(), 1)) AS sum(val) OVER (PARTITION BY cate ORDER BY val DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)#xL], [cate#x], [val#x DESC NULLS LAST]
             +- Project [val#x, cast(udf(cast(cate#x as string)) as string) AS udf(cate)#x, cate#x]
                +- SubqueryAlias testdata
-                  +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                  +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                      +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                         +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                            +- SubqueryAlias testData
@@ -392,7 +392,7 @@ Project [udf(val)#x, cate#x, max#x, min#x, min#x, count#xL, sum#xL, avg#x, stdde
          +- Window [max(_w0#x) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS max#x, min(_w0#x) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS min#x, min(_w0#x) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS min#x, count(_w0#x) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS count#xL, sum(_w0#x) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS sum#xL, avg(_w0#x) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS avg#x, stddev(_w2#x) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS stddev#x, first_value(_w0#x, false) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS first_value#x, first_value(_w0#x, true) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS first_value_ignore_null#x, first_value(_w0#x, false) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS first_value_contain_null#x, any_value(_w0#x, false) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS any_value#x, any_value(_w0#x, true) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS any_value_ignore_null#x, any_value(_w0#x, false) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS any_value_contain_null#x, last_value(_w0#x, false) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS last_value#x, last_value(_w0#x, true) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS last_value_ignore_null#x, last_value(_w0#x, false) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS last_value_contain_null#x, rank(_w0#x) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank#x, dense_rank(_w0#x) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS dense_rank#x, cume_dist() windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS cume_dist#x, percent_rank(_w0#x) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS percent_rank#x, ntile(2) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS ntile#x, row_number() windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS row_number#x, var_pop(_w2#x) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS var_pop#x, var_samp(_w2#x) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS var_samp#x, ... 9 more fields], [_w1#x], [_w0#x ASC NULLS FIRST]
             +- Project [cast(udf(cast(val#x as string)) as int) AS udf(val)#x, cate#x, cast(udf(cast(val#x as string)) as int) AS _w0#x, cast(udf(cast(cate#x as string)) as string) AS _w1#x, cast(cast(udf(cast(val#x as string)) as int) as double) AS _w2#x, cast(cast(udf(cast(val_long#xL as string)) as bigint) as double) AS _w3#x, cast(udf(cast(val_double#x as string)) as double) AS _w4#x, val#x]
                +- SubqueryAlias testdata
-                  +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                  +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                      +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                         +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                            +- SubqueryAlias testData
@@ -409,7 +409,7 @@ Project [udf(val)#x, cate#x, avg(NULL) OVER (PARTITION BY cate ORDER BY val ASC 
          +- Window [avg(cast(null as double)) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS avg(NULL) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [cate#x], [val#x ASC NULLS FIRST]
             +- Project [cast(udf(cast(val#x as string)) as int) AS udf(val)#x, cate#x, val#x]
                +- SubqueryAlias testdata
-                  +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                  +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                      +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                         +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                            +- SubqueryAlias testData
@@ -438,7 +438,7 @@ Project [udf(val)#x, cate#x, sum(val) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND
          +- Window [sum(val#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS sum(val) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL, avg(val#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS avg(val) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
             +- Project [cast(udf(cast(val#x as string)) as int) AS udf(val)#x, cate#x, val#x]
                +- SubqueryAlias testdata
-                  +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                  +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                      +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                         +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                            +- SubqueryAlias testData
@@ -467,7 +467,7 @@ Project [udf(val)#x, cate#x, first_value#x, first_value_ignore_null#x, first_val
          +- Window [first_value(false, false) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS first_value#x, first_value(true, true) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS first_value_ignore_null#x, first_value(false, false) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS first_value_contain_null#x, any_value(false, false) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS any_value#x, any_value(true, true) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS any_value_ignore_null#x, any_value(false, false) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS any_value_contain_null#x, last_value(false, false) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS last_value#x, last_value(true, true) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS last_value_ignore_null#x, last_value(false, false) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS last_value_contain_null#x]
             +- Project [cast(udf(cast(val#x as string)) as int) AS udf(val)#x, cate#x, val#x]
                +- SubqueryAlias testdata
-                  +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                  +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                      +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                         +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                            +- SubqueryAlias testData
@@ -486,7 +486,7 @@ Project [udf(cate)#x, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FI
       +- Project [cast(udf(cast(cate#x as string)) as string) AS udf(cate)#x, val#x, cate#x]
          +- Filter isnotnull(val#x)
             +- SubqueryAlias testdata
-               +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData

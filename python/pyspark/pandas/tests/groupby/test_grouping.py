@@ -155,7 +155,10 @@ class GroupingTestsMixin:
         self.assertTrue(isinstance(psdf.groupby("a")["b"], SeriesGroupBy))
 
 
-class GroupingTests(GroupingTestsMixin, PandasOnSparkTestCase):
+class GroupingTests(
+    GroupingTestsMixin,
+    PandasOnSparkTestCase,
+):
     pass
 
 

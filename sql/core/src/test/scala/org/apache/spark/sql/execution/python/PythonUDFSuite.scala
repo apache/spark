@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.sql.{IntegratedUDFTestUtils, QueryTest}
-import org.apache.spark.sql.functions.count
+import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.functions.{array, col, count, transform}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.LongType
 
@@ -86,6 +86,62 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
     checkAnswer(actual, expected)
   }
 
+  test("variant input to pandas grouped agg UDF") {
+    assume(shouldTestPandasUDFs)
+    val df = spark.range(0, 10).selectExpr(
+      """parse_json(format_string('{"%s": "test"}', id)) as v""")
+
+    val testUdf = TestGroupedAggPandasUDFStringifiedMax(name = "pandas_udf")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.agg(testUdf(df("v"))).collect()
+      },
+      condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+      parameters = Map("sqlExpr" -> "\"pandas_udf(v)\"", "dataType" -> "VARIANT"))
+  }
+
+  test("complex variant input to pandas grouped agg UDF") {
+    assume(shouldTestPandasUDFs)
+    val df = spark.range(0, 10).selectExpr(
+      """array(parse_json(format_string('{"%s": "test"}', id))) as arr_v""")
+
+    val testUdf = TestGroupedAggPandasUDFStringifiedMax(name = "pandas_udf")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.agg(testUdf(df("arr_v"))).collect()
+      },
+      condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+      parameters = Map("sqlExpr" -> "\"pandas_udf(arr_v)\"", "dataType" -> "ARRAY<VARIANT>"))
+  }
+
+  test("variant output to pandas grouped agg UDF") {
+    assume(shouldTestPandasUDFs)
+    val df = spark.range(0, 10).toDF("id")
+
+    val testUdf = TestGroupedAggPandasUDFReturnVariant(name = "pandas_udf")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.agg(testUdf(df("id"))).collect()
+      },
+      condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+      parameters = Map("sqlExpr" -> "\"pandas_udf(id)\"", "dataType" -> "VARIANT"))
+  }
+
+  test("complex variant output to pandas grouped agg UDF") {
+    assume(shouldTestPandasUDFs)
+    val df = spark.range(0, 10).toDF("id")
+
+    val testUdf = TestGroupedAggPandasUDFReturnComplexVariant(name = "pandas_udf")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.agg(testUdf(df("id"))).collect()
+      },
+      condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"pandas_udf(id)\"",
+        "dataType" -> "STRUCT<a: STRUCT<v: VARIANT>>"))
+  }
+
   test("SPARK-34265: Instrument Python UDF execution using SQL Metrics") {
     assume(shouldTestPythonUDFs)
     val pythonSQLMetrics = List(
@@ -111,5 +167,29 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
     val df = spark.range(1)
     val pandasTestUDF = TestGroupedAggPandasUDF(name = udfName)
     assert(df.agg(pandasTestUDF(df("id"))).schema.fieldNames.exists(_.startsWith(udfName)))
+  }
+
+  test("SPARK-48706: Negative test case for Python UDF in higher order functions") {
+    assume(shouldTestPythonUDFs)
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.range(1).select(transform(array("id"), x => pythonTestUDF(x))).collect()
+      },
+      condition = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
+      parameters = Map("funcName" -> "\"pyUDF(namedlambdavariable())\""),
+      context = ExpectedContext(
+        "transform", s".*${this.getClass.getSimpleName}.*"))
+  }
+
+  test("SPARK-48666: Python UDF execution against partitioned column") {
+    assume(shouldTestPythonUDFs)
+    withTable("t") {
+      spark.range(1).selectExpr("id AS t", "(id + 1) AS p").write.partitionBy("p").saveAsTable("t")
+      val table = spark.table("t")
+      val newTable = table.withColumn("new_column", pythonTestUDF(table("p")))
+      val df = newTable.as("t1").join(
+        newTable.as("t2"), col("t1.new_column") === col("t2.new_column"))
+      checkAnswer(df, Row(0, 1, 1, 0, 1, 1))
+    }
   }
 }

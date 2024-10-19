@@ -27,11 +27,19 @@ class FakeTask(
     stageId: Int,
     partitionId: Int,
     prefLocs: Seq[TaskLocation] = Nil,
-    serializedTaskMetrics: Array[Byte] =
-      SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array(),
-    isBarrier: Boolean = false)
-  extends Task[Int](stageId, 0, partitionId, 1, JobArtifactSet.defaultJobArtifactSet,
-    new Properties, serializedTaskMetrics, isBarrier = isBarrier) {
+    isBarrier: Boolean = false,
+    // This has to be a `val`, so that the accumulators of `TaskMetrics` will be referenced and not
+    // GCed before the stage is completed.
+    private val fakeTaskMetrics: TaskMetrics = TaskMetrics.registered)
+  extends Task[Int](
+    stageId,
+    0,
+    partitionId,
+    1,
+    JobArtifactSet.defaultJobArtifactSet,
+    new Properties,
+    SparkEnv.get.closureSerializer.newInstance().serialize(fakeTaskMetrics).array(),
+    isBarrier = isBarrier) {
 
   override def runTask(context: TaskContext): Int = 0
   override def preferredLocations: Seq[TaskLocation] = prefLocs

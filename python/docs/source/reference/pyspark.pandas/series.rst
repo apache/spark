@@ -461,9 +461,9 @@ specific plotting methods of the form ``Series.plot.<kind>``.
    Series.plot.box
    Series.plot.density
    Series.plot.hist
+   Series.plot.kde
    Series.plot.line
    Series.plot.pie
-   Series.plot.kde
 
 .. autosummary::
    :toctree: api/
@@ -486,6 +486,7 @@ Serialization / IO / Conversion
    Series.to_json
    Series.to_csv
    Series.to_excel
+   Series.to_hdf
    Series.to_frame
 
 Pandas-on-Spark specific

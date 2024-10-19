@@ -22,7 +22,7 @@ from typing import cast
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType, assert_true, lit
 from pyspark.sql.types import DoubleType, StructType, StructField, LongType, DayTimeIntervalType
 from pyspark.errors import ParseException, PythonException, PySparkTypeError
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -30,7 +30,6 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import QuietTest
 
 
 @unittest.skipIf(
@@ -126,7 +125,7 @@ class PandasUDFTestsMixin:
         self.assertEqual(foo.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
 
     def test_udf_wrong_arg(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_udf_wrong_arg()
 
             with self.assertRaises(ParseException):
@@ -143,8 +142,8 @@ class PandasUDFTestsMixin:
 
             self.check_error(
                 exception=pe.exception,
-                error_class="INVALID_RETURN_TYPE_FOR_PANDAS_UDF",
-                message_parameters={
+                errorClass="INVALID_RETURN_TYPE_FOR_PANDAS_UDF",
+                messageParameters={
                     "eval_type": "SQL_GROUPED_MAP_PANDAS_UDF "
                     "or SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE",
                     "return_type": "DoubleType()",
@@ -166,8 +165,8 @@ class PandasUDFTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_BE_NONE",
-            message_parameters={"arg_name": "returnType"},
+            errorClass="CANNOT_BE_NONE",
+            messageParameters={"arg_name": "returnType"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -178,8 +177,8 @@ class PandasUDFTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_PANDAS_UDF_TYPE",
-            message_parameters={"arg_name": "functionType", "arg_type": "100"},
+            errorClass="INVALID_PANDAS_UDF_TYPE",
+            messageParameters={"arg_name": "functionType", "arg_type": "100"},
         )
 
         with self.assertRaisesRegex(ValueError, "0-arg pandas_udfs.*not.*supported"):
@@ -198,8 +197,8 @@ class PandasUDFTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_DATATYPE_OR_STR",
-            message_parameters={"arg_name": "returnType", "arg_type": "int"},
+            errorClass="NOT_DATATYPE_OR_STR",
+            messageParameters={"arg_name": "returnType", "arg_type": "int"},
         )
 
     def test_stopiteration_in_udf(self):
@@ -339,6 +338,19 @@ class PandasUDFTestsMixin:
         ).collect()
         self.assertEqual(df.schema[0].dataType.simpleString(), "interval day to second")
         self.assertEqual(df.first()[0], datetime.timedelta(microseconds=123))
+
+    def test_pandas_udf_return_type_error(self):
+        import pandas as pd
+
+        @pandas_udf("s string")
+        def upper(s: pd.Series) -> pd.Series:
+            return s.str.upper()
+
+        df = self.spark.createDataFrame([("a",)], schema="s string")
+
+        self.assertRaisesRegex(
+            PythonException, "Invalid return type", df.select(upper("s")).collect
+        )
 
 
 class PandasUDFTests(PandasUDFTestsMixin, ReusedSQLTestCase):

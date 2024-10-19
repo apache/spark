@@ -135,6 +135,31 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
       KafkaOffsetRange(tp, 2, LATEST, None)).sortBy(_.topicPartition.toString))
   }
 
+  testWithAllOffsetFetchingSQLConf(
+    "SPARK-48383: START_OFFSET_DOES_NOT_MATCH_ASSIGNED error class"
+  ) {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    val reader = createKafkaReader(topic, minPartitions = Some(4))
+
+    // There are three topic partitions, but we only include two in offsets.
+    val tp1 = new TopicPartition(topic, 0)
+    val tp2 = new TopicPartition(topic, 1)
+    val startingOffsets = SpecificOffsetRangeLimit(Map(tp1 -> EARLIEST, tp2 -> EARLIEST))
+    val endingOffsets = SpecificOffsetRangeLimit(Map(tp1 -> LATEST, tp2 -> 3))
+
+    val ex = intercept[KafkaIllegalStateException] {
+      reader.getOffsetRangesFromUnresolvedOffsets(startingOffsets, endingOffsets)
+    }
+    checkError(
+      exception = ex,
+      condition = "KAFKA_START_OFFSET_DOES_NOT_MATCH_ASSIGNED",
+      parameters = Map(
+        "specifiedPartitions" -> "Set\\(.*,.*\\)",
+        "assignedPartitions" -> "Set\\(.*,.*,.*\\)"),
+      matchPVals = true)
+  }
+
   testWithAllOffsetFetchingSQLConf("SPARK-30656: getOffsetRangesFromUnresolvedOffsets - " +
     "multiple topic partitions") {
     val topic = newTopic()
@@ -170,7 +195,7 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
     val offsetRanges = reader.getOffsetRangesFromResolvedOffsets(
       fromPartitionOffsets,
       untilPartitionOffsets,
-      _ => {})
+      (_, _) => {})
     assert(offsetRanges.sortBy(_.topicPartition.toString) === Seq(
       KafkaOffsetRange(tp1, 0, 33, None),
       KafkaOffsetRange(tp1, 33, 66, None),

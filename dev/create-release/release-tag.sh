@@ -85,11 +85,7 @@ fi
 sed -i".tmp1" 's/SPARK_VERSION:.*$/SPARK_VERSION: '"$RELEASE_VERSION"'/g' docs/_config.yml
 sed -i".tmp2" 's/SPARK_VERSION_SHORT:.*$/SPARK_VERSION_SHORT: '"$RELEASE_VERSION"'/g' docs/_config.yml
 sed -i".tmp3" "s/'facetFilters':.*$/'facetFilters': [\"version:$RELEASE_VERSION\"]/g" docs/_config.yml
-if [[ $RELEASE_VERSION == 3.0* ]] || [[ $RELEASE_VERSION == 3.1* ]] || [[ $RELEASE_VERSION == 3.2* ]]; then
-  sed -i".tmp4" 's/__version__ = .*$/__version__ = "'"$RELEASE_VERSION"'"/' python/pyspark/version.py
-else
-  sed -i".tmp4" 's/__version__: str = .*$/__version__: str = "'"$RELEASE_VERSION"'"/' python/pyspark/version.py
-fi
+sed -i".tmp4" 's/__version__: str = .*$/__version__: str = "'"$RELEASE_VERSION"'"/' python/pyspark/version.py
 
 git commit -a -m "Preparing Spark release $RELEASE_TAG"
 echo "Creating tag $RELEASE_TAG at the head of $GIT_BRANCH"
@@ -102,11 +98,7 @@ R_NEXT_VERSION=`echo $NEXT_VERSION | sed 's/-SNAPSHOT//g'`
 sed -i".tmp5" 's/Version.*$/Version: '"$R_NEXT_VERSION"'/g' R/pkg/DESCRIPTION
 # Write out the R_NEXT_VERSION to PySpark version info we use dev0 instead of SNAPSHOT to be closer
 # to PEP440.
-if [[ $RELEASE_VERSION == 3.0* ]] || [[ $RELEASE_VERSION == 3.1* ]] || [[ $RELEASE_VERSION == 3.2* ]]; then
-  sed -i".tmp6" 's/__version__ = .*$/__version__ = "'"$R_NEXT_VERSION.dev0"'"/' python/pyspark/version.py
-else
-  sed -i".tmp6" 's/__version__: str = .*$/__version__: str = "'"$R_NEXT_VERSION.dev0"'"/' python/pyspark/version.py
-fi
+sed -i".tmp6" 's/__version__: str = .*$/__version__: str = "'"$R_NEXT_VERSION.dev0"'"/' python/pyspark/version.py
 
 # Update docs with next version
 sed -i".tmp7" 's/SPARK_VERSION:.*$/SPARK_VERSION: '"$NEXT_VERSION"'/g' docs/_config.yml

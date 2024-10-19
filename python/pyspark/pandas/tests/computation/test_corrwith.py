@@ -19,7 +19,7 @@ import unittest
 import numpy as np
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -64,7 +64,11 @@ class FrameCorrwithMixin:
                 self.assert_eq(p_corr.sort_index(), ps_corr.sort_index(), almost=True)
 
 
-class FrameCorrwithTests(FrameCorrwithMixin, ComparisonTestBase, SQLTestUtils):
+class FrameCorrwithTests(
+    FrameCorrwithMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

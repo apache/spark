@@ -23,7 +23,8 @@ import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.connector.read.PartitionReader
@@ -159,7 +160,8 @@ class ContinuousQueuedDataReader(
       } catch {
         case _: InterruptedException =>
           // Continuous shutdown always involves an interrupt; do nothing and shut down quietly.
-          logInfo(s"shutting down interrupted data reader thread $getName")
+          logInfo(log"shutting down interrupted data reader thread " +
+            log"${MDC(THREAD_NAME, getName)}")
 
         case NonFatal(t) =>
           failureReason = t

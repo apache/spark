@@ -129,8 +129,8 @@ When reading from Hive metastore ORC tables and inserting to Hive metastore ORC 
 
 ### Configuration
 
-<table>
-  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Since Version</b></th></tr></thead>
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>spark.sql.orc.impl</code></td>
     <td><code>native</code></td>
@@ -240,8 +240,8 @@ Data source options of ORC can be set via:
   </tr>
   <tr>
     <td><code>compression</code></td>
-    <td><code>snappy</code></td>
-    <td>compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, snappy, zlib, lzo, zstd and lz4). This will override <code>orc.compress</code> and <code>spark.sql.orc.compression.codec</code>.</td>
+    <td><code>zstd</code></td>
+    <td>compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, snappy, zlib, lzo, zstd, lz4 and brotli). This will override <code>orc.compress</code> and <code>spark.sql.orc.compression.codec</code>. Note that <code>brotli</code> requires <code>brotli4j</code> to be installed.</td>
     <td>write</td>
   </tr>
 </table>

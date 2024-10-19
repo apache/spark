@@ -23,7 +23,7 @@ import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
@@ -37,10 +37,10 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
     newCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     newCatalog.createTable(
       ident,
-      new StructType()
-        .add("id", IntegerType)
-        .add("data", StringType)
-        .add("dt", StringType),
+      Array(
+        Column.create("id", IntegerType),
+        Column.create("data", StringType),
+        Column.create("dt", StringType)),
       Array[Transform](LogicalExpressions.identity(ref("dt"))),
       util.Collections.emptyMap[String, String])
     newCatalog
@@ -121,7 +121,7 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
       exception = intercept[SparkUnsupportedOperationException] {
         partTable.purgePartitions(partIdents)
       },
-      errorClass = "UNSUPPORTED_FEATURE.PURGE_PARTITION",
+      condition = "UNSUPPORTED_FEATURE.PURGE_PARTITION",
       parameters = Map.empty
     )
   }
@@ -170,7 +170,7 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
       partTable.truncatePartitions(Array(InternalRow("5"), InternalRow("6")))
     }
     checkError(e,
-      errorClass = "PARTITIONS_NOT_FOUND",
+      condition = "PARTITIONS_NOT_FOUND",
       parameters = Map("partitionList" -> "PARTITION (`dt` = 6)",
       "tableName" -> "`test`.`ns`.`test_table`"))
     assert(partTable.rows === InternalRow(2, "zyx", "5") :: Nil)

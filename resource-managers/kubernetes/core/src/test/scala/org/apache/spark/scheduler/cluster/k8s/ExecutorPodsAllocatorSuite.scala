@@ -42,7 +42,7 @@ import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.internal.config._
 import org.apache.spark.resource._
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
-import org.apache.spark.util.{ManualClock, SparkExitCode}
+import org.apache.spark.util.ManualClock
 
 class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -60,6 +60,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   private val conf = new SparkConf()
     .set(KUBERNETES_DRIVER_POD_NAME, driverPodName)
     .set(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key, "10s")
+    .set(KUBERNETES_ALLOCATION_BATCH_SIZE.key, "5")
 
   private val defaultProfile: ResourceProfile = ResourceProfile.getOrCreateDefaultProfile(conf)
   private val podAllocationSize = conf.get(KUBERNETES_ALLOCATION_BATCH_SIZE)
@@ -124,10 +125,12 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(podsWithNamespace.withName(driverPodName)).thenReturn(driverPodOperations)
     when(podsWithNamespace.resource(any())).thenReturn(podResource)
     when(podsWithNamespace.withLabel(anyString(), anyString())).thenReturn(labeledPods)
-    when(podsWithNamespace.withLabelIn(anyString(), any())).thenReturn(labeledPods)
+    when(podsWithNamespace.withLabelIn(
+      anyString(), any(classOf[Array[String]]): _*)).thenReturn(labeledPods)
     when(podsWithNamespace.withField(anyString(), anyString())).thenReturn(labeledPods)
     when(labeledPods.withLabel(anyString(), anyString())).thenReturn(labeledPods)
-    when(labeledPods.withLabelIn(anyString(), any())).thenReturn(labeledPods)
+    when(labeledPods.withLabelIn(
+      anyString(), any(classOf[Array[String]]): _*)).thenReturn(labeledPods)
     when(labeledPods.withField(anyString(), anyString())).thenReturn(labeledPods)
     when(driverPodOperations.get).thenReturn(driverPod)
     when(driverPodOperations.waitUntilReady(any(), any())).thenReturn(driverPod)
@@ -147,44 +150,12 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(persistentVolumeClaimList.getItems).thenReturn(Seq.empty[PersistentVolumeClaim].asJava)
   }
 
-  test("SPARK-41210: Window based executor failure tracking mechanism") {
-    var _exitCode = -1
-    val _conf = conf.clone
-      .set(MAX_EXECUTOR_FAILURES.key, "2")
-      .set(EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS.key, "2s")
-    podsAllocatorUnderTest = new ExecutorPodsAllocator(_conf, secMgr,
-      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock) {
-      override private[spark] def stopApplication(exitCode: Int): Unit = {
-        _exitCode = exitCode
-      }
-    }
-    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3))
-    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
-    assert(podsAllocatorUnderTest.getNumExecutorsFailed === 0)
-
-    waitForExecutorPodsClock.advance(1000)
-    snapshotsStore.updatePod(failedExecutorWithoutDeletion(1))
-    snapshotsStore.updatePod(failedExecutorWithoutDeletion(2))
-    snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.getNumExecutorsFailed === 2)
-    assert(_exitCode === -1)
-
-    waitForExecutorPodsClock.advance(1000)
-    snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.getNumExecutorsFailed === 2)
-    assert(_exitCode === -1)
-
-    waitForExecutorPodsClock.advance(2000)
-    assert(podsAllocatorUnderTest.getNumExecutorsFailed === 0)
-    assert(_exitCode === -1)
-
-    waitForExecutorPodsClock.advance(1000)
-    snapshotsStore.updatePod(failedExecutorWithoutDeletion(3))
-    snapshotsStore.updatePod(failedExecutorWithoutDeletion(4))
-    snapshotsStore.updatePod(failedExecutorWithoutDeletion(5))
-    snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.getNumExecutorsFailed === 3)
-    assert(_exitCode === SparkExitCode.EXCEED_MAX_EXECUTOR_FAILURES)
+  test("SPARK-49447: Prevent small values less than 100 for batch delay") {
+    val m = intercept[IllegalArgumentException] {
+      val conf = new SparkConf().set(KUBERNETES_ALLOCATION_BATCH_DELAY.key, "1")
+      conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
+    }.getMessage
+    assert(m.contains("Allocation batch delay must be greater than 0.1s."))
   }
 
   test("SPARK-36052: test splitSlots") {
@@ -212,7 +183,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(podOperations)
     when(podOperations
-      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any(classOf[Array[String]]): _*))
       .thenReturn(podOperations)
 
     val startTime = Instant.now.toEpochMilli
@@ -362,7 +333,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(labeledPods)
     when(labeledPods
-      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any(classOf[Array[String]]): _*))
       .thenReturn(labeledPods)
 
     val startTime = Instant.now.toEpochMilli
@@ -432,7 +403,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(labeledPods)
     when(labeledPods
-      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any(classOf[Array[String]]): _*))
       .thenReturn(labeledPods)
 
     val startTime = Instant.now.toEpochMilli
@@ -477,7 +448,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(labeledPods)
     when(labeledPods
-      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any(classOf[Array[String]]): _*))
       .thenReturn(labeledPods)
 
     val startTime = Instant.now.toEpochMilli
@@ -560,7 +531,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(labeledPods)
     when(labeledPods
-      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any(classOf[Array[String]]): _*))
       .thenReturn(labeledPods)
 
     val startTime = Instant.now.toEpochMilli
@@ -642,7 +613,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(labeledPods)
     when(labeledPods
-      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any(classOf[Array[String]]): _*))
       .thenReturn(labeledPods)
 
     val startTime = Instant.now.toEpochMilli
@@ -768,7 +739,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
     val pvc = persistentVolumeClaim("pvc-0", "gp2", "200Gi")
     pvc.getMetadata
-      .setCreationTimestamp(Instant.now().minus(podAllocationDelay + 1, MILLIS).toString)
+      .setCreationTimestamp(Instant.now().minus(podCreationTimeout + 1, MILLIS).toString)
     when(persistentVolumeClaimList.getItems).thenReturn(Seq(pvc).asJava)
     when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
         meq(kubernetesClient), any(classOf[ResourceProfile])))
@@ -794,7 +765,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(labeledPods)
     when(labeledPods
-      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any(classOf[Array[String]]): _*))
       .thenReturn(labeledPods)
 
     val startTime = Instant.now.toEpochMilli
@@ -842,15 +813,17 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     val getReusablePVCs =
       PrivateMethod[mutable.Buffer[PersistentVolumeClaim]](Symbol("getReusablePVCs"))
 
-    val pvc1 = persistentVolumeClaim("pvc-0", "gp2", "200Gi")
-    val pvc2 = persistentVolumeClaim("pvc-1", "gp2", "200Gi")
+    val pvc1 = persistentVolumeClaim("pvc-1", "gp2", "200Gi")
+    val pvc2 = persistentVolumeClaim("pvc-2", "gp2", "200Gi")
 
     val now = Instant.now()
-    pvc1.getMetadata.setCreationTimestamp(now.minus(2 * podAllocationDelay, MILLIS).toString)
+    pvc1.getMetadata.setCreationTimestamp(now.minus(podCreationTimeout + 1, MILLIS).toString)
     pvc2.getMetadata.setCreationTimestamp(now.toString)
 
     when(persistentVolumeClaimList.getItems).thenReturn(Seq(pvc1, pvc2).asJava)
-    podsAllocatorUnderTest invokePrivate getReusablePVCs("appId", Seq("pvc-1"))
+    val reusablePVCs = podsAllocatorUnderTest invokePrivate getReusablePVCs("appId", Seq.empty)
+    assert(reusablePVCs.size == 1)
+    assert(reusablePVCs.head.getMetadata.getName == "pvc-1")
   }
 
   test("SPARK-41410: Support waitToReusePersistentVolumeClaims") {
@@ -890,7 +863,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(labeledPods)
     when(labeledPods
-      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any(classOf[Array[String]]): _*))
       .thenReturn(labeledPods)
 
     val startTime = Instant.now.toEpochMilli

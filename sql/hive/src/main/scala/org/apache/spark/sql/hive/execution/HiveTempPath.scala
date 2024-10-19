@@ -19,7 +19,8 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.IOException
 import java.net.URI
-import java.text.SimpleDateFormat
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.{Date, Locale, Random}
 
 import scala.util.control.NonFatal
@@ -30,7 +31,8 @@ import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.ql.exec.TaskRunner
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.hive.HiveExternalCatalog
@@ -40,6 +42,11 @@ class HiveTempPath(session: SparkSession, val hadoopConf: Configuration, path: P
   private var stagingDirForCreating: Option[Path] = None
 
   lazy val externalTempPath: Path = getExternalTmpPath(path)
+
+  private lazy val dateTimeFormatter =
+    DateTimeFormatter
+      .ofPattern("yyyy-MM-dd_HH-mm-ss_SSS", Locale.US)
+      .withZone(ZoneId.systemDefault())
 
   private def getExternalTmpPath(path: Path): Path = {
     import org.apache.spark.sql.hive.client.hive._
@@ -117,8 +124,7 @@ class HiveTempPath(session: SparkSession, val hadoopConf: Configuration, path: P
 
   private def executionId: String = {
     val rand: Random = new Random
-    val format = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS", Locale.US)
-    "hive_" + format.format(new Date) + "_" + Math.abs(rand.nextLong)
+    "hive_" + dateTimeFormatter.format(new Date().toInstant) + "_" + Math.abs(rand.nextLong)
   }
 
   def deleteTmpPath() : Unit = {
@@ -135,7 +141,7 @@ class HiveTempPath(session: SparkSession, val hadoopConf: Configuration, path: P
     } catch {
       case NonFatal(e) =>
         val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
-        logWarning(s"Unable to delete staging directory: $stagingDir.\n" + e)
+        logWarning(log"Unable to delete staging directory: ${MDC(PATH, stagingDir)}.", e)
     }
   }
 

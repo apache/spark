@@ -25,8 +25,8 @@ import org.apache.spark.sql.internal.{SessionState, SessionStateBuilder, SQLConf
  * A special `SparkSession` prepared for testing.
  */
 private[spark] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) { self =>
-  def this(sparkConf: SparkConf) = {
-    this(new SparkContext("local[2]", "test-sql-context",
+  def this(sparkConf: SparkConf, maxLocalTaskFailures: Int = 1, numCores: Int = 2) = {
+    this(new SparkContext(s"local[$numCores,$maxLocalTaskFailures]", "test-sql-context",
       sparkConf.set("spark.sql.testkey", "true")))
   }
 

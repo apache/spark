@@ -24,7 +24,7 @@ import java.util.Properties
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.{JobArtifactSet, SparkFunSuite}
-import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.ResourceAmountUtils
 import org.apache.spark.resource.ResourceUtils.GPU
 
 class TaskDescriptionSuite extends SparkFunSuite {
@@ -59,8 +59,10 @@ class TaskDescriptionSuite extends SparkFunSuite {
       }
     }
 
-    val originalResources =
-      Map(GPU -> new ResourceInformation(GPU, Array("1", "2", "3")))
+    val originalResources = Map(GPU ->
+      Map("1" -> ResourceAmountUtils.toInternalResource(0.2),
+        "2" -> ResourceAmountUtils.toInternalResource(0.5),
+        "3" -> ResourceAmountUtils.toInternalResource(0.1)))
 
     // Create a dummy byte buffer for the task.
     val taskBuffer = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
@@ -99,17 +101,8 @@ class TaskDescriptionSuite extends SparkFunSuite {
     assert(decodedTaskDescription.artifacts.equals(artifacts))
     assert(decodedTaskDescription.properties.equals(originalTaskDescription.properties))
     assert(decodedTaskDescription.cpus.equals(originalTaskDescription.cpus))
-    assert(equalResources(decodedTaskDescription.resources, originalTaskDescription.resources))
+    assert(decodedTaskDescription.resources === originalTaskDescription.resources)
     assert(decodedTaskDescription.serializedTask.equals(taskBuffer))
-
-    def equalResources(original: Map[String, ResourceInformation],
-        target: Map[String, ResourceInformation]): Boolean = {
-      original.size == target.size && original.forall { case (name, info) =>
-        target.get(name).exists { targetInfo =>
-          info.name.equals(targetInfo.name) &&
-            info.addresses.sameElements(targetInfo.addresses)
-        }
-      }
-    }
   }
+
 }

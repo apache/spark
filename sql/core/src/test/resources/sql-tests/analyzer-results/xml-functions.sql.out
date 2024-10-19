@@ -22,8 +22,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"array(named_struct(a, 1, b, 2))\"",
-    "inputType" : "\"ARRAY<STRUCT<a: INT, b: INT>>\"",
-    "paramIndex" : "1",
+    "inputType" : "\"ARRAY<STRUCT<a: INT NOT NULL, b: INT NOT NULL>>\"",
+    "paramIndex" : "first",
     "requiredType" : "\"STRUCT\"",
     "sqlExpr" : "\"to_xml(array(named_struct(a, 1, b, 2)))\""
   },
@@ -47,7 +47,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"map(a, 1)\"",
     "inputType" : "\"MAP<STRING, INT>\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"STRUCT\"",
     "sqlExpr" : "\"to_xml(map(a, 1))\""
   },
@@ -359,7 +359,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 CREATE TEMPORARY VIEW xmlTable(xmlField, a) AS SELECT * FROM VALUES ('<p><a>1</a><b>"2"</b></p>', 'a')
 -- !query analysis
-CreateViewCommand `xmlTable`, [(xmlField,None), (a,None)], SELECT * FROM VALUES ('<p><a>1</a><b>"2"</b></p>', 'a'), false, false, LocalTempView, true
+CreateViewCommand `xmlTable`, [(xmlField,None), (a,None)], SELECT * FROM VALUES ('<p><a>1</a><b>"2"</b></p>', 'a'), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [col1#x, col2#x]
       +- LocalRelation [col1#x, col2#x]
 

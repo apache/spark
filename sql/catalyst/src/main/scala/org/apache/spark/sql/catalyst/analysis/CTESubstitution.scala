@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Command, CTEInChildren, CTERelationDef, CTERelationRef, InsertIntoDir, LogicalPlan, ParsedStatement, SubqueryAlias, UnresolvedWith, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.TypeUtils._
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
@@ -149,12 +149,10 @@ object CTESubstitution extends Rule[LogicalPlan] {
       plan: LogicalPlan,
       cteDefs: ArrayBuffer[CTERelationDef]): LogicalPlan = {
     plan.resolveOperatorsUp {
-      case cte @ UnresolvedWith(child, relations) =>
+      case UnresolvedWith(child, relations) =>
         val resolvedCTERelations =
           resolveCTERelations(relations, isLegacy = true, forceInline = false, Seq.empty, cteDefs)
-        val substituted = substituteCTE(child, alwaysInline = true, resolvedCTERelations)
-        substituted.copyTagsFrom(cte)
-        substituted
+        substituteCTE(child, alwaysInline = true, resolvedCTERelations)
     }
   }
 
@@ -204,7 +202,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
     var firstSubstituted: Option[LogicalPlan] = None
     val newPlan = plan.resolveOperatorsDownWithPruning(
         _.containsAnyPattern(UNRESOLVED_WITH, PLAN_EXPRESSION)) {
-      case cte @ UnresolvedWith(child: LogicalPlan, relations) =>
+      case UnresolvedWith(child: LogicalPlan, relations) =>
         val resolvedCTERelations =
           resolveCTERelations(relations, isLegacy = false, forceInline, outerCTEDefs, cteDefs) ++
             outerCTEDefs
@@ -215,7 +213,6 @@ object CTESubstitution extends Rule[LogicalPlan] {
         if (firstSubstituted.isEmpty) {
           firstSubstituted = Some(substituted)
         }
-        substituted.copyTagsFrom(cte)
         substituted
 
       case other =>
@@ -275,7 +272,8 @@ object CTESubstitution extends Rule[LogicalPlan] {
       alwaysInline: Boolean,
       cteRelations: Seq[(String, CTERelationDef)]): LogicalPlan = {
     plan.resolveOperatorsUpWithPruning(
-        _.containsAnyPattern(RELATION_TIME_TRAVEL, UNRESOLVED_RELATION, PLAN_EXPRESSION)) {
+        _.containsAnyPattern(RELATION_TIME_TRAVEL, UNRESOLVED_RELATION, PLAN_EXPRESSION,
+          UNRESOLVED_IDENTIFIER)) {
       case RelationTimeTravel(UnresolvedRelation(Seq(table), _, _), _, _)
         if cteRelations.exists(r => plan.conf.resolver(r._1, table)) =>
         throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(table))
@@ -289,6 +287,14 @@ object CTESubstitution extends Rule[LogicalPlan] {
             SubqueryAlias(table, CTERelationRef(d.id, d.resolved, d.output, d.isStreaming))
           }
         }.getOrElse(u)
+
+      case p: PlanWithUnresolvedIdentifier =>
+        // We must look up CTE relations first when resolving `UnresolvedRelation`s,
+        // but we can't do it here as `PlanWithUnresolvedIdentifier` is a leaf node
+        // and may produce `UnresolvedRelation` later.
+        // Here we wrap it with `UnresolvedWithCTERelations` so that we can
+        // delay the CTE relations lookup after `PlanWithUnresolvedIdentifier` is resolved.
+        UnresolvedWithCTERelations(p, cteRelations)
 
       case other =>
         // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.

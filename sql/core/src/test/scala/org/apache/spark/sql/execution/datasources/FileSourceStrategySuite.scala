@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path, RawLocalFileSystem
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.SparkException
+import org.apache.spark.internal.config
 import org.apache.spark.paths.SparkPath.{fromUrlString => sp}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -44,7 +45,7 @@ import org.apache.spark.util.Utils
 class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
-  protected override def sparkConf = super.sparkConf.set("spark.default.parallelism", "1")
+  protected override def sparkConf = super.sparkConf.set(config.DEFAULT_PARALLELISM.key, "1")
 
   test("unpartitioned table, single partition") {
     val table =
@@ -480,8 +481,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
         val e = intercept[SparkException] {
           spark.read.text(inputFile.toURI.toString).collect()
         }
-        assert(e.getCause.getCause.isInstanceOf[EOFException])
-        assert(e.getCause.getCause.getMessage === "Unexpected end of input stream")
+        assert(e.getCause.isInstanceOf[EOFException])
+        assert(e.getCause.getMessage === "Unexpected end of input stream")
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
         assert(spark.read.text(inputFile.toURI.toString).collect().isEmpty)

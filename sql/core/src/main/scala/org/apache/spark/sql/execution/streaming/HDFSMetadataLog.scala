@@ -29,7 +29,8 @@ import org.apache.hadoop.fs._
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -265,7 +266,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
 
   override def getLatest(): Option[(Long, T)] = {
     listBatches.sorted.lastOption.map { batchId =>
-      logInfo(s"Getting latest batch $batchId")
+      logInfo(log"Getting latest batch ${MDC(BATCH_ID, batchId)}")
       (batchId, getExistingBatch(batchId))
     }
   }
@@ -335,7 +336,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
       batchCache.synchronized {
         batchCache.keySet.asScala.toArray
       }
-    logInfo("BatchIds found from listing: " + batchIds.sorted.mkString(", "))
+    logInfo(log"BatchIds found from listing: ${MDC(BATCH_ID, batchIds.sorted.mkString(", "))}")
 
     if (batchIds.isEmpty) {
       Array.empty

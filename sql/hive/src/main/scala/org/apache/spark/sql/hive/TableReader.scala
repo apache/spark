@@ -36,7 +36,8 @@ import org.apache.hadoop.mapred.{FileInputFormat, InputFormat => oldInputClass, 
 import org.apache.hadoop.mapreduce.{InputFormat => newInputClass}
 
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD, UnionRDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
@@ -518,7 +519,10 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
           i += 1
         } catch {
           case ex: Throwable =>
-            logError(s"Exception thrown in field <${fieldRefs(i).getFieldName}>")
+            logError(
+              log"Exception thrown in field <${MDC(FIELD_NAME, fieldRefs(i).getFieldName)}>",
+              ex
+            )
             throw ex
         }
       }

@@ -29,9 +29,8 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.MessageToMessageDecoder;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.protocol.Message;
 import org.apache.spark.network.protocol.MessageDecoder;
@@ -52,7 +51,8 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  * are processed in the separate handlers.
  * */
 public class ShuffleTransportContext extends TransportContext {
-  private static final Logger logger = LoggerFactory.getLogger(ShuffleTransportContext.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ShuffleTransportContext.class);
   private static final ShuffleMessageDecoder SHUFFLE_DECODER =
       new ShuffleMessageDecoder(MessageDecoder.INSTANCE);
   private final EventLoopGroup finalizeWorkers;
@@ -158,7 +158,7 @@ public class ShuffleTransportContext extends TransportContext {
   }
 
   static class FinalizedHandler extends SimpleChannelInboundHandler<RpcRequestInternal> {
-    private static final Logger logger = LoggerFactory.getLogger(FinalizedHandler.class);
+    private static final SparkLogger logger = SparkLoggerFactory.getLogger(FinalizedHandler.class);
     public static final String HANDLER_NAME = "finalizeHandler";
     private final TransportRequestHandler transportRequestHandler;
 

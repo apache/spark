@@ -17,21 +17,25 @@
 
 from typing import Any, Callable, TYPE_CHECKING
 
-import py4j.protocol
-from py4j.protocol import Py4JJavaError
-from py4j.java_gateway import JavaObject
-from py4j.java_collections import JavaArray, JavaList
-
-import pyspark.context
-from pyspark import RDD, SparkContext
+from pyspark.util import is_remote_only
 from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
 from pyspark.sql import DataFrame, SparkSession
 
 if TYPE_CHECKING:
+    import py4j.protocol
+    from py4j.java_gateway import JavaObject
+
+    import pyspark.core.context
+    from pyspark.core.rdd import RDD
+    from pyspark.core.context import SparkContext
     from pyspark.ml._typing import C, JavaObjectOrPickleDump
 
-# Hack for support float('inf') in Py4j
-_old_smart_decode = py4j.protocol.smart_decode
+
+if not is_remote_only():
+    import py4j
+
+    # Hack for support float('inf') in Py4j
+    _old_smart_decode = py4j.protocol.smart_decode
 
 _float_str_mapping = {
     "nan": "NaN",
@@ -47,7 +51,10 @@ def _new_smart_decode(obj: Any) -> str:
     return _old_smart_decode(obj)
 
 
-py4j.protocol.smart_decode = _new_smart_decode
+if not is_remote_only():
+    import py4j
+
+    py4j.protocol.smart_decode = _new_smart_decode
 
 
 _picklable_classes = [
@@ -59,7 +66,7 @@ _picklable_classes = [
 
 
 # this will call the ML version of pythonToJava()
-def _to_java_object_rdd(rdd: RDD) -> JavaObject:
+def _to_java_object_rdd(rdd: "RDD") -> "JavaObject":
     """Return an JavaRDD of Object by unpickling
 
     It will convert each Python object into Java object by Pickle, whenever the
@@ -70,8 +77,12 @@ def _to_java_object_rdd(rdd: RDD) -> JavaObject:
     return rdd.ctx._jvm.org.apache.spark.ml.python.MLSerDe.pythonToJava(rdd._jrdd, True)
 
 
-def _py2java(sc: SparkContext, obj: Any) -> JavaObject:
+def _py2java(sc: "SparkContext", obj: Any) -> "JavaObject":
     """Convert Python object into Java"""
+    from py4j.java_gateway import JavaObject
+    from pyspark.core.rdd import RDD
+    from pyspark.core.context import SparkContext
+
     if isinstance(obj, RDD):
         obj = _to_java_object_rdd(obj)
     elif isinstance(obj, DataFrame):
@@ -91,7 +102,11 @@ def _py2java(sc: SparkContext, obj: Any) -> JavaObject:
     return obj
 
 
-def _java2py(sc: SparkContext, r: "JavaObjectOrPickleDump", encoding: str = "bytes") -> Any:
+def _java2py(sc: "SparkContext", r: "JavaObjectOrPickleDump", encoding: str = "bytes") -> Any:
+    from py4j.protocol import Py4JJavaError
+    from py4j.java_gateway import JavaObject
+    from py4j.java_collections import JavaArray, JavaList
+
     if isinstance(r, JavaObject):
         clsName = r.getClass().getSimpleName()
         # convert RDD into JavaRDD
@@ -122,7 +137,9 @@ def _java2py(sc: SparkContext, r: "JavaObjectOrPickleDump", encoding: str = "byt
 
 
 def callJavaFunc(
-    sc: pyspark.context.SparkContext, func: Callable[..., "JavaObjectOrPickleDump"], *args: Any
+    sc: "pyspark.core.context.SparkContext",
+    func: Callable[..., "JavaObjectOrPickleDump"],
+    *args: Any,
 ) -> "JavaObjectOrPickleDump":
     """Call Java Function"""
     java_args = [_py2java(sc, a) for a in args]

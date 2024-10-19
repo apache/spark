@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.{SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -104,28 +105,38 @@ object IntervalUtils extends SparkIntervalUtils {
       endField: Byte,
       intervalStr: String,
       typeName: String,
-      fallBackNotice: Option[String] = None) = {
-    throw new IllegalArgumentException(
-      s"Interval string does not match $intervalStr format of " +
-        s"${supportedFormat((startFiled, endField)).map(format => s"`$format`").mkString(", ")} " +
-        s"when cast to $typeName: ${input.toString}" +
-        s"${fallBackNotice.map(s => s", $s").getOrElse("")}")
+      fallBackNotice: Boolean = false) = {
+    throw new SparkIllegalArgumentException(
+      errorClass = {
+        if (fallBackNotice) "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE"
+        else "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING"
+      },
+      messageParameters = Map(
+        "intervalStr" -> intervalStr,
+        "supportedFormat" -> supportedFormat((intervalStr, startFiled, endField))
+          .map(format => s"`$format`").mkString(", "),
+        "typeName" -> typeName,
+        "input" -> input.toString))
   }
 
   val supportedFormat = Map(
-    (YM.YEAR, YM.MONTH) -> Seq("[+|-]y-m", "INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH"),
-    (YM.YEAR, YM.YEAR) -> Seq("[+|-]y", "INTERVAL [+|-]'[+|-]y' YEAR"),
-    (YM.MONTH, YM.MONTH) -> Seq("[+|-]m", "INTERVAL [+|-]'[+|-]m' MONTH"),
-    (DT.DAY, DT.DAY) -> Seq("[+|-]d", "INTERVAL [+|-]'[+|-]d' DAY"),
-    (DT.DAY, DT.HOUR) -> Seq("[+|-]d h", "INTERVAL [+|-]'[+|-]d h' DAY TO HOUR"),
-    (DT.DAY, DT.MINUTE) -> Seq("[+|-]d h:m", "INTERVAL [+|-]'[+|-]d h:m' DAY TO MINUTE"),
-    (DT.DAY, DT.SECOND) -> Seq("[+|-]d h:m:s.n", "INTERVAL [+|-]'[+|-]d h:m:s.n' DAY TO SECOND"),
-    (DT.HOUR, DT.HOUR) -> Seq("[+|-]h", "INTERVAL [+|-]'[+|-]h' HOUR"),
-    (DT.HOUR, DT.MINUTE) -> Seq("[+|-]h:m", "INTERVAL [+|-]'[+|-]h:m' HOUR TO MINUTE"),
-    (DT.HOUR, DT.SECOND) -> Seq("[+|-]h:m:s.n", "INTERVAL [+|-]'[+|-]h:m:s.n' HOUR TO SECOND"),
-    (DT.MINUTE, DT.MINUTE) -> Seq("[+|-]m", "INTERVAL [+|-]'[+|-]m' MINUTE"),
-    (DT.MINUTE, DT.SECOND) -> Seq("[+|-]m:s.n", "INTERVAL [+|-]'[+|-]m:s.n' MINUTE TO SECOND"),
-    (DT.SECOND, DT.SECOND) -> Seq("[+|-]s.n", "INTERVAL [+|-]'[+|-]s.n' SECOND")
+    ("year-month", YM.YEAR, YM.MONTH) -> Seq("[+|-]y-m", "INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH"),
+    ("year-month", YM.YEAR, YM.YEAR) -> Seq("[+|-]y", "INTERVAL [+|-]'[+|-]y' YEAR"),
+    ("year-month", YM.MONTH, YM.MONTH) -> Seq("[+|-]m", "INTERVAL [+|-]'[+|-]m' MONTH"),
+    ("day-time", DT.DAY, DT.DAY) -> Seq("[+|-]d", "INTERVAL [+|-]'[+|-]d' DAY"),
+    ("day-time", DT.DAY, DT.HOUR) -> Seq("[+|-]d h", "INTERVAL [+|-]'[+|-]d h' DAY TO HOUR"),
+    ("day-time", DT.DAY, DT.MINUTE) ->
+      Seq("[+|-]d h:m", "INTERVAL [+|-]'[+|-]d h:m' DAY TO MINUTE"),
+    ("day-time", DT.DAY, DT.SECOND) ->
+      Seq("[+|-]d h:m:s.n", "INTERVAL [+|-]'[+|-]d h:m:s.n' DAY TO SECOND"),
+    ("day-time", DT.HOUR, DT.HOUR) -> Seq("[+|-]h", "INTERVAL [+|-]'[+|-]h' HOUR"),
+    ("day-time", DT.HOUR, DT.MINUTE) -> Seq("[+|-]h:m", "INTERVAL [+|-]'[+|-]h:m' HOUR TO MINUTE"),
+    ("day-time", DT.HOUR, DT.SECOND) ->
+      Seq("[+|-]h:m:s.n", "INTERVAL [+|-]'[+|-]h:m:s.n' HOUR TO SECOND"),
+    ("day-time", DT.MINUTE, DT.MINUTE) -> Seq("[+|-]m", "INTERVAL [+|-]'[+|-]m' MINUTE"),
+    ("day-time", DT.MINUTE, DT.SECOND) ->
+      Seq("[+|-]m:s.n", "INTERVAL [+|-]'[+|-]m:s.n' MINUTE TO SECOND"),
+    ("day-time", DT.SECOND, DT.SECOND) -> Seq("[+|-]s.n", "INTERVAL [+|-]'[+|-]s.n' SECOND")
   )
 
   def castStringToYMInterval(
@@ -136,14 +147,15 @@ object IntervalUtils extends SparkIntervalUtils {
     def checkTargetType(targetStartField: Byte, targetEndField: Byte): Boolean =
       startField == targetStartField && endField == targetEndField
 
-    input.trimAll().toString match {
+    val trimmedInput = input.trimAll().toString
+    trimmedInput match {
       case yearMonthRegex(sign, year, month) if checkTargetType(YM.YEAR, YM.MONTH) =>
-        toYMInterval(year, month, finalSign(sign))
+        toYMInterval(year, month, trimmedInput, finalSign(sign))
       case yearMonthLiteralRegex(firstSign, secondSign, year, month)
         if checkTargetType(YM.YEAR, YM.MONTH) =>
-        toYMInterval(year, month, finalSign(firstSign, secondSign))
+        toYMInterval(year, month, trimmedInput, finalSign(firstSign, secondSign))
       case yearMonthIndividualRegex(firstSign, value) =>
-        safeToInterval("year-month") {
+        safeToInterval("year-month", trimmedInput) {
           val sign = finalSign(firstSign)
           if (endField == YM.YEAR) {
             sign * Math.toIntExact(value.toLong * MONTHS_PER_YEAR)
@@ -155,7 +167,7 @@ object IntervalUtils extends SparkIntervalUtils {
           }
         }
       case yearMonthIndividualLiteralRegex(firstSign, secondSign, value, unit) =>
-        safeToInterval("year-month") {
+        safeToInterval("year-month", trimmedInput) {
           val sign = finalSign(firstSign, secondSign)
           unit.toUpperCase(Locale.ROOT) match {
             case "YEAR" if checkTargetType(YM.YEAR, YM.YEAR) =>
@@ -193,18 +205,21 @@ object IntervalUtils extends SparkIntervalUtils {
     new CalendarInterval(months, 0, 0)
   }
 
-  private def safeToInterval[T](interval: String)(f: => T): T = {
+  private def safeToInterval[T](interval: String, input: String)(f: => T): T = {
     try {
       f
     } catch {
+      case e: SparkThrowable => throw e
       case NonFatal(e) =>
-        throw new IllegalArgumentException(
-          s"Error parsing interval $interval string: ${e.getMessage}", e)
+        throw new SparkIllegalArgumentException(
+          errorClass = "INVALID_INTERVAL_FORMAT.INTERVAL_PARSING",
+          messageParameters = Map("input" -> input, "interval" -> interval),
+          cause = e)
     }
   }
 
-  private def toYMInterval(year: String, month: String, sign: Int): Int = {
-    safeToInterval("year-month") {
+  private def toYMInterval(year: String, month: String, input: String, sign: Int): Int = {
+    safeToInterval("year-month", input) {
       val years = toLongWithRange(yearStr, year, 0, Integer.MAX_VALUE / MONTHS_PER_YEAR)
       val totalMonths =
         sign * (years * MONTHS_PER_YEAR + toLongWithRange(monthStr, month, 0, 11))
@@ -273,7 +288,8 @@ object IntervalUtils extends SparkIntervalUtils {
     def checkTargetType(targetStartField: Byte, targetEndField: Byte): Boolean =
       startField == targetStartField && endField == targetEndField
 
-    input.trimAll().toString match {
+    val trimmedInput = input.trimAll().toString
+    trimmedInput match {
       case dayHourRegex(sign, day, hour) if checkTargetType(DT.DAY, DT.HOUR) =>
         toDTInterval(day, hour, "0", "0", finalSign(sign))
       case dayHourLiteralRegex(firstSign, secondSign, day, hour)
@@ -312,7 +328,7 @@ object IntervalUtils extends SparkIntervalUtils {
         toDTInterval(minute, secondAndMicro(second, micro), finalSign(firstSign, secondSign))
 
       case dayTimeIndividualRegex(firstSign, value, suffix) =>
-        safeToInterval("day-time") {
+        safeToInterval("day-time", trimmedInput) {
           val sign = finalSign(firstSign)
           (startField, endField) match {
             case (DT.DAY, DT.DAY) if suffix == null && value.length <= 9 =>
@@ -327,11 +343,11 @@ object IntervalUtils extends SparkIntervalUtils {
                 case -1 => parseSecondNano(s"-${secondAndMicro(value, suffix)}")
               }
             case (_, _) => throwIllegalIntervalFormatException(input, startField, endField,
-              "day-time", DT(startField, endField).typeName, Some(fallbackNotice))
+              "day-time", DT(startField, endField).typeName, true)
           }
         }
       case dayTimeIndividualLiteralRegex(firstSign, secondSign, value, suffix, unit) =>
-        safeToInterval("day-time") {
+        safeToInterval("day-time", trimmedInput) {
           val sign = finalSign(firstSign, secondSign)
           unit.toUpperCase(Locale.ROOT) match {
             case "DAY" if suffix == null && value.length <= 9 && checkTargetType(DT.DAY, DT.DAY) =>
@@ -348,11 +364,11 @@ object IntervalUtils extends SparkIntervalUtils {
                 case -1 => parseSecondNano(s"-${secondAndMicro(value, suffix)}")
               }
             case _ => throwIllegalIntervalFormatException(input, startField, endField,
-              "day-time", DT(startField, endField).typeName, Some(fallbackNotice))
+              "day-time", DT(startField, endField).typeName, true)
           }
         }
       case _ => throwIllegalIntervalFormatException(input, startField, endField,
-        "day-time", DT(startField, endField).typeName, Some(fallbackNotice))
+        "day-time", DT(startField, endField).typeName, true)
     }
   }
 
@@ -499,8 +515,12 @@ object IntervalUtils extends SparkIntervalUtils {
           secondsFraction = 0
         case DT.SECOND =>
           // No-op
-        case _ => throw new IllegalArgumentException(s"Cannot support (" +
-          s"interval '$input' ${DT.fieldToString(from)} to ${DT.fieldToString(to)}) expression")
+        case _ => throw new SparkIllegalArgumentException(
+          errorClass = "INVALID_INTERVAL_FORMAT.UNSUPPORTED_FROM_TO_EXPRESSION",
+          messageParameters = Map(
+            "input" -> input,
+            "from" -> DT.fieldToString(from),
+            "to" -> DT.fieldToString(to)))
       }
       var micros = secondsFraction
       micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
@@ -508,9 +528,15 @@ object IntervalUtils extends SparkIntervalUtils {
       micros = Math.addExact(micros, Math.multiplyExact(seconds, MICROS_PER_SECOND))
       new CalendarInterval(0, sign * days, sign * micros)
     } catch {
+      // Bypass SparkIllegalArgumentExceptions
+      case se: SparkIllegalArgumentException => throw se
       case e: Exception =>
-        throw new IllegalArgumentException(
-          s"Error parsing interval day-time string: ${e.getMessage}", e)
+        throw new SparkIllegalArgumentException(
+          errorClass = "INVALID_INTERVAL_FORMAT.DAY_TIME_PARSING",
+          messageParameters = Map(
+            "msg" -> e.getMessage,
+            "input" -> input),
+          cause = e)
     }
   }
 
@@ -546,9 +572,9 @@ object IntervalUtils extends SparkIntervalUtils {
       case Array(secondsStr, nanosStr) =>
         val seconds = parseSeconds(secondsStr)
         Math.addExact(seconds, parseNanos(nanosStr, seconds < 0))
-      case _ =>
-        throw new IllegalArgumentException(
-          "Interval string does not match second-nano format of ss.nnnnnnnnn")
+      case _ => throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_INTERVAL_FORMAT.SECOND_NANO_FORMAT",
+        messageParameters = Map("input" -> secondNano))
     }
   }
 
@@ -886,7 +912,7 @@ object IntervalUtils extends SparkIntervalUtils {
       case DAY => Decimal(v / MICROS_PER_DAY)
       case HOUR => Decimal(v / MICROS_PER_HOUR)
       case MINUTE => Decimal(v / MICROS_PER_MINUTE)
-      case SECOND => Decimal(v, Decimal.MAX_LONG_DIGITS, 6)
+      case SECOND => Decimal(v, Decimal.MAX_LONG_DIGITS + 1, 6)
     }
   }
 

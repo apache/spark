@@ -32,7 +32,8 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.{Since, Unstable}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
 import org.apache.spark.ml.feature.RFormulaModel
@@ -381,7 +382,7 @@ trait DefaultParamsReadable[T] extends MLReadable[T] {
 private[ml] class DefaultParamsWriter(instance: Params) extends MLWriter {
 
   override protected def saveImpl(path: String): Unit = {
-    DefaultParamsWriter.saveMetadata(instance, path, sc)
+    DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
   }
 }
 
@@ -402,16 +403,75 @@ private[ml] object DefaultParamsWriter {
    *                  Otherwise, all [[org.apache.spark.ml.param.Param]]s are encoded using
    *                  [[org.apache.spark.ml.param.Param.jsonEncode()]].
    */
+  @deprecated("use saveMetadata with SparkSession", "4.0.0")
   def saveMetadata(
       instance: Params,
       path: String,
       sc: SparkContext,
       extraMetadata: Option[JObject] = None,
-      paramMap: Option[JValue] = None): Unit = {
+      paramMap: Option[JValue] = None): Unit =
+    saveMetadata(
+      instance,
+      path,
+      SparkSession.builder().sparkContext(sc).getOrCreate(),
+      extraMetadata,
+      paramMap)
+
+  /**
+   * Saves metadata + Params to: path + "/metadata"
+   *  - class
+   *  - timestamp
+   *  - sparkVersion
+   *  - uid
+   *  - defaultParamMap
+   *  - paramMap
+   *  - (optionally, extra metadata)
+   *
+   * @param extraMetadata  Extra metadata to be saved at same level as uid, paramMap, etc.
+   * @param paramMap  If given, this is saved in the "paramMap" field.
+   *                  Otherwise, all [[org.apache.spark.ml.param.Param]]s are encoded using
+   *                  [[org.apache.spark.ml.param.Param.jsonEncode()]].
+   */
+  def saveMetadata(
+      instance: Params,
+      path: String,
+      spark: SparkSession,
+      extraMetadata: Option[JObject],
+      paramMap: Option[JValue]): Unit = {
     val metadataPath = new Path(path, "metadata").toString
-    val metadataJson = getMetadataToSave(instance, sc, extraMetadata, paramMap)
-    sc.parallelize(Seq(metadataJson), 1).saveAsTextFile(metadataPath)
+    val metadataJson = getMetadataToSave(instance, spark, extraMetadata, paramMap)
+    // Note that we should write single file. If there are more than one row
+    // it produces more partitions.
+    spark.createDataFrame(Seq(Tuple1(metadataJson))).write.text(metadataPath)
   }
+
+  def saveMetadata(
+      instance: Params,
+      path: String,
+      spark: SparkSession,
+      extraMetadata: Option[JObject]): Unit =
+    saveMetadata(instance, path, spark, extraMetadata, None)
+
+  def saveMetadata(instance: Params, path: String, spark: SparkSession): Unit =
+    saveMetadata(instance, path, spark, None, None)
+
+  /**
+   * Helper for [[saveMetadata()]] which extracts the JSON to save.
+   * This is useful for ensemble models which need to save metadata for many sub-models.
+   *
+   * @see [[saveMetadata()]] for details on what this includes.
+   */
+  @deprecated("use getMetadataToSave with SparkSession", "4.0.0")
+  def getMetadataToSave(
+      instance: Params,
+      sc: SparkContext,
+      extraMetadata: Option[JObject] = None,
+      paramMap: Option[JValue] = None): String =
+    getMetadataToSave(
+      instance,
+      SparkSession.builder().sparkContext(sc).getOrCreate(),
+      extraMetadata,
+      paramMap)
 
   /**
    * Helper for [[saveMetadata()]] which extracts the JSON to save.
@@ -421,9 +481,9 @@ private[ml] object DefaultParamsWriter {
    */
   def getMetadataToSave(
       instance: Params,
-      sc: SparkContext,
-      extraMetadata: Option[JObject] = None,
-      paramMap: Option[JValue] = None): String = {
+      spark: SparkSession,
+      extraMetadata: Option[JObject],
+      paramMap: Option[JValue]): String = {
     val uid = instance.uid
     val cls = instance.getClass.getName
     val params = instance.paramMap.toSeq
@@ -436,7 +496,7 @@ private[ml] object DefaultParamsWriter {
     }.toList)
     val basicMetadata = ("class" -> cls) ~
       ("timestamp" -> System.currentTimeMillis()) ~
-      ("sparkVersion" -> sc.version) ~
+      ("sparkVersion" -> spark.version) ~
       ("uid" -> uid) ~
       ("paramMap" -> jsonParams) ~
       ("defaultParamMap" -> jsonDefaultParams)
@@ -449,6 +509,17 @@ private[ml] object DefaultParamsWriter {
     val metadataJson: String = compact(render(metadata))
     metadataJson
   }
+
+  def getMetadataToSave(
+      instance: Params,
+      spark: SparkSession,
+      extraMetadata: Option[JObject]): String =
+    getMetadataToSave(instance, spark, extraMetadata, None)
+
+  def getMetadataToSave(
+      instance: Params,
+      spark: SparkSession): String =
+    getMetadataToSave(instance, spark, None, None)
 }
 
 /**
@@ -462,7 +533,7 @@ private[ml] object DefaultParamsWriter {
 private[ml] class DefaultParamsReader[T] extends MLReader[T] {
 
   override def load(path: String): T = {
-    val metadata = DefaultParamsReader.loadMetadata(path, sc)
+    val metadata = DefaultParamsReader.loadMetadata(path, sparkSession)
     val cls = Utils.classForName(metadata.className)
     val instance =
       cls.getConstructor(classOf[String]).newInstance(metadata.uid).asInstanceOf[Params]
@@ -582,11 +653,21 @@ private[ml] object DefaultParamsReader {
    * @param expectedClassName  If non empty, this is checked against the loaded metadata.
    * @throws IllegalArgumentException if expectedClassName is specified and does not match metadata
    */
-  def loadMetadata(path: String, sc: SparkContext, expectedClassName: String = ""): Metadata = {
+  @deprecated("use loadMetadata with SparkSession", "4.0.0")
+  def loadMetadata(path: String, sc: SparkContext, expectedClassName: String = ""): Metadata =
+    loadMetadata(
+      path,
+      SparkSession.builder().sparkContext(sc).getOrCreate(),
+      expectedClassName)
+
+  def loadMetadata(path: String, spark: SparkSession, expectedClassName: String): Metadata = {
     val metadataPath = new Path(path, "metadata").toString
-    val metadataStr = sc.textFile(metadataPath, 1).first()
+    val metadataStr = spark.read.text(metadataPath).first().getString(0)
     parseMetadata(metadataStr, expectedClassName)
   }
+
+  def loadMetadata(path: String, spark: SparkSession): Metadata =
+    loadMetadata(path, spark, "")
 
   /**
    * Parse metadata JSON string produced by [[DefaultParamsWriter.getMetadataToSave()]].
@@ -618,15 +699,23 @@ private[ml] object DefaultParamsReader {
    * Load a `Params` instance from the given path, and return it.
    * This assumes the instance implements [[MLReadable]].
    */
+  @deprecated("use loadParamsInstance with SparkSession", "4.0.0")
   def loadParamsInstance[T](path: String, sc: SparkContext): T =
-    loadParamsInstanceReader(path, sc).load(path)
+    loadParamsInstance[T](path, SparkSession.builder().sparkContext(sc).getOrCreate())
+
+  def loadParamsInstance[T](path: String, spark: SparkSession): T =
+    loadParamsInstanceReader(path, spark).load(path)
 
   /**
    * Load a `Params` instance reader from the given path, and return it.
    * This assumes the instance implements [[MLReadable]].
    */
-  def loadParamsInstanceReader[T](path: String, sc: SparkContext): MLReader[T] = {
-    val metadata = DefaultParamsReader.loadMetadata(path, sc)
+  @deprecated("use loadParamsInstanceReader with SparkSession", "4.0.0")
+  def loadParamsInstanceReader[T](path: String, sc: SparkContext): MLReader[T] =
+    loadParamsInstanceReader[T](path, SparkSession.builder().sparkContext(sc).getOrCreate())
+
+  def loadParamsInstanceReader[T](path: String, spark: SparkSession): MLReader[T] = {
+    val metadata = DefaultParamsReader.loadMetadata(path, spark)
     val cls = Utils.classForName(metadata.className)
     cls.getMethod("read").invoke(null).asInstanceOf[MLReader[T]]
   }
@@ -674,7 +763,7 @@ private[ml] class FileSystemOverwrite extends Logging {
     val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
     if (fs.exists(qualifiedOutputPath)) {
       if (shouldOverwrite) {
-        logInfo(s"Path $path already exists. It will be overwritten.")
+        logInfo(log"Path ${MDC(PATH, path)} already exists. It will be overwritten.")
         // TODO: Revert back to the original content if save is not successful.
         fs.delete(qualifiedOutputPath, true)
       } else {

@@ -31,7 +31,8 @@ import org.apache.commons.crypto.random._
 import org.apache.commons.crypto.stream._
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.{CryptoUtils, JavaUtils}
 
@@ -131,8 +132,8 @@ private[spark] object CryptoStreamUtils extends Logging {
     val initialIVFinish = System.nanoTime()
     val initialIVTime = TimeUnit.NANOSECONDS.toMillis(initialIVFinish - initialIVStart)
     if (initialIVTime > 2000) {
-      logWarning(s"It costs ${initialIVTime} milliseconds to create the Initialization Vector " +
-        s"used by CryptoStream")
+      logWarning(log"It costs ${MDC(TIME_UNITS, initialIVTime)} milliseconds " +
+        log"to create the Initialization Vector used by CryptoStream")
     }
     iv
   }

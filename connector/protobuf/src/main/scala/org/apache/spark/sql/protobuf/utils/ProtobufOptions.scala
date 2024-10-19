@@ -43,8 +43,8 @@ private[sql] class ProtobufOptions(
 
   /**
    * Adds support for recursive fields. If this option is is not specified, recursive fields are
-   * not permitted. Setting it to 0 drops the recursive fields, 1 allows it to be recursed once,
-   * and 2 allows it to be recursed twice and so on, up to 10. Values larger than 10 are not
+   * not permitted. Setting it to 1 drops the recursive fields, 0 allows it to be recursed once,
+   * and 3 allows it to be recursed twice and so on, up to 10. Values larger than 10 are not
    * allowed in order avoid inadvertently creating very large schemas. If a Protobuf message
    * has depth beyond this limit, the Spark struct returned is truncated after the recursion limit.
    *
@@ -52,8 +52,8 @@ private[sql] class ProtobufOptions(
    *   `message Person { string name = 1; Person friend = 2; }`
    * The following lists the schema with different values for this setting.
    *  1:  `struct<name: string>`
-   *  2:  `struct<name string, friend: struct<name: string>>`
-   *  3:  `struct<name string, friend: struct<name string, friend: struct<name: string>>>`
+   *  2:  `struct<name: string, friend: struct<name: string>>`
+   *  3:  `struct<name: string, friend: struct<name: string, friend: struct<name: string>>>`
    * and so on.
    */
   val recursiveFieldMaxDepth: Int = parameters.getOrElse("recursive.fields.max.depth", "-1").toInt
@@ -180,6 +180,50 @@ private[sql] class ProtobufOptions(
   // can contain large unsigned values without overflow.
   val upcastUnsignedInts: Boolean =
     parameters.getOrElse("upcast.unsigned.ints", false.toString).toBoolean
+
+  // Whether to unwrap the struct representation for well known primitive wrapper types when
+  // deserializing. By default, the wrapper types for primitives (i.e. google.protobuf.Int32Value,
+  // google.protobuf.Int64Value, etc.) will get deserialized as structs. We allow the option to
+  // deserialize them as their respective primitives.
+  // https://protobuf.dev/reference/protobuf/google.protobuf/
+  //
+  // For example, given a message like:
+  // ```
+  // syntax = "proto3";
+  // message Example {
+  //   google.protobuf.Int32Value int_val = 1;
+  // }
+  // ```
+  //
+  // The message Example(Int32Value(1)) would be deserialized by default as
+  // {int_val: {value: 5}}
+  //
+  // However, with this option set, it would be deserialized as
+  // {int_val: 5}
+  //
+  // NOTE: With `emit.default.values`, we won't fill in the default primitive value during
+  // this unwrapping; this behavior preserves as much information as possible.
+  // Concretely, the behavior with emit defaults and this option set is:
+  //    nil => nil, Int32Value(0) => 0, Int32Value(100) => 100.
+  val unwrapWellKnownTypes: Boolean =
+    parameters.getOrElse("unwrap.primitive.wrapper.types", false.toString).toBoolean
+
+  // Since Spark doesn't allow writing empty StructType, empty proto message type will be
+  // dropped by default. Setting this option to true will insert a dummy column to empty proto
+  // message so that the empty message will be retained.
+  // For example, an empty message is used as field in another message:
+  //
+  // ```
+  // message A {}
+  // message B {A a = 1, string name = 2}
+  // ```
+  //
+  // By default, in the spark schema field a will be dropped, which result in schema
+  // b struct<name: string>
+  // If retain.empty.message.types=true, field a will be retained by inserting a dummy column.
+  // b struct<a: struct<__dummy_field_in_empty_struct: string>, name: string>
+  val retainEmptyMessage: Boolean =
+    parameters.getOrElse("retain.empty.message.types", false.toString).toBoolean
 }
 
 private[sql] object ProtobufOptions {

@@ -19,7 +19,7 @@ package org.apache.spark.ml.tuning
 
 import java.io.File
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.ml.{Estimator, Model, Pipeline}
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel, OneVsRest}
 import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
@@ -123,10 +123,16 @@ class CrossValidatorSuite
       .setEvaluator(eval)
       .setNumFolds(3)
       .setFoldCol("fold1")
-    val err1 = intercept[IllegalArgumentException] {
-      cv.fit(datasetWithFold)
-    }
-    assert(err1.getMessage.contains("fold1 does not exist. Available: label, features, fold"))
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        cv.fit(datasetWithFold)
+      },
+      condition = "FIELD_NOT_FOUND",
+      parameters = Map(
+        "fieldName" -> "`fold1`",
+        "fields" -> "`label`, `features`, `fold`")
+    )
 
     // Fold column must be integer type.
     val foldCol = udf(() => 1L)

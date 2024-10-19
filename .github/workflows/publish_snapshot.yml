@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: Publish Snapshot
+name: Publish snapshot
 
 on:
   schedule:
@@ -45,7 +45,7 @@ jobs:
       with:
         ref: ${{ matrix.branch }}
     - name: Cache Maven local repository
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.m2/repository
         key: snapshot-maven-${{ hashFiles('**/pom.xml') }}

@@ -22,6 +22,8 @@ import java.util.concurrent.TimeUnit._
 import scala.collection.mutable
 
 import org.apache.spark.TaskContext
+import org.apache.spark.internal.LogKeys.CONFIG
+import org.apache.spark.internal.MDC
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -59,7 +61,7 @@ case class HashAggregateExec(
     child: SparkPlan)
   extends AggregateCodegenSupport {
 
-  require(Aggregate.supportsHashAggregate(aggregateBufferAttributes))
+  require(Aggregate.supportsHashAggregate(aggregateBufferAttributes, groupingExpressions))
 
   override lazy val allAttributes: AttributeSeq =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
@@ -410,8 +412,8 @@ case class HashAggregateExec(
   private def enableTwoLevelHashMap(): Unit = {
     if (!checkIfFastHashMapSupported()) {
       if (!Utils.isTesting) {
-        logInfo(s"${SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key} is set to true, but"
-          + " current version of codegened fast hashmap does not support this aggregate.")
+        logInfo(log"${MDC(CONFIG, SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key)} is set to true, but" +
+          log" current version of codegened fast hashmap does not support this aggregate.")
       }
     } else {
       isFastHashMapEnabled = true
@@ -680,7 +682,7 @@ case class HashAggregateExec(
          |    $unsafeRowKeys, $unsafeRowKeyHash);
          |  if ($unsafeRowBuffer == null) {
          |    // failed to allocate the first page
-         |    throw new $oomeClassName("No enough memory for aggregation");
+         |    throw new $oomeClassName("_LEGACY_ERROR_TEMP_3302", new java.util.HashMap());
          |  }
          |}
        """.stripMargin

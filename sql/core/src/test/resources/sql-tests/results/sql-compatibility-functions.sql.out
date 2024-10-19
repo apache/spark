@@ -126,3 +126,11 @@ SELECT nvl(st.col1, "value"), count(*) FROM from tempView1 GROUP BY nvl(st.col1,
 struct<nvl(st.col1, value):string,FROM:bigint>
 -- !query output
 gamma	1
+
+
+-- !query
+SELECT nullif(SUM(id), 0) from range(5)
+-- !query schema
+struct<nullif(sum(id), 0):bigint>
+-- !query output
+10

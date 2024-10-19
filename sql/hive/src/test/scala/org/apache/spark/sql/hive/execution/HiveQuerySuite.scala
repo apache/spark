@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
-import java.net.URI
 import java.nio.file.Files
 import java.sql.Timestamp
 
@@ -48,7 +47,7 @@ case class TestData(a: Int, b: String)
  */
 @SlowHiveTest
 class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAndAfter {
-  import org.apache.spark.sql.hive.test.TestHive.implicits._
+  import org.apache.spark.sql.hive.test.TestHive.sparkSession.implicits._
 
   private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
 
@@ -73,14 +72,14 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   private def assertUnsupportedFeature(
       body: => Unit,
-      message: String,
+      operation: String,
       expectedContext: ExpectedContext): Unit = {
     checkError(
       exception = intercept[ParseException] {
         body
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> message),
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> operation),
       context = expectedContext)
   }
 
@@ -159,28 +158,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       |    SELECT explode(array(1,2,3)) FROM src LIMIT 3;
       |  SELECT key FROM gen_tmp ORDER BY key ASC;
     """.stripMargin)
-
-  test("multiple generators in projection") {
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("SELECT explode(array(key, key)), explode(array(key, key)) FROM src").collect()
-      },
-      errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
-      parameters = Map(
-        "clause" -> "SELECT",
-        "num" -> "2",
-        "generators" -> "\"explode(array(key, key))\", \"explode(array(key, key))\""))
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("SELECT explode(array(key, key)) as k1, explode(array(key, key)) FROM src").collect()
-      },
-      errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
-      parameters = Map(
-        "clause" -> "SELECT",
-        "num" -> "2",
-        "generators" -> "\"explode(array(key, key))\", \"explode(array(key, key))\""))
-  }
 
   createQueryTest("! operator",
     """
@@ -391,7 +368,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   test("SPARK-7270: consider dynamic partition when comparing table output") {
     withTable("test_partition", "ptest") {
-      sql(s"CREATE TABLE test_partition (a STRING) PARTITIONED BY (b BIGINT, c STRING)")
+      sql(s"CREATE TABLE test_partition (a STRING) USING HIVE PARTITIONED BY (b BIGINT, c STRING)")
       sql(s"CREATE TABLE ptest (a STRING, b BIGINT, c STRING)")
 
       val analyzedPlan = sql(
@@ -701,15 +678,23 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     assert(actual === expected)
   }
 
-  // TODO: adopt this test when Spark SQL has the functionality / framework to report errors.
-  // See https://github.com/apache/spark/pull/1055#issuecomment-45820167 for a discussion.
-  ignore("non-boolean conditions in a CaseWhen are illegal") {
+  test("non-boolean conditions in a CaseWhen are illegal") {
     checkError(
       exception = intercept[AnalysisException] {
         sql("SELECT (CASE WHEN key > 2 THEN 3 WHEN 1 THEN 2 ELSE 0 END) FROM src").collect()
       },
-      errorClass = null,
-      parameters = Map.empty)
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"CASE WHEN (key > 2) THEN 3 WHEN 1 THEN 2 ELSE 0 END\"",
+        "paramIndex" -> "second",
+        "inputSql" -> "\"1\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"BOOLEAN\""),
+      context = ExpectedContext(
+        fragment = "CASE WHEN key > 2 THEN 3 WHEN 1 THEN 2 ELSE 0 END",
+        start = 8,
+        stop = 56)
+    )
   }
 
   createQueryTest("case sensitivity when query Hive table",
@@ -826,18 +811,19 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("ADD JAR command") {
-    sql("CREATE TABLE alter1(a INT, b INT)")
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql(
-          """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
-            |WITH serdeproperties('s1'='9')""".stripMargin)
-      },
-      errorClass = "_LEGACY_ERROR_TEMP_3065",
-      parameters = Map(
-        "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
-        "msg" -> "at least one column must be specified for the table"))
-    sql("DROP TABLE alter1")
+    withTable("alter1") {
+      sql("CREATE TABLE alter1(a INT, b INT) USING HIVE")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
+              |WITH serdeproperties('s1'='9')""".stripMargin)
+        },
+        condition = "_LEGACY_ERROR_TEMP_3065",
+        parameters = Map(
+          "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
+          "msg" -> "at least one column must be specified for the table"))
+    }
   }
 
   test("ADD JAR command 2") {
@@ -845,12 +831,13 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     val testJar = HiveTestJars.getHiveHcatalogCoreJar().toURI
     val testData = TestHive.getHiveFile("data/files/sample.json").toURI
     sql(s"ADD JAR $testJar")
-    sql(
-      """CREATE TABLE t1(a string, b string)
-      |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'""".stripMargin)
-    sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t1""")
-    sql("select * from src join t1 on src.key = t1.a")
-    sql("DROP TABLE t1")
+    withTable("t1") {
+      sql(
+        """CREATE TABLE t1(a string, b string)
+          |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'""".stripMargin)
+      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t1""")
+      sql("select * from src join t1 on src.key = t1.a")
+    }
     assert(sql("list jars").
       filter(_.getString(0).contains(HiveTestJars.getHiveHcatalogCoreJar().getName)).count() > 0)
     assert(sql("list jar").
@@ -876,12 +863,13 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     val funcJar = TestHive.getHiveFile("TestUDTF.jar")
     val jarURL = funcJar.toURI.toURL
     sql(s"ADD JAR $jarURL")
-    sql(
-      """CREATE TEMPORARY FUNCTION udtf_count2 AS
-        |'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
-      """.stripMargin)
-    assert(sql("DESCRIBE FUNCTION udtf_count2").count() > 1)
-    sql("DROP TEMPORARY FUNCTION udtf_count2")
+    withUserDefinedFunction("udtf_count2" -> true) {
+      sql(
+        """CREATE TEMPORARY FUNCTION udtf_count2 AS
+          |'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+        """.stripMargin)
+      assert(sql("DESCRIBE FUNCTION udtf_count2").count() > 1)
+    }
   }
 
   test("ADD FILE command") {
@@ -1189,91 +1177,98 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       |DROP TABLE IF EXISTS dynamic_part_table;
     """.stripMargin)
 
-  ignore("Dynamic partition folder layout") {
-    sql("DROP TABLE IF EXISTS dynamic_part_table")
-    sql("CREATE TABLE dynamic_part_table(intcol INT) PARTITIONED BY (partcol1 INT, partcol2 INT)")
-    sql("SET hive.exec.dynamic.partition.mode=nonstrict")
+  test("Dynamic partition folder layout") {
+    withTempDir { dir =>
+      withTable("dynamic_part_table") {
+        sql("CREATE TABLE dynamic_part_table(intcol INT) USING HIVE " +
+          s"PARTITIONED BY (partcol1 INT, partcol2 INT) " +
+          s"LOCATION '${dir.getCanonicalPath}/dynamic_part_table'")
+        sql("SET hive.exec.dynamic.partition.mode=nonstrict")
 
-    val data = Map(
-      Seq("1", "1") -> 1,
-      Seq("1", "NULL") -> 2,
-      Seq("NULL", "1") -> 3,
-      Seq("NULL", "NULL") -> 4)
+        val data = Map(
+          Seq("1", "1") -> 1,
+          Seq("1", "NULL") -> 2,
+          Seq("NULL", "1") -> 3,
+          Seq("NULL", "NULL") -> 4)
 
-    data.foreach { case (parts, value) =>
-      sql(
-        s"""INSERT INTO TABLE dynamic_part_table PARTITION(partcol1, partcol2)
-           |SELECT $value, ${parts.mkString(", ")} FROM src WHERE key=150
-         """.stripMargin)
+        data.foreach { case (parts, value) =>
+          sql(
+            s"""INSERT INTO TABLE dynamic_part_table PARTITION(partcol1, partcol2)
+               |SELECT $value, ${parts.mkString(", ")} FROM src WHERE key=150
+             """.stripMargin)
 
-      val partFolder = Seq("partcol1", "partcol2")
-        .zip(parts)
-        .map { case (k, v) =>
-          if (v == "NULL") {
-            s"$k=${ConfVars.DEFAULTPARTITIONNAME.defaultStrVal}"
-          } else {
-            s"$k=$v"
+          val partFolder = Seq("partcol1", "partcol2")
+            .zip(parts)
+            .map { case (k, v) =>
+              if (v == "NULL") {
+                s"$k=${ConfVars.DEFAULTPARTITIONNAME.defaultStrVal}"
+              } else {
+                s"$k=$v"
+              }
+            }
+            .mkString("/")
+
+          // Loads partition data to a temporary table to verify contents
+          val path = s"${dir.getCanonicalPath}/dynamic_part_table/$partFolder/part-00000*"
+
+          withTable("dp_verify") {
+            sql("CREATE TABLE dp_verify(intcol INT) USING HIVE")
+            sql(s"LOAD DATA LOCAL INPATH '$path' INTO TABLE dp_verify")
+
+            assert(sql("SELECT * FROM dp_verify").collect() === Array(Row(value)))
           }
         }
-        .mkString("/")
-
-      // Loads partition data to a temporary table to verify contents
-      val warehousePathFile = new URI(sparkSession.getWarehousePath()).getPath
-      val path = s"$warehousePathFile/dynamic_part_table/$partFolder/part-00000"
-
-      sql("DROP TABLE IF EXISTS dp_verify")
-      sql("CREATE TABLE dp_verify(intcol INT)")
-      sql(s"LOAD DATA LOCAL INPATH '$path' INTO TABLE dp_verify")
-
-      assert(sql("SELECT * FROM dp_verify").collect() === Array(Row(value)))
+      }
     }
   }
 
   test("SPARK-5592: get java.net.URISyntaxException when dynamic partitioning") {
-    sql("""
-      |create table sc as select *
-      |from (select '2011-01-11', '2011-01-11+14:18:26' from src tablesample (1 rows)
-      |union all
-      |select '2011-01-11', '2011-01-11+15:18:26' from src tablesample (1 rows)
-      |union all
-      |select '2011-01-11', '2011-01-11+16:18:26' from src tablesample (1 rows) ) s
+    withSQLConf("hive.exec.dynamic.partition" -> "true",
+      "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      sql(
+        """
+          |create table sc as select *
+          |from (select '2011-01-11', '2011-01-11+14:18:26' from src tablesample (1 rows)
+          |union all
+          |select '2011-01-11', '2011-01-11+15:18:26' from src tablesample (1 rows)
+          |union all
+          |select '2011-01-11', '2011-01-11+16:18:26' from src tablesample (1 rows) ) s
     """.stripMargin)
-    sql("create table sc_part (key string) partitioned by (ts string) stored as rcfile")
-    sql("set hive.exec.dynamic.partition=true")
-    sql("set hive.exec.dynamic.partition.mode=nonstrict")
-    sql("insert overwrite table sc_part partition(ts) select * from sc")
-    sql("drop table sc_part")
+      sql("create table sc_part (key string) partitioned by (ts string) stored as rcfile")
+      sql("insert overwrite table sc_part partition(ts) select * from sc")
+      sql("drop table sc_part")
+    }
   }
 
   test("Partition spec validation") {
-    sql("DROP TABLE IF EXISTS dp_test")
-    sql("CREATE TABLE dp_test(key INT, value STRING) PARTITIONED BY (dp INT, sp INT)")
-    sql("SET hive.exec.dynamic.partition.mode=strict")
-
-    // Should throw when using strict dynamic partition mode without any static partition
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql(
-          """INSERT INTO TABLE dp_test PARTITION(dp)
-            |SELECT key, value, key % 5 FROM src""".stripMargin)
-      },
-      errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
-      parameters = Map(
-        "tableName" -> "`spark_catalog`.`default`.`dp_test`",
-        "tableColumns" -> "`key`, `value`, `dp`, `sp`",
-        "dataColumns" -> "`key`, `value`, `(key % 5)`"))
-
-    sql("SET hive.exec.dynamic.partition.mode=nonstrict")
-
-    // Should throw when a static partition appears after a dynamic partition
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql(
-          """INSERT INTO TABLE dp_test PARTITION(dp, sp = 1)
-            |SELECT key, value, key % 5 FROM src""".stripMargin)
-      },
-      errorClass = "_LEGACY_ERROR_TEMP_3079",
-      parameters = Map.empty)
+    withTable("dp_test") {
+      sql("CREATE TABLE dp_test(key INT, value STRING) USING HIVE PARTITIONED BY (dp INT, sp INT)")
+      withSQLConf("hive.exec.dynamic.partition.mode" -> "strict") {
+        // Should throw when using strict dynamic partition mode without any static partition
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(
+              """INSERT INTO TABLE dp_test PARTITION(dp)
+                |SELECT key, value, key % 5 FROM src""".stripMargin)
+          },
+          condition = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`dp_test`",
+            "tableColumns" -> "`key`, `value`, `dp`, `sp`",
+            "dataColumns" -> "`key`, `value`, `(key % 5)`"))
+      }
+      withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        // Should throw when a static partition appears after a dynamic partition
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(
+              """INSERT INTO TABLE dp_test PARTITION(dp, sp = 1)
+                |SELECT key, value, key % 5 FROM src""".stripMargin)
+          },
+          condition = "_LEGACY_ERROR_TEMP_3079",
+          parameters = Map.empty)
+      }
+    }
   }
 
   test("SPARK-3414 regression: should store analyzed logical plan when creating a temporary view") {
@@ -1314,21 +1309,22 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("SPARK-3810: PreprocessTableInsertion dynamic partitioning support") {
-    val analyzedPlan = {
-      loadTestTable("srcpart")
-      sql("DROP TABLE IF EXISTS withparts")
-      sql("CREATE TABLE withparts LIKE srcpart")
-      sql("SET hive.exec.dynamic.partition.mode=nonstrict")
+    withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      val analyzedPlan = {
+        loadTestTable("srcpart")
+        sql("DROP TABLE IF EXISTS withparts")
+        sql("CREATE TABLE withparts LIKE srcpart")
 
-      sql("CREATE TABLE IF NOT EXISTS withparts LIKE srcpart")
-      sql("INSERT INTO TABLE withparts PARTITION(ds, hr) SELECT key, value, '1', '2' FROM src")
-        .queryExecution.analyzed
-    }
+        sql("CREATE TABLE IF NOT EXISTS withparts LIKE srcpart")
+        sql("INSERT INTO TABLE withparts PARTITION(ds, hr) SELECT key, value, '1', '2' FROM src")
+          .queryExecution.analyzed
+      }
 
-    assertResult(2, "Duplicated project detected\n" + analyzedPlan) {
-      analyzedPlan.collect {
-        case i: InsertIntoHiveTable => i.query.collect { case p: Project => () }.size
-      }.sum
+      assertResult(2, "Duplicated project detected\n" + analyzedPlan) {
+        analyzedPlan.collect {
+          case i: InsertIntoHiveTable => i.query.collect { case p: Project => () }.size
+        }.sum
+      }
     }
   }
 
@@ -1353,69 +1349,69 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("current_database with multiple sessions") {
-    sql("create database a")
-    sql("use a")
-    val s2 = newSession()
-    s2.sql("create database b")
-    s2.sql("use b")
+    withCurrentCatalogAndNamespace {
+      sql("create database a")
+      sql("use a")
+      val s2 = newSession()
+      s2.sql("create database b")
+      s2.sql("use b")
 
-    assert(sql("select current_database()").first() === Row("a"))
-    assert(s2.sql("select current_database()").first() === Row("b"))
+      assert(sql("select current_database()").first() === Row("a"))
+      assert(s2.sql("select current_database()").first() === Row("b"))
 
-    try {
-      sql("create table test_a(key INT, value STRING)")
-      s2.sql("create table test_b(key INT, value STRING)")
+      try {
+        sql("create table test_a(key INT, value STRING)")
+        s2.sql("create table test_b(key INT, value STRING)")
 
-      sql("select * from test_a")
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("select * from test_b")
-        },
-        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`test_b`"),
-        context = ExpectedContext(
-          fragment = "test_b",
-          start = 14,
-          stop = 19))
+        sql("select * from test_a")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("select * from test_b")
+          },
+          condition = "TABLE_OR_VIEW_NOT_FOUND",
+          parameters = Map("relationName" -> "`test_b`"),
+          context = ExpectedContext(
+            fragment = "test_b",
+            start = 14,
+            stop = 19))
 
-      sql("select * from b.test_b")
+        sql("select * from b.test_b")
 
-      s2.sql("select * from test_b")
-      checkError(
-        exception = intercept[AnalysisException] {
-          s2.sql("select * from test_a")
-        },
-        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`test_a`"),
-        context = ExpectedContext(
-          fragment = "test_a",
-          start = 14,
-          stop = 19))
-      s2.sql("select * from a.test_a")
-    } finally {
-      sql("DROP TABLE IF EXISTS test_a")
-      s2.sql("DROP TABLE IF EXISTS test_b")
+        s2.sql("select * from test_b")
+        checkError(
+          exception = intercept[AnalysisException] {
+            s2.sql("select * from test_a")
+          },
+          condition = "TABLE_OR_VIEW_NOT_FOUND",
+          parameters = Map("relationName" -> "`test_a`"),
+          context = ExpectedContext(
+            fragment = "test_a",
+            start = 14,
+            stop = 19))
+        s2.sql("select * from a.test_a")
+      } finally {
+        sql("DROP TABLE IF EXISTS test_a")
+        s2.sql("DROP TABLE IF EXISTS test_b")
+      }
     }
-
   }
 
   test("use database") {
     val currentDatabase = sql("select current_database()").first().getString(0)
+    withCurrentCatalogAndNamespace {
+      sql("CREATE DATABASE hive_test_db")
+      sql("USE hive_test_db")
+      assert("hive_test_db" == sql("select current_database()").first().getString(0))
+      assert("hive_test_db" == sql("select current_schema()").first().getString(0))
 
-    sql("CREATE DATABASE hive_test_db")
-    sql("USE hive_test_db")
-    assert("hive_test_db" == sql("select current_database()").first().getString(0))
-
-    assert("hive_test_db" == sql("select current_schema()").first().getString(0))
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("USE not_existing_db")
-      },
-      errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`not_existing_db`"))
-
-    sql(s"USE $currentDatabase")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("USE not_existing_db")
+        },
+        condition = "SCHEMA_NOT_FOUND",
+        parameters = Map("schemaName" -> "`spark_catalog`.`not_existing_db`")
+      )
+    }
     assert(currentDatabase == sql("select current_database()").first().getString(0))
   }
 
@@ -1424,11 +1420,11 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       exception = intercept[AnalysisException] {
         range(1).selectExpr("not_a_udf()")
       },
-      errorClass = "UNRESOLVED_ROUTINE",
+      condition = "UNRESOLVED_ROUTINE",
       sqlState = None,
       parameters = Map(
         "routineName" -> "`not_a_udf`",
-        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`a`]"),
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
       context = ExpectedContext(
         fragment = "not_a_udf()",
         start = 0,
@@ -1441,11 +1437,11 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
           exception = intercept[AnalysisException] {
             range(1).selectExpr("not_a_udf()")
           },
-          errorClass = "UNRESOLVED_ROUTINE",
+          condition = "UNRESOLVED_ROUTINE",
           sqlState = None,
           parameters = Map(
             "routineName" -> "`not_a_udf`",
-            "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`a`]"),
+            "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
           context = ExpectedContext(
             fragment = "not_a_udf()",
             start = 0,
@@ -1649,10 +1645,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   test("SPARK-33084: Add jar support Ivy URI in SQL") {
     val testData = TestHive.getHiveFile("data/files/sample.json").toURI
     withTable("t") {
-      // hive-catalog-core has some transitive dependencies which dont exist on maven central
-      // and hence cannot be found in the test environment or are non-jar (.pom) which cause
-      // failures in tests. Use transitive=false as it should be good enough to test the Ivy
-      // support in Hive ADD JAR
+      // Use transitive=false as it should be good enough to test the Ivy support
+      // in Hive ADD JAR
       sql(s"ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:$hiveVersion" +
         "?transitive=false")
       sql(

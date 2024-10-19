@@ -246,6 +246,8 @@ private[deploy] object DeployMessages {
 
   case object RequestClearCompletedDriversAndApps extends DeployMessage
 
+  case object RequestReadyz extends DeployMessage
+
   // Internal message in AppClient
 
   case object StopAppClient

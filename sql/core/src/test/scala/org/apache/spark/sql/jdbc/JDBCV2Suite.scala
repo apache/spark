@@ -34,6 +34,7 @@ import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalo
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.execution.FormattedMode
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, coalesce, cos, cosh, cot, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sin, sinh, sqrt, sum, tan, tanh, udf, when}
@@ -51,8 +52,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte) ++
     Array.fill(15)(0.toByte)
 
+  private val h2Dialect = JdbcDialects.get(url).asInstanceOf[H2Dialect]
+
   val testH2Dialect = new JdbcDialect {
-    override def canHandle(url: String): Boolean = H2Dialect.canHandle(url)
+    val h2 = JdbcDialects.get(url).asInstanceOf[H2Dialect]
+
+    override def canHandle(url: String): Boolean = h2.canHandle(url)
 
     override def supportsLimit: Boolean = false
 
@@ -101,7 +106,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       }
     }
 
-    override def functions: Seq[(String, UnboundFunction)] = H2Dialect.functions
+    override def functions: Seq[(String, UnboundFunction)] = h2.functions
   }
 
   case object CharLength extends ScalarFunction[Int] {
@@ -223,16 +228,38 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       stmt.setString(1, "jen")
       stmt.setBytes(2, testBytes)
       stmt.executeUpdate()
+
+      conn.prepareStatement("CREATE TABLE \"test\".\"employee_bonus\" " +
+        "(name TEXT(32), salary NUMERIC(20, 2), bonus DOUBLE, factor DOUBLE)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
+        "VALUES ('amy', 10000, 1000, 0.1)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
+        "VALUES ('alex', 12000, 1200, 0.1)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
+        "VALUES ('cathy', 8000, 1200, 0.15)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
+        "VALUES ('david', 10000, 1300, 0.13)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
+        "VALUES ('jen', 12000, 2400, 0.2)").executeUpdate()
+
+      conn.prepareStatement(
+        "CREATE TABLE \"test\".\"strings_with_nulls\" (str TEXT(32))").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"strings_with_nulls\" VALUES " +
+        "('abc')").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"strings_with_nulls\" VALUES " +
+        "('a a a')").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"strings_with_nulls\" VALUES " +
+        "(null)").executeUpdate()
     }
-    H2Dialect.registerFunction("my_avg", IntegralAverage)
-    H2Dialect.registerFunction("my_strlen", StrLen(CharLength))
-    H2Dialect.registerFunction("my_strlen_magic", StrLen(CharLengthWithMagicMethod))
-    H2Dialect.registerFunction(
+    h2Dialect.registerFunction("my_avg", IntegralAverage)
+    h2Dialect.registerFunction("my_strlen", StrLen(CharLength))
+    h2Dialect.registerFunction("my_strlen_magic", StrLen(CharLengthWithMagicMethod))
+    h2Dialect.registerFunction(
       "my_strlen_static_magic", StrLen(new JavaStrLenStaticMagic()))
   }
 
   override def afterAll(): Unit = {
-    H2Dialect.clearFunctions()
+    h2Dialect.clearFunctions()
     Utils.deleteRecursively(tempDir)
     super.afterAll()
   }
@@ -339,7 +366,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkPushedInfo(df5, "PushedFilters: []")
     checkAnswer(df5, Seq(Row(10000.00, 1000.0, "amy")))
 
-    JdbcDialects.unregisterDialect(H2Dialect)
+    JdbcDialects.unregisterDialect(h2Dialect)
     try {
       JdbcDialects.registerDialect(testH2Dialect)
       val df6 = spark.read.table("h2.test.employee")
@@ -349,7 +376,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       checkAnswer(df6, Seq(Row(1, "amy", 10000.00, 1000.0, true)))
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
-      JdbcDialects.registerDialect(H2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
     }
   }
 
@@ -362,6 +389,20 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     } else {
       assert(offsets.nonEmpty)
     }
+  }
+
+  test("null value for option exception") {
+    val df = spark.read
+      .option("pushDownOffset", null)
+      .table("h2.test.employee")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.collect()
+      },
+      condition = "NULL_DATA_SOURCE_OPTION",
+      parameters = Map(
+        "option" -> "pushDownOffset")
+    )
   }
 
   test("simple scan with OFFSET") {
@@ -436,7 +477,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkPushedInfo(df6, "PushedFilters: []")
     checkAnswer(df6, Seq(Row(10000.00, 1300.0, "dav"), Row(9000.00, 1200.0, "cat")))
 
-    JdbcDialects.unregisterDialect(H2Dialect)
+    JdbcDialects.unregisterDialect(h2Dialect)
     try {
       JdbcDialects.registerDialect(testH2Dialect)
       val df7 = spark.read
@@ -449,7 +490,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       checkAnswer(df7, Seq(Row(1, "cathy", 9000.00, 1200.0, false)))
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
-      JdbcDialects.registerDialect(H2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
     }
   }
 
@@ -1239,7 +1280,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df15, Seq(Row(1, "cathy", 9000, 1200, false),
       Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
 
-    val df16 = spark.table("h2.test.employee")
+    val df16 = spark.table("h2.test.employee_bonus")
       .filter(sin($"bonus") < -0.08)
       .filter(sinh($"bonus") > 200)
       .filter(cos($"bonus") > 0.9)
@@ -1247,17 +1288,17 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .filter(tan($"bonus") < -0.08)
       .filter(tanh($"bonus") === 1)
       .filter(cot($"bonus") < -11)
-      .filter(asin($"bonus") > 0.1)
-      .filter(acos($"bonus") > 1.4)
+      .filter(asin($"factor") > 0.13)
+      .filter(acos($"factor") < 1.47)
       .filter(atan($"bonus") > 1.4)
       .filter(atan2($"bonus", $"bonus") > 0.7)
     checkFiltersRemoved(df16)
     checkPushedInfo(df16, "PushedFilters: [" +
-      "BONUS IS NOT NULL, SIN(BONUS) < -0.08, SINH(BONUS) > 200.0, COS(BONUS) > 0.9, " +
-      "COSH(BONUS) > 200.0, TAN(BONUS) < -0.08, TANH(BONUS) = 1.0, COT(BONUS) < -11.0, " +
-      "ASIN(BONUS) > 0.1, ACOS(BONUS) > 1.4, ATAN(BONUS) > 1.4, (ATAN2(BONUS, BONUS)) > 0.7],")
-    checkAnswer(df16, Seq(Row(1, "cathy", 9000, 1200, false),
-      Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
+      "BONUS IS NOT NULL, FACTOR IS NOT NULL, SIN(BONUS) < -0.08, SINH(BONUS) > 200.0, " +
+      "COS(BONUS) > 0.9, COSH(BONUS) > 200.0, TAN(BONUS) < -0.08, TANH(BONUS) = 1.0, " +
+      "COT(BONUS) < -11.0, ASIN(FACTOR) > 0.13, ACOS(FACTOR) < 1.47, ATAN(BONUS) > 1.4, " +
+      "(ATAN2(BONUS, BONUS)) > 0.7],")
+    checkAnswer(df16, Seq(Row("cathy", 8000, 1200, 0.15)))
 
     // H2 does not support log2, asinh, acosh, atanh, cbrt
     val df17 = sql(
@@ -1273,6 +1314,24 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkPushedInfo(df17,
       "PushedFilters: [DEPT IS NOT NULL, BONUS IS NOT NULL, SALARY IS NOT NULL]")
     checkAnswer(df17, Seq(Row(6, "jen", 12000, 1200, true)))
+  }
+
+  test("SPARK-48943: arguments for asin and acos are invalid (< -1 || > 1) in H2") {
+    val df1 = spark.table("h2.test.employee").filter(acos($"bonus") > 1.4)
+    val e1 = intercept[SparkException] {
+      checkAnswer(df1, Seq(Row(1, "cathy", 9000, 1200, false)))
+    }
+    assert(e1.getCause.getClass === classOf[org.h2.jdbc.JdbcSQLDataException])
+    assert(e1.getCause.getMessage.contains("Invalid value")
+      && e1.getCause.getMessage.contains("ACOS"))
+
+    val df2 = spark.table("h2.test.employee").filter(asin($"bonus") > 0.1)
+    val e2 = intercept[SparkException] {
+      checkAnswer(df2, Seq(Row(1, "cathy", 9000, 1200, false)))
+    }
+    assert(e2.getCause.getClass === classOf[org.h2.jdbc.JdbcSQLDataException])
+    assert(e2.getCause.getMessage.contains("Invalid value")
+      && e2.getCause.getMessage.contains("ASIN"))
   }
 
   test("SPARK-38432: escape the single quote, _ and % for DS V2 pushdown") {
@@ -1300,7 +1359,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df5 = spark.table("h2.test.address").filter($"email".startsWith("abc_'%"))
     checkFiltersRemoved(df5)
     checkPushedInfo(df5,
-      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE 'abc\_\'\%%' ESCAPE '\']")
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE 'abc\_''\%%' ESCAPE '\']")
     checkAnswer(df5, Seq(Row("abc_'%def@gmail.com")))
 
     val df6 = spark.table("h2.test.address").filter($"email".endsWith("_def@gmail.com"))
@@ -1331,7 +1390,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df10 = spark.table("h2.test.address").filter($"email".endsWith("_'%def@gmail.com"))
     checkFiltersRemoved(df10)
     checkPushedInfo(df10,
-      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%\_\'\%def@gmail.com' ESCAPE '\']")
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%\_''\%def@gmail.com' ESCAPE '\']")
     checkAnswer(df10, Seq(Row("abc_'%def@gmail.com")))
 
     val df11 = spark.table("h2.test.address").filter($"email".contains("c_d"))
@@ -1359,7 +1418,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df15 = spark.table("h2.test.address").filter($"email".contains("c_'%d"))
     checkFiltersRemoved(df15)
     checkPushedInfo(df15,
-      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%c\_\'\%d%' ESCAPE '\']")
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%c\_''\%d%' ESCAPE '\']")
     checkAnswer(df15, Seq(Row("abc_'%def@gmail.com")))
   }
 
@@ -1589,7 +1648,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("scan with filter push-down with UDF") {
-    JdbcDialects.unregisterDialect(H2Dialect)
+    JdbcDialects.unregisterDialect(h2Dialect)
     try {
       JdbcDialects.registerDialect(testH2Dialect)
       val df1 = sql("SELECT * FROM h2.test.people where h2.my_strlen(name) > 2")
@@ -1609,12 +1668,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
-      JdbcDialects.registerDialect(H2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
     }
   }
 
   test("scan with filter push-down with UDF that has magic method") {
-    JdbcDialects.unregisterDialect(H2Dialect)
+    JdbcDialects.unregisterDialect(h2Dialect)
     try {
       JdbcDialects.registerDialect(testH2Dialect)
       val df1 = sql("SELECT * FROM h2.test.people where h2.my_strlen_magic(name) > 2")
@@ -1635,12 +1694,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
-      JdbcDialects.registerDialect(H2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
     }
   }
 
   test("scan with filter push-down with UDF that has static magic method") {
-    JdbcDialects.unregisterDialect(H2Dialect)
+    JdbcDialects.unregisterDialect(h2Dialect)
     try {
       JdbcDialects.registerDialect(testH2Dialect)
       val df1 = sql("SELECT * FROM h2.test.people where h2.my_strlen_static_magic(name) > 2")
@@ -1661,7 +1720,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
-      JdbcDialects.registerDialect(H2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
     }
   }
 
@@ -1718,7 +1777,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         Row("test", "empty_table", false), Row("test", "employee", false),
         Row("test", "item", false), Row("test", "dept", false),
         Row("test", "person", false), Row("test", "view1", false), Row("test", "view2", false),
-        Row("test", "datetime", false), Row("test", "binary1", false)))
+        Row("test", "datetime", false), Row("test", "binary1", false),
+        Row("test", "employee_bonus", false),
+        Row("test", "strings_with_nulls", false)))
   }
 
   test("SQL API: create table as select") {
@@ -2435,7 +2496,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAggregateRemoved(df1)
     checkPushedInfo(df1,
       """
-        |PushedAggregates: [MODE(SALARY, true)],
+        |PushedAggregates: [MODE() WITHIN GROUP (ORDER BY SALARY ASC NULLS FIRST)],
         |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
         |PushedGroupByExpressions: [DEPT],
         |""".stripMargin.replaceAll("\n", " "))
@@ -2465,7 +2526,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAggregateRemoved(df3)
     checkPushedInfo(df3,
       """
-        |PushedAggregates: [MODE(SALARY, true)],
+        |PushedAggregates: [MODE() WITHIN GROUP (ORDER BY SALARY ASC NULLS FIRST)],
         |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
         |PushedGroupByExpressions: [DEPT],
         |""".stripMargin.replaceAll("\n", " "))
@@ -2481,11 +2542,67 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAggregateRemoved(df4)
     checkPushedInfo(df4,
       """
-        |PushedAggregates: [MODE(SALARY, false)],
+        |PushedAggregates: [MODE() WITHIN GROUP (ORDER BY SALARY DESC NULLS LAST)],
         |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
         |PushedGroupByExpressions: [DEPT],
         |""".stripMargin.replaceAll("\n", " "))
     checkAnswer(df4, Seq(Row(1, 10000.00), Row(2, 12000.00), Row(6, 12000.00)))
+  }
+
+  test("scan with aggregate push-down: PERCENTILE & PERCENTILE_DISC with filter and group by") {
+    val df1 = sql(
+      """
+        |SELECT
+        |  dept,
+        |  PERCENTILE(salary, 0.5)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
+    checkFiltersRemoved(df1)
+    checkAggregateRemoved(df1)
+    checkPushedInfo(df1,
+      """
+        |PushedAggregates: [PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY SALARY ASC NULLS FIRST)],
+        |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
+        |PushedGroupByExpressions: [DEPT],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df1, Seq(Row(1, 9500.00), Row(2, 11000.00), Row(6, 12000.00)))
+
+    val df2 = sql(
+      """
+        |SELECT
+        |  dept,
+        |  PERCENTILE_CONT(0.3) WITHIN GROUP (ORDER BY SALARY),
+        |  PERCENTILE_CONT(0.3) WITHIN GROUP (ORDER BY SALARY DESC)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
+    checkFiltersRemoved(df2)
+    checkAggregateRemoved(df2)
+    checkPushedInfo(df2,
+      """
+        |PushedAggregates: [PERCENTILE_CONT(0.3) WITHIN GROUP (ORDER BY SALARY ASC NULLS FIRST),
+        |PERCENTILE_CONT(0.3) WITHIN GROUP (ORDER BY SALARY DESC NULLS LAST)],
+        |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
+        |PushedGroupByExpressions: [DEPT],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df2,
+      Seq(Row(1, 9300.0, 9700.0), Row(2, 10600.0, 11400.0), Row(6, 12000.0, 12000.0)))
+
+    val df3 = sql(
+      """
+        |SELECT
+        |  dept,
+        |  PERCENTILE_DISC(0.3) WITHIN GROUP (ORDER BY SALARY),
+        |  PERCENTILE_DISC(0.3) WITHIN GROUP (ORDER BY SALARY DESC)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
+    checkFiltersRemoved(df3)
+    checkAggregateRemoved(df3)
+    checkPushedInfo(df3,
+      """
+        |PushedAggregates: [PERCENTILE_DISC(0.3) WITHIN GROUP (ORDER BY SALARY ASC NULLS FIRST),
+        |PERCENTILE_DISC(0.3) WITHIN GROUP (ORDER BY SALARY DESC NULLS LAST)],
+        |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
+        |PushedGroupByExpressions: [DEPT],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df3,
+      Seq(Row(1, 9000.0, 10000.0), Row(2, 10000.0, 12000.0), Row(6, 12000.0, 12000.0)))
   }
 
   test("scan with aggregate push-down: aggregate over alias push down") {
@@ -2571,7 +2688,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         val df = sql("SELECT SUM(2147483647 + DEPT) FROM h2.test.employee")
         checkAggregateRemoved(df, ansiMode)
         val expectedPlanFragment = if (ansiMode) {
-          "PushedAggregates: [SUM(2147483647 + DEPT)], " +
+          "PushedAggregates: [SUM(DEPT + 2147483647)], " +
             "PushedFilters: [], " +
             "PushedGroupByExpressions: []"
         } else {
@@ -2803,12 +2920,11 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         checkAggregateRemoved(df, false)
         checkPushedInfo(df, "PushedAggregates: [COUNT(PRICE), SUM(PRICE)]")
         if (ansiEnabled) {
-          val e = intercept[SparkException] {
+          val e = intercept[ArithmeticException] {
             df.collect()
           }
-          assert(e.getCause.isInstanceOf[ArithmeticException])
-          assert(e.getCause.getMessage.contains("cannot be represented as Decimal") ||
-            e.getCause.getMessage.contains("Overflow in sum of decimals"))
+          assert(e.getMessage.contains("cannot be represented as Decimal") ||
+            e.getMessage.contains("Overflow in sum of decimals"))
         } else {
           checkAnswer(df, Seq(Row(null)))
         }
@@ -2816,8 +2932,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
   }
 
-  test("register dialect specific functions") {
-    JdbcDialects.unregisterDialect(H2Dialect)
+  test("register h2Dialect specific functions") {
+    JdbcDialects.unregisterDialect(h2Dialect)
     try {
       JdbcDialects.registerDialect(testH2Dialect)
       val df = sql("SELECT h2.my_avg(id) FROM h2.test.people")
@@ -2827,7 +2943,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         exception = intercept[AnalysisException] {
           checkAnswer(sql("SELECT h2.test.my_avg2(id) FROM h2.test.people"), Seq.empty)
         },
-        errorClass = "UNRESOLVED_ROUTINE",
+        condition = "UNRESOLVED_ROUTINE",
         parameters = Map(
           "routineName" -> "`h2`.`test`.`my_avg2`",
           "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`.`default`]"),
@@ -2839,7 +2955,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         exception = intercept[AnalysisException] {
           checkAnswer(sql("SELECT h2.my_avg2(id) FROM h2.test.people"), Seq.empty)
         },
-        errorClass = "UNRESOLVED_ROUTINE",
+        condition = "UNRESOLVED_ROUTINE",
         parameters = Map(
           "routineName" -> "`h2`.`my_avg2`",
           "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`.`default`]"),
@@ -2849,12 +2965,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
           stop = 20))
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
-      JdbcDialects.registerDialect(H2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
     }
   }
 
   test("scan with aggregate push-down: complete push-down UDAF") {
-    JdbcDialects.unregisterDialect(H2Dialect)
+    JdbcDialects.unregisterDialect(h2Dialect)
     try {
       JdbcDialects.registerDialect(testH2Dialect)
       val df1 = sql("SELECT h2.my_avg(id) FROM h2.test.people")
@@ -2903,7 +3019,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       }
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
-      JdbcDialects.registerDialect(H2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
     }
   }
 
@@ -2922,7 +3038,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       exception = intercept[IndexAlreadyExistsException] {
         sql(s"CREATE INDEX people_index ON TABLE h2.test.people (id)")
       },
-      errorClass = "INDEX_ALREADY_EXISTS",
+      condition = "INDEX_ALREADY_EXISTS",
       parameters = Map(
         "indexName" -> "`people_index`",
         "tableName" -> "`test`.`people`"
@@ -2940,7 +3056,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       exception = intercept[NoSuchIndexException] {
         sql(s"DROP INDEX people_index ON TABLE h2.test.people")
       },
-      errorClass = "INDEX_NOT_FOUND",
+      condition = "INDEX_NOT_FOUND",
       parameters = Map("indexName" -> "`people_index`", "tableName" -> "`test`.`people`")
     )
     assert(jdbcTable.indexExists("people_index") == false)
@@ -2950,20 +3066,35 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
   test("IDENTIFIER_TOO_MANY_NAME_PARTS: " +
     "jdbc function doesn't support identifiers consisting of more than 2 parts") {
-    JdbcDialects.unregisterDialect(H2Dialect)
+    JdbcDialects.unregisterDialect(h2Dialect)
     try {
       JdbcDialects.registerDialect(testH2Dialect)
       checkError(
         exception = intercept[AnalysisException] {
           sql("SELECT * FROM h2.test.people where h2.db_name.schema_name.function_name()")
         },
-        errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+        condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
         sqlState = "42601",
         parameters = Map("identifier" -> "`db_name`.`schema_name`.`function_name`")
       )
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
-      JdbcDialects.registerDialect(H2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
     }
+  }
+
+  test("Explain shows executed SQL query") {
+    val df = sql("SELECT max(id) FROM h2.test.people WHERE id > 1")
+    val explained = getNormalizedExplain(df, FormattedMode)
+    assert(explained.contains("External engine query:"))
+  }
+
+  test("Test not nullSafeEqual") {
+    val df = sql("SELECT str FROM h2.test.strings_with_nulls WHERE NOT str <=> 'abc'")
+    val rows = df.collect()
+
+    assert(rows.length == 2)
+    assert(rows.contains(Row(null)))
+    assert(rows.contains(Row("a a a")))
   }
 }

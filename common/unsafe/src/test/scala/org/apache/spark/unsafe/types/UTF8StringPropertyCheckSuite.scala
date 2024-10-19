@@ -81,7 +81,7 @@ class UTF8StringPropertyCheckSuite extends AnyFunSuite with ScalaCheckDrivenProp
   test("compare") {
     forAll { (s1: String, s2: String) =>
       assert(Math.signum {
-        toUTF8(s1).compareTo(toUTF8(s2)).toFloat
+        toUTF8(s1).binaryCompare(toUTF8(s2)).toFloat
       } === Math.signum(s1.compareTo(s2).toFloat))
     }
   }

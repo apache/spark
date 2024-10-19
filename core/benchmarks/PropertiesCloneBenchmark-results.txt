@@ -2,39 +2,39 @@
 Properties Cloning
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 Empty Properties:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SerializationUtils.clone                              0              0           0          0.2        5400.0       1.0X
-Utils.cloneProperties                                 0              0           0     Infinity           0.0  InfinityX
+SerializationUtils.clone                              0              0           0          0.3        3466.0       1.0X
+Utils.cloneProperties                                 0              0           0         34.5          29.0     119.5X
 
-OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 System Properties:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SerializationUtils.clone                              0              0           0          0.0      208504.0       1.0X
-Utils.cloneProperties                                 0              0           0          0.2        6500.0      32.1X
+SerializationUtils.clone                              0              0           0          0.0      156422.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.4        2685.0      58.3X
 
-OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 Small Properties:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SerializationUtils.clone                              0              1           0          0.0      471306.0       1.0X
-Utils.cloneProperties                                 0              0           0          0.2        6300.0      74.8X
+SerializationUtils.clone                              0              0           0          0.0      277017.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.3        3666.0      75.6X
 
-OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 Medium Properties:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SerializationUtils.clone                              2              2           0          0.0     1677443.0       1.0X
-Utils.cloneProperties                                 0              0           0          0.0       36703.0      45.7X
+SerializationUtils.clone                              1              1           0          0.0      920141.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.0       20097.0      45.8X
 
-OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 Large Properties:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SerializationUtils.clone                              3              3           0          0.0     3222659.0       1.0X
-Utils.cloneProperties                                 0              0           0          0.0       74201.0      43.4X
+SerializationUtils.clone                              2              2           0          0.0     1714798.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.0       40385.0      42.5X
 
 

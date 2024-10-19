@@ -21,7 +21,8 @@ Generate 'Supported pandas APIs' documentation file
 import warnings
 from enum import Enum, unique
 from inspect import getmembers, isclass, isfunction, signature
-from typing import Any, Callable, Dict, List, NamedTuple, Set, TextIO, Tuple
+from typing import Any, Dict, List, NamedTuple, Set, TextIO, Tuple
+from types import FunctionType
 
 import pyspark.pandas as ps
 import pyspark.pandas.groupby as psg
@@ -37,7 +38,7 @@ from pyspark.pandas.exceptions import PandasNotImplementedError
 MAX_MISSING_PARAMS_SIZE = 5
 COMMON_PARAMETER_SET = {"kwargs", "args", "cls"}
 MODULE_GROUP_MATCH = [(pd, ps), (pdw, psw), (pdg, psg)]
-PANDAS_LATEST_VERSION = "2.1.4"
+PANDAS_LATEST_VERSION = "2.2.3"
 
 RST_HEADER = """
 =====================
@@ -214,8 +215,8 @@ def _create_supported_by_module(
 
 def _organize_by_implementation_status(
     module_name: str,
-    pd_funcs: Dict[str, Callable],
-    ps_funcs: Dict[str, Callable],
+    pd_funcs: Dict[str, FunctionType],
+    ps_funcs: Dict[str, FunctionType],
     pd_module_group: Any,
     ps_module_group: Any,
 ) -> Dict[str, SupportedStatus]:

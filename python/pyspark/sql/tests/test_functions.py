@@ -17,6 +17,7 @@
 
 from contextlib import redirect_stdout
 import datetime
+from enum import Enum
 from inspect import getmembers, isfunction
 import io
 from itertools import chain
@@ -24,11 +25,11 @@ import math
 import re
 import unittest
 
-from py4j.protocol import Py4JJavaError
-
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeException
 from pyspark.sql import Row, Window, functions as F, types
+from pyspark.sql.avro.functions import from_avro, to_avro
 from pyspark.sql.column import Column
+from pyspark.sql.functions.builtin import nullifzero, randstr, uniform, zeroifnull
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.testing.utils import have_numpy
 
@@ -167,8 +168,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "col", "arg_type": "int"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "col", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -176,8 +177,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_DICT",
-            message_parameters={"arg_name": "fractions", "arg_type": "list"},
+            errorClass="NOT_DICT",
+            messageParameters={"arg_name": "fractions", "arg_type": "list"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -185,12 +186,12 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DISALLOWED_TYPE_FOR_CONTAINER",
-            message_parameters={
+            errorClass="DISALLOWED_TYPE_FOR_CONTAINER",
+            messageParameters={
                 "arg_name": "fractions",
                 "arg_type": "dict",
                 "allowed_types": "float, int, str",
-                "return_type": "NoneType",
+                "item_type": "NoneType",
             },
         )
 
@@ -204,8 +205,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_STR",
-            message_parameters={"arg_name": "col1", "arg_type": "int"},
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "col1", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -213,8 +214,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_STR",
-            message_parameters={"arg_name": "col2", "arg_type": "bool"},
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "col2", "arg_type": "bool"},
         )
 
     def test_crosstab(self):
@@ -350,8 +351,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_SAME_TYPE",
-            message_parameters={
+            errorClass="NOT_SAME_TYPE",
+            messageParameters={
                 "arg_name1": "startPos",
                 "arg_name2": "length",
                 "arg_type1": "int",
@@ -364,8 +365,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INT",
-            message_parameters={
+            errorClass="NOT_COLUMN_OR_INT",
+            messageParameters={
                 "arg_name": "startPos",
                 "arg_type": "str",
             },
@@ -376,6 +377,11 @@ class FunctionsTestsMixin:
                 df.select(getattr(F, name)("name")).first()[0],
                 df.select(getattr(F, name)(F.col("name"))).first()[0],
             )
+
+    def test_collation(self):
+        df = self.spark.createDataFrame([("a",), ("b",)], ["name"])
+        actual = df.select(F.collation(F.collate("name", "UNICODE"))).distinct().collect()
+        self.assertEqual([Row("UNICODE")], actual)
 
     def test_octet_length_function(self):
         # SPARK-36751: add octet length api for python
@@ -414,6 +420,18 @@ class FunctionsTestsMixin:
         df = self.spark.createDataFrame([Row(date=dt)])
         row = df.select(F.dayofweek(df.date)).first()
         self.assertEqual(row[0], 2)
+
+    def test_monthname(self):
+        dt = datetime.datetime(2017, 11, 6)
+        df = self.spark.createDataFrame([Row(date=dt)])
+        row = df.select(F.monthname(df.date)).first()
+        self.assertEqual(row[0], "Nov")
+
+    def test_dayname(self):
+        dt = datetime.datetime(2017, 11, 6)
+        df = self.spark.createDataFrame([Row(date=dt)])
+        row = df.select(F.dayname(df.date)).first()
+        self.assertEqual(row[0], "Mon")
 
     # Test added for SPARK-37738; change Python API to accept both col & int as input
     def test_date_add_function(self):
@@ -667,8 +685,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="WRONG_NUM_COLUMNS",
-            message_parameters={"func_name": "least", "num_cols": "2"},
+            errorClass="WRONG_NUM_COLUMNS",
+            messageParameters={"func_name": "least", "num_cols": "2"},
         )
 
     def test_overlay(self):
@@ -713,8 +731,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INT_OR_STR",
-            message_parameters={"arg_name": "pos", "arg_type": "float"},
+            errorClass="NOT_COLUMN_OR_INT_OR_STR",
+            messageParameters={"arg_name": "pos", "arg_type": "float"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -722,8 +740,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INT_OR_STR",
-            message_parameters={"arg_name": "len", "arg_type": "float"},
+            errorClass="NOT_COLUMN_OR_INT_OR_STR",
+            messageParameters={"arg_name": "len", "arg_type": "float"},
         )
 
     def test_percentile(self):
@@ -843,8 +861,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
-            message_parameters={"func_name": "<lambda>"},
+            errorClass="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
+            messageParameters={"func_name": "<lambda>"},
         )
 
         # Should fail with kwargs
@@ -853,8 +871,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
-            message_parameters={"func_name": "<lambda>"},
+            errorClass="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
+            messageParameters={"func_name": "<lambda>"},
         )
 
         # Should fail with nullary function
@@ -863,8 +881,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
-            message_parameters={"func_name": "<lambda>", "num_args": "0"},
+            errorClass="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
+            messageParameters={"func_name": "<lambda>", "num_args": "0"},
         )
 
         # Should fail with quaternary function
@@ -873,8 +891,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
-            message_parameters={"func_name": "<lambda>", "num_args": "4"},
+            errorClass="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
+            messageParameters={"func_name": "<lambda>", "num_args": "4"},
         )
 
         # Should fail if function doesn't return Column
@@ -883,8 +901,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN",
-            message_parameters={"func_name": "<lambda>", "return_type": "int"},
+            errorClass="HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN",
+            messageParameters={"func_name": "<lambda>", "return_type": "int"},
         )
 
     def test_nested_higher_order_function(self):
@@ -997,6 +1015,34 @@ class FunctionsTestsMixin:
         for r, ex in zip(rs, expected):
             self.assertEqual(tuple(r), ex[: len(r)])
 
+    def test_window_functions_moving_average(self):
+        data = [
+            (datetime.datetime(2023, 1, 1), 20),
+            (datetime.datetime(2023, 1, 2), 22),
+            (datetime.datetime(2023, 1, 3), 21),
+            (datetime.datetime(2023, 1, 4), 23),
+            (datetime.datetime(2023, 1, 5), 24),
+            (datetime.datetime(2023, 1, 6), 26),
+        ]
+        df = self.spark.createDataFrame(data, ["date", "temperature"])
+
+        def to_sec(i):
+            return i * 86400
+
+        w = Window.orderBy(F.col("date").cast("timestamp").cast("long")).rangeBetween(-to_sec(3), 0)
+        res = df.withColumn("3_day_avg_temp", F.avg("temperature").over(w))
+        rs = sorted(res.collect())
+        expected = [
+            (datetime.datetime(2023, 1, 1, 0, 0), 20, 20.0),
+            (datetime.datetime(2023, 1, 2, 0, 0), 22, 21.0),
+            (datetime.datetime(2023, 1, 3, 0, 0), 21, 21.0),
+            (datetime.datetime(2023, 1, 4, 0, 0), 23, 21.5),
+            (datetime.datetime(2023, 1, 5, 0, 0), 24, 22.5),
+            (datetime.datetime(2023, 1, 6, 0, 0), 26, 23.5),
+        ]
+        for r, ex in zip(rs, expected):
+            self.assertEqual(tuple(r), ex[: len(r)])
+
     def test_window_time(self):
         df = self.spark.createDataFrame(
             [(datetime.datetime(2016, 3, 11, 9, 0, 7), 1)], ["date", "val"]
@@ -1033,7 +1079,7 @@ class FunctionsTestsMixin:
         self.assertEqual(datetime.date(2017, 1, 22), parse_result["to_date(dateCol)"])
 
     def test_assert_true(self):
-        self.check_assert_true(Py4JJavaError)
+        self.check_assert_true(SparkRuntimeException)
 
     def check_assert_true(self, tpe):
         df = self.spark.range(3)
@@ -1054,12 +1100,12 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "errMsg", "arg_type": "int"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "errMsg", "arg_type": "int"},
         )
 
     def test_raise_error(self):
-        self.check_raise_error(Py4JJavaError)
+        self.check_raise_error(SparkRuntimeException)
 
     def check_raise_error(self, tpe):
         df = self.spark.createDataFrame([Row(id="foobar")])
@@ -1075,8 +1121,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "errMsg", "arg_type": "NoneType"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "errMsg", "arg_type": "NoneType"},
         )
 
     def test_sum_distinct(self):
@@ -1135,8 +1181,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="COLUMN_IN_LIST",
-            message_parameters={"func_name": "lit"},
+            errorClass="COLUMN_IN_LIST",
+            messageParameters={"func_name": "lit"},
         )
 
     # Test added for SPARK-39832; change Python API to accept both col & str as input
@@ -1211,8 +1257,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
-            message_parameters={
+            errorClass="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
+            messageParameters={
                 "dtype": "uint64",
             },
         )
@@ -1262,15 +1308,69 @@ class FunctionsTestsMixin:
         self.assertEqual({**expected, **expected2}, dict(actual["merged"]))
         self.assertEqual(expected, actual["from_items"])
 
+    def test_parse_json(self):
+        df = self.spark.createDataFrame([{"json": """{ "a" : 1 }"""}])
+        actual = df.select(
+            F.to_json(F.parse_json(df.json)).alias("var"),
+            F.to_json(F.parse_json(F.lit("""{"b": [{"c": "str2"}]}"""))).alias("var_lit"),
+        ).first()
+
+        self.assertEqual("""{"a":1}""", actual["var"])
+        self.assertEqual("""{"b":[{"c":"str2"}]}""", actual["var_lit"])
+
+    def test_variant_expressions(self):
+        df = self.spark.createDataFrame([Row(json="""{ "a" : 1 }"""), Row(json="""{ "b" : 2 }""")])
+        v = F.parse_json(df.json)
+
+        def check(resultDf, expected):
+            self.assertEqual([r[0] for r in resultDf.collect()], expected)
+
+        check(df.select(F.is_variant_null(v)), [False, False])
+        check(df.select(F.schema_of_variant(v)), ["OBJECT<a: BIGINT>", "OBJECT<b: BIGINT>"])
+        check(df.select(F.schema_of_variant_agg(v)), ["OBJECT<a: BIGINT, b: BIGINT>"])
+
+        check(df.select(F.variant_get(v, "$.a", "int")), [1, None])
+        check(df.select(F.variant_get(v, "$.b", "int")), [None, 2])
+        check(df.select(F.variant_get(v, "$.a", "double")), [1.0, None])
+
+        with self.assertRaises(SparkRuntimeException) as ex:
+            df.select(F.variant_get(v, "$.a", "binary")).collect()
+
+        self.check_error(
+            exception=ex.exception,
+            errorClass="INVALID_VARIANT_CAST",
+            messageParameters={"value": "1", "dataType": '"BINARY"'},
+        )
+
+        check(df.select(F.try_variant_get(v, "$.a", "int")), [1, None])
+        check(df.select(F.try_variant_get(v, "$.b", "int")), [None, 2])
+        check(df.select(F.try_variant_get(v, "$.a", "double")), [1.0, None])
+        check(df.select(F.try_variant_get(v, "$.a", "binary")), [None, None])
+
     def test_schema_of_json(self):
         with self.assertRaises(PySparkTypeError) as pe:
             F.schema_of_json(1)
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "json", "arg_type": "int"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "json", "arg_type": "int"},
         )
+
+    def test_try_parse_json(self):
+        df = self.spark.createDataFrame([{"json": """{ "a" : 1 }"""}, {"json": """{ a : 1 }"""}])
+        actual = df.select(
+            F.to_json(F.try_parse_json(df.json)).alias("var"),
+        ).collect()
+        self.assertEqual("""{"a":1}""", actual[0]["var"])
+        self.assertEqual(None, actual[1]["var"])
+
+    def test_to_variant_object(self):
+        df = self.spark.createDataFrame([(1, {"a": 1})], "i int, v struct<a int>")
+        actual = df.select(
+            F.to_json(F.to_variant_object(df.v)).alias("var"),
+        ).collect()
+        self.assertEqual("""{"a":1}""", actual[0]["var"])
 
     def test_schema_of_csv(self):
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1278,8 +1378,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "csv", "arg_type": "int"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "csv", "arg_type": "int"},
         )
 
     def test_from_csv(self):
@@ -1289,8 +1389,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "schema", "arg_type": "int"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "schema", "arg_type": "int"},
         )
 
     def test_schema_of_xml(self):
@@ -1299,8 +1399,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "xml", "arg_type": "int"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "xml", "arg_type": "int"},
         )
 
     def test_from_xml(self):
@@ -1310,8 +1410,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR_OR_STRUCT",
-            message_parameters={"arg_name": "schema", "arg_type": "int"},
+            errorClass="NOT_COLUMN_OR_STR_OR_STRUCT",
+            messageParameters={"arg_name": "schema", "arg_type": "int"},
         )
 
     def test_greatest(self):
@@ -1321,8 +1421,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="WRONG_NUM_COLUMNS",
-            message_parameters={"func_name": "greatest", "num_cols": "2"},
+            errorClass="WRONG_NUM_COLUMNS",
+            messageParameters={"func_name": "greatest", "num_cols": "2"},
         )
 
     def test_when(self):
@@ -1331,8 +1431,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN",
-            message_parameters={"arg_name": "condition", "arg_type": "str"},
+            errorClass="NOT_COLUMN",
+            messageParameters={"arg_name": "condition", "arg_type": "str"},
         )
 
     def test_window(self):
@@ -1341,8 +1441,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_STR",
-            message_parameters={"arg_name": "windowDuration", "arg_type": "int"},
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "windowDuration", "arg_type": "int"},
         )
 
     def test_session_window(self):
@@ -1351,8 +1451,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "gapDuration", "arg_type": "int"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "gapDuration", "arg_type": "int"},
         )
 
     def test_current_user(self):
@@ -1370,8 +1470,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INT",
-            message_parameters={"arg_name": "numBuckets", "arg_type": "str"},
+            errorClass="NOT_COLUMN_OR_INT",
+            messageParameters={"arg_name": "numBuckets", "arg_type": "str"},
         )
 
     def test_to_timestamp_ltz(self):
@@ -1423,6 +1523,126 @@ class FunctionsTestsMixin:
         df = self.spark.range(1).select(F.now())
         self.assertIsInstance(df.first()[0], datetime.datetime)
         self.assertEqual(df.schema.names[0], "now()")
+
+    def test_json_tuple_empty_fields(self):
+        df = self.spark.createDataFrame(
+            [
+                ("1", """{"f1": "value1", "f2": "value2"}"""),
+                ("2", """{"f1": "value12"}"""),
+            ],
+            ("key", "jstring"),
+        )
+        self.assertRaisesRegex(
+            PySparkValueError,
+            "At least one field must be specified",
+            lambda: df.select(F.json_tuple(df.jstring)),
+        )
+
+    def test_avro_type_check(self):
+        parameters = ["data", "jsonFormatSchema", "options"]
+        expected_type = ["pyspark.sql.Column or str", "str", "dict, optional"]
+        dummyDF = self.spark.createDataFrame([Row(a=i, b=i) for i in range(5)])
+
+        # test from_avro type checks for each parameter
+        wrong_type_value = 1
+        with self.assertRaises(PySparkTypeError) as pe1:
+            dummyDF.select(from_avro(wrong_type_value, "jsonSchema", None))
+        with self.assertRaises(PySparkTypeError) as pe2:
+            dummyDF.select(from_avro("value", wrong_type_value, None))
+        with self.assertRaises(PySparkTypeError) as pe3:
+            dummyDF.select(from_avro("value", "jsonSchema", wrong_type_value))
+        from_avro_pes = [pe1, pe2, pe3]
+        for i in range(3):
+            self.check_error(
+                exception=from_avro_pes[i].exception,
+                errorClass="INVALID_TYPE",
+                messageParameters={"arg_name": parameters[i], "arg_type": expected_type[i]},
+            )
+
+        # test to_avro type checks for each parameter
+        with self.assertRaises(PySparkTypeError) as pe4:
+            dummyDF.select(to_avro(wrong_type_value, "jsonSchema"))
+        with self.assertRaises(PySparkTypeError) as pe5:
+            dummyDF.select(to_avro("value", wrong_type_value))
+        to_avro_pes = [pe4, pe5]
+        for i in range(2):
+            self.check_error(
+                exception=to_avro_pes[i].exception,
+                errorClass="INVALID_TYPE",
+                messageParameters={"arg_name": parameters[i], "arg_type": expected_type[i]},
+            )
+
+    def test_enum_literals(self):
+        class IntEnum(Enum):
+            X = 1
+            Y = 2
+            Z = 3
+
+        id = F.col("id")
+        b = F.col("b")
+
+        cols, expected = list(
+            zip(
+                (F.lit(IntEnum.X), 1),
+                (F.lit([IntEnum.X, IntEnum.Y]), [1, 2]),
+                (F.rand(IntEnum.X), 0.9531453492357947),
+                (F.randn(IntEnum.X), -1.1081822375859998),
+                (F.when(b, IntEnum.X), 1),
+            )
+        )
+
+        result = (
+            self.spark.range(1, 2)
+            .select(id, id.astype("string").alias("s"), id.astype("boolean").alias("b"))
+            .select(*cols)
+            .first()
+        )
+
+        for r, c, e in zip(result, cols, expected):
+            self.assertEqual(r, e, str(c))
+
+    def test_nullifzero_zeroifnull(self):
+        df = self.spark.createDataFrame([(0,), (1,)], ["a"])
+        result = df.select(nullifzero(df.a).alias("r")).collect()
+        self.assertEqual([Row(r=None), Row(r=1)], result)
+
+        df = self.spark.createDataFrame([(None,), (1,)], ["a"])
+        result = df.select(zeroifnull(df.a).alias("r")).collect()
+        self.assertEqual([Row(r=0), Row(r=1)], result)
+
+    def test_randstr_uniform(self):
+        df = self.spark.createDataFrame([(0,)], ["a"])
+        result = df.select(randstr(F.lit(5), F.lit(0)).alias("x")).selectExpr("length(x)").collect()
+        self.assertEqual([Row(5)], result)
+        # The random seed is optional.
+        result = df.select(randstr(F.lit(5)).alias("x")).selectExpr("length(x)").collect()
+        self.assertEqual([Row(5)], result)
+
+        df = self.spark.createDataFrame([(0,)], ["a"])
+        result = (
+            df.select(uniform(F.lit(10), F.lit(20), F.lit(0)).alias("x"))
+            .selectExpr("x > 5")
+            .collect()
+        )
+        self.assertEqual([Row(True)], result)
+        # The random seed is optional.
+        result = df.select(uniform(F.lit(10), F.lit(20)).alias("x")).selectExpr("x > 5").collect()
+        self.assertEqual([Row(True)], result)
+
+    def test_string_validation(self):
+        df = self.spark.createDataFrame([("abc",)], ["a"])
+        # test is_valid_utf8
+        result_is_valid_utf8 = df.select(F.is_valid_utf8(df.a).alias("r")).collect()
+        self.assertEqual([Row(r=True)], result_is_valid_utf8)
+        # test make_valid_utf8
+        result_make_valid_utf8 = df.select(F.make_valid_utf8(df.a).alias("r")).collect()
+        self.assertEqual([Row(r="abc")], result_make_valid_utf8)
+        # test validate_utf8
+        result_validate_utf8 = df.select(F.validate_utf8(df.a).alias("r")).collect()
+        self.assertEqual([Row(r="abc")], result_validate_utf8)
+        # test try_validate_utf8
+        result_try_validate_utf8 = df.select(F.try_validate_utf8(df.a).alias("r")).collect()
+        self.assertEqual([Row(r="abc")], result_try_validate_utf8)
 
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):

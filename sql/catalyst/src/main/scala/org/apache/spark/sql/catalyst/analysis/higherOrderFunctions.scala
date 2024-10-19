@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.TypeUtils.{toSQLConf, toSQLId}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
@@ -113,9 +114,11 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
     case _ if e.resolved => e
 
     case h: HigherOrderFunction if h.argumentsResolved && h.checkArgumentDataTypes().isSuccess =>
+      checkForSubqueryExpressions(e)
       h.bind(createLambda).mapChildren(resolve(_, parentLambdaMap))
 
     case l: LambdaFunction if !l.bound =>
+      checkForSubqueryExpressions(e)
       // Do not resolve an unbound lambda function. If we see such a lambda function this means
       // that either the higher order function has yet to be resolved, or that we are seeing
       // dangling lambda function.
@@ -137,5 +140,17 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
 
     case _ =>
       e.mapChildren(resolve(_, parentLambdaMap))
+  }
+
+  /**
+   * SPARK-47509: There is a correctness bug when subquery expressions appear within lambdas or
+   * higher-order functions. Here we check for that case and return an error if the corresponding
+   * configuration indicates to do so.
+   */
+  private def checkForSubqueryExpressions(expression: Expression): Unit = {
+    if (expression.containsPattern(PLAN_EXPRESSION) &&
+      !conf.getConf(SQLConf.ALLOW_SUBQUERY_EXPRESSIONS_IN_LAMBDAS_AND_HIGHER_ORDER_FUNCTIONS)) {
+      throw QueryCompilationErrors.subqueryExpressionInLambdaOrHigherOrderFunctionNotAllowedError()
+    }
   }
 }

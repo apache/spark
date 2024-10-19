@@ -20,24 +20,23 @@ package org.apache.spark.sql.api.python
 import java.io.InputStream
 import java.net.Socket
 import java.nio.channels.Channels
-import java.util.Locale
 
 import net.razorvine.pickle.{Pickler, Unpickler}
 
-import org.apache.spark.SparkException
 import org.apache.spark.api.python.DechunkedInputStream
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.CLASS_LOADER
 import org.apache.spark.security.SocketAuthServer
-import org.apache.spark.sql.{Column, DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{internal, Column, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.python.EvaluatePython
+import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
@@ -69,7 +68,10 @@ private[sql] object PythonSQLUtils extends Logging {
 
   // This is needed when generating SQL documentation for built-in functions.
   def listBuiltinFunctionInfos(): Array[ExpressionInfo] = {
-    FunctionRegistry.functionSet.flatMap(f => FunctionRegistry.builtin.lookupFunction(f)).toArray
+    (FunctionRegistry.functionSet.flatMap(f => FunctionRegistry.builtin.lookupFunction(f)) ++
+      TableFunctionRegistry.functionSet.flatMap(
+        f => TableFunctionRegistry.builtin.lookupFunction(f))).
+      groupBy(_.getName).map(v => v._2.head).toArray
   }
 
   private def listAllSQLConfigs(): Seq[(String, String, String, String)] = {
@@ -136,65 +138,27 @@ private[sql] object PythonSQLUtils extends Logging {
   def addJarToCurrentClassLoader(path: String): Unit = {
     Utils.getContextOrSparkClassLoader match {
       case cl: MutableURLClassLoader => cl.addURL(Utils.resolveURI(path).toURL)
-      case cl => logWarning(
-        s"Unsupported class loader $cl will not update jars in the thread class loader.")
+      case cl => logWarning(log"Unsupported class loader ${MDC(CLASS_LOADER, cl)} will not " +
+        log"update jars in the thread class loader.")
     }
   }
 
-  def castTimestampNTZToLong(c: Column): Column = Column(CastTimestampNTZToLong(c.expr))
+  def unresolvedNamedLambdaVariable(name: String): Column =
+    Column(internal.UnresolvedNamedLambdaVariable.apply(name))
 
-  def ewm(e: Column, alpha: Double, ignoreNA: Boolean): Column =
-    Column(EWM(e.expr, alpha, ignoreNA))
-
-  def nullIndex(e: Column): Column = Column(NullIndex(e.expr))
-
-  def makeInterval(unit: String, e: Column): Column = {
-    val zero = MakeInterval(years = Literal(0), months = Literal(0), weeks = Literal(0),
-      days = Literal(0), hours = Literal(0), mins = Literal(0), secs = Literal(0))
-
-    unit.toUpperCase(Locale.ROOT) match {
-      case "YEAR" => Column(zero.copy(years = e.expr))
-      case "MONTH" => Column(zero.copy(months = e.expr))
-      case "WEEK" => Column(zero.copy(weeks = e.expr))
-      case "DAY" => Column(zero.copy(days = e.expr))
-      case "HOUR" => Column(zero.copy(hours = e.expr))
-      case "MINUTE" => Column(zero.copy(mins = e.expr))
-      case "SECOND" => Column(zero.copy(secs = e.expr))
-      case _ => throw SparkException.internalError(s"Got the unexpected unit '$unit'.")
-    }
+  @scala.annotation.varargs
+  def lambdaFunction(function: Column, variables: Column*): Column = {
+    val arguments = variables.map(_.node.asInstanceOf[internal.UnresolvedNamedLambdaVariable])
+    Column(internal.LambdaFunction(function.node, arguments))
   }
 
-  def timestampDiff(unit: String, start: Column, end: Column): Column = {
-    Column(TimestampDiff(unit, start.expr, end.expr))
-  }
+  def namedArgumentExpression(name: String, e: Column): Column = NamedArgumentExpression(name, e)
 
-  def pandasProduct(e: Column, ignoreNA: Boolean): Column = {
-    Column(PandasProduct(e.expr, ignoreNA).toAggregateExpression(false))
-  }
+  @scala.annotation.varargs
+  def fn(name: String, arguments: Column*): Column = Column.fn(name, arguments: _*)
 
-  def pandasStddev(e: Column, ddof: Int): Column = {
-    Column(PandasStddev(e.expr, ddof).toAggregateExpression(false))
-  }
-
-  def pandasVariance(e: Column, ddof: Int): Column = {
-    Column(PandasVariance(e.expr, ddof).toAggregateExpression(false))
-  }
-
-  def pandasSkewness(e: Column): Column = {
-    Column(PandasSkewness(e.expr).toAggregateExpression(false))
-  }
-
-  def pandasKurtosis(e: Column): Column = {
-    Column(PandasKurtosis(e.expr).toAggregateExpression(false))
-  }
-
-  def pandasMode(e: Column, ignoreNA: Boolean): Column = {
-    Column(PandasMode(e.expr, ignoreNA).toAggregateExpression(false))
-  }
-
-  def pandasCovar(col1: Column, col2: Column, ddof: Int): Column = {
-    Column(PandasCovar(col1.expr, col2.expr, ddof).toAggregateExpression(false))
-  }
+  @scala.annotation.varargs
+  def internalFn(name: String, inputs: Column*): Column = Column.internalFn(name, inputs: _*)
 }
 
 /**

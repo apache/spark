@@ -16,12 +16,12 @@
 #
 
 import datetime
-import unittest
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
@@ -235,7 +235,11 @@ class DateOpsTestsMixin:
         self.assert_eq(pdf["this"] >= pdf["this"], psdf["this"] >= psdf["this"])
 
 
-class DateOpsTests(DateOpsTestsMixin, OpsTestBase):
+class DateOpsTests(
+    DateOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
     pass
 
 

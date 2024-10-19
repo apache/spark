@@ -10,7 +10,7 @@ CreateViewCommand `nested`, values
   (1, array(32, 97), array(array(12, 99), array(123, 42), array(1))),
   (2, array(77, -76), array(array(6, 96, 65), array(-1, -2))),
   (3, array(12), array(array(17)))
-  as t(x, ys, zs), false, true, LocalTempView, true
+  as t(x, ys, zs), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias t
       +- LocalRelation [x#x, ys#x, zs#x]
 
@@ -36,11 +36,31 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+select ceil(x -> x) as v
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
+  "sqlState" : "42K0D",
+  "messageParameters" : {
+    "class" : "org.apache.spark.sql.catalyst.expressions.CeilExpressionBuilder$"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "ceil(x -> x)"
+  } ]
+}
+
+
+-- !query
 select transform(zs, z -> z) as v from nested
 -- !query analysis
 Project [transform(zs#x, lambdafunction(lambda z#x, lambda z#x, false)) AS v#x]
 +- SubqueryAlias nested
-   +- View (`nested`, [x#x,ys#x,zs#x])
+   +- View (`nested`, [x#x, ys#x, zs#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as array<int>) AS ys#x, cast(zs#x as array<array<int>>) AS zs#x]
          +- SubqueryAlias t
             +- LocalRelation [x#x, ys#x, zs#x]
@@ -51,7 +71,7 @@ select transform(ys, y -> y * y) as v from nested
 -- !query analysis
 Project [transform(ys#x, lambdafunction((lambda y#x * lambda y#x), lambda y#x, false)) AS v#x]
 +- SubqueryAlias nested
-   +- View (`nested`, [x#x,ys#x,zs#x])
+   +- View (`nested`, [x#x, ys#x, zs#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as array<int>) AS ys#x, cast(zs#x as array<array<int>>) AS zs#x]
          +- SubqueryAlias t
             +- LocalRelation [x#x, ys#x, zs#x]
@@ -62,7 +82,7 @@ select transform(ys, (y, i) -> y + i) as v from nested
 -- !query analysis
 Project [transform(ys#x, lambdafunction((lambda y#x + lambda i#x), lambda y#x, lambda i#x, false)) AS v#x]
 +- SubqueryAlias nested
-   +- View (`nested`, [x#x,ys#x,zs#x])
+   +- View (`nested`, [x#x, ys#x, zs#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as array<int>) AS ys#x, cast(zs#x as array<array<int>>) AS zs#x]
          +- SubqueryAlias t
             +- LocalRelation [x#x, ys#x, zs#x]
@@ -73,7 +93,7 @@ select transform(zs, z -> concat(ys, z)) as v from nested
 -- !query analysis
 Project [transform(zs#x, lambdafunction(concat(ys#x, lambda z#x), lambda z#x, false)) AS v#x]
 +- SubqueryAlias nested
-   +- View (`nested`, [x#x,ys#x,zs#x])
+   +- View (`nested`, [x#x, ys#x, zs#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as array<int>) AS ys#x, cast(zs#x as array<array<int>>) AS zs#x]
          +- SubqueryAlias t
             +- LocalRelation [x#x, ys#x, zs#x]
@@ -84,7 +104,7 @@ select transform(ys, 0) as v from nested
 -- !query analysis
 Project [transform(ys#x, lambdafunction(0, lambda col0#x, true)) AS v#x]
 +- SubqueryAlias nested
-   +- View (`nested`, [x#x,ys#x,zs#x])
+   +- View (`nested`, [x#x, ys#x, zs#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as array<int>) AS ys#x, cast(zs#x as array<array<int>>) AS zs#x]
          +- SubqueryAlias t
             +- LocalRelation [x#x, ys#x, zs#x]
@@ -102,7 +122,7 @@ select filter(ys, y -> y > 30) as v from nested
 -- !query analysis
 Project [filter(ys#x, lambdafunction((lambda y#x > 30), lambda y#x, false)) AS v#x]
 +- SubqueryAlias nested
-   +- View (`nested`, [x#x,ys#x,zs#x])
+   +- View (`nested`, [x#x, ys#x, zs#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as array<int>) AS ys#x, cast(zs#x as array<array<int>>) AS zs#x]
          +- SubqueryAlias t
             +- LocalRelation [x#x, ys#x, zs#x]
@@ -120,7 +140,7 @@ select transform(zs, z -> filter(z, zz -> zz > 50)) as v from nested
 -- !query analysis
 Project [transform(zs#x, lambdafunction(filter(lambda z#x, lambdafunction((lambda zz#x > 50), lambda zz#x, false)), lambda z#x, false)) AS v#x]
 +- SubqueryAlias nested
-   +- View (`nested`, [x#x,ys#x,zs#x])
+   +- View (`nested`, [x#x, ys#x, zs#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as array<int>) AS ys#x, cast(zs#x as array<array<int>>) AS zs#x]
          +- SubqueryAlias t
             +- LocalRelation [x#x, ys#x, zs#x]
@@ -131,7 +151,7 @@ select aggregate(ys, 0, (y, a) -> y + a + x) as v from nested
 -- !query analysis
 Project [aggregate(ys#x, 0, lambdafunction(((lambda y#x + lambda a#x) + x#x), lambda y#x, lambda a#x, false), lambdafunction(lambda id#x, lambda id#x, false)) AS v#x]
 +- SubqueryAlias nested
-   +- View (`nested`, [x#x,ys#x,zs#x])
+   +- View (`nested`, [x#x, ys#x, zs#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as array<int>) AS ys#x, cast(zs#x as array<array<int>>) AS zs#x]
          +- SubqueryAlias t
             +- LocalRelation [x#x, ys#x, zs#x]
@@ -142,7 +162,7 @@ select aggregate(ys, (0 as sum, 0 as n), (acc, x) -> (acc.sum + x, acc.n + 1), a
 -- !query analysis
 Project [aggregate(ys#x, named_struct(sum, 0, n, 0), lambdafunction(named_struct(col1, (lambda acc#x.sum + lambda x#x), col2, (lambda acc#x.n + 1)), lambda acc#x, lambda x#x, false), lambdafunction((cast(lambda acc#x.sum as double) / cast(lambda acc#x.n as double)), lambda acc#x, false)) AS v#x]
 +- SubqueryAlias nested
-   +- View (`nested`, [x#x,ys#x,zs#x])
+   +- View (`nested`, [x#x, ys#x, zs#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as array<int>) AS ys#x, cast(zs#x as array<array<int>>) AS zs#x]
          +- SubqueryAlias t
             +- LocalRelation [x#x, ys#x, zs#x]
@@ -153,7 +173,7 @@ select transform(zs, z -> aggregate(z, 1, (acc, val) -> acc * val * size(z))) as
 -- !query analysis
 Project [transform(zs#x, lambdafunction(aggregate(lambda z#x, 1, lambdafunction(((lambda acc#x * lambda val#x) * size(lambda z#x, false)), lambda acc#x, lambda val#x, false), lambdafunction(lambda id#x, lambda id#x, false)), lambda z#x, false)) AS v#x]
 +- SubqueryAlias nested
-   +- View (`nested`, [x#x,ys#x,zs#x])
+   +- View (`nested`, [x#x, ys#x, zs#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as array<int>) AS ys#x, cast(zs#x as array<array<int>>) AS zs#x]
          +- SubqueryAlias t
             +- LocalRelation [x#x, ys#x, zs#x]
@@ -171,7 +191,7 @@ select reduce(ys, 0, (y, a) -> y + a + x) as v from nested
 -- !query analysis
 Project [reduce(ys#x, 0, lambdafunction(((lambda y#x + lambda a#x) + x#x), lambda y#x, lambda a#x, false), lambdafunction(lambda id#x, lambda id#x, false)) AS v#x]
 +- SubqueryAlias nested
-   +- View (`nested`, [x#x,ys#x,zs#x])
+   +- View (`nested`, [x#x, ys#x, zs#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as array<int>) AS ys#x, cast(zs#x as array<array<int>>) AS zs#x]
          +- SubqueryAlias t
             +- LocalRelation [x#x, ys#x, zs#x]
@@ -182,7 +202,7 @@ select reduce(ys, (0 as sum, 0 as n), (acc, x) -> (acc.sum + x, acc.n + 1), acc 
 -- !query analysis
 Project [reduce(ys#x, named_struct(sum, 0, n, 0), lambdafunction(named_struct(col1, (lambda acc#x.sum + lambda x#x), col2, (lambda acc#x.n + 1)), lambda acc#x, lambda x#x, false), lambdafunction((cast(lambda acc#x.sum as double) / cast(lambda acc#x.n as double)), lambda acc#x, false)) AS v#x]
 +- SubqueryAlias nested
-   +- View (`nested`, [x#x,ys#x,zs#x])
+   +- View (`nested`, [x#x, ys#x, zs#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as array<int>) AS ys#x, cast(zs#x as array<array<int>>) AS zs#x]
          +- SubqueryAlias t
             +- LocalRelation [x#x, ys#x, zs#x]
@@ -193,7 +213,7 @@ select transform(zs, z -> reduce(z, 1, (acc, val) -> acc * val * size(z))) as v 
 -- !query analysis
 Project [transform(zs#x, lambdafunction(reduce(lambda z#x, 1, lambdafunction(((lambda acc#x * lambda val#x) * size(lambda z#x, false)), lambda acc#x, lambda val#x, false), lambdafunction(lambda id#x, lambda id#x, false)), lambda z#x, false)) AS v#x]
 +- SubqueryAlias nested
-   +- View (`nested`, [x#x,ys#x,zs#x])
+   +- View (`nested`, [x#x, ys#x, zs#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as array<int>) AS ys#x, cast(zs#x as array<array<int>>) AS zs#x]
          +- SubqueryAlias t
             +- LocalRelation [x#x, ys#x, zs#x]
@@ -211,7 +231,7 @@ select exists(ys, y -> y > 30) as v from nested
 -- !query analysis
 Project [exists(ys#x, lambdafunction((lambda y#x > 30), lambda y#x, false)) AS v#x]
 +- SubqueryAlias nested
-   +- View (`nested`, [x#x,ys#x,zs#x])
+   +- View (`nested`, [x#x, ys#x, zs#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as array<int>) AS ys#x, cast(zs#x as array<array<int>>) AS zs#x]
          +- SubqueryAlias t
             +- LocalRelation [x#x, ys#x, zs#x]
@@ -229,7 +249,7 @@ select zip_with(ys, zs, (a, b) -> a + size(b)) as v from nested
 -- !query analysis
 Project [zip_with(ys#x, zs#x, lambdafunction((lambda a#x + size(lambda b#x, false)), lambda a#x, lambda b#x, false)) AS v#x]
 +- SubqueryAlias nested
-   +- View (`nested`, [x#x,ys#x,zs#x])
+   +- View (`nested`, [x#x, ys#x, zs#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as array<int>) AS ys#x, cast(zs#x as array<array<int>>) AS zs#x]
          +- SubqueryAlias t
             +- LocalRelation [x#x, ys#x, zs#x]
@@ -258,7 +278,7 @@ create or replace temporary view nested as values
 CreateViewCommand `nested`, values
   (1, map(1, 1, 2, 2, 3, 3)),
   (2, map(4, 4, 5, 5, 6, 6))
-  as t(x, ys), false, true, LocalTempView, true
+  as t(x, ys), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias t
       +- LocalRelation [x#x, ys#x]
 
@@ -268,7 +288,7 @@ select transform_keys(ys, (k, v) -> k) as v from nested
 -- !query analysis
 Project [transform_keys(ys#x, lambdafunction(lambda k#x, lambda k#x, lambda v#x, false)) AS v#x]
 +- SubqueryAlias nested
-   +- View (`nested`, [x#x,ys#x])
+   +- View (`nested`, [x#x, ys#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as map<int,int>) AS ys#x]
          +- SubqueryAlias t
             +- LocalRelation [x#x, ys#x]
@@ -279,7 +299,7 @@ select transform_keys(ys, (k, v) -> k + 1) as v from nested
 -- !query analysis
 Project [transform_keys(ys#x, lambdafunction((lambda k#x + 1), lambda k#x, lambda v#x, false)) AS v#x]
 +- SubqueryAlias nested
-   +- View (`nested`, [x#x,ys#x])
+   +- View (`nested`, [x#x, ys#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as map<int,int>) AS ys#x]
          +- SubqueryAlias t
             +- LocalRelation [x#x, ys#x]
@@ -290,7 +310,7 @@ select transform_keys(ys, (k, v) -> k + v) as v from nested
 -- !query analysis
 Project [transform_keys(ys#x, lambdafunction((lambda k#x + lambda v#x), lambda k#x, lambda v#x, false)) AS v#x]
 +- SubqueryAlias nested
-   +- View (`nested`, [x#x,ys#x])
+   +- View (`nested`, [x#x, ys#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as map<int,int>) AS ys#x]
          +- SubqueryAlias t
             +- LocalRelation [x#x, ys#x]
@@ -301,7 +321,7 @@ select transform_values(ys, (k, v) -> v) as v from nested
 -- !query analysis
 Project [transform_values(ys#x, lambdafunction(lambda v#x, lambda k#x, lambda v#x, false)) AS v#x]
 +- SubqueryAlias nested
-   +- View (`nested`, [x#x,ys#x])
+   +- View (`nested`, [x#x, ys#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as map<int,int>) AS ys#x]
          +- SubqueryAlias t
             +- LocalRelation [x#x, ys#x]
@@ -312,7 +332,7 @@ select transform_values(ys, (k, v) -> v + 1) as v from nested
 -- !query analysis
 Project [transform_values(ys#x, lambdafunction((lambda v#x + 1), lambda k#x, lambda v#x, false)) AS v#x]
 +- SubqueryAlias nested
-   +- View (`nested`, [x#x,ys#x])
+   +- View (`nested`, [x#x, ys#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as map<int,int>) AS ys#x]
          +- SubqueryAlias t
             +- LocalRelation [x#x, ys#x]
@@ -323,7 +343,7 @@ select transform_values(ys, (k, v) -> k + v) as v from nested
 -- !query analysis
 Project [transform_values(ys#x, lambdafunction((lambda k#x + lambda v#x), lambda k#x, lambda v#x, false)) AS v#x]
 +- SubqueryAlias nested
-   +- View (`nested`, [x#x,ys#x])
+   +- View (`nested`, [x#x, ys#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as map<int,int>) AS ys#x]
          +- SubqueryAlias t
             +- LocalRelation [x#x, ys#x]

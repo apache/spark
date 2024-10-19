@@ -27,7 +27,7 @@ import org.apache.commons.io.FileExistsException
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_DRIVER_REUSE_PVC
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config.{SHUFFLE_CHECKSUM_ALGORITHM, SHUFFLE_CHECKSUM_ENABLED}
 import org.apache.spark.shuffle.ShuffleChecksumUtils.{compareChecksums, getChecksumFileName}
 import org.apache.spark.shuffle.api.{ShuffleExecutorComponents, ShuffleMapOutputWriter, SingleSpillShuffleMapOutputWriter}
@@ -54,7 +54,8 @@ class KubernetesLocalDiskShuffleExecutorComponents(sparkConf: SparkConf)
         KubernetesLocalDiskShuffleExecutorComponents.recoverDiskStore(sparkConf, blockManager)
       }
     } else {
-      logInfo(s"Skip recovery because ${KUBERNETES_DRIVER_REUSE_PVC.key} is disabled.")
+      logInfo(log"Skip recovery because ${MDC(LogKeys.CONFIG, KUBERNETES_DRIVER_REUSE_PVC.key)} " +
+        log"is disabled.")
     }
   }
 
@@ -94,20 +95,23 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
       .partition(_.getName.contains(".checksum"))
     val (indexFiles, dataFiles) = files.partition(_.getName.endsWith(".index"))
 
-    logInfo(s"Found ${dataFiles.size} data files, ${indexFiles.size} index files, " +
-        s"and ${checksumFiles.size} checksum files.")
+    logInfo(log"Found ${MDC(LogKeys.NUM_DATA_FILE, dataFiles.length)} data files, " +
+      log"${MDC(LogKeys.NUM_INDEX_FILE, indexFiles.length)} index files, " +
+      log"and ${MDC(LogKeys.NUM_CHECKSUM_FILE, checksumFiles.length)} checksum files.")
 
     // Build a hashmap with checksum file name as a key
     val checksumFileMap = new mutable.HashMap[String, File]()
     val algorithm = conf.get(SHUFFLE_CHECKSUM_ALGORITHM)
     checksumFiles.foreach { f =>
-      logInfo(s"${f.getName} -> ${f.getAbsolutePath}")
+      logInfo(log"${MDC(LogKeys.FILE_NAME, f.getName)} -> " +
+        log"${MDC(LogKeys.FILE_ABSOLUTE_PATH, f.getAbsolutePath)}")
       checksumFileMap.put(f.getName, f)
     }
     // Build a hashmap with shuffle data file name as a key
     val indexFileMap = new mutable.HashMap[String, File]()
     indexFiles.foreach { f =>
-      logInfo(s"${f.getName.replace(".index", ".data")} -> ${f.getAbsolutePath}")
+      logInfo(log"${MDC(LogKeys.FILE_NAME, f.getName.replace(".index", ".data"))} -> " +
+        log"${MDC(LogKeys.FILE_ABSOLUTE_PATH, f.getAbsolutePath)}")
       indexFileMap.put(f.getName.replace(".index", ".data"), f)
     }
 
@@ -116,7 +120,7 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
     val level = StorageLevel.DISK_ONLY
     val checksumDisabled = !conf.get(SHUFFLE_CHECKSUM_ENABLED)
     (dataFiles ++ indexFiles).foreach { f =>
-      logInfo(s"Try to recover ${f.getAbsolutePath}")
+      logInfo(log"Try to recover ${MDC(LogKeys.FILE_ABSOLUTE_PATH, f.getAbsolutePath)}")
       try {
         val id = BlockId(f.getName)
         // To make it sure to handle only shuffle blocks
@@ -129,7 +133,8 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
             val decryptedSize = f.length()
             bm.TempFileBasedBlockStoreUpdater(id, level, classTag, f, decryptedSize).save()
           } else {
-            logInfo(s"Ignore ${f.getAbsolutePath} due to the verification failure.")
+            logInfo(log"Ignore ${MDC(LogKeys.FILE_ABSOLUTE_PATH, f.getAbsolutePath)} " +
+              log"due to the verification failure.")
           }
         } else {
           logInfo("Ignore a non-shuffle block file.")

@@ -18,7 +18,7 @@ CreateViewCommand `EMP`, SELECT * FROM VALUES
   (500, "emp 5", NULL),
   (600, "emp 6", 100),
   (800, "emp 8", 70)
-AS EMP(id, emp_name, dept_id), false, false, LocalTempView, true
+AS EMP(id, emp_name, dept_id), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [id#x, emp_name#x, dept_id#x]
       +- SubqueryAlias EMP
          +- LocalRelation [id#x, emp_name#x, dept_id#x]
@@ -41,7 +41,7 @@ CreateViewCommand `DEPT`, SELECT * FROM VALUES
   (40, "dept 4 - unassigned", "OR"),
   (50, "dept 5 - unassigned", "NJ"),
   (70, "dept 7", "FL")
-AS DEPT(dept_id, dept_name, state), false, false, LocalTempView, true
+AS DEPT(dept_id, dept_name, state), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [dept_id#x, dept_name#x, state#x]
       +- SubqueryAlias DEPT
          +- LocalRelation [dept_id#x, dept_name#x, state#x]
@@ -68,7 +68,7 @@ CreateViewCommand `BONUS`, SELECT * FROM VALUES
   ("emp 4", 100.00D),
   ("emp 5", 1000.00D),
   ("emp 6 - no dept", 500.00D)
-AS BONUS(emp_name, bonus_amt), false, false, LocalTempView, true
+AS BONUS(emp_name, bonus_amt), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [emp_name#x, bonus_amt#x]
       +- SubqueryAlias BONUS
          +- LocalRelation [emp_name#x, bonus_amt#x]
@@ -91,7 +91,7 @@ CreateViewCommand `ADDRESS`, SELECT * FROM VALUES
   (null, null, "addr4"),
   (600, "emp 6", "addr6"),
   (800, "emp 8", "addr8")
-AS ADDRESS(id, emp_name, address), false, false, LocalTempView, true
+AS ADDRESS(id, emp_name, address), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [id#x, emp_name#x, address#x]
       +- SubqueryAlias ADDRESS
          +- LocalRelation [id#x, emp_name#x, address#x]
@@ -102,7 +102,7 @@ CREATE TEMPORARY VIEW S1 AS SELECT * FROM VALUES
   (null, null), (5, 5), (8, 8), (11, 11) AS s1(a, b)
 -- !query analysis
 CreateViewCommand `S1`, SELECT * FROM VALUES
-  (null, null), (5, 5), (8, 8), (11, 11) AS s1(a, b), false, false, LocalTempView, true
+  (null, null), (5, 5), (8, 8), (11, 11) AS s1(a, b), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias s1
          +- LocalRelation [a#x, b#x]
@@ -113,7 +113,7 @@ CREATE TEMPORARY VIEW S2 AS SELECT * FROM VALUES
   (7, 7), (8, 8), (11, 11), (null, null) AS s2(c, d)
 -- !query analysis
 CreateViewCommand `S2`, SELECT * FROM VALUES
-  (7, 7), (8, 8), (11, 11), (null, null) AS s2(c, d), false, false, LocalTempView, true
+  (7, 7), (8, 8), (11, 11), (null, null) AS s2(c, d), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [c#x, d#x]
       +- SubqueryAlias s2
          +- LocalRelation [c#x, d#x]
@@ -132,13 +132,13 @@ Project [id#x, dept_id#x]
 +- Filter (((id#x = 600) OR (id#x = 500)) OR NOT dept_id#x IN (list#x []))
    :  +- Project [dept_id#x]
    :     +- SubqueryAlias emp
-   :        +- View (`EMP`, [id#x,emp_name#x,dept_id#x])
+   :        +- View (`EMP`, [id#x, emp_name#x, dept_id#x])
    :           +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(dept_id#x as int) AS dept_id#x]
    :              +- Project [id#x, emp_name#x, dept_id#x]
    :                 +- SubqueryAlias EMP
    :                    +- LocalRelation [id#x, emp_name#x, dept_id#x]
    +- SubqueryAlias emp
-      +- View (`EMP`, [id#x,emp_name#x,dept_id#x])
+      +- View (`EMP`, [id#x, emp_name#x, dept_id#x])
          +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(dept_id#x as int) AS dept_id#x]
             +- Project [id#x, emp_name#x, dept_id#x]
                +- SubqueryAlias EMP
@@ -158,13 +158,13 @@ Project [id#x, dept_id#x]
 +- Filter ((id#x = 800) OR (isnotnull(dept_id#x) AND NOT dept_id#x IN (list#x [])))
    :  +- Project [dept_id#x]
    :     +- SubqueryAlias emp
-   :        +- View (`EMP`, [id#x,emp_name#x,dept_id#x])
+   :        +- View (`EMP`, [id#x, emp_name#x, dept_id#x])
    :           +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(dept_id#x as int) AS dept_id#x]
    :              +- Project [id#x, emp_name#x, dept_id#x]
    :                 +- SubqueryAlias EMP
    :                    +- LocalRelation [id#x, emp_name#x, dept_id#x]
    +- SubqueryAlias emp
-      +- View (`EMP`, [id#x,emp_name#x,dept_id#x])
+      +- View (`EMP`, [id#x, emp_name#x, dept_id#x])
          +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(dept_id#x as int) AS dept_id#x]
             +- Project [id#x, emp_name#x, dept_id#x]
                +- SubqueryAlias EMP
@@ -185,13 +185,13 @@ Project [id#x, dept_id#x]
    :  +- Project [dept_id#x]
    :     +- Filter isnotnull(dept_id#x)
    :        +- SubqueryAlias emp
-   :           +- View (`EMP`, [id#x,emp_name#x,dept_id#x])
+   :           +- View (`EMP`, [id#x, emp_name#x, dept_id#x])
    :              +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(dept_id#x as int) AS dept_id#x]
    :                 +- Project [id#x, emp_name#x, dept_id#x]
    :                    +- SubqueryAlias EMP
    :                       +- LocalRelation [id#x, emp_name#x, dept_id#x]
    +- SubqueryAlias emp
-      +- View (`EMP`, [id#x,emp_name#x,dept_id#x])
+      +- View (`EMP`, [id#x, emp_name#x, dept_id#x])
          +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(dept_id#x as int) AS dept_id#x]
             +- Project [id#x, emp_name#x, dept_id#x]
                +- SubqueryAlias EMP
@@ -213,13 +213,13 @@ Project [id#x, dept_id#x]
    :  +- Project [dept_id#x]
    :     +- Filter isnotnull(dept_id#x)
    :        +- SubqueryAlias emp
-   :           +- View (`EMP`, [id#x,emp_name#x,dept_id#x])
+   :           +- View (`EMP`, [id#x, emp_name#x, dept_id#x])
    :              +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(dept_id#x as int) AS dept_id#x]
    :                 +- Project [id#x, emp_name#x, dept_id#x]
    :                    +- SubqueryAlias EMP
    :                       +- LocalRelation [id#x, emp_name#x, dept_id#x]
    +- SubqueryAlias emp
-      +- View (`EMP`, [id#x,emp_name#x,dept_id#x])
+      +- View (`EMP`, [id#x, emp_name#x, dept_id#x])
          +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(dept_id#x as int) AS dept_id#x]
             +- Project [id#x, emp_name#x, dept_id#x]
                +- SubqueryAlias EMP
@@ -241,20 +241,20 @@ Project [id#x, dept_id#x, emp_name#x]
 +- Filter (emp_name#x IN (list#x []) OR (isnotnull(dept_id#x) AND NOT dept_id#x IN (list#x [])))
    :  :- Project [emp_name#x]
    :  :  +- SubqueryAlias bonus
-   :  :     +- View (`BONUS`, [emp_name#x,bonus_amt#x])
+   :  :     +- View (`BONUS`, [emp_name#x, bonus_amt#x])
    :  :        +- Project [cast(emp_name#x as string) AS emp_name#x, cast(bonus_amt#x as double) AS bonus_amt#x]
    :  :           +- Project [emp_name#x, bonus_amt#x]
    :  :              +- SubqueryAlias BONUS
    :  :                 +- LocalRelation [emp_name#x, bonus_amt#x]
    :  +- Project [dept_id#x]
    :     +- SubqueryAlias dept
-   :        +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
+   :        +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
    :           +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
    :              +- Project [dept_id#x, dept_name#x, state#x]
    :                 +- SubqueryAlias DEPT
    :                    +- LocalRelation [dept_id#x, dept_name#x, state#x]
    +- SubqueryAlias emp
-      +- View (`EMP`, [id#x,emp_name#x,dept_id#x])
+      +- View (`EMP`, [id#x, emp_name#x, dept_id#x])
          +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(dept_id#x as int) AS dept_id#x]
             +- Project [id#x, emp_name#x, dept_id#x]
                +- SubqueryAlias EMP
@@ -278,20 +278,20 @@ Project [id#x, dept_id#x, emp_name#x]
    :  :- Project [emp_name#x]
    :  :  +- Filter (outer(emp_name#x) = emp_name#x)
    :  :     +- SubqueryAlias bonus
-   :  :        +- View (`BONUS`, [emp_name#x,bonus_amt#x])
+   :  :        +- View (`BONUS`, [emp_name#x, bonus_amt#x])
    :  :           +- Project [cast(emp_name#x as string) AS emp_name#x, cast(bonus_amt#x as double) AS bonus_amt#x]
    :  :              +- Project [emp_name#x, bonus_amt#x]
    :  :                 +- SubqueryAlias BONUS
    :  :                    +- LocalRelation [emp_name#x, bonus_amt#x]
    :  +- Project [dept_id#x]
    :     +- SubqueryAlias dept
-   :        +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
+   :        +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
    :           +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
    :              +- Project [dept_id#x, dept_name#x, state#x]
    :                 +- SubqueryAlias DEPT
    :                    +- LocalRelation [dept_id#x, dept_name#x, state#x]
    +- SubqueryAlias emp
-      +- View (`EMP`, [id#x,emp_name#x,dept_id#x])
+      +- View (`EMP`, [id#x, emp_name#x, dept_id#x])
          +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(dept_id#x as int) AS dept_id#x]
             +- Project [id#x, emp_name#x, dept_id#x]
                +- SubqueryAlias EMP
@@ -310,13 +310,13 @@ Project [id#x, dept_id#x, emp_name#x]
 +- Filter ((dept_id#x = 10) OR NOT named_struct(id, id#x, emp_name, emp_name#x) IN (list#x []))
    :  +- Project [id#x, emp_name#x]
    :     +- SubqueryAlias address
-   :        +- View (`ADDRESS`, [id#x,emp_name#x,address#x])
+   :        +- View (`ADDRESS`, [id#x, emp_name#x, address#x])
    :           +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(address#x as string) AS address#x]
    :              +- Project [id#x, emp_name#x, address#x]
    :                 +- SubqueryAlias ADDRESS
    :                    +- LocalRelation [id#x, emp_name#x, address#x]
    +- SubqueryAlias emp
-      +- View (`EMP`, [id#x,emp_name#x,dept_id#x])
+      +- View (`EMP`, [id#x, emp_name#x, dept_id#x])
          +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(dept_id#x as int) AS dept_id#x]
             +- Project [id#x, emp_name#x, dept_id#x]
                +- SubqueryAlias EMP
@@ -341,13 +341,13 @@ Project [id#x, dept_id#x, emp_name#x]
    :  +- Project [id#x, emp_name#x]
    :     +- Filter (isnotnull(id#x) AND isnotnull(emp_name#x))
    :        +- SubqueryAlias address
-   :           +- View (`ADDRESS`, [id#x,emp_name#x,address#x])
+   :           +- View (`ADDRESS`, [id#x, emp_name#x, address#x])
    :              +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(address#x as string) AS address#x]
    :                 +- Project [id#x, emp_name#x, address#x]
    :                    +- SubqueryAlias ADDRESS
    :                       +- LocalRelation [id#x, emp_name#x, address#x]
    +- SubqueryAlias emp
-      +- View (`EMP`, [id#x,emp_name#x,dept_id#x])
+      +- View (`EMP`, [id#x, emp_name#x, dept_id#x])
          +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(dept_id#x as int) AS dept_id#x]
             +- Project [id#x, emp_name#x, dept_id#x]
                +- SubqueryAlias EMP
@@ -371,13 +371,13 @@ Project [id#x, dept_id#x, emp_name#x]
    :  +- Project [emp_name#x]
    :     +- Filter ((isnotnull(id#x) AND isnotnull(emp_name#x)) AND (outer(id#x) = id#x))
    :        +- SubqueryAlias address
-   :           +- View (`ADDRESS`, [id#x,emp_name#x,address#x])
+   :           +- View (`ADDRESS`, [id#x, emp_name#x, address#x])
    :              +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(address#x as string) AS address#x]
    :                 +- Project [id#x, emp_name#x, address#x]
    :                    +- SubqueryAlias ADDRESS
    :                       +- LocalRelation [id#x, emp_name#x, address#x]
    +- SubqueryAlias emp
-      +- View (`EMP`, [id#x,emp_name#x,dept_id#x])
+      +- View (`EMP`, [id#x, emp_name#x, dept_id#x])
          +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(dept_id#x as int) AS dept_id#x]
             +- Project [id#x, emp_name#x, dept_id#x]
                +- SubqueryAlias EMP
@@ -406,7 +406,7 @@ Project [id#x, dept_id#x, emp_name#x]
    :  :- Project [id#x]
    :  :  +- Filter ((isnotnull(id#x) AND isnotnull(emp_name#x)) AND (id#x >= 400))
    :  :     +- SubqueryAlias address
-   :  :        +- View (`ADDRESS`, [id#x,emp_name#x,address#x])
+   :  :        +- View (`ADDRESS`, [id#x, emp_name#x, address#x])
    :  :           +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(address#x as string) AS address#x]
    :  :              +- Project [id#x, emp_name#x, address#x]
    :  :                 +- SubqueryAlias ADDRESS
@@ -414,13 +414,13 @@ Project [id#x, dept_id#x, emp_name#x]
    :  +- Project [emp_name#x]
    :     +- Filter ((isnotnull(id#x) AND isnotnull(emp_name#x)) AND ((outer(id#x) = id#x) AND (id#x < 400)))
    :        +- SubqueryAlias address
-   :           +- View (`ADDRESS`, [id#x,emp_name#x,address#x])
+   :           +- View (`ADDRESS`, [id#x, emp_name#x, address#x])
    :              +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(address#x as string) AS address#x]
    :                 +- Project [id#x, emp_name#x, address#x]
    :                    +- SubqueryAlias ADDRESS
    :                       +- LocalRelation [id#x, emp_name#x, address#x]
    +- SubqueryAlias emp
-      +- View (`EMP`, [id#x,emp_name#x,dept_id#x])
+      +- View (`EMP`, [id#x, emp_name#x, dept_id#x])
          +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(dept_id#x as int) AS dept_id#x]
             +- Project [id#x, emp_name#x, dept_id#x]
                +- SubqueryAlias EMP
@@ -437,13 +437,13 @@ Project [a#x, b#x]
 +- Filter NOT NOT a#x IN (list#x [])
    :  +- Project [c#x]
    :     +- SubqueryAlias s2
-   :        +- View (`S2`, [c#x,d#x])
+   :        +- View (`S2`, [c#x, d#x])
    :           +- Project [cast(c#x as int) AS c#x, cast(d#x as int) AS d#x]
    :              +- Project [c#x, d#x]
    :                 +- SubqueryAlias s2
    :                    +- LocalRelation [c#x, d#x]
    +- SubqueryAlias s1
-      +- View (`S1`, [a#x,b#x])
+      +- View (`S1`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias s1
@@ -461,13 +461,13 @@ Project [a#x, b#x]
 +- Filter NOT ((a#x > 5) OR a#x IN (list#x []))
    :  +- Project [c#x]
    :     +- SubqueryAlias s2
-   :        +- View (`S2`, [c#x,d#x])
+   :        +- View (`S2`, [c#x, d#x])
    :           +- Project [cast(c#x as int) AS c#x, cast(d#x as int) AS d#x]
    :              +- Project [c#x, d#x]
    :                 +- SubqueryAlias s2
    :                    +- LocalRelation [c#x, d#x]
    +- SubqueryAlias s1
-      +- View (`S1`, [a#x,b#x])
+      +- View (`S1`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias s1
@@ -485,13 +485,13 @@ Project [a#x, b#x]
 +- Filter NOT ((a#x > 5) OR NOT a#x IN (list#x []))
    :  +- Project [c#x]
    :     +- SubqueryAlias s2
-   :        +- View (`S2`, [c#x,d#x])
+   :        +- View (`S2`, [c#x, d#x])
    :           +- Project [cast(c#x as int) AS c#x, cast(d#x as int) AS d#x]
    :              +- Project [c#x, d#x]
    :                 +- SubqueryAlias s2
    :                    +- LocalRelation [c#x, d#x]
    +- SubqueryAlias s1
-      +- View (`S1`, [a#x,b#x])
+      +- View (`S1`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias s1
@@ -509,13 +509,13 @@ Project [a#x, b#x]
 +- Filter NOT ((a#x > 5) AND a#x IN (list#x []))
    :  +- Project [c#x]
    :     +- SubqueryAlias s2
-   :        +- View (`S2`, [c#x,d#x])
+   :        +- View (`S2`, [c#x, d#x])
    :           +- Project [cast(c#x as int) AS c#x, cast(d#x as int) AS d#x]
    :              +- Project [c#x, d#x]
    :                 +- SubqueryAlias s2
    :                    +- LocalRelation [c#x, d#x]
    +- SubqueryAlias s1
-      +- View (`S1`, [a#x,b#x])
+      +- View (`S1`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias s1
@@ -533,13 +533,13 @@ Project [a#x, b#x]
 +- Filter NOT ((a#x > 5) AND NOT a#x IN (list#x []))
    :  +- Project [c#x]
    :     +- SubqueryAlias s2
-   :        +- View (`S2`, [c#x,d#x])
+   :        +- View (`S2`, [c#x, d#x])
    :           +- Project [cast(c#x as int) AS c#x, cast(d#x as int) AS d#x]
    :              +- Project [c#x, d#x]
    :                 +- SubqueryAlias s2
    :                    +- LocalRelation [c#x, d#x]
    +- SubqueryAlias s1
-      +- View (`S1`, [a#x,b#x])
+      +- View (`S1`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias s1

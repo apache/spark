@@ -25,6 +25,8 @@ import breeze.linalg.{DenseMatrix => BDM}
 import org.json4s.jackson.JsonMethods.{parse => parseJson}
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.internal.LogKeys.MALFORMATTED_STRING
+import org.apache.spark.internal.MDC
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.mllib.util.TestingUtils._
@@ -226,7 +228,7 @@ class VectorsSuite extends SparkFunSuite {
     malformatted.foreach { s =>
       intercept[SparkException] {
         Vectors.parse(s)
-        logInfo(s"Didn't detect malformatted string $s.")
+        logInfo(log"Didn't detect malformatted string ${MDC(MALFORMATTED_STRING, s)}.")
       }
     }
   }

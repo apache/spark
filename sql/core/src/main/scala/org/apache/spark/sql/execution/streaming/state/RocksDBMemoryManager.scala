@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.streaming.state
 
 import org.rocksdb._
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 
 /**
  * Singleton responsible for managing cache and write buffer manager associated with all RocksDB
@@ -47,8 +48,8 @@ object RocksDBMemoryManager extends Logging {
         }
 
         val totalMemoryUsageInBytes: Long = conf.totalMemoryUsageMB * 1024 * 1024
-        logInfo(s"Creating RocksDB state store LRU cache with " +
-          s"total_size=$totalMemoryUsageInBytes")
+        logInfo(log"Creating RocksDB state store LRU cache with " +
+          log"total_size=${MDC(NUM_BYTES, totalMemoryUsageInBytes)}")
 
         // SPARK-44878 - avoid using strict limit to prevent insertion exception on cache full.
         // Please refer to RocksDB issue here - https://github.com/facebook/rocksdb/issues/8670

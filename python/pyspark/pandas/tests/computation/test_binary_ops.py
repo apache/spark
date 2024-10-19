@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -35,6 +35,10 @@ class FrameBinaryOpsMixin:
             index=np.random.rand(9),
         )
 
+    @property
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
+
     def test_binary_operators(self):
         pdf = pd.DataFrame(
             {"A": [0, 2, 4], "B": [4, 2, 0], "X": [-1, 10, 0]}, index=np.random.rand(3)
@@ -45,11 +49,12 @@ class FrameBinaryOpsMixin:
         self.assert_eq(psdf + psdf.loc[:, ["A", "B"]], pdf + pdf.loc[:, ["A", "B"]])
         self.assert_eq(psdf.loc[:, ["A", "B"]] + psdf, pdf.loc[:, ["A", "B"]] + pdf)
 
-        self.assertRaisesRegex(
-            ValueError,
-            "it comes from a different dataframe",
-            lambda: ps.range(10).add(ps.range(10)),
-        )
+        with ps.option_context("compute.ops_on_diff_frames", False):
+            self.assertRaisesRegex(
+                ValueError,
+                "it comes from a different dataframe",
+                lambda: ps.range(10).add(ps.range(10)),
+            )
 
         self.assertRaisesRegex(
             TypeError,
@@ -207,7 +212,11 @@ class FrameBinaryOpsMixin:
         self.assert_eq(psdf.rfloordiv(10), expected_result)
 
 
-class FrameBinaryOpsTests(FrameBinaryOpsMixin, ComparisonTestBase, SQLTestUtils):
+class FrameBinaryOpsTests(
+    FrameBinaryOpsMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

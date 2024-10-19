@@ -26,6 +26,7 @@ import org.apache.arrow.memory.RootAllocator
 import org.apache.commons.lang3.SystemUtils
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.agnosticEncoderFor
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.arrow.{ArrowDeserializers, ArrowSerializer}
 import org.apache.spark.sql.test.ConnectFunSuite
@@ -52,9 +53,10 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
 
   test("test implicit encoder resolution") {
     val spark = session
+    import org.apache.spark.util.ArrayImplicits._
     import spark.implicits._
     def testImplicit[T: Encoder](expected: T): Unit = {
-      val encoder = encoderFor[T]
+      val encoder = agnosticEncoderFor[T]
       val allocator = new RootAllocator()
       try {
         val batch = ArrowSerializer.serialize(
@@ -84,6 +86,8 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(booleans)
     testImplicit(booleans.toSeq)
     testImplicit(booleans.toSeq)(newBooleanSeqEncoder)
+    testImplicit(booleans.toSeq)(newSequenceEncoder)
+    testImplicit(booleans.toImmutableArraySeq)
 
     val bytes = Array(76.toByte, 59.toByte, 121.toByte)
     testImplicit(bytes.head)
@@ -91,6 +95,8 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(bytes)
     testImplicit(bytes.toSeq)
     testImplicit(bytes.toSeq)(newByteSeqEncoder)
+    testImplicit(bytes.toSeq)(newSequenceEncoder)
+    testImplicit(bytes.toImmutableArraySeq)
 
     val shorts = Array(21.toShort, (-213).toShort, 14876.toShort)
     testImplicit(shorts.head)
@@ -98,6 +104,8 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(shorts)
     testImplicit(shorts.toSeq)
     testImplicit(shorts.toSeq)(newShortSeqEncoder)
+    testImplicit(shorts.toSeq)(newSequenceEncoder)
+    testImplicit(shorts.toImmutableArraySeq)
 
     val ints = Array(4, 6, 5)
     testImplicit(ints.head)
@@ -105,6 +113,8 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(ints)
     testImplicit(ints.toSeq)
     testImplicit(ints.toSeq)(newIntSeqEncoder)
+    testImplicit(ints.toSeq)(newSequenceEncoder)
+    testImplicit(ints.toImmutableArraySeq)
 
     val longs = Array(System.nanoTime(), System.currentTimeMillis())
     testImplicit(longs.head)
@@ -112,6 +122,8 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(longs)
     testImplicit(longs.toSeq)
     testImplicit(longs.toSeq)(newLongSeqEncoder)
+    testImplicit(longs.toSeq)(newSequenceEncoder)
+    testImplicit(longs.toImmutableArraySeq)
 
     val floats = Array(3f, 10.9f)
     testImplicit(floats.head)
@@ -119,6 +131,8 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(floats)
     testImplicit(floats.toSeq)
     testImplicit(floats.toSeq)(newFloatSeqEncoder)
+    testImplicit(floats.toSeq)(newSequenceEncoder)
+    testImplicit(floats.toImmutableArraySeq)
 
     val doubles = Array(23.78d, -329.6d)
     testImplicit(doubles.head)
@@ -126,22 +140,29 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(doubles)
     testImplicit(doubles.toSeq)
     testImplicit(doubles.toSeq)(newDoubleSeqEncoder)
+    testImplicit(doubles.toSeq)(newSequenceEncoder)
+    testImplicit(doubles.toImmutableArraySeq)
 
     val strings = Array("foo", "baz", "bar")
     testImplicit(strings.head)
     testImplicit(strings)
     testImplicit(strings.toSeq)
     testImplicit(strings.toSeq)(newStringSeqEncoder)
+    testImplicit(strings.toSeq)(newSequenceEncoder)
+    testImplicit(strings.toImmutableArraySeq)
 
     val myTypes = Array(MyType(12L, Math.E, Math.PI), MyType(0, 0, 0))
     testImplicit(myTypes.head)
     testImplicit(myTypes)
     testImplicit(myTypes.toSeq)
     testImplicit(myTypes.toSeq)(newProductSeqEncoder[MyType])
+    testImplicit(myTypes.toSeq)(newSequenceEncoder)
+    testImplicit(myTypes.toImmutableArraySeq)
 
     // Others.
     val decimal = java.math.BigDecimal.valueOf(3141527000000000000L, 18)
     testImplicit(decimal)
+    testImplicit(Array(decimal).toImmutableArraySeq)
     testImplicit(BigDecimal(decimal))
     testImplicit(Date.valueOf(LocalDate.now()))
     testImplicit(LocalDate.now())

@@ -16,18 +16,18 @@
 #
 import unittest
 
-from pyspark import pandas as ps
 from pyspark.pandas.tests.test_categorical import CategoricalTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 
 
 class CategoricalParityTests(
-    CategoricalTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
+    CategoricalTestsMixin,
+    PandasOnSparkTestUtils,
+    TestUtils,
+    ReusedConnectTestCase,
 ):
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
+    pass
 
 
 if __name__ == "__main__":

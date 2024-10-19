@@ -25,8 +25,8 @@ import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
-import org.apache.spark.sql.catalyst.trees.LeafLike
+import org.apache.spark.sql.catalyst.plans.logical.{Command, ExecutableDuringAnalysis, LogicalPlan, SupervisingCommand}
+import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.connector.ExternalCommandRunner
 import org.apache.spark.sql.execution.{CommandExecutionMode, ExplainMode, LeafExecNode, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -51,6 +51,7 @@ trait RunnableCommand extends Command {
 }
 
 trait LeafRunnableCommand extends RunnableCommand with LeafLike[LogicalPlan]
+trait UnaryRunnableCommand extends RunnableCommand with UnaryLike[LogicalPlan]
 
 /**
  * A physical operator that executes the run method of a `RunnableCommand` and
@@ -157,20 +158,28 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
     mode: ExplainMode)
-  extends LeafRunnableCommand {
+  extends RunnableCommand with SupervisingCommand {
 
   override val output: Seq[Attribute] =
     Seq(AttributeReference("plan", StringType, nullable = true)())
 
   // Run through the optimizer to generate the physical plan.
   override def run(sparkSession: SparkSession): Seq[Row] = try {
-    val outputString = sparkSession.sessionState.executePlan(logicalPlan, CommandExecutionMode.SKIP)
-      .explainString(mode)
+    val stagedLogicalPlan = stageForAnalysis(logicalPlan)
+    val qe = sparkSession.sessionState.executePlan(stagedLogicalPlan, CommandExecutionMode.SKIP)
+    val outputString = qe.explainString(mode)
     Seq(Row(outputString))
   } catch { case NonFatal(cause) =>
     ("Error occurred during query planning: \n" + cause.getMessage).split("\n")
       .map(Row(_)).toImmutableArraySeq
   }
+
+  private def stageForAnalysis(plan: LogicalPlan): LogicalPlan = plan transform {
+    case p: ExecutableDuringAnalysis => p.stageForExplain()
+  }
+
+  def withTransformedSupervisedPlan(transformer: LogicalPlan => LogicalPlan): LogicalPlan =
+    copy(logicalPlan = transformer(logicalPlan))
 }
 
 /** An explain command for users to see how a streaming batch is executed. */

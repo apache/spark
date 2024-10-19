@@ -22,13 +22,12 @@ import java.util.Locale
 import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
 
-import org.mockito.Mockito._
-
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
+import org.apache.spark.internal.config.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, JoinSelectionHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, HintInfo, Join, JoinHint, NO_BROADCAST_AND_REPLICATION}
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -36,30 +35,14 @@ import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExch
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.python.BatchEvalPythonExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
-class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
+class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper
+  with JoinSelectionHelper {
   import testImplicits._
-
-  private def attachCleanupResourceChecker(plan: SparkPlan): Unit = {
-    // SPARK-21492: Check cleanupResources are finally triggered in SortExec node for every
-    // test case
-    plan.foreachUp {
-      case s: SortExec =>
-        val sortExec = spy[SortExec](s)
-        verify(sortExec, atLeastOnce).cleanupResources()
-        verify(sortExec.rowSorter, atLeastOnce).cleanupResources()
-      case _ =>
-    }
-  }
-
-  override protected def checkAnswer(df: => DataFrame, rows: Seq[Row]): Unit = {
-    attachCleanupResourceChecker(df.queryExecution.sparkPlan)
-    super.checkAnswer(df, rows)
-  }
 
   setupTestData()
 
@@ -79,6 +62,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     val sqlString = pair._1
     val c = pair._2
     val df = sql(sqlString)
+    val optimized = df.queryExecution.optimizedPlan
     val physical = df.queryExecution.sparkPlan
     val operators = physical.collect {
       case j: BroadcastHashJoinExec => j
@@ -92,6 +76,10 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     if (operators.head.getClass != c) {
       fail(s"$sqlString expected operator: $c, but got ${operators.head}\n physical: \n$physical")
     }
+    assert(
+      canPlanAsBroadcastHashJoin(optimized.asInstanceOf[Join], conf) ===
+        operators.head.isInstanceOf[BroadcastHashJoinExec],
+      "canPlanAsBroadcastHashJoin not in sync with join selection codepath!")
     operators.head
   }
 
@@ -107,11 +95,13 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       val planned = spark.sessionState.planner.JoinSelection(join)
       assert(planned.size == 1)
       assert(planned.head.isInstanceOf[CartesianProductExec])
+      assert(!canPlanAsBroadcastHashJoin(join, conf))
 
       val plannedWithHint = spark.sessionState.planner.JoinSelection(joinWithHint)
       assert(plannedWithHint.size == 1)
       assert(plannedWithHint.head.isInstanceOf[BroadcastNestedLoopJoinExec])
       assert(plannedWithHint.head.asInstanceOf[BroadcastNestedLoopJoinExec].buildSide == BuildLeft)
+      assert(!canPlanAsBroadcastHashJoin(joinWithHint, conf))
     }
   }
 
@@ -130,10 +120,12 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     val planned = spark.sessionState.planner.JoinSelection(join)
     assert(planned.size == 1)
     assert(planned.head.isInstanceOf[BroadcastHashJoinExec])
+    assert(canPlanAsBroadcastHashJoin(join, conf))
 
     val plannedWithHint = spark.sessionState.planner.JoinSelection(joinWithHint)
     assert(plannedWithHint.size == 1)
     assert(plannedWithHint.head.isInstanceOf[SortMergeJoinExec])
+    assert(!canPlanAsBroadcastHashJoin(joinWithHint, conf))
   }
 
   test("NO_BROADCAST_AND_REPLICATION controls build side in BNLJ") {
@@ -149,11 +141,13 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     assert(planned.size == 1)
     assert(planned.head.isInstanceOf[BroadcastNestedLoopJoinExec])
     assert(planned.head.asInstanceOf[BroadcastNestedLoopJoinExec].buildSide == BuildRight)
+    assert(!canPlanAsBroadcastHashJoin(join, conf))
 
     val plannedWithHint = spark.sessionState.planner.JoinSelection(joinWithHint)
     assert(plannedWithHint.size == 1)
     assert(plannedWithHint.head.isInstanceOf[BroadcastNestedLoopJoinExec])
     assert(plannedWithHint.head.asInstanceOf[BroadcastNestedLoopJoinExec].buildSide == BuildLeft)
+    assert(!canPlanAsBroadcastHashJoin(joinWithHint, conf))
   }
 
   test("join operator selection") {
@@ -208,6 +202,16 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
 //      ("SELECT * FROM arrayData JOIN complexData ON data = a", classOf[ShuffledHashJoin])
 //    ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
 //  }
+
+  test("broadcastable join with shuffle join hint") {
+    spark.sharedState.cacheManager.clearCache()
+    sql("CACHE TABLE testData")
+    // Make sure it's planned as broadcast join without the hint.
+    assertJoin("SELECT * FROM testData JOIN testData2 ON key = a",
+      classOf[BroadcastHashJoinExec])
+    assertJoin("SELECT /*+ SHUFFLE_HASH(testData) */ * FROM testData JOIN testData2 ON key = a",
+      classOf[ShuffledHashJoinExec])
+  }
 
   test("broadcasted hash join operator selection") {
     spark.sharedState.cacheManager.clearCache()
@@ -593,10 +597,10 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
 
       assert(statisticSizeInByte(spark.table("testData2")) >
-        spark.conf.get[Long](SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
+        sqlConf.getConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
 
       assert(statisticSizeInByte(spark.table("testData")) <
-        spark.conf.get[Long](SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
+        sqlConf.getConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
 
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
@@ -1753,6 +1757,36 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       }.isEmpty, df.queryExecution)
     } finally {
       cached.unpersist()
+    }
+  }
+}
+
+class ThreadLeakInSortMergeJoinSuite
+  extends QueryTest
+    with SharedSparkSession
+    with AdaptiveSparkPlanHelper {
+
+  setupTestData()
+  override protected def createSparkSession: TestSparkSession = {
+    SparkSession.cleanupAnyExistingSession()
+    new TestSparkSession(
+      sparkConf.set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, 20))
+  }
+
+  test("SPARK-47146: thread leak when doing SortMergeJoin (with spill)") {
+
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1") {
+
+      assertSpilled(sparkContext, "inner join") {
+        sql("SELECT * FROM testData JOIN testData2 ON key = a").collect()
+      }
+
+      val readAheadThread = Thread.getAllStackTraces.keySet().asScala
+        .find {
+          _.getName.startsWith("read-ahead")
+        }
+      assert(readAheadThread.isEmpty)
     }
   }
 }

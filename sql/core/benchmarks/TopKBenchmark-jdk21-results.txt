@@ -2,21 +2,21 @@
 Top-K Computation
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 Benchmark Top-K:                                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------------------------
-ROW_NUMBER (PARTITION: , WindowGroupLimit: false)                        15323          15880         410          1.4         730.7       1.0X
-ROW_NUMBER (PARTITION: , WindowGroupLimit: true)                          2137           2317         149          9.8         101.9       7.2X
-ROW_NUMBER (PARTITION: PARTITION BY b, WindowGroupLimit: false)          17023          17196         133          1.2         811.7       0.9X
-ROW_NUMBER (PARTITION: PARTITION BY b, WindowGroupLimit: true)            8008           8175         124          2.6         381.8       1.9X
-RANK (PARTITION: , WindowGroupLimit: false)                              16566          17057         360          1.3         789.9       0.9X
-RANK (PARTITION: , WindowGroupLimit: true)                                5761           5973         221          3.6         274.7       2.7X
-RANK (PARTITION: PARTITION BY b, WindowGroupLimit: false)                18029          18380         196          1.2         859.7       0.8X
-RANK (PARTITION: PARTITION BY b, WindowGroupLimit: true)                  8000           8093          62          2.6         381.5       1.9X
-DENSE_RANK (PARTITION: , WindowGroupLimit: false)                        15961          16328         303          1.3         761.1       1.0X
-DENSE_RANK (PARTITION: , WindowGroupLimit: true)                          5544           5773         180          3.8         264.3       2.8X
-DENSE_RANK (PARTITION: PARTITION BY b, WindowGroupLimit: false)          17493          17796         178          1.2         834.1       0.9X
-DENSE_RANK (PARTITION: PARTITION BY b, WindowGroupLimit: true)            7890           8014          99          2.7         376.2       1.9X
+ROW_NUMBER (PARTITION: , WindowGroupLimit: false)                         9148           9493         278          2.3         436.2       1.0X
+ROW_NUMBER (PARTITION: , WindowGroupLimit: true)                          1698           1731          48         12.4          81.0       5.4X
+ROW_NUMBER (PARTITION: PARTITION BY b, WindowGroupLimit: false)          12103          12157          56          1.7         577.1       0.8X
+ROW_NUMBER (PARTITION: PARTITION BY b, WindowGroupLimit: true)            5049           5211          98          4.2         240.8       1.8X
+RANK (PARTITION: , WindowGroupLimit: false)                               9596           9842         149          2.2         457.6       1.0X
+RANK (PARTITION: , WindowGroupLimit: true)                                1896           2059         112         11.1          90.4       4.8X
+RANK (PARTITION: PARTITION BY b, WindowGroupLimit: false)                12338          12642         150          1.7         588.3       0.7X
+RANK (PARTITION: PARTITION BY b, WindowGroupLimit: true)                  4985           5179          95          4.2         237.7       1.8X
+DENSE_RANK (PARTITION: , WindowGroupLimit: false)                         9389           9628         171          2.2         447.7       1.0X
+DENSE_RANK (PARTITION: , WindowGroupLimit: true)                          1849           1900          71         11.3          88.2       4.9X
+DENSE_RANK (PARTITION: PARTITION BY b, WindowGroupLimit: false)          12027          12393         186          1.7         573.5       0.8X
+DENSE_RANK (PARTITION: PARTITION BY b, WindowGroupLimit: true)            5018           5083          47          4.2         239.3       1.8X
 
 

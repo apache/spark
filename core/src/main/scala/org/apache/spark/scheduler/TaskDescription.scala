@@ -23,11 +23,10 @@ import java.nio.charset.StandardCharsets
 import java.util.Properties
 
 import scala.collection.immutable
-import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
+import scala.collection.mutable.{HashMap, Map}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{JobArtifactSet, JobArtifactState}
-import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
 
 /**
@@ -57,7 +56,10 @@ private[spark] class TaskDescription(
     val artifacts: JobArtifactSet,
     val properties: Properties,
     val cpus: Int,
-    val resources: immutable.Map[String, ResourceInformation],
+    // resources is the total resources assigned to the task
+    // Eg, Map("gpu" -> Map("0" -> ResourceAmountUtils.toInternalResource(0.7))):
+    // assign 0.7 of the gpu address "0" to this task
+    val resources: immutable.Map[String, immutable.Map[String, Long]],
     val serializedTask: ByteBuffer) {
 
   assert(cpus > 0, "CPUs per task should be > 0")
@@ -74,14 +76,16 @@ private[spark] object TaskDescription {
     }
   }
 
-  private def serializeResources(map: immutable.Map[String, ResourceInformation],
+  private def serializeResources(map: immutable.Map[String, immutable.Map[String, Long]],
       dataOut: DataOutputStream): Unit = {
     dataOut.writeInt(map.size)
-    map.foreach { case (key, value) =>
-      dataOut.writeUTF(key)
-      dataOut.writeUTF(value.name)
-      dataOut.writeInt(value.addresses.length)
-      value.addresses.foreach(dataOut.writeUTF(_))
+    map.foreach { case (rName, addressAmountMap) =>
+      dataOut.writeUTF(rName)
+      dataOut.writeInt(addressAmountMap.size)
+      addressAmountMap.foreach { case (address, amount) =>
+        dataOut.writeUTF(address)
+        dataOut.writeLong(amount)
+      }
     }
   }
 
@@ -172,21 +176,22 @@ private[spark] object TaskDescription {
   }
 
   private def deserializeResources(dataIn: DataInputStream):
-      immutable.Map[String, ResourceInformation] = {
-    val map = new HashMap[String, ResourceInformation]()
+      immutable.Map[String, immutable.Map[String, Long]] = {
+    val map = new HashMap[String, immutable.Map[String, Long]]()
     val mapSize = dataIn.readInt()
     var i = 0
     while (i < mapSize) {
       val resType = dataIn.readUTF()
-      val name = dataIn.readUTF()
-      val numIdentifier = dataIn.readInt()
-      val identifiers = new ArrayBuffer[String](numIdentifier)
+      val addressAmountMap = new HashMap[String, Long]()
+      val addressAmountSize = dataIn.readInt()
       var j = 0
-      while (j < numIdentifier) {
-        identifiers += dataIn.readUTF()
+      while (j < addressAmountSize) {
+        val address = dataIn.readUTF()
+        val amount = dataIn.readLong()
+        addressAmountMap(address) = amount
         j += 1
       }
-      map(resType) = new ResourceInformation(name, identifiers.toArray)
+      map.put(resType, addressAmountMap.toMap)
       i += 1
     }
     map.toMap

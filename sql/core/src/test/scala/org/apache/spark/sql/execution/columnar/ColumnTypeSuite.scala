@@ -21,11 +21,12 @@ import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets
 import java.time.{Duration, Period}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.types.{PhysicalArrayType, PhysicalDataType, PhysicalMapType, PhysicalStructType}
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -40,7 +41,9 @@ class ColumnTypeSuite extends SparkFunSuite {
     val checks = Map(
       NULL -> 0, BOOLEAN -> 1, BYTE -> 1, SHORT -> 2, INT -> 4, LONG -> 8,
       FLOAT -> 4, DOUBLE -> 8, COMPACT_DECIMAL(15, 10) -> 8, LARGE_DECIMAL(20, 10) -> 12,
-      STRING -> 8, BINARY -> 16, STRUCT_TYPE -> 20, ARRAY_TYPE -> 28, MAP_TYPE -> 68,
+      STRING(StringType) -> 8, STRING(StringType("UTF8_LCASE")) -> 8,
+      STRING(StringType("UNICODE")) -> 8, STRING(StringType("UNICODE_CI")) -> 8,
+      BINARY -> 16, STRUCT_TYPE -> 20, ARRAY_TYPE -> 28, MAP_TYPE -> 68,
       CALENDAR_INTERVAL -> 16)
 
     checks.foreach { case (columnType, expectedSize) =>
@@ -73,7 +76,12 @@ class ColumnTypeSuite extends SparkFunSuite {
     checkActualSize(LONG, Long.MaxValue, 8)
     checkActualSize(FLOAT, Float.MaxValue, 4)
     checkActualSize(DOUBLE, Double.MaxValue, 8)
-    checkActualSize(STRING, "hello", 4 + "hello".getBytes(StandardCharsets.UTF_8).length)
+    Seq(
+      "UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI"
+    ).foreach(collation => {
+      checkActualSize(STRING(StringType(collation)),
+        "hello", 4 + "hello".getBytes(StandardCharsets.UTF_8).length)
+    })
     checkActualSize(BINARY, Array.fill[Byte](4)(0.toByte), 4 + 4)
     checkActualSize(COMPACT_DECIMAL(15, 10), Decimal(0, 15, 10), 8)
     checkActualSize(LARGE_DECIMAL(20, 10), Decimal(0, 20, 10), 5)
@@ -93,7 +101,10 @@ class ColumnTypeSuite extends SparkFunSuite {
   testNativeColumnType(FLOAT)
   testNativeColumnType(DOUBLE)
   testNativeColumnType(COMPACT_DECIMAL(15, 10))
-  testNativeColumnType(STRING)
+  testNativeColumnType(STRING(StringType)) // UTF8_BINARY
+  testNativeColumnType(STRING(StringType("UTF8_LCASE")))
+  testNativeColumnType(STRING(StringType("UNICODE")))
+  testNativeColumnType(STRING(StringType("UNICODE_CI")))
 
   testColumnType(NULL)
   testColumnType(BINARY)
@@ -104,11 +115,18 @@ class ColumnTypeSuite extends SparkFunSuite {
   testColumnType(CALENDAR_INTERVAL)
 
   def testNativeColumnType[T <: PhysicalDataType](columnType: NativeColumnType[T]): Unit = {
-    testColumnType[T#InternalType](columnType)
+    val typeName = columnType match {
+      case s: STRING =>
+        val collation = CollationFactory.fetchCollation(s.collationId).collationName
+        Some(if (collation == "UTF8_BINARY") "STRING" else s"STRING($collation)")
+      case _ => None
+    }
+    testColumnType[T#InternalType](columnType, typeName)
   }
 
-  def testColumnType[JvmType](columnType: ColumnType[JvmType]): Unit = {
-
+  def testColumnType[JvmType](
+      columnType: ColumnType[JvmType],
+      typeName: Option[String] = None): Unit = {
     val proj = UnsafeProjection.create(
       Array[DataType](ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType)))
     val converter = CatalystTypeConverters.createToScalaConverter(
@@ -116,8 +134,9 @@ class ColumnTypeSuite extends SparkFunSuite {
     val seq = (0 until 4).map(_ => proj(makeRandomRow(columnType)).copy())
     val totalSize = seq.map(_.getSizeInBytes).sum
     val bufferSize = Math.max(DEFAULT_BUFFER_SIZE, totalSize)
+    val testName = typeName.getOrElse(columnType.toString)
 
-    test(s"$columnType append/extract") {
+    test(s"$testName append/extract") {
       val buffer = ByteBuffer.allocate(bufferSize).order(ByteOrder.nativeOrder())
       seq.foreach(r => columnType.append(columnType.getField(r, 0), buffer))
 
@@ -163,10 +182,12 @@ class ColumnTypeSuite extends SparkFunSuite {
         override def typeName: String = "invalid type name"
     }
 
-    val message = intercept[java.lang.Exception] {
-      ColumnType(invalidType)
-    }.getMessage
-
-    assert(message.contains("Unsupported type: invalid type name"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        ColumnType(invalidType)
+      },
+      condition = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> "\"INVALID TYPE NAME\"")
+    )
   }
 }

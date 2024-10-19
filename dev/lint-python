@@ -18,7 +18,7 @@
 # define test binaries + versions
 FLAKE8_BUILD="flake8"
 MINIMUM_FLAKE8="3.9.0"
-MINIMUM_MYPY="0.920"
+MINIMUM_MYPY="1.8.0"
 MYPY_BUILD="mypy"
 PYTEST_BUILD="pytest"
 
@@ -84,7 +84,10 @@ function satisfies_min_version {
     local expected_version="$2"
     echo "$(
         "$PYTHON_EXECUTABLE" << EOM
-from setuptools.extern.packaging import version
+try:
+    from setuptools.extern.packaging import version
+except ModuleNotFoundError:
+    from packaging import version
 print(version.parse('$provided_version') >= version.parse('$expected_version'))
 EOM
     )"
@@ -122,6 +125,7 @@ function mypy_annotation_test {
 
     echo "starting mypy annotations test..."
     MYPY_REPORT=$( ($MYPY_BUILD \
+      --python-executable $PYTHON_EXECUTABLE \
       --namespace-packages \
       --config-file python/mypy.ini \
       --cache-dir /tmp/.mypy_cache/ \
@@ -181,6 +185,7 @@ function mypy_examples_test {
     echo "starting mypy examples test..."
 
     MYPY_REPORT=$( (MYPYPATH=python $MYPY_BUILD \
+      --python-executable $PYTHON_EXECUTABLE \
       --namespace-packages \
       --config-file python/mypy.ini \
       --exclude "mllib/*" \
@@ -278,7 +283,7 @@ function black_test {
     fi
 
     echo "starting black test..."
-    BLACK_REPORT=$( ($BLACK_BUILD  --config dev/pyproject.toml --check python/pyspark dev python/setup.py) 2>&1)
+    BLACK_REPORT=$( ($BLACK_BUILD  --config dev/pyproject.toml --check python/pyspark dev python/packaging) 2>&1)
     BLACK_STATUS=$?
 
     if [ "$BLACK_STATUS" -ne 0 ]; then

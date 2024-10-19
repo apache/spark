@@ -16,13 +16,14 @@
 #
 
 import sys
-from typing import Any, Optional, Union
-
-from py4j.java_gateway import JavaObject
+from typing import Any, Dict, Optional, Union, TYPE_CHECKING
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.errors import PySparkTypeError
+
+if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
 
 
 class RuntimeConfig:
@@ -34,7 +35,7 @@ class RuntimeConfig:
         Supports Spark Connect.
     """
 
-    def __init__(self, jconf: JavaObject) -> None:
+    def __init__(self, jconf: "JavaObject") -> None:
         """Create a new RuntimeConfig that wraps the underlying JVM object."""
         self._jconf = jconf
 
@@ -93,6 +94,20 @@ class RuntimeConfig:
                 self._check_type(default, "default")
             return self._jconf.get(key, default)
 
+    @property
+    def getAll(self) -> Dict[str, str]:
+        """
+        Returns all properties set in this conf.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        dict
+            A dictionary containing all properties set in this conf.
+        """
+        return dict(self._jconf.getAllAsJava())
+
     def unset(self, key: str) -> None:
         """
         Resets the configuration property for the given key.
@@ -121,8 +136,8 @@ class RuntimeConfig:
         """Assert that an object is of type str."""
         if not isinstance(obj, str):
             raise PySparkTypeError(
-                error_class="NOT_STR",
-                message_parameters={
+                errorClass="NOT_STR",
+                messageParameters={
                     "arg_name": identifier,
                     "arg_type": type(obj).__name__,
                 },

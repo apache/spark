@@ -18,8 +18,8 @@
 package org.apache.spark.deploy.master.ui
 
 import java.util.Date
-import javax.servlet.http.HttpServletRequest
 
+import jakarta.servlet.http.HttpServletRequest
 import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.SparkFunSuite
@@ -36,13 +36,16 @@ class ApplicationPageSuite extends SparkFunSuite {
 
   private val rp = new ResourceProfile(Map.empty, Map.empty)
   private val desc = ApplicationDescription("name", Some(4), null, "appUiUrl", rp)
+  private val descWithoutUI = ApplicationDescription("name", Some(4), null, "", rp)
   private val appFinished = new ApplicationInfo(0, "app-finished", desc, new Date, null, 1)
   appFinished.markFinished(ApplicationState.FINISHED)
   private val appLive = new ApplicationInfo(0, "app-live", desc, new Date, null, 1)
+  private val appLiveWithoutUI =
+    new ApplicationInfo(0, "app-live-without-ui", descWithoutUI, new Date, null, 1)
 
   private val state = mock(classOf[MasterStateResponse])
   when(state.completedApps).thenReturn(Array(appFinished))
-  when(state.activeApps).thenReturn(Array(appLive))
+  when(state.activeApps).thenReturn(Array(appLive, appLiveWithoutUI))
 
   private val rpc = mock(classOf[RpcEndpointRef])
   when(rpc.askSync[MasterStateResponse](RequestMasterState)).thenReturn(state)
@@ -57,6 +60,16 @@ class ApplicationPageSuite extends SparkFunSuite {
 
     val result = new ApplicationPage(masterWebUI).render(request).toString()
     assert(result.contains("Application Detail UI"))
+    assert(!result.contains("Application History UI"))
+    assert(!result.contains(master.historyServerUrl.get))
+  }
+
+  test("SPARK-50021: Application Detail UI is empty when spark.ui.enabled=false") {
+    val request = mock(classOf[HttpServletRequest])
+    when(request.getParameter("appId")).thenReturn("app-live-without-ui")
+
+    val result = new ApplicationPage(masterWebUI).render(request).toString()
+    assert(result.contains("Application UI:</strong> Disabled"))
     assert(!result.contains("Application History UI"))
     assert(!result.contains(master.historyServerUrl.get))
   }

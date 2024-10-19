@@ -20,12 +20,14 @@ package org.apache.spark.sql.execution.streaming
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CONFIG, DEFAULT_VALUE, NEW_VALUE, OLD_VALUE, TIP}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
 import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExecHelper, StreamingAggregationStateManager, SymmetricHashJoinStateManager}
-import org.apache.spark.sql.internal.SQLConf.{FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION, _}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf._
 
 
 /**
@@ -99,7 +101,9 @@ object OffsetSeqMetadata extends Logging {
     SHUFFLE_PARTITIONS, STATE_STORE_PROVIDER_CLASS, STREAMING_MULTIPLE_WATERMARK_POLICY,
     FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION, STREAMING_AGGREGATION_STATE_FORMAT_VERSION,
     STREAMING_JOIN_STATE_FORMAT_VERSION, STATE_STORE_COMPRESSION_CODEC,
-    STATE_STORE_ROCKSDB_FORMAT_VERSION, STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION)
+    STATE_STORE_ROCKSDB_FORMAT_VERSION, STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION,
+    PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN
+  )
 
   /**
    * Default values of relevant configurations that are used for backward compatibility.
@@ -120,7 +124,8 @@ object OffsetSeqMetadata extends Logging {
     STREAMING_JOIN_STATE_FORMAT_VERSION.key ->
       SymmetricHashJoinStateManager.legacyVersion.toString,
     STATE_STORE_COMPRESSION_CODEC.key -> CompressionCodec.LZ4,
-    STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION.key -> "false"
+    STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION.key -> "false",
+    PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key -> "true"
   )
 
   def apply(json: String): OffsetSeqMetadata = Serialization.read[OffsetSeqMetadata](json)
@@ -134,19 +139,21 @@ object OffsetSeqMetadata extends Logging {
   }
 
   /** Set the SparkSession configuration with the values in the metadata */
-  def setSessionConf(metadata: OffsetSeqMetadata, sessionConf: RuntimeConfig): Unit = {
+  def setSessionConf(metadata: OffsetSeqMetadata, sessionConf: SQLConf): Unit = {
+    val configs = sessionConf.getAllConfs
     OffsetSeqMetadata.relevantSQLConfs.map(_.key).foreach { confKey =>
 
       metadata.conf.get(confKey) match {
 
         case Some(valueInMetadata) =>
           // Config value exists in the metadata, update the session config with this value
-          val optionalValueInSession = sessionConf.getOption(confKey)
-          if (optionalValueInSession.isDefined && optionalValueInSession.get != valueInMetadata) {
-            logWarning(s"Updating the value of conf '$confKey' in current session from " +
-              s"'${optionalValueInSession.get}' to '$valueInMetadata'.")
+          val optionalValueInSession = sessionConf.getConfString(confKey, null)
+          if (optionalValueInSession != null && optionalValueInSession != valueInMetadata) {
+            logWarning(log"Updating the value of conf '${MDC(CONFIG, confKey)}' in current " +
+              log"session from '${MDC(OLD_VALUE, optionalValueInSession)}' " +
+              log"to '${MDC(NEW_VALUE, valueInMetadata)}'.")
           }
-          sessionConf.set(confKey, valueInMetadata)
+          sessionConf.setConfString(confKey, valueInMetadata)
 
         case None =>
           // For backward compatibility, if a config was not recorded in the offset log,
@@ -155,15 +162,19 @@ object OffsetSeqMetadata extends Logging {
           relevantSQLConfDefaultValues.get(confKey) match {
 
             case Some(defaultValue) =>
-              sessionConf.set(confKey, defaultValue)
-              logWarning(s"Conf '$confKey' was not found in the offset log, " +
-                s"using default value '$defaultValue'")
+              sessionConf.setConfString(confKey, defaultValue)
+              logWarning(log"Conf '${MDC(CONFIG, confKey)}' was not found in the offset log, " +
+                log"using default value '${MDC(DEFAULT_VALUE, defaultValue)}'")
 
             case None =>
-              val valueStr = sessionConf.getOption(confKey).map { v =>
-                s" Using existing session conf value '$v'."
-              }.getOrElse { " No value set in session conf." }
-              logWarning(s"Conf '$confKey' was not found in the offset log. $valueStr")
+              val value = sessionConf.getConfString(confKey, null)
+              val valueStr = if (value != null) {
+                s" Using existing session conf value '$value'."
+              } else {
+                " No value set in session conf."
+              }
+              logWarning(log"Conf '${MDC(CONFIG, confKey)}' was not found in the offset log. " +
+                log"${MDC(TIP, valueStr)}")
 
           }
       }

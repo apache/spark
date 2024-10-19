@@ -62,8 +62,15 @@ SET TIME ZONE 'invalid/zone'
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-'invalid/zone' in spark.sql.session.timeZone is invalid. Cannot resolve the given timezone with ZoneId.of(_, ZoneId.SHORT_IDS)
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_CONF_VALUE.TIME_ZONE",
+  "sqlState" : "22022",
+  "messageParameters" : {
+    "confName" : "spark.sql.session.timeZone",
+    "confValue" : "invalid/zone"
+  }
+}
 
 
 -- !query
@@ -73,7 +80,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0044",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
+  "sqlState" : "22006",
+  "messageParameters" : {
+    "input" : "3"
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -91,7 +102,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0044",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
+  "sqlState" : "22006",
+  "messageParameters" : {
+    "input" : "24"
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -109,7 +124,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0044",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
+  "sqlState" : "22006",
+  "messageParameters" : {
+    "input" : "19"
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -145,7 +164,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0044",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
+  "sqlState" : "22006",
+  "messageParameters" : {
+    "input" : "36000"
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

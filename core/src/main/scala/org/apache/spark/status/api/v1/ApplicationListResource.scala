@@ -17,8 +17,9 @@
 package org.apache.spark.status.api.v1
 
 import java.util.{List => JList}
-import javax.ws.rs.{DefaultValue, GET, Produces, QueryParam}
-import javax.ws.rs.core.MediaType
+
+import jakarta.ws.rs.{DefaultValue, GET, Produces, QueryParam}
+import jakarta.ws.rs.core.MediaType
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class ApplicationListResource extends ApiRequestContext {

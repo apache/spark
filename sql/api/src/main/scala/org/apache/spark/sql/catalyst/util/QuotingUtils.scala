@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.util
 
+import java.util.regex.Pattern
+
 import org.apache.spark.sql.connector.catalog.Identifier
 
 object QuotingUtils {
@@ -41,11 +43,13 @@ object QuotingUtils {
     name.map(part => quoteIdentifier(part)).mkString(".")
   }
 
+  private val validIdentPattern = Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]*")
+
   def quoteIfNeeded(part: String): String = {
-    if (part.matches("[a-zA-Z0-9_]+") && !part.matches("\\d+")) {
+    if (validIdentPattern.matcher(part).matches()) {
       part
     } else {
-      s"`${part.replace("`", "``")}`"
+      quoteIdentifier(part)
     }
   }
 

@@ -22,27 +22,35 @@ from pyspark.errors import PySparkImportError, PySparkRuntimeError
 def require_minimum_pandas_version() -> None:
     """Raise ImportError if minimum version of Pandas is not installed"""
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
-    minimum_pandas_version = "1.4.4"
+    minimum_pandas_version = "2.0.0"
 
     try:
         import pandas
 
-        have_pandas = True
+        # Even if pandas is deleted, if the pandas extension package (e.g. pandas-stubs) is still
+        # installed, the pandas path will not be completely deleted.
+        # Therefore, even if the import is successful, additional check is required here to verify
+        # that pandas is actually installed properly.
+        if hasattr(pandas, "__version__"):
+            have_pandas = True
+        else:
+            have_pandas = False
+            raised_error = None
     except ImportError as error:
         have_pandas = False
         raised_error = error
     if not have_pandas:
         raise PySparkImportError(
-            error_class="PACKAGE_NOT_INSTALLED",
-            message_parameters={
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={
                 "package_name": "Pandas",
                 "minimum_version": str(minimum_pandas_version),
             },
         ) from raised_error
     if LooseVersion(pandas.__version__) < LooseVersion(minimum_pandas_version):
         raise PySparkImportError(
-            error_class="UNSUPPORTED_PACKAGE_VERSION",
-            message_parameters={
+            errorClass="UNSUPPORTED_PACKAGE_VERSION",
+            messageParameters={
                 "package_name": "Pandas",
                 "minimum_version": str(minimum_pandas_version),
                 "current_version": str(pandas.__version__),
@@ -53,7 +61,7 @@ def require_minimum_pandas_version() -> None:
 def require_minimum_pyarrow_version() -> None:
     """Raise ImportError if minimum version of pyarrow is not installed"""
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
-    minimum_pyarrow_version = "4.0.0"
+    minimum_pyarrow_version = "10.0.0"
 
     import os
 
@@ -66,16 +74,16 @@ def require_minimum_pyarrow_version() -> None:
         raised_error = error
     if not have_arrow:
         raise PySparkImportError(
-            error_class="PACKAGE_NOT_INSTALLED",
-            message_parameters={
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={
                 "package_name": "PyArrow",
                 "minimum_version": str(minimum_pyarrow_version),
             },
         ) from raised_error
     if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
         raise PySparkImportError(
-            error_class="UNSUPPORTED_PACKAGE_VERSION",
-            message_parameters={
+            errorClass="UNSUPPORTED_PACKAGE_VERSION",
+            messageParameters={
                 "package_name": "PyArrow",
                 "minimum_version": str(minimum_pyarrow_version),
                 "current_version": str(pyarrow.__version__),
@@ -83,6 +91,6 @@ def require_minimum_pyarrow_version() -> None:
         )
     if os.environ.get("ARROW_PRE_0_15_IPC_FORMAT", "0") == "1":
         raise PySparkRuntimeError(
-            error_class="ARROW_LEGACY_IPC_FORMAT",
-            message_parameters={},
+            errorClass="ARROW_LEGACY_IPC_FORMAT",
+            messageParameters={},
         )

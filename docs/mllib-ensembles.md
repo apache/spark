@@ -29,7 +29,7 @@ Both use [decision trees](mllib-decision-tree.html) as their base models.
 
 ## Gradient-Boosted Trees vs. Random Forests
 
-Both [Gradient-Boosted Trees (GBTs)](mllib-ensembles.html#Gradient-Boosted-Trees-(GBTS)) and [Random Forests](mllib-ensembles.html#Random-Forests) are algorithms for learning ensembles of trees, but the training processes are different.  There are several practical trade-offs:
+Both [Gradient-Boosted Trees (GBTs)](mllib-ensembles.html#gradient-boosted-trees-gbts) and [Random Forests](mllib-ensembles.html#random-forests) are algorithms for learning ensembles of trees, but the training processes are different.  There are several practical trade-offs:
 
  * GBTs train one tree at a time, so they can take longer to train than random forests.  Random Forests can train multiple trees in parallel.
    * On the other hand, it is often reasonable to use smaller (shallower) trees with GBTs than with Random Forests, and training smaller trees takes less time.
@@ -175,7 +175,7 @@ using both continuous and categorical features.
 `spark.mllib` implements GBTs using the existing [decision tree](mllib-decision-tree.html) implementation.  Please see the decision tree guide for more information on trees.
 
 *Note*: GBTs do not yet support multiclass classification.  For multiclass problems, please use
-[decision trees](mllib-decision-tree.html) or [Random Forests](mllib-ensembles.html#Random-Forest).
+[decision trees](mllib-decision-tree.html) or [Random Forests](mllib-ensembles.html#random-forests).
 
 ### Basic algorithm
 

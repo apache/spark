@@ -21,17 +21,20 @@ import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -43,8 +46,8 @@ import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata, WatermarkPropagator}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.util.{LazyTry, Utils}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.Utils
 
 /**
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy
@@ -57,7 +60,8 @@ class QueryExecution(
     val sparkSession: SparkSession,
     val logical: LogicalPlan,
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
-    val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL) extends Logging {
+    val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
+    val shuffleCleanupMode: ShuffleCleanupMode = DoNotCleanup) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
 
@@ -82,7 +86,7 @@ class QueryExecution(
     }
   }
 
-  lazy val analyzed: LogicalPlan = {
+  private val lazyAnalyzed = LazyTry {
     val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
       // We can't clone `logical` here, which will reset the `_analyzed` flag.
       sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
@@ -91,11 +95,17 @@ class QueryExecution(
     plan
   }
 
-  lazy val commandExecuted: LogicalPlan = mode match {
-    case CommandExecutionMode.NON_ROOT => analyzed.mapChildren(eagerlyExecuteCommands)
-    case CommandExecutionMode.ALL => eagerlyExecuteCommands(analyzed)
-    case CommandExecutionMode.SKIP => analyzed
+  def analyzed: LogicalPlan = lazyAnalyzed.get
+
+  private val lazyCommandExecuted = LazyTry {
+    mode match {
+      case CommandExecutionMode.NON_ROOT => analyzed.mapChildren(eagerlyExecuteCommands)
+      case CommandExecutionMode.ALL => eagerlyExecuteCommands(analyzed)
+      case CommandExecutionMode.SKIP => analyzed
+    }
   }
+
+  def commandExecuted: LogicalPlan = lazyCommandExecuted.get
 
   private def commandExecutionName(command: Command): String = command match {
     case _: CreateTableAsSelect => "create"
@@ -106,53 +116,59 @@ class QueryExecution(
     case _ => "command"
   }
 
-  private def eagerlyExecuteCommands(p: LogicalPlan) = p transformDown {
-    case c: Command =>
+  private def eagerlyExecuteCommands(p: LogicalPlan) = {
+    def eagerlyExecute(
+        p: LogicalPlan,
+        name: String,
+        mode: CommandExecutionMode.Value): LogicalPlan = {
       // Since Command execution will eagerly take place here,
       // and in most cases be the bulk of time and effort,
       // with the rest of processing of the root plan being just outputting command results,
       // for eagerly executed commands we mark this place as beginning of execution.
       tracker.setReadyForExecution()
-      val qe = sparkSession.sessionState.executePlan(c, CommandExecutionMode.NON_ROOT)
-      val result = SQLExecution.withNewExecutionId(qe, Some(commandExecutionName(c))) {
-        qe.executedPlan.executeCollect()
+      val qe = sparkSession.sessionState.executePlan(p, mode)
+      val result = QueryExecution.withInternalError(s"Eagerly executed $name failed.") {
+        SQLExecution.withNewExecutionId(qe, Some(name)) {
+          qe.executedPlan.executeCollect()
+        }
       }
       CommandResult(
         qe.analyzed.output,
         qe.commandExecuted,
         qe.executedPlan,
         result.toImmutableArraySeq)
-    case other => other
-  }
-
-  // The plan that has been normalized by custom rules, so that it's more likely to hit cache.
-  lazy val normalized: LogicalPlan = {
-    val normalizationRules = sparkSession.sessionState.planNormalizationRules
-    if (normalizationRules.isEmpty) {
-      commandExecuted
-    } else {
-      val planChangeLogger = new PlanChangeLogger[LogicalPlan]()
-      val normalized = normalizationRules.foldLeft(commandExecuted) { (p, rule) =>
-        val result = rule.apply(p)
-        planChangeLogger.logRule(rule.ruleName, p, result)
-        result
-      }
-      planChangeLogger.logBatch("Plan Normalization", commandExecuted, normalized)
-      normalized
+    }
+    p transformDown {
+      case u @ Union(children, _, _) if children.forall(_.isInstanceOf[Command]) =>
+        eagerlyExecute(u, "multi-commands", CommandExecutionMode.SKIP)
+      case c: Command =>
+        val name = commandExecutionName(c)
+        eagerlyExecute(c, name, CommandExecutionMode.NON_ROOT)
     }
   }
 
-  lazy val withCachedData: LogicalPlan = sparkSession.withActive {
-    assertAnalyzed()
-    assertSupported()
-    // clone the plan to avoid sharing the plan instance between different stages like analyzing,
-    // optimizing and planning.
-    sparkSession.sharedState.cacheManager.useCachedData(normalized.clone())
+  private val lazyNormalized = LazyTry {
+    QueryExecution.normalize(sparkSession, commandExecuted, Some(tracker))
   }
+
+  // The plan that has been normalized by custom rules, so that it's more likely to hit cache.
+  def normalized: LogicalPlan = lazyNormalized.get
+
+  private val lazyWithCachedData = LazyTry {
+    sparkSession.withActive {
+      assertAnalyzed()
+      assertSupported()
+      // clone the plan to avoid sharing the plan instance between different stages like analyzing,
+      // optimizing and planning.
+      sparkSession.sharedState.cacheManager.useCachedData(normalized.clone())
+    }
+  }
+
+  def withCachedData: LogicalPlan = lazyWithCachedData.get
 
   def assertCommandExecuted(): Unit = commandExecuted
 
-  lazy val optimizedPlan: LogicalPlan = {
+  private val lazyOptimizedPlan = LazyTry {
     // We need to materialize the commandExecuted here because optimizedPlan is also tracked under
     // the optimizing phase
     assertCommandExecuted()
@@ -170,9 +186,11 @@ class QueryExecution(
     }
   }
 
+  def optimizedPlan: LogicalPlan = lazyOptimizedPlan.get
+
   def assertOptimized(): Unit = optimizedPlan
 
-  lazy val sparkPlan: SparkPlan = {
+  private val lazySparkPlan = LazyTry {
     // We need to materialize the optimizedPlan here because sparkPlan is also tracked under
     // the planning phase
     assertOptimized()
@@ -183,11 +201,11 @@ class QueryExecution(
     }
   }
 
+  def sparkPlan: SparkPlan = lazySparkPlan.get
+
   def assertSparkPlanPrepared(): Unit = sparkPlan
 
-  // executedPlan should not be used to initialize any SparkPlan. It should be
-  // only used for execution.
-  lazy val executedPlan: SparkPlan = {
+  private val lazyExecutedPlan = LazyTry {
     // We need to materialize the optimizedPlan here, before tracking the planning phase, to ensure
     // that the optimization time is not counted as part of the planning phase.
     assertOptimized()
@@ -202,7 +220,15 @@ class QueryExecution(
     plan
   }
 
+  // executedPlan should not be used to initialize any SparkPlan. It should be
+  // only used for execution.
+  def executedPlan: SparkPlan = lazyExecutedPlan.get
+
   def assertExecutedPlanPrepared(): Unit = executedPlan
+
+  val lazyToRdd = LazyTry {
+    new SQLExecutionRDD(executedPlan.execute(), sparkSession.sessionState.conf)
+  }
 
   /**
    * Internal version of the RDD. Avoids copies and has no schema.
@@ -214,11 +240,10 @@ class QueryExecution(
    * Given QueryExecution is not a public class, end users are discouraged to use this: please
    * use `Dataset.rdd` instead where conversion will be applied.
    */
-  lazy val toRdd: RDD[InternalRow] = new SQLExecutionRDD(
-    executedPlan.execute(), sparkSession.sessionState.conf)
+  def toRdd: RDD[InternalRow] = lazyToRdd.get
 
   /** Get the metrics observed during the execution of the query plan. */
-  def observedMetrics: Map[String, Row] = CollectMetricsExec.collect(executedPlan)
+  def observedMetrics: Map[String, Row] = CollectMetricsExec.collect(executedPlan, Some(analyzed))
 
   protected def preparations: Seq[Rule[SparkPlan]] = {
     QueryExecution.preparations(sparkSession,
@@ -255,6 +280,7 @@ class QueryExecution(
       QueryPlan.append(executedPlan,
         append, verbose = false, addSuffix = false, maxFields = maxFields)
     }
+    extendedExplainInfo(append, executedPlan)
     append("\n")
   }
 
@@ -314,6 +340,7 @@ class QueryExecution(
       QueryPlan.append(optimizedPlan, append, verbose, addSuffix, maxFields)
       append("\n== Physical Plan ==\n")
       QueryPlan.append(executedPlan, append, verbose, addSuffix, maxFields)
+      extendedExplainInfo(append, executedPlan)
     } catch {
       case e: AnalysisException => append(e.toString)
     }
@@ -364,6 +391,24 @@ class QueryExecution(
    */
   private def withRedaction(message: String): String = {
     Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, message)
+  }
+
+  def extendedExplainInfo(append: String => Unit, plan: SparkPlan): Unit = {
+    val generators = sparkSession.sessionState.conf.getConf(SQLConf.EXTENDED_EXPLAIN_PROVIDERS)
+      .getOrElse(Seq.empty)
+    val extensions = Utils.loadExtensions(classOf[ExtendedExplainGenerator],
+      generators,
+      sparkSession.sparkContext.conf)
+    if (extensions.nonEmpty) {
+      extensions.foreach(extension =>
+        try {
+          append(s"\n== Extended Information (${extension.title}) ==\n")
+          append(extension.generateExtendedInfo(plan))
+        } catch {
+          case NonFatal(e) => logWarning(log"Cannot use " +
+            log"${MDC(EXTENDED_EXPLAIN_GENERATOR, extension)} to get extended information.", e)
+        })
+    }
   }
 
   /** A special namespace for commands that can be used to debug query execution. */
@@ -432,6 +477,22 @@ class QueryExecution(
 object CommandExecutionMode extends Enumeration {
   val SKIP, NON_ROOT, ALL = Value
 }
+
+/**
+ * Modes for shuffle dependency cleanup.
+ *
+ * DoNotCleanup: Do not perform any cleanup.
+ * SkipMigration: Shuffle dependencies will not be migrated at node decommissions.
+ * RemoveShuffleFiles: Shuffle dependency files are removed at the end of SQL executions.
+ */
+sealed trait ShuffleCleanupMode
+
+case object DoNotCleanup extends ShuffleCleanupMode
+
+case object SkipMigration extends ShuffleCleanupMode
+
+case object RemoveShuffleFiles extends ShuffleCleanupMode
+
 
 object QueryExecution {
   private val _nextExecutionId = new AtomicLong(0)
@@ -537,26 +598,60 @@ object QueryExecution {
   }
 
   /**
-   * Converts asserts, null pointer exceptions to internal errors.
+   * Marks null pointer exceptions, asserts and scala match errors as internal errors
    */
-  private[sql] def toInternalError(msg: String, e: Throwable): Throwable = e match {
-    case e @ (_: java.lang.NullPointerException | _: java.lang.AssertionError) =>
+  private[sql] def isInternalError(e: Throwable): Boolean = e match {
+    case _: java.lang.NullPointerException => true
+    case _: java.lang.AssertionError => true
+    case _: scala.MatchError => true
+    case _ => false
+  }
+
+  /**
+   * Converts marked exceptions from [[isInternalError]] to internal errors.
+   */
+  private[sql] def toInternalError(msg: String, e: Throwable): Throwable = {
+    if (isInternalError(e)) {
       SparkException.internalError(
         msg + " You hit a bug in Spark or the Spark plugins you use. Please, report this bug " +
           "to the corresponding communities or vendors, and provide the full stack trace.",
         e)
-    case e: Throwable =>
+    } else {
       e
+    }
   }
 
   /**
-   * Catches asserts, null pointer exceptions, and converts them to internal errors.
+   * Catches marked exceptions from [[isInternalError]], and converts them to internal errors.
    */
   private[sql] def withInternalError[T](msg: String)(block: => T): T = {
     try {
       block
     } catch {
       case e: Throwable => throw toInternalError(msg, e)
+    }
+  }
+
+  def normalize(
+      session: SparkSession,
+      plan: LogicalPlan,
+      tracker: Option[QueryPlanningTracker] = None): LogicalPlan = {
+    val normalizationRules = session.sessionState.planNormalizationRules
+    if (normalizationRules.isEmpty) {
+      plan
+    } else {
+      val planChangeLogger = new PlanChangeLogger[LogicalPlan]()
+      val normalized = normalizationRules.foldLeft(plan) { (p, rule) =>
+        val startTime = System.nanoTime()
+        val result = rule.apply(p)
+        val runTime = System.nanoTime() - startTime
+        val effective = !result.fastEquals(p)
+        tracker.foreach(_.recordRuleInvocation(rule.ruleName, runTime, effective))
+        planChangeLogger.logRule(rule.ruleName, p, result)
+        result
+      }
+      planChangeLogger.logBatch("Plan Normalization", plan, normalized)
+      normalized
     }
   }
 }

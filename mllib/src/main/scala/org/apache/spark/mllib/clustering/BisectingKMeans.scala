@@ -24,7 +24,8 @@ import scala.collection.mutable
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CLUSTER_LEVEL, COST, DIVISIBLE_CLUSTER_INDICES_SIZE, FEATURE_DIMENSION, MIN_POINT_PER_CLUSTER, NUM_POINT}
 import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.axpy
@@ -158,7 +159,7 @@ class BisectingKMeans private (
       handlePersistence: Boolean,
       instr: Option[Instrumentation]): BisectingKMeansModel = {
     val d = instances.map(_._1.size).first()
-    logInfo(s"Feature dimension: $d.")
+    logInfo(log"Feature dimension: ${MDC(FEATURE_DIMENSION, d)}.")
 
     val dMeasure = DistanceMeasure.decodeFromString(this.distanceMeasure)
     val norms = instances.map(d => Vectors.norm(d._1, 2.0))
@@ -178,14 +179,15 @@ class BisectingKMeans private (
     instr.foreach(_.logSumOfWeights(activeClusters.values.map(_.weightSum).sum))
     val rootSummary = activeClusters(ROOT_INDEX)
     val n = rootSummary.size
-    logInfo(s"Number of points: $n.")
-    logInfo(s"Initial cost: ${rootSummary.cost}.")
+    logInfo(log"Number of points: ${MDC(NUM_POINT, n)}.")
+    logInfo(log"Initial cost: ${MDC(COST, rootSummary.cost)}.")
     val minSize = if (minDivisibleClusterSize >= 1.0) {
       math.ceil(minDivisibleClusterSize).toLong
     } else {
       math.ceil(minDivisibleClusterSize * n).toLong
     }
-    logInfo(s"The minimum number of points of a divisible cluster is $minSize.")
+    logInfo(log"The minimum number of points of a divisible cluster is " +
+      log"${MDC(MIN_POINT_PER_CLUSTER, minSize)}.")
     var inactiveClusters = mutable.Seq.empty[(Long, ClusterSummary)]
     val random = new Random(seed)
     var numLeafClustersNeeded = k - 1
@@ -206,7 +208,8 @@ class BisectingKMeans private (
       }
       if (divisibleClusters.nonEmpty) {
         val divisibleIndices = divisibleClusters.keys.toSet
-        logInfo(s"Dividing ${divisibleIndices.size} clusters on level $level.")
+        logInfo(log"Dividing ${MDC(DIVISIBLE_CLUSTER_INDICES_SIZE, divisibleIndices.size)}" +
+          log" clusters on level ${MDC(CLUSTER_LEVEL, level)}.")
         var newClusterCenters = divisibleClusters.flatMap { case (index, summary) =>
           val (left, right) = splitCenter(summary.center, random, dMeasure)
           Iterator((leftChildIndex(index), left), (rightChildIndex(index), right))
@@ -233,7 +236,8 @@ class BisectingKMeans private (
         activeClusters = newClusters
         numLeafClustersNeeded -= divisibleClusters.size
       } else {
-        logInfo(s"None active and divisible clusters left on level $level. Stop iterations.")
+        logInfo(log"None active and divisible clusters left " +
+          log"on level ${MDC(CLUSTER_LEVEL, level)}. Stop iterations.")
         inactiveClusters ++= activeClusters
         activeClusters = Map.empty
       }

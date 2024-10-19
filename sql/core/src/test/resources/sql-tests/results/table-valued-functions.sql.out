@@ -112,7 +112,7 @@ org.apache.spark.sql.AnalysisException
     "functionName" : "`range`",
     "inputSql" : "\"NULL\"",
     "inputType" : "\"VOID\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "\"BIGINT\""
   },
   "queryContext" : [ {
@@ -138,7 +138,7 @@ org.apache.spark.sql.AnalysisException
     "functionName" : "`range`",
     "inputSql" : "\"array(1, 2, 3)\"",
     "inputType" : "\"ARRAY<INT>\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "\"BIGINT\""
   },
   "queryContext" : [ {
@@ -189,6 +189,54 @@ struct<i:bigint>
 -- !query output
 0
 1
+
+
+-- !query
+select * from range(0, (select 1))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "sqlState" : "42K08",
+  "messageParameters" : {
+    "funcName" : "`range`",
+    "paramName" : "`end`",
+    "paramType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 34,
+    "fragment" : "range(0, (select 1))"
+  } ]
+}
+
+
+-- !query
+select * from values (0, 1) t(c1, c2), lateral range(0, c2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "sqlState" : "42K08",
+  "messageParameters" : {
+    "funcName" : "`range`",
+    "paramName" : "`end`",
+    "paramType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 48,
+    "stopIndex" : 59,
+    "fragment" : "range(0, c2)"
+  } ]
+}
 
 
 -- !query
@@ -263,7 +311,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"NULL\"",
     "inputType" : "\"VOID\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "(\"ARRAY\" or \"MAP\")",
     "sqlExpr" : "\"explode(NULL)\""
   },
@@ -289,7 +337,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"NULL\"",
     "inputType" : "\"VOID\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "(\"ARRAY\" or \"MAP\")",
     "sqlExpr" : "\"explode(NULL)\""
   },
@@ -315,7 +363,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "(\"ARRAY\" or \"MAP\")",
     "sqlExpr" : "\"explode(1)\""
   },
@@ -492,7 +540,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"NULL\"",
     "inputType" : "\"VOID\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"ARRAY<STRUCT>\"",
     "sqlExpr" : "\"inline(NULL)\""
   },
@@ -611,7 +659,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "(\"ARRAY\" or \"MAP\")",
     "sqlExpr" : "\"posexplode(1)\""
   },

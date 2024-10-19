@@ -20,7 +20,7 @@ import unittest
 from typing import Optional
 
 from pyspark import InheritableThread, inheritable_thread_target
-from pyspark.sql.connect.client import ChannelBuilder
+from pyspark.sql.connect.client import DefaultChannelBuilder
 from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 from pyspark.testing.connectutils import should_test_connect
 
@@ -28,7 +28,7 @@ if should_test_connect:
     from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class CustomChannelBuilder(ChannelBuilder):
+class CustomChannelBuilder(DefaultChannelBuilder):
     @property
     def userId(self) -> Optional[str]:
         return "abc"
@@ -77,6 +77,34 @@ class SparkSessionTestCase(unittest.TestCase):
         self.assertIs(session, session2)
         session.stop()
 
+    def test_active_session_expires_when_client_closes(self):
+        s1 = RemoteSparkSession.builder.remote("sc://other").getOrCreate()
+        s2 = RemoteSparkSession.getActiveSession()
+
+        self.assertIs(s1, s2)
+
+        # We don't call close() to avoid executing ExecutePlanResponseReattachableIterator
+        s1._client._closed = True
+
+        self.assertIsNone(RemoteSparkSession.getActiveSession())
+        s3 = RemoteSparkSession.builder.remote("sc://other").getOrCreate()
+
+        self.assertIsNot(s1, s3)
+
+    def test_default_session_expires_when_client_closes(self):
+        s1 = RemoteSparkSession.builder.remote("sc://other").getOrCreate()
+        s2 = RemoteSparkSession.getDefaultSession()
+
+        self.assertIs(s1, s2)
+
+        # We don't call close() to avoid executing ExecutePlanResponseReattachableIterator
+        s1._client._closed = True
+
+        self.assertIsNone(RemoteSparkSession.getDefaultSession())
+        s3 = RemoteSparkSession.builder.remote("sc://other").getOrCreate()
+
+        self.assertIsNot(s1, s3)
+
 
 class JobCancellationTests(ReusedConnectTestCase):
     def test_tags(self):
@@ -90,6 +118,34 @@ class JobCancellationTests(ReusedConnectTestCase):
         self.spark.clearTags()
         self.assertEqual(self.spark.getTags(), set())
         self.spark.clearTags()
+
+    def test_tags_multithread(self):
+        output1 = None
+        output2 = None
+
+        def tag1():
+            nonlocal output1
+
+            self.spark.addTag("tag1")
+            output1 = self.spark.getTags()
+
+        def tag2():
+            nonlocal output2
+
+            self.spark.addTag("tag2")
+            output2 = self.spark.getTags()
+
+        t1 = threading.Thread(target=tag1)
+        t1.start()
+        t1.join()
+        t2 = threading.Thread(target=tag2)
+        t2.start()
+        t2.join()
+
+        self.assertIsNotNone(output1)
+        self.assertEquals(output1, {"tag1"})
+        self.assertIsNotNone(output2)
+        self.assertEquals(output2, {"tag2"})
 
     def test_interrupt_tag(self):
         thread_ids = range(4)

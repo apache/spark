@@ -2,7 +2,7 @@
 -- !query
 CREATE TEMPORARY VIEW t AS SELECT 'aa' as a
 -- !query analysis
-CreateViewCommand `t`, SELECT 'aa' as a, false, false, LocalTempView, true
+CreateViewCommand `t`, SELECT 'aa' as a, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [aa AS a#x]
       +- OneRowRelation
 
@@ -370,7 +370,7 @@ Project [c0#x]
 -- !query
 select from_json(a, 'a INT') from t
 -- !query analysis
-Project [from_json(StructField(a,IntegerType,true), a#x, Some(America/Los_Angeles)) AS from_json(a)#x]
+Project [from_json(StructField(a,IntegerType,true), a#x, Some(America/Los_Angeles), false) AS from_json(a)#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
       +- Project [cast(a#x as string) AS a#x]

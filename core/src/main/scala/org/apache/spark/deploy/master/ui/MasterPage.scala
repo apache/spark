@@ -17,21 +17,22 @@
 
 package org.apache.spark.deploy.master.ui
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.Node
 
+import jakarta.servlet.http.HttpServletRequest
 import org.json4s.JValue
 
 import org.apache.spark.deploy.DeployMessages.{KillDriverResponse, MasterStateResponse, RequestKillDriver, RequestMasterState}
 import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.StandaloneResourceUtils._
 import org.apache.spark.deploy.master._
+import org.apache.spark.internal.config.UI.MASTER_UI_TITLE
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
 private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private val master = parent.masterEndpointRef
+  private val title = parent.master.conf.get(MASTER_UI_TITLE)
   private val jsonFieldPattern = "/json/([a-zA-Z]+).*".r
 
   def getMasterState: MasterStateResponse = {
@@ -41,6 +42,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   override def renderJson(request: HttpServletRequest): JValue = {
     jsonFieldPattern.findFirstMatchIn(request.getRequestURI()) match {
       case None => JsonProtocol.writeMasterState(getMasterState)
+      case Some(m) if m.group(1) == "clusterutilization" =>
+        JsonProtocol.writeClusterUtilization(getMasterState)
       case Some(m) => JsonProtocol.writeMasterState(getMasterState, Some(m.group(1)))
     }
   }
@@ -168,7 +171,10 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
                 {state.completedDrivers.count(_.state == DriverState.ERROR)} Error,
                 {state.completedDrivers.count(_.state == DriverState.RELAUNCHING)} Relaunching)
               </li>
-              <li><strong>Status:</strong> {state.status}</li>
+              <li><strong>Status:</strong> {state.status}
+                (<a href={"/environment/"}>Environment</a>,
+                <a href={"/logPage/?self&logType=out"}>Log</a>)
+              </li>
             </ul>
           </div>
         </div>
@@ -262,7 +268,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
           }
         </div>;
 
-    UIUtils.basicSparkPage(request, content, "Spark Master at " + state.uri)
+    UIUtils.basicSparkPage(request, content, title.getOrElse("Spark Master at " + state.uri))
   }
 
   private def workerRow(showResourceColumn: Boolean): WorkerInfo => Seq[Node] = worker => {
@@ -310,7 +316,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       </td>
       <td>
         {
-          if (app.isFinished) {
+          if (app.isFinished || app.desc.appUiUrl.isBlank()) {
             app.desc.name
           } else {
             <a href={UIUtils.makeHref(parent.master.reverseProxy,
@@ -375,7 +381,9 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td>{formatResourcesAddresses(driver.resources)}</td>
       <td>{driver.desc.command.arguments(2)}</td>
       {if (showDuration) {
-        <td>{UIUtils.formatDuration(System.currentTimeMillis() - driver.startTime)}</td>
+        <td sorttable_customkey={(-driver.startTime).toString}>
+          {UIUtils.formatDuration(System.currentTimeMillis() - driver.startTime)}
+        </td>
       }}
     </tr>
   }

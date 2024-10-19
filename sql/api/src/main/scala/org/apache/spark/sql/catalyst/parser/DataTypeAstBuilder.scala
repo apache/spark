@@ -24,6 +24,7 @@ import org.antlr.v4.runtime.Token
 import org.antlr.v4.runtime.tree.ParseTree
 
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.{string, withOrigin}
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.internal.SqlApiConf
@@ -58,8 +59,8 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
    * Resolve/create a primitive type.
    */
   override def visitPrimitiveDataType(ctx: PrimitiveDataTypeContext): DataType = withOrigin(ctx) {
-    val typeName = ctx.`type`.start.getType
-    (typeName, ctx.INTEGER_VALUE().asScala.toList) match {
+    val typeCtx = ctx.`type`
+    (typeCtx.start.getType, ctx.INTEGER_VALUE().asScala.toList) match {
       case (BOOLEAN, Nil) => BooleanType
       case (TINYINT | BYTE, Nil) => ByteType
       case (SMALLINT | SHORT, Nil) => ShortType
@@ -71,7 +72,14 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       case (TIMESTAMP, Nil) => SqlApiConf.get.timestampType
       case (TIMESTAMP_NTZ, Nil) => TimestampNTZType
       case (TIMESTAMP_LTZ, Nil) => TimestampType
-      case (STRING, Nil) => StringType
+      case (STRING, Nil) =>
+        typeCtx.children.asScala.toSeq match {
+          case Seq(_) => SqlApiConf.get.defaultStringType
+          case Seq(_, ctx: CollateClauseContext) =>
+            val collationName = visitCollateClause(ctx)
+            val collationId = CollationFactory.collationNameToId(collationName)
+            StringType(collationId)
+        }
       case (CHARACTER | CHAR, length :: Nil) => CharType(length.getText.toInt)
       case (VARCHAR, length :: Nil) => VarcharType(length.getText.toInt)
       case (BINARY, Nil) => BinaryType
@@ -112,7 +120,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   override def visitDayTimeIntervalDataType(ctx: DayTimeIntervalDataTypeContext): DataType = {
     val startStr = ctx.from.getText.toLowerCase(Locale.ROOT)
     val start = DayTimeIntervalType.stringToField(startStr)
-    if (ctx.to != null ) {
+    if (ctx.to != null) {
       val endStr = ctx.to.getText.toLowerCase(Locale.ROOT)
       val end = DayTimeIntervalType.stringToField(endStr)
       if (end <= start) {
@@ -193,7 +201,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   override def visitComplexColType(ctx: ComplexColTypeContext): StructField = withOrigin(ctx) {
     import ctx._
     val structField = StructField(
-      name = identifier.getText,
+      name = errorCapturingIdentifier.getText,
       dataType = typedVisit(dataType()),
       nullable = NULL == null)
     Option(commentSpec).map(visitCommentSpec).map(structField.withComment).getOrElse(structField)
@@ -204,5 +212,12 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
    */
   override def visitCommentSpec(ctx: CommentSpecContext): String = withOrigin(ctx) {
     string(visitStringLit(ctx.stringLit))
+  }
+
+  /**
+   * Returns a collation name.
+   */
+  override def visitCollateClause(ctx: CollateClauseContext): String = withOrigin(ctx) {
+    ctx.identifier.getText
   }
 }

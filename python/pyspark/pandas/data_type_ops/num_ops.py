@@ -43,8 +43,7 @@ from pyspark.pandas.data_type_ops.base import (
     _is_boolean_type,
 )
 from pyspark.pandas.typedef.typehints import extension_dtypes, pandas_on_spark_type
-from pyspark.sql import functions as F
-from pyspark.sql import Column as PySparkColumn
+from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import (
     BooleanType,
     DataType,
@@ -53,7 +52,7 @@ from pyspark.sql.types import (
 from pyspark.errors import PySparkValueError
 
 # For Supporting Spark Connect
-from pyspark.sql.utils import pyspark_column_op, get_column_class
+from pyspark.sql.utils import pyspark_column_op
 
 
 def _non_fractional_astype(
@@ -82,8 +81,7 @@ class NumericOps(DataTypeOps):
             raise TypeError("Addition can not be applied to given types.")
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
-        Column = get_column_class()
-        return column_op(Column.__add__)(left, right)
+        return column_op(PySparkColumn.__add__)(left, right)
 
     def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
@@ -91,8 +89,7 @@ class NumericOps(DataTypeOps):
             raise TypeError("Subtraction can not be applied to given types.")
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
-        Column = get_column_class()
-        return column_op(Column.__sub__)(left, right)
+        return column_op(PySparkColumn.__sub__)(left, right)
 
     def mod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
@@ -110,13 +107,11 @@ class NumericOps(DataTypeOps):
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Exponentiation can not be applied to given types.")
 
-        Column = get_column_class()
-
-        def pow_func(left: Column, right: Any) -> Column:  # type: ignore[valid-type]
+        def pow_func(left: PySparkColumn, right: Any) -> PySparkColumn:
             return (
-                F.when(left == 1, left)  # type: ignore
+                F.when(left == 1, left)
                 .when(F.lit(right) == 0, 1)
-                .otherwise(Column.__pow__(left, right))
+                .otherwise(PySparkColumn.__pow__(left, right))
             )
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
@@ -127,34 +122,29 @@ class NumericOps(DataTypeOps):
         if not isinstance(right, numbers.Number):
             raise TypeError("Addition can not be applied to given types.")
         right = transform_boolean_operand_to_numeric(right)
-        Column = get_column_class()
-        return column_op(Column.__radd__)(left, right)
+        return column_op(PySparkColumn.__radd__)(left, right)
 
     def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
         if not isinstance(right, numbers.Number):
             raise TypeError("Subtraction can not be applied to given types.")
         right = transform_boolean_operand_to_numeric(right)
-        Column = get_column_class()
-        return column_op(Column.__rsub__)(left, right)
+        return column_op(PySparkColumn.__rsub__)(left, right)
 
     def rmul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
         if not isinstance(right, numbers.Number):
             raise TypeError("Multiplication can not be applied to given types.")
         right = transform_boolean_operand_to_numeric(right)
-        Column = get_column_class()
-        return column_op(Column.__rmul__)(left, right)
+        return column_op(PySparkColumn.__rmul__)(left, right)
 
     def rpow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
         if not isinstance(right, numbers.Number):
             raise TypeError("Exponentiation can not be applied to given types.")
 
-        Column = get_column_class()
-
-        def rpow_func(left: Column, right: Any) -> Column:  # type: ignore[valid-type]
-            return F.when(F.lit(right == 1), right).otherwise(Column.__rpow__(left, right))
+        def rpow_func(left: PySparkColumn, right: Any) -> PySparkColumn:
+            return F.when(F.lit(right == 1), right).otherwise(PySparkColumn.__rpow__(left, right))
 
         right = transform_boolean_operand_to_numeric(right)
         return column_op(rpow_func)(left, right)
@@ -250,8 +240,8 @@ class IntegralOps(NumericOps):
             raise TypeError("Multiplication can not be applied to given types.")
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
-        Column = get_column_class()
-        return column_op(Column.__mul__)(left, right)
+
+        return column_op(PySparkColumn.__mul__)(left, right)
 
     def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
@@ -335,8 +325,8 @@ class FractionalOps(NumericOps):
             raise TypeError("Multiplication can not be applied to given types.")
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
-        Column = get_column_class()
-        return column_op(Column.__mul__)(left, right)
+
+        return column_op(PySparkColumn.__mul__)(left, right)
 
     def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
@@ -439,7 +429,9 @@ class FractionalOps(NumericOps):
                 ).otherwise(index_ops.spark.column.cast(spark_type))
             return index_ops._with_new_scol(
                 scol.alias(index_ops._internal.data_spark_column_names[0]),
-                field=index_ops._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type),
+                field=index_ops._internal.data_fields[0].copy(
+                    dtype=dtype, spark_type=spark_type  # type: ignore[arg-type]
+                ),
             )
         elif isinstance(spark_type, StringType):
             return _as_string_type(index_ops, dtype, null_str=str(np.nan))
@@ -494,13 +486,11 @@ class DecimalOps(FractionalOps):
         if not isinstance(right, numbers.Number):
             raise TypeError("Exponentiation can not be applied to given types.")
 
-        Column = get_column_class()
-
-        def rpow_func(left: Column, right: Any) -> Column:  # type: ignore[valid-type]
+        def rpow_func(left: PySparkColumn, right: Any) -> PySparkColumn:
             return (
-                F.when(left.isNull(), np.nan)  # type: ignore
+                F.when(left.isNull(), np.nan)
                 .when(F.lit(right == 1), right)
-                .otherwise(Column.__rpow__(left, right))
+                .otherwise(PySparkColumn.__rpow__(left, right))
             )
 
         right = transform_boolean_operand_to_numeric(right)
@@ -579,7 +569,9 @@ class FractionalExtensionOps(FractionalOps):
                 ).otherwise(index_ops.spark.column.cast(spark_type))
             return index_ops._with_new_scol(
                 scol.alias(index_ops._internal.data_spark_column_names[0]),
-                field=index_ops._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type),
+                field=index_ops._internal.data_fields[0].copy(
+                    dtype=dtype, spark_type=spark_type  # type: ignore[arg-type]
+                ),
             )
         elif isinstance(spark_type, StringType):
             return _as_string_type(index_ops, dtype, null_str=str(np.nan))

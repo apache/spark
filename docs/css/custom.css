@@ -1,23 +1,26 @@
-
-
+:root {
+  --navbar-height: 80px;
+}
 
 body {
   color: #666666;
-  font-family: 'DM Sans', sans-serif;
+  font-family: "DM Sans", sans-serif;
   font-style: normal;
   font-weight: 400;
   overflow-wrap: anywhere;
-  overflow-x: hidden;
-  padding-top: 80px;
+  overflow-x: auto;
   padding-bottom: 20px;
+  padding-top: var(--navbar-height);
 }
 
 a {
+  background: transparent;
   color: #2fa4e7;
   text-decoration: none;
 }
 
-a:hover, a:focus {
+a:hover,
+a:focus {
   color: #157ab5;
   text-decoration: underline;
 }
@@ -25,41 +28,54 @@ a:hover, a:focus {
 .navbar {
   border-radius: 0;
   z-index: 9999;
-}
-
-.navbar {
   transition: none !important;
+  height: var(--navbar-height);
 }
 
-.navbar .nav-item:hover .dropdown-menu, .navbar .nav-item .dropdown-menu, .navbar .dropdown-menu.fade-down, .navbar-toggler, .collapse, .collapsing {
+/*
+Any element with an id attribute can be scrolled to via the URL hash fragment.
+But since the navbar is fixed at the top, elements will, by default, get hidden
+by the navbar. To prevent this, we make sure that there's a margin above these
+links.
+*/
+*[id] {
+  scroll-margin-top: var(--navbar-height);
+}
+
+.navbar .nav-item:hover .dropdown-menu,
+.navbar .nav-item .dropdown-menu,
+.navbar .dropdown-menu.fade-down,
+.navbar-toggler,
+.collapse,
+.collapsing {
   transition: none !important;
   transform: none !important;
 }
 
 @media all and (min-width: 992px) {
   .navbar .nav-item .dropdown-menu {
-      display: block;
-      opacity: 0;
-      visibility: hidden;
-      transition: none !important;
-      margin-top: 0;
+    display: block;
+    opacity: 0;
+    visibility: hidden;
+    transition: none !important;
+    margin-top: 0;
   }
 
   .navbar .dropdown-menu.fade-down {
-      top: 80%;
-      transform: none !important;
-      transform-origin: 0% 0%;
+    top: 80%;
+    transform: none !important;
+    transform-origin: 0% 0%;
   }
 
   .navbar .dropdown-menu.fade-up {
-      top: 180%;
+    top: 180%;
   }
 
   .navbar .nav-item:hover .dropdown-menu {
-      opacity: 1;
-      visibility: visible;
-      top: 100%;
-      font-size: calc(0.51rem + 0.55vw);
+    opacity: 1;
+    visibility: visible;
+    top: 100%;
+    font-size: calc(0.51rem + 0.55vw);
   }
 }
 
@@ -74,12 +90,17 @@ a:hover, a:focus {
   text-decoration: none !important;
 }
 
-.navbar-dark .navbar-nav .nav-link.active, .navbar-dark .navbar-nav .show > .nav-link, .navbar-dark .navbar-nav .nav-link {
+.navbar-dark .navbar-nav .nav-link.active,
+.navbar-dark .navbar-nav .show>.nav-link,
+.navbar-dark .navbar-nav .nav-link {
   color: #ffffff;
   border: 1px solid transparent;
 }
 
-.navbar-dark .navbar-nav .nav-link:focus, .navbar-dark .navbar-nav .nav-link:active, .navbar-dark .navbar-nav .nav-link:focus, .navbar-dark .navbar-nav .nav-link:hover {
+.navbar-dark .navbar-nav .nav-link:focus,
+.navbar-dark .navbar-nav .nav-link:active,
+.navbar-dark .navbar-nav .nav-link:focus,
+.navbar-dark .navbar-nav .nav-link:hover {
   color: #ffffff;
   background-color: #1b618e;
   border: 1px solid transparent;
@@ -96,31 +117,13 @@ section {
   border-color: transparent;
 }
 
-.hero-banner .bg {
-  background: url(/img/spark-hero-thin-light.jpg) no-repeat;
-  transform: translate(36%, 0%);
-  height: 475px;
-  top: 0;
-  position: absolute;
-  right: 0;
-  width: 100%;
-  opacity: 50%;
-}
-
-.hero-banner h1 {
+.hero-banner .container .row h1 {
   color: #0B9ACE;
   font-style: normal;
   font-weight: normal;
   font-size: 48px;
   line-height: 63px;
   letter-spacing: -0.045em;
-}
-
-.hero-banner h2 {
-  font-style: normal;
-  font-weight: bold;
-  font-size: 32px;
-  line-height: 42px;
 }
 
 .what-is-spark {
@@ -169,9 +172,9 @@ section {
 }
 
 @media screen and (min-width: 1900px) {
-.apache-spark-motto {
-  font-size: 7.3rem;
-}
+  .apache-spark-motto {
+    font-size: 7.3rem;
+  }
 }
 
 .features .title {
@@ -202,18 +205,21 @@ section {
   color: #ffffff;
 }
 
-.spark-run-now .nav-link:focus, .nav-link:hover {
+.spark-run-now .nav-link:focus,
+.nav-link:hover {
   color: #ffffff;
   border: 1px solid transparent;
 }
 
-.spark-run-now .nav-tabs .nav-item.show .nav-link, .spark-run-now .nav-tabs .nav-link.active {
+.spark-run-now .nav-tabs .nav-item.show .nav-link,
+.spark-run-now .nav-tabs .nav-link.active {
   color: #ffffff;
   background-color: #1d6890;
   border: none;
 }
 
-.spark-run-now .nav-tabs .nav-link:focus, .spark-run-now .nav-tabs .nav-link:hover {
+.spark-run-now .nav-tabs .nav-link:focus,
+.spark-run-now .nav-tabs .nav-link:hover {
   outline: none;
   background-color: #1D6890;
   border: 1px solid transparent;
@@ -245,41 +251,6 @@ section {
   border-top: 2px solid #000000;
 }
 
-.spark-install .code {
-  color: #000000;
-  background-color: #ffffff;
-  padding: 15px;
-  font-family: "Menlo", "Lucida Console", Consolas, monospace;
-  font-style: normal;
-  font-weight: normal;
-  font-size: 14px;
-  line-height: 1.428571429;
-}
-
-.spark-install .code p {
-  margin: 0;
-}
-
-.spark-install .code .orange {
-  color: #df584e;
-}
-
-.spark-install .code .green {
-  color: #579f52;
-}
-
-.spark-install .code .blue {
-  color: #2088bb;
-}
-
-.spark-install .code .purple {
-  color: #a73ea7;
-}
-
-.spark-install .code .brown {
-  color: #976716;
-}
-
 .examples {
   color: #666666;
   padding: 12px 0 0 0;
@@ -306,9 +277,6 @@ section {
   font-weight: normal;
   font-size: 15px;
   line-height: 19px;
-}
-
-.spark-run-now .examples .nav-link {
   color: #666666;
   box-shadow: 0px 4px 4px rgba(0, 0, 0, 0.25);
 }
@@ -346,12 +314,15 @@ section {
   margin-bottom: 0;
 }
 
-.spark-run-now .examples .nav-tabs .nav-link:focus, .spark-run-now .examples .nav-tabs .nav-link:hover, .spark-run-now .examples .nav-tabs .nav-link:active {
+.spark-run-now .examples .nav-tabs .nav-link:focus,
+.spark-run-now .examples .nav-tabs .nav-link:hover,
+.spark-run-now .examples .nav-tabs .nav-link:active {
   border-right: 1px solid;
 }
 
-.spark-run-now .examples .nav-tabs .nav-item.show .nav-link, .spark-run-now .examples .nav-tabs .nav-link.active {
-  border-right: 1px solid #666666;
+.spark-run-now .examples .nav-tabs .nav-item.show .nav-link,
+.spark-run-now .examples .nav-tabs .nav-link.active {
+  border-right: 1px solid #666;
 }
 
 .btn {
@@ -418,133 +389,118 @@ section {
 
 @media (max-width: 768px) {
   .hero-banner {
-      background-size: 390px;
-      background-position: center right;
-      background-position-y: 40px;
+    background-size: 390px;
+    background-position: center right;
+    background-position-y: 40px;
   }
 
   .hero-banner .bg {
-      transform: translate(46%, -5%);
+    transform: translate(46%, -5%);
+    display: none;
   }
 
   .hero-banner h1 {
-      margin-bottom: 30px;
+    margin-bottom: 30px;
   }
 
   .apache-spark-motto {
-      font-size: 90px;
-      margin: 120px 0;
+    font-size: 90px;
+    margin: 120px 0;
   }
 
   .features {
-      margin-top: 53px;
+    margin-top: 53px;
   }
 
   .features:first-child {
-      margin-top: 0;
+    margin-top: 0;
   }
 
   .border-end {
-      border-right: 1px solid transparent !important;
-      border-bottom: 1px solid #dee2e6 !important;
-  }
-
-  .hero-banner .bg {
-      display: none;
+    border-right: 1px solid transparent;
+    border-bottom: 1px solid #dee2e6;
   }
 }
 
 @media (max-width: 320px) {
   .hero-banner {
-      background-size: 230px;
-      background-position: center right;
-      background-position-y: 160px;
-      background: none;
+    background-size: 230px;
+    background-position: center right;
+    background-position-y: 160px;
+    background: none;
   }
 
-  .navbar-dark .navbar-nav .nav-link.active, .navbar-dark .navbar-nav .show > .nav-link, .navbar-dark .navbar-nav .nav-link {
-      padding-left: 1rem;
+  .navbar-dark .navbar-nav .nav-link.active,
+  .navbar-dark .navbar-nav .show>.nav-link,
+  .navbar-dark .navbar-nav .nav-link {
+    padding-left: 1rem;
   }
 
   .hero-banner h1 {
-      line-height: 65px;
+    line-height: 65px;
   }
 
   .apache-spark-motto {
-      font-size: 70px;
-      margin: 0 0 50px 0;
-      line-height: 80px;
+    font-size: 70px;
+    margin: 0 0 50px 0;
+    line-height: 80px;
   }
 }
 
-a {
-  background: transparent;
-}
-
-a:active, a:hover {
+a:active,
+a:hover {
   outline: 0;
 }
 
 @media print {
   * {
-      color: #000 !important;
-      text-shadow: none !important;
-      background: transparent !important;
-      box-shadow: none !important;
+    color: #000 !important;
+    text-shadow: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
   }
 
-  a, a:visited {
-      text-decoration: underline;
+  a,
+  a:visited {
+    text-decoration: underline;
   }
 
   a[href]:after {
-      content: " (" attr(href) ")";
+    content: " (" attr(href) ")";
   }
 
   p {
-      orphans: 3;
-      widows: 3;
+    orphans: 3;
+    widows: 3;
   }
 
   pre {
-      border: 1px solid #999;
-      page-break-inside: avoid;
+    border: 1px solid #999;
+    page-break-inside: avoid;
   }
 
   .global pre {
-      border: 1px solid #999;
-      page-break-inside: avoid;
+    border: 1px solid #999;
+    page-break-inside: avoid;
   }
 
   h3 {
-      orphans: 3;
-      widows: 3;
-  }
-
-  h3 {
-      page-break-after: avoid;
+    orphans: 3;
+    widows: 3;
+    page-break-after: avoid;
   }
 }
 
-*, *:before, *:after {
+*,
+*:before,
+*:after {
   -webkit-box-sizing: border-box;
   -moz-box-sizing: border-box;
   box-sizing: border-box;
 }
 
-a {
-  color: #2fa4e7;
-  text-decoration: none;
-}
-
-a:hover, a:focus {
-  color: #157ab5;
-  text-decoration: underline;
-}
-
 a:focus {
-  outline: thin dotted;
-  outline: 5px auto -webkit-focus-ring-color;
+  outline: 5px;
   outline-offset: -2px;
 }
 
@@ -553,15 +509,8 @@ h5 {
   font-weight: 500;
   line-height: 1.1;
   color: #317eac;
-}
-
-h5 {
   margin-top: 10px;
   margin-bottom: 10px;
-}
-
-h5 {
-  font-size: 14px;
 }
 
 p {
@@ -589,15 +538,18 @@ ul {
 }
 
 .news h5 {
-  color: rgb(85, 85, 85);
+  color: #555;
+  font-size: 16px;
 }
 
 .news ul li {
   margin-bottom: 6px;
 }
 
-.news li a, .news li a:hover, .news li a:visited {
-  color: rgb(85, 85, 85);
+.news li a,
+.news li a:hover,
+.news li a:visited {
+  color: #555;
 }
 
 .news li .small {
@@ -605,33 +557,8 @@ ul {
   font-size: 12px;
 }
 
-.news h5 {
-  font-size: 16px;
-}
-
-code, pre {
-  font-family: monospace, serif;
-  font-size: 1em;
-}
-
 pre {
   white-space: pre-wrap;
-}
-
-code, pre {
-  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
-}
-
-code {
-  padding: 2px 4px;
-  font-size: 90%;
-  color: #c7254e;
-  white-space: nowrap;
-  background-color: #f9f2f4;
-  border-radius: 4px;
-}
-
-pre {
   display: block;
   padding: 20px;
   margin: 0 0 10px;
@@ -645,6 +572,19 @@ pre {
   border-radius: 4px;
 }
 
+pre {
+  font: 1em Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+
+code {
+  font: 90% "Menlo", "Lucida Console", Consolas, monospace;
+  white-space: nowrap;
+  background: transparent;
+  border-radius: 4px;
+  padding: 0;
+  color: inherit;
+}
+
 pre code {
   padding: 0;
   font-size: inherit;
@@ -654,35 +594,10 @@ pre code {
   border-radius: 0;
 }
 
-code {
-  font-family: "Menlo", "Lucida Console", Consolas, monospace;
-  background: transparent;
-  padding: 0;
-  color: inherit;
-}
-
-.code .sparkop {
-  color: #1663a8;
-}
-
-.code .closure {
-  color: #c1130e;
-}
-
 h3 {
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  font-weight: 500;
-  line-height: 1.1;
+  font: 500 20px/1.1 "Helvetica Neue", Helvetica, Arial, sans-serif;
   color: #317eac;
-}
-
-h3 {
   margin-top: 20px;
-  margin-bottom: 10px;
-  font-size: 20px;
-}
-ul {
-  margin-top: 0;
   margin-bottom: 10px;
 }
 
@@ -691,70 +606,21 @@ ul {
   padding: 0;
 }
 
-.jumbotron {
-  padding: 30px;
-  margin-bottom: 30px;
-  font-size: 21px;
-  font-weight: 200;
-  line-height: 2.1428571435;
-  color: inherit;
-  background-color: #eee;
-}
-
-.container .jumbotron {
-  border-radius: 6px;
-}
-
-@media screen and (min-width: 768px) {
-  .jumbotron {
-      padding-top: 48px;
-      padding-bottom: 48px;
-  }
-
-  .container .jumbotron {
-      padding-right: 60px;
-      padding-left: 60px;
-  }
-}
-
 @media screen and (max-width: 990px) {
   .navbar-nav {
-      font-size: 16px;
+    font-size: 16px;
   }
 
   .features .details {
-      margin-right: 0 !important;
+    margin-right: 0 !important;
   }
 }
 
 @media screen and (min-width: 1441px) {
-  .navbar-nav, .navbar .nav-item:hover .dropdown-menu {
-      font-size: 16px;
-  }
-}
 
-.jumbotron {
-  padding: 20px 20px;
-  margin-bottom: 20px;
-  color: rgb(85, 85, 85);
-  background: #eef6fd;
-  text-align: center;
-  line-height: inherit;
-}
-
-.jumbotron {
-  font-size: 18px;
-}
-
-@media (min-width: 768px) {
-  .jumbotron {
-      font-size: 19px;
-  }
-}
-
-@media (min-width: 992px) {
-  .jumbotron {
-      font-size: 21px;
+  .navbar-nav,
+  .navbar .nav-item:hover .dropdown-menu {
+    font-size: 16px;
   }
 }
 
@@ -767,29 +633,32 @@ ul {
   text-align: center;
 }
 
-.nav > li > a {
+.nav>li>a {
   position: relative;
   display: block;
   padding: 10px 15px;
 }
 
-.nav > li > a:hover, .nav > li > a:focus {
+.nav>li>a:hover,
+.nav>li>a:focus {
   text-decoration: none;
   background-color: #eee;
 }
 
-.nav-tabs > li > a {
+.nav-tabs>li>a {
   margin-right: 2px;
   line-height: 1.428571429;
   border: 1px solid transparent;
   border-radius: 4px 4px 0 0;
 }
 
-.nav-tabs > li > a:hover {
+.nav-tabs>li>a:hover {
   border-color: #eee #eee #ddd;
 }
 
-.nav-tabs > li.active > a, .nav-tabs > li.active > a:hover, .nav-tabs > li.active > a:focus {
+.nav-tabs>li.active>a,
+.nav-tabs>li.active>a:hover,
+.nav-tabs>li.active>a:focus {
   color: #555;
   cursor: default;
   background-color: #fff;
@@ -797,7 +666,7 @@ ul {
   border-bottom-color: transparent;
 }
 
-.nav.nav-tabs > li > a {
+.nav.nav-tabs>li>a {
   padding: 6px 11px;
   font-size: 14px;
   border-radius: 0;
@@ -812,31 +681,65 @@ ul {
   margin-bottom: 30px;
 }
 
-.global h1, .global h2, .global h3, .global h4, .global h5, .global h6, .global .h1, .global .h2, .global .h3, .global .h4, .global .h5, .global .h6 {
+.global h1,
+.global h2,
+.global h3,
+.global h4,
+.global h5,
+.global h6,
+.global .h1,
+.global .h2,
+.global .h3,
+.global .h4,
+.global .h5,
+.global .h6 {
   color: #317eac;
-  /*display: inline-block;*/
-  /*text-transform: lowercase;*/
 }
 
-.global h1, .global h2, .global h3 {
+.global h1,
+.global h2,
+.global h3 {
   margin-top: 20px;
   margin-bottom: 10px;
 }
 
-.global h2, .global .h2 {
+.global h1,
+.global .h1 {
   font-size: 30px;
 }
 
-.global h3 {
+#content h1.title {
+  font-size: 40px;
+}
+
+.global h2 {
   font-size: 24px !important;
+}
+
+.global h3 {
+  font-size: 20px !important;
 }
 
 .global h4 {
   font-size: 18px !important;
 }
 
+.global h5 {
+  font-size: 16px !important;
+}
 
-.global h1:first-letter, .global h2:first-letter, .global h3:first-letter, .global h4:first-letter, .global h5:first-letter, .global h6:first-letter, .global .h1:first-letter, .global .h2:first-letter, .global .h3:first-letter, .global .h4:first-letter, .global .h5:first-letter, .global .h6:first-letter {
+.global h1:first-letter,
+.global h2:first-letter,
+.global h3:first-letter,
+.global h4:first-letter,
+.global h5:first-letter,
+.global h6:first-letter,
+.global .h1:first-letter,
+.global .h2:first-letter,
+.global .h3:first-letter,
+.global .h4:first-letter,
+.global .h5:first-letter,
+.global .h6:first-letter {
   text-transform: uppercase;
 }
 
@@ -847,57 +750,17 @@ ul {
   color: #8f8f8f;
 }
 
-.global .code {
-  font-family: "Menlo", "Lucida Console", Consolas, monospace;
-  font-size: 12px;
-}
-
-@media (min-width: 1200px) {
-  .global .code {
-      font-size: 13px;
-  }
-}
-
-.global .code .string {
-  color: #2b8eeb;
-}
-
-.global .code .sparkop {
-  color: #1663a8;
-}
-
-/*! CSS Used from: http://spark.apache.org/css/cerulean.min.css */
 .global figure {
   display: block;
+  margin: 0;
 }
 
-.global code, .global pre {
-  font-family: monospace, serif;
-  font-size: 1em;
+.global pre {
+  font: 1em Menlo, Monaco, Consolas, "Courier New", monospace;
 }
 
 .global pre {
   white-space: pre-wrap;
-}
-
-.global figure {
-  margin: 0;
-}
-
-.global code, .global pre {
-  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
-}
-
-.global code {
-  padding: 2px 4px;
-  font-size: 90%;
-  color: #c7254e;
-  white-space: nowrap;
-  background-color: #f9f2f4;
-  border-radius: 4px;
-}
-
-.global pre {
   display: block;
   padding: 9.5px;
   margin: 0 0 10px;
@@ -920,29 +783,6 @@ ul {
   border-radius: 0;
 }
 
-.global .code {
-  font-family: "Menlo", "Lucida Console", Consolas, monospace;
-  font-size: 12px;
-}
-
-@media (min-width: 1200px) {
-  .global .code {
-      font-size: 13px;
-  }
-}
-
-.global code {
-  font-family: "Menlo", "Lucida Console", Consolas, monospace;
-  background: transparent;
-  padding: 0;
-  color: inherit;
-}
-
-.global .code-tab {
-  margin-bottom: 10px;
-  border-bottom: 1px solid #ddd;
-}
-
 footer {
   text-align: center;
   color: #8f8f8f;
@@ -954,11 +794,11 @@ footer a {
   display: contents;
 }
 
-h1 .tm, h2 .tm, h3 .tm {
+h1 .tm,
+h2 .tm,
+h3 .tm {
   bottom: 10px;
 }
-
-
 
 .question {
   font-size: 16px;
@@ -967,7 +807,6 @@ h1 .tm, h2 .tm, h3 .tm {
   font-weight: 500;
 }
 
-/* GitHub style blockquote */
 blockquote {
   display: block;
   margin-block-start: 1em;
@@ -976,17 +815,15 @@ blockquote {
   margin-inline-end: 40px;
   padding: 0 1em;
   color: rgba(0, 0, 0, .5);
-  border-left: 0.25em solid rgba(0, 0, 0, .1)
+  border-left: 0.25em solid rgba(0, 0, 0, .1);
 }
-
 
 .content {
   z-index: 1;
   position: relative;
   background-color: #FFF;
   max-width: 914px;
-  line-height: 1.6; /* Inspired by GitHub's wiki style */
-  /*padding-left: 15px;*/
+  line-height: 1.6;
 }
 
 .content-with-sidebar {
@@ -994,15 +831,12 @@ blockquote {
   position: relative;
   background-color: #FFF;
   max-width: 914px;
-  line-height: 1.6; /* Inspired by GitHub's wiki style */
+  line-height: 1.6;
   padding-left: 30px;
   min-height: 100vh;
 }
 
-/**
- * The left navigation bar.
- */
- .left-menu-wrapper {
+.left-menu-wrapper {
   margin-left: 0px;
   margin-right: 0px;
   border-top-width: 0px;
@@ -1023,15 +857,12 @@ blockquote {
   line-height: 30px;
 }
 
-/**
- * The collapsing button for the navigation bar.
- */
 .nav-trigger {
   position: fixed;
   clip: rect(0, 0, 0, 0);
 }
 
-.nav-trigger + label:after {
+.nav-trigger+label:after {
   content: '»';
 }
 
@@ -1056,52 +887,51 @@ label[for="nav-trigger"]:hover {
   background-color: #d0cdcd;
 }
 
-.nav-trigger:checked + label {
+.nav-trigger:checked+label {
   margin-left: 200px;
 }
 
-.nav-trigger:checked + label:after {
+.nav-trigger:checked+label:after {
   content: '«';
 }
 
-.nav-trigger:checked ~ div.content-with-sidebar {
+.nav-trigger:checked~div.content-with-sidebar {
   margin-left: 200px;
 }
 
-.nav-trigger + label, div.content-with-sidebar {
+.nav-trigger+label,
+div.content-with-sidebar {
   transition: left 0.4s;
 }
 
-/**
- * Rules to collapse the menu automatically when the screen becomes too thin.
- */
-
 @media all and (max-width: 780px) {
-
   div.content-with-sidebar {
     margin-left: 200px;
   }
-  .nav-trigger + label:after {
+
+  .nav-trigger+label:after {
     content: '«';
   }
+
   label[for="nav-trigger"] {
     margin-left: 200px;
   }
 
-  .nav-trigger:checked + label {
+  .nav-trigger:checked+label {
     margin-left: 0px;
   }
-  .nav-trigger:checked + label:after {
+
+  .nav-trigger:checked+label:after {
     content: '»';
   }
-  .nav-trigger:checked ~ div.content-with-sidebar {
+
+  .nav-trigger:checked~div.content-with-sidebar {
     margin-left: 0px;
   }
 
   div.container-index {
     margin-left: -215px;
   }
-
 }
 
 img {
@@ -1110,19 +940,89 @@ img {
 
 table {
   width: 100%;
-  overflow-wrap: normal;
-  border-collapse: collapse; /* Ensures that the borders collapse into a single border */
+  overflow-wrap: break-word;
+  border-collapse: collapse;
+  white-space: normal;
 }
 
-table th, table td {
-  border: 1px solid #cccccc; /* Adds a border to each table header and data cell */
-  padding: 6px 13px; /* Optional: Adds padding inside each cell for better readability */
+table code {
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+
+table th,
+table td {
+  border: 1px solid #cccccc;
+  padding: 6px 13px;
 }
 
 table tr {
-  background-color: white; /* Sets a default background color for all rows */
+  background-color: white;
 }
 
+/* Set a different background color for even rows so that the row
+   color alternates.
+ */
 table tr:nth-child(2n) {
-  background-color: #F1F4F5; /* Sets a different background color for even rows */
+  background-color: #F1F4F5;
+}
+
+table.spark-config {
+  width: 100%;
+  table-layout: fixed;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+/* We have long config names and formulas that often show up in tables. To prevent
+ * any table column from become super wide, we allow the browser to break words at
+ * any point.
+ */
+table.spark-config code,
+table.spark-config th,
+table.spark-config td {
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+/* CSS does not respect max-width on tables or table parts (like cells, columns, etc.),
+   so we have to pick a fixed width for each column.
+   See: https://stackoverflow.com/a/8465980
+ */
+table.spark-config th:nth-child(1),
+table.spark-config td:nth-child(1) {
+  width: 30%;
+}
+
+table.spark-config th:nth-child(2),
+table.spark-config td:nth-child(2) {
+  width: 20%;
+}
+
+table.spark-config th:nth-child(4),
+table.spark-config td:nth-child(4) {
+  width: 90px;
+}
+
+table#error-conditions {
+  table-layout: fixed;
+
+  span.error-condition-name {
+    /* Any error names that wrap will have the wrapped lines indented
+       relative to the first line thanks to these three rules.
+     */
+    padding-left: 2em;
+    text-indent: -2em;
+    display: block;
+  }
+
+  th:nth-child(1),
+  td:nth-child(1) {
+    /* width: 85px; */
+    width: 105px;
+  }
+
+  td.error-sub-condition {
+    padding-left: 2.5em;
+  }
 }

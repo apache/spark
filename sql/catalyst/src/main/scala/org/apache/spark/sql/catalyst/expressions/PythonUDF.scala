@@ -20,13 +20,14 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkException.internalError
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDF, TreePattern}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types._
 
 /**
  * Helper functions for [[PythonUDF]]
@@ -63,6 +64,23 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
   override def toString: String = s"$name(${children.mkString(", ")})#${resultId.id}$typeSuffix"
 
   override def nullable: Boolean = true
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val check = super.checkInputDataTypes()
+    if (check.isFailure) {
+      check
+    } else {
+      val exprReturningVariant = children.collectFirst {
+        case e: Expression if VariantExpressionEvalUtils.typeContainsVariant(e.dataType) => e
+      }
+      exprReturningVariant match {
+        case Some(e) => TypeCheckResult.DataTypeMismatch(
+          errorSubClass = "UNSUPPORTED_UDF_INPUT_TYPE",
+          messageParameters = Map("dataType" -> s"${e.dataType.sql}"))
+        case None => TypeCheckResult.TypeCheckSuccess
+      }
+    }
+  }
 }
 
 /**
@@ -78,6 +96,10 @@ case class PythonUDF(
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId)
   extends Expression with PythonFuncExpression with Unevaluable {
+
+  if (VariantExpressionEvalUtils.typeContainsVariant(dataType)) {
+    throw QueryCompilationErrors.unsupportedUDFOuptutType(this, dataType)
+  }
 
   lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
     exprId = resultId)
@@ -120,6 +142,10 @@ case class PythonUDAF(
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId)
   extends UnevaluableAggregateFunc with PythonFuncExpression {
+
+  if (VariantExpressionEvalUtils.typeContainsVariant(dataType)) {
+    throw QueryCompilationErrors.unsupportedUDFOuptutType(this, dataType)
+  }
 
   override def evalType: Int = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
 
@@ -187,6 +213,13 @@ case class PythonUDTF(
     pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None)
   extends UnevaluableGenerator with PythonFuncExpression {
 
+  elementSchema.collectFirst {
+    case sf: StructField if VariantExpressionEvalUtils.typeContainsVariant(sf.dataType) => sf
+  } match {
+    case Some(sf) => throw QueryCompilationErrors.unsupportedUDFOuptutType(this, sf.dataType)
+    case None =>
+  }
+
   override lazy val canonicalized: Expression = {
     val canonicalizedChildren = children.map(_.canonicalized)
     // `resultId` can be seen as cosmetic variation in PythonUDTF, as it doesn't affect the result.
@@ -246,6 +279,12 @@ case class UnresolvedPolymorphicPythonUDTF(
  * @param orderByExpressions if non-empty, this contains the list of ordering items that the
  *                           'analyze' method explicitly indicated that the UDTF call should consume
  *                           the input table rows by
+ * @param selectedInputExpressions If non-empty, this is a list of expressions that the UDTF is
+ *                                 specifying for Catalyst to evaluate against the columns in the
+ *                                 input TABLE argument. In this case, Catalyst will insert a
+ *                                 projection to evaluate these expressions and return the result to
+ *                                 the UDTF. The UDTF then receives one input column for each
+ *                                 expression in the list, in the order they are listed.
  * @param pickledAnalyzeResult this is the pickled 'AnalyzeResult' instance from the UDTF, which
  *                             contains all metadata returned by the Python UDTF 'analyze' method
  *                             including the result schema of the function call as well as optional
@@ -256,6 +295,7 @@ case class PythonUDTFAnalyzeResult(
     withSinglePartition: Boolean,
     partitionByExpressions: Seq[Expression],
     orderByExpressions: Seq[SortOrder],
+    selectedInputExpressions: Seq[PythonUDTFSelectedExpression],
     pickledAnalyzeResult: Array[Byte]) {
   /**
    * Applies the requested properties from this analysis result to the target TABLE argument
@@ -291,6 +331,7 @@ case class PythonUDTFAnalyzeResult(
     var newWithSinglePartition = t.withSinglePartition
     var newPartitionByExpressions = t.partitionByExpressions
     var newOrderByExpressions = t.orderByExpressions
+    var newSelectedInputExpressions = t.selectedInputExpressions
     if (withSinglePartition) {
       newWithSinglePartition = true
     }
@@ -300,12 +341,29 @@ case class PythonUDTFAnalyzeResult(
     if (orderByExpressions.nonEmpty) {
       newOrderByExpressions = orderByExpressions
     }
+    if (selectedInputExpressions.nonEmpty) {
+      newSelectedInputExpressions = selectedInputExpressions
+    }
     t.copy(
       withSinglePartition = newWithSinglePartition,
       partitionByExpressions = newPartitionByExpressions,
-      orderByExpressions = newOrderByExpressions)
+      orderByExpressions = newOrderByExpressions,
+      selectedInputExpressions = newSelectedInputExpressions)
   }
 }
+
+/**
+ * Represents an expression that the UDTF is specifying for Catalyst to evaluate against the
+ * columns in the input TABLE argument. The UDTF then receives one input column for each expression
+ * in the list, in the order they are listed.
+ *
+ * @param expression the expression that the UDTF is specifying for Catalyst to evaluate against the
+ *                   columns in the input TABLE argument
+ * @param alias If present, this is the alias for the column or expression as visible from the
+ *              UDTF's 'eval' method. This is required if the expression is not a simple column
+ *              reference.
+ */
+case class PythonUDTFSelectedExpression(expression: Expression, alias: Option[String])
 
 /**
  * A place holder used when printing expressions without debugging information such as the

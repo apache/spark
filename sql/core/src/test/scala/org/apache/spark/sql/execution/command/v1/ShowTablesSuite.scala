@@ -56,7 +56,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase with command.Tests
       exception = intercept[AnalysisException] {
         runShowTablesSql("SHOW TABLES FROM a.b", Seq())
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1126",
+      condition = "_LEGACY_ERROR_TEMP_1126",
       parameters = Map("catalog" -> "a.b")
     )
   }
@@ -102,7 +102,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase with command.Tests
         exception = intercept[AnalysisException] {
           sql(showTableCmd)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1125",
+        condition = "_LEGACY_ERROR_TEMP_1125",
         parameters = Map.empty
       )
     }
@@ -205,6 +205,7 @@ class ShowTablesSuite extends ShowTablesSuiteBase with CommandSuiteBase {
              |Type: VIEW
              |View Text: SELECT id FROM $catalog.$namespace.$table
              |View Original Text: SELECT id FROM $catalog.$namespace.$table
+             |View Schema Mode: COMPENSATION
              |View Catalog and Namespace: $catalog.$namespace
              |View Query Output Columns: [id]
              |Schema: root

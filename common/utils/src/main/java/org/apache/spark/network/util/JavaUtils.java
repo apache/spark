@@ -29,15 +29,18 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.commons.lang3.SystemUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 /**
  * General utilities available in the network package. Many of these are sourced from Spark's
  * own Utils, just accessible within this package.
  */
 public class JavaUtils {
-  private static final Logger logger = LoggerFactory.getLogger(JavaUtils.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(JavaUtils.class);
 
   /**
    * Define a default value for driver memory here since this value is referenced across the code
@@ -104,13 +107,15 @@ public class JavaUtils {
 
     // On Unix systems, use operating system command to run faster
     // If that does not work out, fallback to the Java IO way
-    if (SystemUtils.IS_OS_UNIX && filter == null) {
+    // We exclude Apple Silicon test environment due to the limited resource issues.
+    if (SystemUtils.IS_OS_UNIX && filter == null && !(SystemUtils.IS_OS_MAC_OSX &&
+        (System.getenv("SPARK_TESTING") != null || System.getProperty("spark.testing") != null))) {
       try {
         deleteRecursivelyUsingUnixNative(file);
         return;
       } catch (IOException e) {
         logger.warn("Attempt to delete using native Unix OS command failed for path = {}. " +
-                        "Falling back to Java IO way", file.getAbsolutePath(), e);
+          "Falling back to Java IO way", e, MDC.of(LogKeys.PATH$.MODULE$, file.getAbsolutePath()));
       }
     }
 
@@ -120,6 +125,7 @@ public class JavaUtils {
   private static void deleteRecursivelyUsingJavaIO(
       File file,
       FilenameFilter filter) throws IOException {
+    if (!file.exists()) return;
     BasicFileAttributes fileAttributes =
       Files.readAttributes(file.toPath(), BasicFileAttributes.class);
     if (fileAttributes.isDirectory() && !isSymlink(file)) {
@@ -225,6 +231,8 @@ public class JavaUtils {
       Map.entry("pb", ByteUnit.PiB));
   }
 
+  private static final Pattern TIME_STRING_PATTERN = Pattern.compile("(-?[0-9]+)([a-z]+)?");
+
   /**
    * Convert a passed time string (e.g. 50s, 100ms, or 250us) to a time count in the given unit.
    * The unit is also considered the default if the given string does not specify a unit.
@@ -233,7 +241,7 @@ public class JavaUtils {
     String lower = str.toLowerCase(Locale.ROOT).trim();
 
     try {
-      Matcher m = Pattern.compile("(-?[0-9]+)([a-z]+)?").matcher(lower);
+      Matcher m = TIME_STRING_PATTERN.matcher(lower);
       if (!m.matches()) {
         throw new NumberFormatException("Failed to parse time string: " + str);
       }
@@ -273,6 +281,11 @@ public class JavaUtils {
     return timeStringAs(str, TimeUnit.SECONDS);
   }
 
+  private static final Pattern BYTE_STRING_PATTERN =
+    Pattern.compile("([0-9]+)([a-z]+)?");
+  private static final Pattern BYTE_STRING_FRACTION_PATTERN =
+    Pattern.compile("([0-9]+\\.[0-9]+)([a-z]+)?");
+
   /**
    * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to the given. If no suffix is
    * provided, a direct conversion to the provided unit is attempted.
@@ -281,8 +294,8 @@ public class JavaUtils {
     String lower = str.toLowerCase(Locale.ROOT).trim();
 
     try {
-      Matcher m = Pattern.compile("([0-9]+)([a-z]+)?").matcher(lower);
-      Matcher fractionMatcher = Pattern.compile("([0-9]+\\.[0-9]+)([a-z]+)?").matcher(lower);
+      Matcher m = BYTE_STRING_PATTERN.matcher(lower);
+      Matcher fractionMatcher = BYTE_STRING_FRACTION_PATTERN.matcher(lower);
 
       if (m.matches()) {
         long val = Long.parseLong(m.group(1));
@@ -393,7 +406,7 @@ public class JavaUtils {
         dir = new File(root, namePrefix + "-" + UUID.randomUUID());
         Files.createDirectories(dir.toPath());
       } catch (IOException | SecurityException e) {
-        logger.error("Failed to create directory " + dir, e);
+        logger.error("Failed to create directory {}", e, MDC.of(LogKeys.PATH$.MODULE$, dir));
         dir = null;
       }
     }

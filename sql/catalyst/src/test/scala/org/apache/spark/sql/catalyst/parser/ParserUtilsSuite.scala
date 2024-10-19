@@ -29,7 +29,7 @@ class ParserUtilsSuite extends SparkFunSuite {
   import ParserUtils._
 
   val setConfContext = buildContext("set example.setting.name=setting.value") { parser =>
-    parser.statement().asInstanceOf[SetConfigurationContext]
+    parser.setResetStatement().asInstanceOf[SetConfigurationContext]
   }
 
   val showFuncContext = buildContext("show functions foo.bar") { parser =>
@@ -131,6 +131,18 @@ class ParserUtilsSuite extends SparkFunSuite {
         |cd\ef"""".stripMargin) ==
       """ab
         |cdef""".stripMargin)
+
+    // String with an invalid '\' as the last character.
+    assert(unescapeSQLString(""""abc\"""") == "abc\\")
+
+    // Strings containing invalid Unicode escapes with non-hex characters.
+    assert(unescapeSQLString("\"abc\\uXXXXa\"") == "abcuXXXXa")
+    assert(unescapeSQLString("\"abc\\uxxxxa\"") == "abcuxxxxa")
+    assert(unescapeSQLString("\"abc\\UXXXXXXXXa\"") == "abcUXXXXXXXXa")
+    assert(unescapeSQLString("\"abc\\Uxxxxxxxxa\"") == "abcUxxxxxxxxa")
+    // Guard against off-by-one errors in the "all chars are hex" routine:
+    assert(unescapeSQLString("\"abc\\uAAAXa\"") == "abcuAAAXa")
+
     // scalastyle:on nonascii
   }
 
@@ -147,7 +159,7 @@ class ParserUtilsSuite extends SparkFunSuite {
       exception = intercept[ParseException] {
         operationNotAllowed(errorMessage, showFuncContext)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> errorMessage))
   }
 
@@ -160,7 +172,7 @@ class ParserUtilsSuite extends SparkFunSuite {
       exception = intercept[ParseException] {
         checkDuplicateKeys(properties2, createDbContext)
       },
-      errorClass = "DUPLICATE_KEY",
+      condition = "DUPLICATE_KEY",
       parameters = Map("keyColumn" -> "`a`"))
   }
 
@@ -211,7 +223,7 @@ class ParserUtilsSuite extends SparkFunSuite {
       exception = intercept[ParseException] {
         validate(f1(emptyContext), message, emptyContext)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      condition = "_LEGACY_ERROR_TEMP_0064",
       parameters = Map("msg" -> message))
   }
 

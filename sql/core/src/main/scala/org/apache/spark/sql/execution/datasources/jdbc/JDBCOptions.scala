@@ -25,9 +25,10 @@ import org.apache.commons.io.FilenameUtils
 import org.apache.spark.SparkFiles
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.TimestampNTZType
+import org.apache.spark.util.Utils
 
 /**
  * Options for the JDBC data source.
@@ -51,7 +52,14 @@ class JDBCOptions(
    */
   val asProperties: Properties = {
     val properties = new Properties()
-    parameters.originalMap.foreach { case (k, v) => properties.setProperty(k, v) }
+    parameters.originalMap.foreach { case (k, v) =>
+      // If an option value is `null`, throw a user-friendly error. Keys here cannot be null, as
+      // scala's implementation of Maps prohibits null keys.
+      if (v == null) {
+        throw QueryCompilationErrors.nullDataSourceOption(k)
+      }
+      properties.setProperty(k, v)
+    }
     properties
   }
 
@@ -248,6 +256,8 @@ class JDBCOptions(
       otherOption.parameters.equals(this.parameters)
     case _ => false
   }
+
+  def getRedactUrl(): String = Utils.redact(SQLConf.get.stringRedactionPattern, url)
 }
 
 class JdbcOptionsInWrite(

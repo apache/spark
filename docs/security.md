@@ -49,9 +49,14 @@ specified below, the secret must be defined by setting the `spark.authenticate.s
 option. The same secret is shared by all Spark applications and daemons in that case, which limits
 the security of these deployments, especially on multi-tenant clusters.
 
-The REST Submission Server does not support authentication. You should
-ensure that all network access to the REST API (port 6066 by default) 
-is restricted to hosts that are trusted to submit jobs.
+The REST Submission Server supports HTTP `Authorization` header with
+a cryptographically signed JSON Web Token via `JWSFilter`.
+To enable authorization, Spark Master should have
+`spark.master.rest.filters=org.apache.spark.ui.JWSFilter` and
+`spark.org.apache.spark.ui.JWSFilter.param.secretKey=BASE64URL-ENCODED-KEY` configurations, and
+client should provide HTTP `Authorization` header which contains JSON Web Token signed by
+the shared secret key. Please note that this feature requires a Spark distribution built with
+`jjwt` profile.
 
 ### YARN
 
@@ -60,7 +65,7 @@ distributing the shared secret. Each application will use a unique shared secret
 the case of YARN, this feature relies on YARN RPC encryption being enabled for the distribution of
 secrets to be secure.
 
-<table>
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.yarn.shuffle.server.recovery.disabled</code></td>
@@ -82,7 +87,7 @@ that any user that can list pods in the namespace where the Spark application is
 also see their authentication secret. Access control rules should be properly set up by the
 Kubernetes admin to ensure that Spark authentication is secure.
 
-<table>
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.authenticate</code></td>
@@ -103,7 +108,7 @@ Kubernetes admin to ensure that Spark authentication is secure.
 Alternatively, one can mount authentication secrets using files and Kubernetes secrets that
 the user mounts into their pods.
 
-<table>
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.authenticate.secret.file</code></td>
@@ -149,14 +154,15 @@ secret file agrees with the executors' secret file.
 
 # Network Encryption
 
-Spark supports two mutually exclusive forms of encryption for RPC connections.
+Spark supports two mutually exclusive forms of encryption for RPC connections:
 
-The first is an AES-based encryption which relies on a shared secret, and thus requires
-RPC authentication to also be enabled.
+The **preferred method** uses TLS (aka SSL) encryption via Netty's support for SSL. Enabling SSL
+requires keys and certificates to be properly configured. SSL is standardized and considered more
+secure.
 
-The second is an SSL based encryption mechanism utilizing Netty's support for SSL. This requires
-keys and certificates to be properly configured. It can be used with or without the authentication
-mechanism discussed earlier.
+The legacy method is an AES-based encryption mechanism relying on a shared secret. This requires
+RPC authentication to also be enabled. This method uses a bespoke protocol and it is recommended
+to use SSL instead.
 
 One may prefer to use the SSL based encryption in scenarios where compliance mandates the usage
 of specific protocols; or to leverage the security of a more standard encryption library. However,
@@ -166,19 +172,37 @@ is that data be encrypted in transit.
 If both options are enabled in the configuration, the SSL based RPC encryption takes precedence
 and the AES based encryption will not be used (and a warning message will be emitted).
 
-## AES based Encryption
+## SSL Encryption (Preferred)
+
+Spark supports SSL based encryption for RPC connections. Please refer to the SSL Configuration
+section below to understand how to configure it. The SSL settings are mostly similar across the UI
+and RPC, however there are a few additional settings which are specific to the RPC implementation.
+The RPC implementation uses Netty under the hood (while the UI uses Jetty), which supports a
+different set of options.
+
+Unlike the other SSL settings for the UI, the RPC SSL is *not* automatically enabled if
+`spark.ssl.enabled` is set. It must be explicitly enabled, to ensure a safe migration path for users
+upgrading Spark versions.
+
+## AES-based Encryption (Legacy)
 
 Spark supports AES-based encryption for RPC connections. For encryption to be enabled, RPC
 authentication must also be enabled and properly configured. AES encryption uses the
 [Apache Commons Crypto](https://commons.apache.org/proper/commons-crypto/) library, and Spark's
 configuration system allows access to that library's configuration for advanced users.
 
+This legacy protocol has two mutually incompatible versions. Version 1 omits applying key derivation function
+(KDF) to the key exchange protocol's output, while version 2 applies a KDF to ensure that the derived session
+key is uniformly distributed. Version 1 is default for backward compatibility. It is **recommended to use version 2**
+for better security properties. The version can be configured by setting `spark.network.crypto.authEngineVersion` to
+1 or 2 respectively.
+
 There is also support for SASL-based encryption, although it should be considered deprecated. It
 is still required when talking to shuffle services from Spark versions older than 2.2.0.
 
 The following table describes the different options available for configuring this feature.
 
-<table>
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.network.crypto.enabled</code></td>
@@ -187,6 +211,21 @@ The following table describes the different options available for configuring th
     Enable AES-based RPC encryption, including the new authentication protocol added in 2.2.0.
   </td>
   <td>2.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.network.crypto.cipher</code></td>
+  <td>AES/CTR/NoPadding</td>
+  <td>
+    Cipher mode to use. Defaults "AES/CTR/NoPadding" for backward compatibility, which is not authenticated. 
+    Recommended to use "AES/GCM/NoPadding", which is an authenticated encryption mode.
+  </td>
+  <td>4.0.0, 3.5.2, 3.4.4</td>
+</tr>
+<tr>
+  <td><code>spark.network.crypto.authEngineVersion</code></td>
+  <td>1</td>
+  <td>Version of AES-based RPC encryption to use. Valid versions are 1 or 2. Version 2 is recommended.</td>
+  <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.network.crypto.config.*</code></td>
@@ -228,18 +267,6 @@ The following table describes the different options available for configuring th
 </tr>
 </table>
 
-## SSL Encryption
-
-Spark supports SSL based encryption for RPC connections. Please refer to the SSL Configuration
-section below to understand how to configure it. The SSL settings are mostly similar across the UI 
-and RPC, however there are a few additional settings which are specific to the RPC implementation.
-The RPC implementation uses Netty under the hood (while the UI uses Jetty), which supports a
-different set of options.
-
-Unlike the other SSL settings for the UI, the RPC SSL is *not* automatically enabled if 
-`spark.ssl.enabled` is set. It must be explicitly enabled, to ensure a safe migration path for users
-upgrading Spark versions.
-
 # Local Storage Encryption
 
 Spark supports encrypting temporary data written to local disks. This covers shuffle files, shuffle
@@ -249,7 +276,7 @@ encrypting output data generated by applications with APIs such as `saveAsHadoop
 
 The following settings cover enabling encryption for data written to disk:
 
-<table>
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.io.encryption.enabled</code></td>
@@ -295,7 +322,7 @@ The following settings cover enabling encryption for data written to disk:
 
 ## Authentication and Authorization
 
-Enabling authentication for the Web UIs is done using [javax servlet filters](https://docs.oracle.com/javaee/6/api/javax/servlet/Filter.html).
+Enabling authentication for the Web UIs is done using [jakarta servlet filters](https://jakarta.ee/specifications/servlet/5.0/apidocs/jakarta/servlet/filter).
 You will need a filter that implements the authentication method you want to deploy. Spark does not
 provide any built-in authentication filters.
 
@@ -317,7 +344,7 @@ below.
 
 The following options control the authentication of Web UIs:
 
-<table>
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.ui.allowFramingFrom</code></td>
@@ -329,6 +356,8 @@ The following options control the authentication of Web UIs:
   <td><code>spark.ui.filters</code></td>
   <td>None</td>
   <td>
+    Spark supports HTTP <code>Authorization</code> header with a cryptographically signed
+    JSON Web Token via <code>org.apache.spark.ui.JWSFilter</code>. <br />
     See the <a href="configuration.html#spark-ui">Spark UI</a> configuration for how to configure
     filters.
   </td>
@@ -421,7 +450,7 @@ servlet filters.
 
 To enable authorization in the SHS, a few extra options are used:
 
-<table>
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.history.ui.acls.enable</code></td>
@@ -734,7 +763,7 @@ Apache Spark can be configured to include HTTP headers to aid in preventing Cros
 (XSS), Cross-Frame Scripting (XFS), MIME-Sniffing, and also to enforce HTTP Strict Transport
 Security.
 
-<table>
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.ui.xXssProtection</code></td>
@@ -784,6 +813,12 @@ Generally speaking, a Spark cluster and its services are not deployed on the pub
 They are generally private services, and should only be accessible within the network of the
 organization that deploys Spark. Access to the hosts and ports used by Spark services should
 be limited to origin hosts that need to access the services.
+
+However, like the REST Submission port, Spark also supports HTTP `Authorization` header
+with a cryptographically signed JSON Web Token (JWT) for all UI ports.
+To use it, a user needs the Spark distribution built with `jjwt` profile and to configure
+`spark.ui.filters=org.apache.spark.ui.JWSFilter` and
+`spark.org.apache.spark.ui.JWSFilter.param.secretKey=BASE64URL-ENCODED-KEY`.
 
 Below are the primary ports that Spark uses for its communication and how to
 configure those ports.
@@ -912,12 +947,12 @@ mechanism (see `java.util.ServiceLoader`). Implementations of
 `org.apache.spark.security.HadoopDelegationTokenProvider` can be made available to Spark
 by listing their names in the corresponding file in the jar's `META-INF/services` directory.
 
-Delegation token support is currently only supported in YARN mode. Consult the
+Delegation token support is currently only supported in YARN and Kubernetes mode. Consult the
 deployment-specific page for more information.
 
 The following options provides finer-grained control for this feature:
 
-<table>
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.security.credentials.${service}.enabled</code></td>

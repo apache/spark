@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler.cluster
 
 import java.util.Locale
-import java.util.concurrent.{Semaphore, TimeUnit}
+import java.util.concurrent.{RejectedExecutionException, Semaphore, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.concurrent.Future
@@ -27,7 +27,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
 import org.apache.spark.executor.ExecutorExitCode
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
 import org.apache.spark.internal.config.EXECUTOR_REMOVE_DELAY
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
@@ -144,7 +144,7 @@ private[spark] class StandaloneSchedulerBackend(
   }
 
   override def connected(appId: String): Unit = {
-    logInfo("Connected to Spark cluster with app ID " + appId)
+    logInfo(log"Connected to Spark cluster with app ID ${MDC(LogKeys.APP_ID, appId)}")
     this.appId = appId
     notifyContext()
     launcherBackend.setAppId(appId)
@@ -161,7 +161,7 @@ private[spark] class StandaloneSchedulerBackend(
     notifyContext()
     if (!stopping.get) {
       launcherBackend.setState(SparkAppHandle.State.KILLED)
-      logError("Application has been killed. Reason: " + reason)
+      logError(log"Application has been killed. Reason: ${MDC(LogKeys.REASON, reason)}")
       try {
         scheduler.error(reason)
       } finally {
@@ -173,8 +173,9 @@ private[spark] class StandaloneSchedulerBackend(
 
   override def executorAdded(fullId: String, workerId: String, hostPort: String, cores: Int,
     memory: Int): Unit = {
-    logInfo("Granted executor ID %s on hostPort %s with %d core(s), %s RAM".format(
-      fullId, hostPort, cores, Utils.megabytesToString(memory)))
+    logInfo(log"Granted executor ID ${MDC(LogKeys.EXECUTOR_ID, fullId)} on hostPort " +
+      log"${MDC(LogKeys.HOST_PORT, hostPort)} with ${MDC(LogKeys.NUM_CORES, cores)} core(s), " +
+      log"${MDC(LogKeys.MEMORY_SIZE, Utils.megabytesToString(memory))} RAM")
   }
 
   override def executorRemoved(
@@ -191,23 +192,28 @@ private[spark] class StandaloneSchedulerBackend(
       case Some(code) => ExecutorExited(code, exitCausedByApp = true, message)
       case None => ExecutorProcessLost(message, workerHost, causedByApp = workerHost.isEmpty)
     }
-    logInfo("Executor %s removed: %s".format(fullId, message))
+    logInfo(
+      log"Executor ${MDC(LogKeys.EXECUTOR_ID, fullId)} removed: ${MDC(LogKeys.MESSAGE, message)}")
     removeExecutor(fullId.split("/")(1), reason)
   }
 
   override def executorDecommissioned(fullId: String,
       decommissionInfo: ExecutorDecommissionInfo): Unit = {
-    logInfo(s"Asked to decommission executor $fullId")
+    logInfo(log"Asked to decommission executor ${MDC(LogKeys.EXECUTOR_ID, fullId)}")
     val execId = fullId.split("/")(1)
     decommissionExecutors(
       Array((execId, decommissionInfo)),
       adjustTargetNumExecutors = false,
       triggeredByExecutor = false)
-    logInfo("Executor %s decommissioned: %s".format(fullId, decommissionInfo))
+    logInfo(
+      log"Executor ${MDC(LogKeys.EXECUTOR_ID, fullId)} " +
+        log"decommissioned: ${MDC(LogKeys.DESCRIPTION, decommissionInfo)}"
+      )
   }
 
   override def workerRemoved(workerId: String, host: String, message: String): Unit = {
-    logInfo("Worker %s removed: %s".format(workerId, message))
+    logInfo(log"Worker ${MDC(LogKeys.WORKER_ID, workerId)} removed: " +
+      log"${MDC(LogKeys.MESSAGE, message)}")
     removeWorker(workerId, host, message)
   }
 
@@ -343,8 +349,14 @@ private[spark] class StandaloneSchedulerBackend(
             }
           }
         }
-        executorDelayRemoveThread.schedule(removeExecutorTask,
-          _executorRemoveDelay, TimeUnit.MILLISECONDS)
+        try {
+          executorDelayRemoveThread.schedule(removeExecutorTask,
+            _executorRemoveDelay, TimeUnit.MILLISECONDS)
+        } catch {
+          case _: RejectedExecutionException if stopping.get() =>
+            logWarning("Skipping onDisconnected RemoveExecutor call " +
+              "because the scheduler is stopping")
+        }
       }
     }
   }

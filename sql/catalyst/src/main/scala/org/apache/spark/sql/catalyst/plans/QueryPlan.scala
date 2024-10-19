@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import java.util.IdentityHashMap
+
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
@@ -30,6 +32,7 @@ import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.util.TransientLazy
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -75,8 +78,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   /**
    * The set of all attributes that are input to this operator by its children.
    */
-  def inputSet: AttributeSet =
-    AttributeSet(children.flatMap(_.asInstanceOf[QueryPlan[PlanType]].output))
+  def inputSet: AttributeSet = {
+    children match {
+      case Seq() => AttributeSet.empty
+      case Seq(c) => c.outputSet
+      case _ => AttributeSet.fromAttributeSets(children.map(_.outputSet))
+    }
+  }
 
   /**
    * The set of all attributes that are produced by this node.
@@ -87,10 +95,11 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * All Attributes that appear in expressions from this operator.  Note that this set does not
    * include attributes that are implicitly referenced by being passed through to the output tuple.
    */
-  @transient
-  lazy val references: AttributeSet = {
-    AttributeSet.fromAttributeSets(expressions.map(_.references)) -- producedAttributes
-  }
+  def references: AttributeSet = _references()
+
+  private val _references = new TransientLazy({
+    AttributeSet(expressions) -- producedAttributes
+  })
 
   /**
    * Returns true when the all the expressions in the current node as well as all of its children
@@ -102,7 +111,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   /**
    * Attributes that are referenced by expressions but not provided by this node's children.
    */
-  final def missingInput: AttributeSet = references -- inputSet
+  final def missingInput: AttributeSet = {
+    if (references.isEmpty) {
+      AttributeSet.empty
+    } else {
+      references -- inputSet
+    }
+  }
 
   /**
    * Runs [[transformExpressionsDown]] with `rule` on all expressions present
@@ -215,12 +230,14 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
       }
     }
 
+    @scala.annotation.nowarn("cat=deprecation")
     def recursiveTransform(arg: Any): AnyRef = arg match {
       case e: Expression => transformExpression(e)
       case Some(value) => Some(recursiveTransform(value))
       case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
-      case stream: LazyList[_] => stream.map(recursiveTransform).force
+      case stream: Stream[_] => stream.map(recursiveTransform).force
+      case lazyList: LazyList[_] => lazyList.map(recursiveTransform).force
       case seq: Iterable[_] => seq.map(recursiveTransform)
       case other: AnyRef => other
       case null => null
@@ -361,6 +378,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
         } else {
           transferAttrMapping ++ newOtherAttrMapping
         }
+        if (!(plan eq planAfterRule)) {
+          planAfterRule.copyTagsFrom(plan)
+        }
         planAfterRule -> resultAttrMapping.toSeq
       }
     }
@@ -429,7 +449,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   override def verboseString(maxFields: Int): String = simpleString(maxFields)
 
   override def simpleStringWithNodeId(): String = {
-    val operatorId = getTagValue(QueryPlan.OP_ID_TAG).map(id => s"$id").getOrElse("unknown")
+    val operatorId = Option(QueryPlan.localIdMap.get().get(this)).map(id => s"$id")
+      .getOrElse("unknown")
     s"$nodeName ($operatorId)".trim
   }
 
@@ -449,7 +470,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   protected def formattedNodeName: String = {
-    val opId = getTagValue(QueryPlan.OP_ID_TAG).map(id => s"$id").getOrElse("unknown")
+    val opId = Option(QueryPlan.localIdMap.get().get(this)).map(id => s"$id")
+      .getOrElse("unknown")
     val codegenId =
       getTagValue(QueryPlan.CODEGEN_ID_TAG).map(id => s" [codegen id : $id]").getOrElse("")
     s"($opId) $nodeName$codegenId"
@@ -506,6 +528,30 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    */
   def transformDownWithSubqueries(f: PartialFunction[PlanType, PlanType]): PlanType = {
     transformDownWithSubqueriesAndPruning(AlwaysProcess.fn, UnknownRuleId)(f)
+  }
+
+  /**
+   * Same as `transformUpWithSubqueries` except allows for pruning opportunities.
+   */
+  def transformUpWithSubqueriesAndPruning(
+    cond: TreePatternBits => Boolean,
+    ruleId: RuleId = UnknownRuleId)
+    (f: PartialFunction[PlanType, PlanType]): PlanType = {
+    val g: PartialFunction[PlanType, PlanType] = new PartialFunction[PlanType, PlanType] {
+      override def isDefinedAt(x: PlanType): Boolean = true
+
+      override def apply(plan: PlanType): PlanType = {
+        val transformed = plan.transformExpressionsUpWithPruning(t =>
+          t.containsPattern(PLAN_EXPRESSION) && cond(t)) {
+          case planExpression: PlanExpression[PlanType@unchecked] =>
+            val newPlan = planExpression.plan.transformUpWithSubqueriesAndPruning(cond, ruleId)(f)
+            planExpression.withNewPlan(newPlan)
+        }
+        f.applyOrElse[PlanType, PlanType](transformed, identity)
+      }
+    }
+
+    transformUpWithPruning(cond, ruleId)(g)
   }
 
   /**
@@ -637,8 +683,16 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 }
 
 object QueryPlan extends PredicateHelper {
-  val OP_ID_TAG = TreeNodeTag[Int]("operatorId")
   val CODEGEN_ID_TAG = new TreeNodeTag[Int]("wholeStageCodegenId")
+
+  /**
+   * A thread local map to store the mapping between the query plan and the query plan id.
+   * The scope of this thread local is within ExplainUtils.processPlan. The reason we define it here
+   * is because [[ QueryPlan ]] also needs this, and it doesn't have access to `execution` package
+   * from `catalyst`.
+   */
+  val localIdMap: ThreadLocal[java.util.Map[QueryPlan[_], Int]] = ThreadLocal.withInitial(() =>
+    new IdentityHashMap[QueryPlan[_], Int]())
 
   /**
    * Normalize the exprIds in the given expression, by updating the exprId in `AttributeReference`

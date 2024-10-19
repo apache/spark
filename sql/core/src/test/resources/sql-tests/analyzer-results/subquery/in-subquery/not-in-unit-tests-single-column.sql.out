@@ -10,7 +10,7 @@ CreateViewCommand `m`, SELECT * FROM VALUES
   (null, 1.0),
   (2, 3.0),
   (4, 5.0)
-  AS m(a, b), false, false, LocalTempView, true
+  AS m(a, b), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias m
          +- LocalRelation [a#x, b#x]
@@ -27,7 +27,7 @@ CreateViewCommand `s`, SELECT * FROM VALUES
   (null, 1.0),
   (2, 3.0),
   (6, 7.0)
-  AS s(c, d), false, false, LocalTempView, true
+  AS s(c, d), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [c#x, d#x]
       +- SubqueryAlias s
          +- LocalRelation [c#x, d#x]
@@ -45,13 +45,13 @@ Project [a#x, b#x]
    :  +- Project [c#x]
    :     +- Filter (cast(d#x as decimal(3,1)) > 10.0)
    :        +- SubqueryAlias s
-   :           +- View (`s`, [c#x,d#x])
+   :           +- View (`s`, [c#x, d#x])
    :              +- Project [cast(c#x as int) AS c#x, cast(d#x as decimal(2,1)) AS d#x]
    :                 +- Project [c#x, d#x]
    :                    +- SubqueryAlias s
    :                       +- LocalRelation [c#x, d#x]
    +- SubqueryAlias m
-      +- View (`m`, [a#x,b#x])
+      +- View (`m`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as decimal(2,1)) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias m
@@ -70,13 +70,13 @@ Project [a#x, b#x]
    :  +- Project [c#x]
    :     +- Filter (d#x = 1.0)
    :        +- SubqueryAlias s
-   :           +- View (`s`, [c#x,d#x])
+   :           +- View (`s`, [c#x, d#x])
    :              +- Project [cast(c#x as int) AS c#x, cast(d#x as decimal(2,1)) AS d#x]
    :                 +- Project [c#x, d#x]
    :                    +- SubqueryAlias s
    :                       +- LocalRelation [c#x, d#x]
    +- SubqueryAlias m
-      +- View (`m`, [a#x,b#x])
+      +- View (`m`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as decimal(2,1)) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias m
@@ -96,13 +96,13 @@ Project [a#x, b#x]
    :  +- Project [c#x]
    :     +- Filter (d#x = 3.0)
    :        +- SubqueryAlias s
-   :           +- View (`s`, [c#x,d#x])
+   :           +- View (`s`, [c#x, d#x])
    :              +- Project [cast(c#x as int) AS c#x, cast(d#x as decimal(2,1)) AS d#x]
    :                 +- Project [c#x, d#x]
    :                    +- SubqueryAlias s
    :                       +- LocalRelation [c#x, d#x]
    +- SubqueryAlias m
-      +- View (`m`, [a#x,b#x])
+      +- View (`m`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as decimal(2,1)) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias m
@@ -122,13 +122,13 @@ Project [a#x, b#x]
    :  +- Project [c#x]
    :     +- Filter (d#x = 3.0)
    :        +- SubqueryAlias s
-   :           +- View (`s`, [c#x,d#x])
+   :           +- View (`s`, [c#x, d#x])
    :              +- Project [cast(c#x as int) AS c#x, cast(d#x as decimal(2,1)) AS d#x]
    :                 +- Project [c#x, d#x]
    :                    +- SubqueryAlias s
    :                       +- LocalRelation [c#x, d#x]
    +- SubqueryAlias m
-      +- View (`m`, [a#x,b#x])
+      +- View (`m`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as decimal(2,1)) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias m
@@ -148,13 +148,13 @@ Project [a#x, b#x]
    :  +- Project [c#x]
    :     +- Filter (d#x = 7.0)
    :        +- SubqueryAlias s
-   :           +- View (`s`, [c#x,d#x])
+   :           +- View (`s`, [c#x, d#x])
    :              +- Project [cast(c#x as int) AS c#x, cast(d#x as decimal(2,1)) AS d#x]
    :                 +- Project [c#x, d#x]
    :                    +- SubqueryAlias s
    :                       +- LocalRelation [c#x, d#x]
    +- SubqueryAlias m
-      +- View (`m`, [a#x,b#x])
+      +- View (`m`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as decimal(2,1)) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias m
@@ -173,13 +173,13 @@ Project [a#x, b#x]
    :  +- Project [c#x]
    :     +- Filter (cast(d#x as decimal(4,1)) = (outer(b#x) + cast(10 as decimal(2,0))))
    :        +- SubqueryAlias s
-   :           +- View (`s`, [c#x,d#x])
+   :           +- View (`s`, [c#x, d#x])
    :              +- Project [cast(c#x as int) AS c#x, cast(d#x as decimal(2,1)) AS d#x]
    :                 +- Project [c#x, d#x]
    :                    +- SubqueryAlias s
    :                       +- LocalRelation [c#x, d#x]
    +- SubqueryAlias m
-      +- View (`m`, [a#x,b#x])
+      +- View (`m`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as decimal(2,1)) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias m
@@ -199,13 +199,13 @@ Project [a#x, b#x]
    :  +- Project [c#x]
    :     +- Filter (cast(d#x as decimal(4,1)) = (outer(b#x) + cast(10 as decimal(2,0))))
    :        +- SubqueryAlias s
-   :           +- View (`s`, [c#x,d#x])
+   :           +- View (`s`, [c#x, d#x])
    :              +- Project [cast(c#x as int) AS c#x, cast(d#x as decimal(2,1)) AS d#x]
    :                 +- Project [c#x, d#x]
    :                    +- SubqueryAlias s
    :                       +- LocalRelation [c#x, d#x]
    +- SubqueryAlias m
-      +- View (`m`, [a#x,b#x])
+      +- View (`m`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as decimal(2,1)) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias m
@@ -225,13 +225,13 @@ Project [a#x, b#x]
    :  +- Project [c#x]
    :     +- Filter (cast(d#x as decimal(4,1)) = (outer(b#x) + cast(10 as decimal(2,0))))
    :        +- SubqueryAlias s
-   :           +- View (`s`, [c#x,d#x])
+   :           +- View (`s`, [c#x, d#x])
    :              +- Project [cast(c#x as int) AS c#x, cast(d#x as decimal(2,1)) AS d#x]
    :                 +- Project [c#x, d#x]
    :                    +- SubqueryAlias s
    :                       +- LocalRelation [c#x, d#x]
    +- SubqueryAlias m
-      +- View (`m`, [a#x,b#x])
+      +- View (`m`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as decimal(2,1)) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias m

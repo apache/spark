@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import java.lang.Thread.sleep
 import java.time.{LocalDateTime, ZoneId}
 
 import scala.concurrent.duration._
@@ -49,6 +50,19 @@ class ComputeCurrentTimeSuite extends PlanTest {
     assert(lits(0) >= min && lits(0) <= max)
     assert(lits(1) >= min && lits(1) <= max)
     assert(lits(0) == lits(1))
+  }
+
+  test("analyzer should respect time flow in current timestamp calls") {
+    val in = Project(Alias(CurrentTimestamp(), "t1")() :: Nil, LocalRelation())
+
+    val planT1 = Optimize.execute(in.analyze).asInstanceOf[Project]
+    sleep(1)
+    val planT2 = Optimize.execute(in.analyze).asInstanceOf[Project]
+
+    val t1 = DateTimeUtils.microsToMillis(literals[Long](planT1)(0))
+    val t2 = DateTimeUtils.microsToMillis(literals[Long](planT2)(0))
+
+    assert(t2 - t1 <= 1000 && t2 - t1 > 0)
   }
 
   test("analyzer should replace current_date with literals") {

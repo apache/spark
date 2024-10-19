@@ -83,6 +83,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   private static final Map<String, String> specialClasses = new HashMap<>();
   static {
     specialClasses.put("org.apache.spark.repl.Main", "spark-shell");
+    specialClasses.put("org.apache.spark.sql.application.ConnectRepl", "connect-shell");
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver",
       SparkLauncher.NO_RESOURCE);
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2",
@@ -245,13 +246,21 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
     if (mainClass != null) {
       args.add(parser.CLASS);
-      args.add(mainClass);
+      if (isRemote && "1".equals(getenv("SPARK_SCALA_SHELL"))) {
+        args.add("org.apache.spark.sql.application.ConnectRepl");
+      } else {
+        args.add(mainClass);
+      }
     }
 
     args.addAll(parsedArgs);
 
     if (appResource != null) {
-      args.add(appResource);
+      if (isRemote && "1".equals(getenv("SPARK_SCALA_SHELL"))) {
+        args.add("connect-shell");
+      } else {
+        args.add(appResource);
+      }
     }
 
     args.addAll(appArgs);
@@ -267,6 +276,12 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     Map<String, String> config = getEffectiveConfig();
     boolean isClientMode = isClientMode(config);
     String extraClassPath = isClientMode ? config.get(SparkLauncher.DRIVER_EXTRA_CLASSPATH) : null;
+    String defaultExtraClassPath = config.get(SparkLauncher.DRIVER_DEFAULT_EXTRA_CLASS_PATH);
+    if (extraClassPath == null || extraClassPath.trim().isEmpty()) {
+      extraClassPath = defaultExtraClassPath;
+    } else {
+      extraClassPath += File.pathSeparator + defaultExtraClassPath;
+    }
 
     List<String> cmd = buildJavaCommand(extraClassPath);
     // Take Thrift/Connect Server as daemon
@@ -303,8 +318,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         config.get(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH));
     }
 
-    // SPARK-36796: Always add default `--add-opens` to submit command
+    // SPARK-36796: Always add some JVM runtime default options to submit command
     addOptionString(cmd, JavaModuleOptions.defaultModuleOptions());
+    addOptionString(cmd, "-Dderby.connection.requireAuthentication=false");
     cmd.add("org.apache.spark.deploy.SparkSubmit");
     cmd.addAll(buildSparkSubmitArgs());
     return cmd;
@@ -491,17 +507,25 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     protected boolean handle(String opt, String value) {
       switch (opt) {
         case MASTER -> master = value;
-        case REMOTE -> remote = value;
+        case REMOTE -> {
+          isRemote = true;
+          remote = value;
+        }
         case DEPLOY_MODE -> deployMode = value;
         case PROPERTIES_FILE -> propertiesFile = value;
         case DRIVER_MEMORY -> conf.put(SparkLauncher.DRIVER_MEMORY, value);
         case DRIVER_JAVA_OPTIONS -> conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, value);
         case DRIVER_LIBRARY_PATH -> conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, value);
+        case DRIVER_DEFAULT_CLASS_PATH ->
+          conf.put(SparkLauncher.DRIVER_DEFAULT_EXTRA_CLASS_PATH, value);
         case DRIVER_CLASS_PATH -> conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, value);
         case CONF -> {
           checkArgument(value != null, "Missing argument to %s", CONF);
           String[] setConf = value.split("=", 2);
           checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
+          if (setConf[0].equals("spark.remote")) {
+            isRemote = true;
+          }
           conf.put(setConf[0], setConf[1]);
         }
         case CLASS -> {

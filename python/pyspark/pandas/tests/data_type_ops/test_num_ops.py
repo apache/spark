@@ -22,6 +22,7 @@ import numpy as np
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
@@ -100,7 +101,7 @@ class NumOpsTestsMixin:
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(pser, psser._to_pandas())
+            self.assert_eq(pser, psser._to_pandas(), check_exact=False)
             self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -111,12 +112,12 @@ class NumOpsTestsMixin:
     def test_neg(self):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
-            self.assert_eq(-pdf[col], -psdf[col])
+            self.assert_eq(-pdf[col], -psdf[col], check_exact=False)
 
     def test_abs(self):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
-            self.assert_eq(abs(pdf[col]), abs(psdf[col]))
+            self.assert_eq(abs(pdf[col]), abs(psdf[col]), check_exact=False)
 
     def test_invert(self):
         pdf, psdf = self.pdf, self.psdf
@@ -410,7 +411,11 @@ class FractionalExtensionOpsTest(OpsTestBase):
                 self.check_extension(pser >= pser, (psser >= psser).sort_index())
 
 
-class NumOpsTests(NumOpsTestsMixin, OpsTestBase):
+class NumOpsTests(
+    NumOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
     pass
 
 

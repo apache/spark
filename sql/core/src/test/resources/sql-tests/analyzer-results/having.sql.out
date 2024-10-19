@@ -12,7 +12,7 @@ CreateViewCommand `hav`, select * from values
   ("two", 2),
   ("three", 3),
   ("one", 5)
-  as hav(k, v), false, false, LocalTempView, true
+  as hav(k, v), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v#x]
       +- SubqueryAlias hav
          +- LocalRelation [k#x, v#x]
@@ -24,7 +24,7 @@ SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2
 Filter (sum(v)#xL > cast(2 as bigint))
 +- Aggregate [k#x], [k#x, sum(v#x) AS sum(v)#xL]
    +- SubqueryAlias hav
-      +- View (`hav`, [k#x,v#x])
+      +- View (`hav`, [k#x, v#x])
          +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias hav
@@ -38,7 +38,7 @@ Project [count(k)#xL]
 +- Filter ((v#x + 1)#x = 2)
    +- Aggregate [(v#x + 1)], [count(k#x) AS count(k)#xL, (v#x + 1) AS (v#x + 1)#x]
       +- SubqueryAlias hav
-         +- View (`hav`, [k#x,v#x])
+         +- View (`hav`, [k#x, v#x])
             +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias hav
@@ -77,7 +77,7 @@ Project [min(v)#x]
          +- Project [k#x, v#x]
             +- Filter (v#x > 0)
                +- SubqueryAlias hav
-                  +- View (`hav`, [k#x,v#x])
+                  +- View (`hav`, [k#x, v#x])
                      +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                         +- Project [k#x, v#x]
                            +- SubqueryAlias hav
@@ -188,7 +188,7 @@ Sort [sum(v)#xL ASC NULLS FIRST], true
 +- Filter (sum(v)#xL > cast(2 as bigint))
    +- Aggregate [k#x], [k#x, sum(v#x) AS sum(v)#xL]
       +- SubqueryAlias hav
-         +- View (`hav`, [k#x,v#x])
+         +- View (`hav`, [k#x, v#x])
             +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias hav
@@ -203,7 +203,7 @@ Project [k#x, sum(v)#xL]
    +- Filter (sum(v)#xL > cast(2 as bigint))
       +- Aggregate [k#x], [k#x, sum(v#x) AS sum(v)#xL, avg(v#x) AS avg(v#x)#x]
          +- SubqueryAlias hav
-            +- View (`hav`, [k#x,v#x])
+            +- View (`hav`, [k#x, v#x])
                +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                   +- Project [k#x, v#x]
                      +- SubqueryAlias hav

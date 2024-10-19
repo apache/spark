@@ -6,7 +6,7 @@ AS testData(a, b)
 -- !query analysis
 CreateViewCommand `testData`, SELECT * FROM VALUES
 (1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2)
-AS testData(a, b), false, true, LocalTempView, true
+AS testData(a, b), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias testData
          +- LocalRelation [a#x, b#x]
@@ -19,7 +19,7 @@ Aggregate [(a#x + b#x)#x, b#x, spark_grouping_id#xL], [(a#x + b#x)#x AS (a + b)#
 +- Expand [[a#x, b#x, (a#x + b#x)#x, b#x, 0], [a#x, b#x, (a#x + b#x)#x, null, 1], [a#x, b#x, null, b#x, 2], [a#x, b#x, null, null, 3]], [a#x, b#x, (a#x + b#x)#x, b#x, spark_grouping_id#xL]
    +- Project [a#x, b#x, (a#x + b#x) AS (a#x + b#x)#x, b#x AS b#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -33,7 +33,7 @@ Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum(b#x) AS sum(b)#xL]
 +- Expand [[a#x, b#x, a#x, b#x, 0], [a#x, b#x, a#x, null, 1], [a#x, b#x, null, b#x, 2], [a#x, b#x, null, null, 3]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL]
    +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -47,7 +47,7 @@ Aggregate [(a#x + b#x)#x, b#x, spark_grouping_id#xL], [(a#x + b#x)#x AS (a + b)#
 +- Expand [[a#x, b#x, (a#x + b#x)#x, b#x, 0], [a#x, b#x, (a#x + b#x)#x, null, 1], [a#x, b#x, null, null, 3]], [a#x, b#x, (a#x + b#x)#x, b#x, spark_grouping_id#xL]
    +- Project [a#x, b#x, (a#x + b#x) AS (a#x + b#x)#x, b#x AS b#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -61,7 +61,7 @@ Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum(b#x) AS sum(b)#xL]
 +- Expand [[a#x, b#x, a#x, b#x, 0], [a#x, b#x, a#x, null, 1], [a#x, b#x, null, null, 3]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL]
    +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -75,7 +75,7 @@ AS courseSales(course, year, earnings)
 -- !query analysis
 CreateViewCommand `courseSales`, SELECT * FROM VALUES
 ("dotNET", 2012, 10000), ("Java", 2012, 20000), ("dotNET", 2012, 5000), ("dotNET", 2013, 48000), ("Java", 2013, 30000)
-AS courseSales(course, year, earnings), false, true, LocalTempView, true
+AS courseSales(course, year, earnings), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [course#x, year#x, earnings#x]
       +- SubqueryAlias courseSales
          +- LocalRelation [course#x, year#x, earnings#x]
@@ -89,7 +89,7 @@ Sort [course#x ASC NULLS FIRST, year#x ASC NULLS FIRST], true
    +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
          +- SubqueryAlias coursesales
-            +- View (`courseSales`, [course#x,year#x,earnings#x])
+            +- View (`courseSales`, [course#x, year#x, earnings#x])
                +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
@@ -104,7 +104,7 @@ Sort [course#x ASC NULLS FIRST, year#x ASC NULLS FIRST], true
    +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0, 0], [course#x, year#x, earnings#x, course#x, year#x, 0, 1], [course#x, year#x, earnings#x, course#x, null, 1, 2], [course#x, year#x, earnings#x, null, null, 3, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL, _gen_grouping_pos#x]
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
          +- SubqueryAlias coursesales
-            +- View (`courseSales`, [course#x,year#x,earnings#x])
+            +- View (`courseSales`, [course#x, year#x, earnings#x])
                +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
@@ -138,7 +138,7 @@ Sort [course#x ASC NULLS FIRST, year#x ASC NULLS FIRST], true
    +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
          +- SubqueryAlias coursesales
-            +- View (`courseSales`, [course#x,year#x,earnings#x])
+            +- View (`courseSales`, [course#x, year#x, earnings#x])
                +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
@@ -153,7 +153,7 @@ Sort [course#x ASC NULLS FIRST, year#x ASC NULLS FIRST], true
    +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0, 0], [course#x, year#x, earnings#x, course#x, year#x, 0, 1], [course#x, year#x, earnings#x, course#x, year#x, 0, 2], [course#x, year#x, earnings#x, course#x, null, 1, 3], [course#x, year#x, earnings#x, course#x, year#x, 0, 4], [course#x, year#x, earnings#x, null, year#x, 2, 5], [course#x, year#x, earnings#x, course#x, year#x, 0, 6], [course#x, year#x, earnings#x, null, null, 3, 7]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL, _gen_grouping_pos#x]
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
          +- SubqueryAlias coursesales
-            +- View (`courseSales`, [course#x,year#x,earnings#x])
+            +- View (`courseSales`, [course#x, year#x, earnings#x])
                +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
@@ -186,7 +186,7 @@ Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, sum(earni
 +- Expand [[course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
    +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
       +- SubqueryAlias coursesales
-         +- View (`courseSales`, [course#x,year#x,earnings#x])
+         +- View (`courseSales`, [course#x, year#x, earnings#x])
             +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                +- Project [course#x, year#x, earnings#x]
                   +- SubqueryAlias courseSales
@@ -200,7 +200,7 @@ Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, sum(earni
 +- Expand [[course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
    +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
       +- SubqueryAlias coursesales
-         +- View (`courseSales`, [course#x,year#x,earnings#x])
+         +- View (`courseSales`, [course#x, year#x, earnings#x])
             +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                +- Project [course#x, year#x, earnings#x]
                   +- SubqueryAlias courseSales
@@ -214,7 +214,7 @@ Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, sum(earni
 +- Expand [[course#x, year#x, earnings#x, course#x, null, 1]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
    +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
       +- SubqueryAlias coursesales
-         +- View (`courseSales`, [course#x,year#x,earnings#x])
+         +- View (`courseSales`, [course#x, year#x, earnings#x])
             +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                +- Project [course#x, year#x, earnings#x]
                   +- SubqueryAlias courseSales
@@ -228,7 +228,7 @@ Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, sum(earni
 +- Expand [[course#x, year#x, earnings#x, null, year#x, 2]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
    +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
       +- SubqueryAlias coursesales
-         +- View (`courseSales`, [course#x,year#x,earnings#x])
+         +- View (`courseSales`, [course#x, year#x, earnings#x])
             +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                +- Project [course#x, year#x, earnings#x]
                   +- SubqueryAlias courseSales
@@ -243,7 +243,7 @@ Sort [course#x ASC NULLS FIRST, year#x ASC NULLS FIRST], true
    +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0, 0], [course#x, year#x, earnings#x, course#x, null, 1, 1], [course#x, year#x, earnings#x, course#x, year#x, 0, 2], [course#x, year#x, earnings#x, course#x, null, 1, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL, _gen_grouping_pos#x]
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
          +- SubqueryAlias coursesales
-            +- View (`courseSales`, [course#x,year#x,earnings#x])
+            +- View (`courseSales`, [course#x, year#x, earnings#x])
                +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
@@ -258,7 +258,7 @@ Sort [course#x ASC NULLS FIRST, year#x ASC NULLS FIRST], true
    +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0, 0], [course#x, year#x, earnings#x, course#x, year#x, 0, 1], [course#x, year#x, earnings#x, course#x, year#x, 0, 2], [course#x, year#x, earnings#x, course#x, year#x, 0, 3], [course#x, year#x, earnings#x, course#x, null, 1, 4], [course#x, year#x, earnings#x, course#x, null, 1, 5], [course#x, year#x, earnings#x, course#x, year#x, 0, 6], [course#x, year#x, earnings#x, course#x, year#x, 0, 7], [course#x, year#x, earnings#x, null, year#x, 2, 8], [course#x, year#x, earnings#x, course#x, year#x, 0, 9], [course#x, year#x, earnings#x, course#x, null, 1, 10], [course#x, year#x, earnings#x, null, null, 3, 11]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL, _gen_grouping_pos#x]
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
          +- SubqueryAlias coursesales
-            +- View (`courseSales`, [course#x,year#x,earnings#x])
+            +- View (`courseSales`, [course#x, year#x, earnings#x])
                +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
@@ -273,7 +273,7 @@ Sort [course#x ASC NULLS FIRST, year#x ASC NULLS FIRST], true
    +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0, 0], [course#x, year#x, earnings#x, course#x, year#x, 0, 1], [course#x, year#x, earnings#x, course#x, year#x, 0, 2], [course#x, year#x, earnings#x, course#x, year#x, 0, 3], [course#x, year#x, earnings#x, course#x, year#x, 0, 4], [course#x, year#x, earnings#x, course#x, year#x, 0, 5], [course#x, year#x, earnings#x, course#x, year#x, 0, 6], [course#x, year#x, earnings#x, course#x, year#x, 0, 7], [course#x, year#x, earnings#x, course#x, null, 1, 8], [course#x, year#x, earnings#x, course#x, year#x, 0, 9], [course#x, year#x, earnings#x, course#x, null, 1, 10], [course#x, year#x, earnings#x, course#x, year#x, 0, 11], [course#x, year#x, earnings#x, course#x, year#x, 0, 12], [course#x, year#x, earnings#x, course#x, year#x, 0, 13], [course#x, year#x, earnings#x, course#x, year#x, 0, 14], [course#x, year#x, earnings#x, course#x, year#x, 0, 15], [course#x, year#x, earnings#x, course#x, year#x, 0, 16], [course#x, year#x, earnings#x, null, year#x, 2, 17], [course#x, year#x, earnings#x, course#x, year#x, 0, 18], [course#x, year#x, earnings#x, course#x, year#x, 0, 19], [course#x, year#x, earnings#x, course#x, null, 1, 20], [course#x, year#x, earnings#x, course#x, year#x, 0, 21], [course#x, year#x, earnings#x, course#x, null, 1, 22], [course#x, year#x, earnings#x, null, year#x, 2, 23]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL, _gen_grouping_pos#x]
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
          +- SubqueryAlias coursesales
-            +- View (`courseSales`, [course#x,year#x,earnings#x])
+            +- View (`courseSales`, [course#x, year#x, earnings#x])
                +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
@@ -289,7 +289,7 @@ Sort [course#x ASC NULLS FIRST, sum#xL ASC NULLS FIRST], true
    +- Expand [[course#x, year#x, earnings#x, null, null, 3], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, course#x, earnings#x, 0]], [course#x, year#x, earnings#x, course#x, earnings#x, spark_grouping_id#xL]
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, earnings#x AS earnings#x]
          +- SubqueryAlias coursesales
-            +- View (`courseSales`, [course#x,year#x,earnings#x])
+            +- View (`courseSales`, [course#x, year#x, earnings#x])
                +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
@@ -305,7 +305,7 @@ Sort [course#x ASC NULLS FIRST, sum#xL ASC NULLS FIRST], true
    +- Expand [[course#x, year#x, earnings#x, null, null, 3], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, course#x, earnings#x, 0]], [course#x, year#x, earnings#x, course#x, earnings#x, spark_grouping_id#xL]
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, earnings#x AS earnings#x]
          +- SubqueryAlias coursesales
-            +- View (`courseSales`, [course#x,year#x,earnings#x])
+            +- View (`courseSales`, [course#x, year#x, earnings#x])
                +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
@@ -320,7 +320,7 @@ Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, cast((shi
 +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
    +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
       +- SubqueryAlias coursesales
-         +- View (`courseSales`, [course#x,year#x,earnings#x])
+         +- View (`courseSales`, [course#x, year#x, earnings#x])
             +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                +- Project [course#x, year#x, earnings#x]
                   +- SubqueryAlias courseSales
@@ -369,7 +369,7 @@ Sort [grouping__id#xL ASC NULLS FIRST, course#x ASC NULLS FIRST, year#x ASC NULL
    +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
       +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
          +- SubqueryAlias coursesales
-            +- View (`courseSales`, [course#x,year#x,earnings#x])
+            +- View (`courseSales`, [course#x, year#x, earnings#x])
                +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
@@ -387,7 +387,7 @@ Sort [course#x ASC NULLS FIRST, year#x ASC NULLS FIRST], true
          +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
             +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
                +- SubqueryAlias coursesales
-                  +- View (`courseSales`, [course#x,year#x,earnings#x])
+                  +- View (`courseSales`, [course#x, year#x, earnings#x])
                      +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                         +- Project [course#x, year#x, earnings#x]
                            +- SubqueryAlias courseSales
@@ -423,7 +423,7 @@ Project [course#x, year#x]
       +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
          +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
             +- SubqueryAlias coursesales
-               +- View (`courseSales`, [course#x,year#x,earnings#x])
+               +- View (`courseSales`, [course#x, year#x, earnings#x])
                   +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                      +- Project [course#x, year#x, earnings#x]
                         +- SubqueryAlias courseSales
@@ -440,7 +440,7 @@ Project [course#x, year#x, grouping(course)#x, grouping(year)#x]
       +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
          +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
             +- SubqueryAlias coursesales
-               +- View (`courseSales`, [course#x,year#x,earnings#x])
+               +- View (`courseSales`, [course#x, year#x, earnings#x])
                   +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                      +- Project [course#x, year#x, earnings#x]
                         +- SubqueryAlias courseSales
@@ -457,7 +457,7 @@ Project [course#x, year#x, grouping_id(course, year)#xL]
       +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
          +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
             +- SubqueryAlias coursesales
-               +- View (`courseSales`, [course#x,year#x,earnings#x])
+               +- View (`courseSales`, [course#x, year#x, earnings#x])
                   +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                      +- Project [course#x, year#x, earnings#x]
                         +- SubqueryAlias courseSales
@@ -493,7 +493,7 @@ Project [course#x, year#x]
       +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
          +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
             +- SubqueryAlias coursesales
-               +- View (`courseSales`, [course#x,year#x,earnings#x])
+               +- View (`courseSales`, [course#x, year#x, earnings#x])
                   +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                      +- Project [course#x, year#x, earnings#x]
                         +- SubqueryAlias courseSales
@@ -507,7 +507,7 @@ Aggregate [k1#x, k2#x, spark_grouping_id#xL], [k1#x, k2#x, sum((a#x - b#x)) AS s
 +- Expand [[a#x, b#x, k1#x, k2#x, 0], [a#x, b#x, k1#x, null, 1], [a#x, b#x, null, k2#x, 2], [a#x, b#x, null, null, 3]], [a#x, b#x, k1#x, k2#x, spark_grouping_id#xL]
    +- Project [a#x, b#x, (a#x + b#x) AS k1#x, b#x AS k2#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -521,7 +521,7 @@ Aggregate [k#x, b#x, spark_grouping_id#xL], [k#x, b#x, sum((a#x - b#x)) AS sum((
 +- Expand [[a#x, b#x, k#x, b#x, 0], [a#x, b#x, k#x, null, 1], [a#x, b#x, null, null, 3]], [a#x, b#x, k#x, b#x, spark_grouping_id#xL]
    +- Project [a#x, b#x, (a#x + b#x) AS k#x, b#x AS b#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -535,7 +535,7 @@ Aggregate [(a#x + b#x)#x, k#x, spark_grouping_id#xL], [(a#x + b#x)#x AS (a + b)#
 +- Expand [[a#x, b#x, null, k#x, 2]], [a#x, b#x, (a#x + b#x)#x, k#x, spark_grouping_id#xL]
    +- Project [a#x, b#x, (a#x + b#x) AS (a#x + b#x)#x, b#x AS k#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -549,7 +549,7 @@ Aggregate [a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x], [a#x, b#x, coun
 +- Expand [[a#x, b#x, a#x, b#x, 0, 0], [a#x, b#x, a#x, b#x, 0, 1], [a#x, b#x, a#x, b#x, 0, 2], [a#x, b#x, a#x, b#x, 0, 3]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x]
    +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -563,7 +563,7 @@ Aggregate [a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x], [a#x, b#x, coun
 +- Expand [[a#x, b#x, a#x, b#x, 0, 0], [a#x, b#x, a#x, b#x, 0, 1], [a#x, b#x, a#x, b#x, 0, 2]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x]
    +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -577,7 +577,7 @@ Aggregate [a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x], [a#x, b#x, coun
 +- Expand [[a#x, b#x, a#x, b#x, 0, 0], [a#x, b#x, a#x, b#x, 0, 1], [a#x, b#x, a#x, b#x, 0, 2], [a#x, b#x, a#x, b#x, 0, 3], [a#x, b#x, a#x, null, 1, 4], [a#x, b#x, a#x, null, 1, 5], [a#x, b#x, a#x, b#x, 0, 6], [a#x, b#x, a#x, b#x, 0, 7], [a#x, b#x, null, b#x, 2, 8], [a#x, b#x, a#x, b#x, 0, 9], [a#x, b#x, a#x, null, 1, 10], [a#x, b#x, null, null, 3, 11]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x]
    +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -591,7 +591,7 @@ Aggregate [a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x], [a#x, b#x, coun
 +- Expand [[a#x, b#x, a#x, b#x, 0, 0], [a#x, b#x, a#x, b#x, 0, 1], [a#x, b#x, a#x, b#x, 0, 2], [a#x, b#x, a#x, null, 1, 3], [a#x, b#x, a#x, b#x, 0, 4], [a#x, b#x, a#x, b#x, 0, 5], [a#x, b#x, a#x, b#x, 0, 6], [a#x, b#x, a#x, null, 1, 7]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x]
    +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -605,7 +605,7 @@ Aggregate [a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x], [a#x, b#x, coun
 +- Expand [[a#x, b#x, a#x, b#x, 0, 0], [a#x, b#x, a#x, null, 1, 1], [a#x, b#x, a#x, null, 1, 2]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x]
    +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -619,7 +619,7 @@ Aggregate [a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x], [a#x, b#x, coun
 +- Expand [[a#x, b#x, a#x, b#x, 0, 0], [a#x, b#x, a#x, b#x, 0, 1], [a#x, b#x, a#x, b#x, 0, 2], [a#x, b#x, a#x, b#x, 0, 3], [a#x, b#x, a#x, null, 1, 4], [a#x, b#x, a#x, null, 1, 5], [a#x, b#x, a#x, b#x, 0, 6], [a#x, b#x, a#x, b#x, 0, 7], [a#x, b#x, a#x, b#x, 0, 8], [a#x, b#x, a#x, b#x, 0, 9], [a#x, b#x, a#x, null, 1, 10], [a#x, b#x, a#x, null, 1, 11]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x]
    +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -633,7 +633,7 @@ Aggregate [a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x], [a#x, b#x, coun
 +- Expand [[a#x, b#x, a#x, b#x, 0, 0], [a#x, b#x, a#x, b#x, 0, 1], [a#x, b#x, a#x, b#x, 0, 2], [a#x, b#x, a#x, b#x, 0, 3], [a#x, b#x, a#x, b#x, 0, 4], [a#x, b#x, a#x, b#x, 0, 5], [a#x, b#x, a#x, b#x, 0, 6], [a#x, b#x, a#x, b#x, 0, 7], [a#x, b#x, a#x, b#x, 0, 8], [a#x, b#x, a#x, b#x, 0, 9], [a#x, b#x, a#x, b#x, 0, 10], [a#x, b#x, a#x, b#x, 0, 11], [a#x, b#x, a#x, b#x, 0, 12], [a#x, b#x, a#x, null, 1, 13], [a#x, b#x, a#x, null, 1, 14], [a#x, b#x, a#x, b#x, 0, 15], [a#x, b#x, a#x, null, 1, 16], [a#x, b#x, a#x, null, 1, 17], [a#x, b#x, a#x, b#x, 0, 18], [a#x, b#x, a#x, b#x, 0, 19], [a#x, b#x, a#x, b#x, 0, 20], [a#x, b#x, a#x, b#x, 0, 21], [a#x, b#x, a#x, b#x, 0, 22], [a#x, b#x, a#x, b#x, 0, 23], ... 12 more fields], [a#x, b#x, a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x]
    +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -647,7 +647,7 @@ Aggregate [a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x], [a#x, b#x, coun
 +- Expand [[a#x, b#x, a#x, b#x, 0, 0], [a#x, b#x, a#x, null, 1, 1], [a#x, b#x, a#x, null, 1, 2]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x]
    +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -661,7 +661,7 @@ Aggregate [a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x], [a#x, b#x, coun
 +- Expand [[a#x, b#x, a#x, b#x, 0, 0], [a#x, b#x, a#x, null, 1, 1], [a#x, b#x, a#x, null, 1, 2]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x]
    +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -675,7 +675,7 @@ Aggregate [a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x], [a#x, b#x, coun
 +- Expand [[a#x, b#x, a#x, b#x, 0, 0], [a#x, b#x, a#x, b#x, 0, 1], [a#x, b#x, a#x, null, 1, 2], [a#x, b#x, a#x, null, 1, 3]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x]
    +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -689,7 +689,7 @@ Aggregate [a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x], [a#x, b#x, coun
 +- Expand [[a#x, b#x, a#x, b#x, 0, 0], [a#x, b#x, a#x, b#x, 0, 1], [a#x, b#x, a#x, b#x, 0, 2]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x]
    +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -703,7 +703,7 @@ Aggregate [a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x], [a#x, b#x, coun
 +- Expand [[a#x, b#x, a#x, b#x, 0, 0], [a#x, b#x, a#x, b#x, 0, 1], [a#x, b#x, a#x, b#x, 0, 2]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x]
    +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -717,7 +717,7 @@ Aggregate [a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x], [a#x, b#x, coun
 +- Expand [[a#x, b#x, a#x, b#x, 0, 0], [a#x, b#x, a#x, null, 1, 1], [a#x, b#x, a#x, null, 1, 2], [a#x, b#x, a#x, b#x, 0, 3], [a#x, b#x, a#x, null, 1, 4], [a#x, b#x, a#x, b#x, 0, 5], [a#x, b#x, a#x, null, 1, 6]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x]
    +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -731,7 +731,7 @@ Aggregate [a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x], [a#x, b#x, coun
 +- Expand [[a#x, b#x, a#x, b#x, 0, 0], [a#x, b#x, a#x, null, 1, 1], [a#x, b#x, a#x, null, 1, 2], [a#x, b#x, a#x, b#x, 0, 3], [a#x, b#x, a#x, null, 1, 4], [a#x, b#x, a#x, b#x, 0, 5], [a#x, b#x, a#x, null, 1, 6]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x]
    +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -745,7 +745,7 @@ Aggregate [a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x], [a#x, b#x, coun
 +- Expand [[a#x, b#x, a#x, b#x, 0, 0], [a#x, b#x, a#x, null, 1, 1], [a#x, b#x, a#x, null, 1, 2], [a#x, b#x, a#x, b#x, 0, 3], [a#x, b#x, a#x, null, 1, 4], [a#x, b#x, a#x, b#x, 0, 5], [a#x, b#x, a#x, null, 1, 6]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x]
    +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData

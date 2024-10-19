@@ -1,3 +1,4 @@
+--ONLY_IF spark
 create temp view v (c) as values (1), (null);
 create temp view v_empty (e) as select 1 where false;
 

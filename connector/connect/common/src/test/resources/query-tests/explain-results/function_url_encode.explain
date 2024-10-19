@@ -1,2 +1,0 @@
-Project [staticinvoke(class org.apache.spark.sql.catalyst.expressions.UrlCodec$, StringType, encode, g#0, UTF-8, StringType, StringType, true, true, true) AS url_encode(g)#0]
-+- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

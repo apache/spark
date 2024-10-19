@@ -6,7 +6,7 @@ AS testData(a, b)
 -- !query analysis
 CreateViewCommand `testData`, SELECT * FROM VALUES
 (1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2), (null, 1), (3, null), (null, null)
-AS testData(a, b), false, true, LocalTempView, true
+AS testData(a, b), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias testData
          +- LocalRelation [a#x, b#x]
@@ -34,7 +34,7 @@ SELECT COUNT(a), COUNT(b) FROM testData
 -- !query analysis
 Aggregate [count(a#x) AS count(a)#xL, count(b#x) AS count(b)#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -46,7 +46,7 @@ SELECT a, COUNT(b) FROM testData GROUP BY a
 -- !query analysis
 Aggregate [a#x], [a#x, count(b#x) AS count(b)#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -72,7 +72,7 @@ SELECT COUNT(a), COUNT(b) FROM testData GROUP BY a
 -- !query analysis
 Aggregate [a#x], [count(a#x) AS count(a)#xL, count(b#x) AS count(b)#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -84,7 +84,7 @@ SELECT 'foo', COUNT(a) FROM testData GROUP BY 1
 -- !query analysis
 Aggregate [foo], [foo AS foo#x, count(a#x) AS count(a)#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -97,7 +97,7 @@ SELECT 'foo' FROM testData WHERE a = 0 GROUP BY 1
 Aggregate [foo], [foo AS foo#x]
 +- Filter (a#x = 0)
    +- SubqueryAlias testdata
-      +- View (`testData`, [a#x,b#x])
+      +- View (`testData`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias testData
@@ -110,7 +110,7 @@ SELECT 'foo', APPROX_COUNT_DISTINCT(a) FROM testData WHERE a = 0 GROUP BY 1
 Aggregate [foo], [foo AS foo#x, approx_count_distinct(a#x, 0.05, 0, 0) AS approx_count_distinct(a)#xL]
 +- Filter (a#x = 0)
    +- SubqueryAlias testdata
-      +- View (`testData`, [a#x,b#x])
+      +- View (`testData`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias testData
@@ -123,7 +123,7 @@ SELECT 'foo', MAX(STRUCT(a)) FROM testData WHERE a = 0 GROUP BY 1
 Aggregate [foo], [foo AS foo#x, max(struct(a, a#x)) AS max(struct(a))#x]
 +- Filter (a#x = 0)
    +- SubqueryAlias testdata
-      +- View (`testData`, [a#x,b#x])
+      +- View (`testData`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias testData
@@ -135,7 +135,7 @@ SELECT a + b, COUNT(b) FROM testData GROUP BY a + b
 -- !query analysis
 Aggregate [(a#x + b#x)], [(a#x + b#x) AS (a + b)#x, count(b#x) AS count(b)#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -161,7 +161,7 @@ SELECT a + 1 + 1, COUNT(b) FROM testData GROUP BY a + 1
 -- !query analysis
 Aggregate [(a#x + 1)], [((a#x + 1) + 1) AS ((a + 1) + 1)#x, count(b#x) AS count(b)#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -173,7 +173,7 @@ SELECT count(1) FROM testData GROUP BY struct(a + 0.1 AS aa)
 -- !query analysis
 Aggregate [struct(aa, (cast(a#x as decimal(10,0)) + 0.1))], [count(1) AS count(1)#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -186,7 +186,7 @@ FROM testData
 -- !query analysis
 Aggregate [skewness(cast(a#x as double)) AS skewness(a)#x, kurtosis(cast(a#x as double)) AS kurtosis(a)#x, min(a#x) AS min(a)#x, max(a#x) AS max(a)#x, avg(a#x) AS avg(a)#x, variance(cast(a#x as double)) AS variance(a)#x, stddev(cast(a#x as double)) AS stddev(a)#x, sum(a#x) AS sum(a)#xL, count(a#x) AS count(a)#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -207,7 +207,7 @@ SELECT a AS k, COUNT(b) FROM testData GROUP BY k
 -- !query analysis
 Aggregate [a#x], [a#x AS k#x, count(b#x) AS count(b)#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -220,7 +220,7 @@ SELECT a AS k, COUNT(b) FROM testData GROUP BY k HAVING k > 1
 Filter (k#x > 1)
 +- Aggregate [a#x], [a#x AS k#x, count(b#x) AS count(b)#xL]
    +- SubqueryAlias testdata
-      +- View (`testData`, [a#x,b#x])
+      +- View (`testData`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias testData
@@ -273,7 +273,7 @@ CREATE OR REPLACE TEMPORARY VIEW testDataHasSameNameWithAlias AS SELECT * FROM V
 (1, 1, 3), (1, 2, 1) AS testDataHasSameNameWithAlias(k, a, v)
 -- !query analysis
 CreateViewCommand `testDataHasSameNameWithAlias`, SELECT * FROM VALUES
-(1, 1, 3), (1, 2, 1) AS testDataHasSameNameWithAlias(k, a, v), false, true, LocalTempView, true
+(1, 1, 3), (1, 2, 1) AS testDataHasSameNameWithAlias(k, a, v), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, a#x, v#x]
       +- SubqueryAlias testDataHasSameNameWithAlias
          +- LocalRelation [k#x, a#x, v#x]
@@ -326,7 +326,7 @@ SELECT a, COUNT(1) FROM testData WHERE false GROUP BY a
 Aggregate [a#x], [a#x, count(1) AS count(1)#xL]
 +- Filter false
    +- SubqueryAlias testdata
-      +- View (`testData`, [a#x,b#x])
+      +- View (`testData`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias testData
@@ -339,7 +339,7 @@ SELECT COUNT(1) FROM testData WHERE false
 Aggregate [count(1) AS count(1)#xL]
 +- Filter false
    +- SubqueryAlias testdata
-      +- View (`testData`, [a#x,b#x])
+      +- View (`testData`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias testData
@@ -354,7 +354,7 @@ Project [1 AS 1#x]
    +- Aggregate [count(1) AS count(1)#xL]
       +- Filter false
          +- SubqueryAlias testdata
-            +- View (`testData`, [a#x,b#x])
+            +- View (`testData`, [a#x, b#x])
                +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                   +- Project [a#x, b#x]
                      +- SubqueryAlias testData
@@ -395,7 +395,7 @@ SELECT 1 FROM range(10) HAVING true
 -- !query analysis
 Filter cast(true as boolean)
 +- Aggregate [1 AS 1#x]
-   +- Range (0, 10, step=1, splits=None)
+   +- Range (0, 10, step=1)
 
 
 -- !query
@@ -404,7 +404,7 @@ SELECT 1 FROM range(10) HAVING MAX(id) > 0
 Project [1#x]
 +- Filter (max(id#xL)#xL > cast(0 as bigint))
    +- Aggregate [1 AS 1#x, max(id#xL) AS max(id#xL)#xL]
-      +- Range (0, 10, step=1, splits=None)
+      +- Range (0, 10, step=1)
 
 
 -- !query
@@ -435,7 +435,7 @@ SELECT 1 FROM range(10) HAVING true
 -- !query analysis
 Filter cast(true as boolean)
 +- Project [1 AS 1#x]
-   +- Range (0, 10, step=1, splits=None)
+   +- Range (0, 10, step=1)
 
 
 -- !query
@@ -464,7 +464,7 @@ SELECT id FROM range(10) HAVING id > 0
 -- !query analysis
 Filter (id#xL > cast(0 as bigint))
 +- Project [id#xL]
-   +- Range (0, 10, step=1, splits=None)
+   +- Range (0, 10, step=1)
 
 
 -- !query
@@ -486,7 +486,7 @@ CreateViewCommand `test_agg`, SELECT * FROM VALUES
   (2, true),
   (3, false), (3, null),
   (4, null), (4, null),
-  (5, null), (5, true), (5, false) AS test_agg(k, v), false, true, LocalTempView, true
+  (5, null), (5, true), (5, false) AS test_agg(k, v), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v#x]
       +- SubqueryAlias test_agg
          +- LocalRelation [k#x, v#x]
@@ -498,7 +498,7 @@ SELECT every(v), some(v), any(v), bool_and(v), bool_or(v) FROM test_agg WHERE 1 
 Aggregate [every(v#x) AS every(v)#x, some(v#x) AS some(v)#x, any(v#x) AS any(v)#x, bool_and(v#x) AS bool_and(v)#x, bool_or(v#x) AS bool_or(v)#x]
 +- Filter (1 = 0)
    +- SubqueryAlias test_agg
-      +- View (`test_agg`, [k#x,v#x])
+      +- View (`test_agg`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias test_agg
@@ -511,7 +511,7 @@ SELECT every(v), some(v), any(v), bool_and(v), bool_or(v) FROM test_agg WHERE k 
 Aggregate [every(v#x) AS every(v)#x, some(v#x) AS some(v)#x, any(v#x) AS any(v)#x, bool_and(v#x) AS bool_and(v)#x, bool_or(v#x) AS bool_or(v)#x]
 +- Filter (k#x = 4)
    +- SubqueryAlias test_agg
-      +- View (`test_agg`, [k#x,v#x])
+      +- View (`test_agg`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias test_agg
@@ -524,7 +524,7 @@ SELECT every(v), some(v), any(v), bool_and(v), bool_or(v) FROM test_agg WHERE k 
 Aggregate [every(v#x) AS every(v)#x, some(v#x) AS some(v)#x, any(v#x) AS any(v)#x, bool_and(v#x) AS bool_and(v)#x, bool_or(v#x) AS bool_or(v)#x]
 +- Filter (k#x = 5)
    +- SubqueryAlias test_agg
-      +- View (`test_agg`, [k#x,v#x])
+      +- View (`test_agg`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias test_agg
@@ -536,7 +536,7 @@ SELECT k, every(v), some(v), any(v), bool_and(v), bool_or(v) FROM test_agg GROUP
 -- !query analysis
 Aggregate [k#x], [k#x, every(v#x) AS every(v)#x, some(v#x) AS some(v)#x, any(v#x) AS any(v)#x, bool_and(v#x) AS bool_and(v)#x, bool_or(v#x) AS bool_or(v)#x]
 +- SubqueryAlias test_agg
-   +- View (`test_agg`, [k#x,v#x])
+   +- View (`test_agg`, [k#x, v#x])
       +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
          +- Project [k#x, v#x]
             +- SubqueryAlias test_agg
@@ -549,7 +549,7 @@ SELECT k, every(v) FROM test_agg GROUP BY k HAVING every(v) = false
 Filter (every(v)#x = false)
 +- Aggregate [k#x], [k#x, every(v#x) AS every(v)#x]
    +- SubqueryAlias test_agg
-      +- View (`test_agg`, [k#x,v#x])
+      +- View (`test_agg`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias test_agg
@@ -562,7 +562,7 @@ SELECT k, every(v) FROM test_agg GROUP BY k HAVING every(v) IS NULL
 Filter isnull(every(v)#x)
 +- Aggregate [k#x], [k#x, every(v#x) AS every(v)#x]
    +- SubqueryAlias test_agg
-      +- View (`test_agg`, [k#x,v#x])
+      +- View (`test_agg`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias test_agg
@@ -584,13 +584,13 @@ Aggregate [k#x], [k#x, every(v#x) AS every#x]
    :  +- Aggregate [any(v#x) AS any(v)#x]
    :     +- Filter (k#x = 1)
    :        +- SubqueryAlias test_agg
-   :           +- View (`test_agg`, [k#x,v#x])
+   :           +- View (`test_agg`, [k#x, v#x])
    :              +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
    :                 +- Project [k#x, v#x]
    :                    +- SubqueryAlias test_agg
    :                       +- LocalRelation [k#x, v#x]
    +- SubqueryAlias test_agg
-      +- View (`test_agg`, [k#x,v#x])
+      +- View (`test_agg`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias test_agg
@@ -612,13 +612,13 @@ Aggregate [k#x], [k#x, every(v#x) AS every#x]
    :  +- Aggregate [every(v#x) AS every(v)#x]
    :     +- Filter (k#x = 1)
    :        +- SubqueryAlias test_agg
-   :           +- View (`test_agg`, [k#x,v#x])
+   :           +- View (`test_agg`, [k#x, v#x])
    :              +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
    :                 +- Project [k#x, v#x]
    :                    +- SubqueryAlias test_agg
    :                       +- LocalRelation [k#x, v#x]
    +- SubqueryAlias test_agg
-      +- View (`test_agg`, [k#x,v#x])
+      +- View (`test_agg`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias test_agg
@@ -635,7 +635,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"every(1)\""
   },
@@ -659,7 +659,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"SMALLINT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"some(1)\""
   },
@@ -683,7 +683,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"BIGINT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"any(1)\""
   },
@@ -707,7 +707,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"true\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"every(true)\""
   },
@@ -731,7 +731,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1.0\"",
     "inputType" : "\"DECIMAL(2,1)\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"bool_and(1.0)\""
   },
@@ -755,7 +755,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1.0\"",
     "inputType" : "\"DOUBLE\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"bool_or(1.0)\""
   },
@@ -777,7 +777,7 @@ Project [k#x, v#x, every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANG
    +- Window [every(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
       +- Project [k#x, v#x]
          +- SubqueryAlias test_agg
-            +- View (`test_agg`, [k#x,v#x])
+            +- View (`test_agg`, [k#x, v#x])
                +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
                   +- Project [k#x, v#x]
                      +- SubqueryAlias test_agg
@@ -792,7 +792,7 @@ Project [k#x, v#x, some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE
    +- Window [some(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
       +- Project [k#x, v#x]
          +- SubqueryAlias test_agg
-            +- View (`test_agg`, [k#x,v#x])
+            +- View (`test_agg`, [k#x, v#x])
                +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
                   +- Project [k#x, v#x]
                      +- SubqueryAlias test_agg
@@ -807,7 +807,7 @@ Project [k#x, v#x, any(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE 
    +- Window [any(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS any(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
       +- Project [k#x, v#x]
          +- SubqueryAlias test_agg
-            +- View (`test_agg`, [k#x,v#x])
+            +- View (`test_agg`, [k#x, v#x])
                +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
                   +- Project [k#x, v#x]
                      +- SubqueryAlias test_agg
@@ -822,7 +822,7 @@ Project [k#x, v#x, bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST R
    +- Window [bool_and(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
       +- Project [k#x, v#x]
          +- SubqueryAlias test_agg
-            +- View (`test_agg`, [k#x,v#x])
+            +- View (`test_agg`, [k#x, v#x])
                +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
                   +- Project [k#x, v#x]
                      +- SubqueryAlias test_agg
@@ -837,7 +837,7 @@ Project [k#x, v#x, bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RA
    +- Window [bool_or(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
       +- Project [k#x, v#x]
          +- SubqueryAlias test_agg
-            +- View (`test_agg`, [k#x,v#x])
+            +- View (`test_agg`, [k#x, v#x])
                +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
                   +- Project [k#x, v#x]
                      +- SubqueryAlias test_agg
@@ -850,7 +850,7 @@ SELECT count(*) FROM test_agg HAVING count(*) > 1L
 Filter (count(1)#xL > 1)
 +- Aggregate [count(1) AS count(1)#xL]
    +- SubqueryAlias test_agg
-      +- View (`test_agg`, [k#x,v#x])
+      +- View (`test_agg`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias test_agg
@@ -863,7 +863,7 @@ SELECT k, max(v) FROM test_agg GROUP BY k HAVING max(v) = true
 Filter (max(v)#x = true)
 +- Aggregate [k#x], [k#x, max(v#x) AS max(v)#x]
    +- SubqueryAlias test_agg
-      +- View (`test_agg`, [k#x,v#x])
+      +- View (`test_agg`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias test_agg
@@ -878,7 +878,7 @@ Project [cnt#xL]
    +- SubqueryAlias __auto_generated_subquery_name
       +- Aggregate [count(1) AS cnt#xL]
          +- SubqueryAlias test_agg
-            +- View (`test_agg`, [k#x,v#x])
+            +- View (`test_agg`, [k#x, v#x])
                +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
                   +- Project [k#x, v#x]
                      +- SubqueryAlias test_agg
@@ -963,7 +963,7 @@ GROUP BY a IS NULL
 -- !query analysis
 Aggregate [isnull(a#x)], [NOT isnull(a#x) AS (NOT (a IS NULL))#x, count(1) AS c#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -1171,3 +1171,152 @@ Aggregate [c#x], [(c#x * 2) AS d#x]
          +- Project [if ((a#x < 0)) 0 else a#x AS b#x]
             +- SubqueryAlias t1
                +- LocalRelation [a#x]
+
+
+-- !query
+SELECT col1, count(*) AS cnt
+FROM VALUES
+  (0.0),
+  (-0.0),
+  (double('NaN')),
+  (double('NaN')),
+  (double('Infinity')),
+  (double('Infinity')),
+  (-double('Infinity')),
+  (-double('Infinity'))
+GROUP BY col1
+ORDER BY col1
+-- !query analysis
+Sort [col1#x ASC NULLS FIRST], true
++- Aggregate [col1#x], [col1#x, count(1) AS cnt#xL]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (ARRAY(MAP(1, 2, 2, 3), MAP(1, 3))), (ARRAY(MAP(2, 3), MAP(1, 3))), (ARRAY(MAP(2, 3, 1, 2), MAP(1, 3))) as t(a)
+GROUP BY a
+-- !query analysis
+Aggregate [a#x], [count(1) AS count(1)#xL]
++- SubqueryAlias t
+   +- LocalRelation [a#x]
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (named_struct('b', map(1, 2, 2, 3))), (named_struct('b', map(1, 3))), (named_struct('b', map(2, 3, 1, 2))) as t(a)
+GROUP BY a
+-- !query analysis
+Aggregate [a#x], [count(1) AS count(1)#xL]
++- SubqueryAlias t
+   +- LocalRelation [a#x]
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (named_struct('b', map(1, 2, 2, 3))), (named_struct('b', map(1, 3))), (named_struct('b', map(2, 3, 1, 2))) as t(a)
+GROUP BY a.b
+-- !query analysis
+Aggregate [a#x.b], [count(1) AS count(1)#xL]
++- SubqueryAlias t
+   +- LocalRelation [a#x]
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (named_struct('b', array(map(1, 2, 2, 3), map(1, 3)))), (named_struct('b', array(map(2, 3), map(1, 3)))), (named_struct('b', array(map(2, 3, 1, 2), map(1, 3)))) as t(a)
+GROUP BY a
+-- !query analysis
+Aggregate [a#x], [count(1) AS count(1)#xL]
++- SubqueryAlias t
+   +- LocalRelation [a#x]
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (ARRAY(named_struct('b', map(1, 2, 2, 3)), named_struct('b', map(1, 3)))), (ARRAY(named_struct('b', map(2, 3)), named_struct('b', map(1, 3)))), (ARRAY(named_struct('b', map(2, 3, 1, 2)), named_struct('b', map(1, 3)))) as t(a)
+group BY a
+-- !query analysis
+Aggregate [a#x], [count(1) AS count(1)#xL]
++- SubqueryAlias t
+   +- LocalRelation [a#x]
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (map(array(1, 2), 2, array(2, 3), 3)), (map(array(1, 3), 3)), (map(array(2, 3), 3, array(1, 2), 2)) as t(a)
+group BY a
+-- !query analysis
+Aggregate [a#x], [count(1) AS count(1)#xL]
++- SubqueryAlias t
+   +- LocalRelation [a#x]
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (map(array(1, 2, 3), 3)), (map(array(3, 2, 1), 3)) as t(a)
+group BY a
+-- !query analysis
+Aggregate [a#x], [count(1) AS count(1)#xL]
++- SubqueryAlias t
+   +- LocalRelation [a#x]
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (ARRAY(map(array(1, 2), 2, array(2, 3), 3))), (ARRAY(MAP(ARRAY(1, 3), 3))), (ARRAY(map(array(2, 3), 3, array(1, 2), 2))) as t(a)
+group BY a
+-- !query analysis
+Aggregate [a#x], [count(1) AS count(1)#xL]
++- SubqueryAlias t
+   +- LocalRelation [a#x]
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (map(named_struct('b', 1), 2, named_struct('b', 2), 3)), (map(named_struct('b', 1), 3)), (map(named_struct('b', 2), 3, named_struct('b', 1), 2)) as t(a)
+group BY a
+-- !query analysis
+Aggregate [a#x], [count(1) AS count(1)#xL]
++- SubqueryAlias t
+   +- LocalRelation [a#x]
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (named_struct('b', map(named_struct('c', 1), 2, named_struct('c', 2), 3))), (named_struct('b', map(named_struct('c', 1), 3))), (named_struct('b', map(named_struct('c', 2), 3, named_struct('c', 1), 2))) as t(a)
+group BY a
+-- !query analysis
+Aggregate [a#x], [count(1) AS count(1)#xL]
++- SubqueryAlias t
+   +- LocalRelation [a#x]
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (named_struct('b', map(named_struct('c', 1), 2, named_struct('c', 2), 3))), (named_struct('b', map(named_struct('c', 1), 3))), (named_struct('b', map(named_struct('c', 2), 3, named_struct('c', 1), 2))) as t(a)
+group BY a.b
+-- !query analysis
+Aggregate [a#x.b], [count(1) AS count(1)#xL]
++- SubqueryAlias t
+   +- LocalRelation [a#x]
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (Map(1, Map(1,2), 2, Map(2, 3, 1, 2))), (Map(2, Map(1, 2, 2,3), 1, Map(1, 2))), (Map(1, Map(1,2), 2, Map(2, 4))) as t(a)
+GROUP BY a
+-- !query analysis
+Aggregate [a#x], [count(1) AS count(1)#xL]
++- SubqueryAlias t
+   +- LocalRelation [a#x]
+
+
+-- !query
+SELECT count(*)
+FROM VALUES (Map(1, Array(Map(1,2)), 2, Array(Map(2, 3, 1, 2)))), (Map(2, Array(Map(1, 2, 2,3)), 1, Array(Map(1, 2)))), (Map(1, Array(Map(1,2)), 2, Array(Map(2, 4)))) as t(a)
+GROUP BY a
+-- !query analysis
+Aggregate [a#x], [count(1) AS count(1)#xL]
++- SubqueryAlias t
+   +- LocalRelation [a#x]

@@ -38,8 +38,10 @@ import org.apache.avro.generic.{GenericContainer, GenericData, GenericRecord}
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark._
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonBroadcast
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.internal.io.FileCommitProtocol._
 import org.apache.spark.network.util.ByteUnit
@@ -226,10 +228,7 @@ class KryoSerializer(conf: SparkConf)
 
     // scalastyle:on
 
-    kryo.register(None.getClass)
-    kryo.register(Nil.getClass)
     kryo.register(Utils.classForName("scala.collection.immutable.ArraySeq$ofRef"))
-    kryo.register(Utils.classForName("scala.collection.immutable.$colon$colon"))
     kryo.register(Utils.classForName("scala.collection.immutable.Map$EmptyMap$"))
     kryo.register(Utils.classForName("scala.math.Ordering$Reverse"))
     kryo.register(Utils.classForName("scala.reflect.ClassTag$GenericClassTag"))
@@ -521,6 +520,7 @@ private[spark] class KryoSerializerInstance(
  * Interface implemented by clients to register their classes with Kryo when using Kryo
  * serialization.
  */
+@DeveloperApi
 trait KryoRegistrator {
   def registerClasses(kryo: Kryo): Unit
 }
@@ -739,7 +739,7 @@ private object JavaIterableWrapperSerializer extends Logging {
   private val underlyingMethodOpt = {
     try Some(wrapperClass.getDeclaredMethod("underlying")) catch {
       case e: Exception =>
-        logError("Failed to find the underlying field in " + wrapperClass, e)
+        logError(log"Failed to find the underlying field in ${MDC(CLASS_NAME, wrapperClass)}", e)
         None
     }
   }

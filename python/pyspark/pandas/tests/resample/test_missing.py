@@ -63,8 +63,8 @@ class ResampleMissingMixin:
         return ps.from_pandas(self.pdf1)
 
     def test_missing(self):
-        pdf_r = self.psdf1.resample("3Y")
-        pser_r = self.psdf1.A.resample("3Y")
+        pdf_r = self.psdf1.resample("3D")
+        pser_r = self.psdf1.A.resample("3D")
 
         # DataFrameResampler functions
         missing_functions = inspect.getmembers(

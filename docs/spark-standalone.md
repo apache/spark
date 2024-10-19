@@ -143,6 +143,18 @@ You can optionally configure the cluster further by setting environment variable
     </td>
   </tr>
   <tr>
+    <td><code>SPARK_LOG_DIR</code></td>
+    <td>Where log files are stored. (default: SPARK_HOME/logs).</td>
+  </tr>
+  <tr>
+    <td><code>SPARK_LOG_MAX_FILES</code></td>
+    <td>The maximum number of log files (default: 5).</td>
+  </tr>
+  <tr>
+    <td><code>SPARK_PID_DIR</code></td>
+    <td>Where pid files are stored. (default: /tmp).</td>
+  </tr>
+  <tr>
     <td><code>SPARK_WORKER_CORES</code></td>
     <td>Total number of cores to allow Spark applications to use on the machine (default: all available cores).</td>
   </tr>
@@ -188,7 +200,7 @@ You can optionally configure the cluster further by setting environment variable
 
 SPARK_MASTER_OPTS supports the following system properties:
 
-<table>
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.master.ui.port</code></td>
@@ -197,6 +209,15 @@ SPARK_MASTER_OPTS supports the following system properties:
     Specifies the port number of the Master Web UI endpoint.
   </td>
   <td>1.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.master.ui.title</code></td>
+  <td>(None)</td>
+  <td>
+    Specifies the title of the Master UI page. If unset, <code>Spark Master at 'master url'</code>
+    is used by default.
+  </td>
+  <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.master.ui.decommission.allow.mode</code></td>
@@ -243,6 +264,14 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>1.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.master.rest.filters</code></td>
+  <td>(None)</td>
+  <td>
+    Comma separated list of filter class names to apply to the Master REST API.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.master.useAppNameAsAppId.enabled</code></td>
   <td><code>false</code></td>
   <td>
@@ -267,7 +296,17 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>1.1.0</td>
 </tr>
 <tr>
-  <td><code>spark.deploy.spreadOut</code></td>
+  <td><code>spark.deploy.spreadOutDrivers</code></td>
+  <td>true</td>
+  <td>
+    Whether the standalone cluster manager should spread drivers out across nodes or try
+    to consolidate them onto as few nodes as possible. Spreading out is usually better for
+    data locality in HDFS, but consolidating is more efficient for compute-intensive workloads.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.deploy.spreadOutApps</code></td>
   <td>true</td>
   <td>
     Whether the standalone cluster manager should spread applications out across nodes or try
@@ -381,9 +420,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>
     Path to resources file which is used to find various resources while worker starting up.
     The content of resources file should be formatted like
-    <code>[{"id":{"componentName":</code>
-    <code>"spark.worker", "resourceName":"gpu"},</code>
-    <code>"addresses":["0","1","2"]}]</code>.
+    <code>[{"id":{"componentName": "spark.worker", "resourceName":"gpu"}, "addresses":["0","1","2"]}]</code>.
     If a particular resource is not found in the resources file, the discovery script would be used to
     find that resource. If the discovery script also does not find the resources, the worker will fail
     to start up.
@@ -394,7 +431,7 @@ SPARK_MASTER_OPTS supports the following system properties:
 
 SPARK_WORKER_OPTS supports the following system properties:
 
-<table>
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.worker.initialRegistrationRetries</code></td>
@@ -416,7 +453,7 @@ SPARK_WORKER_OPTS supports the following system properties:
 </tr>
 <tr>
   <td><code>spark.worker.cleanup.enabled</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Enable periodic cleanup of worker / application directories.  Note that this only affects standalone
     mode, as YARN works differently. Only the directories of stopped applications are cleaned up.
@@ -527,8 +564,8 @@ You can also pass an option `--total-executor-cores <numCores>` to control the n
 
 Spark applications supports the following configuration properties specific to standalone mode:
 
-<table>
-  <thead><tr><th style="width:21%">Property Name</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr></thead>
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
   <td><code>spark.standalone.submit.waitAppCompletion</code></td>
   <td><code>false</code></td>
@@ -577,11 +614,13 @@ via <code>http://[host:port]/[version]/submissions/[action]</code> where
 <code>version</code> is a protocol version, <code>v1</code> as of today, and
 <code>action</code> is one of the following supported actions.
 
-<table>
-  <thead><tr><th style="width:21%">Command</th><th>Description</th><th>HTTP METHOD</th><th>Since Version</th></tr></thead>
+<table class="spark-config">
+  <thead><tr><th>Command</th><th>Description</th><th>HTTP METHOD</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>create</code></td>
-    <td>Create a Spark driver via <code>cluster</code> mode.</td>
+    <td>Create a Spark driver via <code>cluster</code> mode. Since 4.0.0, Spark master supports server-side
+      variable replacements for the values of Spark properties and environment variables.
+    </td>
     <td>POST</td>
     <td>1.3.0</td>
   </tr>
@@ -645,6 +684,33 @@ The following is the response from the REST API for the above <code>create</code
 }
 ```
 
+When Spark master requires HTTP <code>Authorization</code> header via
+<code>spark.master.rest.filters=org.apache.spark.ui.JWSFilter</code> and
+<code>spark.org.apache.spark.ui.JWSFilter.param.secretKey=BASE64URL-ENCODED-KEY</code>
+configurations, <code>curl</code> CLI command can provide the required header like the following.
+
+```bash
+$ curl -XPOST http://IP:PORT/v1/submissions/create \
+--header "Authorization: Bearer USER-PROVIDED-WEB-TOEN-SIGNED-BY-THE-SAME-SHARED-KEY"
+...
+```
+
+For <code>sparkProperties</code> and <code>environmentVariables</code>, users can use place
+holders for server-side environment variables like the following.
+
+```bash
+{% raw %}
+...
+  "sparkProperties": {
+    "spark.hadoop.fs.s3a.endpoint": "{{AWS_ENDPOINT_URL}}",
+    "spark.hadoop.fs.s3a.endpoint.region": "{{AWS_REGION}}"
+  },
+  "environmentVariables": {
+    "AWS_CA_BUNDLE": "{{AWS_CA_BUNDLE}}"
+  },
+...
+{% endraw %}
+```
 
 # Resource Scheduling
 
@@ -731,8 +797,7 @@ Learn more about getting started with ZooKeeper [here](https://zookeeper.apache.
 
 **Configuration**
 
-In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env by configuring `spark.deploy.recoveryMode` and related spark.deploy.zookeeper.* configurations.
-For more information about these configurations please refer to the [configuration doc](configuration.html#deploy)
+In order to enable this recovery mode, you can set `SPARK_DAEMON_JAVA_OPTS` in spark-env by configuring `spark.deploy.recoveryMode` and related `spark.deploy.zookeeper.*` configurations.
 
 Possible gotcha: If you have multiple Masters in your cluster but fail to correctly configure the Masters to use ZooKeeper, the Masters will fail to discover each other and think they're all leaders. This will not lead to a healthy cluster state (as all Masters will schedule independently).
 
@@ -756,8 +821,8 @@ ZooKeeper is the best way to go for production-level high availability, but if y
 
 In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env using this configuration:
 
-<table>
-  <thead><tr><th style="width:21%">System property</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr></thead>
+<table class="spark-config">
+  <thead><tr><th>System property</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>spark.deploy.recoveryMode</code></td>
     <td>NONE</td>
@@ -774,18 +839,10 @@ In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spa
     <td><code>spark.deploy.recoveryDirectory</code></td>
     <td>""</td>
     <td>The directory in which Spark will store recovery state, accessible from the Master's perspective.
-      Note that the directory should be clearly manually if <code>spark.deploy.recoveryMode</code>,
-      <code>spark.deploy.recoverySerializer</code>, or <code>spark.deploy.recoveryCompressionCodec</code> is changed.
+      Note that the directory should be clearly manually if <code>spark.deploy.recoveryMode</code>
+      or <code>spark.deploy.recoveryCompressionCodec</code> is changed.
     </td>
     <td>0.8.1</td>
-  </tr>
-  <tr>
-    <td><code>spark.deploy.recoverySerializer</code></td>
-    <td>JAVA</td>
-    <td>A serializer for writing/reading objects to/from persistence engines; JAVA (default) or KRYO.
-      Java serializer has been the default mode since Spark 0.8.1.
-      Kryo serializer is a new fast and compact mode from Spark 4.0.0.</td>
-    <td>4.0.0</td>
   </tr>
   <tr>
     <td><code>spark.deploy.recoveryCompressionCodec</code></td>

@@ -392,7 +392,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'invalid_cast_error_expected'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -603,7 +602,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'name1'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -701,6 +699,37 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+DECLARE p = 10
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :p' USING p
+-- !query schema
+struct<id:int>
+-- !query output
+10
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :p' USING p, 'p'
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ALL_PARAMETERS_MUST_BE_NAMED",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "exprs" : "\"p\""
+  }
+}
+
+
+-- !query
 EXECUTE IMMEDIATE 'SELECT id, data.f1 FROM tbl_view WHERE id = 10' INTO res_id, res_id
 -- !query schema
 struct<>
@@ -726,6 +755,29 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "07501",
   "messageParameters" : {
     "sqlString" : "EXECUTE IMMEDIATE 'SELECT ID FROM TBL_VIEW WHERE ID = ? USING 10'"
+  }
+}
+
+
+-- !query
+SET VAR sql_string = null
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+EXECUTE IMMEDIATE sql_string
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
+  "sqlState" : "22004",
+  "messageParameters" : {
+    "varName" : "`sql_string`"
   }
 }
 

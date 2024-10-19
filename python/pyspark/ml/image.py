@@ -29,7 +29,6 @@ from typing import Any, Dict, List, NoReturn, Optional, cast
 
 import numpy as np
 
-from pyspark import SparkContext
 from pyspark.sql.types import Row, StructType, _create_row, _parse_datatype_json_string
 from pyspark.sql import SparkSession
 
@@ -63,6 +62,7 @@ class _ImageSchema:
 
         .. versionadded:: 2.3.0
         """
+        from pyspark.core.context import SparkContext
 
         if self._imageSchema is None:
             ctx = SparkContext._active_spark_context
@@ -83,6 +83,7 @@ class _ImageSchema:
 
         .. versionadded:: 2.3.0
         """
+        from pyspark.core.context import SparkContext
 
         if self._ocvTypes is None:
             ctx = SparkContext._active_spark_context
@@ -103,6 +104,7 @@ class _ImageSchema:
 
         .. versionadded:: 2.4.0
         """
+        from pyspark.core.context import SparkContext
 
         if self._columnSchema is None:
             ctx = SparkContext._active_spark_context
@@ -123,6 +125,7 @@ class _ImageSchema:
 
         .. versionadded:: 2.3.0
         """
+        from pyspark.core.context import SparkContext
 
         if self._imageFields is None:
             ctx = SparkContext._active_spark_context
@@ -137,6 +140,7 @@ class _ImageSchema:
 
         .. versionadded:: 2.3.0
         """
+        from pyspark.core.context import SparkContext
 
         if self._undefinedImageType is None:
             ctx = SparkContext._active_spark_context

@@ -21,6 +21,7 @@ import java.util.Random
 
 import org.scalatest.matchers.must.Matchers._
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.functions.{col, lit, struct, when}
@@ -142,7 +143,7 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         dfx.stat.freqItems(Array("num"))
       },
-      errorClass = "AMBIGUOUS_REFERENCE",
+      condition = "AMBIGUOUS_REFERENCE",
       parameters = Map(
         "name" -> "`num`",
         "referenceNames" -> "[`table1`.`num`, `table2`.`num`]"
@@ -154,7 +155,7 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         dfx.stat.approxQuantile("num", Array(0.1), 0.0)
       },
-      errorClass = "AMBIGUOUS_REFERENCE",
+      condition = "AMBIGUOUS_REFERENCE",
       parameters = Map(
         "name" -> "`num`",
         "referenceNames" -> "[`table1`.`num`, `table2`.`num`]"
@@ -166,7 +167,7 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         dfx.stat.cov("num", "num")
       },
-      errorClass = "AMBIGUOUS_REFERENCE",
+      condition = "AMBIGUOUS_REFERENCE",
       parameters = Map(
         "name" -> "`num`",
         "referenceNames" -> "[`table1`.`num`, `table2`.`num`]"
@@ -176,7 +177,7 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         dfx.stat.corr("num", "num")
       },
-      errorClass = "AMBIGUOUS_REFERENCE",
+      condition = "AMBIGUOUS_REFERENCE",
       parameters = Map(
         "name" -> "`num`",
         "referenceNames" -> "[`table1`.`num`, `table2`.`num`]"
@@ -539,6 +540,70 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
     val filter4 = df.stat.bloomFilter($"id" * 3, 1000, 64 * 5)
     assert(filter4.bitSize() == 64 * 5)
     assert(0.until(1000).forall(i => filter4.mightContain(i * 3)))
+  }
+
+  test("SPARK-34165: Add count_distinct to summary") {
+    val person3: DataFrame = Seq(
+      ("Luis", 1, 99),
+      ("Luis", 16, 99),
+      ("Luis", 16, 176),
+      ("Fernando", 32, 99),
+      ("Fernando", 32, 164),
+      ("David", 60, 99),
+      ("Amy", 24, 99)).toDF("name", "age", "height")
+    val summaryDF = person3.summary("count", "count_distinct")
+
+    val summaryResult = Seq(
+      Row("count", "7", "7", "7"),
+      Row("count_distinct", "4", "5", "3"))
+
+    def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
+    assert(getSchemaAsSeq(summaryDF) === Seq("summary", "name", "age", "height"))
+    checkAnswer(summaryDF, summaryResult)
+
+    val approxSummaryDF = person3.summary("count", "approx_count_distinct")
+    val approxSummaryResult = Seq(
+      Row("count", "7", "7", "7"),
+      Row("approx_count_distinct", "4", "5", "3"))
+    assert(getSchemaAsSeq(summaryDF) === Seq("summary", "name", "age", "height"))
+    checkAnswer(approxSummaryDF, approxSummaryResult)
+  }
+
+  test("summary advanced") {
+    import org.apache.spark.util.ArrayImplicits._
+    val person2: DataFrame = Seq(
+      ("Bob", 16, 176),
+      ("Alice", 32, 164),
+      ("David", 60, 192),
+      ("Amy", 24, 180)).toDF("name", "age", "height")
+
+    val stats = Array("count", "50.01%", "max", "mean", "min", "25%")
+    val orderMatters = person2.summary(stats.toImmutableArraySeq: _*)
+    assert(orderMatters.collect().map(_.getString(0)) === stats)
+
+    val onlyPercentiles = person2.summary("0.1%", "99.9%")
+    assert(onlyPercentiles.count() === 2)
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        person2.summary("foo")
+      },
+      condition = "_LEGACY_ERROR_TEMP_2114",
+      parameters = Map("stats" -> "foo")
+    )
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        person2.summary("foo%")
+      },
+      condition = "_LEGACY_ERROR_TEMP_2113",
+      parameters = Map("stats" -> "foo%")
+    )
+  }
+
+  test("SPARK-19691 Calculating percentile of decimal column fails with ClassCastException") {
+    val df = spark.range(1).selectExpr("CAST(id as DECIMAL) as x").selectExpr("percentile(x, 0.5)")
+    checkAnswer(df, Row(BigDecimal(0)) :: Nil)
   }
 }
 

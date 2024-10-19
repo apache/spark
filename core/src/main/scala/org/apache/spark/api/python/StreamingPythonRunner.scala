@@ -21,10 +21,11 @@ import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, Data
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkEnv
-import org.apache.spark.internal.Logging
+import org.apache.spark.{SparkEnv, SparkPythonException}
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{PYTHON_EXEC, PYTHON_WORKER_MODULE, PYTHON_WORKER_RESPONSE, SESSION_ID}
 import org.apache.spark.internal.config.BUFFER_SIZE
-import org.apache.spark.internal.config.Python.{PYTHON_AUTH_SOCKET_TIMEOUT, PYTHON_USE_DAEMON}
+import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
 
 
 private[spark] object StreamingPythonRunner {
@@ -58,7 +59,8 @@ private[spark] class StreamingPythonRunner(
    * to be used with the functions.
    */
   def init(): (DataOutputStream, DataInputStream) = {
-    logInfo(s"Initializing Python runner (session: $sessionId, pythonExec: $pythonExec)")
+    logInfo(log"Initializing Python runner (session: ${MDC(SESSION_ID, sessionId)}," +
+      log" pythonExec: ${MDC(PYTHON_EXEC, pythonExec)})")
     val env = SparkEnv.get
 
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
@@ -68,17 +70,11 @@ private[spark] class StreamingPythonRunner(
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
     envVars.put("SPARK_CONNECT_LOCAL_URL", connectUrl)
 
-    val prevConf = conf.get(PYTHON_USE_DAEMON)
-    conf.set(PYTHON_USE_DAEMON, false)
-    try {
-      val workerFactory =
-        new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap)
-      val (worker: PythonWorker, _) = workerFactory.createSimpleWorker(blockingMode = true)
-      pythonWorker = Some(worker)
-      pythonWorkerFactory = Some(workerFactory)
-    } finally {
-      conf.set(PYTHON_USE_DAEMON, prevConf)
-    }
+    val workerFactory =
+      new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap, false)
+    val (worker: PythonWorker, _) = workerFactory.createSimpleWorker(blockingMode = true)
+    pythonWorker = Some(worker)
+    pythonWorkerFactory = Some(workerFactory)
 
     val stream = new BufferedOutputStream(
       pythonWorker.get.channel.socket().getOutputStream, bufferSize)
@@ -97,16 +93,34 @@ private[spark] class StreamingPythonRunner(
       new BufferedInputStream(pythonWorker.get.channel.socket().getInputStream, bufferSize))
 
     val resFromPython = dataIn.readInt()
-    logInfo(s"Runner initialization succeeded (returned $resFromPython).")
+    if (resFromPython != 0) {
+      val errMessage = PythonWorkerUtils.readUTF(dataIn)
+      throw streamingPythonRunnerInitializationFailure(resFromPython, errMessage)
+    }
+    logInfo(log"Runner initialization succeeded (returned" +
+      log" ${MDC(PYTHON_WORKER_RESPONSE, resFromPython)}).")
 
     (dataOut, dataIn)
   }
+
+  def streamingPythonRunnerInitializationFailure(resFromPython: Int, errMessage: String):
+    StreamingPythonRunnerInitializationException = {
+    new StreamingPythonRunnerInitializationException(resFromPython, errMessage)
+  }
+
+  class StreamingPythonRunnerInitializationException(resFromPython: Int, errMessage: String)
+    extends SparkPythonException(
+      errorClass = "STREAMING_PYTHON_RUNNER_INITIALIZATION_FAILURE",
+      messageParameters = Map(
+        "resFromPython" -> resFromPython.toString,
+        "msg" -> errMessage))
 
   /**
    * Stops the Python worker.
    */
   def stop(): Unit = {
-    logInfo(s"Stopping streaming runner for sessionId: $sessionId, module: $workerModule.")
+    logInfo(log"Stopping streaming runner for sessionId: ${MDC(SESSION_ID, sessionId)}," +
+      log" module: ${MDC(PYTHON_WORKER_MODULE, workerModule)}.")
 
     try {
       pythonWorkerFactory.foreach { factory =>

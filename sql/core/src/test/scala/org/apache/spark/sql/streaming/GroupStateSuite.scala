@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.sql.Date
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.api.java.Optional
 import org.apache.spark.sql.execution.streaming.GroupStateImpl
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.NO_TIMESTAMP
@@ -115,12 +115,12 @@ class GroupStateSuite extends SparkFunSuite {
       )
       for (state <- states) {
         // for streaming queries
-        testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
-        testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
+        testTimeoutDurationNotAllowed[SparkUnsupportedOperationException](state)
+        testTimeoutTimestampNotAllowed[SparkUnsupportedOperationException](state)
 
         // for batch queries
-        testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
-        testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
+        testTimeoutDurationNotAllowed[SparkUnsupportedOperationException](state)
+        testTimeoutTimestampNotAllowed[SparkUnsupportedOperationException](state)
       }
     }
   }
@@ -135,7 +135,7 @@ class GroupStateSuite extends SparkFunSuite {
     assert(state.getTimeoutTimestampMs.get() === 2000)
     state.setTimeoutDuration(500)
     assert(state.getTimeoutTimestampMs.get() === 1500) // can be set without initializing state
-    testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
+    testTimeoutTimestampNotAllowed[SparkUnsupportedOperationException](state)
 
     state.update(5)
     assert(state.getTimeoutTimestampMs.isPresent())
@@ -144,37 +144,37 @@ class GroupStateSuite extends SparkFunSuite {
     assert(state.getTimeoutTimestampMs.get() === 2000)
     state.setTimeoutDuration("2 second")
     assert(state.getTimeoutTimestampMs.get() === 3000)
-    testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
+    testTimeoutTimestampNotAllowed[SparkUnsupportedOperationException](state)
 
     state.remove()
     assert(state.getTimeoutTimestampMs.isPresent())
     assert(state.getTimeoutTimestampMs.get() === 3000) // does not change
     state.setTimeoutDuration(500) // can still be set
     assert(state.getTimeoutTimestampMs.get() === 1500)
-    testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
+    testTimeoutTimestampNotAllowed[SparkUnsupportedOperationException](state)
 
     // for batch queries
     state = GroupStateImpl.createForBatch(
       ProcessingTimeTimeout, watermarkPresent = false).asInstanceOf[GroupStateImpl[Int]]
     assert(!state.getTimeoutTimestampMs.isPresent())
     state.setTimeoutDuration(500)
-    testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
+    testTimeoutTimestampNotAllowed[SparkUnsupportedOperationException](state)
 
     state.update(5)
     state.setTimeoutDuration(1000)
     state.setTimeoutDuration("2 second")
-    testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
+    testTimeoutTimestampNotAllowed[SparkUnsupportedOperationException](state)
 
     state.remove()
     state.setTimeoutDuration(500)
-    testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
+    testTimeoutTimestampNotAllowed[SparkUnsupportedOperationException](state)
   }
 
   test("GroupState - setTimeout - with EventTimeTimeout") {
     var state = TestGroupState.create[Int](
       Optional.empty[Int], EventTimeTimeout, 1000, Optional.of(1000), hasTimedOut = false)
     assert(!state.getTimeoutTimestampMs.isPresent())
-    testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
+    testTimeoutDurationNotAllowed[SparkUnsupportedOperationException](state)
     state.setTimeoutTimestamp(5000)
     assert(state.getTimeoutTimestampMs.get() === 5000) // can be set without initializing state
 
@@ -184,29 +184,29 @@ class GroupStateSuite extends SparkFunSuite {
     assert(state.getTimeoutTimestampMs.get() === 10000)
     state.setTimeoutTimestamp(new Date(20000))
     assert(state.getTimeoutTimestampMs.get() === 20000)
-    testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
+    testTimeoutDurationNotAllowed[SparkUnsupportedOperationException](state)
 
     state.remove()
     assert(state.getTimeoutTimestampMs.get() === 20000)
     state.setTimeoutTimestamp(5000)
     assert(state.getTimeoutTimestampMs.get() === 5000) // can be set after removing state
-    testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
+    testTimeoutDurationNotAllowed[SparkUnsupportedOperationException](state)
 
     // for batch queries
     state = GroupStateImpl.createForBatch(
       EventTimeTimeout, watermarkPresent = false).asInstanceOf[GroupStateImpl[Int]]
     assert(!state.getTimeoutTimestampMs.isPresent())
-    testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
+    testTimeoutDurationNotAllowed[SparkUnsupportedOperationException](state)
     state.setTimeoutTimestamp(5000)
 
     state.update(5)
     state.setTimeoutTimestamp(10000)
     state.setTimeoutTimestamp(new Date(20000))
-    testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
+    testTimeoutDurationNotAllowed[SparkUnsupportedOperationException](state)
 
     state.remove()
     state.setTimeoutTimestamp(5000)
-    testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
+    testTimeoutDurationNotAllowed[SparkUnsupportedOperationException](state)
   }
 
   test("GroupState - illegal params to setTimeout") {
@@ -297,20 +297,19 @@ class GroupStateSuite extends SparkFunSuite {
     assert(illegalArgument.getMessage.contains("batchProcessingTimeMs must be 0 or positive"))
 
     // hasTimedOut cannot be true if there's no timeout configured
-    var unsupportedOperation = intercept[UnsupportedOperationException] {
-      TestGroupState.create[Int](
-        Optional.of(5), NoTimeout, 100L, Optional.empty[Long], hasTimedOut = true)
-    }
-    assert(
-      unsupportedOperation
-        .getMessage.contains("hasTimedOut is true however there's no timeout configured"))
-    unsupportedOperation = intercept[UnsupportedOperationException] {
-      GroupStateImpl.createForStreaming[Int](
-        Some(5), 100L, NO_TIMESTAMP, NoTimeout, true, false)
-    }
-    assert(
-      unsupportedOperation
-        .getMessage.contains("hasTimedOut is true however there's no timeout configured"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        TestGroupState.create[Int](
+          Optional.of(5), NoTimeout, 100L, Optional.empty[Long], hasTimedOut = true)
+      },
+      condition = "_LEGACY_ERROR_TEMP_3168",
+      parameters = Map.empty)
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        GroupStateImpl.createForStreaming[Int](Some(5), 100L, NO_TIMESTAMP, NoTimeout, true, false)
+      },
+      condition = "_LEGACY_ERROR_TEMP_3168",
+      parameters = Map.empty)
   }
 
   test("GroupState - hasTimedOut") {
@@ -348,9 +347,10 @@ class GroupStateSuite extends SparkFunSuite {
     }
 
     def assertWrongTimeoutError(test: => Unit): Unit = {
-      val e = intercept[UnsupportedOperationException] { test }
-      assert(e.getMessage.contains(
-        "Cannot get event time watermark timestamp without setting watermark"))
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] { test },
+        condition = "_LEGACY_ERROR_TEMP_2204",
+        parameters = Map.empty)
     }
 
     for (timeoutConf <- Seq(NoTimeout, EventTimeTimeout, ProcessingTimeTimeout)) {

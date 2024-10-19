@@ -458,14 +458,14 @@ This example shows how to estimate clusters on streaming data.
 
 <div data-lang="python" markdown="1">
 Refer to the [`StreamingKMeans` Python docs](api/python/reference/api/pyspark.mllib.clustering.StreamingKMeans.html) for more details on the API.
-And Refer to [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing) for details on StreamingContext.
+And Refer to [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing-streamingcontext) for details on StreamingContext.
 
 {% include_example python/mllib/streaming_k_means_example.py %}
 </div>
 
 <div data-lang="scala" markdown="1">
 Refer to the [`StreamingKMeans` Scala docs](api/scala/org/apache/spark/mllib/clustering/StreamingKMeans.html) for details on the API.
-And Refer to [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing) for details on StreamingContext.
+And Refer to [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing-streamingcontext) for details on StreamingContext.
 
 {% include_example scala/org/apache/spark/examples/mllib/StreamingKMeansExample.scala %}
 </div>

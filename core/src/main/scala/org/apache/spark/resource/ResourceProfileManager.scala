@@ -23,7 +23,8 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.Evolving
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerResourceProfileAdded}
 import org.apache.spark.util.Utils
@@ -45,11 +46,6 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
     (lock.readLock(), lock.writeLock())
   }
 
-  private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
-  addResourceProfile(defaultProfile)
-
-  def defaultResourceProfile: ResourceProfile = defaultProfile
-
   private val dynamicEnabled = Utils.isDynamicAllocationEnabled(sparkConf)
   private val master = sparkConf.getOption("spark.master")
   private val isYarn = master.isDefined && master.get.equals("yarn")
@@ -60,12 +56,18 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
   private val notRunningUnitTests = !isTesting
   private val testExceptionThrown = sparkConf.get(RESOURCE_PROFILE_MANAGER_TESTING)
 
+  private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+  addResourceProfile(defaultProfile)
+
+  def defaultResourceProfile: ResourceProfile = defaultProfile
+
   /**
    * If we use anything except the default profile, it's supported on YARN, Kubernetes and
    * Standalone with dynamic allocation enabled, and task resource profile with dynamic allocation
    * disabled on Standalone. Throw an exception if not supported.
    */
   private[spark] def isSupported(rp: ResourceProfile): Boolean = {
+    assert(master != null)
     if (rp.isInstanceOf[TaskResourceProfile] && !dynamicEnabled) {
       if ((notRunningUnitTests || testExceptionThrown) &&
         !(isStandaloneOrLocalCluster || isYarn || isK8s)) {
@@ -139,7 +141,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
     if (putNewProfile) {
       // force the computation of maxTasks and limitingResource now so we don't have cost later
       rp.limitingResource(sparkConf)
-      logInfo(s"Added ResourceProfile id: ${rp.id}")
+      logInfo(log"Added ResourceProfile id: ${MDC(LogKeys.RESOURCE_PROFILE_ID, rp.id)}")
       listenerBus.post(SparkListenerResourceProfileAdded(rp))
     }
   }

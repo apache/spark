@@ -15,10 +15,6 @@
 # limitations under the License.
 #
 
-import unittest
-
-from pyspark.errors import AnalysisException, PythonException
-from pyspark.sql.functions import udf
 from pyspark.sql.tests.connect.test_parity_udf import UDFParityTests
 from pyspark.sql.tests.test_arrow_python_udf import PythonUDFArrowTestsMixin
 
@@ -35,28 +31,6 @@ class ArrowPythonUDFParityTests(UDFParityTests, PythonUDFArrowTestsMixin):
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
         finally:
             super(ArrowPythonUDFParityTests, cls).tearDownClass()
-
-    def test_named_arguments_negative(self):
-        @udf("int")
-        def test_udf(a, b):
-            return a + b
-
-        self.spark.udf.register("test_udf", test_udf)
-
-        with self.assertRaisesRegex(
-            AnalysisException,
-            "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
-        ):
-            self.spark.sql("SELECT test_udf(a => id, a => id * 10) FROM range(2)").show()
-
-        with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
-            self.spark.sql("SELECT test_udf(a => id, id * 10) FROM range(2)").show()
-
-        with self.assertRaises(PythonException):
-            self.spark.sql("SELECT test_udf(c => 'x') FROM range(2)").show()
-
-        with self.assertRaises(PythonException):
-            self.spark.sql("SELECT test_udf(id, a => id * 10) FROM range(2)").show()
 
 
 if __name__ == "__main__":

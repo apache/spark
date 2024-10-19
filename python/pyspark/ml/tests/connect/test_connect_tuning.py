@@ -17,7 +17,9 @@
 #
 
 import unittest
+import os
 
+from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
@@ -25,11 +27,14 @@ if should_test_connect:
     from pyspark.ml.tests.connect.test_legacy_mode_tuning import CrossValidatorTestsMixin
 
 
-@unittest.skipIf(not should_test_connect, connect_requirement_message)
+@unittest.skipIf(
+    not should_test_connect or is_remote_only(),
+    connect_requirement_message or "Requires PySpark core library in Spark Connect server",
+)
 class CrossValidatorTestsOnConnect(CrossValidatorTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = (
-            SparkSession.builder.remote("local[2]")
+            SparkSession.builder.remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]"))
             .config("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
             .getOrCreate()
         )

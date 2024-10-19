@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -53,12 +54,12 @@ class ColumnarRulesSuite extends PlanTest with SharedSparkSession {
 }
 
 case class LeafOp(override val supportsColumnar: Boolean) extends LeafExecNode {
-  override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException()
+  override protected def doExecute(): RDD[InternalRow] = throw SparkUnsupportedOperationException()
   override def output: Seq[Attribute] = Seq.empty
 }
 
 case class UnaryOp(child: SparkPlan, override val supportsColumnar: Boolean) extends UnaryExecNode {
-  override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException()
+  override protected def doExecute(): RDD[InternalRow] = throw SparkUnsupportedOperationException()
   override def output: Seq[Attribute] = child.output
   override protected def withNewChildInternal(newChild: SparkPlan): UnaryOp = copy(child = newChild)
 }

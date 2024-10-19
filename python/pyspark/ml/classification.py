@@ -37,7 +37,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from pyspark import keyword_only, since, SparkContext, inheritable_thread_target
+from pyspark import keyword_only, since, inheritable_thread_target
 from pyspark.ml import Estimator, Predictor, PredictionModel, Model
 from pyspark.ml.param.shared import (
     HasRawPredictionCol,
@@ -89,7 +89,7 @@ from pyspark.ml.util import (
 from pyspark.ml.wrapper import JavaParams, JavaPredictor, JavaPredictionModel, JavaWrapper
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.linalg import Matrix, Vector, Vectors, VectorUDT
-from pyspark.sql import DataFrame, Row
+from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
 from pyspark.storagelevel import StorageLevel
@@ -97,6 +97,7 @@ from pyspark.storagelevel import StorageLevel
 if TYPE_CHECKING:
     from pyspark.ml._typing import P, ParamMap
     from py4j.java_gateway import JavaObject
+    from pyspark.core.context import SparkContext
 
 
 T = TypeVar("T")
@@ -698,7 +699,7 @@ class LinearSVC(
     >>> model_path = temp_path + "/svm_model"
     >>> model.save(model_path)
     >>> model2 = LinearSVCModel.load(model_path)
-    >>> model.coefficients[0] == model2.coefficients[0]
+    >>> bool(model.coefficients[0] == model2.coefficients[0])
     True
     >>> model.intercept == model2.intercept
     True
@@ -872,7 +873,7 @@ class LinearSVCModel(
         return self._call_java("intercept")
 
     @since("3.1.0")
-    def summary(self) -> "LinearSVCTrainingSummary":
+    def summary(self) -> "LinearSVCTrainingSummary":  # type: ignore[override]
         """
         Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
@@ -1209,7 +1210,7 @@ class LogisticRegression(
     >>> model_path = temp_path + "/lr_model"
     >>> blorModel.save(model_path)
     >>> model2 = LogisticRegressionModel.load(model_path)
-    >>> blorModel.coefficients[0] == model2.coefficients[0]
+    >>> bool(blorModel.coefficients[0] == model2.coefficients[0])
     True
     >>> blorModel.intercept == model2.intercept
     True
@@ -2037,9 +2038,9 @@ class RandomForestClassifier(
     >>> result = model.transform(test0).head()
     >>> result.prediction
     0.0
-    >>> numpy.argmax(result.probability)
+    >>> int(numpy.argmax(result.probability))
     0
-    >>> numpy.argmax(result.newRawPrediction)
+    >>> int(numpy.argmax(result.newRawPrediction))
     0
     >>> result.leafId
     DenseVector([0.0, 0.0, 0.0])
@@ -3318,7 +3319,9 @@ class MultilayerPerceptronClassificationModel(
         return self._call_java("weights")
 
     @since("3.1.0")
-    def summary(self) -> "MultilayerPerceptronClassificationTrainingSummary":
+    def summary(  # type: ignore[override]
+        self,
+    ) -> "MultilayerPerceptronClassificationTrainingSummary":
         """
         Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
@@ -3675,7 +3678,7 @@ class _OneVsRestSharedReadWrite:
     @staticmethod
     def saveImpl(
         instance: Union[OneVsRest, "OneVsRestModel"],
-        sc: SparkContext,
+        sc: Union["SparkContext", SparkSession],
         path: str,
         extraMetadata: Optional[Dict[str, Any]] = None,
     ) -> None:
@@ -3688,7 +3691,10 @@ class _OneVsRestSharedReadWrite:
         cast(MLWritable, instance.getClassifier()).save(classifierPath)
 
     @staticmethod
-    def loadClassifier(path: str, sc: SparkContext) -> Union[OneVsRest, "OneVsRestModel"]:
+    def loadClassifier(
+        path: str,
+        sc: Union["SparkContext", SparkSession],
+    ) -> Union[OneVsRest, "OneVsRestModel"]:
         classifierPath = os.path.join(path, "classifier")
         return DefaultParamsReader.loadParamsInstance(classifierPath, sc)
 
@@ -3713,11 +3719,13 @@ class OneVsRestReader(MLReader[OneVsRest]):
         self.cls = cls
 
     def load(self, path: str) -> OneVsRest:
-        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
         if not DefaultParamsReader.isPythonParamsInstance(metadata):
             return JavaMLReader(self.cls).load(path)  # type: ignore[arg-type]
         else:
-            classifier = cast(Classifier, _OneVsRestSharedReadWrite.loadClassifier(path, self.sc))
+            classifier = cast(
+                Classifier, _OneVsRestSharedReadWrite.loadClassifier(path, self.sparkSession)
+            )
             ova: OneVsRest = OneVsRest(classifier=classifier)._resetUid(metadata["uid"])
             DefaultParamsReader.getAndSetParams(ova, metadata, skipParams=["classifier"])
             return ova
@@ -3731,7 +3739,7 @@ class OneVsRestWriter(MLWriter):
 
     def saveImpl(self, path: str) -> None:
         _OneVsRestSharedReadWrite.validateParams(self.instance)
-        _OneVsRestSharedReadWrite.saveImpl(self.instance, self.sc, path)
+        _OneVsRestSharedReadWrite.saveImpl(self.instance, self.sparkSession, path)
 
 
 class OneVsRestModel(
@@ -3769,6 +3777,8 @@ class OneVsRestModel(
 
     def __init__(self, models: List[ClassificationModel]):
         super(OneVsRestModel, self).__init__()
+        from pyspark.core.context import SparkContext
+
         self.models = models
         if not isinstance(models[0], JavaMLWritable):
             return
@@ -3911,6 +3921,8 @@ class OneVsRestModel(
         py4j.java_gateway.JavaObject
             Java object equivalent to this instance.
         """
+        from pyspark.core.context import SparkContext
+
         sc = SparkContext._active_spark_context
         assert sc is not None and sc._gateway is not None
 
@@ -3956,16 +3968,18 @@ class OneVsRestModelReader(MLReader[OneVsRestModel]):
         self.cls = cls
 
     def load(self, path: str) -> OneVsRestModel:
-        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
         if not DefaultParamsReader.isPythonParamsInstance(metadata):
             return JavaMLReader(self.cls).load(path)  # type: ignore[arg-type]
         else:
-            classifier = _OneVsRestSharedReadWrite.loadClassifier(path, self.sc)
+            classifier = _OneVsRestSharedReadWrite.loadClassifier(path, self.sparkSession)
             numClasses = metadata["numClasses"]
             subModels = [None] * numClasses
             for idx in range(numClasses):
                 subModelPath = os.path.join(path, f"model_{idx}")
-                subModels[idx] = DefaultParamsReader.loadParamsInstance(subModelPath, self.sc)
+                subModels[idx] = DefaultParamsReader.loadParamsInstance(
+                    subModelPath, self.sparkSession
+                )
             ovaModel = OneVsRestModel(cast(List[ClassificationModel], subModels))._resetUid(
                 metadata["uid"]
             )
@@ -3985,7 +3999,9 @@ class OneVsRestModelWriter(MLWriter):
         instance = self.instance
         numClasses = len(instance.models)
         extraMetadata = {"numClasses": numClasses}
-        _OneVsRestSharedReadWrite.saveImpl(instance, self.sc, path, extraMetadata=extraMetadata)
+        _OneVsRestSharedReadWrite.saveImpl(
+            instance, self.sparkSession, path, extraMetadata=extraMetadata
+        )
         for idx in range(numClasses):
             subModelPath = os.path.join(path, f"model_{idx}")
             cast(MLWritable, instance.models[idx]).save(subModelPath)

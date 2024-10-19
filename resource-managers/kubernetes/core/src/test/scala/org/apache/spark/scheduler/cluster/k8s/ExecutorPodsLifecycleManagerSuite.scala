@@ -33,11 +33,14 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config
+import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.deploy.k8s.KubernetesUtils._
+import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.ExecutorExited
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
+import org.apache.spark.util.{ManualClock, SparkExitCode}
 
 class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -60,21 +63,69 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
 
   before {
     MockitoAnnotations.openMocks(this).close()
+    val sparkConf = new SparkConf()
+      .set(KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME, TEST_SPARK_EXECUTOR_CONTAINER_NAME)
     snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
     namedExecutorPods = mutable.Map.empty[String, PodResource]
     when(schedulerBackend.getExecutorsWithRegistrationTs()).thenReturn(Map.empty[String, Long])
+    when(schedulerBackend.getExecutorIds()).thenReturn(Seq.empty)
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.inNamespace(anyString())).thenReturn(podsWithNamespace)
     when(podsWithNamespace.withName(any(classOf[String]))).thenAnswer(namedPodsAnswer())
     eventHandlerUnderTest = new ExecutorPodsLifecycleManager(
-      new SparkConf(),
+      sparkConf,
       kubernetesClient,
       snapshotsStore)
     eventHandlerUnderTest.start(schedulerBackend)
   }
 
+  test("SPARK-41210: Window based executor failure tracking mechanism") {
+    var _exitCode = -1
+    var waitForExecutorPodsClock = new ManualClock(0L)
+    val _conf = eventHandlerUnderTest.conf.clone
+      .set(MAX_EXECUTOR_FAILURES.key, "2")
+      .set(EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS.key, "2s")
+    snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
+    eventHandlerUnderTest = new ExecutorPodsLifecycleManager(_conf,
+      kubernetesClient, snapshotsStore, waitForExecutorPodsClock) {
+      override private[k8s] def stopApplication(exitCode: Int): Unit = {
+        logError("!!!")
+        _exitCode = exitCode
+      }
+    }
+    eventHandlerUnderTest.start(schedulerBackend)
+    assert(eventHandlerUnderTest.getNumExecutorsFailed === 0)
+
+    waitForExecutorPodsClock.advance(1000)
+    snapshotsStore.updatePod(failedExecutorWithoutDeletion(1))
+    snapshotsStore.updatePod(failedExecutorWithoutDeletion(2))
+    snapshotsStore.notifySubscribers()
+    assert(eventHandlerUnderTest.getNumExecutorsFailed === 2)
+    assert(_exitCode === -1)
+
+    waitForExecutorPodsClock.advance(1000)
+    snapshotsStore.notifySubscribers()
+    assert(eventHandlerUnderTest.getNumExecutorsFailed === 2)
+    assert(_exitCode === -1)
+
+    waitForExecutorPodsClock.advance(2000)
+    assert(eventHandlerUnderTest.getNumExecutorsFailed === 0)
+    assert(_exitCode === -1)
+
+    waitForExecutorPodsClock.advance(1000)
+    snapshotsStore.updatePod(failedExecutorWithoutDeletion(3))
+    snapshotsStore.updatePod(failedExecutorWithoutDeletion(4))
+    snapshotsStore.updatePod(failedExecutorWithoutDeletion(5))
+    snapshotsStore.notifySubscribers()
+    assert(eventHandlerUnderTest.getNumExecutorsFailed === 3)
+    assert(_exitCode === SparkExitCode.EXCEED_MAX_EXECUTOR_FAILURES)
+  }
+
   test("When an executor reaches error states immediately, remove from the scheduler backend.") {
     val failedPod = failedExecutorWithoutDeletion(1)
+    val mockPodResource = mock(classOf[PodResource])
+    namedExecutorPods.put("spark-executor-1", mockPodResource)
+    when(mockPodResource.get()).thenReturn(failedPod)
     snapshotsStore.updatePod(failedPod)
     snapshotsStore.notifySubscribers()
     val msg = exitReasonMessage(1, failedPod, 1)
@@ -85,6 +136,9 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
 
   test("Don't remove executors twice from Spark but remove from K8s repeatedly.") {
     val failedPod = failedExecutorWithoutDeletion(1)
+    val mockPodResource = mock(classOf[PodResource])
+    namedExecutorPods.put("spark-executor-1", mockPodResource)
+    when(mockPodResource.get()).thenReturn(failedPod)
     snapshotsStore.updatePod(failedPod)
     snapshotsStore.notifySubscribers()
     snapshotsStore.updatePod(failedPod)
@@ -93,6 +147,26 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)
     verify(schedulerBackend, times(1)).doRemoveExecutor("1", expectedLossReason)
     verify(namedExecutorPods(failedPod.getMetadata.getName), times(2)).delete()
+  }
+
+  test("Don't remove executors twice from Spark and K8s.") {
+    val failedPod = failedExecutorWithoutDeletion(1)
+    val mockPodResource = mock(classOf[PodResource])
+    namedExecutorPods.put("spark-executor-1", mockPodResource)
+    when(mockPodResource.get()).thenReturn(failedPod)
+    snapshotsStore.updatePod(failedPod)
+    snapshotsStore.notifySubscribers()
+    val msg = exitReasonMessage(1, failedPod, 1)
+    val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)
+    verify(schedulerBackend, times(1)).doRemoveExecutor("1", expectedLossReason)
+    verify(namedExecutorPods(failedPod.getMetadata.getName), times(1)).delete()
+
+    // Now remove the pod from K8s
+    when(mockPodResource.get()).thenReturn(null)
+    snapshotsStore.updatePod(failedPod)
+    snapshotsStore.notifySubscribers()
+    verify(schedulerBackend, times(1)).doRemoveExecutor("1", expectedLossReason)
+    verify(namedExecutorPods(failedPod.getMetadata.getName), times(1)).delete()
   }
 
   test("When the scheduler backend lists executor ids that aren't present in the cluster," +
@@ -134,6 +208,15 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     verify(namedExecutorPods(failedPod.getMetadata.getName), never()).delete()
     verify(namedExecutorPods(failedPod.getMetadata.getName))
       .edit(any[UnaryOperator[Pod]]())
+  }
+
+  test("SPARK-49804: Use the exit code of executor container always") {
+    val failedPod = failedExecutorWithSidecarStatusListedFirst(1)
+    snapshotsStore.updatePod(failedPod)
+    snapshotsStore.notifySubscribers()
+    val msg = exitReasonMessage(1, failedPod, 1)
+    val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)
+    verify(schedulerBackend).doRemoveExecutor("1", expectedLossReason)
   }
 
   private def exitReasonMessage(execId: Int, failedPod: Pod, exitCode: Int): String = {

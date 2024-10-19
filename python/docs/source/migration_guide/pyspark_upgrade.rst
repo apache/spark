@@ -22,9 +22,10 @@ Upgrading PySpark
 Upgrading from PySpark 3.5 to 4.0
 ---------------------------------
 
-* In Spark 4.0, it is recommended to use Pandas version 2.0.0 or above with PySpark for optimal compatibility.
-* In Spark 4.0, the minimum supported version for Pandas has been raised from 1.0.5 to 1.4.4 in PySpark.
+* In Spark 4.0, Python 3.8 support was dropped in PySpark.
+* In Spark 4.0, the minimum supported version for Pandas has been raised from 1.0.5 to 2.0.0 in PySpark.
 * In Spark 4.0, the minimum supported version for Numpy has been raised from 1.15 to 1.21 in PySpark.
+* In Spark 4.0, the minimum supported version for PyArrow has been raised from 4.0.0 to 10.0.0 in PySpark.
 * In Spark 4.0, ``Int64Index`` and ``Float64Index`` have been removed from pandas API on Spark, ``Index`` should be used directly.
 * In Spark 4.0, ``DataFrame.iteritems`` has been removed from pandas API on Spark, use ``DataFrame.items`` instead.
 * In Spark 4.0, ``Series.iteritems`` has been removed from pandas API on Spark, use ``Series.items`` instead.
@@ -67,7 +68,12 @@ Upgrading from PySpark 3.5 to 4.0
 * In Spark 4.0, ``DataFrame.to_pandas_on_spark`` has been removed from PySpark, use ``DataFrame.pandas_api`` instead.
 * In Spark 4.0, ``DatatimeIndex.week`` and ``DatatimeIndex.weekofyear`` have been removed from Pandas API on Spark, use ``DatetimeIndex.isocalendar().week`` instead.
 * In Spark 4.0, ``Series.dt.week`` and ``Series.dt.weekofyear`` have been removed from Pandas API on Spark, use ``Series.dt.isocalendar().week`` instead.
-
+* In Spark 4.0, when applying ``astype`` to a decimal type object, the existing missing value is changed to ``True`` instead of ``False`` from Pandas API on Spark.
+* In Spark 4.0, ``pyspark.testing.assertPandasOnSparkEqual`` has been removed from Pandas API on Spark, use ``pyspark.pandas.testing.assert_frame_equal`` instead.
+* In Spark 4.0, the aliases ``Y``, ``M``, ``H``, ``T``, ``S`` have been deprecated from Pandas API on Spark, use ``YE``, ``ME``, ``h``, ``min``, ``s`` instead respectively.
+* In Spark 4.0, the schema of a map column is inferred by merging the schemas of all pairs in the map. To restore the previous behavior where the schema is only inferred from the first non-null pair, you can set ``spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled`` to ``true``.
+* In Spark 4.0, `compute.ops_on_diff_frames` is on by default. To restore the previous behavior, set `compute.ops_on_diff_frames` to `false`.
+* In Spark 4.0, the data type `YearMonthIntervalType` in ``DataFrame.collect`` no longer returns the underlying integers. To restore the previous behavior, set ``PYSPARK_YM_INTERVAL_LEGACY`` environment variable to ``1``.
 
 
 Upgrading from PySpark 3.3 to 3.4

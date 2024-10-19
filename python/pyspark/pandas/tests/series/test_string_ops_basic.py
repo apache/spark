@@ -38,7 +38,7 @@ class SeriesStringOpsMixin:
                 "\nleading-whitespace",
                 "trailing-Whitespace    \t",
                 None,
-                np.NaN,
+                np.nan,
             ]
         )
 
@@ -167,7 +167,11 @@ class SeriesStringOpsMixin:
         self.check_func(lambda x: x.str.count("WH", flags=re.IGNORECASE))
 
 
-class SeriesStringOpsTests(SeriesStringOpsMixin, PandasOnSparkTestCase, SQLTestUtils):
+class SeriesStringOpsTests(
+    SeriesStringOpsMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

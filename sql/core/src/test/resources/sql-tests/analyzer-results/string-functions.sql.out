@@ -384,21 +384,21 @@ Project [btrim(xyxtrimyyx, xy) AS btrim(xyxtrimyyx, xy)#x]
 -- !query
 SELECT btrim(encode(" xyz ", 'utf-8'))
 -- !query analysis
-Project [btrim(encode( xyz , utf-8, false)) AS btrim(encode( xyz , utf-8))#x]
+Project [btrim(encode( xyz , utf-8)) AS btrim(encode( xyz , utf-8))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT btrim(encode('yxTomxx', 'utf-8'), encode('xyz', 'utf-8'))
 -- !query analysis
-Project [btrim(encode(yxTomxx, utf-8, false), encode(xyz, utf-8, false)) AS btrim(encode(yxTomxx, utf-8), encode(xyz, utf-8))#x]
+Project [btrim(encode(yxTomxx, utf-8), encode(xyz, utf-8)) AS btrim(encode(yxTomxx, utf-8), encode(xyz, utf-8))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT btrim(encode('xxxbarxxx', 'utf-8'), encode('x', 'utf-8'))
 -- !query analysis
-Project [btrim(encode(xxxbarxxx, utf-8, false), encode(x, utf-8, false)) AS btrim(encode(xxxbarxxx, utf-8), encode(x, utf-8))#x]
+Project [btrim(encode(xxxbarxxx, utf-8), encode(x, utf-8)) AS btrim(encode(xxxbarxxx, utf-8), encode(x, utf-8))#x]
 +- OneRowRelation
 
 
@@ -649,14 +649,14 @@ SetCommand (spark.sql.legacy.javaCharsets,Some(true))
 -- !query
 select encode('hello', 'WINDOWS-1252')
 -- !query analysis
-Project [encode(hello, WINDOWS-1252, true) AS encode(hello, WINDOWS-1252)#x]
+Project [encode(hello, WINDOWS-1252) AS encode(hello, WINDOWS-1252)#x]
 +- OneRowRelation
 
 
 -- !query
 select encode(scol, ecol) from values('hello', 'WINDOWS-1252') as t(scol, ecol)
 -- !query analysis
-Project [encode(scol#x, ecol#x, true) AS encode(scol, ecol)#x]
+Project [encode(scol#x, ecol#x) AS encode(scol, ecol)#x]
 +- SubqueryAlias t
    +- LocalRelation [scol#x, ecol#x]
 
@@ -670,14 +670,14 @@ SetCommand (spark.sql.legacy.javaCharsets,Some(false))
 -- !query
 select encode('hello', 'WINDOWS-1252')
 -- !query analysis
-Project [encode(hello, WINDOWS-1252, false) AS encode(hello, WINDOWS-1252)#x]
+Project [encode(hello, WINDOWS-1252) AS encode(hello, WINDOWS-1252)#x]
 +- OneRowRelation
 
 
 -- !query
 select encode(scol, ecol) from values('hello', 'WINDOWS-1252') as t(scol, ecol)
 -- !query analysis
-Project [encode(scol#x, ecol#x, false) AS encode(scol, ecol)#x]
+Project [encode(scol#x, ecol#x) AS encode(scol, ecol)#x]
 +- SubqueryAlias t
    +- LocalRelation [scol#x, ecol#x]
 
@@ -685,16 +685,93 @@ Project [encode(scol#x, ecol#x, false) AS encode(scol, ecol)#x]
 -- !query
 select encode('hello', 'Windows-xxx')
 -- !query analysis
-Project [encode(hello, Windows-xxx, false) AS encode(hello, Windows-xxx)#x]
+Project [encode(hello, Windows-xxx) AS encode(hello, Windows-xxx)#x]
 +- OneRowRelation
 
 
 -- !query
 select encode(scol, ecol) from values('hello', 'Windows-xxx') as t(scol, ecol)
 -- !query analysis
-Project [encode(scol#x, ecol#x, false) AS encode(scol, ecol)#x]
+Project [encode(scol#x, ecol#x) AS encode(scol, ecol)#x]
 +- SubqueryAlias t
    +- LocalRelation [scol#x, ecol#x]
+
+
+-- !query
+set spark.sql.legacy.codingErrorAction=true
+-- !query analysis
+SetCommand (spark.sql.legacy.codingErrorAction,Some(true))
+
+
+-- !query
+select encode('渭城朝雨浥轻尘', 'US-ASCII')
+-- !query analysis
+Project [encode(渭城朝雨浥轻尘, US-ASCII) AS encode(渭城朝雨浥轻尘, US-ASCII)#x]
++- OneRowRelation
+
+
+-- !query
+select encode(scol, ecol) from values('渭城朝雨浥轻尘', 'US-ASCII') as t(scol, ecol)
+-- !query analysis
+Project [encode(scol#x, ecol#x) AS encode(scol, ecol)#x]
++- SubqueryAlias t
+   +- LocalRelation [scol#x, ecol#x]
+
+
+-- !query
+set spark.sql.legacy.codingErrorAction=false
+-- !query analysis
+SetCommand (spark.sql.legacy.codingErrorAction,Some(false))
+
+
+-- !query
+select encode('客舍青青柳色新', 'US-ASCII')
+-- !query analysis
+Project [encode(客舍青青柳色新, US-ASCII) AS encode(客舍青青柳色新, US-ASCII)#x]
++- OneRowRelation
+
+
+-- !query
+select encode(scol, ecol) from values('客舍青青柳色新', 'US-ASCII') as t(scol, ecol)
+-- !query analysis
+Project [encode(scol#x, ecol#x) AS encode(scol, ecol)#x]
++- SubqueryAlias t
+   +- LocalRelation [scol#x, ecol#x]
+
+
+-- !query
+select encode(decode(encode('白日依山尽，黄河入海流。欲穷千里目，更上一层楼。', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query analysis
+Project [encode(decode(encode(白日依山尽，黄河入海流。欲穷千里目，更上一层楼。, UTF-16), UTF-16), UTF-8) AS encode(decode(encode(白日依山尽，黄河入海流。欲穷千里目，更上一层楼。, UTF-16), UTF-16), UTF-8)#x]
++- OneRowRelation
+
+
+-- !query
+select encode(decode(encode('南山經之首曰䧿山。其首曰招搖之山，臨於西海之上。', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query analysis
+Project [encode(decode(encode(南山經之首曰䧿山。其首曰招搖之山，臨於西海之上。, UTF-16), UTF-16), UTF-8) AS encode(decode(encode(南山經之首曰䧿山。其首曰招搖之山，臨於西海之上。, UTF-16), UTF-16), UTF-8)#x]
++- OneRowRelation
+
+
+-- !query
+select encode(decode(encode('세계에서 가장 인기 있는 빅데이터 처리 프레임워크인 Spark', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query analysis
+Project [encode(decode(encode(세계에서 가장 인기 있는 빅데이터 처리 프레임워크인 Spark, UTF-16), UTF-16), UTF-8) AS encode(decode(encode(세계에서 가장 인기 있는 빅데이터 처리 프레임워크인 Spark, UTF-16), UTF-16), UTF-8)#x]
++- OneRowRelation
+
+
+-- !query
+select encode(decode(encode('το Spark είναι το πιο δημοφιλές πλαίσιο επεξεργασίας μεγάλων δεδομένων παγκοσμίως', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query analysis
+Project [encode(decode(encode(το Spark είναι το πιο δημοφιλές πλαίσιο επεξεργασίας μεγάλων δεδομένων παγκοσμίως, UTF-16), UTF-16), UTF-8) AS encode(decode(encode(το Spark είναι το πιο δημοφιλές πλαίσιο επεξεργασίας μεγάλων δεδομένων παγκοσμίως, UTF-16), UTF-16), UTF-8)#x]
++- OneRowRelation
+
+
+-- !query
+select encode(decode(encode('Sparkは世界で最も人気のあるビッグデータ処理フレームワークである。', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query analysis
+Project [encode(decode(encode(Sparkは世界で最も人気のあるビッグデータ処理フレームワークである。, UTF-16), UTF-16), UTF-8) AS encode(decode(encode(Sparkは世界で最も人気のあるビッグデータ処理フレームワークである。, UTF-16), UTF-16), UTF-8)#x]
++- OneRowRelation
 
 
 -- !query
@@ -746,7 +823,14 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select decode(encode('abc', 'utf-8'), 'utf-8')
 -- !query analysis
-Project [decode(encode(abc, utf-8, false), utf-8) AS decode(encode(abc, utf-8), utf-8)#x]
+Project [decode(encode(abc, utf-8), utf-8) AS decode(encode(abc, utf-8), utf-8)#x]
++- OneRowRelation
+
+
+-- !query
+select decode(encode('大千世界', 'utf-32'), 'utf-32')
+-- !query analysis
+Project [decode(encode(大千世界, utf-32), utf-32) AS decode(encode(大千世界, utf-32), utf-32)#x]
 +- OneRowRelation
 
 
@@ -850,6 +934,48 @@ Project [decode(0x68656C6C6F, WINDOWS-1252) AS decode(X'68656C6C6F', WINDOWS-125
 
 -- !query
 select decode(scol, ecol) from values(X'68656c6c6f', 'WINDOWS-1252') as t(scol, ecol)
+-- !query analysis
+Project [decode(scol#x, ecol#x) AS decode(scol, ecol)#x]
++- SubqueryAlias t
+   +- LocalRelation [scol#x, ecol#x]
+
+
+-- !query
+set spark.sql.legacy.codingErrorAction=true
+-- !query analysis
+SetCommand (spark.sql.legacy.codingErrorAction,Some(true))
+
+
+-- !query
+select decode(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII')
+-- !query analysis
+Project [decode(0xE58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592, US-ASCII) AS decode(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', US-ASCII)#x]
++- OneRowRelation
+
+
+-- !query
+select decode(scol, ecol) from values(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII') as t(scol, ecol)
+-- !query analysis
+Project [decode(scol#x, ecol#x) AS decode(scol, ecol)#x]
++- SubqueryAlias t
+   +- LocalRelation [scol#x, ecol#x]
+
+
+-- !query
+set spark.sql.legacy.codingErrorAction=false
+-- !query analysis
+SetCommand (spark.sql.legacy.codingErrorAction,Some(false))
+
+
+-- !query
+select decode(X'E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII')
+-- !query analysis
+Project [decode(0xE8A5BFE587BAE998B3E585B3E697A0E69585E4BABA, US-ASCII) AS decode(X'E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', US-ASCII)#x]
++- OneRowRelation
+
+
+-- !query
+select decode(scol, ecol) from values(X'E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII') as t(scol, ecol)
 -- !query analysis
 Project [decode(scol#x, ecol#x) AS decode(scol, ecol)#x]
 +- SubqueryAlias t
@@ -1428,7 +1554,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 CREATE TEMPORARY VIEW fmtTable(fmtField) AS SELECT * FROM VALUES ('invalidFormat')
 -- !query analysis
-CreateViewCommand `fmtTable`, [(fmtField,None)], SELECT * FROM VALUES ('invalidFormat'), false, false, LocalTempView, true
+CreateViewCommand `fmtTable`, [(fmtField,None)], SELECT * FROM VALUES ('invalidFormat'), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [col1#x]
       +- LocalRelation [col1#x]
 
@@ -1585,4 +1711,88 @@ Project [luhn_check(cast(6011111111111118 as string)) AS luhn_check(601111111111
 select luhn_check(123.456)
 -- !query analysis
 Project [luhn_check(cast(123.456 as string)) AS luhn_check(123.456)#x]
++- OneRowRelation
+
+
+-- !query
+select is_valid_utf8('')
+-- !query analysis
+Project [is_valid_utf8() AS is_valid_utf8()#x]
++- OneRowRelation
+
+
+-- !query
+select is_valid_utf8('abc')
+-- !query analysis
+Project [is_valid_utf8(abc) AS is_valid_utf8(abc)#x]
++- OneRowRelation
+
+
+-- !query
+select is_valid_utf8(x'80')
+-- !query analysis
+Project [is_valid_utf8(cast(0x80 as string)) AS is_valid_utf8(X'80')#x]
++- OneRowRelation
+
+
+-- !query
+select make_valid_utf8('')
+-- !query analysis
+Project [make_valid_utf8() AS make_valid_utf8()#x]
++- OneRowRelation
+
+
+-- !query
+select make_valid_utf8('abc')
+-- !query analysis
+Project [make_valid_utf8(abc) AS make_valid_utf8(abc)#x]
++- OneRowRelation
+
+
+-- !query
+select make_valid_utf8(x'80')
+-- !query analysis
+Project [make_valid_utf8(cast(0x80 as string)) AS make_valid_utf8(X'80')#x]
++- OneRowRelation
+
+
+-- !query
+select validate_utf8('')
+-- !query analysis
+Project [validate_utf8() AS validate_utf8()#x]
++- OneRowRelation
+
+
+-- !query
+select validate_utf8('abc')
+-- !query analysis
+Project [validate_utf8(abc) AS validate_utf8(abc)#x]
++- OneRowRelation
+
+
+-- !query
+select validate_utf8(x'80')
+-- !query analysis
+Project [validate_utf8(cast(0x80 as string)) AS validate_utf8(X'80')#x]
++- OneRowRelation
+
+
+-- !query
+select try_validate_utf8('')
+-- !query analysis
+Project [try_validate_utf8() AS try_validate_utf8()#x]
++- OneRowRelation
+
+
+-- !query
+select try_validate_utf8('abc')
+-- !query analysis
+Project [try_validate_utf8(abc) AS try_validate_utf8(abc)#x]
++- OneRowRelation
+
+
+-- !query
+select try_validate_utf8(x'80')
+-- !query analysis
+Project [try_validate_utf8(cast(0x80 as string)) AS try_validate_utf8(X'80')#x]
 +- OneRowRelation

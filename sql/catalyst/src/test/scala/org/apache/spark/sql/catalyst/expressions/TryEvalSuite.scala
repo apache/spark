@@ -46,6 +46,19 @@ class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("try_mod") {
+    Seq(
+      (3.0, 2.0, 1.0),
+      (1.0, 0.0, null),
+      (-1.0, 0.0, null)
+    ).foreach { case (a, b, expected) =>
+      val left = Literal(a)
+      val right = Literal(b)
+      val input = Remainder(left, right, EvalMode.TRY)
+      checkEvaluation(input, expected)
+    }
+  }
+
   test("try_subtract") {
     Seq(
       (1, 1, 0),

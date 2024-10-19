@@ -18,7 +18,7 @@
 package org.apache.spark.sql.api.r
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
-import java.util.{Locale, Map => JMap}
+import java.util.{Map => JMap}
 
 import scala.jdk.CollectionConverters._
 import scala.util.matching.Regex
@@ -27,7 +27,8 @@ import org.apache.spark.TaskContext
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.r.SerDe
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.CONFIG
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericRowWithSchema, Literal}
@@ -46,8 +47,7 @@ private[sql] object SQLUtils extends Logging {
       enableHiveSupport: Boolean): SparkSession = {
     val spark =
       if (enableHiveSupport &&
-          jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase(Locale.ROOT) ==
-            "hive" &&
+          jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive") == "hive" &&
           // Note that the order of conditions here are on purpose.
           // `SparkSession.hiveClassesArePresent` checks if Hive's `HiveConf` is loadable or not;
           // however, `HiveConf` itself has some static logic to check if Hadoop version is
@@ -59,9 +59,9 @@ private[sql] object SQLUtils extends Logging {
         SparkSession.builder().enableHiveSupport().sparkContext(jsc.sc).getOrCreate()
       } else {
         if (enableHiveSupport) {
-          logWarning("SparkR: enableHiveSupport is requested for SparkSession but " +
-            s"Spark is not built with Hive or ${CATALOG_IMPLEMENTATION.key} is not set to " +
-            "'hive', falling back to without Hive support.")
+          logWarning(log"SparkR: enableHiveSupport is requested for SparkSession but " +
+            log"Spark is not built with Hive or ${MDC(CONFIG, CATALOG_IMPLEMENTATION.key)} " +
+            log"is not set to 'hive', falling back to without Hive support.")
         }
         SparkSession.builder().sparkContext(jsc.sc).getOrCreate()
       }

@@ -914,6 +914,22 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     assert(c.cartesian[Int](a).collect().toList.sorted === c_cartesian_a)
   }
 
+  test("SPARK-48656: number of cartesian partitions overflow") {
+    val numSlices: Int = 65536
+    val rdd1 = sc.parallelize(Seq(1, 2, 3), numSlices = numSlices)
+    val rdd2 = sc.parallelize(Seq(1, 2, 3), numSlices = numSlices)
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        rdd1.cartesian(rdd2).partitions
+      },
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.INITIALIZE",
+      sqlState = "54000",
+      parameters = Map(
+        "numberOfElements" -> (numSlices.toLong * numSlices.toLong).toString,
+        "maxRoundedArrayLength" -> Int.MaxValue.toString)
+    )
+  }
+
   test("intersection") {
     val all = sc.parallelize(1 to 10)
     val evens = sc.parallelize(2 to 10 by 2)
@@ -1269,7 +1285,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     val rdd = sc.parallelize(0 to totalElements, totalElements)
     import scala.language.reflectiveCalls
     val jobCountListener = new SparkListener {
-      private var count: AtomicInteger = new AtomicInteger(0)
+      private val count: AtomicInteger = new AtomicInteger(0)
       def getCount: Int = count.get
       def reset(): Unit = count.set(0)
       override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
@@ -1317,7 +1333,9 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
       val thrown = intercept[IllegalStateException] {
         block
       }
-      assert(thrown.getMessage.contains("stopped"))
+      assert(thrown.getMessage.contains("Cannot call methods on a stopped SparkContext"))
+      assert(thrown.getMessage.contains("This stopped SparkContext was created at:"))
+      assert(thrown.getMessage.contains("And it was stopped at:"))
     }
     assertFails { sc.parallelize(1 to 100) }
     assertFails { sc.textFile("/nonexistent-path") }

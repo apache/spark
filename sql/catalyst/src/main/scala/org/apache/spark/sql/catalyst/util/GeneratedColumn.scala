@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, Table
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * This object contains utility methods and values for Generated Columns
@@ -126,7 +127,7 @@ object GeneratedColumn {
     } catch {
       case ex: AnalysisException =>
         // Improve error message if possible
-        if (ex.getErrorClass == "UNRESOLVED_COLUMN.WITH_SUGGESTION") {
+        if (ex.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION") {
           ex.messageParameters.get("objectName").foreach { unresolvedCol =>
             val resolver = SQLConf.get.resolver
             // Whether `col` = `unresolvedCol` taking into account case-sensitivity
@@ -143,7 +144,7 @@ object GeneratedColumn {
             }
           }
         }
-        if (ex.getErrorClass == "UNRESOLVED_ROUTINE") {
+        if (ex.getCondition == "UNRESOLVED_ROUTINE") {
           // Cannot resolve function using built-in catalog
           ex.messageParameters.get("routineName").foreach { fnName =>
             throw unsupportedExpressionError(s"failed to resolve $fnName to a built-in function")
@@ -161,6 +162,10 @@ object GeneratedColumn {
       throw unsupportedExpressionError(
         s"generation expression data type ${analyzed.dataType.simpleString} " +
         s"is incompatible with column data type ${dataType.simpleString}")
+    }
+    if (analyzed.exists(e => SchemaUtils.hasNonUTF8BinaryCollation(e.dataType))) {
+      throw unsupportedExpressionError(
+        "generation expression cannot contain non utf8 binary collated string type")
     }
   }
 

@@ -18,6 +18,8 @@
 package org.apache.spark.mllib.tree
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.{MDC, MessageWithContext}
+import org.apache.spark.internal.LogKeys.{LEARNING_RATE, NUM_ITERATIONS, SUBSAMPLING_RATE}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy, Strategy}
 import org.apache.spark.mllib.tree.configuration.Algo._
@@ -32,6 +34,15 @@ import org.apache.spark.util.Utils
  * Test suite for [[GradientBoostedTrees]].
  */
 class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext {
+
+  private def buildErrorLog(
+      numIterations: Int,
+      learningRate: Double,
+      subsamplingRate: Double): MessageWithContext = {
+    log"FAILED for numIterations=${MDC(NUM_ITERATIONS, numIterations)}, " +
+      log"learningRate=${MDC(LEARNING_RATE, learningRate)}, " +
+      log"subsamplingRate=${MDC(SUBSAMPLING_RATE, subsamplingRate)}"
+  }
 
   test("Regression with continuous features: SquaredError") {
     GradientBoostedTreesSuite.testCombinations.foreach {
@@ -51,8 +62,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
             gbt, GradientBoostedTreesSuite.data.toImmutableArraySeq, 0.06)
         } catch {
           case e: java.lang.AssertionError =>
-            logError(s"FAILED for numIterations=$numIterations, learningRate=$learningRate," +
-              s" subsamplingRate=$subsamplingRate")
+            logError(buildErrorLog(numIterations, learningRate, subsamplingRate))
             throw e
         }
 
@@ -82,8 +92,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
             gbt, GradientBoostedTreesSuite.data.toImmutableArraySeq, 0.85, "mae")
         } catch {
           case e: java.lang.AssertionError =>
-            logError(s"FAILED for numIterations=$numIterations, learningRate=$learningRate," +
-              s" subsamplingRate=$subsamplingRate")
+            logError(buildErrorLog(numIterations, learningRate, subsamplingRate))
             throw e
         }
 
@@ -114,8 +123,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
             gbt, GradientBoostedTreesSuite.data.toImmutableArraySeq, 0.9)
         } catch {
           case e: java.lang.AssertionError =>
-            logError(s"FAILED for numIterations=$numIterations, learningRate=$learningRate," +
-              s" subsamplingRate=$subsamplingRate")
+            logError(buildErrorLog(numIterations, learningRate, subsamplingRate))
             throw e
         }
 

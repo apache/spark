@@ -26,7 +26,7 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.UpdateFieldsBenchmark._
 import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingTimezonesIds, outstandingZoneIds}
@@ -455,7 +455,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df2.filter($"a".isin($"b"))
       },
-      errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+      condition = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
       parameters = Map(
         "functionName" -> "`in`",
         "dataType" -> "[\"INT\", \"ARRAY<INT>\"]",
@@ -523,7 +523,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             exception = intercept[AnalysisException] {
               df2.filter($"a".isInCollection(Seq($"b")))
             },
-            errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+            condition = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
             parameters = Map(
               "functionName" -> "`in`",
               "dataType" -> "[\"INT\", \"ARRAY<INT>\"]",
@@ -734,7 +734,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             exception = intercept[AnalysisException] {
               sql(s"SELECT *, $f() FROM tab1 JOIN tab2 ON tab1.id = tab2.id")
             },
-            errorClass = "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION",
+            condition = "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION",
             parameters = Map("expr" -> s""""$f()""""),
             context = ExpectedContext(
               fragment = s"$f()",
@@ -753,7 +753,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
               exception = intercept[AnalysisException] {
                 sql(stmt)
               },
-              errorClass = "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION",
+              condition = "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION",
               parameters = Map("expr" -> """"input_file_name()""""),
               context = ExpectedContext(
                 fragment = s"input_file_name()",
@@ -978,15 +978,15 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   test("SPARK-37646: lit") {
     assert(lit($"foo") == $"foo")
     assert(lit($"foo") == $"foo")
-    assert(lit(1) == Column(Literal(1)))
-    assert(lit(null) == Column(Literal(null, NullType)))
+    assert(lit(1).expr == Literal(1))
+    assert(lit(null).expr == Literal(null, NullType))
   }
 
   test("typedLit") {
     assert(typedLit($"foo") == $"foo")
     assert(typedLit($"foo") == $"foo")
-    assert(typedLit(1) == Column(Literal(1)))
-    assert(typedLit[String](null) == Column(Literal(null, StringType)))
+    assert(typedLit(1).expr == Literal(1))
+    assert(typedLit[String](null).expr == Literal(null, StringType))
 
     val df = Seq(Tuple1(0)).toDF("a")
     // Only check the types `lit` cannot handle
@@ -1055,10 +1055,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         testData.withColumn("key", $"key".withField("a", lit(2)))
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"update_fields(key, WithField(2))\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"key\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "\"STRUCT\""),
@@ -1087,14 +1087,14 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         structLevel2.withColumn("a", $"a".withField("x.b", lit(2)))
       },
-      errorClass = "FIELD_NOT_FOUND",
+      condition = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`x`", "fields" -> "`a`"))
 
     checkError(
       exception = intercept[AnalysisException] {
         structLevel3.withColumn("a", $"a".withField("a.x.b", lit(2)))
       },
-      errorClass = "FIELD_NOT_FOUND",
+      condition = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`x`", "fields" -> "`a`"))
   }
 
@@ -1103,10 +1103,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         structLevel1.withColumn("a", $"a".withField("b.a", lit(2)))
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"update_fields(a.b, WithField(2))\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"a.b\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "\"STRUCT\""),
@@ -1129,7 +1129,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
         structLevel2.withColumn("a", $"a".withField("a.b", lit(2)))
       },
-      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+      condition = "AMBIGUOUS_REFERENCE_TO_FIELDS",
       sqlState = "42000",
       parameters = Map("field" -> "`a`", "count" -> "2")
     )
@@ -1532,7 +1532,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.withColumn("a", $"a".withField("a.b.e.f", lit(2)))
       },
-      errorClass = "FIELD_NOT_FOUND",
+      condition = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`a`", "fields" -> "`a`.`b`"))
   }
 
@@ -1644,14 +1644,14 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           mixedCaseStructLevel2.withColumn("a", $"a".withField("A.a", lit(2)))
         },
-        errorClass = "FIELD_NOT_FOUND",
+        condition = "FIELD_NOT_FOUND",
         parameters = Map("fieldName" -> "`A`", "fields" -> "`a`, `B`"))
 
       checkError(
         exception = intercept[AnalysisException] {
           mixedCaseStructLevel2.withColumn("a", $"a".withField("b.a", lit(2)))
         },
-        errorClass = "FIELD_NOT_FOUND",
+        condition = "FIELD_NOT_FOUND",
         parameters = Map("fieldName" -> "`b`", "fields" -> "`a`, `B`"))
     }
   }
@@ -1687,7 +1687,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
           .select($"struct_col".withField("a.c", lit(3)))
       },
-      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+      condition = "AMBIGUOUS_REFERENCE_TO_FIELDS",
       sqlState = "42000",
       parameters = Map("field" -> "`a`", "count" -> "2")
     )
@@ -1854,10 +1854,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         testData.withColumn("key", $"key".dropFields("a"))
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"update_fields(key, dropfield())\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"key\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "\"STRUCT\""),
@@ -1878,14 +1878,14 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         structLevel2.withColumn("a", $"a".dropFields("x.b"))
       },
-      errorClass = "FIELD_NOT_FOUND",
+      condition = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`x`", "fields" -> "`a`"))
 
     checkError(
       exception = intercept[AnalysisException] {
         structLevel3.withColumn("a", $"a".dropFields("a.x.b"))
       },
-      errorClass = "FIELD_NOT_FOUND",
+      condition = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`x`", "fields" -> "`a`"))
   }
 
@@ -1894,10 +1894,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         structLevel1.withColumn("a", $"a".dropFields("b.a"))
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"update_fields(a.b, dropfield())\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"a.b\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "\"STRUCT\""),
@@ -1920,7 +1920,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
         structLevel2.withColumn("a", $"a".dropFields("a.b"))
       },
-      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+      condition = "AMBIGUOUS_REFERENCE_TO_FIELDS",
       sqlState = "42000",
       parameters = Map("field" -> "`a`", "count" -> "2")
     )
@@ -1968,7 +1968,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         structLevel1.withColumn("a", $"a".dropFields("a", "b", "c"))
       },
-      errorClass = "DATATYPE_MISMATCH.CANNOT_DROP_ALL_FIELDS",
+      condition = "DATATYPE_MISMATCH.CANNOT_DROP_ALL_FIELDS",
       parameters = Map("sqlExpr" -> "\"update_fields(a, dropfield(), dropfield(), dropfield())\""),
       context = ExpectedContext(
         fragment = "dropFields",
@@ -2158,14 +2158,14 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           mixedCaseStructLevel2.withColumn("a", $"a".dropFields("A.a"))
         },
-        errorClass = "FIELD_NOT_FOUND",
+        condition = "FIELD_NOT_FOUND",
         parameters = Map("fieldName" -> "`A`", "fields" -> "`a`, `B`"))
 
       checkError(
         exception = intercept[AnalysisException] {
           mixedCaseStructLevel2.withColumn("a", $"a".dropFields("b.a"))
         },
-        errorClass = "FIELD_NOT_FOUND",
+        condition = "FIELD_NOT_FOUND",
         parameters = Map("fieldName" -> "`b`", "fields" -> "`a`, `B`"))
     }
   }
@@ -2243,7 +2243,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
           .select($"struct_col".dropFields("a", "b"))
       },
-      errorClass = "DATATYPE_MISMATCH.CANNOT_DROP_ALL_FIELDS",
+      condition = "DATATYPE_MISMATCH.CANNOT_DROP_ALL_FIELDS",
       parameters = Map("sqlExpr" -> "\"update_fields(struct_col, dropfield(), dropfield())\""),
       context = ExpectedContext(
         fragment = "dropFields",
@@ -2270,7 +2270,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
           .select($"struct_col".dropFields("a.c"))
       },
-      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+      condition = "AMBIGUOUS_REFERENCE_TO_FIELDS",
       sqlState = "42000",
       parameters = Map("field" -> "`a`", "count" -> "2")
     )
@@ -2420,7 +2420,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         structLevel1.select($"a".withField("d", lit(4)).withField("e", $"a.d" + 1).as("a"))
       },
-      errorClass = "FIELD_NOT_FOUND",
+      condition = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`d`", "fields" -> "`a`, `b`, `c`"),
       context = ExpectedContext(
         fragment = "$",
@@ -2476,7 +2476,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           .select($"a".dropFields("c").as("a"))
           .select($"a".withField("z", $"a.c")).as("a")
       },
-      errorClass = "FIELD_NOT_FOUND",
+      condition = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`c`", "fields" -> "`a`, `b`"),
       context = ExpectedContext(
         fragment = "$",
@@ -2571,11 +2571,11 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       booleanDf.filter("cond = true").select(assert_true($"cond")),
       Row(null) :: Nil
     )
-    val e1 = intercept[SparkException] {
-      booleanDf.select(assert_true($"cond", lit(null.asInstanceOf[String]))).collect()
-    }
-    checkError(e1.getCause.asInstanceOf[SparkThrowable],
-      errorClass = "USER_RAISED_EXCEPTION",
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        booleanDf.select(assert_true($"cond", lit(null.asInstanceOf[String]))).collect()
+      },
+      condition = "USER_RAISED_EXCEPTION",
       parameters = Map("errorMessage" -> "null"))
 
     val nullDf = Seq(("first row", None), ("second row", Some(true))).toDF("n", "cond")
@@ -2583,40 +2583,38 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       nullDf.filter("cond = true").select(assert_true($"cond", $"cond")),
       Row(null) :: Nil
     )
-    val e2 = intercept[SparkException] {
-      nullDf.select(assert_true($"cond", $"n")).collect()
-    }
-    checkError(e2.getCause.asInstanceOf[SparkThrowable],
-      errorClass = "USER_RAISED_EXCEPTION",
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        nullDf.select(assert_true($"cond", $"n")).collect()
+      },
+      condition = "USER_RAISED_EXCEPTION",
       parameters = Map("errorMessage" -> "first row"))
 
     // assert_true(condition)
     val intDf = Seq((0, 1)).toDF("a", "b")
     checkAnswer(intDf.select(assert_true($"a" < $"b")), Row(null) :: Nil)
-    val e3 = intercept[SparkException] {
+    val e3 = intercept[SparkRuntimeException] {
       intDf.select(assert_true($"a" > $"b")).collect()
     }
-
-    assert(e3.getCause.isInstanceOf[RuntimeException])
-    assert(e3.getCause.getMessage.matches(
+    assert(e3.getMessage.matches(
       "\\[USER_RAISED_EXCEPTION\\] '\\(a#\\d+ > b#\\d+\\)' is not true! SQLSTATE: P0001"))
   }
 
   test("raise_error") {
     val strDf = Seq(("hello")).toDF("a")
 
-    val e1 = intercept[SparkException] {
-      strDf.select(raise_error(lit(null.asInstanceOf[String]))).collect()
-    }
-    checkError(e1.getCause.asInstanceOf[SparkThrowable],
-      errorClass = "USER_RAISED_EXCEPTION",
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        strDf.select(raise_error(lit(null.asInstanceOf[String]))).collect()
+      },
+      condition = "USER_RAISED_EXCEPTION",
       parameters = Map("errorMessage" -> "null"))
 
-    val e2 = intercept[SparkException] {
-      strDf.select(raise_error($"a")).collect()
-    }
-    checkError(e2.getCause.asInstanceOf[SparkThrowable],
-      errorClass = "USER_RAISED_EXCEPTION",
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        strDf.select(raise_error($"a")).collect()
+      },
+      condition = "USER_RAISED_EXCEPTION",
       parameters = Map("errorMessage" -> "hello"))
   }
 
@@ -2653,13 +2651,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         }
       }
 
-      val e = intercept[SparkException] {
+      val e = intercept[ArithmeticException] {
         Seq((LocalDate.of(2021, 3, 11), Period.ofMonths(Int.MaxValue)))
           .toDF("date", "interval")
           .select($"date" + $"interval")
           .collect()
-      }.getCause
-      assert(e.isInstanceOf[ArithmeticException])
+      }
       assert(e.getMessage.contains("integer overflow"))
     }
   }
@@ -2683,13 +2680,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         }
       }
 
-      val e = intercept[SparkException] {
+      val e = intercept[ArithmeticException] {
         Seq((LocalDate.of(2021, 3, 11), Period.ofMonths(Int.MaxValue)))
           .toDF("date", "interval")
           .select($"date" - $"interval")
           .collect()
-      }.getCause
-      assert(e.isInstanceOf[ArithmeticException])
+      }
       assert(e.getMessage.contains("integer overflow"))
     }
   }
@@ -2917,22 +2913,19 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       Seq((Period.ofMonths(-1), BigDecimal(0.5))).toDF("i", "n").select($"i" / $"n"),
       Row(Period.ofMonths(-2)))
 
-    val e = intercept[SparkException] {
+    val e = intercept[ArithmeticException] {
       Seq((Period.ofYears(9999), 0)).toDF("i", "n").select($"i" / $"n").collect()
-    }.getCause
-    assert(e.isInstanceOf[ArithmeticException])
+    }
     assert(e.getMessage.contains("Division by zero"))
 
-    val e2 = intercept[SparkException] {
+    val e2 = intercept[ArithmeticException] {
       Seq((Period.ofYears(9999), 0d)).toDF("i", "n").select($"i" / $"n").collect()
-    }.getCause
-    assert(e2.isInstanceOf[ArithmeticException])
+    }
     assert(e2.getMessage.contains("Division by zero"))
 
-    val e3 = intercept[SparkException] {
+    val e3 = intercept[ArithmeticException] {
       Seq((Period.ofYears(9999), BigDecimal(0))).toDF("i", "n").select($"i" / $"n").collect()
-    }.getCause
-    assert(e3.isInstanceOf[ArithmeticException])
+    }
     assert(e3.getMessage.contains("Division by zero"))
   }
 
@@ -2964,22 +2957,19 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         .toDF("i", "n").select($"i" / $"n"),
       Row(Duration.of(-1, ChronoUnit.MICROS).multipliedBy(10000).dividedBy(100000001)))
 
-    val e = intercept[SparkException] {
+    val e = intercept[ArithmeticException] {
       Seq((Duration.ofDays(9999), 0)).toDF("i", "n").select($"i" / $"n").collect()
-    }.getCause
-    assert(e.isInstanceOf[ArithmeticException])
+    }
     assert(e.getMessage.contains("Division by zero"))
 
-    val e2 = intercept[SparkException] {
+    val e2 = intercept[ArithmeticException] {
       Seq((Duration.ofDays(9999), 0d)).toDF("i", "n").select($"i" / $"n").collect()
-    }.getCause
-    assert(e2.isInstanceOf[ArithmeticException])
+    }
     assert(e2.getMessage.contains("Division by zero"))
 
-    val e3 = intercept[SparkException] {
+    val e3 = intercept[ArithmeticException] {
       Seq((Duration.ofDays(9999), BigDecimal(0))).toDF("i", "n").select($"i" / $"n").collect()
-    }.getCause
-    assert(e3.isInstanceOf[ArithmeticException])
+    }
     assert(e3.getMessage.contains("Division by zero"))
   }
 

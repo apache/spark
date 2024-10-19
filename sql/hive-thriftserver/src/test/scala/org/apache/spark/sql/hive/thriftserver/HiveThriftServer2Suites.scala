@@ -1062,7 +1062,7 @@ class SingleSessionSuite extends HiveThriftServer2TestBase {
         statement.executeQuery("SET spark.sql.hive.thriftServer.singleSession=false")
       }.getMessage
       assert(e.contains(
-        "Cannot modify the value of a static config: spark.sql.hive.thriftServer.singleSession"))
+        "CANNOT_MODIFY_CONFIG"))
     }
   }
 
@@ -1120,7 +1120,7 @@ class HiveThriftCleanUpScratchDirSuite extends HiveThriftServer2TestBase {
 
   override protected def extraConf: Seq[String] =
     s" --hiveconf ${ConfVars.HIVE_START_CLEANUP_SCRATCHDIR}=true " ::
-       s"--hiveconf ${ConfVars.SCRATCHDIR}=${tempScratchDir.getAbsolutePath}" :: Nil
+       s"--hiveconf hive.exec.scratchdir=${tempScratchDir.getAbsolutePath}" :: Nil
 
   test("Cleanup the Hive scratchdir when starting the Hive Server") {
     assert(!tempScratchDir.exists())
@@ -1206,7 +1206,7 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
   protected var operationLogPath: File = _
   protected var lScratchDir: File = _
   private var logTailingProcess: Process = _
-  private var diagnosisBuffer: ArrayBuffer[String] = ArrayBuffer.empty[String]
+  private val diagnosisBuffer: ArrayBuffer[String] = ArrayBuffer.empty[String]
 
   protected def extraConf: Seq[String] = Nil
 
@@ -1222,7 +1222,7 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
       // overrides all other potential log4j configurations contained in other dependency jar files.
       val tempLog4jConf = Utils.createTempDir().getCanonicalPath
 
-      Files.write(
+      Files.asCharSink(new File(s"$tempLog4jConf/log4j2.properties"), StandardCharsets.UTF_8).write(
         """rootLogger.level = info
           |rootLogger.appenderRef.stdout.ref = console
           |appender.console.type = Console
@@ -1230,21 +1230,19 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
           |appender.console.target = SYSTEM_ERR
           |appender.console.layout.type = PatternLayout
           |appender.console.layout.pattern = %d{HH:mm:ss.SSS} %p %c: %maxLen{%m}{512}%n%ex{8}%n
-        """.stripMargin,
-        new File(s"$tempLog4jConf/log4j2.properties"),
-        StandardCharsets.UTF_8)
+        """.stripMargin)
 
       tempLog4jConf
     }
 
     s"""$startScript
        |  --master local
-       |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$metastoreJdbcUri
-       |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
+       |  --hiveconf javax.jdo.option.ConnectionURL=$metastoreJdbcUri
+       |  --hiveconf hive.metastore.warehouse.dir=$warehousePath
        |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=$localhost
        |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
        |  --hiveconf ${ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LOG_LOCATION}=$operationLogPath
-       |  --hiveconf ${ConfVars.LOCALSCRATCHDIR}=$lScratchDir
+       |  --hiveconf hive.exec.local.scratchdir=$lScratchDir
        |  --hiveconf $portConf=0
        |  --driver-class-path $driverClassPath
        |  --driver-java-options -Dlog4j2.debug
@@ -1430,9 +1428,9 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
 
   protected def jdbcUri(database: String = "default"): String = if (mode == ServerMode.http) {
     s"""jdbc:hive2://$localhost:$serverPort/
-       |$database?
-       |hive.server2.transport.mode=http;
-       |hive.server2.thrift.http.path=cliservice;
+       |$database;
+       |transportMode=http;
+       |httpPath=cliservice;?
        |${hiveConfList}#${hiveVarList}
      """.stripMargin.split("\n").mkString.trim
   } else {

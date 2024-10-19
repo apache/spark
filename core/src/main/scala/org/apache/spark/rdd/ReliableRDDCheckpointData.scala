@@ -23,7 +23,8 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{NEW_RDD_ID, RDD_CHECKPOINT_DIR, RDD_ID}
 import org.apache.spark.internal.config.CLEANER_REFERENCE_TRACKING_CLEAN_CHECKPOINTS
 
 /**
@@ -66,7 +67,8 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient private v
       }
     }
 
-    logInfo(s"Done checkpointing RDD ${rdd.id} to $cpDir, new parent is RDD ${newRDD.id}")
+    logInfo(log"Done checkpointing RDD ${MDC(RDD_ID, rdd.id)}" +
+      log" to ${MDC(RDD_CHECKPOINT_DIR, cpDir)}, new parent is RDD ${MDC(NEW_RDD_ID, newRDD.id)}")
     newRDD
   }
 

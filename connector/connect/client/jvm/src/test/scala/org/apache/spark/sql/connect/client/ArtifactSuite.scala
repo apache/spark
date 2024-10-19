@@ -30,6 +30,7 @@ import org.apache.commons.codec.digest.DigestUtils.sha256Hex
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.connect.proto.AddArtifactsRequest
+import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.test.ConnectFunSuite
 import org.apache.spark.util.IvyTestUtils
@@ -273,14 +274,16 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
   }
 
   test("resolve ivy") {
-    val main = new MavenCoordinate("my.great.lib", "mylib", "0.1")
-    val dep = "my.great.dep:mydep:0.5"
+    val main = new MavenCoordinate("my.artifactsuite.lib", "mylib", "0.1")
+    val dep = "my.artifactsuite.dep:mydep:0.5"
     IvyTestUtils.withRepository(main, Some(dep), None) { repo =>
       val artifacts =
-        Artifact.newIvyArtifacts(URI.create(s"ivy://my.great.lib:mylib:0.1?repos=$repo"))
-      assert(artifacts.exists(_.path.toString.contains("jars/my.great.lib_mylib-0.1.jar")))
+        Artifact.newIvyArtifacts(URI.create(s"ivy://my.artifactsuite.lib:mylib:0.1?repos=$repo"))
+      assert(
+        artifacts.exists(_.path.toString.contains("jars/my.artifactsuite.lib_mylib-0.1.jar")))
       // transitive dependency
-      assert(artifacts.exists(_.path.toString.contains("jars/my.great.dep_mydep-0.5.jar")))
+      assert(
+        artifacts.exists(_.path.toString.contains("jars/my.artifactsuite.dep_mydep-0.5.jar")))
     }
 
   }

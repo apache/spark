@@ -149,7 +149,6 @@ from pyspark.pandas.typedef.typehints import (
     create_tuple_for_frame_type,
 )
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor
-from pyspark.sql.utils import get_column_class, get_dataframe_class
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType
@@ -491,7 +490,8 @@ class DataFrame(Frame, Generic[T]):
 
     >>> import pandas as pd
     >>> sdf = spark.createDataFrame([("Data", 1), ("Bricks", 2)], ["x", "y"])
-    >>> ps.DataFrame(data=sdf, index=pd.Index([0, 1, 2]))
+    >>> with ps.option_context("compute.ops_on_diff_frames", False):
+    ...     ps.DataFrame(data=sdf, index=pd.Index([0, 1, 2]))
     Traceback (most recent call last):
       ...
     ValueError: Cannot combine the series or dataframe...'compute.ops_on_diff_frames' option.
@@ -509,7 +509,8 @@ class DataFrame(Frame, Generic[T]):
 
     >>> import pandas as pd
     >>> sdf = spark.createDataFrame([("Data", 1), ("Bricks", 2)], ["x", "y"])
-    >>> ps.DataFrame(data=sdf, index=ps.Index([0, 1, 2]))
+    >>> with ps.option_context("compute.ops_on_diff_frames", False):
+    ...     ps.DataFrame(data=sdf, index=ps.Index([0, 1, 2]))
     Traceback (most recent call last):
       ...
     ValueError: Cannot combine the series or dataframe...'compute.ops_on_diff_frames' option.
@@ -527,7 +528,6 @@ class DataFrame(Frame, Generic[T]):
     def __init__(  # type: ignore[no-untyped-def]
         self, data=None, index=None, columns=None, dtype=None, copy=False
     ):
-        SparkDataFrame = get_dataframe_class()
         index_assigned = False
         if isinstance(data, InternalFrame):
             assert columns is None
@@ -535,7 +535,7 @@ class DataFrame(Frame, Generic[T]):
             assert not copy
             if index is None:
                 internal = data
-        elif isinstance(data, SparkDataFrame):
+        elif isinstance(data, PySparkDataFrame):
             assert columns is None
             assert dtype is None
             assert not copy
@@ -2648,6 +2648,123 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             psdf._to_internal_pandas(), self.to_latex, pd.DataFrame.to_latex, args
         )
 
+    def to_feather(
+        self,
+        path: Union[str, IO[str]],
+        **kwargs: Any,
+    ) -> None:
+        """
+        Write a DataFrame to the binary Feather format.
+
+        .. note:: This method should only be used if the resulting DataFrame is expected
+                  to be small, as all the data is loaded into the driver's memory.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        path : str, path object, file-like object
+            String, path object (implementing ``os.PathLike[str]``), or file-like
+            object implementing a binary ``write()`` function.
+        **kwargs :
+            Additional keywords passed to :func:`pyarrow.feather.write_feather`.
+            This includes the `compression`, `compression_level`, `chunksize`
+            and `version` keywords.
+
+        Examples
+        --------
+        >>> df = ps.DataFrame([[1, 2, 3], [4, 5, 6]])
+        >>> df.to_feather("file.feather")  # doctest: +SKIP
+        """
+        # Make sure locals() call is at the top of the function so we don't capture local variables.
+        args = locals()
+
+        return validate_arguments_and_invoke_function(
+            self._to_internal_pandas(), self.to_feather, pd.DataFrame.to_feather, args
+        )
+
+    def to_stata(
+        self,
+        path: Union[str, IO[str]],
+        *,
+        convert_dates: Optional[Dict] = None,
+        write_index: bool = True,
+        byteorder: Optional[str] = None,
+        time_stamp: Optional[datetime.datetime] = None,
+        data_label: Optional[str] = None,
+        variable_labels: Optional[Dict] = None,
+        version: Optional[int] = 114,
+        convert_strl: Optional[Sequence[Name]] = None,
+        compression: str = "infer",
+        storage_options: Optional[str] = None,
+        value_labels: Optional[Dict] = None,
+    ) -> None:
+        """
+        Export DataFrame object to Stata dta format.
+
+        .. note:: This method should only be used if the resulting DataFrame is expected
+                  to be small, as all the data is loaded into the driver's memory.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        path : str, path object, or buffer
+            String, path object (implementing ``os.PathLike[str]``), or file-like
+            object implementing a binary ``write()`` function.
+        convert_dates : dict
+            Dictionary mapping columns containing datetime types to stata
+            internal format to use when writing the dates. Options are 'tc',
+            'td', 'tm', 'tw', 'th', 'tq', 'ty'. Column can be either an integer
+            or a name. Datetime columns that do not have a conversion type
+            specified will be converted to 'tc'. Raises NotImplementedError if
+            a datetime column has timezone information.
+        write_index : bool
+            Write the index to Stata dataset.
+        byteorder : str
+            Can be ">", "<", "little", or "big". default is `sys.byteorder`.
+        time_stamp : datetime
+            A datetime to use as file creation date.  Default is the current
+            time.
+        data_label : str, optional
+            A label for the data set.  Must be 80 characters or smaller.
+        variable_labels : dict
+            Dictionary containing columns as keys and variable labels as
+            values. Each label must be 80 characters or smaller.
+        version : {{114, 117, 118, 119, None}}, default 114
+            Version to use in the output dta file. Set to None to let pandas
+            decide between 118 or 119 formats depending on the number of
+            columns in the frame. Version 114 can be read by Stata 10 and
+            later. Version 117 can be read by Stata 13 or later. Version 118
+            is supported in Stata 14 and later. Version 119 is supported in
+            Stata 15 and later. Version 114 limits string variables to 244
+            characters or fewer while versions 117 and later allow strings
+            with lengths up to 2,000,000 characters. Versions 118 and 119
+            support Unicode characters, and version 119 supports more than
+            32,767 variables.
+        convert_strl : list, optional
+            List of column names to convert to string columns to Stata StrL
+            format. Only available if version is 117.  Storing strings in the
+            StrL format can produce smaller dta files if strings have more than
+            8 characters and values are repeated.
+        value_labels : dict of dicts
+            Dictionary containing columns as keys and dictionaries of column value
+            to labels as values. Labels for a single variable must be 32,000
+            characters or smaller.
+
+        Examples
+        --------
+        >>> df = ps.DataFrame({'animal': ['falcon', 'parrot', 'falcon', 'parrot'],
+        ...                    'speed': [350, 18, 361, 15]})
+        >>> df.to_stata('animals.dta')  # doctest: +SKIP
+        """
+        # Make sure locals() call is at the top of the function so we don't capture local variables.
+        args = locals()
+
+        return validate_arguments_and_invoke_function(
+            self._to_internal_pandas(), self.to_stata, pd.DataFrame.to_stata, args
+        )
+
     def transpose(self) -> "DataFrame":
         """
         Transpose index and columns.
@@ -3629,8 +3746,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         allowed_inclusive_values = ["left", "right", "both", "neither"]
         if inclusive not in allowed_inclusive_values:
             raise PySparkValueError(
-                error_class="VALUE_NOT_ALLOWED",
-                message_parameters={
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={
                     "arg_name": "inclusive",
                     "allowed_values": str(allowed_inclusive_values),
                 },
@@ -5187,7 +5304,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         --------
 
         >>> df = ps.DataFrame(dict(
-        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='M')),
+        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='ME')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
         >>> df
@@ -5275,7 +5392,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Examples
         --------
         >>> df = ps.DataFrame(dict(
-        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='M')),
+        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='ME')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
         >>> df
@@ -5357,7 +5474,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Examples
         --------
         >>> df = ps.DataFrame(dict(
-        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='M')),
+        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='ME')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
         >>> df
@@ -5510,10 +5627,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         from pyspark.pandas.indexes import MultiIndex
         from pyspark.pandas.series import IndexOpsMixin
 
-        Column = get_column_class()
         for k, v in kwargs.items():
             is_invalid_assignee = (
-                not (isinstance(v, (IndexOpsMixin, Column)) or callable(v) or is_scalar(v))
+                not (isinstance(v, (IndexOpsMixin, PySparkColumn)) or callable(v) or is_scalar(v))
             ) or isinstance(v, MultiIndex)
             if is_invalid_assignee:
                 raise TypeError(
@@ -5527,7 +5643,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 (v.spark.column, v._internal.data_fields[0])
                 if isinstance(v, IndexOpsMixin) and not isinstance(v, MultiIndex)
                 else (v, None)
-                if isinstance(v, Column)
+                if isinstance(v, PySparkColumn)
                 else (F.lit(v), None)
             )
             for k, v in kwargs.items()
@@ -6126,6 +6242,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             raise ValueError("invalid limit_direction: '{}'".format(limit_direction))
         if (limit_area is not None) and (limit_area not in ["inside", "outside"]):
             raise ValueError("invalid limit_area: '{}'".format(limit_area))
+        for dtype in self.dtypes.values:
+            if dtype == "object":
+                warnings.warn(
+                    "DataFrame.interpolate with object dtype is deprecated and will raise in a "
+                    "future version. Convert to a specific numeric type before interpolating.",
+                    FutureWarning,
+                )
 
         numeric_col_names = []
         for label in self._internal.column_labels:
@@ -6302,7 +6425,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 )
 
             def op(psser: ps.Series) -> ps.Series:
-                return psser.replace(to_replace=to_replace, value=value, regex=regex)
+                return psser.replace(
+                    to_replace=to_replace, value=value, regex=regex  # type: ignore[arg-type]
+                )
 
         psdf = self._apply_series_op(op)
         if inplace:
@@ -7561,21 +7686,20 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if na_position not in ("first", "last"):
             raise ValueError("invalid na_position: '{}'".format(na_position))
 
-        Column = get_column_class()
         # Mapper: Get a spark column
         # n function for (ascending, na_position) combination
         mapper = {
-            (True, "first"): Column.asc_nulls_first,
-            (True, "last"): Column.asc_nulls_last,
-            (False, "first"): Column.desc_nulls_first,
-            (False, "last"): Column.desc_nulls_last,
+            (True, "first"): PySparkColumn.asc_nulls_first,
+            (True, "last"): PySparkColumn.asc_nulls_last,
+            (False, "first"): PySparkColumn.desc_nulls_first,
+            (False, "last"): PySparkColumn.desc_nulls_last,
         }
         by = [mapper[(asc, na_position)](scol) for scol, asc in zip(by, ascending)]
 
         natural_order_scol = F.col(NATURAL_ORDER_COLUMN_NAME)
 
         if keep == "last":
-            natural_order_scol = Column.desc(natural_order_scol)
+            natural_order_scol = PySparkColumn.desc(natural_order_scol)
         elif keep == "all":
             raise NotImplementedError("`keep`=all is not implemented yet.")
         elif keep != "first":
@@ -9940,7 +10064,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             number (0, 1).
         copy : bool, default True
             Return a new object, even if the passed indexes are the same.
-        fill_value : scalar, default np.NaN
+        fill_value : scalar, default np.nan
             Value to use for missing values. Defaults to NaN, but can be any
             "compatible" value.
 
@@ -10483,8 +10607,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     name_like_string(name) if name is not None else "variable_{}".format(i)
                     for i, name in enumerate(self._internal.column_label_names)
                 ]
-        elif isinstance(var_name, str):
-            var_name = [var_name]
+        elif is_list_like(var_name):
+            raise ValueError(f"{var_name=} must be a scalar.")
+        else:
+            var_name = [var_name]  # type: ignore[list-item]
 
         pairs = F.explode(
             F.array(
@@ -12149,7 +12275,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 # hack to use pandas' info as is.
                 object.__setattr__(self, "_data", self)
                 count_func = self.count
-                self.count = (  # type: ignore[assignment]
+                self.count = (  # type: ignore[method-assign]
                     lambda: count_func()._to_pandas()  # type: ignore[assignment, misc, union-attr]
                 )
                 return pd.DataFrame.info(
@@ -12162,7 +12288,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 )
             finally:
                 del self._data
-                self.count = count_func  # type: ignore[assignment]
+                self.count = count_func  # type: ignore[method-assign]
 
     # TODO: fix parameter 'axis' and 'numeric_only' to work same as pandas'
     def quantile(
@@ -13439,10 +13565,74 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return psdf
 
+    def _build_fallback_method(self, method: str) -> Callable:
+        def _internal_fallback_function(*args: Any, **kwargs: Any) -> "DataFrame":
+            log_advice(
+                f"`{method}` is executed in fallback mode. It loads partial data into the "
+                f"driver's memory to infer the schema, and loads all data into one executor's "
+                f"memory to compute. It should only be used if the pandas DataFrame is expected "
+                f"to be small."
+            )
+            input_df = self.copy()
+            index_names = input_df.index.names
+
+            sdf = input_df._internal.spark_frame
+            tmp_agg_column_name = verify_temp_column_name(
+                sdf, f"__tmp_aggregate_col_for_frame_{method}__"
+            )
+            input_df[tmp_agg_column_name] = 0
+
+            tmp_idx_column_name = verify_temp_column_name(
+                sdf, f"__tmp_index_col_for_frame_{method}__"
+            )
+            input_df[tmp_idx_column_name] = input_df.index
+
+            # TODO(SPARK-46859): specify the return type if possible
+            def compute_function(pdf: pd.DataFrame):  # type: ignore[no-untyped-def]
+                pdf = pdf.drop(columns=[tmp_agg_column_name])
+                pdf = pdf.set_index(tmp_idx_column_name, drop=True)
+                pdf = pdf.sort_index()
+                pdf = getattr(pdf, method)(*args, **kwargs)
+                pdf[tmp_idx_column_name] = pdf.index
+                return pdf.reset_index(drop=True)
+
+            output_df = input_df.groupby(tmp_agg_column_name).apply(compute_function)
+            output_df = output_df.set_index(tmp_idx_column_name)
+            output_df.index.names = index_names
+
+            return output_df
+
+        return _internal_fallback_function
+
+    def _asfreq_fallback(self, *args: Any, **kwargs: Any) -> "DataFrame":
+        _f = self._build_fallback_method("asfreq")
+        return _f(*args, **kwargs)
+
+    def _asof_fallback(self, *args: Any, **kwargs: Any) -> "DataFrame":
+        _f = self._build_fallback_method("asof")
+        return _f(*args, **kwargs)
+
+    def _convert_dtypes_fallback(self, *args: Any, **kwargs: Any) -> "DataFrame":
+        _f = self._build_fallback_method("convert_dtypes")
+        return _f(*args, **kwargs)
+
+    def _infer_objects_fallback(self, *args: Any, **kwargs: Any) -> "DataFrame":
+        _f = self._build_fallback_method("infer_objects")
+        return _f(*args, **kwargs)
+
+    def _set_axis_fallback(self, *args: Any, **kwargs: Any) -> "DataFrame":
+        _f = self._build_fallback_method("set_axis")
+        return _f(*args, **kwargs)
+
     def __getattr__(self, key: str) -> Any:
         if key.startswith("__"):
             raise AttributeError(key)
         if hasattr(MissingPandasLikeDataFrame, key):
+            if get_option("compute.pandas_fallback"):
+                new_key = f"_{key}_fallback"
+                if hasattr(self, new_key):
+                    return getattr(self, new_key)
+
             property_or_func = getattr(MissingPandasLikeDataFrame, key)
             if isinstance(property_or_func, property):
                 return property_or_func.fget(self)
@@ -13538,8 +13728,7 @@ def _reduce_spark_multi(sdf: PySparkDataFrame, aggs: List[PySparkColumn]) -> Any
     """
     Performs a reduction on a spark DataFrame, the functions being known SQL aggregate functions.
     """
-    SparkDataFrame = get_dataframe_class()
-    assert isinstance(sdf, SparkDataFrame)
+    assert isinstance(sdf, PySparkDataFrame)
     sdf0 = sdf.agg(*aggs)
     lst = sdf0.limit(2).toPandas()
     assert len(lst) == 1, (sdf, lst)

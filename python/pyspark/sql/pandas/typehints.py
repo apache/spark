@@ -32,7 +32,7 @@ def infer_eval_type(
     sig: Signature, type_hints: Dict[str, Any]
 ) -> Union["PandasScalarUDFType", "PandasScalarIterUDFType", "PandasGroupedAggUDFType"]:
     """
-    Infers the evaluation type in :class:`pyspark.rdd.PythonEvalType` from
+    Infers the evaluation type in :class:`pyspark.util.PythonEvalType` from
     :class:`inspect.Signature` instance and type hints.
     """
     from pyspark.sql.pandas.functions import PandasUDFType
@@ -52,16 +52,16 @@ def infer_eval_type(
     ]
     if len(parameters_sig) != len(sig.parameters):
         raise PySparkValueError(
-            error_class="TYPE_HINT_SHOULD_BE_SPECIFIED",
-            message_parameters={"target": "all parameters", "sig": str(sig)},
+            errorClass="TYPE_HINT_SHOULD_BE_SPECIFIED",
+            messageParameters={"target": "all parameters", "sig": str(sig)},
         )
 
     # Check if the return has a type hint
     return_annotation = type_hints.get("return", sig.return_annotation)
     if sig.empty is return_annotation:
         raise PySparkValueError(
-            error_class="TYPE_HINT_SHOULD_BE_SPECIFIED",
-            message_parameters={"target": "the return type", "sig": str(sig)},
+            errorClass="TYPE_HINT_SHOULD_BE_SPECIFIED",
+            messageParameters={"target": "the return type", "sig": str(sig)},
         )
 
     # Series, Frame or Union[DataFrame, Series], ... -> Series or Frame
@@ -140,8 +140,8 @@ def infer_eval_type(
         return PandasUDFType.GROUPED_AGG
     else:
         raise PySparkNotImplementedError(
-            error_class="UNSUPPORTED_SIGNATURE",
-            message_parameters={"signature": str(sig)},
+            errorClass="UNSUPPORTED_SIGNATURE",
+            messageParameters={"signature": str(sig)},
         )
 
 

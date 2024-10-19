@@ -107,16 +107,6 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
       checkAnswer(df, copyDf)
     }
   }
-
-  test("Default compression codec is snappy for ORC compression") {
-    withTempPath { file =>
-      spark.range(0, 10).write
-        .orc(file.getCanonicalPath)
-      val expectedCompressionKind =
-        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
-      assert(OrcCompressionCodec.SNAPPY.name() === expectedCompressionKind.name())
-    }
-  }
 }
 
 class HiveOrcHadoopFsRelationSuite extends OrcHadoopFsRelationSuite {

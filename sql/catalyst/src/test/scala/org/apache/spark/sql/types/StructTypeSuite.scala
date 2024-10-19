@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.types
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import com.fasterxml.jackson.databind.ObjectMapper
+
+import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -36,19 +38,29 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
 
   private val s = StructType.fromDDL("a INT, b STRING")
 
+  private val UNICODE_COLLATION = "UNICODE"
+  private val UTF8_LCASE_COLLATION = "UTF8_LCASE"
+  private val mapper = new ObjectMapper()
+
   test("lookup a single missing field should output existing fields") {
-    val e = intercept[IllegalArgumentException](s("c")).getMessage
-    assert(e.contains("Available: a, b"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException](s("c")),
+      condition = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`c`", "fields" -> "`a`, `b`"))
   }
 
   test("lookup a set of missing fields should output existing fields") {
-    val e = intercept[IllegalArgumentException](s(Set("a", "c"))).getMessage
-    assert(e.contains("Available: a, b"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException](s(Set("a", "c"))),
+      condition = "NONEXISTENT_FIELD_NAME_IN_LIST",
+      parameters = Map("nonExistFields" -> "`c`", "fieldNames" -> "`a`, `b`"))
   }
 
   test("lookup fieldIndex for missing field should output existing fields") {
-    val e = intercept[IllegalArgumentException](s.fieldIndex("c")).getMessage
-    assert(e.contains("Available: a, b"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException](s.fieldIndex("c")),
+      condition = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`c`", "fields" -> "`a`, `b`"))
   }
 
   test("SPARK-24849: toDDL - simple struct") {
@@ -329,7 +341,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`S1`.`S12`.`S123`",
         "path" -> "`s1`.`s12`"))
@@ -340,7 +352,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
+      condition = "AMBIGUOUS_COLUMN_OR_FIELD",
       parameters = Map("name" -> "`S2`.`x`", "n" -> "2"))
     caseSensitiveCheck(Seq("s2", "x"), Some(Seq("s2") -> StructField("x", IntegerType)))
 
@@ -350,7 +362,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`m1`.`key`",
         "path" -> "`m1`"))
@@ -361,7 +373,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`M1`.`key`.`name`",
         "path" -> "`m1`.`key`"))
@@ -370,7 +382,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`M1`.`value`.`name`",
         "path" -> "`m1`.`value`"))
@@ -387,7 +399,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`m2`.`key`.`A`.`name`",
         "path" -> "`m2`.`key`.`a`"))
@@ -396,7 +408,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`M2`.`value`.`b`.`name`",
         "path" -> "`m2`.`value`.`b`"))
@@ -406,7 +418,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`A1`.`element`",
         "path" -> "`a1`"))
@@ -416,7 +428,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`A1`.`element`.`name`",
         "path" -> "`a1`.`element`"))
@@ -430,7 +442,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`a2`.`element`.`C`.`name`",
         "path" -> "`a2`.`element`.`c`"))
@@ -444,7 +456,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`M3`.`value`.`value`.`MA`.`name`",
         "path" -> "`m3`.`value`.`value`.`ma`"))
@@ -458,7 +470,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = e,
-      errorClass = "INVALID_FIELD_NAME",
+      condition = "INVALID_FIELD_NAME",
       parameters = Map(
         "fieldName" -> "`A3`.`element`.`element`.`D`.`name`",
         "path" -> "`a3`.`element`.`element`.`d`")
@@ -510,7 +522,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkException] {
         StructType.fromDDL("c1 DECIMAL(10, 5)").merge(StructType.fromDDL("c1 DECIMAL(12, 2)"))
       },
-      errorClass = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
+      condition = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
       parameters = Map("left" -> "\"DECIMAL(10,5)\"", "right" -> "\"DECIMAL(12,2)\"")
     )
 
@@ -518,7 +530,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkException] {
         StructType.fromDDL("c1 DECIMAL(12, 5)").merge(StructType.fromDDL("c1 DECIMAL(12, 2)"))
       },
-      errorClass = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
+      condition = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
       parameters = Map("left" -> "\"DECIMAL(12,5)\"", "right" -> "\"DECIMAL(12,2)\"")
     )
   }
@@ -552,7 +564,6 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
         .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "1 + 1")
           .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "1 + 1")
           .build())))
-    val error = "fails to parse as a valid literal value"
     assert(ResolveDefaultColumns.existenceDefaultValues(source2).length == 1)
     assert(ResolveDefaultColumns.existenceDefaultValues(source2)(0) == 2)
 
@@ -564,9 +575,13 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
           .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "invalid")
           .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "invalid")
           .build())))
-    assert(intercept[AnalysisException] {
-      ResolveDefaultColumns.existenceDefaultValues(source3)
-    }.getMessage.contains(error))
+
+    checkError(
+      exception = intercept[AnalysisException]{
+        ResolveDefaultColumns.existenceDefaultValues(source3)
+      },
+      condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+      parameters = Map("statement" -> "", "colName" -> "`c1`", "defaultValue" -> "invalid"))
 
     // Negative test: StructType.defaultValues fails because the existence default value fails to
     // resolve.
@@ -580,8 +595,207 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
             ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
             "(SELECT 'abc' FROM missingtable)")
           .build())))
-    assert(intercept[AnalysisException] {
-      ResolveDefaultColumns.existenceDefaultValues(source4)
-    }.getMessage.contains(error))
+
+    checkError(
+      exception = intercept[AnalysisException]{
+        ResolveDefaultColumns.existenceDefaultValues(source4)
+      },
+      condition = "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
+      parameters = Map("statement" -> "",
+        "colName" -> "`c1`",
+        "defaultValue" -> "(SELECT 'abc' FROM missingtable)"))
+  }
+
+  test("SPARK-46629: Test STRUCT DDL with NOT NULL round trip") {
+    val struct = StructType(
+      Seq(
+        StructField(
+          "b",
+          StructType(
+            Seq(StructField("c", StringType, nullable = false).withComment("struct comment"))),
+          nullable = false),
+        StructField("b", StringType, nullable = false),
+        StructField("c", StringType).withComment("nullable comment")))
+    assert(
+      struct.toDDL == "b STRUCT<c: STRING NOT NULL COMMENT 'struct comment'> NOT NULL," +
+        "b STRING NOT NULL,c STRING COMMENT 'nullable comment'")
+    assert(fromDDL(struct.toDDL) === struct)
+  }
+
+  test("simple struct with collations to json") {
+    val simpleStruct = StructType(
+      StructField("c1", StringType(UNICODE_COLLATION)) :: Nil)
+
+    val expectedJson =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "c1",
+         |      "type": "string",
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "c1": "icu.$UNICODE_COLLATION"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+    assert(mapper.readTree(simpleStruct.json) == mapper.readTree(expectedJson))
+  }
+
+  test("nested struct with collations to json") {
+    val nestedStruct = StructType(
+      StructField("nested", StructType(
+        StructField("c1", StringType(UTF8_LCASE_COLLATION)) :: Nil)) :: Nil)
+
+    val expectedJson =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "nested",
+         |      "type": {
+         |        "type": "struct",
+         |        "fields": [
+         |          {
+         |            "name": "c1",
+         |            "type": "string",
+         |            "nullable": true,
+         |            "metadata": {
+         |              "${DataType.COLLATIONS_METADATA_KEY}": {
+         |                "c1": "spark.$UTF8_LCASE_COLLATION"
+         |              }
+         |            }
+         |          }
+         |        ]
+         |      },
+         |      "nullable": true,
+         |      "metadata": {}
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+    assert(mapper.readTree(nestedStruct.json) == mapper.readTree(expectedJson))
+  }
+
+  test("array with collations in schema to json") {
+    val arrayInSchema = StructType(
+      StructField("arrayField", ArrayType(StringType(UNICODE_COLLATION))) :: Nil)
+
+    val expectedJson =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "arrayField",
+         |      "type": {
+         |        "type": "array",
+         |        "elementType": "string",
+         |        "containsNull": true
+         |      },
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "arrayField.element": "icu.$UNICODE_COLLATION"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+    assert(mapper.readTree(arrayInSchema.json) == mapper.readTree(expectedJson))
+  }
+
+  test("map with collations in schema to json") {
+    val arrayInSchema = StructType(
+      StructField("mapField",
+        MapType(StringType(UNICODE_COLLATION), StringType(UNICODE_COLLATION))) :: Nil)
+
+    val expectedJson =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "mapField",
+         |      "type": {
+         |        "type": "map",
+         |        "keyType": "string",
+         |        "valueType": "string",
+         |        "valueContainsNull": true
+         |      },
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "mapField.key": "icu.$UNICODE_COLLATION",
+         |          "mapField.value": "icu.$UNICODE_COLLATION"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+    assert(mapper.readTree(arrayInSchema.json) == mapper.readTree(expectedJson))
+  }
+
+  test("nested array with collations in map to json" ) {
+    val mapWithNestedArray = StructType(
+      StructField("column", ArrayType(MapType(
+        StringType(UNICODE_COLLATION),
+        ArrayType(ArrayType(ArrayType(StringType(UNICODE_COLLATION))))))) :: Nil)
+
+    val expectedJson =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "column",
+         |      "type": {
+         |        "type": "array",
+         |        "elementType": {
+         |          "type": "map",
+         |          "keyType": "string",
+         |          "valueType": {
+         |            "type": "array",
+         |            "elementType": {
+         |              "type": "array",
+         |              "elementType": {
+         |                "type": "array",
+         |                "elementType": "string",
+         |                "containsNull": true
+         |              },
+         |              "containsNull": true
+         |            },
+         |            "containsNull": true
+         |          },
+         |          "valueContainsNull": true
+         |        },
+         |        "containsNull": true
+         |      },
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "column.element.key": "icu.$UNICODE_COLLATION",
+         |          "column.element.value.element.element.element": "icu.$UNICODE_COLLATION"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+    assert(
+      mapper.readTree(mapWithNestedArray.json) == mapper.readTree(expectedJson))
   }
 }

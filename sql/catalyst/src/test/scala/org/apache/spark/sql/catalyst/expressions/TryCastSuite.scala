@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkThrowable}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC_OPT
 import org.apache.spark.sql.types._
@@ -41,6 +41,14 @@ class TryCastSuite extends CastWithAnsiOnSuite {
       expression: => Expression,
       inputRow: InternalRow,
       expectedErrMsg: String): Unit = {
+    checkEvaluation(expression, null, inputRow)
+  }
+
+  override def checkErrorInExpression[T <: SparkThrowable : ClassTag](
+      expression: => Expression,
+      inputRow: InternalRow,
+      condition: String,
+      parameters: Map[String, String]): Unit = {
     checkEvaluation(expression, null, inputRow)
   }
 

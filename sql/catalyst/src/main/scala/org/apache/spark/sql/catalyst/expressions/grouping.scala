@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GROUPING_ANALYTICS, TreePattern}
@@ -41,10 +42,10 @@ trait BaseGroupingSets extends Expression with CodegenFallback {
   // this should be replaced first
   override lazy val resolved: Boolean = false
 
-  override def dataType: DataType = throw new UnsupportedOperationException
+  override def dataType: DataType = throw SparkUnsupportedOperationException()
   override def foldable: Boolean = false
   override def nullable: Boolean = true
-  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
+  override def eval(input: InternalRow): Any = throw SparkUnsupportedOperationException()
   final override val nodePatterns: Seq[TreePattern] = Seq(GROUPING_ANALYTICS)
 }
 

@@ -28,6 +28,7 @@ import scala.io.Source
 import scala.jdk.CollectionConverters._
 
 import com.google.common.io.Files
+import kafka.log.LogManager
 import kafka.server.{HostedPartition, KafkaConfig, KafkaServer}
 import kafka.server.checkpoints.OffsetCheckpointFile
 import kafka.zk.KafkaZkClient
@@ -47,11 +48,13 @@ import org.apache.zookeeper.client.ZKClientConfig
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 import org.apache.zookeeper.server.auth.SASLAuthenticationProvider
 import org.scalatest.Assertions._
+import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.kafka010.KafkaTokenUtil
 import org.apache.spark.util.{SecurityUtils, ShutdownHookManager, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -64,12 +67,12 @@ import org.apache.spark.util.ArrayImplicits._
  */
 class KafkaTestUtils(
     withBrokerProps: Map[String, Object] = Map.empty,
-    secure: Boolean = false) extends Logging {
+    secure: Boolean = false) extends PrivateMethodTester with Logging {
 
   private val JAVA_AUTH_CONFIG = "java.security.auth.login.config"
 
   private val localHostNameForURI = Utils.localHostNameForURI()
-  logInfo(s"Local host name is $localHostNameForURI")
+  logInfo(log"Local host name is ${MDC(LogKeys.URI, localHostNameForURI)}")
 
   // MiniKDC uses canonical host name on host part, hence we need to provide canonical host name
   // on the 'host' part of the principal.
@@ -173,7 +176,7 @@ class KafkaTestUtils(
     }
 
     kdc.getKrb5conf.delete()
-    Files.write(krb5confStr, kdc.getKrb5conf, StandardCharsets.UTF_8)
+    Files.asCharSink(kdc.getKrb5conf, StandardCharsets.UTF_8).write(krb5confStr)
     logDebug(s"krb5.conf file content: $krb5confStr")
   }
 
@@ -237,7 +240,7 @@ class KafkaTestUtils(
       |  principal="$kafkaServerUser@$realm";
       |};
       """.stripMargin.trim
-    Files.write(content, file, StandardCharsets.UTF_8)
+    Files.asCharSink(file, StandardCharsets.UTF_8).write(content)
     logDebug(s"Created JAAS file: ${file.getPath}")
     logDebug(s"JAAS file content: $content")
     file.getAbsolutePath()
@@ -332,7 +335,7 @@ class KafkaTestUtils(
         Utils.deleteRecursively(new File(f))
       } catch {
         case e: IOException if Utils.isWindows =>
-          logWarning(e.getMessage)
+          logWarning(log"${MDC(LogKeys.ERROR, e.getMessage)}")
       }
     }
 
@@ -446,8 +449,9 @@ class KafkaTestUtils(
     sendMessages(msgs.toImmutableArraySeq)
   }
 
+  private val cleanupLogsPrivateMethod = PrivateMethod[LogManager](Symbol("cleanupLogs"))
   def cleanupLogs(): Unit = {
-    server.logManager.cleanupLogs()
+    server.logManager.invokePrivate(cleanupLogsPrivateMethod())
   }
 
   private def getOffsets(topics: Set[String], offsetSpec: OffsetSpec): Map[TopicPartition, Long] = {
@@ -649,20 +653,17 @@ class KafkaTestUtils(
 
     def shutdown(): Unit = {
       factory.shutdown()
-      // The directories are not closed even if the ZooKeeper server is shut down.
-      // Please see ZOOKEEPER-1844, which is fixed in 3.4.6+. It leads to test failures
-      // on Windows if the directory deletion failure throws an exception.
       try {
         Utils.deleteRecursively(snapshotDir)
       } catch {
         case e: IOException if Utils.isWindows =>
-          logWarning(e.getMessage)
+          logWarning(log"${MDC(LogKeys.ERROR, e.getMessage)}")
       }
       try {
         Utils.deleteRecursively(logDir)
       } catch {
         case e: IOException if Utils.isWindows =>
-          logWarning(e.getMessage)
+          logWarning(log"${MDC(LogKeys.ERROR, e.getMessage)}")
       }
       System.clearProperty(ZOOKEEPER_AUTH_PROVIDER)
     }

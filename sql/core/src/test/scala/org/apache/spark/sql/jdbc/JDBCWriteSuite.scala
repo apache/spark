@@ -191,7 +191,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
         exception = intercept[AnalysisException] {
           df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties())
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1156",
+        condition = "_LEGACY_ERROR_TEMP_1156",
         parameters = Map(
           "colName" -> "NAME",
           "tableSchema" ->
@@ -206,7 +206,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
   }
 
   test("Truncate") {
-    JdbcDialects.unregisterDialect(H2Dialect)
+    JdbcDialects.unregisterDialect(H2Dialect())
     try {
       JdbcDialects.registerDialect(testH2Dialect)
       val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
@@ -224,14 +224,14 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
           df3.write.mode(SaveMode.Overwrite).option("truncate", true)
             .jdbc(url1, "TEST.TRUNCATETEST", properties)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1156",
+        condition = "_LEGACY_ERROR_TEMP_1156",
         parameters = Map(
           "colName" -> "seq",
           "tableSchema" ->
             "Some(StructType(StructField(name,StringType,true),StructField(id,IntegerType,true)))"))
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
-      JdbcDialects.registerDialect(H2Dialect)
+      JdbcDialects.registerDialect(H2Dialect())
     }
   }
 
@@ -256,7 +256,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
       exception = intercept[AnalysisException] {
         df2.write.mode(SaveMode.Append).jdbc(url, "TEST.INCOMPATIBLETEST", new Properties())
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1156",
+      condition = "_LEGACY_ERROR_TEMP_1156",
       parameters = Map(
         "colName" -> "seq",
         "tableSchema" ->
@@ -406,19 +406,21 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
 
   test("SPARK-10849: test schemaString - from createTableColumnTypes option values") {
     def testCreateTableColDataTypes(types: Seq[String]): Unit = {
+      val dialect = JdbcDialects.get(url1)
       val colTypes = types.zipWithIndex.map { case (t, i) => (s"col$i", t) }
       val schema = colTypes
         .foldLeft(new StructType())((schema, colType) => schema.add(colType._1, colType._2))
       val createTableColTypes =
         colTypes.map { case (col, dataType) => s"$col $dataType" }.mkString(", ")
 
-      val expectedSchemaStr =
-        colTypes.map { case (col, dataType) => s""""$col" $dataType """ }.mkString(", ")
+      val expectedSchemaStr = schema.map { f =>
+          s""""${f.name}" ${JdbcUtils.getJdbcType(f.dataType, dialect).databaseTypeDefinition} """
+        }.mkString(", ")
 
       assert(JdbcUtils.schemaString(
+        dialect,
         schema,
         spark.sessionState.conf.caseSensitiveAnalysis,
-        url1,
         Option(createTableColTypes)) == expectedSchemaStr)
     }
 
@@ -505,7 +507,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
           .option("createTableColumnTypes", "name CLOB(2000)")
           .jdbc(url1, "TEST.USERDBTYPETEST", properties)
       },
-      errorClass = "UNSUPPORTED_DATATYPE",
+      condition = "UNSUPPORTED_DATATYPE",
       parameters = Map("typeName" -> "\"CLOB(2000)\""))
   }
 
@@ -517,7 +519,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
           .option("createTableColumnTypes", "`name char(20)") // incorrectly quoted column
           .jdbc(url1, "TEST.USERDBTYPETEST", properties)
       },
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'`'", "hint" -> ""))
   }
 
@@ -531,7 +533,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
       }
       checkError(
         exception = e,
-        errorClass = "COLUMN_ALREADY_EXISTS",
+        condition = "COLUMN_ALREADY_EXISTS",
         parameters = Map("columnName" -> "`name`"))
     }
   }

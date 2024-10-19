@@ -15,11 +15,16 @@
 # limitations under the License.
 #
 
-# Image for building and testing Spark branches. Based on Ubuntu 20.04.
+# Image for building and testing Spark branches. Based on Ubuntu 22.04.
 # See also in https://hub.docker.com/_/ubuntu
-FROM ubuntu:focal-20221019
+FROM ubuntu:jammy-20240227
+LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image"
+# Overwrite this label to avoid exposing the underlying Ubuntu OS version label
+LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE 20231117
+ENV FULL_REFRESH_DATE 20241007
 
 ENV DEBIAN_FRONTEND noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN true
@@ -50,10 +55,8 @@ RUN apt-get update && apt-get install -y \
     openjdk-17-jdk-headless \
     pandoc \
     pkg-config \
-    python3-pip \
-    python3-setuptools \
-    python3.8 \
-    python3.9 \
+    python3.10 \
+    python3-psutil \
     qpdf \
     r-base \
     ruby \
@@ -64,75 +67,91 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 
-RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/' >> /etc/apt/sources.list
+RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/' >> /etc/apt/sources.list
 RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
 RUN gpg -a --export E084DAB9 | apt-key add -
-RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/'
-
-RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown',  \
-    'rmarkdown', 'testthat', 'devtools', 'e1071', 'survival', 'arrow',  \
-    'ggplot2', 'mvtnorm', 'statmod', 'xml2'), repos='https://cloud.r-project.org/')"
+RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/'
 
 # See more in SPARK-39959, roxygen2 < 7.2.1
-RUN Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')"
-RUN Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
-RUN Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
-RUN Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
+RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown',  \
+    'rmarkdown', 'testthat', 'devtools', 'e1071', 'survival', 'arrow',  \
+    'ggplot2', 'mvtnorm', 'statmod', 'xml2'), repos='https://cloud.r-project.org/')" && \
+    Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')" && \
+    Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')" && \
+    Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')" && \
+    Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
 
 # See more in SPARK-39735
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
 
 
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
-
-
 RUN add-apt-repository ppa:pypy/ppa
-RUN mkdir -p /usr/local/pypy/pypy3.8 && \
-    curl -sqL https://downloads.python.org/pypy/pypy3.8-v7.3.11-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.8 --strip-components=1 && \
-    ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3.8 && \
-    ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3
+RUN mkdir -p /usr/local/pypy/pypy3.9 && \
+    curl -sqL https://downloads.python.org/pypy/pypy3.9-v7.3.16-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.9 --strip-components=1 && \
+    ln -sf /usr/local/pypy/pypy3.9/bin/pypy /usr/local/bin/pypy3.9 && \
+    ln -sf /usr/local/pypy/pypy3.9/bin/pypy /usr/local/bin/pypy3
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
-RUN pypy3 -m pip install numpy 'six==1.16.0' 'pandas<=2.1.4' scipy coverage matplotlib lxml
+RUN pypy3 -m pip install numpy 'six==1.16.0' 'pandas==2.2.3' scipy coverage matplotlib lxml
 
 
-ARG BASIC_PIP_PKGS="numpy pyarrow>=14.0.0 six==1.16.0 pandas<=2.1.4 scipy unittest-xml-reporting plotly>=4.8 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
+ARG BASIC_PIP_PKGS="numpy pyarrow>=15.0.0 six==1.16.0 pandas==2.2.3 scipy plotly>=4.8 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
 # Python deps for Spark Connect
-ARG CONNECT_PIP_PKGS="grpcio==1.59.3 grpcio-status==1.59.3 protobuf==4.25.1 googleapis-common-protos==1.56.4"
+ARG CONNECT_PIP_PKGS="grpcio==1.62.0 grpcio-status==1.62.0 protobuf==4.25.1 googleapis-common-protos==1.56.4 graphviz==0.20.3"
 
+# Install Python 3.10 packages
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
+RUN python3.10 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
+RUN python3.10 -m pip install --ignore-installed 'six==1.16.0'  # Avoid `python3-six` installation
+RUN python3.10 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
+    python3.10 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.10 -m pip install deepspeed torcheval && \
+    python3.10 -m pip cache purge
 
-RUN python3.9 -m pip install $BASIC_PIP_PKGS $CONNECT_PIP_PKGS
-# Add torch as a testing dependency for TorchDistributor and DeepspeedTorchDistributor
-RUN python3.9 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu
-RUN python3.9 -m pip install deepspeed torcheval
-
-# Install Python 3.10 at the last stage to avoid breaking Python 3.9
+# Install Python 3.9
 RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y \
-    python3.10 python3.10-distutils \
+    python3.9 python3.9-distutils \
     && rm -rf /var/lib/apt/lists/*
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
-RUN python3.10 -m pip install $BASIC_PIP_PKGS $CONNECT_PIP_PKGS
-RUN python3.10 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu
-RUN python3.10 -m pip install deepspeed torcheval
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
+RUN python3.9 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
+RUN python3.9 -m pip install --force $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
+    python3.9 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.9 -m pip install torcheval && \
+    python3.9 -m pip cache purge
 
 # Install Python 3.11 at the last stage to avoid breaking the existing Python installations
-RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y \
-    python3.11 python3.11-distutils \
+    python3.11 \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
-RUN python3.11 -m pip install $BASIC_PIP_PKGS $CONNECT_PIP_PKGS
-RUN python3.11 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu
-RUN python3.11 -m pip install deepspeed torcheval
+RUN python3.11 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
+RUN python3.11 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
+    python3.11 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.11 -m pip install deepspeed torcheval && \
+    python3.11 -m pip cache purge
 
 # Install Python 3.12 at the last stage to avoid breaking the existing Python installations
-RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y \
-    python3.12 python3.12-distutils \
+    python3.12 \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
-RUN python3.12 -m pip install $BASIC_PIP_PKGS $CONNECT_PIP_PKGS
-# TODO(SPARK-46078) Use official one instead of nightly build when it's ready
-RUN python3.12 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
-RUN python3.12 -m pip install torchvision --index-url https://download.pytorch.org/whl/cpu
-RUN python3.12 -m pip install torcheval
+RUN python3.12 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
+RUN python3.12 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS lxml && \
+    python3.12 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.12 -m pip install torcheval && \
+    python3.12 -m pip cache purge
+
+# Install Python 3.13 at the last stage to avoid breaking the existing Python installations
+RUN apt-get update && apt-get install -y \
+    python3.13 \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.13
+# TODO(SPARK-49862) Add BASIC_PIP_PKGS and CONNECT_PIP_PKGS to Python 3.13 image when it supports Python 3.13
+RUN python3.13 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
+RUN python3.13 -m pip install numpy six==1.16.0 pandas==2.2.3 scipy coverage matplotlib openpyxl grpcio==1.67.0 grpcio-status==1.67.0 lxml numpy>=2.1 && \
+    python3.13 -m pip cache purge
+
+# Remove unused installation packages to free up disk space
+RUN apt-get remove --purge -y 'humanity-icon-theme' 'nodejs-doc'
+RUN apt-get autoremove --purge -y
+RUN apt-get clean

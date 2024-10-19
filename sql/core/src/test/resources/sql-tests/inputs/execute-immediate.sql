@@ -25,7 +25,7 @@ EXECUTE IMMEDIATE 'REFRESH TABLE IDENTIFIER(:tblName)' USING 'x' as tblName;
 EXECUTE IMMEDIATE sql_string;
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = \'name1\'';
 
--- test positional paramete
+-- test positional parameters
 SET VAR sql_string = 'SELECT * from tbl_view where name = ? or name = ?';
 DECLARE a STRING;
 SET VAR a = 'name1';
@@ -34,7 +34,7 @@ EXECUTE IMMEDIATE sql_string USING a, 'name2';
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING 'name1', 'name3';
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING a, 'name2';
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING (a, 'name2');
--- test positonal command
+-- test positional command
 EXECUTE IMMEDIATE 'INSERT INTO x VALUES(?)' USING 1;
 SELECT * from x;
 
@@ -129,10 +129,21 @@ EXECUTE IMMEDIATE 'SELECT id FROM tbl_view' INTO res_id, b;
 -- duplicate aliases
 EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :first' USING 10 as first, 20 as first;
 
+-- no alias
+DECLARE p = 10;
+EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :p' USING p;
+
+-- mixing literals and named parameters
+EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :p' USING p, 'p';
+
 -- duplicate into entry
 EXECUTE IMMEDIATE 'SELECT id, data.f1 FROM tbl_view WHERE id = 10' INTO res_id, res_id;
 
 -- nested execute immediate
 EXECUTE IMMEDIATE 'EXECUTE IMMEDIATE \'SELECT id FROM tbl_view WHERE id = ? USING 10\'';
+
+-- sqlString is null
+SET VAR sql_string = null;
+EXECUTE IMMEDIATE sql_string;
 
 DROP TABLE x;

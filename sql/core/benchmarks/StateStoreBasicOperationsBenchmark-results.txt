@@ -2,110 +2,143 @@
 put rows
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 putting 10000 rows (10000 rows to overwrite - rate 100):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------------------
-In-memory                                                            9             10           1          1.1         880.0       1.0X
-RocksDB (trackTotalNumberOfRows: true)                              63             65           4          0.2        6259.4       0.1X
-RocksDB (trackTotalNumberOfRows: false)                             20             22           1          0.5        2046.7       0.4X
+In-memory                                                            9             10           1          1.1         948.8       1.0X
+RocksDB (trackTotalNumberOfRows: true)                              43             44           2          0.2        4286.1       0.2X
+RocksDB (trackTotalNumberOfRows: false)                             16             16           1          0.6        1556.1       0.6X
 
-OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 putting 10000 rows (5000 rows to overwrite - rate 50):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------
-In-memory                                                          9              9           1          1.2         862.2       1.0X
-RocksDB (trackTotalNumberOfRows: true)                            51             53           4          0.2        5077.6       0.2X
-RocksDB (trackTotalNumberOfRows: false)                           21             22           1          0.5        2056.4       0.4X
+In-memory                                                          9             10           0          1.1         937.8       1.0X
+RocksDB (trackTotalNumberOfRows: true)                            44             45           1          0.2        4368.4       0.2X
+RocksDB (trackTotalNumberOfRows: false)                           16             16           1          0.6        1559.7       0.6X
 
-OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 putting 10000 rows (1000 rows to overwrite - rate 10):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------
-In-memory                                                          8              9           1          1.2         836.0       1.0X
-RocksDB (trackTotalNumberOfRows: true)                            40             42           2          0.3        3984.8       0.2X
-RocksDB (trackTotalNumberOfRows: false)                           20             22           1          0.5        2025.1       0.4X
+In-memory                                                          9             10           0          1.1         921.3       1.0X
+RocksDB (trackTotalNumberOfRows: true)                            44             45           1          0.2        4406.5       0.2X
+RocksDB (trackTotalNumberOfRows: false)                           16             16           1          0.6        1555.2       0.6X
 
-OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 putting 10000 rows (0 rows to overwrite - rate 0):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------------
-In-memory                                                      8              9           1          1.2         822.3       1.0X
-RocksDB (trackTotalNumberOfRows: true)                        37             39           3          0.3        3705.1       0.2X
-RocksDB (trackTotalNumberOfRows: false)                       20             22           1          0.5        2037.1       0.4X
+In-memory                                                      9             10           0          1.1         918.1       1.0X
+RocksDB (trackTotalNumberOfRows: true)                        44             45           1          0.2        4372.7       0.2X
+RocksDB (trackTotalNumberOfRows: false)                       16             16           0          0.6        1559.8       0.6X
+
+
+================================================================================================
+merge rows
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
+merging 10000 rows with 10 values per key (10000 rows to overwrite - rate 100):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+RocksDB (trackTotalNumberOfRows: true)                                                    542            555           7          0.0       54234.9       1.0X
+RocksDB (trackTotalNumberOfRows: false)                                                   179            185           3          0.1       17909.4       3.0X
+
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
+merging 10000 rows with 10 values per key (5000 rows to overwrite - rate 50):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+RocksDB (trackTotalNumberOfRows: true)                                                  474            487           5          0.0       47434.9       1.0X
+RocksDB (trackTotalNumberOfRows: false)                                                 180            184           3          0.1       17961.1       2.6X
+
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
+merging 10000 rows with 10 values per key (1000 rows to overwrite - rate 10):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+RocksDB (trackTotalNumberOfRows: true)                                                  419            428           4          0.0       41901.9       1.0X
+RocksDB (trackTotalNumberOfRows: false)                                                 175            181           2          0.1       17545.5       2.4X
+
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
+merging 10000 rows with 10 values per key (0 rows to overwrite - rate 0):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+RocksDB (trackTotalNumberOfRows: true)                                              400            410           5          0.0       39961.3       1.0X
+RocksDB (trackTotalNumberOfRows: false)                                             175            182           3          0.1       17527.9       2.3X
 
 
 ================================================================================================
 delete rows
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 trying to delete 10000 rows from 10000 rows(10000 rows are non-existing - rate 100):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------
-In-memory                                                                                        1              1           0         17.8          56.2       1.0X
-RocksDB (trackTotalNumberOfRows: true)                                                          39             41           3          0.3        3912.0       0.0X
-RocksDB (trackTotalNumberOfRows: false)                                                         21             22           1          0.5        2073.8       0.0X
+In-memory                                                                                        0              1           0         25.7          38.9       1.0X
+RocksDB (trackTotalNumberOfRows: true)                                                          43             45           1          0.2        4347.8       0.0X
+RocksDB (trackTotalNumberOfRows: false)                                                         15             16           0          0.7        1495.4       0.0X
 
-OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 trying to delete 10000 rows from 10000 rows(5000 rows are non-existing - rate 50):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------
-In-memory                                                                                      6              7           0          1.6         638.3       1.0X
-RocksDB (trackTotalNumberOfRows: true)                                                        51             52           3          0.2        5072.8       0.1X
-RocksDB (trackTotalNumberOfRows: false)                                                       20             21           1          0.5        1998.1       0.3X
+In-memory                                                                                      8              9           0          1.3         789.7       1.0X
+RocksDB (trackTotalNumberOfRows: true)                                                        44             45           1          0.2        4360.4       0.2X
+RocksDB (trackTotalNumberOfRows: false)                                                       15             15           0          0.7        1502.6       0.5X
 
-OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 trying to delete 10000 rows from 10000 rows(1000 rows are non-existing - rate 10):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------
-In-memory                                                                                      7              8           0          1.4         703.3       1.0X
-RocksDB (trackTotalNumberOfRows: true)                                                        60             62           5          0.2        5978.9       0.1X
-RocksDB (trackTotalNumberOfRows: false)                                                       20             21           1          0.5        1999.2       0.4X
+In-memory                                                                                      8              9           0          1.2         833.1       1.0X
+RocksDB (trackTotalNumberOfRows: true)                                                        43             44           1          0.2        4274.2       0.2X
+RocksDB (trackTotalNumberOfRows: false)                                                       15             15           0          0.7        1499.0       0.6X
 
-OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 trying to delete 10000 rows from 10000 rows(0 rows are non-existing - rate 0):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------------------------------
-In-memory                                                                                  7              8           0          1.4         726.6       1.0X
-RocksDB (trackTotalNumberOfRows: true)                                                    62             65           5          0.2        6189.0       0.1X
-RocksDB (trackTotalNumberOfRows: false)                                                   20             22           1          0.5        2043.6       0.4X
+In-memory                                                                                  8              9           0          1.2         845.5       1.0X
+RocksDB (trackTotalNumberOfRows: true)                                                    42             43           1          0.2        4220.8       0.2X
+RocksDB (trackTotalNumberOfRows: false)                                                   15             15           0          0.7        1479.2       0.6X
 
 
 ================================================================================================
 evict rows
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 evicting 10000 rows (maxTimestampToEvictInMillis: 9999) from 10000 rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------------------------
-In-memory                                                                            7              8           0          1.4         704.0       1.0X
-RocksDB (trackTotalNumberOfRows: true)                                              63             66           6          0.2        6333.5       0.1X
-RocksDB (trackTotalNumberOfRows: false)                                             24             25           3          0.4        2380.7       0.3X
+In-memory                                                                            8              9           0          1.2         848.5       1.0X
+RocksDB (trackTotalNumberOfRows: true)                                              42             43           0          0.2        4184.8       0.2X
+RocksDB (trackTotalNumberOfRows: false)                                             16             16           0          0.6        1592.8       0.5X
 
-OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 evicting 5000 rows (maxTimestampToEvictInMillis: 4999) from 10000 rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------------------------------
-In-memory                                                                           6              7           0          1.5         646.7       1.0X
-RocksDB (trackTotalNumberOfRows: true)                                             34             36           3          0.3        3434.7       0.2X
-RocksDB (trackTotalNumberOfRows: false)                                            14             15           1          0.7        1446.0       0.4X
+In-memory                                                                           8              8           0          1.3         792.3       1.0X
+RocksDB (trackTotalNumberOfRows: true)                                             23             23           1          0.4        2267.5       0.3X
+RocksDB (trackTotalNumberOfRows: false)                                            10             10           0          1.0         983.7       0.8X
 
-OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 evicting 1000 rows (maxTimestampToEvictInMillis: 999) from 10000 rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------------------------------
-In-memory                                                                          6              6           0          1.8         569.1       1.0X
-RocksDB (trackTotalNumberOfRows: true)                                            11             11           1          0.9        1056.0       0.5X
-RocksDB (trackTotalNumberOfRows: false)                                            7              7           0          1.5         672.7       0.8X
+In-memory                                                                          7              8           0          1.4         737.0       1.0X
+RocksDB (trackTotalNumberOfRows: true)                                             7              8           0          1.3         742.5       1.0X
+RocksDB (trackTotalNumberOfRows: false)                                            5              5           0          2.1         486.5       1.5X
 
-OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 evicting 0 rows (maxTimestampToEvictInMillis: -1) from 10000 rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------------------
-In-memory                                                                      1              1           0         13.9          71.8       1.0X
-RocksDB (trackTotalNumberOfRows: true)                                         5              5           0          2.2         461.3       0.2X
-RocksDB (trackTotalNumberOfRows: false)                                        5              5           0          2.2         463.7       0.2X
+In-memory                                                                      0              0           0         21.4          46.6       1.0X
+RocksDB (trackTotalNumberOfRows: true)                                         4              4           0          2.8         354.6       0.1X
+RocksDB (trackTotalNumberOfRows: false)                                        4              4           0          2.8         353.8       0.1X
 
 

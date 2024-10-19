@@ -29,8 +29,11 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractMapType, AbstractStringType,
+  StringTypeWithCollation}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 
@@ -202,6 +205,20 @@ abstract class TypeCoercionBase {
   }
 
   /**
+   * A type coercion rule that implicitly casts procedure arguments to expected types.
+   */
+  object ProcedureArgumentCoercion extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case c @ Call(ResolvedProcedure(_, _, procedure: BoundProcedure), args, _) if c.resolved =>
+        val expectedDataTypes = procedure.parameters.map(_.dataType)
+        val coercedArgs = args.zip(expectedDataTypes).map {
+          case (arg, expectedType) => implicitCast(arg, expectedType).getOrElse(arg)
+        }
+        c.copy(args = coercedArgs)
+    }
+  }
+
+  /**
    * Widens the data types of the [[Unpivot]] values.
    */
   object UnpivotCoercion extends Rule[LogicalPlan] {
@@ -266,10 +283,8 @@ abstract class TypeCoercionBase {
             s -> Nil
           } else {
             assert(newChildren.length == 2)
-            val newExcept = Except(newChildren.head, newChildren.last, isAll)
-            newExcept.copyTagsFrom(s)
             val attrMapping = left.output.zip(newChildren.head.output)
-            newExcept -> attrMapping
+            Except(newChildren.head, newChildren.last, isAll) -> attrMapping
           }
 
         case s @ Intersect(left, right, isAll) if s.childrenResolved &&
@@ -279,10 +294,8 @@ abstract class TypeCoercionBase {
             s -> Nil
           } else {
             assert(newChildren.length == 2)
-            val newIntersect = Intersect(newChildren.head, newChildren.last, isAll)
-            newIntersect.copyTagsFrom(s)
             val attrMapping = left.output.zip(newChildren.head.output)
-            newIntersect -> attrMapping
+            Intersect(newChildren.head, newChildren.last, isAll) -> attrMapping
           }
 
         case s: Union if s.childrenResolved && !s.byName &&
@@ -292,9 +305,7 @@ abstract class TypeCoercionBase {
             s -> Nil
           } else {
             val attrMapping = s.children.head.output.zip(newChildren.head.output)
-            val newUnion = s.copy(children = newChildren)
-            newUnion.copyTagsFrom(s)
-            newUnion -> attrMapping
+            s.copy(children = newChildren) -> attrMapping
           }
       }
     }
@@ -427,8 +438,9 @@ abstract class TypeCoercionBase {
           case None => c
         }
 
-      case aj @ ArrayJoin(arr, d, nr) if !ArrayType(StringType).acceptsType(arr.dataType) &&
-        ArrayType.acceptsType(arr.dataType) =>
+      case aj @ ArrayJoin(arr, d, nr)
+          if !AbstractArrayType(StringTypeWithCollation).acceptsType(arr.dataType) &&
+          ArrayType.acceptsType(arr.dataType) =>
         val containsNull = arr.dataType.asInstanceOf[ArrayType].containsNull
         implicitCast(arr, ArrayType(StringType, containsNull)) match {
           case Some(castedArr) => ArrayJoin(castedArr, d, nr)
@@ -615,7 +627,7 @@ abstract class TypeCoercionBase {
       case c @ Concat(children) if conf.concatBinaryAsString ||
         !children.map(_.dataType).forall(_ == BinaryType) =>
         val newChildren = c.children.map { e =>
-          implicitCast(e, StringType).getOrElse(e)
+          implicitCast(e, SQLConf.get.defaultStringType).getOrElse(e)
         }
         c.copy(children = newChildren)
     }
@@ -663,7 +675,7 @@ abstract class TypeCoercionBase {
         val newInputs = if (conf.eltOutputAsString ||
           !children.tail.map(_.dataType).forall(_ == BinaryType)) {
           children.tail.map { e =>
-            implicitCast(e, StringType).getOrElse(e)
+            implicitCast(e, SQLConf.get.defaultStringType).getOrElse(e)
           }
         } else {
           children.tail
@@ -804,7 +816,7 @@ abstract class TypeCoercionBase {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-      case DateAdd(l, r) if r.dataType == StringType && r.foldable =>
+      case DateAdd(l, r) if r.dataType.isInstanceOf[StringType] && r.foldable =>
         val days = try {
           Cast(r, IntegerType, ansiEnabled = true).eval().asInstanceOf[Int]
         } catch {
@@ -812,7 +824,7 @@ abstract class TypeCoercionBase {
             throw QueryCompilationErrors.secondArgumentOfFunctionIsNotIntegerError("date_add", e)
         }
         DateAdd(l, Literal(days))
-      case DateSub(l, r) if r.dataType == StringType && r.foldable =>
+      case DateSub(l, r) if r.dataType.isInstanceOf[StringType] && r.foldable =>
         val days = try {
           Cast(r, IntegerType, ansiEnabled = true).eval().asInstanceOf[Int]
         } catch {
@@ -842,7 +854,9 @@ object TypeCoercion extends TypeCoercionBase {
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
     UnpivotCoercion ::
     WidenSetOperationTypes ::
+    ProcedureArgumentCoercion ::
     new CombinedTypeCoercionRule(
+      CollationTypeCasts ::
       InConversion ::
       PromoteStrings ::
       DecimalPrecision ::
@@ -891,8 +905,8 @@ object TypeCoercion extends TypeCoercionBase {
 
   /** Promotes all the way to StringType. */
   private def stringPromotion(dt1: DataType, dt2: DataType): Option[DataType] = (dt1, dt2) match {
-    case (StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(StringType)
-    case (t1: AtomicType, StringType) if t1 != BinaryType && t1 != BooleanType => Some(StringType)
+    case (st: StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(st)
+    case (t1: AtomicType, st: StringType) if t1 != BinaryType && t1 != BooleanType => Some(st)
     case _ => None
   }
 
@@ -915,16 +929,16 @@ object TypeCoercion extends TypeCoercionBase {
    */
   def findCommonTypeForBinaryComparison(
       dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = (dt1, dt2) match {
-    case (StringType, DateType)
-      => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
-    case (DateType, StringType)
-      => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
-    case (StringType, TimestampType)
-      => if (conf.castDatetimeToString) Some(StringType) else Some(TimestampType)
-    case (TimestampType, StringType)
-      => if (conf.castDatetimeToString) Some(StringType) else Some(TimestampType)
-    case (StringType, NullType) => Some(StringType)
-    case (NullType, StringType) => Some(StringType)
+    case (st: StringType, DateType)
+      => if (conf.castDatetimeToString) Some(st) else Some(DateType)
+    case (DateType, st: StringType)
+      => if (conf.castDatetimeToString) Some(st) else Some(DateType)
+    case (st: StringType, TimestampType)
+      => if (conf.castDatetimeToString) Some(st) else Some(TimestampType)
+    case (TimestampType, st: StringType)
+      => if (conf.castDatetimeToString) Some(st) else Some(TimestampType)
+    case (st: StringType, NullType) => Some(st)
+    case (NullType, st: StringType) => Some(st)
 
     // Cast to TimestampType when we compare DateType with TimestampType
     // i.e. TimeStamp('2017-03-01 00:00:00') eq Date('2017-03-01') = true
@@ -980,7 +994,7 @@ object TypeCoercion extends TypeCoercionBase {
 
       // If the function accepts any numeric type and the input is a string, we follow the hive
       // convention and cast that input into a double
-      case (StringType, NumericType) => NumericType.defaultConcreteType
+      case (_: StringType, NumericType) => NumericType.defaultConcreteType
 
       // Implicit cast among numeric types. When we reach here, input type is not acceptable.
 
@@ -995,13 +1009,16 @@ object TypeCoercion extends TypeCoercionBase {
       case (_: DatetimeType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
 
       // Implicit cast from/to string
-      case (StringType, DecimalType) => DecimalType.SYSTEM_DEFAULT
-      case (StringType, target: NumericType) => target
-      case (StringType, datetime: DatetimeType) => datetime
-      case (StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
-      case (StringType, BinaryType) => BinaryType
+      case (_: StringType, DecimalType) => DecimalType.SYSTEM_DEFAULT
+      case (_: StringType, target: NumericType) => target
+      case (_: StringType, datetime: DatetimeType) => datetime
+      case (_: StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
+      case (_: StringType, BinaryType) => BinaryType
       // Cast any atomic type to string.
-      case (any: AtomicType, StringType) if any != StringType => StringType
+      case (any: AtomicType, st: StringType) if !any.isInstanceOf[StringType] => st
+      case (any: AtomicType, st: AbstractStringType)
+        if !any.isInstanceOf[StringType] =>
+        st.defaultConcreteType
 
       // When we reach here, input type is not acceptable for any types in this type collection,
       // try to find the first one we can implicitly cast.
@@ -1018,6 +1035,9 @@ object TypeCoercion extends TypeCoercionBase {
       // 3. If the nullabilities of both the from type and the to type are false, the cast is
       // allowed only when Cast.forceNullable(fromType, toType) is false.
       case (ArrayType(fromType, fn), ArrayType(toType: DataType, true)) =>
+        implicitCast(fromType, toType).map(ArrayType(_, true)).orNull
+
+      case (ArrayType(fromType, fn), AbstractArrayType(toType)) =>
         implicitCast(fromType, toType).map(ArrayType(_, true)).orNull
 
       case (ArrayType(fromType, true), ArrayType(toType: DataType, false)) => null
@@ -1043,6 +1063,15 @@ object TypeCoercion extends TypeCoercionBase {
           } else {
             null
           }
+        }
+
+      case (MapType(fromKeyType, fromValueType, fn), AbstractMapType(toKeyType, toValueType)) =>
+        val newKeyType = implicitCast(fromKeyType, toKeyType).orNull
+        val newValueType = implicitCast(fromValueType, toValueType).orNull
+        if (newKeyType != null && newValueType != null) {
+          MapType(newKeyType, newValueType, fn)
+        } else {
+          null
         }
 
       case _ => null
@@ -1079,7 +1108,7 @@ object TypeCoercion extends TypeCoercionBase {
    */
   @tailrec
   def hasStringType(dt: DataType): Boolean = dt match {
-    case StringType => true
+    case _: StringType => true
     case ArrayType(et, _) => hasStringType(et)
     // Add StructType if we support string promotion for struct fields in the future.
     case _ => false
@@ -1108,22 +1137,22 @@ object TypeCoercion extends TypeCoercionBase {
 
       case a @ BinaryArithmetic(left @ StringTypeExpression(), right)
         if !isIntervalType(right.dataType) =>
-        a.makeCopy(Array(Cast(left, DoubleType), right))
+        a.withNewChildren(Seq(Cast(left, DoubleType), right))
       case a @ BinaryArithmetic(left, right @ StringTypeExpression())
         if !isIntervalType(left.dataType) =>
-        a.makeCopy(Array(left, Cast(right, DoubleType)))
+        a.withNewChildren(Seq(left, Cast(right, DoubleType)))
 
       // For equality between string and timestamp we cast the string to a timestamp
       // so that things like rounding of subsecond precision does not affect the comparison.
       case p @ Equality(left @ StringTypeExpression(), right @ TimestampTypeExpression()) =>
-        p.makeCopy(Array(Cast(left, TimestampType), right))
+        p.withNewChildren(Seq(Cast(left, TimestampType), right))
       case p @ Equality(left @ TimestampTypeExpression(), right @ StringTypeExpression()) =>
-        p.makeCopy(Array(left, Cast(right, TimestampType)))
+        p.withNewChildren(Seq(left, Cast(right, TimestampType)))
 
       case p @ BinaryComparison(left, right)
           if findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).isDefined =>
         val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).get
-        p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
+        p.withNewChildren(Seq(castExpr(left, commonType), castExpr(right, commonType)))
     }
   }
 

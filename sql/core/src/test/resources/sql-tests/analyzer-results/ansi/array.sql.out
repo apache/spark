@@ -8,7 +8,7 @@ create temporary view data as select * from values
 CreateViewCommand `data`, select * from values
   ("one", array(11, 12, 13), array(array(111, 112, 113), array(121, 122, 123))),
   ("two", array(21, 22, 23), array(array(211, 212, 213), array(221, 222, 223)))
-  as data(a, b, c), false, false, LocalTempView, true
+  as data(a, b, c), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x, c#x]
       +- SubqueryAlias data
          +- LocalRelation [a#x, b#x, c#x]
@@ -19,7 +19,7 @@ select * from data
 -- !query analysis
 Project [a#x, b#x, c#x]
 +- SubqueryAlias data
-   +- View (`data`, [a#x,b#x,c#x])
+   +- View (`data`, [a#x, b#x, c#x])
       +- Project [cast(a#x as string) AS a#x, cast(b#x as array<int>) AS b#x, cast(c#x as array<array<int>>) AS c#x]
          +- Project [a#x, b#x, c#x]
             +- SubqueryAlias data
@@ -31,7 +31,7 @@ select a, b[0], b[0] + b[1] from data
 -- !query analysis
 Project [a#x, b#x[0] AS b[0]#x, (b#x[0] + b#x[1]) AS (b[0] + b[1])#x]
 +- SubqueryAlias data
-   +- View (`data`, [a#x,b#x,c#x])
+   +- View (`data`, [a#x, b#x, c#x])
       +- Project [cast(a#x as string) AS a#x, cast(b#x as array<int>) AS b#x, cast(c#x as array<array<int>>) AS c#x]
          +- Project [a#x, b#x, c#x]
             +- SubqueryAlias data
@@ -43,7 +43,7 @@ select a, c[0][0] + c[0][0 + 1] from data
 -- !query analysis
 Project [a#x, (c#x[0][0] + c#x[0][(0 + 1)]) AS (c[0][0] + c[0][(0 + 1)])#x]
 +- SubqueryAlias data
-   +- View (`data`, [a#x,b#x,c#x])
+   +- View (`data`, [a#x, b#x, c#x])
       +- Project [cast(a#x as string) AS a#x, cast(b#x as array<int>) AS b#x, cast(c#x as array<array<int>>) AS c#x]
          +- Project [a#x, b#x, c#x]
             +- SubqueryAlias data
@@ -97,7 +97,7 @@ CreateViewCommand `primitive_arrays`, select * from values (
   float_array,
   date_array,
   timestamp_array
-), false, false, LocalTempView, true
+), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [boolean_array#x, tinyint_array#x, smallint_array#x, int_array#x, bigint_array#x, decimal_array#x, double_array#x, float_array#x, date_array#x, timestamp_array#x]
       +- SubqueryAlias primitive_arrays
          +- LocalRelation [boolean_array#x, tinyint_array#x, smallint_array#x, int_array#x, bigint_array#x, decimal_array#x, double_array#x, float_array#x, date_array#x, timestamp_array#x]
@@ -108,7 +108,7 @@ select * from primitive_arrays
 -- !query analysis
 Project [boolean_array#x, tinyint_array#x, smallint_array#x, int_array#x, bigint_array#x, decimal_array#x, double_array#x, float_array#x, date_array#x, timestamp_array#x]
 +- SubqueryAlias primitive_arrays
-   +- View (`primitive_arrays`, [boolean_array#x,tinyint_array#x,smallint_array#x,int_array#x,bigint_array#x,decimal_array#x,double_array#x,float_array#x,date_array#x,timestamp_array#x])
+   +- View (`primitive_arrays`, [boolean_array#x, tinyint_array#x, smallint_array#x, int_array#x, bigint_array#x, decimal_array#x, double_array#x, float_array#x, date_array#x, timestamp_array#x])
       +- Project [cast(boolean_array#x as array<boolean>) AS boolean_array#x, cast(tinyint_array#x as array<tinyint>) AS tinyint_array#x, cast(smallint_array#x as array<smallint>) AS smallint_array#x, cast(int_array#x as array<int>) AS int_array#x, cast(bigint_array#x as array<bigint>) AS bigint_array#x, cast(decimal_array#x as array<decimal(19,0)>) AS decimal_array#x, cast(double_array#x as array<double>) AS double_array#x, cast(float_array#x as array<float>) AS float_array#x, cast(date_array#x as array<date>) AS date_array#x, cast(timestamp_array#x as array<timestamp>) AS timestamp_array#x]
          +- Project [boolean_array#x, tinyint_array#x, smallint_array#x, int_array#x, bigint_array#x, decimal_array#x, double_array#x, float_array#x, date_array#x, timestamp_array#x]
             +- SubqueryAlias primitive_arrays
@@ -137,7 +137,7 @@ select array_contains(b, 11), array_contains(c, array(111, 112, 113)) from data
 -- !query analysis
 Project [array_contains(b#x, 11) AS array_contains(b, 11)#x, array_contains(c#x, array(111, 112, 113)) AS array_contains(c, array(111, 112, 113))#x]
 +- SubqueryAlias data
-   +- View (`data`, [a#x,b#x,c#x])
+   +- View (`data`, [a#x, b#x, c#x])
       +- Project [cast(a#x as string) AS a#x, cast(b#x as array<int>) AS b#x, cast(c#x as array<array<int>>) AS c#x]
          +- Project [a#x, b#x, c#x]
             +- SubqueryAlias data
@@ -160,7 +160,7 @@ from primitive_arrays
 -- !query analysis
 Project [sort_array(boolean_array#x, true) AS sort_array(boolean_array, true)#x, sort_array(tinyint_array#x, true) AS sort_array(tinyint_array, true)#x, sort_array(smallint_array#x, true) AS sort_array(smallint_array, true)#x, sort_array(int_array#x, true) AS sort_array(int_array, true)#x, sort_array(bigint_array#x, true) AS sort_array(bigint_array, true)#x, sort_array(decimal_array#x, true) AS sort_array(decimal_array, true)#x, sort_array(double_array#x, true) AS sort_array(double_array, true)#x, sort_array(float_array#x, true) AS sort_array(float_array, true)#x, sort_array(date_array#x, true) AS sort_array(date_array, true)#x, sort_array(timestamp_array#x, true) AS sort_array(timestamp_array, true)#x]
 +- SubqueryAlias primitive_arrays
-   +- View (`primitive_arrays`, [boolean_array#x,tinyint_array#x,smallint_array#x,int_array#x,bigint_array#x,decimal_array#x,double_array#x,float_array#x,date_array#x,timestamp_array#x])
+   +- View (`primitive_arrays`, [boolean_array#x, tinyint_array#x, smallint_array#x, int_array#x, bigint_array#x, decimal_array#x, double_array#x, float_array#x, date_array#x, timestamp_array#x])
       +- Project [cast(boolean_array#x as array<boolean>) AS boolean_array#x, cast(tinyint_array#x as array<tinyint>) AS tinyint_array#x, cast(smallint_array#x as array<smallint>) AS smallint_array#x, cast(int_array#x as array<int>) AS int_array#x, cast(bigint_array#x as array<bigint>) AS bigint_array#x, cast(decimal_array#x as array<decimal(19,0)>) AS decimal_array#x, cast(double_array#x as array<double>) AS double_array#x, cast(float_array#x as array<float>) AS float_array#x, cast(date_array#x as array<date>) AS date_array#x, cast(timestamp_array#x as array<timestamp>) AS timestamp_array#x]
          +- Project [boolean_array#x, tinyint_array#x, smallint_array#x, int_array#x, bigint_array#x, decimal_array#x, double_array#x, float_array#x, date_array#x, timestamp_array#x]
             +- SubqueryAlias primitive_arrays
@@ -177,7 +177,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"sort_array(array(b, d), 1)\""
   },
@@ -194,25 +194,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select sort_array(array('b', 'd'), cast(NULL as boolean))
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"CAST(NULL AS BOOLEAN)\"",
-    "inputType" : "\"BOOLEAN\"",
-    "paramIndex" : "2",
-    "requiredType" : "\"BOOLEAN\"",
-    "sqlExpr" : "\"sort_array(array(b, d), CAST(NULL AS BOOLEAN))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 57,
-    "fragment" : "sort_array(array('b', 'd'), cast(NULL as boolean))"
-  } ]
-}
+Project [sort_array(array(b, d), cast(null as boolean)) AS sort_array(array(b, d), CAST(NULL AS BOOLEAN))#x]
++- OneRowRelation
 
 
 -- !query
@@ -231,7 +214,7 @@ from primitive_arrays
 -- !query analysis
 Project [size(boolean_array#x, false) AS size(boolean_array)#x, size(tinyint_array#x, false) AS size(tinyint_array)#x, size(smallint_array#x, false) AS size(smallint_array)#x, size(int_array#x, false) AS size(int_array)#x, size(bigint_array#x, false) AS size(bigint_array)#x, size(decimal_array#x, false) AS size(decimal_array)#x, size(double_array#x, false) AS size(double_array)#x, size(float_array#x, false) AS size(float_array)#x, size(date_array#x, false) AS size(date_array)#x, size(timestamp_array#x, false) AS size(timestamp_array)#x]
 +- SubqueryAlias primitive_arrays
-   +- View (`primitive_arrays`, [boolean_array#x,tinyint_array#x,smallint_array#x,int_array#x,bigint_array#x,decimal_array#x,double_array#x,float_array#x,date_array#x,timestamp_array#x])
+   +- View (`primitive_arrays`, [boolean_array#x, tinyint_array#x, smallint_array#x, int_array#x, bigint_array#x, decimal_array#x, double_array#x, float_array#x, date_array#x, timestamp_array#x])
       +- Project [cast(boolean_array#x as array<boolean>) AS boolean_array#x, cast(tinyint_array#x as array<tinyint>) AS tinyint_array#x, cast(smallint_array#x as array<smallint>) AS smallint_array#x, cast(int_array#x as array<int>) AS int_array#x, cast(bigint_array#x as array<bigint>) AS bigint_array#x, cast(decimal_array#x as array<decimal(19,0)>) AS decimal_array#x, cast(double_array#x as array<double>) AS double_array#x, cast(float_array#x as array<float>) AS float_array#x, cast(date_array#x as array<date>) AS date_array#x, cast(timestamp_array#x as array<timestamp>) AS timestamp_array#x]
          +- Project [boolean_array#x, tinyint_array#x, smallint_array#x, int_array#x, bigint_array#x, decimal_array#x, double_array#x, float_array#x, date_array#x, timestamp_array#x]
             +- SubqueryAlias primitive_arrays
@@ -360,7 +343,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"map(a, 1, b, 2)\"",
     "inputType" : "\"MAP<STRING, INT>\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"ARRAY\"",
     "sqlExpr" : "\"array_size(map(a, 1, b, 2))\""
   },
@@ -574,7 +557,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"id\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"ARRAY\"",
     "sqlExpr" : "\"array_compact(id)\""
   },
@@ -746,4 +729,18 @@ Project [array_prepend(cast(array() as array<string>), cast(null as string)) AS 
 select array_prepend(array(CAST(NULL AS String)), CAST(NULL AS String))
 -- !query analysis
 Project [array_prepend(array(cast(null as string)), cast(null as string)) AS array_prepend(array(CAST(NULL AS STRING)), CAST(NULL AS STRING))#x]
++- OneRowRelation
+
+
+-- !query
+select array_union(array(0.0, -0.0, DOUBLE("NaN")), array(0.0, -0.0, DOUBLE("NaN")))
+-- !query analysis
+Project [array_union(array(cast(0.0 as double), cast(0.0 as double), cast(NaN as double)), array(cast(0.0 as double), cast(0.0 as double), cast(NaN as double))) AS array_union(array(0.0, 0.0, NaN), array(0.0, 0.0, NaN))#x]
++- OneRowRelation
+
+
+-- !query
+select array_distinct(array(0.0, -0.0, -0.0, DOUBLE("NaN"), DOUBLE("NaN")))
+-- !query analysis
+Project [array_distinct(array(cast(0.0 as double), cast(0.0 as double), cast(0.0 as double), cast(NaN as double), cast(NaN as double))) AS array_distinct(array(0.0, 0.0, 0.0, NaN, NaN))#x]
 +- OneRowRelation

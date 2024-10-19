@@ -17,19 +17,19 @@
 
 package org.apache.spark.deploy.history
 
-import java.util.NoSuchElementException
 import java.util.zip.ZipOutputStream
-import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.util.control.NonFatal
 import scala.xml.Node
 
+import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
+import org.apache.spark.deploy.Utils.addRenderLogHandler
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, UIRoot}
@@ -60,11 +60,13 @@ class HistoryServer(
     poolSize = 1000)
   with Logging with UIRoot with ApplicationCacheOperations {
 
+  val title = conf.get(History.HISTORY_SERVER_UI_TITLE)
+
   // How many applications to retain
   private val retainedApplications = conf.get(History.RETAINED_APPLICATIONS)
 
   // How many applications the summary ui displays
-  private[history] val maxApplications = conf.get(HISTORY_UI_MAX_APPS);
+  private[history] val maxApplications = conf.get(History.HISTORY_UI_MAX_APPS);
 
   // application
   private val appCache = new ApplicationCache(this, retainedApplications, new SystemClock())
@@ -115,9 +117,9 @@ class HistoryServer(
       // requested, and the proper data should be served at that point.
       // Also, make sure that the redirect url contains the query string present in the request.
       val redirect = if (shouldAppendAttemptId) {
-        req.getRequestURI.stripSuffix("/") + "/" + attemptId.get
+        req.getRequestURI.stripSuffix("/") + "/" + attemptId.get + "/"
       } else {
-        req.getRequestURI
+        req.getRequestURI.stripSuffix("/") + "/"
       }
       val query = Option(req.getQueryString).map("?" + _).getOrElse("")
       res.sendRedirect(res.encodeRedirectURL(redirect + query))
@@ -148,10 +150,12 @@ class HistoryServer(
    */
   def initialize(): Unit = {
     attachPage(new HistoryPage(this))
+    attachPage(new LogPage(conf))
 
     attachHandler(ApiRootResource.getServletHandler(this))
 
     addStaticHandler(SparkUI.STATIC_RESOURCE_DIR)
+    addRenderLogHandler(this, conf)
 
     val contextHandler = new ServletContextHandler
     contextHandler.setContextPath(HistoryServer.UI_PATH_PREFIX)
@@ -288,18 +292,18 @@ class HistoryServer(
  * This launches the HistoryServer as a Spark daemon.
  */
 object HistoryServer extends Logging {
-  private val conf = new SparkConf
+  private lazy val conf = new SparkConf
 
   val UI_PATH_PREFIX = "/history"
 
   def main(argStrings: Array[String]): Unit = {
+    Utils.resetStructuredLogging()
     Utils.initDaemon(log)
     new HistoryServerArguments(conf, argStrings)
     initSecurity()
     val securityManager = createSecurityManager(conf)
 
     val providerName = conf.get(History.PROVIDER)
-      .getOrElse(classOf[FsHistoryProvider].getName())
     val provider = Utils.classForName[ApplicationHistoryProvider](providerName)
       .getConstructor(classOf[SparkConf])
       .newInstance(conf)
@@ -330,8 +334,8 @@ object HistoryServer extends Logging {
     }
 
     if (config.get(ACLS_ENABLE)) {
-      logInfo(s"${ACLS_ENABLE.key} is configured, " +
-        s"clearing it and only using ${History.HISTORY_SERVER_UI_ACLS_ENABLE.key}")
+      logInfo(log"${MDC(KEY, ACLS_ENABLE.key)} is configured, " +
+        log"clearing it and only using ${MDC(KEY2, History.HISTORY_SERVER_UI_ACLS_ENABLE.key)}")
       config.set(ACLS_ENABLE, false)
     }
 

@@ -465,7 +465,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       case (ratio, slots) =>
         val conf = new SparkConf()
         conf.set(TASK_GPU_ID.amountConf, ratio.toString)
-        if (ratio > 0.5 && ratio % 1 != 0) {
+        if (ratio > 1.0 && ratio % 1 != 0) {
           assertThrows[SparkException] {
             parseResourceRequirements(conf, SPARK_TASK_PREFIX)
           }

@@ -70,7 +70,11 @@ class FrameInterpolateMixin:
         self._test_interpolate(pdf)
 
 
-class FrameInterpolateTests(FrameInterpolateMixin, PandasOnSparkTestCase, TestUtils):
+class FrameInterpolateTests(
+    FrameInterpolateMixin,
+    PandasOnSparkTestCase,
+    TestUtils,
+):
     pass
 
 

@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.execution.ui
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.Node
 
+import jakarta.servlet.http.HttpServletRequest
 import org.json4s.JNull
 import org.json4s.JsonAST.{JBool, JString}
 import org.json4s.jackson.JsonMethods.parse

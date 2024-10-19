@@ -938,27 +938,31 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   test("Creating metrics with initial values") {
     assert(SQLMetrics.createSizeMetric(sparkContext, name = "m").value === 0)
     assert(SQLMetrics.createSizeMetric(sparkContext, name = "m", initValue = -1).value === 0)
-    assert(SQLMetrics.createSizeMetric(sparkContext, name = "m", initValue = 5).value === 5)
 
     assert(SQLMetrics.createSizeMetric(sparkContext, name = "m").isZero)
     assert(SQLMetrics.createSizeMetric(sparkContext, name = "m", initValue = -1).isZero)
-    assert(SQLMetrics.createSizeMetric(sparkContext, name = "m", initValue = 5).isZero)
 
     assert(SQLMetrics.createTimingMetric(sparkContext, name = "m").value === 0)
     assert(SQLMetrics.createTimingMetric(sparkContext, name = "m", initValue = -1).value === 0)
-    assert(SQLMetrics.createTimingMetric(sparkContext, name = "m", initValue = 5).value === 5)
 
     assert(SQLMetrics.createTimingMetric(sparkContext, name = "m").isZero)
     assert(SQLMetrics.createTimingMetric(sparkContext, name = "m", initValue = -1).isZero)
-    assert(SQLMetrics.createTimingMetric(sparkContext, name = "m", initValue = 5).isZero)
 
     assert(SQLMetrics.createNanoTimingMetric(sparkContext, name = "m").value === 0)
     assert(SQLMetrics.createNanoTimingMetric(sparkContext, name = "m", initValue = -1).value === 0)
-    assert(SQLMetrics.createNanoTimingMetric(sparkContext, name = "m", initValue = 5).value === 5)
 
     assert(SQLMetrics.createNanoTimingMetric(sparkContext, name = "m").isZero)
     assert(SQLMetrics.createNanoTimingMetric(sparkContext, name = "m", initValue = -1).isZero)
-    assert(SQLMetrics.createNanoTimingMetric(sparkContext, name = "m", initValue = 5).isZero)
+
+    // initValue must be <= 0
+    intercept[AssertionError] {
+      SQLMetrics.createNanoTimingMetric(sparkContext, name = "m", initValue = 5)
+    }
+  }
+
+  test("SQLMetric#toInfoUpdate") {
+    assert(SQLMetrics.createSizeMetric(sparkContext, name = "m").toInfoUpdate.update === Some(-1))
+    assert(SQLMetrics.createMetric(sparkContext, name = "m").toInfoUpdate.update === Some(0))
   }
 }
 

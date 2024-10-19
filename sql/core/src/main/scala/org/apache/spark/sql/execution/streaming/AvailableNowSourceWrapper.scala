@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
 
@@ -30,8 +31,8 @@ class AvailableNowSourceWrapper(delegate: Source)
 
   override def schema: StructType = delegate.schema
 
-  override def getOffset: Option[Offset] = throw new UnsupportedOperationException(
-    "latestOffset(Offset, ReadLimit) should be called instead of this method")
+  override def getOffset: Option[Offset] =
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3166")
 
   override def getBatch(start: Option[Offset], end: Offset): DataFrame =
     delegate.getBatch(start, end)

@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.utils import name_like_string
 
@@ -100,8 +100,9 @@ class FrameMeltMixin:
             .sort_values(["variable_0", "variable_1", "value"])
             .rename(columns=name_like_string),
         )
-        self.assert_eq(
-            psdf.melt(
+        self.assertRaises(
+            ValueError,
+            lambda: psdf.melt(
                 id_vars=[(TEN, "A")],
                 value_vars=[(TEN, "B")],
                 var_name=["myV1", "myV2"],
@@ -109,14 +110,6 @@ class FrameMeltMixin:
             )
             .sort_values(["myV1", "myV2", "myValname"])
             .reset_index(drop=True),
-            pdf.melt(
-                id_vars=[(TEN, "A")],
-                value_vars=[(TEN, "B")],
-                var_name=["myV1", "myV2"],
-                value_name="myValname",
-            )
-            .sort_values(["myV1", "myV2", "myValname"])
-            .rename(columns=name_like_string),
         )
 
         columns.names = ["v0", "v1"]
@@ -173,7 +166,11 @@ class FrameMeltMixin:
         )
 
 
-class FrameMeltTests(FrameMeltMixin, ComparisonTestBase, SQLTestUtils):
+class FrameMeltTests(
+    FrameMeltMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

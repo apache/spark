@@ -17,25 +17,32 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import org.apache.spark.sql.errors.QueryExecutionErrors;
-import org.apache.spark.unsafe.types.UTF8String;
-
-import javax.crypto.Cipher;
-import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.IvParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.security.spec.AlgorithmParameterSpec;
+import java.text.BreakIterator;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import javax.crypto.Cipher;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 
+import org.apache.spark.SparkBuildInfo;
+import org.apache.spark.sql.catalyst.util.ArrayData;
+import org.apache.spark.sql.catalyst.util.GenericArrayData;
+import org.apache.spark.sql.errors.QueryExecutionErrors;
+import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.util.VersionUtils;
+import org.apache.spark.util.random.XORShiftRandom;
 
 /**
  * A utility class for constructing expressions.
  */
 public class ExpressionImplUtils {
-  private static final ThreadLocal<SecureRandom> threadLocalSecureRandom =
-          ThreadLocal.withInitial(SecureRandom::new);
+  private static final SecureRandom secureRandom = new SecureRandom();
 
   private static final int GCM_IV_LEN = 12;
   private static final int GCM_TAG_LEN = 128;
@@ -111,6 +118,32 @@ public class ExpressionImplUtils {
     return checkSum % 10 == 0;
   }
 
+  /**
+   * Function to validate a given UTF8 string according to Unicode rules.
+   *
+   * @param utf8String
+   *  the input string to validate against possible invalid byte sequences
+   * @return
+   *  the original string if the input string is a valid UTF8String, throw exception otherwise.
+   */
+  public static UTF8String validateUTF8String(UTF8String utf8String) {
+    if (utf8String.isValid()) return utf8String;
+    else throw QueryExecutionErrors.invalidUTF8StringError(utf8String);
+  }
+
+  /**
+   * Function to try to validate a given UTF8 string according to Unicode rules.
+   *
+   * @param utf8String
+   *  the input string to validate against possible invalid byte sequences
+   * @return
+   *  the original string if the input string is a valid UTF8String, null otherwise.
+   */
+  public static UTF8String tryValidateUTF8String(UTF8String utf8String) {
+    if (utf8String.isValid()) return utf8String;
+    else return null;
+  }
+
   public static byte[] aesEncrypt(byte[] input,
                                   byte[] key,
                                   UTF8String mode,
@@ -144,6 +177,17 @@ public class ExpressionImplUtils {
     );
   }
 
+  /**
+   * Function to return the Spark version.
+   * @return
+   *  Space separated version and revision.
+   */
+  public static UTF8String getSparkVersion() {
+    String shortVersion = VersionUtils.shortVersion(SparkBuildInfo.spark_version());
+    String revision = SparkBuildInfo.spark_revision();
+    return UTF8String.fromString(shortVersion + " " + revision);
+  }
+
   private static SecretKeySpec getSecretKeySpec(byte[] key) {
     return switch (key.length) {
       case 16, 24, 32 -> new SecretKeySpec(key, 0, key.length, "AES");
@@ -153,7 +197,7 @@ public class ExpressionImplUtils {
 
   private static byte[] generateIv(CipherMode mode) {
     byte[] iv = new byte[mode.ivLength];
-    threadLocalSecureRandom.get().nextBytes(iv);
+    secureRandom.nextBytes(iv);
     return iv;
   }
 
@@ -233,5 +277,61 @@ public class ExpressionImplUtils {
     } catch (GeneralSecurityException e) {
       throw QueryExecutionErrors.aesCryptoError(e.getMessage());
     }
+  }
+
+  public static ArrayData getSentences(
+      UTF8String str,
+      UTF8String language,
+      UTF8String country) {
+    if (str == null) return null;
+    Locale locale;
+    if (language != null && country != null) {
+      locale = new Locale(language.toString(), country.toString());
+    } else if (language != null) {
+      locale = new Locale(language.toString());
+    } else {
+      locale = Locale.US;
+    }
+    String sentences = str.toString();
+    BreakIterator sentenceInstance = BreakIterator.getSentenceInstance(locale);
+    sentenceInstance.setText(sentences);
+
+    int sentenceIndex = 0;
+    List<GenericArrayData> res = new ArrayList<>();
+    while (sentenceInstance.next() != BreakIterator.DONE) {
+      String sentence = sentences.substring(sentenceIndex, sentenceInstance.current());
+      sentenceIndex = sentenceInstance.current();
+      BreakIterator wordInstance = BreakIterator.getWordInstance(locale);
+      wordInstance.setText(sentence);
+      int wordIndex = 0;
+      List<UTF8String> words = new ArrayList<>();
+      while (wordInstance.next() != BreakIterator.DONE) {
+        String word = sentence.substring(wordIndex, wordInstance.current());
+        wordIndex = wordInstance.current();
+        if (Character.isLetterOrDigit(word.charAt(0))) {
+          words.add(UTF8String.fromString(word));
+        }
+      }
+      res.add(new GenericArrayData(words.toArray(new UTF8String[0])));
+    }
+    return new GenericArrayData(res.toArray(new GenericArrayData[0]));
+  }
+
+  public static UTF8String randStr(XORShiftRandom rng, int length) {
+    byte[] bytes = new byte[length];
+    for (int i = 0; i < bytes.length; i++) {
+      // We generate a random number between 0 and 61, inclusive. Between the 62 different choices
+      // we choose 0-9, a-z, or A-Z, where each category comprises 10 choices, 26 choices, or 26
+      // choices, respectively (10 + 26 + 26 = 62).
+      int v = Math.abs(rng.nextInt() % 62);
+      if (v < 10) {
+        bytes[i] = (byte)('0' + v);
+      } else if (v < 36) {
+        bytes[i] = (byte)('a' + (v - 10));
+      } else {
+        bytes[i] = (byte)('A' + (v - 36));
+      }
+    }
+    return UTF8String.fromBytes(bytes);
   }
 }

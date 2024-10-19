@@ -47,7 +47,7 @@ object XSDToSchema extends Logging{
   def read(xsdPath: Path): StructType = {
     val in = ValidatorUtil.openSchemaFile(xsdPath)
     val xmlSchemaCollection = new XmlSchemaCollection()
-    xmlSchemaCollection.setBaseUri(xsdPath.getParent.toString)
+    xmlSchemaCollection.setBaseUri(xsdPath.toString)
     val xmlSchema = xmlSchemaCollection.read(new InputStreamReader(in))
     getStructType(xmlSchema)
   }
@@ -96,17 +96,18 @@ object XSDToSchema extends Logging{
                   case facet: XmlSchemaTotalDigitsFacet => facet.getValue.toString.toInt
                 }.getOrElse(38)
                 DecimalType(totalDigits, math.min(totalDigits, fracDigits))
-              case Constants.XSD_UNSIGNEDLONG => DecimalType(38, 0)
+              case Constants.XSD_UNSIGNEDLONG |
+                   Constants.XSD_INTEGER |
+                   Constants.XSD_NEGATIVEINTEGER |
+                   Constants.XSD_NONNEGATIVEINTEGER |
+                   Constants.XSD_NONPOSITIVEINTEGER |
+                   Constants.XSD_POSITIVEINTEGER => DecimalType(38, 0)
               case Constants.XSD_DOUBLE => DoubleType
               case Constants.XSD_FLOAT => FloatType
               case Constants.XSD_BYTE => ByteType
               case Constants.XSD_SHORT |
                    Constants.XSD_UNSIGNEDBYTE => ShortType
-              case Constants.XSD_INTEGER |
-                   Constants.XSD_NEGATIVEINTEGER |
-                   Constants.XSD_NONNEGATIVEINTEGER |
-                   Constants.XSD_NONPOSITIVEINTEGER |
-                   Constants.XSD_POSITIVEINTEGER |
+              case Constants.XSD_INT |
                    Constants.XSD_UNSIGNEDSHORT => IntegerType
               case Constants.XSD_LONG |
                    Constants.XSD_UNSIGNEDINT => LongType

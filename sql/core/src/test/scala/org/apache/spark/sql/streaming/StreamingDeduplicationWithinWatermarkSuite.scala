@@ -199,4 +199,25 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest {
       )
     }
   }
+
+  test("SPARK-46676: canonicalization of StreamingDeduplicateWithinWatermarkExec should work") {
+    withTempDir { checkpoint =>
+      val dedupeInputData = MemoryStream[(String, Int)]
+      val dedupe = dedupeInputData.toDS()
+        .withColumn("eventTime", timestamp_seconds($"_2"))
+        .withWatermark("eventTime", "10 second")
+        .dropDuplicatesWithinWatermark("_1")
+        .select($"_1", $"eventTime".cast("long").as[Long])
+
+      testStream(dedupe, Append)(
+        StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+        AddData(dedupeInputData, "a" -> 1),
+        CheckNewAnswer("a" -> 1),
+        Execute { q =>
+          // This threw out error before SPARK-46676.
+          q.lastExecution.executedPlan.canonicalized
+        }
+      )
+    }
+  }
 }

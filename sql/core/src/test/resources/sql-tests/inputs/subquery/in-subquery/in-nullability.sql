@@ -1,4 +1,5 @@
 -- SPARK-43413: Tests for IN subquery nullability
+--ONLY_IF spark
 
 create temp view t0 as select 1 as a_nonnullable;
 create temp view t1 as select cast(null as int) as b_nullable;

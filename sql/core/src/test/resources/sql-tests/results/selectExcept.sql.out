@@ -122,6 +122,20 @@ struct<id:int,name:string,data:struct<f1:int,s2:struct<f3:string>>>
 
 
 -- !query
+SELECT * EXCEPT (data.f1, data.s2) FROM tbl_view
+-- !query schema
+struct<id:int,name:string,data:struct<>>
+-- !query output
+10	name1	{}
+20	name2	{}
+30	name3	{}
+40	name4	{}
+50	name5	{}
+60	name6	{}
+70	name7	{}
+
+
+-- !query
 SELECT * EXCEPT (id, name, data) FROM tbl_view
 -- !query schema
 struct<>
@@ -344,3 +358,139 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "* EXCEPT(data.s2, data.s2.f2)"
   } ]
 }
+
+
+-- !query
+DROP VIEW tbl_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW v1 AS VALUES (1, 2, NULL, 4, 5) AS T(c1, c2, c3, c4, c5)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT coalesce(*) FROM v1
+-- !query schema
+struct<coalesce(c1, c2, c3, c4, c5):int>
+-- !query output
+1
+
+
+-- !query
+SELECT coalesce(* EXCEPT(c1, c2)) FROM v1
+-- !query schema
+struct<coalesce(c3, c4, c5):int>
+-- !query output
+4
+
+
+-- !query
+SELECT array(*) FROM v1
+-- !query schema
+struct<array(c1, c2, c3, c4, c5):array<int>>
+-- !query output
+[1,2,null,4,5]
+
+
+-- !query
+SELECT array(v1.*) FROM v1
+-- !query schema
+struct<array(c1, c2, c3, c4, c5):array<int>>
+-- !query output
+[1,2,null,4,5]
+
+
+-- !query
+SELECT concat_ws(',', *) FROM v1
+-- !query schema
+struct<concat_ws(,, c1, c2, c3, c4, c5):string>
+-- !query output
+1,2,4,5
+
+
+-- !query
+SELECT (*) FROM v1
+-- !query schema
+struct<c1:int,c2:int,c3:void,c4:int,c5:int>
+-- !query output
+1	2	NULL	4	5
+
+
+-- !query
+SELECT struct(*) FROM v1
+-- !query schema
+struct<struct(c1, c2, c3, c4, c5):struct<c1:int,c2:int,c3:void,c4:int,c5:int>>
+-- !query output
+{"c1":1,"c2":2,"c3":null,"c4":4,"c5":5}
+
+
+-- !query
+SELECT greatest(*) FROM v1
+-- !query schema
+struct<greatest(c1, c2, c3, c4, c5):int>
+-- !query output
+5
+
+
+-- !query
+SELECT 5 IN (*) FROM v1
+-- !query schema
+struct<(5 IN (c1, c2, c3, c4, c5)):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT c1.* FROM VALUES(named_struct('a', 1, 'b', 2), 10, 20) as t(c1, c2, c3)
+-- !query schema
+struct<a:int,b:int>
+-- !query output
+1	2
+
+
+-- !query
+SELECT 1 FROM v1 WHERE coalesce(*) = 1
+-- !query schema
+struct<1:int>
+-- !query output
+1
+
+
+-- !query
+SELECT 1 FROM v1 WHERE array(*) = array(1, 2, NULL, 4, 5)
+-- !query schema
+struct<1:int>
+-- !query output
+1
+
+
+-- !query
+SELECT 1 FROM v1 WHERE 4 IN (*)
+-- !query schema
+struct<1:int>
+-- !query output
+1
+
+
+-- !query
+SELECT T.* FROM v1, LATERAL (SELECT  v1.*) AS T(c1, c2, c3, c4, c5)
+-- !query schema
+struct<c1:int,c2:int,c3:void,c4:int,c5:int>
+-- !query output
+1	2	NULL	4	5
+
+
+-- !query
+SELECT T.* FROM v1, LATERAL (SELECT  COALESCE(v1.*)) AS T(x)
+-- !query schema
+struct<x:int>
+-- !query output
+1

@@ -19,10 +19,14 @@ import unittest
 
 from pyspark.pandas.tests.groupby.test_rank import RankTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class RankParityTests(RankTestsMixin, PandasOnSparkTestCase, ReusedConnectTestCase):
+class RankParityTests(
+    RankTestsMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
+):
     pass
 
 

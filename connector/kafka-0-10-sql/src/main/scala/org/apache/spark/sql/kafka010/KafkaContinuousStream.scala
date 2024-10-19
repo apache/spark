@@ -24,7 +24,8 @@ import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, Offset
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.TaskContext
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{ERROR, OFFSETS, TIP}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.connector.read.InputPartition
@@ -75,7 +76,7 @@ class KafkaContinuousStream(
       case GlobalTimestampRangeLimit(ts, strategy) =>
         offsetReader.fetchGlobalTimestampBasedOffsets(ts, isStartingOffsets = true, strategy)
     }
-    logInfo(s"Initial offsets: $offsets")
+    logInfo(log"Initial offsets: ${MDC(OFFSETS, offsets)}")
     offsets
   }
 
@@ -92,13 +93,17 @@ class KafkaContinuousStream(
 
     val deletedPartitions = oldStartPartitionOffsets.keySet.diff(currentPartitionSet)
     if (deletedPartitions.nonEmpty) {
-      val message = if (
-        offsetReader.driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
-        s"$deletedPartitions are gone. ${CUSTOM_GROUP_ID_ERROR_MESSAGE}"
-      } else {
-        s"$deletedPartitions are gone. Some data may have been missed."
-      }
-      reportDataLoss(message)
+      val (message, config) =
+        if (offsetReader.driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
+          (s"$deletedPartitions are gone. ${CUSTOM_GROUP_ID_ERROR_MESSAGE}",
+            Some(ConsumerConfig.GROUP_ID_CONFIG))
+        } else {
+          (s"$deletedPartitions are gone. Some data may have been missed.", None)
+        }
+
+      reportDataLoss(
+        message,
+        () => KafkaExceptions.partitionsDeleted(deletedPartitions, config))
     }
 
     val startOffsets = newPartitionOffsets ++
@@ -137,14 +142,14 @@ class KafkaContinuousStream(
   override def toString(): String = s"KafkaSource[$offsetReader]"
 
   /**
-   * If `failOnDataLoss` is true, this method will throw an `IllegalStateException`.
+   * If `failOnDataLoss` is true, this method will throw the exception.
    * Otherwise, just log a warning.
    */
-  private def reportDataLoss(message: String): Unit = {
+  private def reportDataLoss(message: String, getException: () => Throwable): Unit = {
     if (failOnDataLoss) {
-      throw new IllegalStateException(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE")
+      throw getException()
     } else {
-      logWarning(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE")
+      logWarning(log"${MDC(ERROR, message)}. ${MDC(TIP, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE)}")
     }
   }
 }
@@ -221,7 +226,7 @@ class KafkaContinuousPartitionReader(
 
         // This is a failOnDataLoss exception. Retry if nextKafkaOffset is within the data range,
         // or if it's the endpoint of the data range (i.e. the "true" next offset).
-        case e: IllegalStateException if e.getCause.isInstanceOf[OffsetOutOfRangeException] =>
+        case e: KafkaIllegalStateException if e.getCause.isInstanceOf[OffsetOutOfRangeException] =>
           val range = consumer.getAvailableOffsetRange()
           if (range.latest >= nextKafkaOffset && range.earliest <= nextKafkaOffset) {
             // retry

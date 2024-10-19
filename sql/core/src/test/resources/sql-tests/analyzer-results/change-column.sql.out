@@ -69,7 +69,14 @@ org.apache.spark.sql.AnalysisException
     "originName" : "`a`",
     "originType" : "\"INT\"",
     "table" : "`spark_catalog`.`default`.`test_change`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 44,
+    "fragment" : "ALTER TABLE test_change CHANGE a TYPE STRING"
+  } ]
 }
 
 
@@ -160,11 +167,11 @@ ALTER TABLE test_change CHANGE invalid_col TYPE INT
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1331",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
   "messageParameters" : {
-    "fieldName" : "invalid_col",
-    "schema" : "root\n |-- a: integer (nullable = true)\n |-- b: string (nullable = true)\n |-- c: integer (nullable = true)\n",
-    "table" : "spark_catalog.default.test_change"
+    "objectName" : "`invalid_col`",
+    "proposal" : "`a`, `b`, `c`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -197,7 +204,7 @@ DescribeTableCommand `spark_catalog`.`default`.`test_change`, false, [col_name#x
 -- !query
 CREATE TEMPORARY VIEW temp_view(a, b) AS SELECT 1, "one"
 -- !query analysis
-CreateViewCommand `temp_view`, [(a,None), (b,None)], SELECT 1, "one", false, false, LocalTempView, true
+CreateViewCommand `temp_view`, [(a,None), (b,None)], SELECT 1, "one", false, false, LocalTempView, UNSUPPORTED, true
    +- Project [1 AS 1#x, one AS one#x]
       +- OneRowRelation
 
@@ -226,7 +233,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE GLOBAL TEMPORARY VIEW global_temp_view(a, b) AS SELECT 1, "one"
 -- !query analysis
-CreateViewCommand `global_temp_view`, [(a,None), (b,None)], SELECT 1, "one", false, false, GlobalTempView, true
+CreateViewCommand `global_temp_view`, [(a,None), (b,None)], SELECT 1, "one", false, false, GlobalTempView, UNSUPPORTED, true
    +- Project [1 AS 1#x, one AS one#x]
       +- OneRowRelation
 

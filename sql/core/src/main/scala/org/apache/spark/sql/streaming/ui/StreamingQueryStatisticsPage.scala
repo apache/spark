@@ -20,10 +20,11 @@ package org.apache.spark.sql.streaming.ui
 import java.{util => ju}
 import java.lang.{Long => JLong}
 import java.util.Locale
-import javax.servlet.http.HttpServletRequest
 
 import scala.jdk.CollectionConverters._
 import scala.xml.{Node, NodeBuffer, Unparsed}
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.state.StateStoreProvider
@@ -306,7 +307,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
-              <div><strong>Aggregated Number Of Removed State Rows{SparkUIUtils.tooltip("Aggregated number of state rows removed from the state. Normally it means the number of rows evicted from the state because watermark has passed, except in flatMapGroupWithState, where users can manually remove the state.", "right")}</strong></div>
+              <div><strong>Aggregated Number Of Removed State Rows{SparkUIUtils.tooltip("Aggregated number of state rows removed from the state. Normally it means the number of rows evicted from the state because watermark has passed, except in flatMapGroupsWithState, where users can manually remove the state.", "right")}</strong></div>
             </div>
           </td>
           <td class={"aggregated-num-removed-state-rows-timeline"}>{graphUIDataForNumberRemovedRows.generateTimelineHtml(jsCollector)}</td>

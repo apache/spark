@@ -18,7 +18,7 @@ CreateViewCommand `tbl_view`, SELECT * FROM VALUES
   (50, 'name5', named_struct('f1', 5, 's2', named_struct('f2', 505, 'f3', 'e'))),
   (60, 'name6', named_struct('f1', 6, 's2', named_struct('f2', 606, 'f3', 'f'))),
   (70, 'name7', named_struct('f1', 7, 's2', named_struct('f2', 707, 'f3', 'g')))
-AS tbl_view(id, name, data), false, false, LocalTempView, true
+AS tbl_view(id, name, data), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [id#x, name#x, data#x]
       +- SubqueryAlias tbl_view
          +- LocalRelation [id#x, name#x, data#x]
@@ -54,10 +54,10 @@ SetCommand (spark.sql.ansi.enabled,Some(true))
 -- !query
 EXECUTE IMMEDIATE 'CREATE TEMPORARY VIEW IDENTIFIER(:tblName) AS SELECT id, name FROM tbl_view' USING 'tbl_view_tmp' as tblName
 -- !query analysis
-CreateViewCommand `tbl_view_tmp`, SELECT id, name FROM tbl_view, false, false, LocalTempView, true
+CreateViewCommand `tbl_view_tmp`, SELECT id, name FROM tbl_view, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [id#x, name#x]
       +- SubqueryAlias tbl_view
-         +- View (`tbl_view`, [id#x,name#x,data#x])
+         +- View (`tbl_view`, [id#x, name#x, data#x])
             +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
                +- Project [id#x, name#x, data#x]
                   +- SubqueryAlias tbl_view
@@ -69,11 +69,11 @@ EXECUTE IMMEDIATE 'SELECT * FROM tbl_view_tmp'
 -- !query analysis
 Project [id#x, name#x]
 +- SubqueryAlias tbl_view_tmp
-   +- View (`tbl_view_tmp`, [id#x,name#x])
+   +- View (`tbl_view_tmp`, [id#x, name#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x]
          +- Project [id#x, name#x]
             +- SubqueryAlias tbl_view
-               +- View (`tbl_view`, [id#x,name#x,data#x])
+               +- View (`tbl_view`, [id#x, name#x, data#x])
                   +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
                      +- Project [id#x, name#x, data#x]
                         +- SubqueryAlias tbl_view
@@ -92,7 +92,7 @@ EXECUTE IMMEDIATE sql_string
 Project [id#x, name#x, data#x]
 +- Filter (name#x = name1)
    +- SubqueryAlias tbl_view
-      +- View (`tbl_view`, [id#x,name#x,data#x])
+      +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
             +- Project [id#x, name#x, data#x]
                +- SubqueryAlias tbl_view
@@ -105,7 +105,7 @@ EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = \'name1\''
 Project [id#x, name#x, data#x]
 +- Filter (name#x = name1)
    +- SubqueryAlias tbl_view
-      +- View (`tbl_view`, [id#x,name#x,data#x])
+      +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
             +- Project [id#x, name#x, data#x]
                +- SubqueryAlias tbl_view
@@ -141,7 +141,7 @@ EXECUTE IMMEDIATE sql_string USING 'name1', 'name3'
 Project [id#x, name#x, data#x]
 +- Filter ((name#x = name1) OR (name#x = name3))
    +- SubqueryAlias tbl_view
-      +- View (`tbl_view`, [id#x,name#x,data#x])
+      +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
             +- Project [id#x, name#x, data#x]
                +- SubqueryAlias tbl_view
@@ -154,7 +154,7 @@ EXECUTE IMMEDIATE sql_string USING a, 'name2'
 Project [id#x, name#x, data#x]
 +- Filter ((name#x = variablereference(system.session.a='name1')) OR (name#x = name2))
    +- SubqueryAlias tbl_view
-      +- View (`tbl_view`, [id#x,name#x,data#x])
+      +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
             +- Project [id#x, name#x, data#x]
                +- SubqueryAlias tbl_view
@@ -167,7 +167,7 @@ EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING 'nam
 Project [id#x, name#x, data#x]
 +- Filter ((name#x = name1) OR (name#x = name3))
    +- SubqueryAlias tbl_view
-      +- View (`tbl_view`, [id#x,name#x,data#x])
+      +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
             +- Project [id#x, name#x, data#x]
                +- SubqueryAlias tbl_view
@@ -180,7 +180,7 @@ EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING a, '
 Project [id#x, name#x, data#x]
 +- Filter ((name#x = variablereference(system.session.a='name1')) OR (name#x = name2))
    +- SubqueryAlias tbl_view
-      +- View (`tbl_view`, [id#x,name#x,data#x])
+      +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
             +- Project [id#x, name#x, data#x]
                +- SubqueryAlias tbl_view
@@ -193,7 +193,7 @@ EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING (a, 
 Project [id#x, name#x, data#x]
 +- Filter ((name#x = variablereference(system.session.a='name1')) OR (name#x = name2))
    +- SubqueryAlias tbl_view
-      +- View (`tbl_view`, [id#x,name#x,data#x])
+      +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
             +- Project [id#x, name#x, data#x]
                +- SubqueryAlias tbl_view
@@ -245,7 +245,7 @@ EXECUTE IMMEDIATE sql_string USING 40 as second, 'name7' as first
 Project [id#x, name#x, data#x]
 +- Filter ((name#x = name7) OR (id#x = 40))
    +- SubqueryAlias tbl_view
-      +- View (`tbl_view`, [id#x,name#x,data#x])
+      +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
             +- Project [id#x, name#x, data#x]
                +- SubqueryAlias tbl_view
@@ -258,7 +258,7 @@ EXECUTE IMMEDIATE sql_string USING b as second, 'name7' as first
 Project [id#x, name#x, data#x]
 +- Filter ((name#x = name7) OR (id#x = variablereference(system.session.b=40)))
    +- SubqueryAlias tbl_view
-      +- View (`tbl_view`, [id#x,name#x,data#x])
+      +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
             +- Project [id#x, name#x, data#x]
                +- SubqueryAlias tbl_view
@@ -271,7 +271,7 @@ EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first or id = :second' U
 Project [id#x, name#x, data#x]
 +- Filter ((name#x = name7) OR (id#x = 40))
    +- SubqueryAlias tbl_view
-      +- View (`tbl_view`, [id#x,name#x,data#x])
+      +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
             +- Project [id#x, name#x, data#x]
                +- SubqueryAlias tbl_view
@@ -284,7 +284,7 @@ EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first or id = :second' U
 Project [id#x, name#x, data#x]
 +- Filter ((name#x = name7) OR (id#x = variablereference(system.session.b=40)))
    +- SubqueryAlias tbl_view
-      +- View (`tbl_view`, [id#x,name#x,data#x])
+      +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
             +- Project [id#x, name#x, data#x]
                +- SubqueryAlias tbl_view
@@ -297,7 +297,7 @@ EXECUTE IMMEDIATE 'SELECT tbl_view.*, :first as p FROM tbl_view WHERE name = :fi
 Project [id#x, name#x, data#x, name7 AS p#x]
 +- Filter (name#x = name7)
    +- SubqueryAlias tbl_view
-      +- View (`tbl_view`, [id#x,name#x,data#x])
+      +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
             +- Project [id#x, name#x, data#x]
                +- SubqueryAlias tbl_view
@@ -335,7 +335,7 @@ SetVariable [variablereference(system.session.res_id=CAST(NULL AS INT))]
       +- Project [id#x]
          +- Filter (name#x = name7)
             +- SubqueryAlias tbl_view
-               +- View (`tbl_view`, [id#x,name#x,data#x])
+               +- View (`tbl_view`, [id#x, name#x, data#x])
                   +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
                      +- Project [id#x, name#x, data#x]
                         +- SubqueryAlias tbl_view
@@ -358,7 +358,7 @@ SetVariable [variablereference(system.session.res_id=70)]
       +- Project [id#x]
          +- Filter (name#x = variablereference(system.session.a='name1'))
             +- SubqueryAlias tbl_view
-               +- View (`tbl_view`, [id#x,name#x,data#x])
+               +- View (`tbl_view`, [id#x, name#x, data#x])
                   +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
                      +- Project [id#x, name#x, data#x]
                         +- SubqueryAlias tbl_view
@@ -404,7 +404,7 @@ SetVariable [variablereference(system.session.b=40), variablereference(system.se
       +- Project [id#x, name#x]
          +- Filter (id#x = 10)
             +- SubqueryAlias tbl_view
-               +- View (`tbl_view`, [id#x,name#x,data#x])
+               +- View (`tbl_view`, [id#x, name#x, data#x])
                   +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
                      +- Project [id#x, name#x, data#x]
                         +- SubqueryAlias tbl_view
@@ -424,7 +424,7 @@ EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where id = ? AND name = ?' USING b as 
 Project [id#x, name#x, data#x]
 +- Filter ((id#x = variablereference(system.session.b=10)) AND (name#x = variablereference(system.session.a='name1')))
    +- SubqueryAlias tbl_view
-      +- View (`tbl_view`, [id#x,name#x,data#x])
+      +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
             +- Project [id#x, name#x, data#x]
                +- SubqueryAlias tbl_view
@@ -471,7 +471,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'invalid_cast_error_expected'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -662,7 +661,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'name1'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -750,6 +748,39 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+DECLARE p = 10
+-- !query analysis
+CreateVariable defaultvalueexpression(10, 10), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.p
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :p' USING p
+-- !query analysis
+Project [id#x]
++- Filter (id#x = variablereference(system.session.p=10))
+   +- SubqueryAlias tbl_view
+      +- View (`tbl_view`, [id#x, name#x, data#x])
+         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [id#x, name#x, data#x]
+               +- SubqueryAlias tbl_view
+                  +- LocalRelation [id#x, name#x, data#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :p' USING p, 'p'
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ALL_PARAMETERS_MUST_BE_NAMED",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "exprs" : "\"p\""
+  }
+}
+
+
+-- !query
 EXECUTE IMMEDIATE 'SELECT id, data.f1 FROM tbl_view WHERE id = 10' INTO res_id, res_id
 -- !query analysis
 org.apache.spark.sql.AnalysisException
@@ -771,6 +802,28 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "07501",
   "messageParameters" : {
     "sqlString" : "EXECUTE IMMEDIATE 'SELECT ID FROM TBL_VIEW WHERE ID = ? USING 10'"
+  }
+}
+
+
+-- !query
+SET VAR sql_string = null
+-- !query analysis
+SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view where name = :first or id = :second')]
++- Project [cast(sql_string#x as string) AS sql_string#x]
+   +- Project [null AS sql_string#x]
+      +- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE sql_string
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
+  "sqlState" : "22004",
+  "messageParameters" : {
+    "varName" : "`sql_string`"
   }
 }
 

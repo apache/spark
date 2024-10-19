@@ -420,7 +420,7 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     BATCH_SIZE_CONFIGS.foreach { batchSize =>
       Seq(true, false).foreach { dictionaryEnabled =>
         val pageSizes = Seq(4, 4, 4, 4)
-        var firstRowIndexes = Seq(10L, 20, 30, 40)
+        val firstRowIndexes = Seq(10L, 20, 30, 40)
         var ranges = Seq((0L, 5L))
         testNestedStringArrayOneLevel(Some(firstRowIndexes), Some(ranges), pageSizes,
           Seq(),
@@ -502,7 +502,7 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     val ty = parquetSchema.asGroupType().getType("a").asPrimitiveType()
     val cd = new ColumnDescriptor(Seq("a").toArray, ty, 0, maxDef)
     val repetitionLevels = Array.fill[Int](inputValues.length)(0)
-    val definitionLevels = inputValues.map(v => if (v == null) 0 else 1)
+    val definitionLevels = inputValues.map(v => if (v == null) 0 else maxDef)
 
     val memPageStore = new MemPageStore(expectedValues.length)
 

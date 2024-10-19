@@ -29,7 +29,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FsUrlStreamHandlerFactory, Path}
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, PATH, VALUE}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.CacheManager
@@ -168,11 +169,12 @@ private[sql] class SharedState(
     wrapped
   }
 
+  val globalTempDB = conf.get(GLOBAL_TEMP_DATABASE)
+
   /**
    * A manager for global temporary views.
    */
   lazy val globalTempViewManager: GlobalTempViewManager = {
-    val globalTempDB = conf.get(GLOBAL_TEMP_DATABASE)
     if (externalCatalog.databaseExists(globalTempDB)) {
       throw QueryExecutionErrors.databaseNameConflictWithSystemPreservedDatabaseError(globalTempDB)
     }
@@ -258,8 +260,9 @@ object SharedState extends Logging {
     val sparkWarehouseOption =
       initialConfigs.get(WAREHOUSE_PATH.key).orElse(sparkConf.getOption(WAREHOUSE_PATH.key))
     if (initialConfigs.contains(HIVE_WAREHOUSE_CONF_NAME)) {
-      logWarning(s"Not allowing to set $HIVE_WAREHOUSE_CONF_NAME in SparkSession's " +
-        s"options, please use ${WAREHOUSE_PATH.key} to set statically for cross-session usages")
+      logWarning(log"Not allowing to set ${MDC(CONFIG, HIVE_WAREHOUSE_CONF_NAME)} in " +
+        log"SparkSession's options, please use ${MDC(CONFIG2, WAREHOUSE_PATH.key)} to " +
+        log"set statically for cross-session usages")
     }
     // hive.metastore.warehouse.dir only stay in hadoopConf
     sparkConf.remove(HIVE_WAREHOUSE_CONF_NAME)
@@ -268,8 +271,10 @@ object SharedState extends Logging {
     if (hiveWarehouseDir != null && sparkWarehouseOption.isEmpty) {
       // If hive.metastore.warehouse.dir is set and spark.sql.warehouse.dir is not set,
       // we will respect the value of hive.metastore.warehouse.dir.
-      logInfo(s"${WAREHOUSE_PATH.key} is not set, but $HIVE_WAREHOUSE_CONF_NAME is set. " +
-        s"Setting ${WAREHOUSE_PATH.key} to the value of $HIVE_WAREHOUSE_CONF_NAME.")
+      logInfo(log"${MDC(CONFIG, WAREHOUSE_PATH.key)} is not set, but " +
+        log"${MDC(CONFIG2, HIVE_WAREHOUSE_CONF_NAME)} is set. " +
+        log"Setting ${MDC(CONFIG, WAREHOUSE_PATH.key)} to " +
+        log"the value of ${MDC(CONFIG2, HIVE_WAREHOUSE_CONF_NAME)}.")
       hiveWarehouseDir
     } else {
       // If spark.sql.warehouse.dir is set, we will override hive.metastore.warehouse.dir using
@@ -277,8 +282,9 @@ object SharedState extends Logging {
       // When neither spark.sql.warehouse.dir nor hive.metastore.warehouse.dir is set
       // we will set hive.metastore.warehouse.dir to the default value of spark.sql.warehouse.dir.
       val sparkWarehouseDir = sparkWarehouseOption.getOrElse(WAREHOUSE_PATH.defaultValueString)
-      logInfo(s"Setting $HIVE_WAREHOUSE_CONF_NAME ('$hiveWarehouseDir') to the value of " +
-        s"${WAREHOUSE_PATH.key}.")
+      logInfo(log"Setting ${MDC(CONFIG, HIVE_WAREHOUSE_CONF_NAME)} " +
+        log"('${MDC(VALUE, hiveWarehouseDir)}') to the value of " +
+        log"${MDC(CONFIG2, WAREHOUSE_PATH.key)}.")
       sparkWarehouseDir
     }
   }
@@ -286,7 +292,7 @@ object SharedState extends Logging {
   def qualifyWarehousePath(hadoopConf: Configuration, warehousePath: String): String = {
     val tempPath = new Path(warehousePath)
     val qualified = tempPath.getFileSystem(hadoopConf).makeQualified(tempPath).toString
-    logInfo(s"Warehouse path is '$qualified'.")
+    logInfo(log"Warehouse path is '${MDC(PATH, qualified)}'.")
     qualified
   }
 

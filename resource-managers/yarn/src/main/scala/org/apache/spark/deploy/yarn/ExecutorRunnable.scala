@@ -38,7 +38,8 @@ import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.LogKeys.{EXECUTOR_ENVS, EXECUTOR_LAUNCH_COMMANDS, EXECUTOR_RESOURCES}
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
@@ -68,21 +69,23 @@ private[yarn] class ExecutorRunnable(
     startContainer()
   }
 
-  def launchContextDebugInfo(): String = {
+  def launchContextDebugInfo(): MessageWithContext = {
     val commands = prepareCommand()
     val env = prepareEnvironment()
 
-    s"""
-    |===============================================================================
-    |Default YARN executor launch context:
-    |  env:
-    |${Utils.redact(sparkConf, env.toSeq).map { case (k, v) => s"    $k -> $v\n" }.mkString}
-    |  command:
-    |    ${Utils.redactCommandLineArgs(sparkConf, commands).mkString(" \\ \n      ")}
-    |
-    |  resources:
-    |${localResources.map { case (k, v) => s"    $k -> $v\n" }.mkString}
-    |===============================================================================""".stripMargin
+    // scalastyle:off line.size.limit
+    log"""
+        |===============================================================================
+        |Default YARN executor launch context:
+        |  env:
+        |${MDC(EXECUTOR_ENVS, Utils.redact(sparkConf, env.toSeq).map { case (k, v) => s"    $k -> $v\n" }.mkString)}
+        |  command:
+        |    ${MDC(EXECUTOR_LAUNCH_COMMANDS, Utils.redactCommandLineArgs(sparkConf, commands).mkString(" \\ \n      "))}
+        |
+        |  resources:
+        |${MDC(EXECUTOR_RESOURCES, localResources.map { case (k, v) => s"    $k -> $v\n" }.mkString)}
+        |===============================================================================""".stripMargin
+    // scalastyle:on line.size.limit
   }
 
   def startContainer(): java.util.Map[String, ByteBuffer] = {

@@ -23,7 +23,8 @@ import java.util.Optional
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.resource.ResourceDiscoveryPlugin
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.util.Utils.executeAndGetOutput
 
 /**
@@ -44,7 +45,8 @@ class ResourceDiscoveryScriptPlugin extends ResourceDiscoveryPlugin with Logging
     val resourceName = request.id.resourceName
     val result = if (script.isPresent) {
       val scriptFile = new File(script.get)
-      logInfo(s"Discovering resources for $resourceName with script: $scriptFile")
+      logInfo(log"Discovering resources for ${MDC(LogKeys.RESOURCE_NAME, resourceName)}" +
+        log" with script: ${MDC(LogKeys.PATH, scriptFile)}")
       // check that script exists and try to execute
       if (scriptFile.exists()) {
         val output = executeAndGetOutput(Seq(script.get), new File("."))

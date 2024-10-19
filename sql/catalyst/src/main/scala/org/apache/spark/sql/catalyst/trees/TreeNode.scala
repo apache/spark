@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.trees
 
-import java.util.UUID
+import java.util.{IdentityHashMap, UUID}
 
+import scala.annotation.nowarn
 import scala.collection.{mutable, Map}
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -78,8 +79,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
   /**
    * A mutable map for holding auxiliary information of this tree node. It will be carried over
    * when this node is copied via `makeCopy`, or transformed via `transformUp`/`transformDown`.
+   * We lazily evaluate the `tags` since the default size of a `mutable.Map` is nonzero. This
+   * will reduce unnecessary memory pressure.
    */
-  private val tags: mutable.Map[TreeNodeTag[_], Any] = mutable.Map.empty
+  private[this] var _tags: mutable.Map[TreeNodeTag[_], Any] = null
+  private def tags: mutable.Map[TreeNodeTag[_], Any] = {
+    if (_tags eq null) {
+      _tags = mutable.Map.empty
+    }
+    _tags
+  }
 
   /**
    * Default tree pattern [[BitSet] for a [[TreeNode]].
@@ -112,7 +121,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    * ineffective for subsequent apply calls on this tree because query plan structures are
    * immutable.
    */
-  private val ineffectiveRules: BitSet = new BitSet(RuleIdCollection.NumRules)
+  private[this] var _ineffectiveRules: BitSet = null
+  private def ineffectiveRules: BitSet = {
+    if (_ineffectiveRules eq null) {
+      _ineffectiveRules = new BitSet(RuleIdCollection.NumRules)
+    }
+    _ineffectiveRules
+  }
+  private def isIneffectiveRulesEmpty = _ineffectiveRules eq null
 
   /**
    * @return a sequence of tree pattern enums in a TreeNode T. It does not include propagated
@@ -141,17 +157,19 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    *         UnknownId, it returns false.
    */
   protected def isRuleIneffective(ruleId : RuleId): Boolean = {
-    if (ruleId eq UnknownRuleId) {
+    if (isIneffectiveRulesEmpty || (ruleId eq UnknownRuleId)) {
       return false
     }
     ineffectiveRules.get(ruleId.id)
   }
 
+  def isTagsEmpty: Boolean = (_tags eq null) || _tags.isEmpty
+
   def copyTagsFrom(other: BaseType): Unit = {
     // SPARK-32753: it only makes sense to copy tags to a new node
     // but it's too expensive to detect other cases likes node removal
     // so we make a compromise here to copy tags to node with no tags
-    if (tags.isEmpty) {
+    if (isTagsEmpty && !other.isTagsEmpty) {
       tags ++= other.tags
     }
   }
@@ -161,11 +179,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
   }
 
   def getTagValue[T](tag: TreeNodeTag[T]): Option[T] = {
-    tags.get(tag).map(_.asInstanceOf[T])
+    if (isTagsEmpty) {
+      None
+    } else {
+      tags.get(tag).map(_.asInstanceOf[T])
+    }
   }
 
   def unsetTagValue[T](tag: TreeNodeTag[T]): Unit = {
-    tags -= tag
+    if (!isTagsEmpty) {
+      tags -= tag
+    }
   }
 
   /**
@@ -355,12 +379,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       case nonChild: AnyRef => nonChild
       case null => null
     }
+    @nowarn("cat=deprecation")
     val newArgs = mapProductIterator {
       case s: StructType => s // Don't convert struct types to some other type of Seq[StructField]
       // Handle Seq[TreeNode] in TreeNode parameters.
-      case s: LazyList[_] =>
-        // LazyList is lazy so we need to force materialization
+      case s: Stream[_] =>
+        // Stream is lazy so we need to force materialization
         s.map(mapChild).force
+      case l: LazyList[_] =>
+        // LazyList is lazy so we need to force materialization
+        l.map(mapChild).force
       case s: Seq[_] =>
         s.map(mapChild)
       case m: Map[_, _] =>
@@ -778,6 +806,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       case other => other
     }
 
+    @nowarn("cat=deprecation")
     val newArgs = mapProductIterator {
       case arg: TreeNode[_] if containsChild(arg) =>
         arg.asInstanceOf[BaseType].clone()
@@ -790,7 +819,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
         case (_, other) => other
       }
       case d: DataType => d // Avoid unpacking Structs
-      case args: LazyList[_] => args.map(mapChild).force // Force materialization on stream
+      case args: Stream[_] => args.map(mapChild).force // Force materialization on stream
+      case args: LazyList[_] => args.map(mapChild).force // Force materialization on LazyList
       case args: Iterable[_] => args.map(mapChild)
       case nonChild: AnyRef => nonChild
       case null => null
@@ -811,7 +841,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    */
   protected def stringArgs: Iterator[Any] = productIterator
 
-  private lazy val allChildren: Set[TreeNode[_]] = (children ++ innerChildren).toSet[TreeNode[_]]
+  private lazy val allChildren: IdentityHashMap[TreeNode[_], Any] = {
+    val set = new IdentityHashMap[TreeNode[_], Any]()
+    (children ++ innerChildren).foreach {
+      set.put(_, null)
+    }
+    set
+  }
 
   private def redactMapString[K, V](map: Map[K, V], maxFields: Int): List[String] = {
     // For security reason, redact the map value if the key is in certain patterns
@@ -838,11 +874,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
 
   /** Returns a string representing the arguments to this node, minus any children */
   def argString(maxFields: Int): String = stringArgs.flatMap {
-    case tn: TreeNode[_] if allChildren.contains(tn) => Nil
-    case Some(tn: TreeNode[_]) if allChildren.contains(tn) => Nil
+    case tn: TreeNode[_] if allChildren.containsKey(tn) => Nil
+    case Some(tn: TreeNode[_]) if allChildren.containsKey(tn) => Nil
     case Some(tn: TreeNode[_]) => tn.simpleString(maxFields) :: Nil
     case tn: TreeNode[_] => tn.simpleString(maxFields) :: Nil
-    case seq: Seq[Any] if seq.toSet.subsetOf(allChildren.asInstanceOf[Set[Any]]) => Nil
+    case seq: Seq[Any] if seq.forall(allChildren.containsKey) => Nil
     case iter: Iterable[_] if iter.isEmpty => Nil
     case array: Array[_] if array.isEmpty => Nil
     case xs @ (_: Seq[_] | _: Set[_] | _: Array[_]) =>
@@ -1000,21 +1036,20 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
 
     val str = if (verbose) {
       if (addSuffix) verboseStringWithSuffix(maxFields) else verboseString(maxFields)
+    } else if (printNodeId) {
+      simpleStringWithNodeId()
     } else {
-      if (printNodeId) {
-        simpleStringWithNodeId()
-      } else {
-        simpleString(maxFields)
-      }
+      simpleString(maxFields)
     }
     append(prefix)
     append(str)
     append("\n")
 
-    if (innerChildren.nonEmpty) {
+    val innerChildrenLocal = innerChildren
+    if (innerChildrenLocal.nonEmpty) {
       lastChildren.add(children.isEmpty)
       lastChildren.add(false)
-      innerChildren.init.foreach(_.generateTreeString(
+      innerChildrenLocal.init.foreach(_.generateTreeString(
         depth + 2, lastChildren, append, verbose,
         addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent))
       lastChildren.remove(lastChildren.size() - 1)
@@ -1022,7 +1057,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
 
       lastChildren.add(children.isEmpty)
       lastChildren.add(true)
-      innerChildren.last.generateTreeString(
+      innerChildrenLocal.last.generateTreeString(
         depth + 2, lastChildren, append, verbose,
         addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent)
       lastChildren.remove(lastChildren.size() - 1)

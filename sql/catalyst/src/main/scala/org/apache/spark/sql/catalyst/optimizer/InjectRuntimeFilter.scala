@@ -120,33 +120,52 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           hasHitSelectiveFilter = hasHitSelectiveFilter || isLikelySelective(condition),
           currentPlan,
           targetKey)
-      case ExtractEquiJoinKeys(_, lkeys, rkeys, _, _, left, right, _) =>
+      case ExtractEquiJoinKeys(joinType, lkeys, rkeys, _, _, left, right, _) =>
         // Runtime filters use one side of the [[Join]] to build a set of join key values and prune
         // the other side of the [[Join]]. It's also OK to use a superset of the join key values
-        // (ignore null values) to do the pruning.
+        // (ignore null values) to do the pruning. We can also extract from the other side if the
+        // join keys are transitive, and the other side always produces a superset output of join
+        // key values. Any join side always produce a superset output of its corresponding
+        // join keys, but for transitive join keys we need to check the join type.
         // We assume other rules have already pushed predicates through join if possible.
         // So the predicate references won't pass on anymore.
         if (left.output.exists(_.semanticEquals(targetKey))) {
           extract(left, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
             currentPlan = left, targetKey = targetKey).orElse {
-            // We can also extract from the right side if the join keys are transitive.
-            lkeys.zip(rkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
-              .flatMap { newTargetKey =>
-                extract(right, AttributeSet.empty,
-                  hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = right,
-                  targetKey = newTargetKey)
-              }
+            // An example that extract from the right side if the join keys are transitive.
+            //     left table: 1, 2, 3
+            //     right table, 3, 4
+            //     right outer join output: (3, 3), (null, 4)
+            //     right key output: 3, 4
+            if (canPruneLeft(joinType)) {
+              lkeys.zip(rkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
+                .flatMap { newTargetKey =>
+                  extract(right, AttributeSet.empty,
+                    hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = right,
+                    targetKey = newTargetKey)
+                }
+            } else {
+              None
+            }
           }
         } else if (right.output.exists(_.semanticEquals(targetKey))) {
           extract(right, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
             currentPlan = right, targetKey = targetKey).orElse {
-            // We can also extract from the left side if the join keys are transitive.
-            rkeys.zip(lkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
-              .flatMap { newTargetKey =>
-                extract(left, AttributeSet.empty,
-                  hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = left,
-                  targetKey = newTargetKey)
-              }
+            // An example that extract from the left side if the join keys are transitive.
+            // left table: 1, 2, 3
+            // right table, 3, 4
+            // left outer join output: (1, null), (2, null), (3, 3)
+            // left key output: 1, 2, 3
+            if (canPruneRight(joinType)) {
+              rkeys.zip(lkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
+                .flatMap { newTargetKey =>
+                  extract(left, AttributeSet.empty,
+                    hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = left,
+                    targetKey = newTargetKey)
+                }
+            } else {
+              None
+            }
           }
         } else {
           None

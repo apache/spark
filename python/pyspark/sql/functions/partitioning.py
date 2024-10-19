@@ -26,7 +26,7 @@ from typing import (
 )
 
 from pyspark.errors import PySparkTypeError
-from pyspark.sql.column import Column, _to_java_column, _create_column_from_literal
+from pyspark.sql.column import Column
 from pyspark.sql.functions.builtin import _invoke_function_over_columns, _invoke_function
 from pyspark.sql.utils import (
     try_partitioning_remote_functions as _try_partitioning_remote_functions,
@@ -189,6 +189,8 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
+    numBuckets : :class:`~pyspark.sql.Column` or int
+        the number of buckets
     col : :class:`~pyspark.sql.Column` or str
         target date or timestamp column to work on.
 
@@ -204,10 +206,12 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     method of the `DataFrameWriterV2`.
 
     """
+    from pyspark.sql.classic.column import _to_java_column, _create_column_from_literal
+
     if not isinstance(numBuckets, (int, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INT",
-            message_parameters={
+            errorClass="NOT_COLUMN_OR_INT",
+            messageParameters={
                 "arg_name": "numBuckets",
                 "arg_type": type(numBuckets).__name__,
             },

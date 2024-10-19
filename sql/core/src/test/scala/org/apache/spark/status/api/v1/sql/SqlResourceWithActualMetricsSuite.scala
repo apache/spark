@@ -17,10 +17,10 @@
 
 package org.apache.spark.status.api.v1.sql
 
-import java.net.URL
+import java.net.{URI, URL}
 import java.text.SimpleDateFormat
-import javax.servlet.http.HttpServletResponse
 
+import jakarta.servlet.http.HttpServletResponse
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods
 import org.scalatest.time.SpanSugar._
@@ -70,8 +70,8 @@ class SqlResourceWithActualMetricsSuite
   }
 
   private def callSqlRestEndpointAndVerifyResult(): Long = {
-    val url = new URL(spark.sparkContext.ui.get.webUrl
-      + s"/api/v1/applications/${spark.sparkContext.applicationId}/sql")
+    val url = new URI(spark.sparkContext.ui.get.webUrl
+      + s"/api/v1/applications/${spark.sparkContext.applicationId}/sql").toURL
     val jsonResult = verifyAndGetSqlRestResult(url)
     val executionDatas = JsonMethods.parse(jsonResult).extract[Seq[ExecutionData]]
     assert(executionDatas.size > 0,
@@ -82,8 +82,8 @@ class SqlResourceWithActualMetricsSuite
   }
 
   private def callSqlRestEndpointByExecutionIdAndVerifyResult(executionId: Long): Unit = {
-    val url = new URL(spark.sparkContext.ui.get.webUrl
-      + s"/api/v1/applications/${spark.sparkContext.applicationId}/sql/${executionId}")
+    val url = new URI(spark.sparkContext.ui.get.webUrl
+      + s"/api/v1/applications/${spark.sparkContext.applicationId}/sql/${executionId}").toURL
     val jsonResult = verifyAndGetSqlRestResult(url)
     val executionData = JsonMethods.parse(jsonResult).extract[ExecutionData]
     verifySqlRestContent(executionData)
@@ -138,8 +138,8 @@ class SqlResourceWithActualMetricsSuite
       sql(sqlStr)
       intercept[TableAlreadyExistsException](sql(sqlStr))
 
-      val url = new URL(spark.sparkContext.ui.get.webUrl +
-        s"/api/v1/applications/${spark.sparkContext.applicationId}/sql")
+      val url = new URI(spark.sparkContext.ui.get.webUrl +
+        s"/api/v1/applications/${spark.sparkContext.applicationId}/sql").toURL
       eventually(timeout(20.seconds), interval(50.milliseconds)) {
         val result = verifyAndGetSqlRestResult(url)
         val executionDataList = JsonMethods.parse(result)
@@ -153,8 +153,8 @@ class SqlResourceWithActualMetricsSuite
   }
 
   test("SPARK-45291: Use unknown query execution id instead of no such app when id is invalid") {
-    val url = new URL(spark.sparkContext.ui.get.webUrl +
-      s"/api/v1/applications/${spark.sparkContext.applicationId}/sql/${Long.MaxValue}")
+    val url = new URI(spark.sparkContext.ui.get.webUrl +
+      s"/api/v1/applications/${spark.sparkContext.applicationId}/sql/${Long.MaxValue}").toURL
     val (code, resultOpt, error) = getContentAndCode(url)
     assert(code === HttpServletResponse.SC_NOT_FOUND)
     assert(resultOpt.isEmpty)

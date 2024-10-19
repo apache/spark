@@ -46,20 +46,20 @@ class SchemaUtilsSuite extends SparkFunSuite {
           exception = intercept[AnalysisException] {
             SchemaUtils.checkSchemaColumnNameDuplication(schema, caseSensitive)
           },
-          errorClass = "COLUMN_ALREADY_EXISTS",
+          condition = "COLUMN_ALREADY_EXISTS",
           parameters = Map("columnName" -> "`a`"))
         checkError(
           exception = intercept[AnalysisException] {
             SchemaUtils.checkColumnNameDuplication(schema.map(_.name), resolver(caseSensitive))
           },
-          errorClass = "COLUMN_ALREADY_EXISTS",
+          condition = "COLUMN_ALREADY_EXISTS",
           parameters = Map("columnName" -> "`a`"))
         checkError(
           exception = intercept[AnalysisException] {
             SchemaUtils.checkColumnNameDuplication(
               schema.map(_.name), caseSensitiveAnalysis = caseSensitive)
           },
-          errorClass = "COLUMN_ALREADY_EXISTS",
+          condition = "COLUMN_ALREADY_EXISTS",
           parameters = Map("columnName" -> "`a`"))
       }
 
@@ -106,7 +106,7 @@ class SchemaUtilsSuite extends SparkFunSuite {
         exception = intercept[AnalysisException] {
           SchemaUtils.checkSchemaColumnNameDuplication(schema)
         },
-        errorClass = "COLUMN_ALREADY_EXISTS",
+        condition = "COLUMN_ALREADY_EXISTS",
         parameters = Map("columnName" -> "`camelcase`"))
     }
   }

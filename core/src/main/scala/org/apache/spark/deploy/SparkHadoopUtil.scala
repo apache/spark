@@ -37,7 +37,7 @@ import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -142,8 +142,9 @@ private[spark] class SparkHadoopUtil extends Logging {
     if (!new File(keytabFilename).exists()) {
       throw new SparkException(s"Keytab file: ${keytabFilename} does not exist")
     } else {
-      logInfo("Attempting to login to Kerberos " +
-        s"using principal: ${principalName} and keytab: ${keytabFilename}")
+      logInfo(log"Attempting to login to Kerberos using principal: " +
+        log"${MDC(LogKeys.PRINCIPAL, principalName)} and keytab: " +
+        log"${MDC(LogKeys.KEYTAB, keytabFilename)}")
       UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
     }
   }
@@ -528,16 +529,6 @@ private[spark] object SparkHadoopUtil extends Logging {
     // true here is harmless
     if (conf.getOption("spark.hadoop.fs.s3a.downgrade.syncable.exceptions").isEmpty) {
       hadoopConf.set("fs.s3a.downgrade.syncable.exceptions", "true", setBySpark)
-    }
-    // In Hadoop 3.3.1, AWS region handling with the default "" endpoint only works
-    // in EC2 deployments or when the AWS CLI is installed.
-    // The workaround is to set the name of the S3 endpoint explicitly,
-    // if not already set. See HADOOP-17771.
-    if (hadoopConf.get("fs.s3a.endpoint", "").isEmpty &&
-      hadoopConf.get("fs.s3a.endpoint.region") == null) {
-      // set to US central endpoint which can also connect to buckets
-      // in other regions at the expense of a HEAD request during fs creation
-      hadoopConf.set("fs.s3a.endpoint", "s3.amazonaws.com", setBySpark)
     }
   }
 

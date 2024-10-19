@@ -45,7 +45,7 @@ public class DelegateSymlinkTextInputFormat extends SymlinkTextInputFormat {
   public static class DelegateSymlinkTextInputSplit extends FileSplit {
     private Path targetPath; // Path to the actual data file, not the symlink file.
 
-    // Used for deserialisation.
+    // Used for deserialization.
     public DelegateSymlinkTextInputSplit() {
       super((Path) null, 0, 0, (String[]) null);
       targetPath = null;

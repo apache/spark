@@ -700,17 +700,19 @@ class ParquetFilters(
         makeNotEq.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldNames, value))
 
-      case sources.LessThan(name, value) if canMakeFilterOn(name, value) =>
+      case sources.LessThan(name, value) if (value != null) && canMakeFilterOn(name, value) =>
         makeLt.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldNames, value))
-      case sources.LessThanOrEqual(name, value) if canMakeFilterOn(name, value) =>
+      case sources.LessThanOrEqual(name, value) if (value != null) &&
+        canMakeFilterOn(name, value) =>
         makeLtEq.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldNames, value))
 
-      case sources.GreaterThan(name, value) if canMakeFilterOn(name, value) =>
+      case sources.GreaterThan(name, value) if (value != null) && canMakeFilterOn(name, value) =>
         makeGt.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldNames, value))
-      case sources.GreaterThanOrEqual(name, value) if canMakeFilterOn(name, value) =>
+      case sources.GreaterThanOrEqual(name, value) if (value != null) &&
+        canMakeFilterOn(name, value) =>
         makeGtEq.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldNames, value))
 
@@ -804,8 +806,8 @@ class ParquetFilters(
               }
 
               override def keep(value: Binary): Boolean = {
-                value != null && UTF8String.fromBytes(value.getBytes).startsWith(
-                  UTF8String.fromBytes(strToBinary.getBytes))
+                value != null && UTF8String.fromBytes(value.getBytesUnsafe).startsWith(
+                  UTF8String.fromBytes(strToBinary.getBytesUnsafe))
               }
             }
           )
@@ -820,7 +822,7 @@ class ParquetFilters(
               override def canDrop(statistics: Statistics[Binary]): Boolean = false
               override def inverseCanDrop(statistics: Statistics[Binary]): Boolean = false
               override def keep(value: Binary): Boolean = {
-                value != null && UTF8String.fromBytes(value.getBytes).endsWith(suffixStr)
+                value != null && UTF8String.fromBytes(value.getBytesUnsafe).endsWith(suffixStr)
               }
             }
           )
@@ -835,7 +837,7 @@ class ParquetFilters(
               override def canDrop(statistics: Statistics[Binary]): Boolean = false
               override def inverseCanDrop(statistics: Statistics[Binary]): Boolean = false
               override def keep(value: Binary): Boolean = {
-                value != null && UTF8String.fromBytes(value.getBytes).contains(subStr)
+                value != null && UTF8String.fromBytes(value.getBytesUnsafe).contains(subStr)
               }
             }
           )

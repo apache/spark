@@ -299,4 +299,22 @@ private[deploy] object JsonProtocol {
     ("executors" -> obj.executors.map(writeExecutorRunner)) ~
     ("finishedexecutors" -> obj.finishedExecutors.map(writeExecutorRunner))
   }
+
+  /**
+   * Export the cluster utilization based on the [[MasterStateResponse]] to a Json object.
+   */
+  def writeClusterUtilization(obj: MasterStateResponse): JObject = {
+    val aliveWorkers = obj.workers.filter(_.isAlive())
+    val cores = aliveWorkers.map(_.cores).sum
+    val coresUsed = aliveWorkers.map(_.coresUsed).sum
+    val memory = aliveWorkers.map(_.memory).sum
+    val memoryUsed = aliveWorkers.map(_.memoryUsed).sum
+    ("waitingDrivers" -> obj.activeDrivers.count(_.state == DriverState.SUBMITTED)) ~
+    ("cores" -> cores) ~
+    ("coresused" -> coresUsed) ~
+    ("coresutilization" -> (if (cores == 0) 100 else 100 * coresUsed / cores)) ~
+    ("memory" -> memory) ~
+    ("memoryused" -> memoryUsed) ~
+    ("memoryutilization" -> (if (memory == 0) 100 else 100 * memoryUsed / memory))
+  }
 }

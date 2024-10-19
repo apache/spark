@@ -23,6 +23,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.types._
 
 class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -45,7 +46,7 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "2",
+          "paramIndex" -> ordinalNumber(1),
           "requiredType" -> "\"MAP<STRING, STRING>\"",
           "inputSql" -> "\"map(errorMessage, 5)\"",
           "inputType" -> "\"MAP<STRING, INT>\""
@@ -70,6 +71,13 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       evaluateWithMutableProjection(Uuid(seed2)))
     assert(evaluateWithUnsafeProjection(Uuid(seed1)) !==
       evaluateWithUnsafeProjection(Uuid(seed2)))
+
+    val seed3 = Literal.create(r.nextInt())
+    assert(evaluateWithoutCodegen(new Uuid(seed3)) === evaluateWithoutCodegen(new Uuid(seed3)))
+    assert(evaluateWithMutableProjection(new Uuid(seed3)) ===
+      evaluateWithMutableProjection(new Uuid(seed3)))
+    assert(evaluateWithUnsafeProjection(new Uuid(seed3)) ===
+      evaluateWithUnsafeProjection(new Uuid(seed3)))
   }
 
   test("PrintToStderr") {

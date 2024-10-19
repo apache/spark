@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from pyspark.ml import functions as PyMLFunctions
-from pyspark.sql.connect.column import Column
+from pyspark.sql.column import Column
 from pyspark.sql.connect.functions.builtin import _invoke_function, _to_col, lit
 
 

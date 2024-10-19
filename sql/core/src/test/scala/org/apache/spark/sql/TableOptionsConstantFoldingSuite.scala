@@ -44,7 +44,9 @@ class TableOptionsConstantFoldingSuite extends QueryTest with SharedSparkSession
     checkOption("null", null)
     checkOption("cast('11 23:4:0' as interval day to second)",
       "INTERVAL '11 23:04:00' DAY TO SECOND")
-    checkOption("date_diff(current_date(), current_date())", "0")
+    withSQLConf(SQLConf.LEGACY_EVAL_CURRENT_TIME.key -> "true") {
+      checkOption("date_diff(current_date(), current_date())", "0")
+    }
     checkOption("date_sub(date'2022-02-02', 1)", "2022-02-01")
     checkOption("timestampadd(microsecond, 5, timestamp'2022-02-28 00:00:00')",
       "2022-02-28 00:00:00.000005")
@@ -68,42 +70,42 @@ class TableOptionsConstantFoldingSuite extends QueryTest with SharedSparkSession
     checkError(
       exception = intercept[AnalysisException](
         sql(s"$prefix ('k' = 1 + 2 + unresolvedAttribute)")),
-      errorClass = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
       parameters = Map(
         "objectName" -> "`unresolvedAttribute`"),
       queryContext = Array(ExpectedContext("", "", 60, 78, "unresolvedAttribute")))
     checkError(
       exception = intercept[AnalysisException](
         sql(s"$prefix ('k' = true or false or unresolvedAttribute)")),
-      errorClass = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
       parameters = Map(
         "objectName" -> "`unresolvedAttribute`"),
       queryContext = Array(ExpectedContext("", "", 69, 87, "unresolvedAttribute")))
     checkError(
       exception = intercept[AnalysisException](
         sql(s"$prefix ('k' = cast(array('9', '9') as array<byte>))")),
-      errorClass = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
+      condition = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
       parameters = Map(
         "key" -> "k",
         "supported" -> "constant expressions"))
     checkError(
       exception = intercept[AnalysisException](
         sql(s"$prefix ('k' = cast(map('9', '9') as map<string, string>))")),
-      errorClass = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
+      condition = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
       parameters = Map(
         "key" -> "k",
         "supported" -> "constant expressions"))
     checkError(
       exception = intercept[AnalysisException](
         sql(s"$prefix ('k' = raise_error('failure'))")),
-      errorClass = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
+      condition = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
       parameters = Map(
         "key" -> "k",
         "supported" -> "constant expressions"))
     checkError(
       exception = intercept[AnalysisException](
         sql(s"$prefix ('k' = raise_error('failure'))")),
-      errorClass = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
+      condition = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
       parameters = Map(
         "key" -> "k",
         "supported" -> "constant expressions"))

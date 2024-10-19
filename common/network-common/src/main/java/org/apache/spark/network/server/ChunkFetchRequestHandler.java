@@ -25,9 +25,11 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.protocol.ChunkFetchFailure;
@@ -49,7 +51,8 @@ import static org.apache.spark.network.util.NettyUtils.*;
  * registering executors, or waiting for response for an OpenBlocks messages.
  */
 public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkFetchRequest> {
-  private static final Logger logger = LoggerFactory.getLogger(ChunkFetchRequestHandler.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ChunkFetchRequestHandler.class);
 
   private final TransportClient client;
   private final StreamManager streamManager;
@@ -70,7 +73,8 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
 
   @Override
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-    logger.warn("Exception in connection from " + getRemoteAddress(ctx.channel()), cause);
+    logger.warn("Exception in connection from {}", cause,
+      MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(ctx.channel())));
     ctx.close();
   }
 
@@ -92,7 +96,8 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
       long chunksBeingTransferred = streamManager.chunksBeingTransferred();
       if (chunksBeingTransferred >= maxChunksBeingTransferred) {
         logger.warn("The number of chunks being transferred {} is above {}, close the connection.",
-          chunksBeingTransferred, maxChunksBeingTransferred);
+          MDC.of(LogKeys.NUM_CHUNKS$.MODULE$, chunksBeingTransferred),
+          MDC.of(LogKeys.MAX_NUM_CHUNKS$.MODULE$, maxChunksBeingTransferred));
         channel.close();
         return;
       }
@@ -105,8 +110,9 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
         throw new IllegalStateException("Chunk was not found");
       }
     } catch (Exception e) {
-      logger.error(String.format("Error opening block %s for request from %s",
-        msg.streamChunkId, getRemoteAddress(channel)), e);
+      logger.error("Error opening block {} for request from {}", e,
+        MDC.of(LogKeys.STREAM_CHUNK_ID$.MODULE$, msg.streamChunkId),
+        MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)));
       respond(channel, new ChunkFetchFailure(msg.streamChunkId,
         Throwables.getStackTraceAsString(e)));
       return;
@@ -145,8 +151,10 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
       if (future.isSuccess()) {
         logger.trace("Sent result {} to client {}", result, remoteAddress);
       } else {
-        logger.error(String.format("Error sending result %s to %s; closing connection",
-          result, remoteAddress), future.cause());
+        logger.error("Error sending result {} to {}; closing connection",
+          future.cause(),
+          MDC.of(LogKeys.RESULT$.MODULE$, result),
+          MDC.of(LogKeys.HOST_PORT$.MODULE$, remoteAddress));
         channel.close();
       }
     });

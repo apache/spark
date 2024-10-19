@@ -34,17 +34,16 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatestplus.mockito.MockitoSugar
 
-import org.apache.spark.{SparkException, TestUtils}
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException, TestUtils}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Row, SaveMode}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Literal, Rand, Randn, Shuffle, Uuid}
 import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, LocalRelation}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Complete
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit}
-import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
+import org.apache.spark.sql.execution.exchange.{REQUIRED_BY_STATEFUL_OPERATOR, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{MemorySink, TestForeachWriter}
 import org.apache.spark.sql.functions._
@@ -1002,7 +1001,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
 
     val stream = MemoryStream[Int]
-    val df = stream.toDF().select(new Column(Uuid()))
+    val df = stream.toDF().select(uuid())
     testStream(df)(
       AddData(stream, 1),
       CheckAnswer(collectUuid),
@@ -1022,7 +1021,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
 
     val stream = MemoryStream[Int]
-    val df = stream.toDF().select(new Column(new Rand()), new Column(new Randn()))
+    val df = stream.toDF().select(rand(), randn())
     testStream(df)(
       AddData(stream, 1),
       CheckAnswer(collectRand),
@@ -1041,7 +1040,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
 
     val stream = MemoryStream[Int]
-    val df = stream.toDF().select(new Column(new Shuffle(Literal.create[Seq[Int]](0 until 100))))
+    val df = stream.toDF().select(shuffle(typedLit[Seq[Int]](0 until 100)))
     testStream(df)(
       AddData(stream, 1),
       CheckAnswer(collectShuffle),
@@ -1257,7 +1256,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       inputData2.toDF().createOrReplaceTempView("s2")
       val unioned = spark.sql(
         "select s1.value from s1 union select s2.value from s2")
-      checkExceptionMessage(unioned)
+      checkAppendOutputModeException(unioned)
     }
   }
 
@@ -1266,7 +1265,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     withTempView("deduptest") {
       inputData.toDF().toDF("value").createOrReplaceTempView("deduptest")
       val distinct = spark.sql("select distinct value from deduptest")
-      checkExceptionMessage(distinct)
+      checkAppendOutputModeException(distinct)
     }
   }
 
@@ -1364,16 +1363,127 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     )
   }
 
-  private def checkExceptionMessage(df: DataFrame): Unit = {
+  test("Collation aware streaming") {
+    withTable("parquet_streaming_tbl") {
+      spark.sql(
+        """
+          |CREATE TABLE parquet_streaming_tbl
+          |(
+          |  key STRING COLLATE UTF8_LCASE,
+          |  value_stream INTEGER
+          |) USING parquet""".stripMargin)
+
+      val streamDf = spark.readStream.table("parquet_streaming_tbl")
+      val filteredDf = streamDf.filter("key = 'aaa'")
+
+      val clock = new StreamManualClock()
+      testStream(filteredDf)(
+        StartStream(triggerClock = clock, trigger = Trigger.ProcessingTime(100)),
+        Execute { _ =>
+          spark.createDataFrame(Seq("aaa" -> 1, "AAA" -> 2, "bbb" -> 3, "aa" -> 4))
+            .toDF("key", "value_stream")
+            .write.format("parquet").mode(SaveMode.Append)
+            .saveAsTable("parquet_streaming_tbl")
+        },
+        AdvanceManualClock(150),
+        waitUntilBatchProcessed(clock),
+        CheckLastBatch(("aaa", 1), ("AAA", 2))
+      )
+    }
+  }
+
+  test("SPARK-47776: streaming aggregation having binary inequality column in the grouping " +
+    "key must be disallowed") {
+    val tableName = "parquet_dummy_tbl"
+    val collationName = "UTF8_LCASE"
+
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (c1 STRING COLLATE $collationName)
+           |USING PARQUET
+           |""".stripMargin)
+
+      sql(s"INSERT INTO $tableName VALUES ('aaa')")
+      sql(s"INSERT INTO $tableName VALUES ('AAA')")
+
+      val df = spark.readStream.table(tableName)
+        .groupBy("c1")
+        .count()
+
+      val query = df.writeStream
+        .format("memory")
+        .queryName("output")
+        .outputMode("update")
+        .start()
+
+      val ex = intercept[StreamingQueryException] {
+        query.processAllAvailable()
+      }
+      checkError(
+        ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
+        condition = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
+        parameters = Map(
+          "schema" -> ".+\"c1\":\"spark.UTF8_LCASE\".+"
+        ),
+        matchPVals = true
+      )
+    }
+  }
+
+  test("SPARK-48447: check state store provider class before invoking the constructor") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[Object].getCanonicalName) {
+      val input = MemoryStream[Int]
+      input.addData(1)
+      val query = input.toDF().limit(2).writeStream
+        .trigger(Trigger.AvailableNow())
+        .format("console")
+        .start()
+      val ex = intercept[StreamingQueryException] {
+        query.processAllAvailable()
+      }
+      assert(ex.getMessage.contains(
+        s"The given State Store Provider ${classOf[Object].getCanonicalName} does not " +
+          "extend org.apache.spark.sql.execution.streaming.state.StateStoreProvider."))
+    }
+  }
+
+  test("SPARK-49905 shuffle added by stateful operator should use the shuffle origin " +
+    "`REQUIRED_BY_STATEFUL_OPERATOR`") {
+    val inputData = MemoryStream[Int]
+
+    // Use the streaming aggregation as an example - all stateful operators are using the same
+    // distribution, named `StatefulOpClusteredDistribution`.
+    val df = inputData.toDF().groupBy("value").count()
+
+    testStream(df, OutputMode.Update())(
+      AddData(inputData, 1, 2, 3, 1, 2, 3),
+      CheckAnswer((1, 2), (2, 2), (3, 2)),
+      Execute { qe =>
+        val shuffleOpt = qe.lastExecution.executedPlan.collect {
+          case s: ShuffleExchangeExec => s
+        }
+
+        assert(shuffleOpt.nonEmpty, "No shuffle exchange found in the query plan")
+        assert(shuffleOpt.head.shuffleOrigin === REQUIRED_BY_STATEFUL_OPERATOR)
+      }
+    )
+  }
+
+  private def checkAppendOutputModeException(df: DataFrame): Unit = {
     withTempDir { outputDir =>
       withTempDir { checkpointDir =>
-        val exception = intercept[AnalysisException](
-          df.writeStream
-            .option("checkpointLocation", checkpointDir.getCanonicalPath)
-            .start(outputDir.getCanonicalPath))
-        assert(exception.getMessage.contains(
-          "Append output mode not supported when there are streaming aggregations on streaming " +
-            "DataFrames/DataSets without watermark"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            df.writeStream
+              .option("checkpointLocation", checkpointDir.getCanonicalPath)
+              .start(outputDir.getCanonicalPath)
+          },
+          condition = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
+          sqlState = "42KDE",
+          parameters = Map(
+            "outputMode" -> "append",
+            "operation" -> "streaming aggregations without watermark"))
       }
     }
   }

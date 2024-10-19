@@ -126,11 +126,23 @@ select encode('hello', 'WINDOWS-1252');
 select encode(scol, ecol) from values('hello', 'WINDOWS-1252') as t(scol, ecol);
 select encode('hello', 'Windows-xxx');
 select encode(scol, ecol) from values('hello', 'Windows-xxx') as t(scol, ecol);
+set spark.sql.legacy.codingErrorAction=true;
+select encode('渭城朝雨浥轻尘', 'US-ASCII');
+select encode(scol, ecol) from values('渭城朝雨浥轻尘', 'US-ASCII') as t(scol, ecol);
+set spark.sql.legacy.codingErrorAction=false;
+select encode('客舍青青柳色新', 'US-ASCII');
+select encode(scol, ecol) from values('客舍青青柳色新', 'US-ASCII') as t(scol, ecol);
+select encode(decode(encode('白日依山尽，黄河入海流。欲穷千里目，更上一层楼。', 'UTF-16'), 'UTF-16'), 'UTF-8');
+select encode(decode(encode('南山經之首曰䧿山。其首曰招搖之山，臨於西海之上。', 'UTF-16'), 'UTF-16'), 'UTF-8');
+select encode(decode(encode('세계에서 가장 인기 있는 빅데이터 처리 프레임워크인 Spark', 'UTF-16'), 'UTF-16'), 'UTF-8');
+select encode(decode(encode('το Spark είναι το πιο δημοφιλές πλαίσιο επεξεργασίας μεγάλων δεδομένων παγκοσμίως', 'UTF-16'), 'UTF-16'), 'UTF-8');
+select encode(decode(encode('Sparkは世界で最も人気のあるビッグデータ処理フレームワークである。', 'UTF-16'), 'UTF-16'), 'UTF-8');
 
 -- decode
 select decode();
 select decode(encode('abc', 'utf-8'));
 select decode(encode('abc', 'utf-8'), 'utf-8');
+select decode(encode('大千世界', 'utf-32'), 'utf-32');
 select decode(1, 1, 'Southlake');
 select decode(2, 1, 'Southlake');
 select decode(2, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
@@ -146,6 +158,12 @@ select decode(scol, ecol) from values(X'68656c6c6f', 'WINDOWS-1252') as t(scol, 
 set spark.sql.legacy.javaCharsets=false;
 select decode(X'68656c6c6f', 'WINDOWS-1252');
 select decode(scol, ecol) from values(X'68656c6c6f', 'WINDOWS-1252') as t(scol, ecol);
+set spark.sql.legacy.codingErrorAction=true;
+select decode(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII');
+select decode(scol, ecol) from values(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII') as t(scol, ecol);
+set spark.sql.legacy.codingErrorAction=false;
+select decode(X'E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII');
+select decode(scol, ecol) from values(X'E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII') as t(scol, ecol);
 
 -- contains
 SELECT CONTAINS(null, 'Spark');
@@ -275,3 +293,16 @@ select luhn_check(6011111111111117);
 select luhn_check(6011111111111118);
 select luhn_check(123.456);
 
+--utf8 string validation
+select is_valid_utf8('');
+select is_valid_utf8('abc');
+select is_valid_utf8(x'80');
+select make_valid_utf8('');
+select make_valid_utf8('abc');
+select make_valid_utf8(x'80');
+select validate_utf8('');
+select validate_utf8('abc');
+select validate_utf8(x'80');
+select try_validate_utf8('');
+select try_validate_utf8('abc');
+select try_validate_utf8(x'80');

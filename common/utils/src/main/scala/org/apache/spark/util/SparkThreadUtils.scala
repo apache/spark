@@ -42,10 +42,7 @@ private[spark] object SparkThreadUtils {
   @throws(classOf[SparkException])
   def awaitResult[T](awaitable: Awaitable[T], atMost: Duration): T = {
     try {
-      // `awaitPermission` is not actually used anywhere so it's safe to pass in null here.
-      // See SPARK-13747.
-      val awaitPermission = null.asInstanceOf[scala.concurrent.CanAwait]
-      awaitable.result(atMost)(awaitPermission)
+      awaitResultNoSparkExceptionConversion(awaitable, atMost)
     } catch {
       case e: SparkFatalException =>
         throw e.throwable
@@ -55,6 +52,13 @@ private[spark] object SparkThreadUtils {
         if !t.isInstanceOf[TimeoutException] =>
         throw new SparkException("Exception thrown in awaitResult: ", t)
     }
+  }
+
+  def awaitResultNoSparkExceptionConversion[T](awaitable: Awaitable[T], atMost: Duration): T = {
+    // `awaitPermission` is not actually used anywhere so it's safe to pass in null here.
+    // See SPARK-13747.
+    val awaitPermission = null.asInstanceOf[scala.concurrent.CanAwait]
+    awaitable.result(atMost)(awaitPermission)
   }
   // scalastyle:on awaitresult
 }

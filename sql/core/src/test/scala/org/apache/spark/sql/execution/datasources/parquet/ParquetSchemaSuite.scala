@@ -27,7 +27,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.functions.desc
@@ -989,7 +989,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         exception = intercept[SparkException] {
           spark.read.option("mergeSchema", "true").parquet(path)
         },
-        errorClass = "CANNOT_MERGE_SCHEMAS",
+        condition = "CANNOT_MERGE_SCHEMAS",
         sqlState = "42KD9",
         parameters = Map(
           "left" -> toSQLType(df1.schema),
@@ -1041,48 +1041,39 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     withTempPath { dir =>
       val e = testSchemaMismatch(dir.getCanonicalPath, vectorizedReaderEnabled = false)
       val expectedMessage = "Encountered error while reading file"
-      assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getCause.isInstanceOf[ParquetDecodingException])
-      assert(e.getCause.getMessage.contains(expectedMessage))
+      assert(e.getCause.isInstanceOf[ParquetDecodingException])
+      assert(e.getMessage.contains(expectedMessage))
     }
   }
 
   test("schema mismatch failure error message for parquet vectorized reader") {
     withTempPath { dir =>
       val e = testSchemaMismatch(dir.getCanonicalPath, vectorizedReaderEnabled = true)
-      assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
-
-      // Check if the physical type is reporting correctly
-      val errMsg = e.getCause.getMessage
-      assert(errMsg.startsWith("Parquet column cannot be converted in file"))
-      val file = errMsg.substring("Parquet column cannot be converted in file ".length,
-        errMsg.indexOf(". "))
+      assert(e.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
+      val file = e.getMessageParameters.get("path")
       val col = spark.read.parquet(file).schema.fields.filter(_.name == "a")
       assert(col.length == 1)
       if (col(0).dataType == StringType) {
-        checkError(
-          exception = e.getCause.asInstanceOf[SparkException],
-          errorClass = "_LEGACY_ERROR_TEMP_2063",
+        checkErrorMatchPVals(
+          exception = e,
+          condition = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
           parameters = Map(
-            "filePath" ->
-              s".*${dir.getCanonicalPath}.*",
+            "path" -> s".*${dir.getCanonicalPath}.*",
             "column" -> "\\[a\\]",
-            "logicalType" -> "int",
-            "physicalType" -> "BINARY"),
-          matchPVals = true
+            "expectedType" -> "int",
+            "actualType" -> "BINARY"
+          )
         )
       } else {
-        checkError(
-          exception = e.getCause.asInstanceOf[SparkException],
-          errorClass = "_LEGACY_ERROR_TEMP_2063",
+        checkErrorMatchPVals(
+          exception = e,
+          condition = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
           parameters = Map(
-            "filePath" ->
-              s".*${dir.getCanonicalPath}.*",
+            "path" -> s".*${dir.getCanonicalPath}.*",
             "column" -> "\\[a\\]",
-            "logicalType" -> "string",
-            "physicalType" -> "INT32"),
-          matchPVals = true
+            "expectedType" -> "string",
+            "actualType" -> "INT32"
+          )
         )
       }
     }
@@ -1103,8 +1094,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         val e = intercept[SparkException] {
           spark.read.schema(df2.schema).parquet(s"$path/parquet").collect()
         }
-        assert(e.getCause.isInstanceOf[SparkException])
-        assert(e.getCause.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
+        assert(e.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
       }
     }
   }
@@ -1121,10 +1111,37 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
   test("SPARK-40819: parquet file with TIMESTAMP(NANOS, true) (with default nanosAsLong=false)") {
     val testDataPath = testFile("test-data/timestamp-nanos.parquet")
-    val e = intercept[org.apache.spark.SparkException] {
-      spark.read.parquet(testDataPath).collect()
-    }
-    assert(e.getMessage.contains("Illegal Parquet type: INT64 (TIMESTAMP(NANOS,true))."))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.read.parquet(testDataPath).collect()
+      },
+      condition = "PARQUET_TYPE_ILLEGAL",
+      parameters = Map("parquetType" -> "INT64 (TIMESTAMP(NANOS,true))")
+    )
+  }
+
+  test("SPARK-47261: parquet file with unsupported type") {
+    val testDataPath = testFile("test-data/interval-using-fixed-len-byte-array.parquet")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.read.parquet(testDataPath).collect()
+      },
+      condition = "PARQUET_TYPE_NOT_SUPPORTED",
+      parameters = Map("parquetType" -> "FIXED_LEN_BYTE_ARRAY (INTERVAL)")
+    )
+  }
+
+  test("SPARK-47261: parquet file with unrecognized parquet type") {
+    val testDataPath = testFile("test-data/group-field-with-enum-as-logical-annotation.parquet")
+    val expectedParameter = "required group my_list (ENUM) {\n  repeated group list {\n" +
+      "    optional binary element (STRING);\n  }\n}"
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.read.parquet(testDataPath).collect()
+      },
+      condition = "PARQUET_TYPE_NOT_RECOGNIZED",
+      parameters = Map("field" -> expectedParameter)
+    )
   }
 
   // =======================================================

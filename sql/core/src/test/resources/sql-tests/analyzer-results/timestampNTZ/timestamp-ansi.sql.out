@@ -237,7 +237,7 @@ create temporary view ttf1 as select * from values
 CreateViewCommand `ttf1`, select * from values
   (1, 2),
   (2, 3)
-  as ttf1(`current_date`, `current_timestamp`), false, false, LocalTempView, true
+  as ttf1(`current_date`, `current_timestamp`), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [current_date#x, current_timestamp#x]
       +- SubqueryAlias ttf1
          +- LocalRelation [current_date#x, current_timestamp#x]
@@ -248,7 +248,7 @@ select typeof(current_date), typeof(current_timestamp) from ttf1
 -- !query analysis
 Project [typeof(current_date#x) AS typeof(current_date)#x, typeof(current_timestamp#x) AS typeof(current_timestamp)#x]
 +- SubqueryAlias ttf1
-   +- View (`ttf1`, [current_date#x,current_timestamp#x])
+   +- View (`ttf1`, [current_date#x, current_timestamp#x])
       +- Project [cast(current_date#x as int) AS current_date#x, cast(current_timestamp#x as int) AS current_timestamp#x]
          +- Project [current_date#x, current_timestamp#x]
             +- SubqueryAlias ttf1
@@ -264,7 +264,7 @@ create temporary view ttf2 as select * from values
 CreateViewCommand `ttf2`, select * from values
   (1, 2),
   (2, 3)
-  as ttf2(a, b), false, false, LocalTempView, true
+  as ttf2(a, b), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias ttf2
          +- LocalRelation [a#x, b#x]
@@ -579,7 +579,7 @@ select null - timestamp'2011-11-11 11:11:11'
 -- !query
 create temporary view ts_view as select '2011-11-11 11:11:11' str
 -- !query analysis
-CreateViewCommand `ts_view`, select '2011-11-11 11:11:11' str, false, false, LocalTempView, true
+CreateViewCommand `ts_view`, select '2011-11-11 11:11:11' str, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [2011-11-11 11:11:11 AS str#x]
       +- OneRowRelation
 
@@ -745,7 +745,7 @@ Project [unix_timestamp(22 05 2020 Friday, dd MM yyyy EEEEE, Some(America/Los_An
 -- !query
 select from_json('{"t":"26/October/2015"}', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'))
 -- !query analysis
-Project [from_json(StructField(t,TimestampNTZType,true), (timestampFormat,dd/MMMMM/yyyy), {"t":"26/October/2015"}, Some(America/Los_Angeles)) AS from_json({"t":"26/October/2015"})#x]
+Project [from_json(StructField(t,TimestampNTZType,true), (timestampFormat,dd/MMMMM/yyyy), {"t":"26/October/2015"}, Some(America/Los_Angeles), false) AS from_json({"t":"26/October/2015"})#x]
 +- OneRowRelation
 
 

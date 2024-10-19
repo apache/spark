@@ -19,11 +19,12 @@ package org.apache.spark.streaming.scheduler
 
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
+import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
 import scala.util.Failure
 
 import org.apache.spark.ExecutorAllocationClient
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.io.SparkHadoopWriterUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
@@ -123,17 +124,15 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
 
     // Stop the executor for receiving new jobs
     logDebug("Stopping job executor")
-    jobExecutor.shutdown()
 
     // Wait for the queued jobs to complete if indicated
-    val terminated = if (processAllReceivedData) {
-      jobExecutor.awaitTermination(1, TimeUnit.HOURS)  // just a very large period of time
+    if (processAllReceivedData) {
+      // just a very large period of time
+      ThreadUtils.shutdown(jobExecutor, FiniteDuration(1, TimeUnit.HOURS))
     } else {
-      jobExecutor.awaitTermination(2, TimeUnit.SECONDS)
+      ThreadUtils.shutdown(jobExecutor, FiniteDuration(2, TimeUnit.SECONDS))
     }
-    if (!terminated) {
-      jobExecutor.shutdownNow()
-    }
+
     logDebug("Stopped job executor")
 
     // Stop everything else
@@ -145,12 +144,12 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
 
   def submitJobSet(jobSet: JobSet): Unit = {
     if (jobSet.jobs.isEmpty) {
-      logInfo("No jobs added for time " + jobSet.time)
+      logInfo(log"No jobs added for time ${MDC(LogKeys.TIME, jobSet.time)}")
     } else {
       listenerBus.post(StreamingListenerBatchSubmitted(jobSet.toBatchInfo))
       jobSets.put(jobSet.time, jobSet)
       jobSet.jobs.foreach(job => jobExecutor.execute(new JobHandler(job)))
-      logInfo("Added jobs for time " + jobSet.time)
+      logInfo(log"Added jobs for time ${MDC(LogKeys.TIME, jobSet.time)}")
     }
   }
 
@@ -190,7 +189,8 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     }
     job.setStartTime(startTime)
     listenerBus.post(StreamingListenerOutputOperationStarted(job.toOutputOperationInfo))
-    logInfo("Starting job " + job.id + " from job set of time " + jobSet.time)
+    logInfo(log"Starting job ${MDC(LogKeys.JOB_ID, job.id)} from job set of time " +
+      log"${MDC(LogKeys.TIME, jobSet.time)}")
   }
 
   private def handleJobCompletion(job: Job, completedTime: Long): Unit = {
@@ -198,7 +198,8 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     jobSet.handleJobCompletion(job)
     job.setEndTime(completedTime)
     listenerBus.post(StreamingListenerOutputOperationCompleted(job.toOutputOperationInfo))
-    logInfo("Finished job " + job.id + " from job set of time " + jobSet.time)
+    logInfo(log"Finished job ${MDC(LogKeys.JOB_ID, job.id)} from job set of time " +
+      log"${MDC(LogKeys.TIME, jobSet.time)}")
     if (jobSet.hasCompleted) {
       listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo))
     }

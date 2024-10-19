@@ -32,8 +32,11 @@ class ErrorsTest(unittest.TestCase):
         for i in range(len(error_class_names) - 1):
             self.assertTrue(
                 error_class_names[i] < error_class_names[i + 1],
-                f"Error class [{error_class_names[i]}] should place"
-                f"after [{error_class_names[i + 1]}]",
+                f"Error class [{error_class_names[i]}] should place "
+                f"after [{error_class_names[i + 1]}]."
+                "\n\nRun 'cd $SPARK_HOME; bin/pyspark' and "
+                "'from pyspark.errors.exceptions import _write_self; _write_self()' "
+                "to automatically sort them.",
             )
 
     def test_error_classes_duplicated(self):
@@ -49,7 +52,7 @@ class ErrorsTest(unittest.TestCase):
 
     def test_invalid_error_class(self):
         with self.assertRaisesRegex(ValueError, "Cannot find main error class"):
-            PySparkValueError(error_class="invalid", message_parameters={})
+            PySparkValueError(errorClass="invalid", messageParameters={})
 
 
 if __name__ == "__main__":

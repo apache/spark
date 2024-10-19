@@ -20,7 +20,8 @@ package org.apache.spark.storage
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 
 import org.apache.spark.{MapOutputTracker, SparkEnv}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.LogKeys.{BLOCK_ID, BROADCAST_ID, RDD_ID, SHUFFLE_ID}
 import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEnv}
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -44,29 +45,35 @@ class BlockManagerStorageEndpoint(
   // Operations that involve removing blocks may be slow and should be done asynchronously
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RemoveBlock(blockId) =>
-      doAsync[Boolean]("removing block " + blockId, context) {
+      doAsync[Boolean](log"removing block ${MDC(BLOCK_ID, blockId)}", context) {
         blockManager.removeBlock(blockId)
         true
       }
 
     case RemoveRdd(rddId) =>
-      doAsync[Int]("removing RDD " + rddId, context) {
+      doAsync[Int](log"removing RDD ${MDC(RDD_ID, rddId)}", context) {
         blockManager.removeRdd(rddId)
       }
 
     case RemoveShuffle(shuffleId) =>
-      doAsync[Boolean]("removing shuffle " + shuffleId, context) {
+      doAsync[Boolean](log"removing shuffle ${MDC(SHUFFLE_ID, shuffleId)}", context) {
         if (mapOutputTracker != null) {
           mapOutputTracker.unregisterShuffle(shuffleId)
         }
-        SparkEnv.get.shuffleManager.unregisterShuffle(shuffleId)
+        val shuffleManager = SparkEnv.get.shuffleManager
+        if (shuffleManager != null) {
+          shuffleManager.unregisterShuffle(shuffleId)
+        } else {
+          logDebug(log"Ignore remove shuffle ${MDC(SHUFFLE_ID, shuffleId)}")
+          true
+        }
       }
 
     case DecommissionBlockManager =>
       context.reply(blockManager.decommissionSelf())
 
     case RemoveBroadcast(broadcastId, _) =>
-      doAsync[Int]("removing broadcast " + broadcastId, context) {
+      doAsync[Int](log"removing broadcast ${MDC(BROADCAST_ID, broadcastId)}", context) {
         blockManager.removeBroadcast(broadcastId, tellMaster = true)
       }
 
@@ -96,18 +103,20 @@ class BlockManagerStorageEndpoint(
       context.reply(blockManager.blockInfoManager.tryMarkBlockAsVisible(blockId))
   }
 
-  private def doAsync[T](actionMessage: String, context: RpcCallContext)(body: => T): Unit = {
+  private def doAsync[T](
+      actionMessage: MessageWithContext,
+      context: RpcCallContext)(body: => T): Unit = {
     val future = Future {
-      logDebug(actionMessage)
+      logDebug(actionMessage.message)
       body
     }
     future.foreach { response =>
-      logDebug(s"Done $actionMessage, response is $response")
+      logDebug(s"Done ${actionMessage.message}, response is $response")
       context.reply(response)
       logDebug(s"Sent response: $response to ${context.senderAddress}")
     }
     future.failed.foreach { t =>
-      logError(s"Error in $actionMessage", t)
+      logError(log"Error in " + actionMessage, t)
       context.sendFailure(t)
     }
   }

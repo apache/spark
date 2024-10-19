@@ -25,6 +25,7 @@ on:
 
 jobs:
   stale:
+    if: github.repository == 'apache/spark'
     runs-on: ubuntu-latest
     steps:
     - uses: actions/stale@c201d45ef4b0ccbd3bb0616f93bae13e73d0a080 # pin@v1.1.0

@@ -18,7 +18,7 @@ package org.apache.spark.sql.protobuf
 
 import scala.jdk.CollectionConverters._
 
-import com.google.protobuf.{Duration, DynamicMessage, Timestamp, WireFormat}
+import com.google.protobuf.{BoolValue, ByteString, BytesValue, DoubleValue, Duration, DynamicMessage, FloatValue, Int32Value, Int64Value, StringValue, Timestamp, UInt32Value, UInt64Value, WireFormat}
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
 
@@ -172,6 +172,52 @@ private[sql] class ProtobufSerializer(
           // `ArrayList` backed by the specified array without data copying.
           java.util.Arrays.asList(result: _*)
         }
+
+      // Handle serializing primitives back into well known wrapper types.
+      case (BooleanType, MESSAGE)
+        if fieldDescriptor.getMessageType.getFullName == BoolValue.getDescriptor.getFullName =>
+        (getter, ordinal) =>
+          BoolValue.of(getter.getBoolean(ordinal))
+
+      case (IntegerType, MESSAGE)
+        if fieldDescriptor.getMessageType.getFullName == Int32Value.getDescriptor.getFullName =>
+        (getter, ordinal) =>
+          Int32Value.of(getter.getInt(ordinal))
+
+      case (IntegerType, MESSAGE)
+        if fieldDescriptor.getMessageType.getFullName == UInt32Value.getDescriptor.getFullName =>
+        (getter, ordinal) =>
+          UInt32Value.of(getter.getInt(ordinal))
+
+      case (LongType, MESSAGE)
+        if fieldDescriptor.getMessageType.getFullName == Int64Value.getDescriptor.getFullName =>
+        (getter, ordinal) =>
+          Int64Value.of(getter.getLong(ordinal))
+
+      case (LongType, MESSAGE)
+        if fieldDescriptor.getMessageType.getFullName == UInt64Value.getDescriptor.getFullName =>
+        (getter, ordinal) =>
+          UInt64Value.of(getter.getLong(ordinal))
+
+      case (StringType, MESSAGE)
+        if fieldDescriptor.getMessageType.getFullName == StringValue.getDescriptor.getFullName =>
+        (getter, ordinal) =>
+          StringValue.of(getter.getUTF8String(ordinal).toString)
+
+      case (BinaryType, MESSAGE)
+        if fieldDescriptor.getMessageType.getFullName == BytesValue.getDescriptor.getFullName =>
+        (getter, ordinal) =>
+          BytesValue.of(ByteString.copyFrom(getter.getBinary(ordinal)))
+
+      case (FloatType, MESSAGE)
+        if fieldDescriptor.getMessageType.getFullName == FloatValue.getDescriptor.getFullName =>
+        (getter, ordinal) =>
+          FloatValue.of(getter.getFloat(ordinal))
+
+      case (DoubleType, MESSAGE)
+        if fieldDescriptor.getMessageType.getFullName == DoubleValue.getDescriptor.getFullName =>
+        (getter, ordinal) =>
+          DoubleValue.of(getter.getDouble(ordinal))
 
       case (st: StructType, MESSAGE) =>
         val structConverter =

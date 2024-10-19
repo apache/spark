@@ -22,7 +22,7 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.errors import PySparkValueError
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -544,8 +544,8 @@ class SeriesComputeMixin:
 
         self.check_error(
             exception=ctx.exception,
-            error_class="VALUE_NOT_ALLOWED",
-            message_parameters={
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={
                 "arg_name": "inclusive",
                 "allowed_values": str(["left", "right", "both", "neither"]),
             },
@@ -575,7 +575,11 @@ class SeriesComputeMixin:
         )
 
 
-class SeriesComputeTests(SeriesComputeMixin, ComparisonTestBase, SQLTestUtils):
+class SeriesComputeTests(
+    SeriesComputeMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

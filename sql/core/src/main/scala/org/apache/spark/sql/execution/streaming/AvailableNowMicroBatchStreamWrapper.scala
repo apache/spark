@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory}
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.MicroBatchStream
@@ -29,8 +30,8 @@ import org.apache.spark.sql.connector.read.streaming.MicroBatchStream
 class AvailableNowMicroBatchStreamWrapper(delegate: MicroBatchStream)
   extends AvailableNowDataStreamWrapper(delegate) with MicroBatchStream {
 
-  override def latestOffset(): streaming.Offset = throw new UnsupportedOperationException(
-    "latestOffset(Offset, ReadLimit) should be called instead of this method")
+  override def latestOffset(): streaming.Offset =
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3166")
 
   override def planInputPartitions(start: streaming.Offset, end: streaming.Offset):
   Array[InputPartition] = delegate.planInputPartitions(start, end)

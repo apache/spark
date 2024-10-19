@@ -4,6 +4,7 @@
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=true
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
+--ONLY_IF spark
 
 CREATE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
   (100, "emp 1", date "2005-01-01", 100.00D, 10),
@@ -125,3 +126,49 @@ FROM BONUS
 WHERE EXISTS(SELECT RANK() OVER (PARTITION BY hiredate ORDER BY salary) AS s
                     FROM EMP, DEPT where EMP.dept_id = DEPT.dept_id
                         AND DEPT.dept_name < BONUS.emp_name);
+
+-- SPARK-46468: Aggregate always returns 1 row, so EXISTS is always true.
+SELECT tt1.emp_name
+FROM EMP as tt1
+WHERE EXISTS (
+  select max(tt2.id)
+  from EMP as tt2
+  where tt1.emp_name is null
+);
+
+-- Plain exists subquery with a top-level aggregation
+SELECT
+  emp.dept_id,
+  EXISTS (SELECT dept.dept_id FROM dept)
+FROM emp
+GROUP BY emp.dept_id ORDER BY emp.dept_id;
+
+-- Correlated exists subquery with a top-level aggregation
+SELECT
+  emp.dept_id,
+  EXISTS (SELECT dept.dept_id FROM dept)
+FROM emp
+GROUP BY emp.dept_id ORDER BY emp.dept_id;
+
+-- Correlated exists subquery with a top-level aggregation
+SELECT
+  emp.dept_id,
+  NOT EXISTS (SELECT dept.dept_id FROM dept)
+FROM emp
+GROUP BY emp.dept_id ORDER BY emp.dept_id;
+
+-- Correlated exists subquery with a top-level aggregation
+SELECT
+  emp.dept_id,
+  SUM(
+    CASE WHEN EXISTS (SELECT dept.dept_id FROM dept WHERE dept.dept_id = emp.dept_id) THEN 1
+    ELSE 0 END)
+FROM emp
+GROUP BY emp.dept_id ORDER BY emp.dept_id;
+
+---- Grouping expression contains a subquery
+SELECT
+ cast(EXISTS (SELECT id FROM dept where dept.dept_id = emp.dept_id) AS int)
+FROM emp
+GROUP BY
+ cast(EXISTS (SELECT id FROM dept where dept.dept_id = emp.dept_id) AS int)

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, NamedTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkSchemaUtils
 
@@ -293,4 +293,31 @@ private[spark] object SchemaUtils {
    * @return The escaped string.
    */
   def escapeMetaCharacters(str: String): String = SparkSchemaUtils.escapeMetaCharacters(str)
+
+  /**
+   * Checks if a given data type has a non utf8 binary (implicit) collation type.
+   */
+  def hasNonUTF8BinaryCollation(dt: DataType): Boolean = {
+    dt.existsRecursively {
+      case st: StringType => !st.isUTF8BinaryCollation
+      case _ => false
+    }
+  }
+
+  /**
+   * Replaces any collated string type with non collated StringType
+   * recursively in the given data type.
+   */
+  def replaceCollatedStringWithString(dt: DataType): DataType = dt match {
+    case ArrayType(et, nullable) =>
+      ArrayType(replaceCollatedStringWithString(et), nullable)
+    case MapType(kt, vt, nullable) =>
+      MapType(replaceCollatedStringWithString(kt), replaceCollatedStringWithString(vt), nullable)
+    case StructType(fields) =>
+      StructType(fields.map { field =>
+        field.copy(dataType = replaceCollatedStringWithString(field.dataType))
+      })
+    case _: StringType => StringType
+    case _ => dt
+  }
 }

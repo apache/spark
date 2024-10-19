@@ -22,8 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.catalog.CatalogTableType
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, DelegatingCatalogExtension, Identifier, Table, TableCatalog, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, DelegatingCatalogExtension, Identifier, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
 
@@ -53,14 +52,10 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
     if (tables.containsKey(ident)) {
       tables.get(ident)
     } else {
-      // Table was created through the built-in catalog
-      super.loadTable(ident) match {
-        case v1Table: V1Table if v1Table.v1Table.tableType == CatalogTableType.VIEW => v1Table
-        case t =>
-          val table = newTable(t.name(), t.schema(), t.partitioning(), t.properties())
-          addTable(ident, table)
-          table
-      }
+      // Table was created through the built-in catalog via v1 command, this is OK as the
+      // `loadTable` should always be invoked, and we set the `tableCreated` to pass validation.
+      tableCreated.set(true)
+      super.loadTable(ident)
     }
   }
 
@@ -69,31 +64,27 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
       columns: Array[Column],
       partitions: Array[Transform],
       properties: java.util.Map[String, String]): Table = {
-    createTable(ident, CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties)
-  }
-
-  // TODO: remove it when no tests calling this deprecated method.
-  override def createTable(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: java.util.Map[String, String]): Table = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
     val key = TestV2SessionCatalogBase.SIMULATE_ALLOW_EXTERNAL_PROPERTY
-    val propsWithLocation = if (properties.containsKey(key)) {
+    val newProps = new java.util.HashMap[String, String]()
+    newProps.putAll(properties)
+    if (properties.containsKey(TableCatalog.PROP_LOCATION)) {
+      newProps.put(TableCatalog.PROP_EXTERNAL, "true")
+    }
+
+    val propsWithLocation = if (newProps.containsKey(key)) {
       // Always set a location so that CREATE EXTERNAL TABLE won't fail with LOCATION not specified.
-      if (!properties.containsKey(TableCatalog.PROP_LOCATION)) {
-        val newProps = new java.util.HashMap[String, String]()
-        newProps.putAll(properties)
+      if (!newProps.containsKey(TableCatalog.PROP_LOCATION)) {
         newProps.put(TableCatalog.PROP_LOCATION, "file:/abc")
         newProps
       } else {
-        properties
+        newProps
       }
     } else {
-      properties
+      newProps
     }
-    super.createTable(ident, schema, partitions, propsWithLocation)
+    super.createTable(ident, columns, partitions, propsWithLocation)
+    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
     val t = newTable(ident.quoted, schema, partitions, propsWithLocation)
     addTable(ident, t)
     t

@@ -52,7 +52,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_UNSUPPORTED",
-  "sqlState" : "ID001",
+  "sqlState" : "42K0K",
   "messageParameters" : {
     "funcName" : "`mode`"
   },
@@ -103,7 +103,7 @@ org.apache.spark.sql.AnalysisException
     "functionName" : "`mode`",
     "inputSql" : "\"true\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
@@ -182,15 +182,9 @@ struct<mode(col):map<int,string>>
 -- !query
 SELECT mode(col, true) FROM VALUES (map(1, 'a')) AS tab(col)
 -- !query schema
-struct<>
+struct<mode() WITHIN GROUP (ORDER BY col DESC):map<int,string>>
 -- !query output
-org.apache.spark.SparkIllegalArgumentException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_2005",
-  "messageParameters" : {
-    "dataType" : "PhysicalMapType"
-  }
-}
+{1:"a"}
 
 
 -- !query
@@ -380,7 +374,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_UNSUPPORTED",
-  "sqlState" : "ID001",
+  "sqlState" : "42K0K",
   "messageParameters" : {
     "funcName" : "`mode`"
   },
@@ -404,7 +398,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WITHIN_GROUP_MISSING",
-  "sqlState" : "ID001",
+  "sqlState" : "42K0K",
   "messageParameters" : {
     "funcName" : "`mode`"
   },
@@ -428,7 +422,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WRONG_NUM_ORDERINGS",
-  "sqlState" : "ID001",
+  "sqlState" : "42K0K",
   "messageParameters" : {
     "actualNum" : "1",
     "expectedNum" : "0",

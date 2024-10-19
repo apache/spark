@@ -11,6 +11,8 @@ create or replace temporary view nested as values
 
 -- Only allow lambda's in higher order functions.
 select upper(x -> x) as v;
+-- Also test functions registered with `ExpressionBuilder`.
+select ceil(x -> x) as v;
 
 -- Identity transform an array
 select transform(zs, z -> z) as v from nested;

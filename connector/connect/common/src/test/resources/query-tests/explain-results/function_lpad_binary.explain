@@ -1,2 +1,0 @@
-Project [staticinvoke(class org.apache.spark.unsafe.types.ByteArray, BinaryType, lpad, bytes#0, 5, 0x0C0A0F0E, BinaryType, IntegerType, BinaryType, true, false, true) AS lpad(bytes, 5, X'0C0A0F0E')#0]
-+- LocalRelation <empty>, [id#0L, bytes#0]

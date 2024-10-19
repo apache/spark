@@ -21,8 +21,6 @@ import unittest
 from dataclasses import dataclass
 from typing import Iterator, Optional
 
-from py4j.protocol import Py4JJavaError
-
 from pyspark.errors import (
     PySparkAttributeError,
     PythonException,
@@ -30,8 +28,7 @@ from pyspark.errors import (
     AnalysisException,
     PySparkPicklingError,
 )
-from pyspark.files import SparkFiles
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.sql.functions import (
     array,
     create_map,
@@ -408,7 +405,7 @@ class BaseUDTFTestsMixin:
         )
 
     def test_udtf_cleanup_with_exception_in_eval(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_udtf_cleanup_with_exception_in_eval") as d:
             path = os.path.join(d, "file.txt")
 
             @udtf(returnType="x: int")
@@ -437,7 +434,9 @@ class BaseUDTFTestsMixin:
             self.assertEqual(data, "cleanup")
 
     def test_udtf_cleanup_with_exception_in_terminate(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(
+            prefix="test_udtf_cleanup_with_exception_in_terminate"
+        ) as d:
             path = os.path.join(d, "file.txt")
 
             @udtf(returnType="x: int")
@@ -580,8 +579,8 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="UDTF_RETURN_TYPE_MISMATCH",
-            message_parameters={"name": "TestUDTF", "return_type": "IntegerType()"},
+            errorClass="UDTF_RETURN_TYPE_MISMATCH",
+            messageParameters={"name": "TestUDTF", "return_type": "IntegerType()"},
         )
 
         @udtf(returnType=MapType(StringType(), IntegerType()))
@@ -594,8 +593,8 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="UDTF_RETURN_TYPE_MISMATCH",
-            message_parameters={
+            errorClass="UDTF_RETURN_TYPE_MISMATCH",
+            messageParameters={
                 "name": "TestUDTF",
                 "return_type": "MapType(StringType(), IntegerType(), True)",
             },
@@ -622,9 +621,9 @@ class BaseUDTFTestsMixin:
                 yield str(args),
 
         self.spark.udtf.register("test_udtf", TestUDTF)
-        self.assertEqual(
+        self.assertIn(
             self.spark.sql("select * from test_udtf(array(1, 2, 3))").collect(),
-            [Row(x="[1, 2, 3]")],
+            [[Row(x="[1, 2, 3]")], [Row(x="[np.int32(1), np.int32(2), np.int32(3)]")]],
         )
 
     def test_udtf_with_map_input_type(self):
@@ -856,6 +855,8 @@ class BaseUDTFTestsMixin:
                 self._check_result_or_exception(TestUDTF, ret_type, expected)
 
     def test_struct_output_type_casting_row(self):
+        from py4j.protocol import Py4JJavaError
+
         self.check_struct_output_type_casting_row(Py4JJavaError)
 
     def check_struct_output_type_casting_row(self, error_type):
@@ -934,15 +935,28 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="INVALID_UDTF_EVAL_TYPE",
-            message_parameters={
+            errorClass="CANNOT_REGISTER_UDTF",
+            messageParameters={
                 "name": "test_udf",
-                "eval_type": "SQL_TABLE_UDF, SQL_ARROW_TABLE_UDF",
+            },
+        )
+
+        class TestUDTF:
+            ...
+
+        with self.assertRaises(PySparkTypeError) as e:
+            self.spark.udtf.register("test_udtf", TestUDTF)
+
+        self.check_error(
+            exception=e.exception,
+            errorClass="CANNOT_REGISTER_UDTF",
+            messageParameters={
+                "name": "test_udtf",
             },
         )
 
     def test_udtf_pickle_error(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_udtf_pickle_error") as d:
             file = os.path.join(d, "file.txt")
             file_obj = open(file, "w")
 
@@ -977,8 +991,8 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="INVALID_UDTF_NO_EVAL",
-            message_parameters={"name": "TestUDTF"},
+            errorClass="INVALID_UDTF_NO_EVAL",
+            messageParameters={"name": "TestUDTF"},
         )
 
     def test_udtf_with_no_handler_class(self):
@@ -990,8 +1004,8 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="INVALID_UDTF_HANDLER_TYPE",
-            message_parameters={"type": "function"},
+            errorClass="INVALID_UDTF_HANDLER_TYPE",
+            messageParameters={"type": "function"},
         )
 
         with self.assertRaises(PySparkTypeError) as e:
@@ -999,8 +1013,8 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="INVALID_UDTF_HANDLER_TYPE",
-            message_parameters={"type": "int"},
+            errorClass="INVALID_UDTF_HANDLER_TYPE",
+            messageParameters={"type": "int"},
         )
 
     def test_udtf_with_table_argument_query(self):
@@ -1247,6 +1261,7 @@ class BaseUDTFTestsMixin:
                 assert isinstance(a.dataType, DataType)
                 assert a.value is not None
                 assert a.isTable is False
+                assert a.isConstantExpression is True
                 return AnalyzeResult(StructType().add("a", a.dataType))
 
             def eval(self, a):
@@ -1400,6 +1415,7 @@ class BaseUDTFTestsMixin:
                 assert isinstance(a.dataType, StructType)
                 assert a.value is None
                 assert a.isTable is True
+                assert a.isConstantExpression is False
                 return AnalyzeResult(StructType().add("a", a.dataType[0].dataType))
 
             def eval(self, a: Row):
@@ -1419,6 +1435,7 @@ class BaseUDTFTestsMixin:
             def analyze(a: AnalyzeArgument) -> AnalyzeResult:
                 assert isinstance(a.dataType, StructType)
                 assert a.isTable is True
+                assert a.isConstantExpression is False
                 return AnalyzeResult(a.dataType.add("is_even", BooleanType()))
 
             def eval(self, a: Row):
@@ -1524,8 +1541,8 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE",
-            message_parameters={"name": "TestUDTF"},
+            errorClass="INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE",
+            messageParameters={"name": "TestUDTF"},
         )
 
     def test_udtf_with_neither_return_type_nor_analyze(self):
@@ -1538,8 +1555,8 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="INVALID_UDTF_RETURN_TYPE",
-            message_parameters={"name": "TestUDTF"},
+            errorClass="INVALID_UDTF_RETURN_TYPE",
+            messageParameters={"name": "TestUDTF"},
         )
 
     def test_udtf_with_analyze_non_staticmethod(self):
@@ -1555,8 +1572,8 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="INVALID_UDTF_RETURN_TYPE",
-            message_parameters={"name": "TestUDTF"},
+            errorClass="INVALID_UDTF_RETURN_TYPE",
+            messageParameters={"name": "TestUDTF"},
         )
 
         with self.assertRaises(PySparkAttributeError) as e:
@@ -1564,8 +1581,8 @@ class BaseUDTFTestsMixin:
 
         self.check_error(
             exception=e.exception,
-            error_class="INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE",
-            message_parameters={"name": "TestUDTF"},
+            errorClass="INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE",
+            messageParameters={"name": "TestUDTF"},
         )
 
     def test_udtf_with_analyze_returning_non_struct(self):
@@ -1715,7 +1732,7 @@ class BaseUDTFTestsMixin:
         self.sc.addPyFile(path)
 
     def test_udtf_with_analyze_using_pyfile(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_udtf_with_analyze_using_pyfile") as d:
             pyfile_path = os.path.join(d, "my_pyfile.py")
             with open(pyfile_path, "w") as f:
                 f.write("my_func = lambda: 'col1'")
@@ -1752,7 +1769,7 @@ class BaseUDTFTestsMixin:
                     assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
 
     def test_udtf_with_analyze_using_zipped_package(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_udtf_with_analyze_using_zipped_package") as d:
             package_path = os.path.join(d, "my_zipfile")
             os.mkdir(package_path)
             pyfile_path = os.path.join(package_path, "__init__.py")
@@ -1795,7 +1812,12 @@ class BaseUDTFTestsMixin:
         self.sc.addArchive(path)
 
     def test_udtf_with_analyze_using_archive(self):
-        with tempfile.TemporaryDirectory() as d:
+        from pyspark.core.files import SparkFiles
+
+        self.check_udtf_with_analyze_using_archive(SparkFiles.getRootDirectory())
+
+    def check_udtf_with_analyze_using_archive(self, exec_root_dir):
+        with tempfile.TemporaryDirectory(prefix="test_udtf_with_analyze_using_archive") as d:
             archive_path = os.path.join(d, "my_archive")
             os.mkdir(archive_path)
             pyfile_path = os.path.join(archive_path, "my_file.txt")
@@ -1809,9 +1831,7 @@ class BaseUDTFTestsMixin:
                 @staticmethod
                 def read_my_archive() -> str:
                     with open(
-                        os.path.join(
-                            SparkFiles.getRootDirectory(), "my_files", "my_archive", "my_file.txt"
-                        ),
+                        os.path.join(exec_root_dir, "my_files", "my_archive", "my_file.txt"),
                         "r",
                     ) as my_file:
                         return my_file.read().strip()
@@ -1842,7 +1862,12 @@ class BaseUDTFTestsMixin:
         self.sc.addFile(path)
 
     def test_udtf_with_analyze_using_file(self):
-        with tempfile.TemporaryDirectory() as d:
+        from pyspark.core.files import SparkFiles
+
+        self.check_udtf_with_analyze_using_file(SparkFiles.getRootDirectory())
+
+    def check_udtf_with_analyze_using_file(self, exec_root_dir):
+        with tempfile.TemporaryDirectory(prefix="test_udtf_with_analyze_using_file") as d:
             file_path = os.path.join(d, "my_file.txt")
             with open(file_path, "w") as f:
                 f.write("col1")
@@ -1852,9 +1877,7 @@ class BaseUDTFTestsMixin:
             class TestUDTF:
                 @staticmethod
                 def read_my_file() -> str:
-                    with open(
-                        os.path.join(SparkFiles.getRootDirectory(), "my_file.txt"), "r"
-                    ) as my_file:
+                    with open(os.path.join(exec_root_dir, "my_file.txt"), "r") as my_file:
                         return my_file.read().strip()
 
                 @staticmethod
@@ -1957,7 +1980,8 @@ class BaseUDTFTestsMixin:
             def analyze(**kwargs: AnalyzeArgument) -> AnalyzeResult:
                 assert isinstance(kwargs["a"].dataType, IntegerType)
                 assert kwargs["a"].value == 10
-                assert not kwargs["a"].isTable
+                assert kwargs["a"].isTable is False
+                assert kwargs["a"].isConstantExpression is True
                 assert isinstance(kwargs["b"].dataType, StringType)
                 assert kwargs["b"].value == "x"
                 assert not kwargs["b"].isTable
@@ -2019,6 +2043,7 @@ class BaseUDTFTestsMixin:
                 assert isinstance(a.dataType, IntegerType)
                 assert a.value == 10
                 assert not a.isTable
+                assert a.isConstantExpression is True
                 if b is not None:
                     assert isinstance(b.dataType, StringType)
                     assert b.value == "z"
@@ -2547,16 +2572,18 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             def eval(self):
                 yield 1,
 
-        # We do not use `self.sql_conf` here to test the SQL SET command
-        # instead of using PySpark's `spark.conf.set`.
         old_value = self.spark.conf.get("spark.sql.execution.pythonUDTF.arrow.enabled")
-        self.spark.sql("SET spark.sql.execution.pythonUDTF.arrow.enabled=False")
-        self.assertEqual(udtf(TestUDTF, returnType="x: int").evalType, PythonEvalType.SQL_TABLE_UDF)
-        self.spark.sql("SET spark.sql.execution.pythonUDTF.arrow.enabled=True")
-        self.assertEqual(
-            udtf(TestUDTF, returnType="x: int").evalType, PythonEvalType.SQL_ARROW_TABLE_UDF
-        )
-        self.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", old_value)
+        try:
+            self.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", False)
+            self.assertEqual(
+                udtf(TestUDTF, returnType="x: int").evalType, PythonEvalType.SQL_TABLE_UDF
+            )
+            self.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", True)
+            self.assertEqual(
+                udtf(TestUDTF, returnType="x: int").evalType, PythonEvalType.SQL_ARROW_TABLE_UDF
+            )
+        finally:
+            self.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", old_value)
 
     def test_udtf_eval_returning_non_tuple(self):
         @udtf(returnType="a: int")

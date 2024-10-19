@@ -18,10 +18,11 @@
 package org.apache.spark.streaming.ui
 
 import java.util.concurrent.TimeUnit
-import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable
 import scala.xml.{Node, Unparsed}
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}

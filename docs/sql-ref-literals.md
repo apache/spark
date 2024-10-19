@@ -278,12 +278,19 @@ E [ + | - ] digit [ ... ]
 #### Fractional Literals Examples
 
 ```sql
-SELECT 12.578 AS col;
-+------+
-|   col|
-+------+
-|12.578|
-+------+
+SELECT 12.578 AS col, TYPEOF(12.578) AS type;
++------+------------+
+|   col|        type|
++------+------------+
+|12.578|decimal(5,3)|
++------+------------+
+
+SELECT 12.578E0 AS col, TYPEOF(12.578E0) AS type;
++------+------+
+|   col|  type|
++------+------+
+|12.578|double|
++------+------+
 
 SELECT -0.1234567 AS col;
 +----------+

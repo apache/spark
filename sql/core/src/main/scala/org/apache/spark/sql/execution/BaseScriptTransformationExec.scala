@@ -27,7 +27,8 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkFiles, TaskContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Cast, Expression, GenericInternalRow, JsonToStructs, Literal, StructsToJson, UnsafeProjection}
@@ -185,7 +186,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     if (!proc.isAlive) {
       val exitCode = proc.exitValue()
       if (exitCode != 0) {
-        logError(stderrBuffer.toString) // log the stderr circular buffer
+        logError(log"${MDC(STDERR, stderrBuffer.toString)}") // log the stderr circular buffer
         throw QueryExecutionErrors.subprocessExitedError(exitCode, stderrBuffer, cause)
       }
     }
@@ -238,7 +239,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         val complexTypeFactory = JsonToStructs(attr.dataType,
           ioschema.outputSerdeProps.toMap, Literal(null), Some(conf.sessionLocalTimeZone))
         wrapperConvertException(data =>
-          complexTypeFactory.nullSafeEval(UTF8String.fromString(data)), any => any)
+          complexTypeFactory.evaluator.evaluate(UTF8String.fromString(data)), any => any)
       case udt: UserDefinedType[_] =>
         wrapperConvertException(data => udt.deserialize(data), converter)
       case dt =>
@@ -329,12 +330,13 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
         // Javadoc this call will not throw an exception:
         _exception = t
         proc.destroy()
-        logError(s"Thread-${this.getClass.getSimpleName}-Feed exit cause by: ", t)
+        logError(log"Thread-${MDC(CLASS_NAME, this.getClass.getSimpleName)}-Feed " +
+          log"exit cause by: ", t)
     } finally {
       try {
         Utils.tryLogNonFatalError(outputStream.close())
         if (proc.waitFor() != 0) {
-          logError(stderrBuffer.toString) // log the stderr circular buffer
+          logError(log"${MDC(STDERR, stderrBuffer.toString)}") // log the stderr circular buffer
         }
       } catch {
         case NonFatal(exceptionFromFinallyBlock) =>

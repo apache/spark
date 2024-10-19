@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -57,6 +58,8 @@ class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
 
   private val ignoreCorruptFiles = options.ignoreCorruptFiles
   private val ignoreMissingFiles = options.ignoreMissingFiles
+  private val isDefaultNTZ = SQLConf.get.timestampType == TimestampNTZType
+  private val legacyMode = SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY
 
   private def handleJsonErrorsByParseMode(parseMode: ParseMode,
       columnNameOfCorruptRecord: String, e: Throwable): Option[StructType] = {
@@ -66,7 +69,8 @@ class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
       case DropMalformedMode =>
         None
       case FailFastMode =>
-        throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(e)
+        throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(
+          e, columnNameOfCorruptRecord)
     }
   }
 
@@ -78,7 +82,8 @@ class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
    */
   def infer[T](
       json: RDD[T],
-      createParser: (JsonFactory, T) => JsonParser): StructType = {
+      createParser: (JsonFactory, T) => JsonParser,
+      isReadFile: Boolean = false): StructType = {
     val parseMode = options.parseMode
     val columnNameOfCorruptRecord = options.columnNameOfCorruptRecord
 
@@ -93,6 +98,9 @@ class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
             Some(inferField(parser))
           }
         } catch {
+          // If we are not reading from files but hit `RuntimeException`, it means corrupted record.
+          case e: RuntimeException if !isReadFile =>
+            handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, e)
           case e @ (_: JsonProcessingException | _: MalformedInputException) =>
             handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, e)
           case e: CharConversionException if options.encoding.isEmpty =>
@@ -159,16 +167,30 @@ class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
           val bigDecimal = decimalParser(field)
             DecimalType(bigDecimal.precision, bigDecimal.scale)
         }
-        val timestampType = SQLConf.get.timestampType
         if (options.prefersDecimal && decimalTry.isDefined) {
           decimalTry.get
-        } else if (options.inferTimestamp && (SQLConf.get.legacyTimeParserPolicy ==
-          LegacyBehaviorPolicy.LEGACY || timestampType == TimestampNTZType) &&
+        } else if (options.inferTimestamp) {
+          // For text-based format, it's ambiguous to infer a timestamp string without timezone, as
+          // it can be both TIMESTAMP LTZ and NTZ. To avoid behavior changes with the new support
+          // of NTZ, here we only try to infer NTZ if the config is set to use NTZ by default.
+          if (isDefaultNTZ &&
             timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
-          timestampType
-        } else if (options.inferTimestamp &&
-            timestampFormatter.parseOptional(field).isDefined) {
-          TimestampType
+            TimestampNTZType
+          } else if (timestampFormatter.parseOptional(field).isDefined) {
+            TimestampType
+          } else if (legacyMode) {
+            val utf8Value = UTF8String.fromString(field)
+            // There was a mistake that we use TIMESTAMP NTZ parser to infer LTZ type with legacy
+            // mode. The mistake makes it easier to infer TIMESTAMP LTZ type and we have to keep
+            // this behavior now. See SPARK-46769 for more details.
+            if (SparkDateTimeUtils.stringToTimestampWithoutTimeZone(utf8Value, false).isDefined) {
+              TimestampType
+            } else {
+              StringType
+            }
+          } else {
+            StringType
+          }
         } else {
           StringType
         }
@@ -177,7 +199,7 @@ class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
         val builder = Array.newBuilder[StructField]
         while (nextUntil(parser, END_OBJECT)) {
           builder += StructField(
-            parser.getCurrentName,
+            parser.currentName,
             inferField(parser),
             nullable = true)
         }
@@ -343,14 +365,21 @@ object JsonInferSchema {
 
   /**
    * Returns the most general data type for two given data types.
+   * When the two types are incompatible, return `defaultDataType` as a fallback result.
    */
-  def compatibleType(t1: DataType, t2: DataType): DataType = {
+  def compatibleType(
+      t1: DataType, t2: DataType, defaultDataType: DataType = StringType): DataType = {
     TypeCoercion.findTightestCommonType(t1, t2).getOrElse {
       // t1 or t2 is a StructType, ArrayType, or an unexpected type.
       (t1, t2) match {
         // Double support larger range than fixed decimal, DecimalType.Maximum should be enough
         // in most case, also have better precision.
         case (DoubleType, _: DecimalType) | (_: DecimalType, DoubleType) =>
+          DoubleType
+
+        // This branch is only used by `SchemaOfVariant.mergeSchema` because `JsonInferSchema` never
+        // produces `FloatType`.
+        case (FloatType, _: DecimalType) | (_: DecimalType, FloatType) =>
           DoubleType
 
         case (t1: DecimalType, t2: DecimalType) =>
@@ -382,7 +411,8 @@ object JsonInferSchema {
             val f2Name = fields2(f2Idx).name
             val comp = f1Name.compareTo(f2Name)
             if (comp == 0) {
-              val dataType = compatibleType(fields1(f1Idx).dataType, fields2(f2Idx).dataType)
+              val dataType = compatibleType(
+                fields1(f1Idx).dataType, fields2(f2Idx).dataType, defaultDataType)
               newFields.add(StructField(f1Name, dataType, nullable = true))
               f1Idx += 1
               f2Idx += 1
@@ -405,21 +435,22 @@ object JsonInferSchema {
           StructType(newFields.toArray(emptyStructFieldArray))
 
         case (ArrayType(elementType1, containsNull1), ArrayType(elementType2, containsNull2)) =>
-          ArrayType(compatibleType(elementType1, elementType2), containsNull1 || containsNull2)
+          ArrayType(
+            compatibleType(elementType1, elementType2, defaultDataType),
+            containsNull1 || containsNull2)
 
         // The case that given `DecimalType` is capable of given `IntegralType` is handled in
         // `findTightestCommonType`. Both cases below will be executed only when the given
         // `DecimalType` is not capable of the given `IntegralType`.
         case (t1: IntegralType, t2: DecimalType) =>
-          compatibleType(DecimalType.forType(t1), t2)
+          compatibleType(DecimalType.forType(t1), t2, defaultDataType)
         case (t1: DecimalType, t2: IntegralType) =>
-          compatibleType(t1, DecimalType.forType(t2))
+          compatibleType(t1, DecimalType.forType(t2), defaultDataType)
 
         case (TimestampNTZType, TimestampType) | (TimestampType, TimestampNTZType) =>
           TimestampType
 
-        // strings and every string is a Json object.
-        case (_, _) => StringType
+        case (_, _) => defaultDataType
       }
     }
   }

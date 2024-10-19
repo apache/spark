@@ -6,7 +6,7 @@ AS testData(a, b)
 -- !query analysis
 CreateViewCommand `testData`, SELECT * FROM VALUES
 (1, 1), (1, 2), (2, 1), (1, 1), (null, 2), (1, null), (null, null)
-AS testData(a, b), false, true, LocalTempView, true
+AS testData(a, b), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias testData
          +- LocalRelation [a#x, b#x]
@@ -19,7 +19,7 @@ FROM testData
 -- !query analysis
 Aggregate [count(1) AS count(1)#xL, count(1) AS count(1)#xL, count(null) AS count(NULL)#xL, count(a#x) AS count(a)#xL, count(b#x) AS count(b)#xL, count((a#x + b#x)) AS count((a + b))#xL, count(named_struct(a, a#x, b, b#x)) AS count(named_struct(a, a, b, b))#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -38,7 +38,7 @@ FROM testData
 -- !query analysis
 Aggregate [count(distinct 1) AS count(DISTINCT 1)#xL, count(distinct null) AS count(DISTINCT NULL)#xL, count(distinct a#x) AS count(DISTINCT a)#xL, count(distinct b#x) AS count(DISTINCT b)#xL, count(distinct (a#x + b#x)) AS count(DISTINCT (a + b))#xL, count(distinct named_struct(a, a#x, b, b#x)) AS count(DISTINCT named_struct(a, a, b, b))#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -50,7 +50,7 @@ SELECT count(a, b), count(b, a), count(testData.*, testData.*) FROM testData
 -- !query analysis
 Aggregate [count(a#x, b#x) AS count(a, b)#xL, count(b#x, a#x) AS count(b, a)#xL, count(a#x, b#x, a#x, b#x) AS count(a, b, a, b)#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -64,7 +64,7 @@ FROM testData
 -- !query analysis
 Aggregate [count(distinct a#x, b#x) AS count(DISTINCT a, b)#xL, count(distinct b#x, a#x) AS count(DISTINCT b, a)#xL, count(distinct a#x, b#x) AS count(DISTINCT a, b)#xL, count(distinct a#x, b#x, a#x, b#x) AS count(DISTINCT a, b, a, b)#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -97,7 +97,7 @@ SELECT count(DISTINCT a), count(DISTINCT 2,3) FROM testData
 -- !query analysis
 Aggregate [count(distinct a#x) AS count(DISTINCT a)#xL, count(distinct 2, 3) AS count(DISTINCT 2, 3)#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -109,7 +109,7 @@ SELECT count(DISTINCT a), count(DISTINCT 3,2) FROM testData
 -- !query analysis
 Aggregate [count(distinct a#x) AS count(DISTINCT a)#xL, count(distinct 3, 2) AS count(DISTINCT 3, 2)#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -121,7 +121,7 @@ SELECT count(DISTINCT a), count(DISTINCT 2), count(DISTINCT 2,3) FROM testData
 -- !query analysis
 Aggregate [count(distinct a#x) AS count(DISTINCT a)#xL, count(distinct 2) AS count(DISTINCT 2)#xL, count(distinct 2, 3) AS count(DISTINCT 2, 3)#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -133,7 +133,7 @@ SELECT count(DISTINCT a), count(DISTINCT 2), count(DISTINCT 3,2) FROM testData
 -- !query analysis
 Aggregate [count(distinct a#x) AS count(DISTINCT a)#xL, count(distinct 2) AS count(DISTINCT 2)#xL, count(distinct 3, 2) AS count(DISTINCT 3, 2)#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -145,7 +145,7 @@ SELECT count(distinct 0.8), percentile_approx(distinct a, 0.8) FROM testData
 -- !query analysis
 Aggregate [count(distinct 0.8) AS count(DISTINCT 0.8)#xL, percentile_approx(distinct a#x, cast(0.8 as double), 10000, 0, 0) AS percentile_approx(DISTINCT a, 0.8, 10000)#x]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -163,7 +163,7 @@ SELECT count() FROM testData
 -- !query analysis
 Aggregate [count() AS count()#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -205,7 +205,7 @@ SELECT count(testData.*) FROM testData
 -- !query analysis
 Aggregate [count(a#x, b#x) AS count(a, b)#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData

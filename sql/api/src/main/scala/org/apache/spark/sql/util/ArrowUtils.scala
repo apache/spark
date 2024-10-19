@@ -38,33 +38,33 @@ private[sql] object ArrowUtils {
   // todo: support more types.
 
   /** Maps data type from Spark to Arrow. NOTE: timeZoneId required for TimestampTypes */
-  def toArrowType(
-      dt: DataType, timeZoneId: String, largeVarTypes: Boolean = false): ArrowType = dt match {
-    case BooleanType => ArrowType.Bool.INSTANCE
-    case ByteType => new ArrowType.Int(8, true)
-    case ShortType => new ArrowType.Int(8 * 2, true)
-    case IntegerType => new ArrowType.Int(8 * 4, true)
-    case LongType => new ArrowType.Int(8 * 8, true)
-    case FloatType => new ArrowType.FloatingPoint(FloatingPointPrecision.SINGLE)
-    case DoubleType => new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE)
-    case StringType if !largeVarTypes => ArrowType.Utf8.INSTANCE
-    case BinaryType if !largeVarTypes => ArrowType.Binary.INSTANCE
-    case StringType if largeVarTypes => ArrowType.LargeUtf8.INSTANCE
-    case BinaryType if largeVarTypes => ArrowType.LargeBinary.INSTANCE
-    case DecimalType.Fixed(precision, scale) => new ArrowType.Decimal(precision, scale)
-    case DateType => new ArrowType.Date(DateUnit.DAY)
-    case TimestampType if timeZoneId == null =>
-      throw SparkException.internalError("Missing timezoneId where it is mandatory.")
-    case TimestampType => new ArrowType.Timestamp(TimeUnit.MICROSECOND, timeZoneId)
-    case TimestampNTZType =>
-      new ArrowType.Timestamp(TimeUnit.MICROSECOND, null)
-    case NullType => ArrowType.Null.INSTANCE
-    case _: YearMonthIntervalType => new ArrowType.Interval(IntervalUnit.YEAR_MONTH)
-    case _: DayTimeIntervalType => new ArrowType.Duration(TimeUnit.MICROSECOND)
-    case CalendarIntervalType => new ArrowType.Interval(IntervalUnit.MONTH_DAY_NANO)
-    case _ =>
-      throw ExecutionErrors.unsupportedDataTypeError(dt)
-  }
+  def toArrowType(dt: DataType, timeZoneId: String, largeVarTypes: Boolean = false): ArrowType =
+    dt match {
+      case BooleanType => ArrowType.Bool.INSTANCE
+      case ByteType => new ArrowType.Int(8, true)
+      case ShortType => new ArrowType.Int(8 * 2, true)
+      case IntegerType => new ArrowType.Int(8 * 4, true)
+      case LongType => new ArrowType.Int(8 * 8, true)
+      case FloatType => new ArrowType.FloatingPoint(FloatingPointPrecision.SINGLE)
+      case DoubleType => new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE)
+      case _: StringType if !largeVarTypes => ArrowType.Utf8.INSTANCE
+      case BinaryType if !largeVarTypes => ArrowType.Binary.INSTANCE
+      case _: StringType if largeVarTypes => ArrowType.LargeUtf8.INSTANCE
+      case BinaryType if largeVarTypes => ArrowType.LargeBinary.INSTANCE
+      case DecimalType.Fixed(precision, scale) => new ArrowType.Decimal(precision, scale, 8 * 16)
+      case DateType => new ArrowType.Date(DateUnit.DAY)
+      case TimestampType if timeZoneId == null =>
+        throw SparkException.internalError("Missing timezoneId where it is mandatory.")
+      case TimestampType => new ArrowType.Timestamp(TimeUnit.MICROSECOND, timeZoneId)
+      case TimestampNTZType =>
+        new ArrowType.Timestamp(TimeUnit.MICROSECOND, null)
+      case NullType => ArrowType.Null.INSTANCE
+      case _: YearMonthIntervalType => new ArrowType.Interval(IntervalUnit.YEAR_MONTH)
+      case _: DayTimeIntervalType => new ArrowType.Duration(TimeUnit.MICROSECOND)
+      case CalendarIntervalType => new ArrowType.Interval(IntervalUnit.MONTH_DAY_NANO)
+      case _ =>
+        throw ExecutionErrors.unsupportedDataTypeError(dt)
+    }
 
   def fromArrowType(dt: ArrowType): DataType = dt match {
     case ArrowType.Bool.INSTANCE => BooleanType
@@ -73,9 +73,11 @@ private[sql] object ArrowUtils {
     case int: ArrowType.Int if int.getIsSigned && int.getBitWidth == 8 * 4 => IntegerType
     case int: ArrowType.Int if int.getIsSigned && int.getBitWidth == 8 * 8 => LongType
     case float: ArrowType.FloatingPoint
-      if float.getPrecision() == FloatingPointPrecision.SINGLE => FloatType
+        if float.getPrecision() == FloatingPointPrecision.SINGLE =>
+      FloatType
     case float: ArrowType.FloatingPoint
-      if float.getPrecision() == FloatingPointPrecision.DOUBLE => DoubleType
+        if float.getPrecision() == FloatingPointPrecision.DOUBLE =>
+      DoubleType
     case ArrowType.Utf8.INSTANCE => StringType
     case ArrowType.Binary.INSTANCE => BinaryType
     case ArrowType.LargeUtf8.INSTANCE => StringType
@@ -83,13 +85,15 @@ private[sql] object ArrowUtils {
     case d: ArrowType.Decimal => DecimalType(d.getPrecision, d.getScale)
     case date: ArrowType.Date if date.getUnit == DateUnit.DAY => DateType
     case ts: ArrowType.Timestamp
-      if ts.getUnit == TimeUnit.MICROSECOND && ts.getTimezone == null => TimestampNTZType
+        if ts.getUnit == TimeUnit.MICROSECOND && ts.getTimezone == null =>
+      TimestampNTZType
     case ts: ArrowType.Timestamp if ts.getUnit == TimeUnit.MICROSECOND => TimestampType
     case ArrowType.Null.INSTANCE => NullType
-    case yi: ArrowType.Interval if yi.getUnit == IntervalUnit.YEAR_MONTH => YearMonthIntervalType()
+    case yi: ArrowType.Interval if yi.getUnit == IntervalUnit.YEAR_MONTH =>
+      YearMonthIntervalType()
     case di: ArrowType.Duration if di.getUnit == TimeUnit.MICROSECOND => DayTimeIntervalType()
-    case ci: ArrowType.Interval
-      if ci.getUnit == IntervalUnit.MONTH_DAY_NANO => CalendarIntervalType
+    case ci: ArrowType.Interval if ci.getUnit == IntervalUnit.MONTH_DAY_NANO =>
+      CalendarIntervalType
     case _ => throw ExecutionErrors.unsupportedArrowTypeError(dt)
   }
 
@@ -103,31 +107,54 @@ private[sql] object ArrowUtils {
     dt match {
       case ArrayType(elementType, containsNull) =>
         val fieldType = new FieldType(nullable, ArrowType.List.INSTANCE, null)
-        new Field(name, fieldType,
-          Seq(toArrowField("element", elementType, containsNull, timeZoneId,
-            largeVarTypes)).asJava)
+        new Field(
+          name,
+          fieldType,
+          Seq(
+            toArrowField("element", elementType, containsNull, timeZoneId, largeVarTypes)).asJava)
       case StructType(fields) =>
         val fieldType = new FieldType(nullable, ArrowType.Struct.INSTANCE, null)
-        new Field(name, fieldType,
-          fields.map { field =>
-            toArrowField(field.name, field.dataType, field.nullable, timeZoneId, largeVarTypes)
-          }.toImmutableArraySeq.asJava)
+        new Field(
+          name,
+          fieldType,
+          fields
+            .map { field =>
+              toArrowField(field.name, field.dataType, field.nullable, timeZoneId, largeVarTypes)
+            }
+            .toImmutableArraySeq
+            .asJava)
       case MapType(keyType, valueType, valueContainsNull) =>
         val mapType = new FieldType(nullable, new ArrowType.Map(false), null)
         // Note: Map Type struct can not be null, Struct Type key field can not be null
-        new Field(name, mapType,
-          Seq(toArrowField(MapVector.DATA_VECTOR_NAME,
-            new StructType()
-              .add(MapVector.KEY_NAME, keyType, nullable = false)
-              .add(MapVector.VALUE_NAME, valueType, nullable = valueContainsNull),
-            nullable = false,
-            timeZoneId,
-            largeVarTypes)).asJava)
+        new Field(
+          name,
+          mapType,
+          Seq(
+            toArrowField(
+              MapVector.DATA_VECTOR_NAME,
+              new StructType()
+                .add(MapVector.KEY_NAME, keyType, nullable = false)
+                .add(MapVector.VALUE_NAME, valueType, nullable = valueContainsNull),
+              nullable = false,
+              timeZoneId,
+              largeVarTypes)).asJava)
       case udt: UserDefinedType[_] =>
         toArrowField(name, udt.sqlType, nullable, timeZoneId, largeVarTypes)
+      case _: VariantType =>
+        val fieldType = new FieldType(
+          nullable,
+          ArrowType.Struct.INSTANCE,
+          null,
+          Map("variant" -> "true").asJava)
+        new Field(
+          name,
+          fieldType,
+          Seq(
+            toArrowField("value", BinaryType, false, timeZoneId, largeVarTypes),
+            toArrowField("metadata", BinaryType, false, timeZoneId, largeVarTypes)).asJava)
       case dataType =>
-        val fieldType = new FieldType(nullable, toArrowType(dataType, timeZoneId,
-          largeVarTypes), null)
+        val fieldType =
+          new FieldType(nullable, toArrowType(dataType, timeZoneId, largeVarTypes), null)
         new Field(name, fieldType, Seq.empty[Field].asJava)
     }
   }
@@ -143,6 +170,13 @@ private[sql] object ArrowUtils {
         val elementField = field.getChildren().get(0)
         val elementType = fromArrowField(elementField)
         ArrayType(elementType, containsNull = elementField.isNullable)
+      case ArrowType.Struct.INSTANCE
+          if field.getMetadata.getOrDefault("variant", "") == "true"
+            && field.getChildren.asScala
+              .map(_.getName)
+              .asJava
+              .containsAll(Seq("value", "metadata").asJava) =>
+        VariantType
       case ArrowType.Struct.INSTANCE =>
         val fields = field.getChildren().asScala.map { child =>
           val dt = fromArrowField(child)
@@ -153,7 +187,9 @@ private[sql] object ArrowUtils {
     }
   }
 
-  /** Maps schema from Spark to Arrow. NOTE: timeZoneId required for TimestampType in StructType */
+  /**
+   * Maps schema from Spark to Arrow. NOTE: timeZoneId required for TimestampType in StructType
+   */
   def toArrowSchema(
       schema: StructType,
       timeZoneId: String,
@@ -177,14 +213,17 @@ private[sql] object ArrowUtils {
   }
 
   private def deduplicateFieldNames(
-      dt: DataType, errorOnDuplicatedFieldNames: Boolean): DataType = dt match {
-    case udt: UserDefinedType[_] => deduplicateFieldNames(udt.sqlType, errorOnDuplicatedFieldNames)
+      dt: DataType,
+      errorOnDuplicatedFieldNames: Boolean): DataType = dt match {
+    case udt: UserDefinedType[_] =>
+      deduplicateFieldNames(udt.sqlType, errorOnDuplicatedFieldNames)
     case st @ StructType(fields) =>
       val newNames = if (st.names.toSet.size == st.names.length) {
         st.names
       } else {
         if (errorOnDuplicatedFieldNames) {
-          throw ExecutionErrors.duplicatedFieldNameInArrowStructError(st.names.toImmutableArraySeq)
+          throw ExecutionErrors.duplicatedFieldNameInArrowStructError(
+            st.names.toImmutableArraySeq)
         }
         val genNawName = st.names.groupBy(identity).map {
           case (name, names) if names.length > 1 =>
@@ -197,7 +236,10 @@ private[sql] object ArrowUtils {
       val newFields =
         fields.zip(newNames).map { case (StructField(_, dataType, nullable, metadata), name) =>
           StructField(
-            name, deduplicateFieldNames(dataType, errorOnDuplicatedFieldNames), nullable, metadata)
+            name,
+            deduplicateFieldNames(dataType, errorOnDuplicatedFieldNames),
+            nullable,
+            metadata)
         }
       StructType(newFields)
     case ArrayType(elementType, containsNull) =>

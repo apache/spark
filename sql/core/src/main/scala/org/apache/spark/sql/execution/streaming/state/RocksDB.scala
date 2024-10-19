@@ -19,9 +19,14 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.File
 import java.util.Locale
+import java.util.Set
+import java.util.UUID
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, TimeUnit}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
+import scala.jdk.CollectionConverters.{ConcurrentMapHasAsScala, MapHasAsJava}
 import scala.ref.WeakReference
 import scala.util.Try
 
@@ -33,10 +38,20 @@ import org.rocksdb.CompressionType._
 import org.rocksdb.TickerType._
 
 import org.apache.spark.TaskContext
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{LogEntry, Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.{NextIterator, Utils}
+
+// RocksDB operations that could acquire/release the instance lock
+sealed abstract class RocksDBOpType(name: String) {
+  override def toString: String = name
+}
+case object LoadStore extends RocksDBOpType("load_store")
+case object RollbackStore extends RocksDBOpType("rollback_store")
+case object CloseStore extends RocksDBOpType("close_store")
+case object ReportStoreMetrics extends RocksDBOpType("report_store_metrics")
+case object StoreTaskCompletionListener extends RocksDBOpType("store_task_completion_listener")
 
 /**
  * Class representing a RocksDB instance that checkpoints version of data to DFS.
@@ -56,15 +71,25 @@ class RocksDB(
     val conf: RocksDBConf,
     localRootDir: File = Utils.createTempDir(),
     hadoopConf: Configuration = new Configuration,
-    loggingId: String = "") extends Logging {
+    loggingId: String = "",
+    useColumnFamilies: Boolean = false,
+    enableStateStoreCheckpointIds: Boolean = false) extends Logging {
 
-  case class RocksDBSnapshot(checkpointDir: File, version: Long, numKeys: Long) {
+  import RocksDB._
+
+  case class RocksDBSnapshot(
+      checkpointDir: File,
+      version: Long,
+      numKeys: Long,
+      columnFamilyMapping: Map[String, Short],
+      maxColumnFamilyId: Short,
+      dfsFileSuffix: String,
+      fileMapping: Map[String, RocksDBSnapshotFile]) {
     def close(): Unit = {
       silentDeleteRecursively(checkpointDir, s"Free up local checkpoint of snapshot $version")
     }
   }
 
-  @volatile private var latestSnapshot: Option[RocksDBSnapshot] = None
   @volatile private var lastSnapshotVersion = 0L
 
   RocksDBLoader.loadLibrary()
@@ -92,47 +117,64 @@ class RocksDB(
     tableFormatConfig.setPinL0FilterAndIndexBlocksInCache(true)
   }
 
-  private[state] val columnFamilyOptions = new ColumnFamilyOptions()
+  private[state] val rocksDbOptions = new Options() // options to open the RocksDB
+
+  rocksDbOptions.setCreateIfMissing(true)
 
   // Set RocksDB options around MemTable memory usage. By default, we let RocksDB
   // use its internal default values for these settings.
   if (conf.writeBufferSizeMB > 0L) {
-    columnFamilyOptions.setWriteBufferSize(conf.writeBufferSizeMB * 1024 * 1024)
+    rocksDbOptions.setWriteBufferSize(conf.writeBufferSizeMB * 1024 * 1024)
   }
 
   if (conf.maxWriteBufferNumber > 0L) {
-    columnFamilyOptions.setMaxWriteBufferNumber(conf.maxWriteBufferNumber)
+    rocksDbOptions.setMaxWriteBufferNumber(conf.maxWriteBufferNumber)
   }
 
-  columnFamilyOptions.setCompressionType(getCompressionType(conf.compression))
+  rocksDbOptions.setCompressionType(getCompressionType(conf.compression))
 
-  private val dbOptions =
-    new Options(new DBOptions(), columnFamilyOptions) // options to open the RocksDB
-
-  dbOptions.setCreateIfMissing(true)
-  dbOptions.setTableFormatConfig(tableFormatConfig)
-  dbOptions.setMaxOpenFiles(conf.maxOpenFiles)
-  dbOptions.setAllowFAllocate(conf.allowFAllocate)
+  rocksDbOptions.setTableFormatConfig(tableFormatConfig)
+  rocksDbOptions.setMaxOpenFiles(conf.maxOpenFiles)
+  rocksDbOptions.setAllowFAllocate(conf.allowFAllocate)
+  rocksDbOptions.setAvoidFlushDuringShutdown(true)
+  rocksDbOptions.setMergeOperator(new StringAppendOperator())
 
   if (conf.boundedMemoryUsage) {
-    dbOptions.setWriteBufferManager(writeBufferManager)
+    rocksDbOptions.setWriteBufferManager(writeBufferManager)
   }
 
   private val dbLogger = createLogger() // for forwarding RocksDB native logs to log4j
-  dbOptions.setStatistics(new Statistics())
-  private val nativeStats = dbOptions.statistics()
+  rocksDbOptions.setStatistics(new Statistics())
+  private val nativeStats = rocksDbOptions.statistics()
 
   private val workingDir = createTempDir("workingDir")
   private val fileManager = new RocksDBFileManager(dfsRootDir, createTempDir("fileManager"),
     hadoopConf, conf.compressionCodec, loggingId = loggingId)
   private val byteArrayPair = new ByteArrayPair()
   private val commitLatencyMs = new mutable.HashMap[String, Long]()
+
   private val acquireLock = new Object
 
   @volatile private var db: NativeRocksDB = _
   @volatile private var changelogWriter: Option[StateStoreChangelogWriter] = None
   private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
   @volatile private var loadedVersion = -1L   // -1 = nothing valid is loaded
+
+  // variables to manage checkpoint ID. Once a checkpointing finishes, it needs to return
+  // `lastCommittedStateStoreCkptId` as the committed checkpointID, as well as
+  // `lastCommitBasedStateStoreCkptId` as the checkpontID of the previous version that is based on.
+  // `loadedStateStoreCkptId` is the checkpointID for the current live DB. After the batch finishes
+  // and checkpoint finishes, it will turn into `lastCommitBasedStateStoreCkptId`.
+  // `sessionStateStoreCkptId` store an ID to be used for future checkpoints. It will be used as
+  // `lastCommittedStateStoreCkptId` after the checkpoint is committed. It will be reused until
+  // we have to use a new one. We have to update `sessionStateStoreCkptId` if we reload a previous
+  // batch version, as we would have to use a new checkpointID for re-committing a version.
+  // The reusing is to help debugging but is not required for the algorithm to work.
+  private var lastCommitBasedStateStoreCkptId: Option[String] = None
+  private var lastCommittedStateStoreCkptId: Option[String] = None
+  private var loadedStateStoreCkptId: Option[String] = None
+  private var sessionStateStoreCkptId: Option[String] = None
+
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
@@ -145,75 +187,276 @@ class RocksDB(
   @GuardedBy("acquireLock")
   @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
 
+  // This is accessed and updated only between load and commit
+  // which means it is implicitly guarded by acquireLock
+  @GuardedBy("acquireLock")
+  private val colFamilyNameToIdMap = new ConcurrentHashMap[String, Short]()
+
+  @GuardedBy("acquireLock")
+  private val maxColumnFamilyId: AtomicInteger = new AtomicInteger(-1)
+
+  @GuardedBy("acquireLock")
+  private val shouldForceSnapshot: AtomicBoolean = new AtomicBoolean(false)
+
+  /**
+   * Check whether the column family name is for internal column families.
+   *
+   * @param cfName - column family name
+   * @return - true if the column family is for internal use, false otherwise
+   */
+  private def checkInternalColumnFamilies(cfName: String): Boolean = cfName.charAt(0) == '_'
+
+  // Methods to fetch column family mapping for this State Store version
+  def getColumnFamilyMapping: Map[String, Short] = {
+    colFamilyNameToIdMap.asScala
+  }
+
+  def getColumnFamilyId(cfName: String): Short = {
+    colFamilyNameToIdMap.get(cfName)
+  }
+
+  /**
+   * Create RocksDB column family, if not created already
+   */
+  def createColFamilyIfAbsent(colFamilyName: String): Short = {
+    if (!checkColFamilyExists(colFamilyName)) {
+      val newColumnFamilyId = maxColumnFamilyId.incrementAndGet().toShort
+      colFamilyNameToIdMap.putIfAbsent(colFamilyName, newColumnFamilyId)
+      shouldForceSnapshot.set(true)
+      newColumnFamilyId
+    } else {
+      colFamilyNameToIdMap.get(colFamilyName)
+    }
+  }
+
+  /**
+   * Remove RocksDB column family, if exists
+   * @return columnFamilyId if it exists, else None
+   */
+  def removeColFamilyIfExists(colFamilyName: String): Option[Short] = {
+    if (checkColFamilyExists(colFamilyName)) {
+      shouldForceSnapshot.set(true)
+      Some(colFamilyNameToIdMap.remove(colFamilyName))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Function to check if the column family exists in the state store instance.
+   *
+   * @param colFamilyName - name of the column family
+   * @return - true if the column family exists, false otherwise
+   */
+  def checkColFamilyExists(colFamilyName: String): Boolean = {
+    colFamilyNameToIdMap.containsKey(colFamilyName)
+  }
+
+  // This method sets the internal column family metadata to
+  // the default values it should be set to on load
+  private def setInitialCFInfo(): Unit = {
+    colFamilyNameToIdMap.clear()
+    shouldForceSnapshot.set(false)
+    maxColumnFamilyId.set(0)
+  }
+
+  def getColFamilyCount(isInternal: Boolean): Long = {
+    if (isInternal) {
+      colFamilyNameToIdMap.asScala.keys.toSeq.count(checkInternalColumnFamilies)
+    } else {
+      colFamilyNameToIdMap.asScala.keys.toSeq.count(!checkInternalColumnFamilies(_))
+    }
+  }
+
+  // Mapping of local SST files to DFS files for file reuse.
+  // This mapping should only be updated using the Task thread - at version load and commit time.
+  // If same mapping instance is updated from different threads,
+  // it will result in undefined behavior (and most likely incorrect mapping state).
+  @GuardedBy("acquireLock")
+  private val rocksDBFileMapping: RocksDBFileMapping = new RocksDBFileMapping()
+
+  // We send snapshots that needs to be uploaded by the maintenance thread to this queue
+  private val snapshotsToUploadQueue = new ConcurrentLinkedQueue[RocksDBSnapshot]()
+
   /**
    * Load the given version of data in a native RocksDB instance.
    * Note that this will copy all the necessary file from DFS to local disk as needed,
    * and possibly restart the native RocksDB instance.
    */
-  def load(version: Long, readOnly: Boolean = false): RocksDB = {
+  def load(
+      version: Long,
+      stateStoreCkptId: Option[String] = None,
+      readOnly: Boolean = false): RocksDB = {
     assert(version >= 0)
-    acquire()
+    acquire(LoadStore)
     recordedMetrics = None
-    logInfo(s"Loading $version")
+    logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)}")
     try {
-      if (loadedVersion != version) {
-        closeDB()
+      if (loadedVersion != version ||
+        (enableStateStoreCheckpointIds && stateStoreCkptId.isDefined &&
+        (loadedStateStoreCkptId.isEmpty || stateStoreCkptId.get != loadedStateStoreCkptId.get))) {
+        closeDB(ignoreException = false)
         val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
-        val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
+        rocksDBFileMapping.currentVersion = latestSnapshotVersion
+        val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion,
+          workingDir, rocksDBFileMapping)
         loadedVersion = latestSnapshotVersion
 
-        openDB()
+        // reset the last snapshot version to the latest available snapshot version
+        lastSnapshotVersion = latestSnapshotVersion
 
-        numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
-          // we don't track the total number of rows - discard the number being track
-          -1L
-        } else if (metadata.numKeys < 0) {
-          // we track the total number of rows, but the snapshot doesn't have tracking number
-          // need to count keys now
-          countKeys()
-        } else {
-          metadata.numKeys
+        // Initialize maxVersion upon successful load from DFS
+        fileManager.setMaxSeenVersion(version)
+
+        setInitialCFInfo()
+        metadata.columnFamilyMapping.foreach { mapping =>
+          colFamilyNameToIdMap.putAll(mapping.asJava)
         }
+
+        metadata.maxColumnFamilyId.foreach { maxId =>
+          maxColumnFamilyId.set(maxId)
+        }
+        openDB()
+        numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
+            // we don't track the total number of rows - discard the number being track
+            -1L
+          } else if (metadata.numKeys < 0) {
+            // we track the total number of rows, but the snapshot doesn't have tracking number
+            // need to count keys now
+            countKeys()
+          } else {
+            metadata.numKeys
+          }
         if (loadedVersion != version) replayChangelog(version)
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.
         numKeysOnLoadedVersion = numKeysOnWritingVersion
         fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
       }
+      if (enableStateStoreCheckpointIds) {
+        lastCommitBasedStateStoreCkptId = None
+        loadedStateStoreCkptId = stateStoreCkptId
+        sessionStateStoreCkptId = Some(java.util.UUID.randomUUID.toString)
+      }
+      lastCommittedStateStoreCkptId = None
       if (conf.resetStatsOnLoad) {
         nativeStats.reset
       }
-      logInfo(s"Loaded $version")
+      logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)}")
     } catch {
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded data
+        lastCommitBasedStateStoreCkptId = None
+        lastCommittedStateStoreCkptId = None
+        loadedStateStoreCkptId = None
+        sessionStateStoreCkptId = None
         throw t
     }
     if (enableChangelogCheckpointing && !readOnly) {
       // Make sure we don't leak resource.
       changelogWriter.foreach(_.abort())
-      changelogWriter = Some(fileManager.getChangeLogWriter(version + 1))
+      changelogWriter = Some(fileManager.getChangeLogWriter(version + 1, useColumnFamilies))
     }
     this
+  }
+
+  /**
+   * Load from the start snapshot version and apply all the changelog records to reach the
+   * end version. Note that this will copy all the necessary files from DFS to local disk as needed,
+   * and possibly restart the native RocksDB instance.
+   *
+   * @param snapshotVersion version of the snapshot to start with
+   * @param endVersion end version
+   * @return A RocksDB instance loaded with the state endVersion replayed from snapshotVersion.
+   *         Note that the instance will be read-only since this method is only used in State Data
+   *         Source.
+   */
+  def loadFromSnapshot(snapshotVersion: Long, endVersion: Long): RocksDB = {
+    assert(snapshotVersion >= 0 && endVersion >= snapshotVersion)
+    acquire(LoadStore)
+    recordedMetrics = None
+    logInfo(
+      log"Loading snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
+      log"changelog files to version ${MDC(LogKeys.VERSION_NUM, endVersion)}.")
+    try {
+      replayFromCheckpoint(snapshotVersion, endVersion)
+
+      logInfo(
+        log"Loaded snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
+        log"changelog files to version ${MDC(LogKeys.VERSION_NUM, endVersion)}.")
+    } catch {
+      case t: Throwable =>
+        loadedVersion = -1  // invalidate loaded data
+        throw t
+    }
+    this
+  }
+
+  /**
+   * Load from the start checkpoint version and apply all the changelog records to reach the
+   * end version.
+   * If the start version does not exist, it will throw an exception.
+   *
+   * @param snapshotVersion start checkpoint version
+   * @param endVersion end version
+   */
+  private def replayFromCheckpoint(snapshotVersion: Long, endVersion: Long): Any = {
+    closeDB()
+    rocksDBFileMapping.currentVersion = snapshotVersion
+    val metadata = fileManager.loadCheckpointFromDfs(snapshotVersion,
+      workingDir, rocksDBFileMapping)
+    loadedVersion = snapshotVersion
+    lastSnapshotVersion = snapshotVersion
+    openDB()
+
+    numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
+      // we don't track the total number of rows - discard the number being track
+      -1L
+    } else if (metadata.numKeys < 0) {
+      // we track the total number of rows, but the snapshot doesn't have tracking number
+      // need to count keys now
+      countKeys()
+    } else {
+      metadata.numKeys
+    }
+    if (loadedVersion != endVersion) replayChangelog(endVersion)
+    // After changelog replay the numKeysOnWritingVersion will be updated to
+    // the correct number of keys in the loaded version.
+    numKeysOnLoadedVersion = numKeysOnWritingVersion
+    fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
+
+    if (conf.resetStatsOnLoad) {
+      nativeStats.reset
+    }
   }
 
   /**
    * Replay change log from the loaded version to the target version.
    */
   private def replayChangelog(endVersion: Long): Unit = {
+    logInfo(log"Replaying changelog from version " +
+      log"${MDC(LogKeys.LOADED_VERSION, loadedVersion)} -> " +
+      log"${MDC(LogKeys.END_VERSION, endVersion)}")
     for (v <- loadedVersion + 1 to endVersion) {
+      logInfo(log"Replaying changelog on version " +
+        log"${MDC(LogKeys.VERSION_NUM, v)}")
       var changelogReader: StateStoreChangelogReader = null
       try {
-        changelogReader = fileManager.getChangelogReader(v)
-        changelogReader.foreach { case (key, value) =>
-          if (value != null) {
-            put(key, value)
-          } else {
-            remove(key)
+        changelogReader = fileManager.getChangelogReader(v, useColumnFamilies)
+        changelogReader.foreach { case (recordType, key, value) =>
+          recordType match {
+            case RecordType.PUT_RECORD =>
+              put(key, value)
+
+            case RecordType.DELETE_RECORD =>
+              remove(key)
+
+            case RecordType.MERGE_RECORD =>
+              merge(key, value)
           }
         }
       } finally {
-        if (changelogReader != null) changelogReader.close()
+        if (changelogReader != null) changelogReader.closeIfNeeded()
       }
     }
     loadedVersion = endVersion
@@ -238,8 +481,33 @@ class RocksDB(
         numKeysOnWritingVersion += 1
       }
     }
+
     db.put(writeOptions, key, value)
     changelogWriter.foreach(_.put(key, value))
+  }
+
+  /**
+   * Merge the given value for the given key. This is equivalent to the Atomic
+   * Read-Modify-Write operation in RocksDB, known as the "Merge" operation. The
+   * modification is appending the provided value to current list of values for
+   * the given key.
+   *
+   * @note This operation requires that the encoder used can decode multiple values for
+   * a key from the values byte array.
+   *
+   * @note This update is not committed to disk until commit() is called.
+   */
+  def merge(key: Array[Byte], value: Array[Byte]): Unit = {
+
+    if (conf.trackTotalNumberOfRows) {
+      val oldValue = db.get(readOptions, key)
+      if (oldValue == null) {
+        numKeysOnWritingVersion += 1
+      }
+    }
+    db.merge(writeOptions, key, value)
+
+    changelogWriter.foreach(_.merge(key, value))
   }
 
   /**
@@ -261,8 +529,9 @@ class RocksDB(
    * Get an iterator of all committed and uncommitted key-value pairs.
    */
   def iterator(): Iterator[ByteArrayPair] = {
+
     val iter = db.newIterator()
-    logInfo(s"Getting iterator from version $loadedVersion")
+    logInfo(log"Getting iterator from version ${MDC(LogKeys.LOADED_VERSION, loadedVersion)}")
     iter.seekToFirst()
 
     // Attempt to close this iterator if there is a task failure, or a task interruption.
@@ -289,8 +558,10 @@ class RocksDB(
 
   private def countKeys(): Long = {
     val iter = db.newIterator()
+
     try {
-      logInfo(s"Counting keys - getting iterator from version $loadedVersion")
+      logInfo(log"Counting keys - getting iterator from version " +
+        log"${MDC(LogKeys.LOADED_VERSION, loadedVersion)}")
 
       iter.seekToFirst()
 
@@ -341,24 +612,32 @@ class RocksDB(
   def commit(): Long = {
     val newVersion = loadedVersion + 1
     try {
-
-      logInfo(s"Flushing updates for $newVersion")
+      logInfo(log"Flushing updates for ${MDC(LogKeys.VERSION_NUM, newVersion)}")
 
       var compactTimeMs = 0L
       var flushTimeMs = 0L
       var checkpointTimeMs = 0L
-      if (shouldCreateSnapshot()) {
+      var snapshot: Option[RocksDBSnapshot] = None
+
+      if (shouldCreateSnapshot() || shouldForceSnapshot.get()) {
         // Need to flush the change to disk before creating a checkpoint
         // because rocksdb wal is disabled.
-        logInfo(s"Flushing updates for $newVersion")
-        flushTimeMs = timeTakenMs { db.flush(flushOptions) }
+        logInfo(log"Flushing updates for ${MDC(LogKeys.VERSION_NUM, newVersion)}")
+        flushTimeMs = timeTakenMs {
+          db.flush(flushOptions)
+        }
+
         if (conf.compactOnCommit) {
           logInfo("Compacting")
-          compactTimeMs = timeTakenMs { db.compactRange() }
+          compactTimeMs = timeTakenMs {
+            db.compactRange()
+          }
         }
+
         checkpointTimeMs = timeTakenMs {
           val checkpointDir = createTempDir("checkpoint")
-          logInfo(s"Creating checkpoint for $newVersion in $checkpointDir")
+          logInfo(log"Creating checkpoint for ${MDC(LogKeys.VERSION_NUM, newVersion)} " +
+            log"in ${MDC(LogKeys.PATH, checkpointDir)}")
           // Make sure the directory does not exist. Native RocksDB fails if the directory to
           // checkpoint exists.
           Utils.deleteRecursively(checkpointDir)
@@ -367,36 +646,69 @@ class RocksDB(
           // background operations.
           val cp = Checkpoint.create(db)
           cp.createCheckpoint(checkpointDir.toString)
-          synchronized {
-            // if changelog checkpointing is disabled, the snapshot is uploaded synchronously
-            // inside the uploadSnapshot() called below.
-            // If changelog checkpointing is enabled, snapshot will be uploaded asynchronously
-            // during state store maintenance.
-            latestSnapshot.foreach(_.close())
-            latestSnapshot = Some(
-              RocksDBSnapshot(checkpointDir, newVersion, numKeysOnWritingVersion))
-            lastSnapshotVersion = newVersion
-          }
+          // if changelog checkpointing is disabled, the snapshot is uploaded synchronously
+          // inside the uploadSnapshot() called below.
+          // If changelog checkpointing is enabled, snapshot will be uploaded asynchronously
+          // during state store maintenance.
+          snapshot = Some(createSnapshot(checkpointDir, newVersion,
+            colFamilyNameToIdMap.asScala.toMap, maxColumnFamilyId.get().toShort))
+          lastSnapshotVersion = newVersion
         }
       }
 
-      logInfo(s"Syncing checkpoint for $newVersion to DFS")
+      logInfo(log"Syncing checkpoint for ${MDC(LogKeys.VERSION_NUM, newVersion)} to DFS")
       val fileSyncTimeMs = timeTakenMs {
         if (enableChangelogCheckpointing) {
+          // If we have changed the columnFamilyId mapping, we have set a new
+          // snapshot and need to upload this to the DFS even if changelog checkpointing
+          // is enabled.
+          var isUploaded = false
+          if (shouldForceSnapshot.get()) {
+            assert(snapshot.isDefined)
+            fileManagerMetrics = uploadSnapshot(
+              snapshot.get,
+              fileManager,
+              rocksDBFileMapping.snapshotsPendingUpload,
+              loggingId
+            )
+            isUploaded = true
+            shouldForceSnapshot.set(false)
+          }
+
+          // ensure that changelog files are always written
           try {
             assert(changelogWriter.isDefined)
             changelogWriter.foreach(_.commit())
+            if (!isUploaded) {
+              snapshot.foreach(snapshotsToUploadQueue.offer)
+            }
           } finally {
             changelogWriter = None
           }
         } else {
           assert(changelogWriter.isEmpty)
-          uploadSnapshot()
+          assert(snapshot.isDefined)
+          fileManagerMetrics = uploadSnapshot(
+            snapshot.get,
+            fileManager,
+            rocksDBFileMapping.snapshotsPendingUpload,
+            loggingId
+          )
         }
       }
 
+      // Set maxVersion when checkpoint files are synced to DFS successfully
+      // We need to handle this explicitly in RocksDB as we could use different
+      // changeLogWriter instances in fileManager instance when committing
+      fileManager.setMaxSeenVersion(newVersion)
+
       numKeysOnLoadedVersion = numKeysOnWritingVersion
       loadedVersion = newVersion
+      if (enableStateStoreCheckpointIds) {
+        lastCommitBasedStateStoreCkptId = loadedStateStoreCkptId
+        lastCommittedStateStoreCkptId = sessionStateStoreCkptId
+        loadedStateStoreCkptId = sessionStateStoreCkptId
+      }
       commitLatencyMs ++= Map(
         "flush" -> flushTimeMs,
         "compact" -> compactTimeMs,
@@ -404,7 +716,8 @@ class RocksDB(
         "fileSync" -> fileSyncTimeMs
       )
       recordedMetrics = Some(metrics)
-      logInfo(s"Committed $newVersion, stats = ${recordedMetrics.get.json}")
+      logInfo(log"Committed ${MDC(LogKeys.VERSION_NUM, newVersion)}, " +
+        log"stats = ${MDC(LogKeys.METRICS_JSON, recordedMetrics.get.json)}")
       loadedVersion
     } catch {
       case t: Throwable =>
@@ -413,7 +726,7 @@ class RocksDB(
     } finally {
       // reset resources as either 1) we already pushed the changes and it has been committed or
       // 2) commit has failed and the current version is "invalidated".
-      release()
+      release(LoadStore)
     }
   }
 
@@ -421,77 +734,82 @@ class RocksDB(
     if (enableChangelogCheckpointing) {
       assert(changelogWriter.isDefined)
       val newVersion = loadedVersion + 1
-      newVersion - lastSnapshotVersion >= conf.minDeltasForSnapshot ||
-        changelogWriter.get.size > 10000
+      newVersion - lastSnapshotVersion >= conf.minDeltasForSnapshot
     } else true
-  }
-
-  private def uploadSnapshot(): Unit = {
-    val localCheckpoint = synchronized {
-      val checkpoint = latestSnapshot
-      latestSnapshot = None
-      checkpoint
-    }
-    localCheckpoint match {
-      case Some(RocksDBSnapshot(localDir, version, numKeys)) =>
-        try {
-          val uploadTime = timeTakenMs {
-            fileManager.saveCheckpointToDfs(localDir, version, numKeys)
-            fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
-          }
-          logInfo(s"$loggingId: Upload snapshot of version $version," +
-            s" time taken: $uploadTime ms")
-        } finally {
-          localCheckpoint.foreach(_.close())
-        }
-      case _ =>
-    }
   }
 
   /**
    * Drop uncommitted changes, and roll back to previous version.
    */
   def rollback(): Unit = {
+    acquire(RollbackStore)
     numKeysOnWritingVersion = numKeysOnLoadedVersion
     loadedVersion = -1L
+    lastCommitBasedStateStoreCkptId = None
+    lastCommittedStateStoreCkptId = None
+    loadedStateStoreCkptId = None
+    sessionStateStoreCkptId = None
     changelogWriter.foreach(_.abort())
     // Make sure changelogWriter gets recreated next time.
     changelogWriter = None
-    release()
-    logInfo(s"Rolled back to $loadedVersion")
+    release(RollbackStore)
+    logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
   }
 
   def doMaintenance(): Unit = {
     if (enableChangelogCheckpointing) {
-      uploadSnapshot()
+
+      var mostRecentSnapshot: Option[RocksDBSnapshot] = None
+      var snapshot = snapshotsToUploadQueue.poll()
+
+      // We only want to upload the most recent snapshot and skip the previous ones.
+      while (snapshot != null) {
+        logDebug(s"RocksDB Maintenance - polled snapshot ${snapshot.version}")
+        mostRecentSnapshot.foreach(_.close())
+        mostRecentSnapshot = Some(snapshot)
+        snapshot = snapshotsToUploadQueue.poll()
+      }
+
+      if (mostRecentSnapshot.isDefined) {
+        fileManagerMetrics = uploadSnapshot(
+          mostRecentSnapshot.get,
+          fileManager,
+          rocksDBFileMapping.snapshotsPendingUpload,
+          loggingId
+        )
+      }
     }
     val cleanupTime = timeTakenMs {
-      fileManager.deleteOldVersions(conf.minVersionsToRetain)
+      fileManager.deleteOldVersions(conf.minVersionsToRetain, conf.minVersionsToDelete)
     }
-    logInfo(s"Cleaned old data, time taken: $cleanupTime ms")
+    logInfo(log"Cleaned old data, time taken: ${MDC(LogKeys.TIME_UNITS, cleanupTime)} ms")
   }
 
   /** Release all resources */
   def close(): Unit = {
     try {
       // Acquire DB instance lock and release at the end to allow for synchronized access
-      acquire()
+      acquire(CloseStore)
       closeDB()
 
       readOptions.close()
       writeOptions.close()
       flushOptions.close()
-      dbOptions.close()
+      rocksDbOptions.close()
       dbLogger.close()
-      synchronized {
-        latestSnapshot.foreach(_.close())
+
+      var snapshot = snapshotsToUploadQueue.poll()
+      while (snapshot != null) {
+        snapshot.close()
+        snapshot = snapshotsToUploadQueue.poll()
       }
+
       silentDeleteRecursively(localRootDir, "closing RocksDB")
     } catch {
       case e: Exception =>
         logWarning("Error closing RocksDB", e)
     } finally {
-      release()
+      release(CloseStore)
     }
   }
 
@@ -500,6 +818,19 @@ class RocksDB(
 
   /** Get the write buffer manager and cache */
   def getWriteBufferManagerAndCache(): (WriteBufferManager, Cache) = (writeBufferManager, lruCache)
+
+  /**
+   * Called by RocksDBStateStoreProvider to retrieve the checkpoint information to be
+   * passed back to the stateful operator. It will return the information for the latest
+   * state store checkpointing.
+   */
+  def getLatestCheckpointInfo(partitionId: Int): StateStoreCheckpointInfo = {
+    StateStoreCheckpointInfo(
+      partitionId,
+      loadedVersion,
+      lastCommittedStateStoreCkptId,
+      lastCommitBasedStateStoreCkptId)
+  }
 
   /** Get current instantaneous statistics */
   private def metrics: RocksDBMetrics = {
@@ -541,19 +872,28 @@ class RocksDB(
       nativeStats.getTickerCount(typ)
     }
 
+    // if bounded memory usage is enabled, we share the block cache across all state providers
+    // running on the same node and account the usage to this single cache. In this case, its not
+    // possible to provide partition level or query level memory usage.
+    val memoryUsage = if (conf.boundedMemoryUsage) {
+      0L
+    } else {
+      readerMemUsage + memTableMemUsage + blockCacheUsage
+    }
+
     RocksDBMetrics(
       numKeysOnLoadedVersion,
       numKeysOnWritingVersion,
-      readerMemUsage + memTableMemUsage + blockCacheUsage,
+      memoryUsage,
       pinnedBlocksMemUsage,
       totalSSTFilesBytes,
-      nativeOpsLatencyMicros.toMap,
+      nativeOpsLatencyMicros,
       commitLatencyMs,
       bytesCopied = fileManagerMetrics.bytesCopied,
       filesCopied = fileManagerMetrics.filesCopied,
       filesReused = fileManagerMetrics.filesReused,
       zipFileBytesUncompressed = fileManagerMetrics.zipFileBytesUncompressed,
-      nativeOpsMetrics = nativeOpsMetrics.toMap)
+      nativeOpsMetrics = nativeOpsMetrics)
   }
 
   /**
@@ -564,21 +904,42 @@ class RocksDB(
   def metricsOpt: Option[RocksDBMetrics] = {
     var rocksDBMetricsOpt: Option[RocksDBMetrics] = None
     try {
-      acquire()
+      acquire(ReportStoreMetrics)
       rocksDBMetricsOpt = recordedMetrics
     } catch {
       case ex: Exception =>
-        logInfo(s"Failed to acquire metrics with exception=$ex")
+        logInfo(log"Failed to acquire metrics with exception=${MDC(LogKeys.ERROR, ex)}")
     } finally {
-      release()
+      release(ReportStoreMetrics)
     }
     rocksDBMetricsOpt
   }
 
-  private def acquire(): Unit = acquireLock.synchronized {
+  private def createSnapshot(
+      checkpointDir: File,
+      version: Long,
+      columnFamilyMapping: Map[String, Short],
+      maxColumnFamilyId: Short): RocksDBSnapshot = {
+    val (dfsFileSuffix, immutableFileMapping) = rocksDBFileMapping.createSnapshotFileMapping(
+      fileManager, checkpointDir, version)
+
+    RocksDBSnapshot(checkpointDir, version, numKeysOnWritingVersion,
+      columnFamilyMapping, maxColumnFamilyId, dfsFileSuffix, immutableFileMapping)
+  }
+
+  /**
+   * Function to acquire RocksDB instance lock that allows for synchronized access to the state
+   * store instance
+   *
+   * @param opType - operation type requesting the lock
+   */
+  private def acquire(opType: RocksDBOpType): Unit = acquireLock.synchronized {
     val newAcquiredThreadInfo = AcquiredThreadInfo()
-    val waitStartTime = System.currentTimeMillis
-    def timeWaitedMs = System.currentTimeMillis - waitStartTime
+    val waitStartTime = System.nanoTime()
+    def timeWaitedMs = {
+      val elapsedNanos = System.nanoTime() - waitStartTime
+      TimeUnit.MILLISECONDS.convert(elapsedNanos, TimeUnit.NANOSECONDS)
+    }
     def isAcquiredByDifferentThread = acquiredThreadInfo != null &&
       acquiredThreadInfo.threadRef.get.isDefined &&
       newAcquiredThreadInfo.threadRef.get.get.getId != acquiredThreadInfo.threadRef.get.get.getId
@@ -588,52 +949,73 @@ class RocksDB(
     }
     if (isAcquiredByDifferentThread) {
       val stackTraceOutput = acquiredThreadInfo.threadRef.get.get.getStackTrace.mkString("\n")
-      throw QueryExecutionErrors.unreleasedThreadError(loggingId, newAcquiredThreadInfo.toString(),
-        acquiredThreadInfo.toString(), timeWaitedMs, stackTraceOutput)
+      throw QueryExecutionErrors.unreleasedThreadError(loggingId, opType.toString,
+        newAcquiredThreadInfo.toString(), acquiredThreadInfo.toString(), timeWaitedMs,
+        stackTraceOutput)
     } else {
       acquiredThreadInfo = newAcquiredThreadInfo
       // Add a listener to always release the lock when the task (if active) completes
-      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] { _ => this.release() })
-      logInfo(s"RocksDB instance was acquired by $acquiredThreadInfo")
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] {
+        _ => this.release(StoreTaskCompletionListener)
+      })
+      logInfo(log"RocksDB instance was acquired by ${MDC(LogKeys.THREAD, acquiredThreadInfo)} " +
+        log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
     }
   }
 
-  private def release(): Unit = acquireLock.synchronized {
-    acquiredThreadInfo = null
-    acquireLock.notifyAll()
+  /**
+   * Function to release RocksDB instance lock that allows for synchronized access to the state
+   * store instance
+   *
+   * @param opType - operation type releasing the lock
+   */
+  private def release(opType: RocksDBOpType): Unit = acquireLock.synchronized {
+    if (acquiredThreadInfo != null) {
+      logInfo(log"RocksDB instance was released by ${MDC(LogKeys.THREAD,
+        acquiredThreadInfo)} " + log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
+      acquiredThreadInfo = null
+      acquireLock.notifyAll()
+    }
   }
 
-  private def getDBProperty(property: String): Long = {
-    db.getProperty(property).toLong
-  }
+  private def getDBProperty(property: String): Long = db.getProperty(property).toLong
 
   private def openDB(): Unit = {
     assert(db == null)
-    db = NativeRocksDB.open(dbOptions, workingDir.toString)
-    logInfo(s"Opened DB with conf ${conf}")
+    db = NativeRocksDB.open(rocksDbOptions, workingDir.toString)
+    logInfo(log"Opened DB with conf ${MDC(LogKeys.CONFIG, conf)}")
   }
 
-  private def closeDB(): Unit = {
+  private def closeDB(ignoreException: Boolean = true): Unit = {
     if (db != null) {
-      db.close()
+      // Cancel and wait until all background work finishes
+      db.cancelAllBackgroundWork(true)
+      if (ignoreException) {
+        // Close the DB instance
+        db.close()
+      } else {
+        // Close the DB instance and throw the exception if any
+        db.closeE()
+      }
       db = null
     }
   }
 
   /** Create a native RocksDB logger that forwards native logs to log4j with correct log levels. */
   private def createLogger(): Logger = {
-    val dbLogger = new Logger(dbOptions) {
+    val dbLogger = new Logger(rocksDbOptions.infoLogLevel()) {
       override def log(infoLogLevel: InfoLogLevel, logMsg: String) = {
         // Map DB log level to log4j levels
         // Warn is mapped to info because RocksDB warn is too verbose
         // (e.g. dumps non-warning stuff like stats)
-        val loggingFunc: ( => String) => Unit = infoLogLevel match {
+        val loggingFunc: ( => LogEntry) => Unit = infoLogLevel match {
           case InfoLogLevel.FATAL_LEVEL | InfoLogLevel.ERROR_LEVEL => logError(_)
           case InfoLogLevel.WARN_LEVEL | InfoLogLevel.INFO_LEVEL => logInfo(_)
           case InfoLogLevel.DEBUG_LEVEL => logDebug(_)
           case _ => logTrace(_)
         }
-        loggingFunc(s"[NativeRocksDB-${infoLogLevel.getValue}] $logMsg")
+        loggingFunc(log"[NativeRocksDB-${MDC(LogKeys.ROCKS_DB_LOG_LEVEL, infoLogLevel.getValue)}]" +
+          log" ${MDC(LogKeys.ROCKS_DB_LOG_MESSAGE, logMsg)}")
       }
     }
 
@@ -644,9 +1026,9 @@ class RocksDB(
     dbLogger.setInfoLogLevel(dbLogLevel)
     // The log level set in dbLogger is effective and the one to dbOptions isn't applied to
     // customized logger. We still set it as it might show up in RocksDB config file or logging.
-    dbOptions.setInfoLogLevel(dbLogLevel)
-    dbOptions.setLogger(dbLogger)
-    logInfo(s"Set RocksDB native logging level to $dbLogLevel")
+    rocksDbOptions.setInfoLogLevel(dbLogLevel)
+    rocksDbOptions.setLogger(dbLogger)
+    logInfo(log"Set RocksDB native logging level to ${MDC(LogKeys.ROCKS_DB_LOG_LEVEL, dbLogLevel)}")
     dbLogger
   }
 
@@ -661,14 +1043,152 @@ class RocksDB(
       Utils.deleteRecursively(file)
     } catch {
       case e: Exception =>
-        logWarning(s"Error recursively deleting local dir $file while $msg", e)
+        logWarning(log"Error recursively deleting local dir ${MDC(LogKeys.PATH, file)} " +
+          log"while ${MDC(LogKeys.ERROR, msg)}", e)
     }
   }
 
-  /** Records the duration of running `body` for the next query progress update. */
-  protected def timeTakenMs(body: => Unit): Long = Utils.timeTakenMs(body)._2
-
   override protected def logName: String = s"${super.logName} $loggingId"
+}
+
+object RocksDB extends Logging {
+
+  /** Upload the snapshot to DFS and remove it from snapshots pending */
+  private def uploadSnapshot(
+      snapshot: RocksDB#RocksDBSnapshot,
+      fileManager: RocksDBFileManager,
+      snapshotsPendingUpload: Set[RocksDBVersionSnapshotInfo],
+      loggingId: String): RocksDBFileManagerMetrics = {
+    var fileManagerMetrics: RocksDBFileManagerMetrics = null
+    try {
+      val uploadTime = timeTakenMs {
+        fileManager.saveCheckpointToDfs(snapshot.checkpointDir,
+          snapshot.version, snapshot.numKeys, snapshot.fileMapping,
+          Some(snapshot.columnFamilyMapping), Some(snapshot.maxColumnFamilyId))
+        fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
+
+        val snapshotInfo = RocksDBVersionSnapshotInfo(snapshot.version, snapshot.dfsFileSuffix)
+        // We are only removing the uploaded snapshot info from the pending set,
+        // to let the file mapping (i.e. query threads) know that the snapshot (i.e. and its files)
+        // have been uploaded to DFS. We don't touch the file mapping here to avoid corrupting it.
+        snapshotsPendingUpload.remove(snapshotInfo)
+      }
+      logInfo(log"${MDC(LogKeys.LOG_ID, loggingId)}: Upload snapshot of version " +
+        log"${MDC(LogKeys.VERSION_NUM, snapshot.version)}," +
+        log" time taken: ${MDC(LogKeys.TIME_UNITS, uploadTime)} ms")
+    } finally {
+      snapshot.close()
+    }
+
+    fileManagerMetrics
+  }
+
+  /** Records the duration of running `body` for the next query progress update. */
+  private def timeTakenMs(body: => Unit): Long = Utils.timeTakenMs(body)._2
+}
+
+// uniquely identifies a Snapshot. Multiple snapshots created for same version will
+// use a different dfsFilesUUID, and hence will have different RocksDBVersionSnapshotInfo
+case class RocksDBVersionSnapshotInfo(version: Long, dfsFilesUUID: String)
+
+// Encapsulates a RocksDB immutable file, and the information whether it has been previously
+// uploaded to DFS. Already uploaded files can be skipped during SST file upload.
+case class RocksDBSnapshotFile(immutableFile: RocksDBImmutableFile, isUploaded: Boolean)
+
+// Encapsulates the mapping of local SST files to DFS files. This mapping prevents
+// re-uploading the same SST file multiple times to DFS, saving I/O and reducing snapshot
+// upload time. During version load, if a DFS file is already present on local file system,
+// it will be reused.
+// This mapping should only be updated using the Task thread - at version load and commit time.
+// If same mapping instance is updated from different threads, it will result in undefined behavior
+// (and most likely incorrect mapping state).
+class RocksDBFileMapping {
+
+  // Maps a local SST file to the DFS version and DFS file.
+  private val localFileMappings: mutable.Map[String, (Long, RocksDBImmutableFile)] =
+    mutable.HashMap[String, (Long, RocksDBImmutableFile)]()
+
+  // Keeps track of all snapshots which have not been uploaded yet. This prevents Spark
+  // from reusing SST files which have not been yet persisted to DFS,
+  val snapshotsPendingUpload: Set[RocksDBVersionSnapshotInfo] = ConcurrentHashMap.newKeySet()
+
+  // Current State Store version which has been loaded.
+  var currentVersion: Long = 0
+
+  // If the local file (with localFileName) has already been persisted to DFS, returns the
+  // DFS file, else returns None.
+  // If the currently mapped DFS file was committed in a newer version (or was generated
+  // in a version which has not been uploaded to DFS yet), the mapped DFS file is ignored (because
+  // it cannot be reused in this version). In this scenario, the local mapping to this DFS file
+  // will be cleared, and function will return None.
+  def getDfsFile(
+      fileManager: RocksDBFileManager,
+      localFileName: String): Option[RocksDBImmutableFile] = {
+    localFileMappings.get(localFileName).map { case (dfsFileCommitVersion, dfsFile) =>
+      val dfsFileSuffix = fileManager.dfsFileSuffix(dfsFile)
+      val versionSnapshotInfo = RocksDBVersionSnapshotInfo(dfsFileCommitVersion, dfsFileSuffix)
+      if (dfsFileCommitVersion >= currentVersion ||
+        snapshotsPendingUpload.contains(versionSnapshotInfo)) {
+        // the mapped dfs file cannot be used, delete from mapping
+        remove(localFileName)
+        None
+      } else {
+        Some(dfsFile)
+      }
+    }.getOrElse(None)
+  }
+
+  private def mapToDfsFile(
+      localFileName: String,
+      dfsFile: RocksDBImmutableFile,
+      version: Long): Unit = {
+    localFileMappings.put(localFileName, (version, dfsFile))
+  }
+
+  def remove(localFileName: String): Unit = {
+    localFileMappings.remove(localFileName)
+  }
+
+  def mapToDfsFileForCurrentVersion(localFileName: String, dfsFile: RocksDBImmutableFile): Unit = {
+    localFileMappings.put(localFileName, (currentVersion, dfsFile))
+  }
+
+  private def syncWithLocalState(localFiles: Seq[File]): Unit = {
+    val localFileNames = localFiles.map(_.getName).toSet
+    val deletedFiles = localFileMappings.keys.filterNot(localFileNames.contains)
+
+    deletedFiles.foreach(localFileMappings.remove)
+  }
+
+  // Generates the DFS file names for local Immutable files in checkpoint directory, and
+  // returns the mapping from local fileName in checkpoint directory to generated DFS file.
+  // If the DFS file has been previously uploaded - the snapshot file isUploaded flag is set
+  // to true.
+  def createSnapshotFileMapping(
+      fileManager: RocksDBFileManager,
+      checkpointDir: File,
+      version: Long): (String, Map[String, RocksDBSnapshotFile]) = {
+    val (localImmutableFiles, _) = fileManager.listRocksDBFiles(checkpointDir)
+    // UUID used to prefix files uploaded to DFS as part of commit
+    val dfsFilesSuffix = UUID.randomUUID().toString
+    val snapshotFileMapping = localImmutableFiles.map { f =>
+      val localFileName = f.getName
+      val existingDfsFile = getDfsFile(fileManager, localFileName)
+      val dfsFile = existingDfsFile.getOrElse {
+        val newDfsFileName = fileManager.newDFSFileName(localFileName, dfsFilesSuffix)
+        val newDfsFile = RocksDBImmutableFile(localFileName, newDfsFileName, sizeBytes = f.length())
+        mapToDfsFile(localFileName, newDfsFile, version)
+        newDfsFile
+      }
+      localFileName -> RocksDBSnapshotFile(dfsFile, existingDfsFile.isDefined)
+    }.toMap
+
+    syncWithLocalState(localImmutableFiles)
+
+    val rocksDBSnapshotInfo = RocksDBVersionSnapshotInfo(version, dfsFilesSuffix)
+    snapshotsPendingUpload.add(rocksDBSnapshotInfo)
+    (dfsFilesSuffix, snapshotFileMapping)
+  }
 }
 
 
@@ -688,6 +1208,7 @@ class ByteArrayPair(var key: Array[Byte] = null, var value: Array[Byte] = null) 
  */
 case class RocksDBConf(
     minVersionsToRetain: Int,
+    minVersionsToDelete: Long,
     minDeltasForSnapshot: Int,
     compactOnCommit: Boolean,
     enableChangelogCheckpointing: Boolean,
@@ -861,7 +1382,7 @@ object RocksDBConf {
     }
 
     def getStringConf(conf: ConfEntry): String = {
-      Try { getConfigMap(conf).getOrElse(conf.fullName, conf.default).toString } getOrElse {
+      Try { getConfigMap(conf).getOrElse(conf.fullName, conf.default) } getOrElse {
         throw new IllegalArgumentException(
           s"Invalid value for '${conf.fullName}', must be a string"
         )
@@ -870,6 +1391,7 @@ object RocksDBConf {
 
     RocksDBConf(
       storeConf.minVersionsToRetain,
+      storeConf.minVersionsToDelete,
       storeConf.minDeltasForSnapshot,
       getBooleanConf(COMPACT_ON_COMMIT_CONF),
       getBooleanConf(ENABLE_CHANGELOG_CHECKPOINTING_CONF),

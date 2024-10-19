@@ -20,6 +20,7 @@ SELECT * EXCEPT (data) FROM tbl_view;
 SELECT * EXCEPT (data.f1) FROM tbl_view;
 SELECT * EXCEPT (data.s2) FROM tbl_view;
 SELECT * EXCEPT (data.s2.f2) FROM tbl_view;
+SELECT * EXCEPT (data.f1, data.s2) FROM tbl_view;
 -- EXCEPT all columns
 SELECT * EXCEPT (id, name, data) FROM tbl_view;
 -- EXCEPT special character names
@@ -49,3 +50,29 @@ SELECT * EXCEPT(id, invalid_column) FROM tbl_view;
 SELECT * EXCEPT(id, id) FROM tbl_view;
 -- EXCEPT overlapping columns
 SELECT * EXCEPT(data.s2, data.s2.f2) FROM tbl_view;
+
+DROP VIEW tbl_view;
+
+CREATE TEMPORARY VIEW v1 AS VALUES (1, 2, NULL, 4, 5) AS T(c1, c2, c3, c4, c5);
+-- star tests in select list
+SELECT coalesce(*) FROM v1;
+SELECT coalesce(* EXCEPT(c1, c2)) FROM v1;
+SELECT array(*) FROM v1;
+SELECT array(v1.*) FROM v1;
+SELECT concat_ws(',', *) FROM v1;
+
+-- This is just SELECT *
+SELECT (*) FROM v1;
+
+SELECT struct(*) FROM v1;
+SELECT greatest(*) FROM v1;
+SELECT 5 IN (*) FROM v1;
+SELECT c1.* FROM VALUES(named_struct('a', 1, 'b', 2), 10, 20) as t(c1, c2, c3);
+
+-- star outside of select list
+SELECT 1 FROM v1 WHERE coalesce(*) = 1;
+SELECT 1 FROM v1 WHERE array(*) = array(1, 2, NULL, 4, 5);
+SELECT 1 FROM v1 WHERE 4 IN (*);
+SELECT T.* FROM v1, LATERAL (SELECT  v1.*) AS T(c1, c2, c3, c4, c5);
+SELECT T.* FROM v1, LATERAL (SELECT  COALESCE(v1.*)) AS T(x);
+

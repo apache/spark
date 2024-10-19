@@ -414,7 +414,8 @@ abstract class ParquetRebaseDatetimeSuite
         val e = intercept[SparkException] {
           df.write.parquet(dir.getCanonicalPath)
         }
-        val errMsg = e.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+        assert(e.getCondition == "TASK_WRITE_FAILED")
+        val errMsg = e.getCause.asInstanceOf[SparkUpgradeException].getMessage
         assert(errMsg.contains("You may get a different result due to the upgrading"))
       }
     }
@@ -430,7 +431,8 @@ abstract class ParquetRebaseDatetimeSuite
           val e = intercept[SparkException] {
             df.write.parquet(dir.getCanonicalPath)
           }
-          val errMsg = e.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+          assert(e.getCondition == "TASK_WRITE_FAILED")
+          val errMsg = e.getCause.asInstanceOf[SparkUpgradeException].getMessage
           assert(errMsg.contains("You may get a different result due to the upgrading"))
         }
       }
@@ -442,11 +444,10 @@ abstract class ParquetRebaseDatetimeSuite
     }
 
     def checkRead(fileName: String): Unit = {
-      val e = intercept[SparkException] {
+      val e = intercept[SparkUpgradeException] {
         spark.read.parquet(getResourceParquetFilePath("test-data/" + fileName)).collect()
       }
-      val errMsg = e.getCause.asInstanceOf[SparkUpgradeException].getMessage
-      assert(errMsg.contains("You may get a different result due to the upgrading"))
+      assert(e.getMessage.contains("You may get a different result due to the upgrading"))
     }
     withAllParquetWriters {
       withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {

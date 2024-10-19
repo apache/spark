@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.types._
 
@@ -242,7 +243,7 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
       errorSubClass = "DATA_DIFF_TYPES",
       messageParameters = Map(
         "functionName" -> "`casewhen`",
-        "dataType" -> "[\"STRUCT<x: INT>\", \"STRUCT<y: INT>\"]")))
+        "dataType" -> "[\"STRUCT<x: INT NOT NULL>\", \"STRUCT<y: INT NOT NULL>\"]")))
 
     val checkResult2 = CaseWhen(Seq((Literal.FalseLiteral, caseVal1),
       (Literal.FalseLiteral, caseVal2)), Some(elseVal)).checkInputDataTypes()
@@ -250,7 +251,8 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
       errorSubClass = "DATA_DIFF_TYPES",
       messageParameters = Map(
         "functionName" -> "`casewhen`",
-        "dataType" -> "[\"STRUCT<x: INT>\", \"STRUCT<y: INT>\", \"STRUCT<z: INT>\"]")))
+        "dataType" -> ("[\"STRUCT<x: INT NOT NULL>\", " +
+          "\"STRUCT<y: INT NOT NULL>\", \"STRUCT<z: INT NOT NULL>\"]"))))
   }
 
   test("SPARK-27917 test semantic equals of CaseWhen") {
@@ -275,5 +277,28 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     // Test with elseValue with inEquality
     assert(!caseWhenObj1.semanticEquals(caseWhenObj2))
     assert(!caseWhenObj2.semanticEquals(caseWhenObj1))
+  }
+
+  test("SPARK-49396 accurate nullability check") {
+    val trueBranch = (TrueLiteral, Literal(5))
+    val normalBranch = (NonFoldableLiteral(true), Literal(10))
+
+    val nullLiteral = Literal.create(null, BooleanType)
+    val noElseValue = CaseWhen(normalBranch :: trueBranch :: Nil, None)
+    assert(!noElseValue.nullable)
+    val withElseValue = CaseWhen(normalBranch :: trueBranch :: Nil, Some(Literal(1)))
+    assert(!withElseValue.nullable)
+    val withNullableElseValue = CaseWhen(normalBranch :: trueBranch :: Nil, Some(nullLiteral))
+    assert(!withNullableElseValue.nullable)
+    val firstTrueNonNullableSecondTrueNullable = CaseWhen(trueBranch ::
+      (TrueLiteral, nullLiteral) :: Nil, None)
+    assert(!firstTrueNonNullableSecondTrueNullable.nullable)
+    val firstTrueNullableSecondTrueNonNullable = CaseWhen((TrueLiteral, nullLiteral) ::
+      trueBranch :: Nil, None)
+    assert(firstTrueNullableSecondTrueNonNullable.nullable)
+    val hasNullInNotTrueBranch = CaseWhen(trueBranch :: (FalseLiteral, nullLiteral) :: Nil, None)
+    assert(!hasNullInNotTrueBranch.nullable)
+    val noTrueBranch = CaseWhen(normalBranch :: Nil, Literal(1))
+    assert(!noTrueBranch.nullable)
   }
 }

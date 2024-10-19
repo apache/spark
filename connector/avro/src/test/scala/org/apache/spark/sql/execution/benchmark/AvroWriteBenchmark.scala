@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.benchmark
 import scala.util.Random
 
 import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.sql.avro.AvroCompressionCodec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -42,8 +44,8 @@ object AvroWriteBenchmark extends DataSourceWriteBenchmark {
     withTempPath { dir =>
       withTempTable("t1") {
         val width = 1000
-        val values = 500000
-        val files = 20
+        val values = 100000
+        val files = 12
         val selectExpr = (1 to width).map(i => s"value as c$i")
         // repartition to ensure we will write multiple files
         val df = spark.range(values)
@@ -52,12 +54,48 @@ object AvroWriteBenchmark extends DataSourceWriteBenchmark {
         // cache the data to ensure we are not benchmarking range or repartition
         df.noop()
         df.createOrReplaceTempView("t1")
-        val benchmark = new Benchmark(s"Write wide rows into $files files", values, output = output)
-        benchmark.addCase("Write wide rows") { _ =>
-          spark.sql("SELECT * FROM t1").
-            write.format("avro").save(s"${dir.getCanonicalPath}/${Random.nextLong().abs}")
+
+        def addBenchmark(
+            benchmark: Benchmark,
+            codec: String,
+            conf: Map[String, String] = Map.empty): Unit = {
+          val name = conf.map(kv => kv._1.stripPrefix("spark.sql.avro.") + "=" + kv._2)
+            .mkString(codec + ": ", ", ", "")
+          benchmark.addCase(name) { _ =>
+            withSQLConf(conf.toSeq: _*) {
+              spark
+                .table("t1")
+                .write
+                .option("compression", codec)
+                .format("avro")
+                .save(s"${dir.getCanonicalPath}/${Random.nextLong().abs}")
+            }
+          }
         }
-        benchmark.run()
+
+        val bm = new Benchmark(s"Avro compression with different codec", values, output = output)
+        AvroCompressionCodec.values().sortBy(_.getCodecName).foreach { codec =>
+          addBenchmark(bm, codec.name)
+        }
+        bm.run()
+
+        AvroCompressionCodec.values().filter(_.getSupportCompressionLevel).foreach { codec =>
+          val bm = new Benchmark(
+            s"Avro ${codec.getCodecName} with different levels", values, output = output)
+          Seq(1, 3, 5, 7, 9).foreach { level =>
+            val conf = Map(s"spark.sql.avro.${codec.getCodecName}.level" -> level.toString)
+            addBenchmark(bm, codec.name, conf)
+            if (codec == AvroCompressionCodec.ZSTANDARD) {
+              val nondft =
+                !spark.sessionState.conf.getConf(SQLConf.AVRO_ZSTANDARD_BUFFER_POOL_ENABLED)
+             addBenchmark(
+               bm,
+               codec.name,
+               conf + (SQLConf.AVRO_ZSTANDARD_BUFFER_POOL_ENABLED.key -> nondft.toString))
+            }
+          }
+          bm.run()
+        }
       }
     }
   }

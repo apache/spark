@@ -25,7 +25,9 @@ import scala.concurrent.duration.NANOSECONDS
 import scala.util.control.NonFatal
 
 import org.apache.spark.{broadcast, SparkException}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.MDC
+import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
@@ -59,16 +61,56 @@ trait BroadcastExchangeLike extends Exchange {
    */
   def relationFuture: Future[broadcast.Broadcast[Any]]
 
+  @transient
+  private lazy val promise = Promise[Unit]()
+
+  @transient
+  private lazy val scalaFuture: scala.concurrent.Future[Unit] = promise.future
+
+  @transient
+  private lazy val triggerFuture: Future[Any] = {
+    SQLExecution.withThreadLocalCaptured(session, BroadcastExchangeExec.executionContext) {
+      try {
+        // Trigger broadcast preparation which can involve expensive operations like waiting on
+        // subqueries and file listing.
+        executeQuery(null)
+        promise.trySuccess(())
+      } catch {
+        case e: Throwable =>
+          promise.tryFailure(e)
+          throw e
+      }
+    }
+  }
+
+  protected def completionFuture: scala.concurrent.Future[broadcast.Broadcast[Any]]
+
   /**
    * The asynchronous job that materializes the broadcast. It's used for registering callbacks on
    * `relationFuture`. Note that calling this method may not start the execution of broadcast job.
    * It also does the preparations work, such as waiting for the subqueries.
    */
-  final def submitBroadcastJob: scala.concurrent.Future[broadcast.Broadcast[Any]] = executeQuery {
-    completionFuture
+  final def submitBroadcastJob(): scala.concurrent.Future[broadcast.Broadcast[Any]] = {
+    triggerFuture
+    scalaFuture.flatMap { _ =>
+      RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
+        completionFuture
+      }
+    }(BroadcastExchangeExec.executionContext)
   }
 
-  protected def completionFuture: scala.concurrent.Future[broadcast.Broadcast[Any]]
+  /**
+   * Cancels broadcast job with an optional reason.
+   */
+  final def cancelBroadcastJob(reason: Option[String]): Unit = {
+    if (!this.relationFuture.isDone) {
+      reason match {
+        case Some(r) => sparkContext.cancelJobsWithTag(this.jobTag, r)
+        case None => sparkContext.cancelJobsWithTag(this.jobTag)
+      }
+      this.relationFuture.cancel(true)
+    }
+  }
 
   /**
    * Returns the runtime statistics after broadcast materialization.
@@ -212,9 +254,9 @@ case class BroadcastExchangeExec(
       relationFuture.get(timeout, TimeUnit.SECONDS).asInstanceOf[broadcast.Broadcast[T]]
     } catch {
       case ex: TimeoutException =>
-        logError(s"Could not execute broadcast in $timeout secs.", ex)
+        logError(log"Could not execute broadcast in ${MDC(TIMEOUT, timeout)} secs.", ex)
         if (!relationFuture.isDone) {
-          sparkContext.cancelJobsWithTag(jobTag)
+          sparkContext.cancelJobsWithTag(jobTag, "The corresponding broadcast query has failed.")
           relationFuture.cancel(true)
         }
         throw QueryExecutionErrors.executeBroadcastTimeoutError(timeout, Some(ex))

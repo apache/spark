@@ -28,8 +28,8 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.{Vector, Vectors}
@@ -37,7 +37,7 @@ import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.param.shared.{HasParallelism, HasWeightCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -93,7 +93,7 @@ private[ml] object OneVsRestParams extends ClassifierTypeTrait {
   def saveImpl(
       path: String,
       instance: OneVsRestParams,
-      sc: SparkContext,
+      spark: SparkSession,
       extraMetadata: Option[JObject] = None): Unit = {
 
     val params = instance.extractParamMap().toSeq
@@ -102,7 +102,7 @@ private[ml] object OneVsRestParams extends ClassifierTypeTrait {
       .map { case ParamPair(p, v) => p.name -> parse(p.jsonEncode(v)) }
       .toList)
 
-    DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
+    DefaultParamsWriter.saveMetadata(instance, path, spark, extraMetadata, Some(jsonParams))
 
     val classifierPath = new Path(path, "classifier").toString
     instance.getClassifier.asInstanceOf[MLWritable].save(classifierPath)
@@ -110,12 +110,12 @@ private[ml] object OneVsRestParams extends ClassifierTypeTrait {
 
   def loadImpl(
       path: String,
-      sc: SparkContext,
+      spark: SparkSession,
       expectedClassName: String): (DefaultParamsReader.Metadata, ClassifierType) = {
 
-    val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
+    val metadata = DefaultParamsReader.loadMetadata(path, spark, expectedClassName)
     val classifierPath = new Path(path, "classifier").toString
-    val estimator = DefaultParamsReader.loadParamsInstance[ClassifierType](classifierPath, sc)
+    val estimator = DefaultParamsReader.loadParamsInstance[ClassifierType](classifierPath, spark)
     (metadata, estimator)
   }
 }
@@ -180,8 +180,8 @@ final class OneVsRestModel private[ml] (
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
     if (getPredictionCol.isEmpty && getRawPredictionCol.isEmpty) {
-      logWarning(s"$uid: OneVsRestModel.transform() does nothing" +
-        " because no output columns were set.")
+      logWarning(log"${MDC(LogKeys.UUID, uid)}: OneVsRestModel.transform() does nothing " +
+        log"because no output columns were set.")
       return dataset.toDF()
     }
 
@@ -281,7 +281,7 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
     override protected def saveImpl(path: String): Unit = {
       val extraJson = ("labelMetadata" -> instance.labelMetadata.json) ~
         ("numClasses" -> instance.models.length)
-      OneVsRestParams.saveImpl(path, instance, sc, Some(extraJson))
+      OneVsRestParams.saveImpl(path, instance, sparkSession, Some(extraJson))
       instance.models.map(_.asInstanceOf[MLWritable]).zipWithIndex.foreach { case (model, idx) =>
         val modelPath = new Path(path, s"model_$idx").toString
         model.save(modelPath)
@@ -296,12 +296,12 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
 
     override def load(path: String): OneVsRestModel = {
       implicit val format = DefaultFormats
-      val (metadata, classifier) = OneVsRestParams.loadImpl(path, sc, className)
+      val (metadata, classifier) = OneVsRestParams.loadImpl(path, sparkSession, className)
       val labelMetadata = Metadata.fromJson((metadata.metadata \ "labelMetadata").extract[String])
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]
       val models = Range(0, numClasses).toArray.map { idx =>
         val modelPath = new Path(path, s"model_$idx").toString
-        DefaultParamsReader.loadParamsInstance[ClassificationModel[_, _]](modelPath, sc)
+        DefaultParamsReader.loadParamsInstance[ClassificationModel[_, _]](modelPath, sparkSession)
       }
       val ovrModel = new OneVsRestModel(metadata.uid, labelMetadata, models)
       metadata.getAndSetParams(ovrModel)
@@ -400,7 +400,8 @@ final class OneVsRest @Since("1.4.0") (
       getClassifier match {
         case _: HasWeightCol => true
         case c =>
-          instr.logWarning(s"weightCol is ignored, as it is not supported by $c now.")
+          instr.logWarning(log"weightCol is ignored, as it is not supported by " +
+            log"${MDC(LogKeys.CLASSIFIER, c)} now.")
           false
       }
     }
@@ -488,7 +489,7 @@ object OneVsRest extends MLReadable[OneVsRest] {
     OneVsRestParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit = {
-      OneVsRestParams.saveImpl(path, instance, sc)
+      OneVsRestParams.saveImpl(path, instance, sparkSession)
     }
   }
 
@@ -498,7 +499,7 @@ object OneVsRest extends MLReadable[OneVsRest] {
     private val className = classOf[OneVsRest].getName
 
     override def load(path: String): OneVsRest = {
-      val (metadata, classifier) = OneVsRestParams.loadImpl(path, sc, className)
+      val (metadata, classifier) = OneVsRestParams.loadImpl(path, sparkSession, className)
       val ovr = new OneVsRest(metadata.uid)
       metadata.getAndSetParams(ovr)
       ovr.setClassifier(classifier)

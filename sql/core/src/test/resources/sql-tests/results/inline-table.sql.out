@@ -131,7 +131,7 @@ select * from values ("one", 2.0), ("two") as data(a, b)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_INLINE_TABLE.NUM_COLUMNS_MISMATCH",
   "sqlState" : "42000",
@@ -177,7 +177,7 @@ select * from values ("one"), ("two") as data(a, b)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_INLINE_TABLE.NUM_COLUMNS_MISMATCH",
   "sqlState" : "42000",
@@ -271,3 +271,19 @@ select * from values (10 + try_divide(5, 0))
 struct<col1:double>
 -- !query output
 NULL
+
+
+-- !query
+select count(distinct ct) from values now(), now(), now() as data(ct)
+-- !query schema
+struct<count(DISTINCT ct):bigint>
+-- !query output
+1
+
+
+-- !query
+select count(distinct ct) from values current_timestamp(), current_timestamp() as data(ct)
+-- !query schema
+struct<count(DISTINCT ct):bigint>
+-- !query output
+1

@@ -4,7 +4,7 @@ CREATE TEMPORARY VIEW tab1 AS SELECT * FROM VALUES
     (0), (1), (2), (2), (2), (2), (3), (null), (null) AS tab1(c1)
 -- !query analysis
 CreateViewCommand `tab1`, SELECT * FROM VALUES
-    (0), (1), (2), (2), (2), (2), (3), (null), (null) AS tab1(c1), false, false, LocalTempView, true
+    (0), (1), (2), (2), (2), (2), (3), (null), (null) AS tab1(c1), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [c1#x]
       +- SubqueryAlias tab1
          +- LocalRelation [c1#x]
@@ -15,7 +15,7 @@ CREATE TEMPORARY VIEW tab2 AS SELECT * FROM VALUES
     (1), (2), (2), (3), (5), (5), (null) AS tab2(c1)
 -- !query analysis
 CreateViewCommand `tab2`, SELECT * FROM VALUES
-    (1), (2), (2), (3), (5), (5), (null) AS tab2(c1), false, false, LocalTempView, true
+    (1), (2), (2), (3), (5), (5), (null) AS tab2(c1), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [c1#x]
       +- SubqueryAlias tab2
          +- LocalRelation [c1#x]
@@ -36,7 +36,7 @@ CreateViewCommand `tab3`, SELECT * FROM VALUES
     (1, 3),
     (2, 3),
     (2, 2)
-    AS tab3(k, v), false, false, LocalTempView, true
+    AS tab3(k, v), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v#x]
       +- SubqueryAlias tab3
          +- LocalRelation [k#x, v#x]
@@ -57,7 +57,7 @@ CreateViewCommand `tab4`, SELECT * FROM VALUES
     (2, 2),
     (2, 2),
     (2, 20)
-    AS tab4(k, v), false, false, LocalTempView, true
+    AS tab4(k, v), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v#x]
       +- SubqueryAlias tab4
          +- LocalRelation [k#x, v#x]
@@ -229,14 +229,14 @@ SELECT k, udf(v) FROM tab4
 Except All true
 :- Project [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, v#x]
 :  +- SubqueryAlias tab3
-:     +- View (`tab3`, [k#x,v#x])
+:     +- View (`tab3`, [k#x, v#x])
 :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :           +- Project [k#x, v#x]
 :              +- SubqueryAlias tab3
 :                 +- LocalRelation [k#x, v#x]
 +- Project [k#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
    +- SubqueryAlias tab4
-      +- View (`tab4`, [k#x,v#x])
+      +- View (`tab4`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias tab4
@@ -251,14 +251,14 @@ SELECT udf(k), v FROM tab3
 Except All true
 :- Project [k#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
 :  +- SubqueryAlias tab4
-:     +- View (`tab4`, [k#x,v#x])
+:     +- View (`tab4`, [k#x, v#x])
 :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :           +- Project [k#x, v#x]
 :              +- SubqueryAlias tab4
 :                 +- LocalRelation [k#x, v#x]
 +- Project [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, v#x]
    +- SubqueryAlias tab3
-      +- View (`tab3`, [k#x,v#x])
+      +- View (`tab3`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias tab3
@@ -275,7 +275,7 @@ SELECT udf(k), udf(v) FROM tab4
 Except All true
 :- Project [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
 :  +- SubqueryAlias tab4
-:     +- View (`tab4`, [k#x,v#x])
+:     +- View (`tab4`, [k#x, v#x])
 :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :           +- Project [k#x, v#x]
 :              +- SubqueryAlias tab4
@@ -283,14 +283,14 @@ Except All true
 +- Intersect false
    :- Project [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
    :  +- SubqueryAlias tab3
-   :     +- View (`tab3`, [k#x,v#x])
+   :     +- View (`tab3`, [k#x, v#x])
    :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
    :           +- Project [k#x, v#x]
    :              +- SubqueryAlias tab3
    :                 +- LocalRelation [k#x, v#x]
    +- Project [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
       +- SubqueryAlias tab4
-         +- View (`tab4`, [k#x,v#x])
+         +- View (`tab4`, [k#x, v#x])
             +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias tab4
@@ -308,21 +308,21 @@ Except false
 :- Except All true
 :  :- Project [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, v#x]
 :  :  +- SubqueryAlias tab4
-:  :     +- View (`tab4`, [k#x,v#x])
+:  :     +- View (`tab4`, [k#x, v#x])
 :  :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :  :           +- Project [k#x, v#x]
 :  :              +- SubqueryAlias tab4
 :  :                 +- LocalRelation [k#x, v#x]
 :  +- Project [k#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
 :     +- SubqueryAlias tab3
-:        +- View (`tab3`, [k#x,v#x])
+:        +- View (`tab3`, [k#x, v#x])
 :           +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :              +- Project [k#x, v#x]
 :                 +- SubqueryAlias tab3
 :                    +- LocalRelation [k#x, v#x]
 +- Project [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
    +- SubqueryAlias tab4
-      +- View (`tab4`, [k#x,v#x])
+      +- View (`tab4`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias tab4
@@ -343,28 +343,28 @@ Except false
 :  :- Except All true
 :  :  :- Project [k#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
 :  :  :  +- SubqueryAlias tab3
-:  :  :     +- View (`tab3`, [k#x,v#x])
+:  :  :     +- View (`tab3`, [k#x, v#x])
 :  :  :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :  :  :           +- Project [k#x, v#x]
 :  :  :              +- SubqueryAlias tab3
 :  :  :                 +- LocalRelation [k#x, v#x]
 :  :  +- Project [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
 :  :     +- SubqueryAlias tab4
-:  :        +- View (`tab4`, [k#x,v#x])
+:  :        +- View (`tab4`, [k#x, v#x])
 :  :           +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :  :              +- Project [k#x, v#x]
 :  :                 +- SubqueryAlias tab4
 :  :                    +- LocalRelation [k#x, v#x]
 :  +- Project [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, v#x]
 :     +- SubqueryAlias tab3
-:        +- View (`tab3`, [k#x,v#x])
+:        +- View (`tab3`, [k#x, v#x])
 :           +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :              +- Project [k#x, v#x]
 :                 +- SubqueryAlias tab3
 :                    +- LocalRelation [k#x, v#x]
 +- Project [k#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
    +- SubqueryAlias tab4
-      +- View (`tab4`, [k#x,v#x])
+      +- View (`tab4`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias tab4
@@ -411,28 +411,28 @@ Except false
 :     :- Except All true
 :     :  :- Project [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
 :     :  :  +- SubqueryAlias tab3
-:     :  :     +- View (`tab3`, [k#x,v#x])
+:     :  :     +- View (`tab3`, [k#x, v#x])
 :     :  :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :     :  :           +- Project [k#x, v#x]
 :     :  :              +- SubqueryAlias tab3
 :     :  :                 +- LocalRelation [k#x, v#x]
 :     :  +- Project [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
 :     :     +- SubqueryAlias tab4
-:     :        +- View (`tab4`, [k#x,v#x])
+:     :        +- View (`tab4`, [k#x, v#x])
 :     :           +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :     :              +- Project [k#x, v#x]
 :     :                 +- SubqueryAlias tab4
 :     :                    +- LocalRelation [k#x, v#x]
 :     +- Project [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
 :        +- SubqueryAlias tab3
-:           +- View (`tab3`, [k#x,v#x])
+:           +- View (`tab3`, [k#x, v#x])
 :              +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :                 +- Project [k#x, v#x]
 :                    +- SubqueryAlias tab3
 :                       +- LocalRelation [k#x, v#x]
 +- Project [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
    +- SubqueryAlias tab4
-      +- View (`tab4`, [k#x,v#x])
+      +- View (`tab4`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias tab4
@@ -454,28 +454,28 @@ Except false
 :     :- Except All true
 :     :  :- Project [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
 :     :  :  +- SubqueryAlias tab3
-:     :  :     +- View (`tab3`, [k#x,v#x])
+:     :  :     +- View (`tab3`, [k#x, v#x])
 :     :  :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :     :  :           +- Project [k#x, v#x]
 :     :  :              +- SubqueryAlias tab3
 :     :  :                 +- LocalRelation [k#x, v#x]
 :     :  +- Project [k#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
 :     :     +- SubqueryAlias tab4
-:     :        +- View (`tab4`, [k#x,v#x])
+:     :        +- View (`tab4`, [k#x, v#x])
 :     :           +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :     :              +- Project [k#x, v#x]
 :     :                 +- SubqueryAlias tab4
 :     :                    +- LocalRelation [k#x, v#x]
 :     +- Project [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
 :        +- SubqueryAlias tab3
-:           +- View (`tab3`, [k#x,v#x])
+:           +- View (`tab3`, [k#x, v#x])
 :              +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :                 +- Project [k#x, v#x]
 :                    +- SubqueryAlias tab3
 :                       +- LocalRelation [k#x, v#x]
 +- Project [k#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
    +- SubqueryAlias tab4
-      +- View (`tab4`, [k#x,v#x])
+      +- View (`tab4`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias tab4
@@ -496,28 +496,28 @@ Except false
 :  :- Except All true
 :  :  :- Project [k#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
 :  :  :  +- SubqueryAlias tab3
-:  :  :     +- View (`tab3`, [k#x,v#x])
+:  :  :     +- View (`tab3`, [k#x, v#x])
 :  :  :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :  :  :           +- Project [k#x, v#x]
 :  :  :              +- SubqueryAlias tab3
 :  :  :                 +- LocalRelation [k#x, v#x]
 :  :  +- Project [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, v#x]
 :  :     +- SubqueryAlias tab4
-:  :        +- View (`tab4`, [k#x,v#x])
+:  :        +- View (`tab4`, [k#x, v#x])
 :  :           +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :  :              +- Project [k#x, v#x]
 :  :                 +- SubqueryAlias tab4
 :  :                    +- LocalRelation [k#x, v#x]
 :  +- Project [k#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
 :     +- SubqueryAlias tab3
-:        +- View (`tab3`, [k#x,v#x])
+:        +- View (`tab3`, [k#x, v#x])
 :           +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :              +- Project [k#x, v#x]
 :                 +- SubqueryAlias tab3
 :                    +- LocalRelation [k#x, v#x]
 +- Project [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, v#x]
    +- SubqueryAlias tab4
-      +- View (`tab4`, [k#x,v#x])
+      +- View (`tab4`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias tab4
@@ -545,13 +545,13 @@ Except All true
 :     +- Project [k#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
 :        +- Join Inner, (cast(udf(cast(k#x as string)) as int) = k#x)
 :           :- SubqueryAlias tab3
-:           :  +- View (`tab3`, [k#x,v#x])
+:           :  +- View (`tab3`, [k#x, v#x])
 :           :     +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :           :        +- Project [k#x, v#x]
 :           :           +- SubqueryAlias tab3
 :           :              +- LocalRelation [k#x, v#x]
 :           +- SubqueryAlias tab4
-:              +- View (`tab4`, [k#x,v#x])
+:              +- View (`tab4`, [k#x, v#x])
 :                 +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :                    +- Project [k#x, v#x]
 :                       +- SubqueryAlias tab4
@@ -561,13 +561,13 @@ Except All true
       +- Project [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, v#x]
          +- Join Inner, (k#x = cast(udf(cast(k#x as string)) as int))
             :- SubqueryAlias tab3
-            :  +- View (`tab3`, [k#x,v#x])
+            :  +- View (`tab3`, [k#x, v#x])
             :     +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             :        +- Project [k#x, v#x]
             :           +- SubqueryAlias tab3
             :              +- LocalRelation [k#x, v#x]
             +- SubqueryAlias tab4
-               +- View (`tab4`, [k#x,v#x])
+               +- View (`tab4`, [k#x, v#x])
                   +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
                      +- Project [k#x, v#x]
                         +- SubqueryAlias tab4
@@ -595,13 +595,13 @@ Except All true
 :     +- Project [cast(udf(cast(cast(udf(cast(k#x as string)) as int) as string)) as int) AS udf(udf(k))#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
 :        +- Join Inner, (cast(udf(cast(cast(udf(cast(k#x as string)) as int) as string)) as int) = cast(udf(cast(k#x as string)) as int))
 :           :- SubqueryAlias tab3
-:           :  +- View (`tab3`, [k#x,v#x])
+:           :  +- View (`tab3`, [k#x, v#x])
 :           :     +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :           :        +- Project [k#x, v#x]
 :           :           +- SubqueryAlias tab3
 :           :              +- LocalRelation [k#x, v#x]
 :           +- SubqueryAlias tab4
-:              +- View (`tab4`, [k#x,v#x])
+:              +- View (`tab4`, [k#x, v#x])
 :                 +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :                    +- Project [k#x, v#x]
 :                       +- SubqueryAlias tab4
@@ -611,13 +611,13 @@ Except All true
       +- Project [cast(udf(cast(v#x as string)) as int) AS k#x, cast(udf(cast(cast(udf(cast(k#x as string)) as int) as string)) as int) AS v#x]
          +- Join Inner, (cast(udf(cast(k#x as string)) as int) = cast(udf(cast(k#x as string)) as int))
             :- SubqueryAlias tab3
-            :  +- View (`tab3`, [k#x,v#x])
+            :  +- View (`tab3`, [k#x, v#x])
             :     +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             :        +- Project [k#x, v#x]
             :           +- SubqueryAlias tab3
             :              +- LocalRelation [k#x, v#x]
             +- SubqueryAlias tab4
-               +- View (`tab4`, [k#x,v#x])
+               +- View (`tab4`, [k#x, v#x])
                   +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
                      +- Project [k#x, v#x]
                         +- SubqueryAlias tab4
@@ -632,14 +632,14 @@ SELECT udf(k) FROM tab4 GROUP BY k
 Except All true
 :- Aggregate [v#x], [cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
 :  +- SubqueryAlias tab3
-:     +- View (`tab3`, [k#x,v#x])
+:     +- View (`tab3`, [k#x, v#x])
 :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :           +- Project [k#x, v#x]
 :              +- SubqueryAlias tab3
 :                 +- LocalRelation [k#x, v#x]
 +- Aggregate [k#x], [cast(udf(cast(k#x as string)) as int) AS udf(k)#x]
    +- SubqueryAlias tab4
-      +- View (`tab4`, [k#x,v#x])
+      +- View (`tab4`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias tab4

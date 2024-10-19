@@ -33,7 +33,8 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{MIN_NUM_FREQUENT_PATTERN, NUM_FREQUENT_ITEMS, NUM_LOCAL_FREQUENT_PATTERN, NUM_PREFIXES, NUM_SEQUENCES}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
@@ -139,13 +140,13 @@ class PrefixSpan private (
     }
 
     val totalCount = data.count()
-    logInfo(s"number of sequences: $totalCount")
+    logInfo(log"number of sequences: ${MDC(NUM_SEQUENCES, totalCount)}")
     val minCount = math.ceil(minSupport * totalCount).toLong
-    logInfo(s"minimum count for a frequent pattern: $minCount")
+    logInfo(log"minimum count for a frequent pattern: ${MDC(MIN_NUM_FREQUENT_PATTERN, minCount)}")
 
     // Find frequent items.
     val freqItems = findFrequentItems(data, minCount)
-    logInfo(s"number of frequent items: ${freqItems.length}")
+    logInfo(log"number of frequent items: ${MDC(NUM_FREQUENT_ITEMS, freqItems.length)}")
 
     // Keep only frequent items from input sequences and convert them to internal storage.
     val itemToInt = Utils.toMapWithIndex(freqItems)
@@ -298,18 +299,20 @@ object PrefixSpan extends Logging {
     var largePrefixes = mutable.Map(emptyPrefix.id -> emptyPrefix)
     while (largePrefixes.nonEmpty) {
       val numLocalFreqPatterns = localFreqPatterns.length
-      logInfo(s"number of local frequent patterns: $numLocalFreqPatterns")
+      logInfo(log"number of local frequent patterns: " +
+        log"${MDC(NUM_LOCAL_FREQUENT_PATTERN, numLocalFreqPatterns)}")
       if (numLocalFreqPatterns > 1000000) {
         logWarning(
-          s"""
-             | Collected $numLocalFreqPatterns local frequent patterns. You may want to consider:
+          log"""
+             | Collected ${MDC(NUM_LOCAL_FREQUENT_PATTERN, numLocalFreqPatterns)}
+             | local frequent patterns. You may want to consider:
              |   1. increase minSupport,
              |   2. decrease maxPatternLength,
              |   3. increase maxLocalProjDBSize.
            """.stripMargin)
       }
-      logInfo(s"number of small prefixes: ${smallPrefixes.size}")
-      logInfo(s"number of large prefixes: ${largePrefixes.size}")
+      logInfo(log"number of small prefixes: ${MDC(NUM_PREFIXES, smallPrefixes.size)}")
+      logInfo(log"number of large prefixes: ${MDC(NUM_PREFIXES, largePrefixes.size)}")
       val largePrefixArray = largePrefixes.values.toArray
       val freqPrefixes = postfixes.flatMap { postfix =>
           largePrefixArray.flatMap { prefix =>
@@ -339,7 +342,8 @@ object PrefixSpan extends Logging {
     var freqPatterns = sc.parallelize(localFreqPatterns.toSeq, 1)
 
     val numSmallPrefixes = smallPrefixes.size
-    logInfo(s"number of small prefixes for local processing: $numSmallPrefixes")
+    logInfo(log"number of small prefixes for local processing: " +
+      log"${MDC(NUM_PREFIXES, numSmallPrefixes)}")
     if (numSmallPrefixes > 0) {
       // Switch to local processing.
       val bcSmallPrefixes = sc.broadcast(smallPrefixes)
@@ -651,7 +655,7 @@ object PrefixSpanModel extends Loader[PrefixSpanModel[_]] {
 
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
 
       // Get the type of item class
       val sample = model.freqSequences.first().sequence(0)(0)

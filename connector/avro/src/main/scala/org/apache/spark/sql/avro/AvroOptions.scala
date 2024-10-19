@@ -27,6 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailFastMode, ParseMode}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -133,6 +134,18 @@ private[sql] class AvroOptions(
 
   val useStableIdForUnionType: Boolean =
     parameters.get(STABLE_ID_FOR_UNION_TYPE).map(_.toBoolean).getOrElse(false)
+
+  val stableIdPrefixForUnionType: String = parameters
+    .getOrElse(STABLE_ID_PREFIX_FOR_UNION_TYPE, "member_")
+
+  val recursiveFieldMaxDepth: Int =
+    parameters.get(RECURSIVE_FIELD_MAX_DEPTH).map(_.toInt).getOrElse(-1)
+
+  if (recursiveFieldMaxDepth > RECURSIVE_FIELD_MAX_DEPTH_LIMIT) {
+    throw QueryCompilationErrors.avroOptionsException(
+      RECURSIVE_FIELD_MAX_DEPTH,
+      s"Should not be greater than $RECURSIVE_FIELD_MAX_DEPTH_LIMIT.")
+  }
 }
 
 private[sql] object AvroOptions extends DataSourceOptions {
@@ -164,4 +177,28 @@ private[sql] object AvroOptions extends DataSourceOptions {
   // type name are identical regardless of case, an exception will be raised. However, in other
   // cases, the field names can be uniquely identified.
   val STABLE_ID_FOR_UNION_TYPE = newOption("enableStableIdentifiersForUnionType")
+  // When STABLE_ID_FOR_UNION_TYPE is enabled, the option allows to configure the prefix for fields
+  // of Avro Union type.
+  val STABLE_ID_PREFIX_FOR_UNION_TYPE = newOption("stableIdentifierPrefixForUnionType")
+
+  /**
+   * Adds support for recursive fields. If this option is not specified or is set to 0, recursive
+   * fields are not permitted. Setting it to 1 drops all recursive fields, 2 allows recursive
+   * fields to be recursed once, and 3 allows it to be recursed twice and so on, up to 15.
+   * Values larger than 15 are not allowed in order to avoid inadvertently creating very large
+   * schemas. If an avro message has depth beyond this limit, the Spark struct returned is
+   * truncated after the recursion limit.
+   *
+   * Examples: Consider an Avro schema with a recursive field:
+   * {"type" : "record", "name" : "Node", "fields" : [{"name": "Id", "type": "int"},
+   * {"name": "Next", "type": ["null", "Node"]}]}
+   * The following lists the parsed schema with different values for this setting.
+   *  1:  `struct<Id: int>`
+   *  2:  `struct<Id: int, Next: struct<Id: int>>`
+   *  3:  `struct<Id: int, Next: struct<Id: int, Next: struct<Id: int>>>`
+   * and so on.
+   */
+  val RECURSIVE_FIELD_MAX_DEPTH = newOption("recursiveFieldMaxDepth")
+
+  val RECURSIVE_FIELD_MAX_DEPTH_LIMIT: Int = 15
 }

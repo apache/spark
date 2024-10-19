@@ -18,13 +18,14 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.time._
+import java.time.format.TextStyle
 import java.time.temporal.{ChronoField, ChronoUnit, IsoFields, Temporal}
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{QueryContext, SparkException}
+import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
@@ -197,6 +198,28 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Returns the three-letter abbreviated month name for the given number of days since 1970-01-01.
+   */
+  def getMonthName(days: Int): UTF8String = {
+    val monthName = Month
+      .of(getMonth(days))
+      .getDisplayName(TextStyle.SHORT, DateFormatter.defaultLocale)
+
+    UTF8String.fromString(monthName)
+  }
+
+  /**
+   * Returns the three-letter abbreviated day name for the given number of days since 1970-01-01.
+   */
+  def getDayName(days: Int): UTF8String = {
+    val dayName = DayOfWeek
+      .of(getWeekDay(days) + 1)
+      .getDisplayName(TextStyle.SHORT, DateFormatter.defaultLocale)
+
+    UTF8String.fromString(dayName)
+  }
+
+  /**
    * Adds months to a timestamp at the given time zone. It converts the input timestamp to a local
    * timestamp at the given time zone, adds months, and converts the resulted local timestamp
    * back to a timestamp, expressed in microseconds since 1970-01-01 00:00:00Z.
@@ -352,7 +375,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Returns day of week from String. Starting from Thursday, marked as 0.
    * (Because 1970-01-01 is Thursday).
-   * @throws IllegalArgumentException if the input is not a valid day of week.
+   * @throws SparkIllegalArgumentException if the input is not a valid day of week.
    */
   def getDayOfWeekFromString(string: UTF8String): Int = {
     val dowString = string.toString.toUpperCase(Locale.ROOT)
@@ -365,7 +388,9 @@ object DateTimeUtils extends SparkDateTimeUtils {
       case "FR" | "FRI" | "FRIDAY" => FRIDAY
       case "SA" | "SAT" | "SATURDAY" => SATURDAY
       case _ =>
-        throw new IllegalArgumentException(s"""Illegal input for day of week: $string""")
+        throw new SparkIllegalArgumentException(
+          errorClass = "ILLEGAL_DAY_OF_WEEK",
+          messageParameters = Map("string" -> string.toString))
     }
   }
 
@@ -505,11 +530,6 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Obtains the current instant as microseconds since the epoch at the UTC time zone.
-   */
-  def currentTimestamp(): Long = instantToMicros(Instant.now())
-
-  /**
    * Obtains the current date as days since the epoch in the specified time-zone.
    */
   def currentDate(zoneId: ZoneId): Int = localDateToDays(LocalDate.now(zoneId))
@@ -560,7 +580,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
   def convertSpecialTimestamp(input: String, zoneId: ZoneId): Option[Long] = {
     extractSpecialValue(input.trim).flatMap {
       case "epoch" => Some(0)
-      case "now" => Some(currentTimestamp())
+      case "now" => Some(instantToMicros(Instant.now()))
       case "today" => Some(instantToMicros(today(zoneId).toInstant))
       case "tomorrow" => Some(instantToMicros(today(zoneId).plusDays(1).toInstant))
       case "yesterday" => Some(instantToMicros(today(zoneId).minusDays(1).toInstant))
@@ -678,7 +698,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
       }
     } catch {
       case _: scala.MatchError =>
-        throw SparkException.internalError(s"Got the unexpected unit '$unit'.")
+        throw QueryExecutionErrors.invalidDatetimeUnitError("TIMESTAMPADD", unit)
       case _: ArithmeticException | _: DateTimeException =>
         throw QueryExecutionErrors.timestampAddOverflowError(micros, quantity, unit)
       case e: Throwable =>
@@ -716,7 +736,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
       val endLocalTs = getLocalDateTime(endTs, zoneId)
       timestampDiffMap(unitInUpperCase)(startLocalTs, endLocalTs)
     } else {
-      throw SparkException.internalError(s"Got the unexpected unit '$unit'.")
+      throw QueryExecutionErrors.invalidDatetimeUnitError("TIMESTAMPDIFF", unit)
     }
   }
 }

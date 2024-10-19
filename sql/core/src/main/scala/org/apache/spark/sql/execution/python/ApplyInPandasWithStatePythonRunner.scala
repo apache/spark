@@ -27,6 +27,8 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.api.python._
+import org.apache.spark.internal.LogKeys.CONFIG
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.InternalRow
@@ -51,7 +53,7 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
  * and output along with data, which requires different struct on Arrow RecordBatch.
  */
 class ApplyInPandasWithStatePythonRunner(
-    funcs: Seq[ChainedPythonFunctions],
+    funcs: Seq[(ChainedPythonFunctions, Long)],
     evalType: Int,
     argOffsets: Array[Array[Int]],
     inputSchema: StructType,
@@ -63,13 +65,13 @@ class ApplyInPandasWithStatePythonRunner(
     stateValueSchema: StructType,
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
-  extends BasePythonRunner[InType, OutType](funcs, evalType, argOffsets, jobArtifactUUID)
+  extends BasePythonRunner[InType, OutType](funcs.map(_._1), evalType, argOffsets, jobArtifactUUID)
   with PythonArrowInput[InType]
   with PythonArrowOutput[OutType] {
 
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
-      funcs.head.funcs.head.pythonExec)
+      funcs.head._1.funcs.head.pythonExec)
 
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
 
@@ -88,9 +90,9 @@ class ApplyInPandasWithStatePythonRunner(
   override val bufferSize: Int = {
     val configuredSize = sqlConf.pandasUDFBufferSize
     if (configuredSize < 4) {
-      logWarning("Pandas execution requires more than 4 bytes. Please configure bigger value " +
-        s"for the configuration '${SQLConf.PANDAS_UDF_BUFFER_SIZE.key}'. " +
-        "Force using the value '4'.")
+      logWarning(log"Pandas execution requires more than 4 bytes. Please configure bigger value " +
+        log"for the configuration '${MDC(CONFIG, SQLConf.PANDAS_UDF_BUFFER_SIZE.key)}'. " +
+        log"Force using the value '4'.")
       4
     } else {
       configuredSize
@@ -108,7 +110,7 @@ class ApplyInPandasWithStatePythonRunner(
   private val stateRowDeserializer = stateEncoder.createDeserializer()
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
-    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
+    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, None)
   }
 
   /**

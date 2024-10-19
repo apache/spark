@@ -45,7 +45,7 @@ class TaskInfo(
     val executorId: String,
     val host: String,
     val taskLocality: TaskLocality.TaskLocality,
-    val speculative: Boolean) {
+    val speculative: Boolean) extends Cloneable {
 
   /**
    * This api doesn't contains partitionId, please use the new api.
@@ -81,6 +81,14 @@ class TaskInfo(
 
   private[spark] def setAccumulables(newAccumulables: Seq[AccumulableInfo]): Unit = {
     _accumulables = newAccumulables
+  }
+
+  override def clone(): TaskInfo = super.clone().asInstanceOf[TaskInfo]
+
+  private[scheduler] def cloneWithEmptyAccumulables(): TaskInfo = {
+    val cloned = clone()
+    cloned.setAccumulables(Nil)
+    cloned
   }
 
   /**

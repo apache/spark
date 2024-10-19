@@ -1,5 +1,6 @@
 -- Tests EXISTS subquery used along with 
 -- Common Table Expressions(CTE)
+--ONLY_IF spark
 
 CREATE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
   (100, "emp 1", date "2005-01-01", 100.00D, 10),

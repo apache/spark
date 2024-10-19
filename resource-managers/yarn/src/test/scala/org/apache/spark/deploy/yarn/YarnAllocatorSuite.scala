@@ -731,6 +731,7 @@ class YarnAllocatorSuite extends SparkFunSuite
     val executorMemory = sparkConf.get(EXECUTOR_MEMORY).toInt
     val offHeapMemoryInMB = 1024L
     val offHeapMemoryInByte = offHeapMemoryInMB * 1024 * 1024
+    val clientModeMinOffHeapMemory = 384L
     try {
       sparkConf.set(MEMORY_OFFHEAP_ENABLED, true)
       sparkConf.set(MEMORY_OFFHEAP_SIZE, offHeapMemoryInByte)
@@ -739,7 +740,7 @@ class YarnAllocatorSuite extends SparkFunSuite
       val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
       val memory = defaultResource.getMemorySize
       assert(memory ==
-        executorMemory + offHeapMemoryInMB + ResourceProfile.MEMORY_OVERHEAD_MIN_MIB)
+        executorMemory + offHeapMemoryInMB + clientModeMinOffHeapMemory)
     } finally {
       sparkConf.set(MEMORY_OFFHEAP_ENABLED, originalOffHeapEnabled)
       sparkConf.set(MEMORY_OFFHEAP_SIZE, originalOffHeapSize)
@@ -772,6 +773,39 @@ class YarnAllocatorSuite extends SparkFunSuite
       assert(memory == (executorMemory * 1.4).toLong)
     } finally {
       sparkConf.set(EXECUTOR_MEMORY_OVERHEAD_FACTOR, 0.1)
+      sparkConf.remove(EXECUTOR_MEMORY_OVERHEAD)
+    }
+  }
+
+  test("SPARK-47208: User can override the minimum memory overhead of the executor") {
+    val executorMemory = sparkConf.get(EXECUTOR_MEMORY)
+    try {
+      sparkConf
+        .set(EXECUTOR_MIN_MEMORY_OVERHEAD, 500L)
+      val (handler, _) = createAllocator(maxExecutors = 1,
+        additionalConfigs = Map(EXECUTOR_MEMORY.key -> executorMemory.toString))
+      val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+      val memory = defaultResource.getMemorySize
+      assert(memory == (executorMemory + 500))
+    } finally {
+      sparkConf.remove(EXECUTOR_MIN_MEMORY_OVERHEAD)
+    }
+  }
+
+  test("SPARK-47208: Explicit overhead takes precedence over minimum overhead") {
+    val executorMemory = sparkConf.get(EXECUTOR_MEMORY)
+    try {
+      sparkConf
+        .set(EXECUTOR_MIN_MEMORY_OVERHEAD, 500L)
+        .set(EXECUTOR_MEMORY_OVERHEAD, 100L)
+      val (handler, _) = createAllocator(maxExecutors = 1,
+        additionalConfigs = Map(EXECUTOR_MEMORY.key -> executorMemory.toString))
+      val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+      val memory = defaultResource.getMemorySize
+      assert(memory == (executorMemory + 100))
+    } finally {
+      sparkConf.remove(EXECUTOR_MEMORY_OVERHEAD)
+      sparkConf.remove(EXECUTOR_MIN_MEMORY_OVERHEAD)
     }
   }
 

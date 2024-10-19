@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -743,6 +744,14 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-24500: create union with stream of children") {
+    @scala.annotation.nowarn("cat=deprecation")
+    val df = Union(Stream(
+      Range(1, 1, 1, 1),
+      Range(1, 2, 1, 1)))
+    df.queryExecution.executedPlan.execute()
+  }
+
+  test("SPARK-45685: create union with LazyList of children") {
     val df = Union(LazyList(
       Range(1, 1, 1, 1),
       Range(1, 2, 1, 1)))
@@ -1373,78 +1382,19 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("SPARK-46219: Unwrap cast in join condition") {
-    val intExpr = Literal(1)
-    val longExpr = Literal(1L)
-    val smjExec = SortMergeJoinExec(
-      leftKeys = Cast(intExpr, LongType) :: Nil,
-      rightKeys = longExpr :: Nil,
-      joinType = Inner,
-      condition = None,
-      left = DummySparkPlan(outputPartitioning = HashPartitioning(intExpr:: Nil, 5)),
-      right = DummySparkPlan())
-
-    Seq(true, false).foreach { unwrapCast =>
-      withSQLConf(SQLConf.UNWRAP_CAST_IN_JOIN_CONDITION_ENABLED.key -> unwrapCast.toString) {
-        val outputPlan = EnsureRequirements.apply(smjExec)
-        if (unwrapCast) {
-          outputPlan match {
-            case SortMergeJoinExec(leftKeys, rightKeys, _, _,
-              SortExec(_, _, _: DummySparkPlan, _),
-              SortExec(_, _, ShuffleExchangeExec(_, _: DummySparkPlan, _, _), _), _) =>
-              assert(leftKeys === Seq(intExpr))
-              assert(rightKeys === Seq(Cast(longExpr, IntegerType, evalMode = EvalMode.TRY)))
-            case _ => fail(outputPlan.toString)
-          }
-        } else {
-          outputPlan match {
-            case SortMergeJoinExec(leftKeys, rightKeys, _, _,
-              SortExec(_, _, ShuffleExchangeExec(_, _: DummySparkPlan, _, _), _),
-              SortExec(_, _, ShuffleExchangeExec(_, _: DummySparkPlan, _, _), _), _) =>
-              assert(leftKeys === smjExec.leftKeys)
-              assert(rightKeys === smjExec.rightKeys)
-            case _ => fail(outputPlan.toString)
-          }
-        }
-      }
-    }
+  test("Limit and offset should not drop LocalLimitExec operator") {
+    val df = sql("SELECT * FROM (SELECT * FROM RANGE(100) LIMIT 25 OFFSET 3) WHERE id > 10")
+    val planned = df.queryExecution.sparkPlan
+    assert(planned.exists(_.isInstanceOf[GlobalLimitExec]))
+    assert(planned.exists(_.isInstanceOf[LocalLimitExec]))
   }
 
-  test("SPARK-46219: Number of partitions may be inconsistent") {
-    val longExpr = Literal(1L)
-    val decimalExpr = Literal(Decimal(1L, 18, 0))
-    val smjExec = SortMergeJoinExec(
-      leftKeys = Cast(longExpr, DecimalType(20, 0)) :: Nil,
-      rightKeys = Cast(decimalExpr, DecimalType(20, 0)) :: Nil,
-      joinType = Inner,
-      condition = None,
-      left = DummySparkPlan(outputPartitioning = HashPartitioning(longExpr :: Nil, 10)),
-      right = DummySparkPlan(outputPartitioning = HashPartitioning(decimalExpr :: Nil, 5)))
-
-    Seq(true, false).foreach { unwrapCast =>
-      withSQLConf(SQLConf.UNWRAP_CAST_IN_JOIN_CONDITION_ENABLED.key -> unwrapCast.toString) {
-        val outputPlan = EnsureRequirements.apply(smjExec)
-        if (unwrapCast) {
-          outputPlan match {
-            case SortMergeJoinExec(leftKeys, rightKeys, _, _,
-              SortExec(_, _, _: DummySparkPlan, _),
-              SortExec(_, _, ShuffleExchangeExec(_, _: DummySparkPlan, _, _), _), _) =>
-              assert(leftKeys === Seq(longExpr))
-              assert(rightKeys === Seq(Cast(decimalExpr, LongType, evalMode = EvalMode.TRY)))
-            case _ => fail(outputPlan.toString)
-          }
-        } else {
-          outputPlan match {
-            case SortMergeJoinExec(leftKeys, rightKeys, _, _,
-              SortExec(_, _, ShuffleExchangeExec(_, _: DummySparkPlan, _, _), _),
-              SortExec(_, _, ShuffleExchangeExec(_, _: DummySparkPlan, _, _), _), _) =>
-              assert(leftKeys === smjExec.leftKeys)
-              assert(rightKeys === smjExec.rightKeys)
-            case _ => fail(outputPlan.toString)
-          }
-        }
-      }
-    }
+  test("Offset and limit should not drop LocalLimitExec operator") {
+    val df = sql("""SELECT * FROM (SELECT * FROM
+      (SELECT * FROM RANGE(100) LIMIT 25) OFFSET 3) WHERE id > 10""".stripMargin)
+    val planned = df.queryExecution.sparkPlan
+    assert(planned.exists(_.isInstanceOf[GlobalLimitExec]))
+    assert(planned.exists(_.isInstanceOf[LocalLimitExec]))
   }
 }
 
@@ -1456,7 +1406,7 @@ private case class DummySparkPlan(
     override val requiredChildDistribution: Seq[Distribution] = Nil,
     override val requiredChildOrdering: Seq[Seq[SortOrder]] = Nil
   ) extends SparkPlan {
-  override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException
+  override protected def doExecute(): RDD[InternalRow] = throw SparkUnsupportedOperationException()
   override def output: Seq[Attribute] = Seq.empty
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): SparkPlan =
     copy(children = newChildren)

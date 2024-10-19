@@ -25,7 +25,8 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.connector.metric.CustomMetric
@@ -178,14 +179,14 @@ class SQLAppStatusListener(
     // work around a race in the DAGScheduler. The metrics info does not contain accumulator info
     // when reading event logs in the SHS, so we have to rely on the accumulator in that case.
     val accums = if (live && event.taskMetrics != null) {
-      event.taskMetrics.externalAccums.flatMap { a =>
+      event.taskMetrics.withExternalAccums(_.flatMap { a =>
         // This call may fail if the accumulator is gc'ed, so account for that.
         try {
-          Some(a.toInfo(Some(a.value), None))
+          Some(a.toInfoUpdate)
         } catch {
           case _: IllegalAccessError => None
         }
-      }
+      })
     } else {
       info.accumulables
     }
@@ -222,9 +223,9 @@ class SQLAppStatusListener(
             method
           } catch {
             case NonFatal(e) =>
-              logWarning(s"Unable to load custom metric object for class `$className`. " +
-                "Please make sure that the custom metric class is in the classpath and " +
-                "it has 0-arg constructor.", e)
+              logWarning(log"Unable to load custom metric object for class " +
+                log"`${MDC(CLASS_NAME, className)}`. Please make sure that the custom metric " +
+                log"class is in the classpath and it has 0-arg constructor.", e)
               // Cannot initialize custom metric object, we might be in history server that does
               // not have the custom metric class.
               val defaultMethod = (_: Array[Long], _: Array[Long]) => "N/A"
@@ -342,7 +343,7 @@ class SQLAppStatusListener(
 
   private def onExecutionStart(event: SparkListenerSQLExecutionStart): Unit = {
     val SparkListenerSQLExecutionStart(executionId, rootExecutionId, description, details,
-      physicalPlanDescription, sparkPlanInfo, time, modifiedConfigs, _) = event
+      physicalPlanDescription, sparkPlanInfo, time, modifiedConfigs, _, _) = event
 
     val planGraph = SparkPlanGraph(sparkPlanInfo)
     val sqlPlanMetrics = planGraph.allNodes.flatMap { node =>

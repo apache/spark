@@ -27,6 +27,8 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkFiles
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.MDC
 
 /**
  * Utilities for working with XSD validation.
@@ -40,7 +42,7 @@ object ValidatorUtil extends Logging {
         val in = openSchemaFile(new Path(key))
         try {
           val schemaFactory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI)
-          schemaFactory.newSchema(new StreamSource(in))
+          schemaFactory.newSchema(new StreamSource(in, key))
         } finally {
           in.close()
         }
@@ -56,7 +58,8 @@ object ValidatorUtil extends Logging {
       case e: Throwable =>
         // Handle case where it was added with sc.addFile
         // When they are added via sc.addFile, they are always downloaded to local file system
-        logInfo(s"$xsdPath was not found, falling back to look up files added by Spark")
+        logInfo(log"${MDC(XSD_PATH, xsdPath)} was not found, " +
+          log"falling back to look up files added by Spark")
         val f = new File(SparkFiles.get(xsdPath.toString))
         if (f.exists()) {
           new FileInputStream(f)

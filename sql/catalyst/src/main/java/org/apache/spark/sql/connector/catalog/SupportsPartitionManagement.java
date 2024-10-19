@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.catalog;
 
 import java.util.Map;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException;
@@ -103,9 +104,8 @@ public interface SupportsPartitionManagement extends Table {
       if (ident.numFields() == partitionNames.length) {
         return listPartitionIdentifiers(partitionNames, ident).length > 0;
       } else {
-        throw new IllegalArgumentException("The number of fields (" + ident.numFields() +
-          ") in the partition identifier is not equal to the partition schema length (" +
-          partitionNames.length + "). The identifier might not refer to one partition.");
+        throw QueryExecutionErrors.partitionNumMismatchError(
+          ident.numFields(), partitionNames.length);
       }
     }
 
@@ -154,10 +154,10 @@ public interface SupportsPartitionManagement extends Table {
      * @since 3.2.0
      */
     default boolean renamePartition(InternalRow from, InternalRow to)
-        throws UnsupportedOperationException,
+        throws SparkUnsupportedOperationException,
                PartitionsAlreadyExistException,
                NoSuchPartitionException {
-      throw new UnsupportedOperationException("Partition renaming is not supported");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3143");
     }
 
     /**
@@ -171,7 +171,7 @@ public interface SupportsPartitionManagement extends Table {
      * @since 3.2.0
      */
     default boolean truncatePartition(InternalRow ident)
-        throws NoSuchPartitionException, UnsupportedOperationException {
-      throw new UnsupportedOperationException("Partition truncate is not supported");
+        throws NoSuchPartitionException, SparkUnsupportedOperationException {
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3144");
     }
 }

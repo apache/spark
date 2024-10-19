@@ -1,40 +1,40 @@
-OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 cast strings to intervals:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-prepare string w/ interval                          589            625          60          1.7         589.1       1.0X
-prepare string w/o interval                         507            513           7          2.0         507.3       1.2X
-1 units w/ interval                                 502            507           6          2.0         502.3       1.2X
-1 units w/o interval                                450            454           5          2.2         450.1       1.3X
-2 units w/ interval                                 674            686          16          1.5         674.4       0.9X
-2 units w/o interval                                657            663           7          1.5         656.7       0.9X
-3 units w/ interval                                1442           1448           8          0.7        1441.7       0.4X
-3 units w/o interval                               1426           1430           4          0.7        1425.9       0.4X
-4 units w/ interval                                1722           1726           3          0.6        1722.5       0.3X
-4 units w/o interval                               1702           1702           1          0.6        1701.6       0.3X
-5 units w/ interval                                1898           1901           3          0.5        1898.0       0.3X
-5 units w/o interval                               1884           1888           5          0.5        1883.6       0.3X
-6 units w/ interval                                2093           2103           9          0.5        2093.4       0.3X
-6 units w/o interval                               2089           2094           5          0.5        2089.2       0.3X
-7 units w/ interval                                2449           2458          13          0.4        2448.6       0.2X
-7 units w/o interval                               2442           2450          12          0.4        2441.8       0.2X
-8 units w/ interval                                2834           2839           5          0.4        2833.9       0.2X
-8 units w/o interval                               2808           2817           8          0.4        2807.8       0.2X
-9 units w/ interval                                3067           3070           4          0.3        3066.6       0.2X
-9 units w/o interval                               3055           3065           8          0.3        3055.4       0.2X
-10 units w/ interval                               3291           3295           4          0.3        3291.1       0.2X
-10 units w/o interval                              3286           3291           4          0.3        3286.4       0.2X
-11 units w/ interval                               3599           3609           9          0.3        3599.4       0.2X
-11 units w/o interval                              3606           3612           5          0.3        3606.1       0.2X
+prepare string w/ interval                          427            498          62          2.3         426.8       1.0X
+prepare string w/o interval                         385            389           4          2.6         384.8       1.1X
+1 units w/ interval                                 340            343           4          2.9         340.0       1.3X
+1 units w/o interval                                380            387           6          2.6         380.3       1.1X
+2 units w/ interval                                 549            557           7          1.8         549.2       0.8X
+2 units w/o interval                                553            555           4          1.8         553.1       0.8X
+3 units w/ interval                                1125           1126           2          0.9        1124.7       0.4X
+3 units w/o interval                               1144           1149           7          0.9        1143.7       0.4X
+4 units w/ interval                                1338           1341           3          0.7        1337.7       0.3X
+4 units w/o interval                               1351           1367          18          0.7        1351.1       0.3X
+5 units w/ interval                                1506           1510           5          0.7        1506.4       0.3X
+5 units w/o interval                               1522           1523           1          0.7        1521.6       0.3X
+6 units w/ interval                                1644           1651          11          0.6        1643.6       0.3X
+6 units w/o interval                               1654           1661          10          0.6        1653.8       0.3X
+7 units w/ interval                                2058           2066           9          0.5        2058.2       0.2X
+7 units w/o interval                               2069           2072           5          0.5        2068.7       0.2X
+8 units w/ interval                                2291           2295           6          0.4        2290.9       0.2X
+8 units w/o interval                               2348           2358          12          0.4        2347.9       0.2X
+9 units w/ interval                                2453           2457           5          0.4        2452.8       0.2X
+9 units w/o interval                               2460           2472          16          0.4        2460.0       0.2X
+10 units w/ interval                               2709           2716           6          0.4        2709.3       0.2X
+10 units w/o interval                              2706           2707           1          0.4        2705.6       0.2X
+11 units w/ interval                               3049           3055           7          0.3        3048.7       0.1X
+11 units w/o interval                              3043           3050           7          0.3        3042.5       0.1X
 
-OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 make_interval():                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-prepare make_interval()                               570            585          15          1.8         570.1       1.0X
-make_interval(0, 1, 2, 3, 4, 5, 50.123456)             67             68           2         15.0          66.6       8.6X
-make_interval(*, *, 2, 3, 4, 5, 50.123456)             85             87           3         11.8          85.1       6.7X
-make_interval(0, 1, *, *, 4, 5, 50.123456)             93             96           4         10.8          92.8       6.1X
-make_interval(0, 1, 2, 3, *, *, *)                    561            566           6          1.8         561.2       1.0X
-make_interval(*, *, *, *, *, *, *)                    568            570           3          1.8         568.3       1.0X
+prepare make_interval()                               351            355           4          2.9         350.8       1.0X
+make_interval(0, 1, 2, 3, 4, 5, 50.123456)             42             44           2         23.9          41.9       8.4X
+make_interval(*, *, 2, 3, 4, 5, 50.123456)             52             54           3         19.2          52.0       6.7X
+make_interval(0, 1, *, *, 4, 5, 50.123456)             61             64           3         16.4          60.9       5.8X
+make_interval(0, 1, 2, 3, *, *, *)                    344            348           5          2.9         344.5       1.0X
+make_interval(*, *, *, *, *, *, *)                    359            363           6          2.8         359.2       1.0X
 

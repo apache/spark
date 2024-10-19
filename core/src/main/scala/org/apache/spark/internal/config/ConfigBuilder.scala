@@ -22,6 +22,7 @@ import java.util.regex.PatternSyntaxException
 
 import scala.util.matching.Regex
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.network.util.{ByteUnit, JavaUtils}
 import org.apache.spark.util.Utils
 
@@ -93,7 +94,7 @@ private[spark] class TypedConfigBuilder[T](
   import ConfigHelpers._
 
   def this(parent: ConfigBuilder, converter: String => T) = {
-    this(parent, converter, Option(_).map(_.toString).orNull)
+    this(parent, converter, { v: T => v.toString })
   }
 
   /** Apply a transformation to the user-provided values of the config entry. */
@@ -106,6 +107,24 @@ private[spark] class TypedConfigBuilder[T](
     transform { v =>
       if (!validator(v)) {
         throw new IllegalArgumentException(s"'$v' in ${parent.key} is invalid. $errorMsg")
+      }
+      v
+    }
+  }
+
+  /** Checks if the user-provided value for the config matches the validator.
+   * If it doesn't match, raise Spark's exception with the given error class. */
+  def checkValue(
+      validator: T => Boolean,
+      errorClass: String,
+      parameters: T => Map[String, String]): TypedConfigBuilder[T] = {
+    transform { v =>
+      if (!validator(v)) {
+        throw new SparkIllegalArgumentException(
+          errorClass = "INVALID_CONF_VALUE." + errorClass,
+          messageParameters = parameters(v) ++ Map(
+            "confValue" -> v.toString,
+            "confName" -> parent.key))
       }
       v
     }
@@ -138,6 +157,7 @@ private[spark] class TypedConfigBuilder[T](
 
   /** Creates a [[ConfigEntry]] that has a default value. */
   def createWithDefault(default: T): ConfigEntry[T] = {
+    assert(default != null, "Use createOptional.")
     // Treat "String" as a special case, so that both createWithDefault and createWithDefaultString
     // behave the same w.r.t. variable expansion of default values.
     default match {

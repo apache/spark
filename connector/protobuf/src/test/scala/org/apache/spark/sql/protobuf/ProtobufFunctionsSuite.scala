@@ -21,12 +21,11 @@ import java.time.Duration
 
 import scala.jdk.CollectionConverters._
 
-import com.google.protobuf.{Any => AnyProto, ByteString, DynamicMessage}
-import org.json4s.StringInput
+import com.google.protobuf.{Any => AnyProto, BoolValue, ByteString, BytesValue, DoubleValue, DynamicMessage, FloatValue, Int32Value, Int64Value, StringValue, UInt32Value, UInt64Value}
 import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
-import org.apache.spark.sql.functions.{lit, struct, typedLit}
+import org.apache.spark.sql.functions.{array, lit, map, struct, typedLit}
 import org.apache.spark.sql.protobuf.protos.Proto2Messages.Proto2AllTypes
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos._
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated.NestedEnum
@@ -709,7 +708,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
     checkError(
       exception = e,
-      errorClass = "PROTOBUF_DEPENDENCY_NOT_FOUND",
+      condition = "PROTOBUF_DEPENDENCY_NOT_FOUND",
       parameters = Map("dependencyName" -> "nestedenum.proto"))
   }
 
@@ -1058,7 +1057,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
     checkError(
       ex,
-      errorClass = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",
+      condition = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",
       parameters = Map("filePath" -> "/non/existent/path.desc")
     )
     assert(ex.getCause != null)
@@ -1124,7 +1123,78 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
-  test("Corner case: empty recursive proto fields should be dropped") {
+  test("Retain empty proto fields when retain.empty.message.types=true") {
+    // When retain.empty.message.types=true, empty proto like 'message A {}' can be retained as
+    // a field by inserting a dummy column as sub column.
+    val options = Map("retain.empty.message.types" -> "true")
+
+    // EmptyProto at the top level. It will be an empty struct.
+    checkWithFileAndClassName("EmptyProto") {
+      case (name, descFilePathOpt) =>
+        val df = emptyBinaryDF.select(
+          from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("empty_proto")
+        )
+        // Top level empty message is retained by adding dummy column to the schema.
+        assert(df.schema ==
+          structFromDDL("empty_proto struct<__dummy_field_in_empty_struct: string>"))
+    }
+
+    // Inner level empty message is retained by adding dummy column to the schema.
+    checkWithFileAndClassName("EmptyProtoWrapper") {
+      case (name, descFilePathOpt) =>
+        val df = emptyBinaryDF.select(
+          from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("wrapper")
+        )
+        // Nested empty message is retained by adding dummy column to the schema.
+        assert(df.schema == structFromDDL("wrapper struct" +
+          "<name: string, empty_proto struct<__dummy_field_in_empty_struct: string>>"))
+    }
+  }
+
+  test("Write empty proto to parquet when retain.empty.message.types=true") {
+    // When retain.empty.message.types=true, empty proto like 'message A {}' can be retained
+    // as a field by inserting a dummy column as sub column, such schema can be written to parquet.
+    val options = Map("retain.empty.message.types" -> "true")
+    withTempDir { file =>
+      val binaryDF = Seq(
+        EmptyProtoWrapper.newBuilder.setName("my_name").build().toByteArray)
+        .toDF("binary")
+      checkWithFileAndClassName("EmptyProtoWrapper") {
+        case (name, descFilePathOpt) =>
+          val df = binaryDF.select(
+            from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("wrapper")
+          )
+          df.write.format("parquet").mode("overwrite").save(file.getAbsolutePath)
+      }
+      val resultDF = spark.read.format("parquet").load(file.getAbsolutePath)
+      assert(resultDF.schema == structFromDDL("wrapper struct" +
+          "<name: string, empty_proto struct<__dummy_field_in_empty_struct: string>>"
+      ))
+      // The dummy column of empty proto should have null value.
+      checkAnswer(resultDF, Seq(Row(Row("my_name", null))))
+    }
+
+    // When top level message is empty, write to parquet.
+    withTempDir { file =>
+      val binaryDF = Seq(
+        EmptyProto.newBuilder.build().toByteArray)
+        .toDF("binary")
+      checkWithFileAndClassName("EmptyProto") {
+        case (name, descFilePathOpt) =>
+          val df = binaryDF.select(
+            from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("empty_proto")
+          )
+          df.write.format("parquet").mode("overwrite").save(file.getAbsolutePath)
+      }
+      val resultDF = spark.read.format("parquet").load(file.getAbsolutePath)
+      assert(resultDF.schema ==
+        structFromDDL("empty_proto struct<__dummy_field_in_empty_struct: string>"))
+      // The dummy column of empty proto should have null value.
+      checkAnswer(resultDF, Seq(Row(Row(null))))
+    }
+  }
+
+  test("Corner case: empty recursive proto fields should be dropped by default") {
     // This verifies that a empty proto like 'message A { A a = 1}' are completely dropped
     // irrespective of max depth setting.
 
@@ -1147,6 +1217,56 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         )
         // 'empty_recursive' field is dropped from the schema. Only "name" is present.
         assert(df.schema == structFromDDL("wrapper struct<name: string>"))
+    }
+  }
+
+  test("Retain empty recursive proto fields when retain.empty.message.types=true") {
+    // This verifies that a empty proto like 'message A { A a = 1}' can be retained by
+    // inserting a dummy field.
+
+    val structWithDummyColumn =
+      StructType(StructField("__dummy_field_in_empty_struct", StringType) :: Nil)
+    val structWithRecursiveDepthEquals2 = StructType(
+      StructField("recursive_field", structWithDummyColumn)
+        :: StructField("recursive_array", ArrayType(structWithDummyColumn, containsNull = false))
+        :: Nil)
+    /*
+      The code below construct the expected schema with recursive depth set to 3.
+      Note: If recursive depth change, the resulting schema of empty recursive proto will change.
+        root
+         |-- empty_proto: struct (nullable = true)
+         |    |-- recursive_field: struct (nullable = true)
+         |    |    |-- recursive_field: struct (nullable = true)
+         |    |    |    |-- __dummy_field_in_empty_struct: string (nullable = true)
+         |    |    |-- recursive_array: array (nullable = true)
+         |    |    |    |-- element: struct (containsNull = false)
+         |    |    |    |    |-- __dummy_field_in_empty_struct: string (nullable = true)
+         |    |-- recursive_array: array (nullable = true)
+         |    |    |-- element: struct (containsNull = false)
+         |    |    |    |-- recursive_field: struct (nullable = true)
+         |    |    |    |    |-- __dummy_field_in_empty_struct: string (nullable = true)
+         |    |    |    |-- recursive_array: array (nullable = true)
+         |    |    |    |    |-- element: struct (containsNull = false)
+         |    |    |    |    |    |-- __dummy_field_in_empty_struct: string (nullable = true)
+    */
+    val structWithRecursiveDepthEquals3 = StructType(
+      StructField("empty_proto",
+        StructType(
+          StructField("recursive_field", structWithRecursiveDepthEquals2) ::
+            StructField("recursive_array",
+              ArrayType(structWithRecursiveDepthEquals2, containsNull = false)
+          ) :: Nil
+        )
+      ) :: Nil
+    )
+
+    val options = Map("recursive.fields.max.depth" -> "3", "retain.empty.message.types" -> "true")
+    checkWithFileAndClassName("EmptyRecursiveProto") {
+      case (name, descFilePathOpt) =>
+        val df = emptyBinaryDF.select(
+          from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("empty_proto")
+        )
+        assert(df.schema == structWithRecursiveDepthEquals3)
     }
   }
 
@@ -1218,7 +1338,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
     // Takes json string and return a json with all the extra whitespace removed.
     def compactJson(json: String): String = {
-      val jsonValue = JsonMethods.parse(StringInput(json))
+      val jsonValue = JsonMethods.parse(json)
       JsonMethods.compact(jsonValue)
     }
 
@@ -1579,7 +1699,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       }
       checkError(
         exception = parseError,
-        errorClass = "CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE",
+        condition = "CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE",
         parameters = Map(
           "sqlColumn" -> "`basic_enum`",
           "protobufColumn" -> "field 'basic_enum'",
@@ -1591,7 +1711,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       }
       checkError(
         exception = parseError,
-        errorClass = "CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE",
+        condition = "CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE",
         parameters = Map(
           "sqlColumn" -> "`basic_enum`",
           "protobufColumn" -> "field 'basic_enum'",
@@ -1646,6 +1766,443 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
+
+  test("well known types deserialization and round trip") {
+    val message = spark.range(1).select(
+      lit(WellKnownWrapperTypes
+        .newBuilder()
+        .setBoolVal(BoolValue.of(true))
+        .setInt32Val(Int32Value.of(100))
+        .setUint32Val(UInt32Value.of(200))
+        .setInt64Val(Int64Value.of(300))
+        .setUint64Val(UInt64Value.of(400))
+        .setStringVal(StringValue.of("string"))
+        .setBytesVal(BytesValue.of(ByteString.copyFromUtf8("bytes")))
+        .setFloatVal(FloatValue.of(1.23f))
+        .setDoubleVal(DoubleValue.of(4.56))
+        .addInt32List(Int32Value.of(1))
+        .addInt32List(Int32Value.of(2))
+        .putWktMap(1, StringValue.of("mapval"))
+        .build().toByteArray
+      ).as("raw_proto"))
+
+    // By default, well known wrapper types should come out as structs.
+    val expectedWithoutFlag = spark.range(1).select(
+      struct(
+        struct(lit(true) as ("value")).as("bool_val"),
+        struct(lit(100).as("value")).as("int32_val"),
+        struct(lit(200).as("value")).as("uint32_val"),
+        struct(lit(300).as("value")).as("int64_val"),
+        struct(lit(400).as("value")).as("uint64_val"),
+        struct(lit("string").as("value")).as("string_val"),
+        struct(lit("bytes".getBytes).as("value")).as("bytes_val"),
+        struct(lit(1.23f).as("value")).as("float_val"),
+        struct(lit(4.56).as("value")).as("double_val"),
+        array(struct(lit(1).as("value")), struct(lit(2).as("value"))).as("int32_list"),
+        map(lit(1), struct(lit("mapval").as("value"))).as("wkt_map")
+      ).as("proto")
+    )
+
+    // With the flag set, ensure that well known wrapper types get deserialized as primitives.
+    val expectedWithFlag = spark.range(1).select(
+      struct(
+        lit(true).as("bool_val"),
+        lit(100).as("int32_val"),
+        lit(200).as("uint32_val"),
+        lit(300).as("int64_val"),
+        lit(400).as("uint64_val"),
+        lit("string").as("string_val"),
+        lit("bytes".getBytes).as("bytes_val"),
+        lit(1.23f).as("float_val"),
+        lit(4.56).as("double_val"),
+        typedLit(List(1, 2)).as("int32_list"),
+        typedLit(Map(1 -> "mapval")).as("wkt_map")
+      ).as("proto")
+    )
+
+    checkWithFileAndClassName("WellKnownWrapperTypes") { case (name, descFilePathOpt) =>
+      // With the option as false, ensure that deserialization works, and the
+      // value can be round-tripped.
+      List(Map.empty[String, String], Map("unwrap.primitive.wrapper.types" -> "false"))
+        .foreach(opts => {
+        val parsed = message.select(from_protobuf_wrapper(
+          $"raw_proto",
+          name,
+          descFilePathOpt,
+          opts).as("parsed"))
+        checkAnswer(parsed, expectedWithoutFlag)
+
+        // Verify that round-tripping gives us the same parsed representation.
+        val reserialized = parsed.select(
+          to_protobuf_wrapper($"parsed", name, descFilePathOpt).as("reserialized"))
+        val reparsed = reserialized.select(
+          from_protobuf_wrapper($"reserialized", name, descFilePathOpt, opts).as("reparsed"))
+        checkAnswer(parsed, reparsed)
+      })
+
+      // Without the option not set or set as false, ensure that the deserialization is as
+      // expected and that round-tripping works.
+      val opt = Map("unwrap.primitive.wrapper.types" -> "true")
+      val parsed = message.select(from_protobuf_wrapper(
+        $"raw_proto",
+        name,
+        descFilePathOpt,
+        opt).as("parsed"))
+      checkAnswer(parsed, expectedWithFlag)
+
+      val reserialized = parsed.select(
+        to_protobuf_wrapper($"parsed", name, descFilePathOpt).as("reserialized"))
+      val reparsed = reserialized.select(
+        from_protobuf_wrapper($"reserialized", name, descFilePathOpt, opt).as("reparsed"))
+      checkAnswer(parsed, reparsed)
+    }
+  }
+
+  test("test well known wrappers with emit defaults") {
+    // Test that the emit defaults behavior and unwrap primitives behavior work correctly together.
+    // We'll go through when a well known wrapper type is not set, set to zero, or set to nonzero
+    // and show the behavior of deserialization under every combination of the
+    // "unwrap.primitive.wrapper.types" and "emit.default.values" flags.
+
+    // Setup test data for the three cases of unset, explicitly zero, and non-zero.
+    val unset = spark.range(1).select(
+      lit(
+        WellKnownWrapperTypes.newBuilder().build().toByteArray
+      ).as("raw_proto"))
+
+    val explicitZero = spark.range(1).select(
+      lit(
+        WellKnownWrapperTypes.newBuilder().setInt32Val(Int32Value.of(0)).build().toByteArray
+      ).as("raw_proto"))
+
+    val explicitNonzero = spark.range(1).select(
+      lit(
+        WellKnownWrapperTypes.newBuilder().setInt32Val(Int32Value.of(100)).build().toByteArray
+      ).as("raw_proto"))
+
+    val expectedEmpty = spark.range(1).select(lit(null).as("int32_val"))
+
+    // For all combinations of unwrap / emitDefaults, check that we get back the expected values.
+    checkWithFileAndClassName("WellKnownWrapperTypes") { case (name, descFilePathOpt) =>
+      for {
+        unwrap <- Seq("true", "false")
+        defaults <- Seq("true", "false")
+      } {
+        // For unset values, we'll always get back null.
+        checkAnswer(
+          unset.select(
+            from_protobuf_wrapper(
+              $"raw_proto",
+              name,
+              descFilePathOpt,
+              Map("unwrap.primitive.wrapper.types" -> unwrap, "emit.default.values" -> defaults)
+            ).as("proto")
+          ).select("proto.int32_val"),
+          expectedEmpty
+        )
+
+        // For explicit zero, we should get back null or zero based on emit default values.
+        val parsedExplicitZero =
+          explicitZero.select(
+            from_protobuf_wrapper(
+              $"raw_proto",
+              name,
+              descFilePathOpt,
+              Map("unwrap.primitive.wrapper.types" -> unwrap, "emit.default.values" -> defaults)
+            ).as("proto")
+          ).select("proto.int32_val")
+
+        if (unwrap == "false") {
+          if (defaults == "false") {
+            checkAnswer(
+              parsedExplicitZero,
+              spark.range(1).select(
+                struct(lit(null).as("value"))
+              ).as("int32_val")
+            )
+          } else {
+            checkAnswer(
+              parsedExplicitZero,
+              spark.range(1).select(
+                struct(lit(0).as("value"))
+              ).as("int32_val")
+            )
+          }
+        } else {
+          if (defaults == "false") {
+            checkAnswer(parsedExplicitZero, expectedEmpty)
+          } else {
+            checkAnswer(parsedExplicitZero, Seq((0)).toDF("int32_val"))
+          }
+        }
+
+        // For nonzero, we should get back the number or wrapped version regardless
+        // of the value of emit defaults.
+        val parsedNonzero =
+          explicitNonzero.select(
+            from_protobuf_wrapper(
+              $"raw_proto",
+              name,
+              descFilePathOpt,
+              Map("unwrap.primitive.wrapper.types" -> unwrap, "emit.default.values" -> defaults)
+            ).as("proto")
+          ).select("proto.int32_val")
+
+        if (unwrap == "true") {
+          checkAnswer(parsedNonzero, Seq((100)).toDF("int32_val"))
+        } else {
+          checkAnswer(
+            parsedNonzero,
+            spark.range(1).select(
+              struct(lit(100).as("value")).as("int32_val")
+            )
+          )
+        }
+      }
+    }
+  }
+
+  test("test well known wrappers with upcast ints") {
+    // Test that the unwrap primitives behavior and upcast uint64 work correctly together.
+    // We'll check the deserialization behavior under every combination of the
+    // "unwrap.primitive.wrapper.types" and "emit.default.values" flags.
+
+    // Set up an example df with negative integer/long values, which have 1 in the largest bit.
+    // When interpreted as unsigned instead, they'd be large numbers.
+    // Integer.MIN_VALUE + 4 = 1000 <28 0s> 0100 = -2147483644 = 2147483652
+    // Long.MinValue + 4 = 1000 <60 0s> 0100 = -9223372036854775804 = 9223372036854775812
+    val originalInt = Integer.MIN_VALUE + 4
+    val originalLong = Long.MinValue + 4
+    val unsignedInt = 2147483652L
+    val unsignedLong = BigDecimal("9223372036854775812")
+
+    val unsigned = spark.range(1).select(
+      lit(
+        WellKnownWrapperTypes.newBuilder()
+          .setUint32Val(UInt32Value.of(originalInt))
+          .setUint64Val(UInt64Value.of(originalLong))
+          .build().toByteArray
+      ).as("raw_proto"))
+
+
+    // For every combination of unwrap/upcast, check that we get the correct values back.
+    checkWithFileAndClassName("WellKnownWrapperTypes") { case (name, descFilePathOpt) =>
+      for {
+        unwrap <- Seq("true", "false")
+        upcast <- Seq("true", "false")
+      } {
+        val parsed = unsigned.select(
+          from_protobuf_wrapper(
+            $"raw_proto",
+            name,
+            descFilePathOpt,
+            Map("unwrap.primitive.wrapper.types" -> unwrap, "upcast.unsigned.ints" -> upcast)
+          ).as("proto")
+        ).select("proto.uint32_val", "proto.uint64_val")
+
+        if (unwrap == "false") {
+          if (upcast == "false") {
+            // unwrap=false, upcast=false should give back negative numbers in struct format.
+            checkAnswer(
+              parsed,
+              spark.range(1).select(
+                struct(lit(originalInt).as("value")).as("uint32_value"),
+                struct(lit(originalLong).as("value")).as("uint64_value")
+              ).as("int32_val")
+            )
+          } else {
+            // unwrap=false, upcast=true should give back large positive numbers in struct format.
+            checkAnswer(
+              parsed,
+              spark.range(1).select(
+                 struct(lit(unsignedInt).as("value")).as("uint32_value"),
+                 struct(lit(unsignedLong).as("value")).as("uint64_value")
+              ).as("int32_val")
+            )
+          }
+        }
+        else {
+          // unwrap=true, upcast=false should give back negative primitives.
+          if (upcast == "false") {
+            checkAnswer(parsed,
+              spark.range(1).select(
+                lit(originalInt).as("uint32_value"),
+                lit(originalLong).as("uint64_value")
+              ))
+          } else {
+            // unwrap=true, upcast=true should give back large positive primitives.
+            checkAnswer(parsed,
+              spark.range(1).select(
+                lit(unsignedInt).as("uint32_value"),
+                lit(unsignedLong).as("uint64_value")
+              ))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-49121: from_protobuf and to_protobuf SQL functions") {
+    withTable("protobuf_test_table") {
+      sql(
+        """
+          |CREATE TABLE protobuf_test_table AS
+          |  SELECT named_struct(
+          |    'id', 1L,
+          |    'string_value', 'test_string',
+          |    'int32_value', 32,
+          |    'int64_value', 64L,
+          |    'double_value', CAST(123.456 AS DOUBLE),
+          |    'float_value', CAST(789.01 AS FLOAT),
+          |    'bool_value', true,
+          |    'bytes_value', CAST('sample_bytes' AS BINARY)
+          |  ) AS complex_struct
+          |""".stripMargin)
+
+      val toProtobufSql =
+        s"""
+           |SELECT
+           |  to_protobuf(
+           |    complex_struct, 'SimpleMessageJavaTypes', '$testFileDescFile', map()
+           |  ) AS protobuf_data
+           |FROM protobuf_test_table
+           |""".stripMargin
+
+      val protobufResult = spark.sql(toProtobufSql).collect()
+      assert(protobufResult != null)
+
+      val fromProtobufSql =
+        s"""
+           |SELECT
+           |  from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', '$testFileDescFile', map())
+           |FROM
+           |  ($toProtobufSql)
+           |""".stripMargin
+
+      checkAnswer(
+        spark.sql(fromProtobufSql),
+        Seq(Row(Row(1L, "test_string", 32, 64L, 123.456, 789.01F, true, "sample_bytes".getBytes)))
+      )
+
+      // Negative tests for to_protobuf.
+      var fragment = s"to_protobuf(complex_struct, 42, '$testFileDescFile', map())"
+      checkError(
+        exception = intercept[AnalysisException](sql(
+          s"""
+             |SELECT
+             |  to_protobuf(complex_struct, 42, '$testFileDescFile', map())
+             |FROM protobuf_test_table
+             |""".stripMargin)),
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        parameters = Map(
+          "sqlExpr" -> s"""\"to_protobuf(complex_struct, 42, $testFileDescFile, map())\"""",
+          "msg" -> ("The second argument of the TO_PROTOBUF SQL function must be a constant " +
+            "string representing the Protobuf message name"),
+          "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          fragment = fragment,
+          start = 10,
+          stop = fragment.length + 9))
+      )
+      checkError(
+        exception = intercept[AnalysisException](sql(
+          s"""
+             |SELECT
+             |  to_protobuf(complex_struct, 'SimpleMessageJavaTypes', 42, map())
+             |FROM protobuf_test_table
+             |""".stripMargin)),
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        parameters = Map(
+          "sqlExpr" -> "\"to_protobuf(complex_struct, SimpleMessageJavaTypes, 42, map())\"",
+          "msg" -> ("The third argument of the TO_PROTOBUF SQL function must be a constant " +
+            "string or binary data representing the Protobuf descriptor file path"),
+          "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          fragment = "to_protobuf(complex_struct, 'SimpleMessageJavaTypes', 42, map())",
+          start = 10,
+          stop = 73))
+      )
+      fragment = s"to_protobuf(complex_struct, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)"
+      checkError(
+        exception = intercept[AnalysisException](sql(
+          s"""
+             |SELECT
+             |  to_protobuf(complex_struct, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)
+             |FROM protobuf_test_table
+             |""".stripMargin)),
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        parameters = Map(
+          "sqlExpr" ->
+            s"""\"to_protobuf(complex_struct, SimpleMessageJavaTypes, $testFileDescFile, 42)\"""",
+          "msg" -> ("The fourth argument of the TO_PROTOBUF SQL function must be a constant " +
+            "map of strings to strings containing the options to use for converting the value " +
+            "to Protobuf format"),
+          "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          fragment = fragment,
+          start = 10,
+          stop = fragment.length + 9))
+      )
+
+      // Negative tests for from_protobuf.
+      fragment = s"from_protobuf(protobuf_data, 42, '$testFileDescFile', map())"
+      checkError(
+        exception = intercept[AnalysisException](sql(
+          s"""
+             |SELECT from_protobuf(protobuf_data, 42, '$testFileDescFile', map())
+             |FROM ($toProtobufSql)
+             |""".stripMargin)),
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        parameters = Map(
+          "sqlExpr" -> s"""\"from_protobuf(protobuf_data, 42, $testFileDescFile, map())\"""",
+          "msg" -> ("The second argument of the FROM_PROTOBUF SQL function must be a constant " +
+            "string representing the Protobuf message name"),
+          "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          fragment = fragment,
+          start = 8,
+          stop = fragment.length + 7))
+      )
+      checkError(
+        exception = intercept[AnalysisException](sql(
+          s"""
+             |SELECT from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', 42, map())
+             |FROM ($toProtobufSql)
+             |""".stripMargin)),
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        parameters = Map(
+          "sqlExpr" -> "\"from_protobuf(protobuf_data, SimpleMessageJavaTypes, 42, map())\"",
+          "msg" -> ("The third argument of the FROM_PROTOBUF SQL function must be a constant " +
+            "string or binary data representing the Protobuf descriptor file path"),
+          "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          fragment = "from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', 42, map())",
+          start = 8,
+          stop = 72))
+      )
+      fragment = s"from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)"
+      checkError(
+        exception = intercept[AnalysisException](sql(
+          s"""
+             |SELECT
+             |  from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)
+             |FROM ($toProtobufSql)
+             |""".stripMargin)),
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        parameters = Map(
+          "sqlExpr" ->
+            s"""\"from_protobuf(protobuf_data, SimpleMessageJavaTypes, $testFileDescFile, 42)\"""",
+          "msg" -> ("The fourth argument of the FROM_PROTOBUF SQL function must be a constant " +
+            "map of strings to strings containing the options to use for converting the value " +
+            "from Protobuf format"),
+          "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          fragment = fragment,
+          start = 10,
+          stop = fragment.length + 9))
+      )
+    }
+  }
 
   def testFromProtobufWithOptions(
     df: DataFrame,

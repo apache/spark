@@ -14,3 +14,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+
+def _write_self() -> None:
+    import json
+    from pathlib import Path
+    from pyspark.errors import error_classes
+
+    ERRORS_DIR = Path(__file__).parents[1]
+
+    with open(ERRORS_DIR / "error-conditions.json", "w") as f:
+        json.dump(
+            error_classes.ERROR_CLASSES_MAP,
+            f,
+            sort_keys=True,
+            indent=2,
+        )

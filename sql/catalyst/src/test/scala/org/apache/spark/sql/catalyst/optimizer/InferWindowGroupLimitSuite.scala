@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{CurrentRow, DenseRank, Literal, NthValue, NTile, Rank, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedPreceding}
+import org.apache.spark.sql.catalyst.expressions.{CurrentRow, DenseRank, Literal, NthValue, NTile, PercentRank, Rank, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedPreceding}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -337,5 +337,21 @@ class InferWindowGroupLimitSuite extends PlanTest {
         Optimize.execute(originalQuery1.analyze),
         WithoutOptimize.execute(correctAnswer1.analyze))
     }
+  }
+
+  test("SPARK-46941: Can't Insert window group limit node for top-k computation if contains " +
+    "SizeBasedWindowFunction") {
+    val originalQuery =
+      testRelation
+        .select(a, b, c,
+          windowExpr(Rank(c :: Nil),
+            windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rank"),
+          windowExpr(PercentRank(c :: Nil),
+            windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("percent_rank"))
+        .where(Symbol("rank") < 2)
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(originalQuery.analyze))
   }
 }

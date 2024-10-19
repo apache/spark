@@ -18,12 +18,13 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.metric.SQLMetric
 
 class WholeStageCodegenEvaluatorFactory(
-    cleanedSource: CodeAndComment,
+    cleanedSourceOpt: Either[Broadcast[CodeAndComment], CodeAndComment],
     durationMs: SQLMetric,
     references: Array[Any]) extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
 
@@ -35,6 +36,12 @@ class WholeStageCodegenEvaluatorFactory(
     override def eval(
         partitionIndex: Int,
         inputs: Iterator[InternalRow]*): Iterator[InternalRow] = {
+      val cleanedSource = cleanedSourceOpt match {
+        case Left(broadcastCode: Broadcast[CodeAndComment]) =>
+          broadcastCode.value
+        case Right(code: CodeAndComment) =>
+          code
+      }
       val (clazz, _) = CodeGenerator.compile(cleanedSource)
       val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
       buffer.init(partitionIndex, inputs.toArray)

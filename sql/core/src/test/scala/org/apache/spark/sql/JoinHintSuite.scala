@@ -695,11 +695,11 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
     val hintAppender = new LogAppender(s"join hint check for equi-join")
     withLogAppender(hintAppender, level = Some(Level.WARN)) {
       assertBroadcastNLJoin(
-        df1.hint("SHUFFLE_HASH").join(df2, $"a1" !== $"b1"), BuildRight)
+        df1.hint("SHUFFLE_HASH").join(df2, $"a1" =!= $"b1"), BuildRight)
     }
     withLogAppender(hintAppender, level = Some(Level.WARN)) {
       assertBroadcastNLJoin(
-        df1.join(df2.hint("MERGE"), $"a1" !== $"b1"), BuildRight)
+        df1.join(df2.hint("MERGE"), $"a1" =!= $"b1"), BuildRight)
     }
     val logs = hintAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
       .filter(_.contains("is not supported in the query:"))

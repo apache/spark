@@ -19,10 +19,14 @@ import unittest
 
 from pyspark.pandas.tests.groupby.test_raises import RaisesTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class RaisesParityTests(RaisesTestsMixin, PandasOnSparkTestCase, ReusedConnectTestCase):
+class RaisesParityTests(
+    RaisesTestsMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
+):
     pass
 
 

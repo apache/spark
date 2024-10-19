@@ -26,7 +26,7 @@ import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkException, SparkUpgradeException}
-import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.{sources, SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
@@ -51,6 +51,11 @@ object DataSourceUtils extends PredicateHelper {
    * INSERT OVERWRITE a partitioned data source table.
    */
   val PARTITION_OVERWRITE_MODE = "partitionOverwriteMode"
+
+  /**
+   * The key to use for storing clusterBy columns as options.
+   */
+  val CLUSTERING_COLUMNS_KEY = "__clustering_columns"
 
   /**
    * Utility methods for converting partitionBy columns to options and back.
@@ -278,5 +283,18 @@ object DataSourceUtils extends PredicateHelper {
     val extraPartitionFilter =
       dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
     (ExpressionSet(partitionFilters ++ extraPartitionFilter).toSeq, dataFilters)
+  }
+
+  def containsFiltersWithCollation(filter: sources.Filter): Boolean = {
+    filter match {
+      case sources.And(left, right) =>
+        containsFiltersWithCollation(left) || containsFiltersWithCollation(right)
+      case sources.Or(left, right) =>
+        containsFiltersWithCollation(left) || containsFiltersWithCollation(right)
+      case sources.Not(child) =>
+        containsFiltersWithCollation(child)
+      case _: sources.CollatedFilter => true
+      case _ => false
+    }
   }
 }

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.functions.spark_partition_id
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
@@ -193,14 +194,15 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
   }
 
   test("user-specified schema given") {
-    val exception = intercept[UnsupportedOperationException] {
-      spark.readStream
-        .format("rate-micro-batch")
-        .option("rowsPerBatch", "10")
-        .schema(spark.range(1).schema)
-        .load()
-    }
-    assert(exception.getMessage.contains(
-      "RatePerMicroBatchProvider source does not support user-specified schema"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        spark.readStream
+          .format("rate-micro-batch")
+          .option("rowsPerBatch", "10")
+          .schema(spark.range(1).schema)
+          .load()
+      },
+      condition = "_LEGACY_ERROR_TEMP_2242",
+      parameters = Map("provider" -> "RatePerMicroBatchProvider"))
   }
 }

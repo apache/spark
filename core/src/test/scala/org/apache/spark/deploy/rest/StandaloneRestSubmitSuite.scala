@@ -18,12 +18,13 @@
 package org.apache.spark.deploy.rest
 
 import java.io.DataOutputStream
-import java.net.{HttpURLConnection, URL}
+import java.net.{HttpURLConnection, URI}
 import java.nio.charset.StandardCharsets
-import javax.servlet.http.HttpServletResponse
+import java.util.Base64
 
 import scala.collection.mutable
 
+import jakarta.servlet.http.HttpServletResponse
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 
@@ -31,6 +32,8 @@ import org.apache.spark._
 import org.apache.spark.deploy.{SparkSubmit, SparkSubmitArguments}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState._
+import org.apache.spark.deploy.master.RecoveryState
+import org.apache.spark.internal.config.MASTER_REST_SERVER_FILTERS
 import org.apache.spark.rpc._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -246,6 +249,24 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     assert(killAllResponse.success)
   }
 
+  test("SPARK-46368: readyz with SC_OK") {
+    val masterUrl = startDummyServer()
+    val response = new RestSubmissionClient(masterUrl).readyz()
+    val readyzResponse = getReadyzResponse(response)
+    assert(readyzResponse.action === Utils.getFormattedClassName(readyzResponse))
+    assert(readyzResponse.success)
+    assert(readyzResponse.message.isBlank)
+  }
+
+  test("SPARK-46368: readyz with SC_SERVICE_UNAVAILABLE") {
+    val masterUrl = startDummyServer(recoveryState = RecoveryState.STANDBY)
+    val response = new RestSubmissionClient(masterUrl).readyz()
+    val errorResponse = getReadyzResponse(response)
+    assert(errorResponse.action === Utils.getFormattedClassName(errorResponse))
+    assert(errorResponse.success == null)
+    assert(errorResponse.message.contains("Master is not ready."))
+  }
+
   /* ---------------------------------------- *
    |     Aberrant client / server behavior    |
    * ---------------------------------------- */
@@ -426,6 +447,30 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     assert(filteredVariables == Map("SPARK_VAR" -> "1"))
   }
 
+  test("SPARK-49033: Support server-side environment variable replacement in REST Submission API") {
+    val request = new CreateSubmissionRequest
+    request.appResource = ""
+    request.mainClass = ""
+    request.appArgs = Array.empty[String]
+    request.sparkProperties = Map.empty[String, String]
+    request.environmentVariables = Map("AWS_ENDPOINT_URL" -> "{{SPARK_SCALA_VERSION}}")
+    val servlet = new StandaloneSubmitRequestServlet(null, null, null)
+    val desc = servlet.buildDriverDescription(request, "spark://master:7077", 6066)
+    assert(desc.command.environment.get("AWS_ENDPOINT_URL") === Some("2.13"))
+  }
+
+  test("SPARK-49034: Support server-side sparkProperties replacement in REST Submission API") {
+    val request = new CreateSubmissionRequest
+    request.appResource = ""
+    request.mainClass = ""
+    request.appArgs = Array.empty[String]
+    request.sparkProperties = Map("spark.hadoop.fs.s3a.endpoint" -> "{{SPARK_SCALA_VERSION}}")
+    request.environmentVariables = Map.empty[String, String]
+    val servlet = new StandaloneSubmitRequestServlet(null, null, null)
+    val desc = servlet.buildDriverDescription(request, "spark://master:7077", 6066)
+    assert(desc.command.javaOpts.exists(_.contains("-Dspark.hadoop.fs.s3a.endpoint=2.13")))
+  }
+
   test("SPARK-45197: Make StandaloneRestServer add JavaModuleOptions to drivers") {
     val request = new CreateSubmissionRequest
     request.appResource = ""
@@ -438,6 +483,55 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     assert(desc.command.javaOpts.exists(_.startsWith("--add-opens")))
   }
 
+  test("SPARK-49103: `spark.master.rest.filters` loads filters successfully") {
+    val conf = new SparkConf()
+    val localhost = Utils.localHostName()
+    val securityManager = new SecurityManager(conf)
+    rpcEnv = Some(RpcEnv.create("rest-with-filter", localhost, 0, conf, securityManager))
+    val fakeMasterRef = rpcEnv.get.setupEndpoint("fake-master", new DummyMaster(rpcEnv.get))
+
+    // Causes exceptions in order to verify new configuration loads filters successfully
+    conf.set(MASTER_REST_SERVER_FILTERS.key, "org.apache.spark.ui.JWSFilter")
+    server = Some(new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077"))
+    val m = intercept[IllegalArgumentException] {
+      server.get.start()
+    }.getMessage()
+    assert(m.contains("Decode argument cannot be null"))
+  }
+
+  private val TEST_KEY = Base64.getUrlEncoder.encodeToString(
+    "Visit https://spark.apache.org to download Apache Spark.".getBytes())
+
+  test("SPARK-49103: REST server stars successfully with `spark.master.rest.filters`") {
+    val conf = new SparkConf()
+    val localhost = Utils.localHostName()
+    val securityManager = new SecurityManager(conf)
+    rpcEnv = Some(RpcEnv.create("rest-with-filter", localhost, 0, conf, securityManager))
+    val fakeMasterRef = rpcEnv.get.setupEndpoint("fake-master", new DummyMaster(rpcEnv.get))
+    conf.set(MASTER_REST_SERVER_FILTERS.key, "org.apache.spark.ui.JWSFilter")
+    conf.set("spark.org.apache.spark.ui.JWSFilter.param.secretKey", TEST_KEY)
+    server = Some(new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077"))
+    server.get.start()
+  }
+
+  test("SPARK-49103: JWSFilter successfully protects REST API via configurations") {
+    val conf = new SparkConf()
+    val localhost = Utils.localHostName()
+    val securityManager = new SecurityManager(conf)
+    rpcEnv = Some(RpcEnv.create("rest-with-filter", localhost, 0, conf, securityManager))
+    val fakeMasterRef = rpcEnv.get.setupEndpoint("fake-master", new DummyMaster(rpcEnv.get))
+    conf.set(MASTER_REST_SERVER_FILTERS.key, "org.apache.spark.ui.JWSFilter")
+    conf.set("spark.org.apache.spark.ui.JWSFilter.param.secretKey", TEST_KEY)
+    server = Some(new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077"))
+    val port = server.get.start()
+    val masterUrl = s"spark://$localhost:$port"
+    val json = constructSubmitRequest(masterUrl).toJson
+    val httpUrl = masterUrl.replace("spark://", "http://")
+    val submitRequestPath = s"$httpUrl/${RestSubmissionServer.PROTOCOL_VERSION}/submissions/create"
+    val conn = sendHttpRequest(submitRequestPath, "POST", json)
+    assert(conn.getResponseCode === HttpServletResponse.SC_FORBIDDEN)
+  }
+
   /* --------------------- *
    |     Helper methods    |
    * --------------------- */
@@ -448,8 +542,10 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
       submitMessage: String = "driver is submitted",
       killMessage: String = "driver is killed",
       state: DriverState = FINISHED,
+      recoveryState: RecoveryState.Value = RecoveryState.ALIVE,
       exception: Option[Exception] = None): String = {
-    startServer(new DummyMaster(_, submitId, submitMessage, killMessage, state, exception))
+    startServer(new DummyMaster(_, submitId, submitMessage, killMessage, state, recoveryState,
+      exception))
   }
 
   /** Start a smarter dummy server that keeps track of submitted driver states. */
@@ -543,6 +639,16 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     }
   }
 
+  /** Return the response as a readyz response, or fail with error otherwise. */
+  private def getReadyzResponse(response: SubmitRestProtocolResponse)
+    : SubmitRestProtocolResponse = {
+    response match {
+      case k: ReadyzResponse => k
+      case e: ErrorResponse => e // This is a valid response for readyz
+      case r => fail(s"Expected readyz response. Actual: ${r.toJson}")
+    }
+  }
+
   /** Return the response as a status response, or fail with error otherwise. */
   private def getStatusResponse(response: SubmitRestProtocolResponse): SubmissionStatusResponse = {
     response match {
@@ -568,7 +674,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
       url: String,
       method: String,
       body: String = ""): HttpURLConnection = {
-    val conn = new URL(url).openConnection().asInstanceOf[HttpURLConnection]
+    val conn = new URI(url).toURL.openConnection().asInstanceOf[HttpURLConnection]
     conn.setRequestMethod(method)
     if (body.nonEmpty) {
       conn.setDoOutput(true)
@@ -602,6 +708,7 @@ private class DummyMaster(
     submitMessage: String = "submitted",
     killMessage: String = "killed",
     state: DriverState = FINISHED,
+    recoveryState: RecoveryState.Value = RecoveryState.ALIVE,
     exception: Option[Exception] = None)
   extends RpcEndpoint {
 
@@ -616,6 +723,8 @@ private class DummyMaster(
       context.reply(DriverStatusResponse(found = true, Some(state), None, None, exception))
     case RequestClearCompletedDriversAndApps =>
       context.reply(true)
+    case RequestReadyz =>
+      context.reply(recoveryState != RecoveryState.STANDBY)
   }
 }
 
@@ -661,6 +770,7 @@ private class SmarterMaster(override val rpcEnv: RpcEnv) extends ThreadSafeRpcEn
  * When handling a killAll request, the server returns an invalid JSON.
  * When handling a status request, the server throws an internal exception.
  * When handling a clear request, the server throws an internal exception.
+ * When handling a readyz request, the server throws an internal exception.
  * The purpose of this class is to test that client handles these cases gracefully.
  */
 private class FaultyStandaloneRestServer(
@@ -676,6 +786,7 @@ private class FaultyStandaloneRestServer(
   protected override val killAllRequestServlet = new InvalidKillAllServlet
   protected override val statusRequestServlet = new ExplodingStatusServlet
   protected override val clearRequestServlet = new ExplodingClearServlet
+  protected override val readyzRequestServlet = new ExplodingReadyzServlet
 
   /** A faulty servlet that produces malformed responses. */
   class MalformedSubmitServlet
@@ -722,6 +833,17 @@ private class FaultyStandaloneRestServer(
     protected override def handleClear(): ClearResponse = {
       val s = super.handleClear()
       s.message = explode.toString
+      s
+    }
+  }
+
+  /** A faulty readyz servlet that explodes. */
+  class ExplodingReadyzServlet extends StandaloneReadyzRequestServlet(masterEndpoint, masterConf) {
+    private def explode: Int = 1 / 0
+
+    protected override def handleReadyz(): ReadyzResponse = {
+      val s = super.handleReadyz()
+      explode.toString
       s
     }
   }

@@ -1,3 +1,4 @@
+--ONLY_IF spark
 drop table if exists x;
 drop table if exists y;
 
@@ -10,6 +11,11 @@ select * from x where exists (select * from y where x1 = y1 limit 1 offset 2);
 select * from x join lateral (select * from y where x1 = y1 limit 1 offset 2);
 select * from x where x1 in (select y1 from y limit 1 offset 2);
 select * from x where (select sum(y2) from y where x1 = y1 limit 1 offset 2) > 2;
+
+select * from x where exists (select * from y where x1 = y1 offset 2);
+select * from x join lateral (select * from y where x1 = y1 offset 2);
+select * from x where x1 in (select y1 from y offset 2);
+select * from x where (select sum(y2) from y where x1 = y1 offset 2) > 2;
 
 CREATE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
   (100, "emp 1", date "2005-01-01", 100.00D, 10),
@@ -50,6 +56,24 @@ JOIN LATERAL (SELECT max(dept.dept_id) a
                    GROUP  BY state
                    ORDER  BY state
                    LIMIT 2
+                   OFFSET 1);
+
+SELECT emp_name
+FROM   emp
+WHERE EXISTS (SELECT max(dept.dept_id) a
+                   FROM   dept
+                   WHERE  dept.dept_id = emp.dept_id
+                   GROUP  BY state
+                   ORDER  BY state
+                   OFFSET 1);
+
+SELECT emp_name
+FROM   emp
+JOIN LATERAL (SELECT max(dept.dept_id) a
+                   FROM   dept
+                   WHERE  dept.dept_id = emp.dept_id
+                   GROUP  BY state
+                   ORDER  BY state
                    OFFSET 1);
 
 drop table x;

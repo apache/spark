@@ -139,7 +139,14 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
           (segments(1).trim, segments(2).replaceAll("\\s+$", ""))
         }
 
-        assertResult(expectedSchema, s"Schema did not match\n$queryString") {
+        val notMatchedSchemaOutput = if (schema == emptySchema) {
+          // There might be exception. See `handleExceptions`.
+          s"Schema did not match\n$queryString\nOutput/Exception: $outputString"
+        } else {
+          s"Schema did not match\n$queryString"
+        }
+
+        assertResult(expectedSchema, notMatchedSchemaOutput) {
           schema
         }
         if (shouldSortResults) {

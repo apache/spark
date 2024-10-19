@@ -154,15 +154,13 @@ def as_spark_type(
     if LooseVersion(np.__version__) >= LooseVersion("1.21"):
         if (
             hasattr(tpe, "__origin__")
-            and tpe.__origin__ is np.ndarray  # type: ignore[union-attr]
+            and tpe.__origin__ is np.ndarray
             and hasattr(tpe, "__args__")
-            and len(tpe.__args__) > 1  # type: ignore[union-attr]
+            and len(tpe.__args__) > 1
         ):
             # numpy.typing.NDArray
             return types.ArrayType(
-                as_spark_type(
-                    tpe.__args__[1].__args__[0], raise_error=raise_error  # type: ignore[union-attr]
-                )
+                as_spark_type(tpe.__args__[1].__args__[0], raise_error=raise_error)
             )
 
     if isinstance(tpe, np.dtype) and tpe == np.dtype("object"):
@@ -170,9 +168,7 @@ def as_spark_type(
     # ArrayType
     elif tpe in (np.ndarray,):
         return types.ArrayType(types.StringType())
-    elif hasattr(tpe, "__origin__") and issubclass(
-        tpe.__origin__, list  # type: ignore[union-attr]
-    ):
+    elif hasattr(tpe, "__origin__") and issubclass(tpe.__origin__, list):
         element_type = as_spark_type(
             tpe.__args__[0], raise_error=raise_error  # type: ignore[union-attr]
         )
@@ -180,7 +176,7 @@ def as_spark_type(
             return None
         return types.ArrayType(element_type)
     # BinaryType
-    elif tpe in (bytes, np.character, np.bytes_, np.string_):
+    elif tpe in (bytes, np.character, np.bytes_):
         return types.BinaryType()
     # BooleanType
     elif tpe in (bool, np.bool_, "bool", "?"):
@@ -194,7 +190,7 @@ def as_spark_type(
     elif tpe in (decimal.Decimal,):
         # TODO: considering the precision & scale for decimal type.
         return types.DecimalType(38, 18)
-    elif tpe in (float, np.float_, np.float64, "float", "float64", "double"):
+    elif tpe in (float, np.double, np.float64, "float", "float64", "double"):
         return types.DoubleType()
     elif tpe in (np.float32, "float32", "f"):
         return types.FloatType()
@@ -205,7 +201,7 @@ def as_spark_type(
     elif tpe in (np.int16, "int16", "short"):
         return types.ShortType()
     # StringType
-    elif tpe in (str, np.unicode_, "str", "U"):
+    elif tpe in (str, np.str_, "str", "U"):
         return types.StringType()
     # TimestampType or TimestampNTZType if timezone is not specified.
     elif tpe in (datetime.datetime, np.datetime64, "datetime64[ns]", "M", pd.Timestamp):
@@ -783,7 +779,7 @@ def _new_type_holders(
 ) -> Tuple:
     if isinstance(params, zip):
         #   DataFrame[zip(names, types)]
-        params = tuple(slice(name, tpe) for name, tpe in params)  # type: ignore[misc, has-type]
+        params = tuple(slice(name, tpe) for name, tpe in params)
 
     if isinstance(params, Iterable):
         #   DataFrame[type, type, ...]
@@ -809,8 +805,8 @@ def _new_type_holders(
             not isinstance(param, slice)
             and (
                 not isinstance(param, Iterable)
-                or isinstance(param, typing.GenericAlias)
-                or isinstance(param, typing._GenericAlias)
+                or isinstance(param, typing.GenericAlias)  # type: ignore[attr-defined]
+                or isinstance(param, typing._GenericAlias)  # type: ignore[attr-defined]
             )
             for param in params
         )

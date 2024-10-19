@@ -26,7 +26,6 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.util.ArrayImplicits._
 
-
 /**
  * Metadata is a wrapper over Map[String, Any] that limits the value type to simple ones: Boolean,
  * Long, Double, String, Metadata, Array[Boolean], Array[Long], Array[Double], Array[String], and
@@ -35,19 +34,27 @@ import org.apache.spark.util.ArrayImplicits._
  * The default constructor is private. User should use either [[MetadataBuilder]] or
  * `Metadata.fromJson()` to create Metadata instances.
  *
- * @param map an immutable map that stores the data
+ * @param map
+ *   an immutable map that stores the data
  *
  * @since 1.3.0
  */
 @Stable
 sealed class Metadata private[types] (private[types] val map: Map[String, Any])
-  extends Serializable {
+    extends Serializable {
 
   /** No-arg constructor for kryo. */
   protected def this() = this(null)
 
   /** Tests whether this Metadata contains a binding for a key. */
   def contains(key: String): Boolean = map.contains(key)
+
+  /**
+   * Tests whether this Metadata is empty.
+   *
+   * @since 4.0.0
+   */
+  def isEmpty: Boolean = map.isEmpty
 
   /** Gets a Long. */
   def getLong(key: String): Long = get(key)
@@ -139,7 +146,7 @@ object Metadata {
       case (key, JInt(value)) =>
         builder.putLong(key, value.toLong)
       case (key, JLong(value)) =>
-        builder.putLong(key, value.toLong)
+        builder.putLong(key, value)
       case (key, JDouble(value)) =>
         builder.putDouble(key, value)
       case (key, JBool(value)) =>
@@ -157,7 +164,7 @@ object Metadata {
             case _: JInt =>
               builder.putLongArray(key, value.asInstanceOf[List[JInt]].map(_.num.toLong).toArray)
             case _: JLong =>
-              builder.putLongArray(key, value.asInstanceOf[List[JLong]].map(_.num.toLong).toArray)
+              builder.putLongArray(key, value.asInstanceOf[List[JLong]].map(_.num).toArray)
             case _: JDouble =>
               builder.putDoubleArray(key, value.asInstanceOf[List[JDouble]].map(_.num).toArray)
             case _: JBool =>
@@ -166,7 +173,8 @@ object Metadata {
               builder.putStringArray(key, value.asInstanceOf[List[JString]].map(_.s).toArray)
             case _: JObject =>
               builder.putMetadataArray(
-                key, value.asInstanceOf[List[JObject]].map(fromJObject).toArray)
+                key,
+                value.asInstanceOf[List[JObject]].map(fromJObject).toArray)
             case other =>
               throw DataTypeErrors.unsupportedArrayTypeError(other.getClass)
           }
@@ -208,8 +216,6 @@ object Metadata {
   /** Computes the hash code for the types we support. */
   private def hash(obj: Any): Int = {
     obj match {
-      // `map.mapValues` return `Map` in Scala 2.12 and return `MapView` in Scala 2.13, call
-      // `toMap` for Scala version compatibility.
       case map: Map[_, _] =>
         map.transform((_, v) => hash(v)).##
       case arr: Array[_] =>

@@ -22,16 +22,13 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 
 import scala.jdk.CollectionConverters._
 
-import com.google.protobuf.ByteString
-
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.connect.proto.Command
 import org.apache.spark.connect.proto.StreamingQueryManagerCommand
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.common.{InvalidPlanInput, StreamingListenerPacket}
-import org.apache.spark.util.SparkSerDeUtils
+import org.apache.spark.sql.{api, SparkSession}
+import org.apache.spark.sql.connect.common.InvalidPlanInput
 
 /**
  * A class to manage all the [[StreamingQuery]] active in a `SparkSession`.
@@ -39,7 +36,9 @@ import org.apache.spark.util.SparkSerDeUtils
  * @since 3.5.0
  */
 @Evolving
-class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Logging {
+class StreamingQueryManager private[sql] (sparkSession: SparkSession)
+    extends api.StreamingQueryManager
+    with Logging {
 
   // Mapping from id to StreamingQueryListener. There's another mapping from id to
   // StreamingQueryListener on server side. This is used by removeListener() to find the id
@@ -50,29 +49,23 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
   private lazy val listenerCache: ConcurrentMap[String, StreamingQueryListener] =
     new ConcurrentHashMap()
 
-  /**
-   * Returns a list of active queries associated with this SQLContext
-   *
-   * @since 3.5.0
-   */
+  private[spark] val streamingQueryListenerBus = new StreamingQueryListenerBus(sparkSession)
+
+  private[spark] def close(): Unit = {
+    streamingQueryListenerBus.close()
+  }
+
+  /** @inheritdoc */
   def active: Array[StreamingQuery] = {
     executeManagerCmd(_.setActive(true)).getActive.getActiveQueriesList.asScala.map { q =>
       RemoteStreamingQuery.fromStreamingQueryInstanceResponse(sparkSession, q)
     }.toArray
   }
 
-  /**
-   * Returns the query if there is an active query with the given id, or null.
-   *
-   * @since 3.5.0
-   */
+  /** @inheritdoc */
   def get(id: UUID): StreamingQuery = get(id.toString)
 
-  /**
-   * Returns the query if there is an active query with the given id, or null.
-   *
-   * @since 3.5.0
-   */
+  /** @inheritdoc */
   def get(id: String): StreamingQuery = {
     val response = executeManagerCmd(_.setGetQuery(id))
     if (response.hasQuery) {
@@ -82,47 +75,14 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     }
   }
 
-  /**
-   * Wait until any of the queries on the associated SQLContext has terminated since the creation
-   * of the context, or since `resetTerminated()` was called. If any query was terminated with an
-   * exception, then the exception will be thrown.
-   *
-   * If a query has terminated, then subsequent calls to `awaitAnyTermination()` will either
-   * return immediately (if the query was terminated by `query.stop()`), or throw the exception
-   * immediately (if the query was terminated with exception). Use `resetTerminated()` to clear
-   * past terminations and wait for new terminations.
-   *
-   * For correctly documenting exceptions across multiple queries, users need to stop all of them
-   * after any of them terminates with exception, and then check the `query.exception()` for each
-   * query.
-   *
-   * @since 3.5.0
-   */
-  // TODO(SPARK-43299): verity the behavior of this method after JVM client-side error-handling
-  // framework is supported and modify the doc accordingly.
+  /** @inheritdoc */
+  @throws[StreamingQueryException]
   def awaitAnyTermination(): Unit = {
     executeManagerCmd(_.getAwaitAnyTerminationBuilder.build())
   }
 
-  /**
-   * Wait until any of the queries on the associated SQLContext has terminated since the creation
-   * of the context, or since `resetTerminated()` was called. Returns whether any query has
-   * terminated or not (multiple may have terminated). If any query has terminated with an
-   * exception, then the exception will be thrown.
-   *
-   * If a query has terminated, then subsequent calls to `awaitAnyTermination()` will either
-   * return `true` immediately (if the query was terminated by `query.stop()`), or throw the
-   * exception immediately (if the query was terminated with exception). Use `resetTerminated()`
-   * to clear past terminations and wait for new terminations.
-   *
-   * For correctly documenting exceptions across multiple queries, users need to stop all of them
-   * after any of them terminates with exception, and then check the `query.exception()` for each
-   * query.
-   *
-   * @since 3.5.0
-   */
-  // TODO(SPARK-43299): verity the behavior of this method after JVM client-side error-handling
-  // framework is supported and modify the doc accordingly.
+  /** @inheritdoc */
+  @throws[StreamingQueryException]
   def awaitAnyTermination(timeoutMs: Long): Boolean = {
     require(timeoutMs > 0, "Timeout has to be positive")
     executeManagerCmd(
@@ -130,59 +90,24 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
         timeoutMs)).getAwaitAnyTermination.getTerminated
   }
 
-  /**
-   * Forget about past terminated queries so that `awaitAnyTermination()` can be used again to
-   * wait for new terminations.
-   *
-   * @since 3.5.0
-   */
+  /** @inheritdoc */
   def resetTerminated(): Unit = {
     executeManagerCmd(_.setResetTerminated(true))
   }
 
-  /**
-   * Register a [[StreamingQueryListener]] to receive up-calls for life cycle events of
-   * [[StreamingQuery]].
-   *
-   * @since 3.5.0
-   */
+  /** @inheritdoc */
   def addListener(listener: StreamingQueryListener): Unit = {
-    // TODO: [SPARK-44400] Improve the Listener to provide users a way to access the Spark session
-    //  and perform arbitrary actions inside the Listener. Right now users can use
-    //  `val spark = SparkSession.builder.getOrCreate()` to create a Spark session inside the
-    //  Listener, but this is a legacy session instead of a connect remote session.
-    val id = UUID.randomUUID.toString
-    cacheListenerById(id, listener)
-    executeManagerCmd(
-      _.getAddListenerBuilder
-        .setListenerPayload(ByteString.copyFrom(SparkSerDeUtils
-          .serialize(StreamingListenerPacket(id, listener))))
-        .setId(id))
+    streamingQueryListenerBus.append(listener)
   }
 
-  /**
-   * Deregister a [[StreamingQueryListener]].
-   *
-   * @since 3.5.0
-   */
+  /** @inheritdoc */
   def removeListener(listener: StreamingQueryListener): Unit = {
-    val id = getIdByListener(listener)
-    executeManagerCmd(
-      _.getRemoveListenerBuilder
-        .setId(id))
-    removeCachedListener(id)
+    streamingQueryListenerBus.remove(listener)
   }
 
-  /**
-   * List all [[StreamingQueryListener]]s attached to this [[StreamingQueryManager]].
-   *
-   * @since 3.5.0
-   */
+  /** @inheritdoc */
   def listListeners(): Array[StreamingQueryListener] = {
-    executeManagerCmd(_.setListListeners(true)).getListListeners.getListenerIdsList.asScala
-      .filter(listenerCache.containsKey(_))
-      .map(listenerCache.get(_))
-      .toArray
+    streamingQueryListenerBus.list()
   }
 
   private def executeManagerCmd(

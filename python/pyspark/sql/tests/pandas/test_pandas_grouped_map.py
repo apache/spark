@@ -52,7 +52,7 @@ from pyspark.sql.types import (
     MapType,
     YearMonthIntervalType,
 )
-from pyspark.errors import PythonException, PySparkTypeError
+from pyspark.errors import PythonException, PySparkTypeError, PySparkValueError
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -60,7 +60,6 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import QuietTest
 
 if have_pandas:
     import pandas as pd
@@ -209,7 +208,7 @@ class GroupedApplyInPandasTestsMixin:
         assert_frame_equal(expected, result)
 
     def test_register_grouped_map_udf(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_register_grouped_map_udf()
 
     def check_register_grouped_map_udf(self):
@@ -220,8 +219,8 @@ class GroupedApplyInPandasTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_UDF_EVAL_TYPE",
-            message_parameters={
+            errorClass="INVALID_UDF_EVAL_TYPE",
+            messageParameters={
                 "eval_type": "SQL_BATCHED_UDF, SQL_ARROW_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF, "
                 "SQL_SCALAR_PANDAS_ITER_UDF or SQL_GROUPED_AGG_PANDAS_UDF"
             },
@@ -279,7 +278,7 @@ class GroupedApplyInPandasTestsMixin:
         assert_frame_equal(expected, result)
 
     def test_apply_in_pandas_not_returning_pandas_dataframe(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_apply_in_pandas_not_returning_pandas_dataframe()
 
     def check_apply_in_pandas_not_returning_pandas_dataframe(self):
@@ -315,7 +314,7 @@ class GroupedApplyInPandasTestsMixin:
         self._test_apply_in_pandas(stats)
 
     def test_apply_in_pandas_returning_wrong_column_names(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_apply_in_pandas_returning_wrong_column_names()
 
     def check_apply_in_pandas_returning_wrong_column_names(self):
@@ -331,7 +330,7 @@ class GroupedApplyInPandasTestsMixin:
             )
 
     def test_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_apply_in_pandas_returning_no_column_names_and_wrong_amount()
 
     def check_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
@@ -348,7 +347,7 @@ class GroupedApplyInPandasTestsMixin:
         self._test_apply_in_pandas_returning_empty_dataframe(pd.DataFrame())
 
     def test_apply_in_pandas_returning_incompatible_type(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_apply_in_pandas_returning_incompatible_type()
 
     def check_apply_in_pandas_returning_incompatible_type(self):
@@ -401,7 +400,7 @@ class GroupedApplyInPandasTestsMixin:
         assert_frame_equal(expected, result)
 
     def test_wrong_return_type(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_wrong_return_type()
 
     def check_wrong_return_type(self):
@@ -416,31 +415,52 @@ class GroupedApplyInPandasTestsMixin:
             )
 
     def test_wrong_args(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_wrong_args()
 
     def check_wrong_args(self):
         df = self.data
 
-        with self.assertRaisesRegex(ValueError, "Invalid function"):
+        with self.assertRaisesRegex(PySparkTypeError, "INVALID_UDF_EVAL_TYPE"):
             df.groupby("id").apply(lambda x: x)
-        with self.assertRaisesRegex(ValueError, "Invalid function"):
+        with self.assertRaisesRegex(PySparkTypeError, "INVALID_UDF_EVAL_TYPE"):
             df.groupby("id").apply(udf(lambda x: x, DoubleType()))
-        with self.assertRaisesRegex(ValueError, "Invalid function"):
+        with self.assertRaisesRegex(PySparkTypeError, "INVALID_UDF_EVAL_TYPE"):
             df.groupby("id").apply(sum(df.v))
-        with self.assertRaisesRegex(ValueError, "Invalid function"):
+        with self.assertRaisesRegex(PySparkTypeError, "INVALID_UDF_EVAL_TYPE"):
             df.groupby("id").apply(df.v + 1)
-        with self.assertRaisesRegex(ValueError, "Invalid function"):
+        with self.assertRaisesRegex(PySparkTypeError, "INVALID_UDF_EVAL_TYPE"):
+            df.groupby("id").apply(pandas_udf(lambda x, y: x, DoubleType()))
+        with self.assertRaisesRegex(PySparkTypeError, "INVALID_UDF_EVAL_TYPE"):
+            df.groupby("id").apply(pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR))
+
+        with self.assertRaisesRegex(PySparkValueError, "INVALID_PANDAS_UDF"):
             df.groupby("id").apply(
                 pandas_udf(lambda: 1, StructType([StructField("d", DoubleType())]))
             )
-        with self.assertRaisesRegex(ValueError, "Invalid function"):
-            df.groupby("id").apply(pandas_udf(lambda x, y: x, DoubleType()))
-        with self.assertRaisesRegex(ValueError, "Invalid function.*GROUPED_MAP"):
-            df.groupby("id").apply(pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR))
+
+    def test_wrong_args_in_apply_func(self):
+        df1 = self.spark.range(11)
+        df2 = self.spark.range(22)
+
+        with self.assertRaisesRegex(PySparkValueError, "INVALID_PANDAS_UDF"):
+            df1.groupby("id").applyInPandas(lambda: 1, StructType([StructField("d", DoubleType())]))
+
+        with self.assertRaisesRegex(PySparkValueError, "INVALID_PANDAS_UDF"):
+            df1.groupby("id").applyInArrow(lambda: 1, StructType([StructField("d", DoubleType())]))
+
+        with self.assertRaisesRegex(PySparkValueError, "INVALID_PANDAS_UDF"):
+            df1.groupby("id").cogroup(df2.groupby("id")).applyInPandas(
+                lambda: 1, StructType([StructField("d", DoubleType())])
+            )
+
+        with self.assertRaisesRegex(PySparkValueError, "INVALID_PANDAS_UDF"):
+            df1.groupby("id").cogroup(df2.groupby("id")).applyInArrow(
+                lambda: 1, StructType([StructField("d", DoubleType())])
+            )
 
     def test_unsupported_types(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_unsupported_types()
 
     def check_unsupported_types(self):
@@ -552,7 +572,7 @@ class GroupedApplyInPandasTestsMixin:
         assert_frame_equal(expected4, result4)
 
     def test_column_order(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_column_order()
 
     def check_column_order(self):
@@ -680,13 +700,13 @@ class GroupedApplyInPandasTestsMixin:
         data = [Row(id=1, x=2), Row(id=1, x=3), Row(id=2, x=4)]
         expected = [Row(id=1, x=5), Row(id=1, x=5), Row(id=2, x=4)]
         num_parts = len(data) + 1
-        df = self.spark.createDataFrame(self.sc.parallelize(data, numSlices=num_parts))
+        df = self.spark.createDataFrame(data).repartition(num_parts)
 
         f = pandas_udf(
             lambda pdf: pdf.assign(x=pdf["x"].sum()), "id long, x int", PandasUDFType.GROUPED_MAP
         )
 
-        result = df.groupBy("id").apply(f).collect()
+        result = df.groupBy("id").apply(f).sort("id").collect()
         self.assertEqual(result, expected)
 
     def test_grouped_over_window(self):
@@ -844,7 +864,7 @@ class GroupedApplyInPandasTestsMixin:
             self.assertEqual(24.5, row[1])
 
     def _test_apply_in_pandas_returning_empty_dataframe_error(self, empty_df, error):
-        with QuietTest(self.sc):
+        with self.quiet():
             with self.assertRaisesRegex(PythonException, error):
                 self._test_apply_in_pandas_returning_empty_dataframe(empty_df)
 

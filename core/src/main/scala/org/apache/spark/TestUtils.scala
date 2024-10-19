@@ -34,7 +34,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.{classTag, ClassTag}
-import scala.sys.process.{Process, ProcessLogger}
+import scala.sys.process.Process
 import scala.util.Try
 
 import com.google.common.io.{ByteStreams, Files}
@@ -204,16 +204,7 @@ private[spark] object TestUtils extends SparkTestUtils {
   /**
    * Test if a command is available.
    */
-  def testCommandAvailable(command: String): Boolean = {
-    val attempt = if (Utils.isWindows) {
-      Try(Process(Seq(
-        "cmd.exe", "/C", s"where $command")).run(ProcessLogger(_ => ())).exitValue())
-    } else {
-      Try(Process(Seq(
-        "sh", "-c", s"command -v $command")).run(ProcessLogger(_ => ())).exitValue())
-    }
-    attempt.isSuccess && attempt.get == 0
-  }
+  def testCommandAvailable(command: String): Boolean = Utils.checkCommandAvailable(command)
 
   // SPARK-40053: This string needs to be updated when the
   // minimum python supported version changes.
@@ -260,6 +251,19 @@ private[spark] object TestUtils extends SparkTestUtils {
       connection.getResponseCode()
     }
   }
+
+  /**
+   * Returns the Location header from an HTTP(S) URL.
+   */
+  def redirectUrl(
+      url: URL,
+      method: String = "GET",
+      headers: Seq[(String, String)] = Nil): String = {
+    withHttpConnection(url, method, headers = headers) { connection =>
+      connection.getHeaderField("Location");
+    }
+  }
+
 
   /**
    * Returns the response message from an HTTP(S) URL.
@@ -417,7 +421,7 @@ private[spark] object TestUtils extends SparkTestUtils {
   def createTempScriptWithExpectedOutput(dir: File, prefix: String, output: String): String = {
     val file = File.createTempFile(prefix, ".sh", dir)
     val script = s"cat <<EOF\n$output\nEOF\n"
-    Files.write(script, file, StandardCharsets.UTF_8)
+    Files.asCharSink(file, StandardCharsets.UTF_8).write(script)
     JavaFiles.setPosixFilePermissions(file.toPath,
       EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
     file.getPath

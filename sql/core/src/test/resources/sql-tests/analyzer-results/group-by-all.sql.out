@@ -18,7 +18,7 @@ CreateViewCommand `data`, select * from values
   ("China", "Shanghai", "Shanghaiese", 5, 15.0),
   ("Korea", "Seoul", "Hyukjin", 6, 16.0),
   ("UK", "London", "Sean", 7, 17.0)
-  as data(country, city, name, id, power), false, false, LocalTempView, true
+  as data(country, city, name, id, power), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [country#x, city#x, name#x, id#x, power#x]
       +- SubqueryAlias data
          +- LocalRelation [country#x, city#x, name#x, id#x, power#x]
@@ -29,7 +29,7 @@ select country, count(*) from data group by ALL
 -- !query analysis
 Aggregate [country#x], [country#x, count(1) AS count(1)#xL]
 +- SubqueryAlias data
-   +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
+   +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
       +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
          +- Project [country#x, city#x, name#x, id#x, power#x]
             +- SubqueryAlias data
@@ -41,7 +41,7 @@ select country, count(*) from data group by aLl
 -- !query analysis
 Aggregate [country#x], [country#x, count(1) AS count(1)#xL]
 +- SubqueryAlias data
-   +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
+   +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
       +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
          +- Project [country#x, city#x, name#x, id#x, power#x]
             +- SubqueryAlias data
@@ -55,7 +55,7 @@ Aggregate [all#x, city#x], [all#x, city#x, count(1) AS count(1)#xL]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Project [country#x AS all#x, city#x, id#x]
       +- SubqueryAlias data
-         +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
+         +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
             +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
                +- Project [country#x, city#x, name#x, id#x, power#x]
                   +- SubqueryAlias data
@@ -75,7 +75,7 @@ select country, city, count(*), sum(power) from data group by all
 -- !query analysis
 Aggregate [country#x, city#x], [country#x, city#x, count(1) AS count(1)#xL, sum(power#x) AS sum(power)#x]
 +- SubqueryAlias data
-   +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
+   +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
       +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
          +- Project [country#x, city#x, name#x, id#x, power#x]
             +- SubqueryAlias data
@@ -87,7 +87,7 @@ select count(*), country, city, sum(power) from data group by all
 -- !query analysis
 Aggregate [country#x, city#x], [count(1) AS count(1)#xL, country#x, city#x, sum(power#x) AS sum(power)#x]
 +- SubqueryAlias data
-   +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
+   +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
       +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
          +- Project [country#x, city#x, name#x, id#x, power#x]
             +- SubqueryAlias data
@@ -99,7 +99,7 @@ select country as con, count(*) from data group by all
 -- !query analysis
 Aggregate [country#x], [country#x AS con#x, count(1) AS count(1)#xL]
 +- SubqueryAlias data
-   +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
+   +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
       +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
          +- Project [country#x, city#x, name#x, id#x, power#x]
             +- SubqueryAlias data
@@ -111,7 +111,7 @@ select country, count(*) as cnt from data group by all
 -- !query analysis
 Aggregate [country#x], [country#x, count(1) AS cnt#xL]
 +- SubqueryAlias data
-   +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
+   +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
       +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
          +- Project [country#x, city#x, name#x, id#x, power#x]
             +- SubqueryAlias data
@@ -123,7 +123,7 @@ select upper(country), count(*) as powerup from data group by all
 -- !query analysis
 Aggregate [upper(country#x)], [upper(country#x) AS upper(country)#x, count(1) AS powerup#xL]
 +- SubqueryAlias data
-   +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
+   +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
       +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
          +- Project [country#x, city#x, name#x, id#x, power#x]
             +- SubqueryAlias data
@@ -135,7 +135,7 @@ select country, sum(power) + 10 as powerup from data group by all
 -- !query analysis
 Aggregate [country#x], [country#x, (sum(power#x) + cast(10 as decimal(2,0))) AS powerup#x]
 +- SubqueryAlias data
-   +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
+   +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
       +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
          +- Project [country#x, city#x, name#x, id#x, power#x]
             +- SubqueryAlias data
@@ -147,7 +147,7 @@ select country, city from data group by all
 -- !query analysis
 Aggregate [country#x, city#x], [country#x, city#x]
 +- SubqueryAlias data
-   +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
+   +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
       +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
          +- Project [country#x, city#x, name#x, id#x, power#x]
             +- SubqueryAlias data
@@ -162,7 +162,7 @@ Project [con#x, powerup#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Aggregate [country#x], [country#x AS con#x, (sum(power#x) + cast(10 as decimal(2,0))) AS powerup#x]
       +- SubqueryAlias data
-         +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
+         +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
             +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
                +- Project [country#x, city#x, name#x, id#x, power#x]
                   +- SubqueryAlias data
@@ -175,7 +175,7 @@ select country, count(id) as cnt from data group by all having cnt > 1
 Filter (cnt#xL > cast(1 as bigint))
 +- Aggregate [country#x], [country#x, count(id#x) AS cnt#xL]
    +- SubqueryAlias data
-      +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
+      +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
          +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
             +- Project [country#x, city#x, name#x, id#x, power#x]
                +- SubqueryAlias data
@@ -187,7 +187,7 @@ select count(id) from data group by all
 -- !query analysis
 Aggregate [count(id#x) AS count(id)#xL]
 +- SubqueryAlias data
-   +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
+   +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
       +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
          +- Project [country#x, city#x, name#x, id#x, power#x]
             +- SubqueryAlias data
@@ -199,7 +199,7 @@ select count(id + power / 2) * 3 from data group by all
 -- !query analysis
 Aggregate [(count((cast(id#x as decimal(10,0)) + (power#x / cast(2 as decimal(1,0))))) * cast(3 as bigint)) AS (count((id + (power / 2))) * 3)#xL]
 +- SubqueryAlias data
-   +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
+   +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
       +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
          +- Project [country#x, city#x, name#x, id#x, power#x]
             +- SubqueryAlias data
@@ -214,7 +214,7 @@ Aggregate [count(1) AS count(1)#xL]
    +- Project [country#x, city#x, name#x, id#x, power#x]
       +- Filter (country#x = DNS)
          +- SubqueryAlias data
-            +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
+            +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
                +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
                   +- Project [country#x, city#x, name#x, id#x, power#x]
                      +- SubqueryAlias data
@@ -261,20 +261,20 @@ select country, (select count(*) from data) as cnt, count(id) as cnt_id from dat
 Aggregate [country#x, scalar-subquery#x []], [country#x, scalar-subquery#x [] AS cnt#xL, count(id#x) AS cnt_id#xL]
 :  :- Aggregate [count(1) AS count(1)#xL]
 :  :  +- SubqueryAlias data
-:  :     +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
+:  :     +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
 :  :        +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
 :  :           +- Project [country#x, city#x, name#x, id#x, power#x]
 :  :              +- SubqueryAlias data
 :  :                 +- LocalRelation [country#x, city#x, name#x, id#x, power#x]
 :  +- Aggregate [count(1) AS count(1)#xL]
 :     +- SubqueryAlias data
-:        +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
+:        +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
 :           +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
 :              +- Project [country#x, city#x, name#x, id#x, power#x]
 :                 +- SubqueryAlias data
 :                    +- LocalRelation [country#x, city#x, name#x, id#x, power#x]
 +- SubqueryAlias data
-   +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
+   +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
       +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
          +- Project [country#x, city#x, name#x, id#x, power#x]
             +- SubqueryAlias data
@@ -289,7 +289,7 @@ Aggregate [country#x, scalar-subquery#x [country#x]], [country#x, scalar-subquer
 :  :  +- Filter (country#x = outer(country#x))
 :  :     +- SubqueryAlias d1
 :  :        +- SubqueryAlias data
-:  :           +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
+:  :           +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
 :  :              +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
 :  :                 +- Project [country#x, city#x, name#x, id#x, power#x]
 :  :                    +- SubqueryAlias data
@@ -298,14 +298,14 @@ Aggregate [country#x, scalar-subquery#x [country#x]], [country#x, scalar-subquer
 :     +- Filter (country#x = outer(country#x))
 :        +- SubqueryAlias d1
 :           +- SubqueryAlias data
-:              +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
+:              +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
 :                 +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
 :                    +- Project [country#x, city#x, name#x, id#x, power#x]
 :                       +- SubqueryAlias data
 :                          +- LocalRelation [country#x, city#x, name#x, id#x, power#x]
 +- SubqueryAlias d2
    +- SubqueryAlias data
-      +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
+      +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
          +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
             +- Project [country#x, city#x, name#x, id#x, power#x]
                +- SubqueryAlias data

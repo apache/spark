@@ -45,10 +45,18 @@ class DerbyTableCatalogSuite extends QueryTest with SharedSparkSession {
       checkError(
         exception = intercept[SparkUnsupportedOperationException](
           sql(s"ALTER TABLE $n1t1 RENAME TO $n2t2")),
-        errorClass = "CANNOT_RENAME_ACROSS_SCHEMA",
+        condition = "CANNOT_RENAME_ACROSS_SCHEMA",
         parameters = Map("type" -> "table"))
       sql(s"ALTER TABLE $n1t1 RENAME TO $n1t2")
       checkAnswer(sql(s"SHOW TABLES IN derby.test1"), Row("test1", "TABLE2", false))
+    }
+  }
+
+  test("SPARK-48439: Calculate suitable precision and scale for DECIMAL type") {
+    withTable("derby.test1.table1") {
+      sql("CREATE TABLE derby.test1.table1 (c1 decimal(38, 18))")
+      sql("INSERT INTO derby.test1.table1 VALUES (1.123456789123456789)")
+      checkAnswer(sql("SELECT * FROM derby.test1.table1"), Row(1.12345678912))
     }
   }
 }

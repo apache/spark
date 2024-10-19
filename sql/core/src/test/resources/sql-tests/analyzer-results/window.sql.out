@@ -22,7 +22,7 @@ CreateViewCommand `testData`, SELECT * FROM VALUES
 (3, 2147483650L, 100.001D, date("2020-12-31"), timestamp_seconds(1609372800), "b"),
 (null, null, null, null, null, null),
 (3, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), null)
-AS testData(val, val_long, val_double, val_date, val_timestamp, cate), false, true, LocalTempView, true
+AS testData(val, val_long, val_double, val_date, val_timestamp, cate), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
       +- SubqueryAlias testData
          +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -67,7 +67,7 @@ CreateViewCommand `basic_pays`, SELECT * FROM VALUES
 ('Pamela Castillo','SCM',11303),
 ('Larry Bott','SCM',11798),
 ('Barry Jones','SCM',10586)
-AS basic_pays(employee_name, department, salary), false, true, LocalTempView, true
+AS basic_pays(employee_name, department, salary), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [employee_name#x, department#x, salary#x]
       +- SubqueryAlias basic_pays
          +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -96,7 +96,7 @@ CreateViewCommand `test_ignore_null`, SELECT * FROM VALUES
 ('a', 6, 'z'),
 ('a', 7, 'v'),
 ('a', 8, null)
-AS test_ignore_null(content, id, v), false, true, LocalTempView, true
+AS test_ignore_null(content, id, v), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [content#x, id#x, v#x]
       +- SubqueryAlias test_ignore_null
          +- LocalRelation [content#x, id#x, v#x]
@@ -112,7 +112,7 @@ Sort [cate#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
       +- Window [count(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), currentrow$())) AS count(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND CURRENT ROW)#xL], [cate#x], [val#x ASC NULLS FIRST]
          +- Project [val#x, cate#x]
             +- SubqueryAlias testdata
-               +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
@@ -129,7 +129,7 @@ Sort [cate#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
       +- Window [sum(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#xL], [cate#x], [val#x ASC NULLS FIRST]
          +- Project [val#x, cate#x]
             +- SubqueryAlias testdata
-               +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
@@ -170,7 +170,7 @@ Sort [cate#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
       +- Window [count(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -1, currentrow$())) AS count(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CURRENT ROW)#xL], [cate#x], [val#x ASC NULLS FIRST]
          +- Project [val#x, cate#x]
             +- SubqueryAlias testdata
-               +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
@@ -187,7 +187,7 @@ Sort [cate#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
       +- Window [sum(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), 1)) AS sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)#xL], [cate#x], [val#x ASC NULLS FIRST]
          +- Project [val#x, cate#x]
             +- SubqueryAlias testdata
-               +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
@@ -204,7 +204,7 @@ Sort [cate#x ASC NULLS FIRST, val_long#xL ASC NULLS FIRST], true
       +- Window [sum(val_long#xL) windowspecdefinition(cate#x, val_long#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), 2147483648)) AS sum(val_long) OVER (PARTITION BY cate ORDER BY val_long ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2147483648 FOLLOWING)#xL], [cate#x], [val_long#xL ASC NULLS FIRST]
          +- Project [val_long#xL, cate#x]
             +- SubqueryAlias testdata
-               +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
@@ -221,7 +221,7 @@ Sort [cate#x ASC NULLS FIRST, val_double#x ASC NULLS FIRST], true
       +- Window [sum(val_double#x) windowspecdefinition(cate#x, val_double#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), cast(2.5 as double))) AS sum(val_double) OVER (PARTITION BY cate ORDER BY val_double ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2.5 FOLLOWING)#x], [cate#x], [val_double#x ASC NULLS FIRST]
          +- Project [val_double#x, cate#x]
             +- SubqueryAlias testdata
-               +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
@@ -238,7 +238,7 @@ Sort [cate#x ASC NULLS FIRST, val_date#x ASC NULLS FIRST], true
       +- Window [max(val_date#x) windowspecdefinition(cate#x, val_date#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), 2)) AS max(val_date) OVER (PARTITION BY cate ORDER BY val_date ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2 FOLLOWING)#x], [cate#x], [val_date#x ASC NULLS FIRST]
          +- Project [val_date#x, cate#x]
             +- SubqueryAlias testdata
-               +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
@@ -256,7 +256,7 @@ Sort [cate#x ASC NULLS FIRST, val_timestamp#x ASC NULLS FIRST], true
       +- Window [avg(_w0#x) windowspecdefinition(cate#x, val_timestamp#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), INTERVAL '23 04' DAY TO HOUR)) AS avg(val_timestamp) OVER (PARTITION BY cate ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '23 04' DAY TO HOUR FOLLOWING)#x], [cate#x], [val_timestamp#x ASC NULLS FIRST]
          +- Project [val_timestamp#x, cate#x, cast(val_timestamp#x as double) AS _w0#x]
             +- SubqueryAlias testdata
-               +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
@@ -274,7 +274,7 @@ Sort [cate#x ASC NULLS FIRST, to_timestamp_ntz(val_timestamp#x, None, TimestampN
       +- Window [avg(_w0#x) windowspecdefinition(cate#x, _w1#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), INTERVAL '23 04' DAY TO HOUR)) AS avg(val_timestamp) OVER (PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp) ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '23 04' DAY TO HOUR FOLLOWING)#x], [cate#x], [_w1#x ASC NULLS FIRST]
          +- Project [val_timestamp#x, cate#x, cast(val_timestamp#x as double) AS _w0#x, to_timestamp_ntz(val_timestamp#x, None, TimestampNTZType, Some(America/Los_Angeles), false) AS _w1#x]
             +- SubqueryAlias testdata
-               +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
@@ -292,7 +292,7 @@ Sort [cate#x ASC NULLS FIRST, val_timestamp#x ASC NULLS FIRST], true
       +- Window [avg(_w0#x) windowspecdefinition(cate#x, val_timestamp#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), INTERVAL '1-1' YEAR TO MONTH)) AS avg(val_timestamp) OVER (PARTITION BY cate ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1-1' YEAR TO MONTH FOLLOWING)#x], [cate#x], [val_timestamp#x ASC NULLS FIRST]
          +- Project [val_timestamp#x, cate#x, cast(val_timestamp#x as double) AS _w0#x]
             +- SubqueryAlias testdata
-               +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
@@ -310,7 +310,7 @@ Sort [cate#x ASC NULLS FIRST, to_timestamp_ntz(val_timestamp#x, None, TimestampN
       +- Window [avg(_w0#x) windowspecdefinition(cate#x, _w1#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), INTERVAL '1-1' YEAR TO MONTH)) AS avg(val_timestamp) OVER (PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp) ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1-1' YEAR TO MONTH FOLLOWING)#x], [cate#x], [_w1#x ASC NULLS FIRST]
          +- Project [val_timestamp#x, cate#x, cast(val_timestamp#x as double) AS _w0#x, to_timestamp_ntz(val_timestamp#x, None, TimestampNTZType, Some(America/Los_Angeles), false) AS _w1#x]
             +- SubqueryAlias testdata
-               +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
@@ -328,7 +328,7 @@ Sort [cate#x ASC NULLS FIRST, val_timestamp#x ASC NULLS FIRST], true
       +- Window [avg(_w0#x) windowspecdefinition(cate#x, val_timestamp#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), INTERVAL '1 02:03:04.001' DAY TO SECOND)) AS avg(val_timestamp) OVER (PARTITION BY cate ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1 02:03:04.001' DAY TO SECOND FOLLOWING)#x], [cate#x], [val_timestamp#x ASC NULLS FIRST]
          +- Project [val_timestamp#x, cate#x, cast(val_timestamp#x as double) AS _w0#x]
             +- SubqueryAlias testdata
-               +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
@@ -346,7 +346,7 @@ Sort [cate#x ASC NULLS FIRST, to_timestamp_ntz(val_timestamp#x, None, TimestampN
       +- Window [avg(_w0#x) windowspecdefinition(cate#x, _w1#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), INTERVAL '1 02:03:04.001' DAY TO SECOND)) AS avg(val_timestamp) OVER (PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp) ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1 02:03:04.001' DAY TO SECOND FOLLOWING)#x], [cate#x], [_w1#x ASC NULLS FIRST]
          +- Project [val_timestamp#x, cate#x, cast(val_timestamp#x as double) AS _w0#x, to_timestamp_ntz(val_timestamp#x, None, TimestampNTZType, Some(America/Los_Angeles), false) AS _w1#x]
             +- SubqueryAlias testdata
-               +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
@@ -364,7 +364,7 @@ Sort [cate#x ASC NULLS FIRST, val_date#x ASC NULLS FIRST], true
       +- Window [avg(_w0#x) windowspecdefinition(cate#x, val_date#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), INTERVAL '1-1' YEAR TO MONTH)) AS avg(val_timestamp) OVER (PARTITION BY cate ORDER BY val_date ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1-1' YEAR TO MONTH FOLLOWING)#x], [cate#x], [val_date#x ASC NULLS FIRST]
          +- Project [val_date#x, cate#x, cast(val_timestamp#x as double) AS _w0#x]
             +- SubqueryAlias testdata
-               +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
@@ -405,7 +405,7 @@ Sort [cate#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
       +- Window [sum(val#x) windowspecdefinition(cate#x, val#x DESC NULLS LAST, specifiedwindowframe(RangeFrame, currentrow$(), 1)) AS sum(val) OVER (PARTITION BY cate ORDER BY val DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)#xL], [cate#x], [val#x DESC NULLS LAST]
          +- Project [val#x, cate#x]
             +- SubqueryAlias testdata
-               +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
@@ -588,7 +588,7 @@ Sort [cate#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
       +- Window [max(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS max#x, min(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS min#x, min(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS min#x, count(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS count#xL, sum(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS sum#xL, avg(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS avg#x, stddev(_w0#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS stddev#x, first_value(val#x, false) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS first_value#x, first_value(val#x, true) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS first_value_ignore_null#x, first_value(val#x, false) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS first_value_contain_null#x, any_value(val#x, false) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS any_value#x, any_value(val#x, true) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS any_value_ignore_null#x, any_value(val#x, false) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS any_value_contain_null#x, last_value(val#x, false) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS last_value#x, last_value(val#x, true) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS last_value_ignore_null#x, last_value(val#x, false) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS last_value_contain_null#x, rank(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank#x, dense_rank(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS dense_rank#x, cume_dist() windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS cume_dist#x, percent_rank(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS percent_rank#x, ntile(2) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS ntile#x, row_number() windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS row_number#x, var_pop(_w0#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS var_pop#x, var_samp(_w0#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS var_samp#x, ... 9 more fields], [cate#x], [val#x ASC NULLS FIRST]
          +- Project [val#x, cate#x, cast(val#x as double) AS _w0#x, cast(val_long#xL as double) AS _w1#x, val_double#x]
             +- SubqueryAlias testdata
-               +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
@@ -604,7 +604,7 @@ Sort [cate#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
       +- Window [avg(cast(null as double)) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS avg(NULL) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [cate#x], [val#x ASC NULLS FIRST]
          +- Project [val#x, cate#x]
             +- SubqueryAlias testdata
-               +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
@@ -632,7 +632,7 @@ Sort [cate#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
       +- Window [sum(val#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS sum(val) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL, avg(val#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS avg(val) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
          +- Project [val#x, cate#x]
             +- SubqueryAlias testdata
-               +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
@@ -660,7 +660,7 @@ Sort [cate#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
       +- Window [first_value(false, false) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS first_value#x, first_value(true, true) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS first_value_ignore_null#x, first_value(false, false) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS first_value_contain_null#x, any_value(false, false) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS any_value#x, any_value(true, true) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS any_value_ignore_null#x, any_value(false, false) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS any_value_contain_null#x, last_value(false, false) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS last_value#x, last_value(true, true) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS last_value_ignore_null#x, last_value(false, false) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS last_value_contain_null#x]
          +- Project [val#x, cate#x]
             +- SubqueryAlias testdata
-               +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
@@ -679,7 +679,7 @@ Project [cate#x, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST R
       +- Project [cate#x, val#x]
          +- Filter isnotnull(val#x)
             +- SubqueryAlias testdata
-               +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                         +- SubqueryAlias testData
@@ -715,7 +715,7 @@ Sort [salary#x DESC NULLS LAST], true
       +- Window [first_value(employee_name#x, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS highest_salary#x, any_value(employee_name#x, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS highest_salary#x, nth_value(employee_name#x, 2, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS second_highest_salary#x], [salary#x DESC NULLS LAST]
          +- Project [employee_name#x, salary#x]
             +- SubqueryAlias basic_pays
-               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+               +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
                   +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
@@ -740,7 +740,7 @@ Sort [salary#x DESC NULLS LAST], true
       +- Window [first_value(employee_name#x, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS highest_salary#x, any_value(employee_name#x, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS highest_salary#x, nth_value(employee_name#x, 2, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS second_highest_salary#x], [salary#x DESC NULLS LAST]
          +- Project [employee_name#x, salary#x]
             +- SubqueryAlias basic_pays
-               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+               +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
                   +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
@@ -765,7 +765,7 @@ Sort [salary#x DESC NULLS LAST], true
       +- Window [first_value(employee_name#x, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS highest_salary#x, any_value(employee_name#x, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS highest_salary#x, nth_value(employee_name#x, 2, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS second_highest_salary#x], [salary#x DESC NULLS LAST]
          +- Project [employee_name#x, salary#x]
             +- SubqueryAlias basic_pays
-               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+               +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
                   +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
@@ -790,7 +790,7 @@ Sort [salary#x ASC NULLS FIRST], true
       +- Window [first_value(employee_name#x, false) windowspecdefinition(salary#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -2000, 1000)) AS highest_salary#x, any_value(employee_name#x, false) windowspecdefinition(salary#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -2000, 1000)) AS highest_salary#x, nth_value(employee_name#x, 2, false) windowspecdefinition(salary#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -2000, 1000)) AS second_highest_salary#x], [salary#x ASC NULLS FIRST]
          +- Project [employee_name#x, salary#x]
             +- SubqueryAlias basic_pays
-               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+               +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
                   +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
@@ -815,7 +815,7 @@ Sort [salary#x DESC NULLS LAST], true
       +- Window [first_value(employee_name#x, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RowFrame, -2, 2)) AS highest_salary#x, any_value(employee_name#x, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RowFrame, -2, 2)) AS highest_salary#x, nth_value(employee_name#x, 2, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RowFrame, -2, 2)) AS second_highest_salary#x], [salary#x DESC NULLS LAST]
          +- Project [employee_name#x, salary#x]
             +- SubqueryAlias basic_pays
-               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+               +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
                   +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
@@ -840,7 +840,7 @@ Sort [salary#x DESC NULLS LAST], true
       +- Window [first_value(employee_name#x, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RangeFrame, currentrow$(), unboundedfollowing$())) AS highest_salary#x, any_value(employee_name#x, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RangeFrame, currentrow$(), unboundedfollowing$())) AS highest_salary#x, nth_value(employee_name#x, 2, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RangeFrame, currentrow$(), unboundedfollowing$())) AS second_highest_salary#x], [salary#x DESC NULLS LAST]
          +- Project [employee_name#x, salary#x]
             +- SubqueryAlias basic_pays
-               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+               +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
                   +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
@@ -865,7 +865,7 @@ Sort [salary#x DESC NULLS LAST], true
       +- Window [first_value(employee_name#x, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), unboundedfollowing$())) AS highest_salary#x, any_value(employee_name#x, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), unboundedfollowing$())) AS highest_salary#x, nth_value(employee_name#x, 2, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), unboundedfollowing$())) AS second_highest_salary#x], [salary#x DESC NULLS LAST]
          +- Project [employee_name#x, salary#x]
             +- SubqueryAlias basic_pays
-               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+               +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
                   +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
@@ -890,7 +890,7 @@ Sort [salary#x DESC NULLS LAST], true
       +- Window [first_value(employee_name#x, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS highest_salary#x, any_value(employee_name#x, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS highest_salary#x, nth_value(employee_name#x, 2, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS second_highest_salary#x], [salary#x DESC NULLS LAST]
          +- Project [employee_name#x, salary#x]
             +- SubqueryAlias basic_pays
-               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+               +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
                   +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
@@ -915,7 +915,7 @@ Sort [salary#x DESC NULLS LAST], true
       +- Window [first_value(employee_name#x, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS highest_salary#x, any_value(employee_name#x, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS highest_salary#x, nth_value(employee_name#x, 2, false) windowspecdefinition(salary#x DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS second_highest_salary#x], [salary#x DESC NULLS LAST]
          +- Project [employee_name#x, salary#x]
             +- SubqueryAlias basic_pays
-               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+               +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
                   +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
@@ -944,7 +944,7 @@ Sort [department#x ASC NULLS FIRST], true
       +- Window [first_value(employee_name#x, false) windowspecdefinition(department#x, salary#x DESC NULLS LAST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), unboundedfollowing$())) AS highest_salary#x, nth_value(employee_name#x, 2, false) windowspecdefinition(department#x, salary#x DESC NULLS LAST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), unboundedfollowing$())) AS second_highest_salary#x], [department#x], [salary#x DESC NULLS LAST]
          +- Project [employee_name#x, department#x, salary#x]
             +- SubqueryAlias basic_pays
-               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+               +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
                   +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
                      +- Project [employee_name#x, department#x, salary#x]
                         +- SubqueryAlias basic_pays
@@ -1012,7 +1012,7 @@ Sort [id#x ASC NULLS FIRST], true
       +- Window [lead(v#x, 0, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, 0, 0)) AS lead_0#x, lead(v#x, 1, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, 1, 1)) AS lead_1#x, lead(v#x, 2, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, 2, 2)) AS lead_2#x, lead(v#x, 3, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, 3, 3)) AS lead_3#x, lag(v#x, 0, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, 0, 0)) AS lag_0#x, lag(v#x, -1, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, -1)) AS lag_1#x, lag(v#x, -2, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -2, -2)) AS lag_2#x, lag(v#x, -3, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -3, -3)) AS lag_3#x, nth_value(v#x, 1, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS nth_value_1#x, nth_value(v#x, 2, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS nth_value_2#x, nth_value(v#x, 3, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS nth_value_3#x, first(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS first_value#x, any_value(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS any_value#x, last(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS last_value#x], [id#x ASC NULLS FIRST]
          +- Project [content#x, id#x, v#x]
             +- SubqueryAlias test_ignore_null
-               +- View (`test_ignore_null`, [content#x,id#x,v#x])
+               +- View (`test_ignore_null`, [content#x, id#x, v#x])
                   +- Project [cast(content#x as string) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string) AS v#x]
                      +- Project [content#x, id#x, v#x]
                         +- SubqueryAlias test_ignore_null
@@ -1041,7 +1041,7 @@ Sort [id#x ASC NULLS FIRST], true
       +- Window [nth_value(v#x, 1, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS nth_value_1#x, nth_value(v#x, 2, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS nth_value_2#x, nth_value(v#x, 3, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS nth_value_3#x, first(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS first_value#x, any_value(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS any_value#x, last(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS last_value#x], [id#x ASC NULLS FIRST]
          +- Project [content#x, id#x, v#x]
             +- SubqueryAlias test_ignore_null
-               +- View (`test_ignore_null`, [content#x,id#x,v#x])
+               +- View (`test_ignore_null`, [content#x, id#x, v#x])
                   +- Project [cast(content#x as string) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string) AS v#x]
                      +- Project [content#x, id#x, v#x]
                         +- SubqueryAlias test_ignore_null
@@ -1070,7 +1070,7 @@ Sort [id#x ASC NULLS FIRST], true
       +- Window [nth_value(v#x, 1, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS nth_value_1#x, nth_value(v#x, 2, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS nth_value_2#x, nth_value(v#x, 3, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS nth_value_3#x, first(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS first_value#x, any_value(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS any_value#x, last(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS last_value#x], [id#x ASC NULLS FIRST]
          +- Project [content#x, id#x, v#x]
             +- SubqueryAlias test_ignore_null
-               +- View (`test_ignore_null`, [content#x,id#x,v#x])
+               +- View (`test_ignore_null`, [content#x, id#x, v#x])
                   +- Project [cast(content#x as string) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string) AS v#x]
                      +- Project [content#x, id#x, v#x]
                         +- SubqueryAlias test_ignore_null
@@ -1099,7 +1099,7 @@ Sort [id#x ASC NULLS FIRST], true
       +- Window [nth_value(v#x, 1, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -2, 2)) AS nth_value_1#x, nth_value(v#x, 2, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -2, 2)) AS nth_value_2#x, nth_value(v#x, 3, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -2, 2)) AS nth_value_3#x, first(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -2, 2)) AS first_value#x, any_value(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -2, 2)) AS any_value#x, last(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -2, 2)) AS last_value#x], [id#x ASC NULLS FIRST]
          +- Project [content#x, id#x, v#x]
             +- SubqueryAlias test_ignore_null
-               +- View (`test_ignore_null`, [content#x,id#x,v#x])
+               +- View (`test_ignore_null`, [content#x, id#x, v#x])
                   +- Project [cast(content#x as string) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string) AS v#x]
                      +- Project [content#x, id#x, v#x]
                         +- SubqueryAlias test_ignore_null
@@ -1128,7 +1128,7 @@ Sort [id#x ASC NULLS FIRST], true
       +- Window [nth_value(v#x, 1, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -2, 2)) AS nth_value_1#x, nth_value(v#x, 2, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -2, 2)) AS nth_value_2#x, nth_value(v#x, 3, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -2, 2)) AS nth_value_3#x, first(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -2, 2)) AS first_value#x, any_value(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -2, 2)) AS any_value#x, last(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -2, 2)) AS last_value#x], [id#x ASC NULLS FIRST]
          +- Project [content#x, id#x, v#x]
             +- SubqueryAlias test_ignore_null
-               +- View (`test_ignore_null`, [content#x,id#x,v#x])
+               +- View (`test_ignore_null`, [content#x, id#x, v#x])
                   +- Project [cast(content#x as string) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string) AS v#x]
                      +- Project [content#x, id#x, v#x]
                         +- SubqueryAlias test_ignore_null
@@ -1157,7 +1157,7 @@ Sort [id#x ASC NULLS FIRST], true
       +- Window [nth_value(v#x, 1, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), unboundedfollowing$())) AS nth_value_1#x, nth_value(v#x, 2, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), unboundedfollowing$())) AS nth_value_2#x, nth_value(v#x, 3, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), unboundedfollowing$())) AS nth_value_3#x, first(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), unboundedfollowing$())) AS first_value#x, any_value(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), unboundedfollowing$())) AS any_value#x, last(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), unboundedfollowing$())) AS last_value#x], [id#x ASC NULLS FIRST]
          +- Project [content#x, id#x, v#x]
             +- SubqueryAlias test_ignore_null
-               +- View (`test_ignore_null`, [content#x,id#x,v#x])
+               +- View (`test_ignore_null`, [content#x, id#x, v#x])
                   +- Project [cast(content#x as string) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string) AS v#x]
                      +- Project [content#x, id#x, v#x]
                         +- SubqueryAlias test_ignore_null
@@ -1186,7 +1186,7 @@ Sort [id#x ASC NULLS FIRST], true
       +- Window [nth_value(v#x, 1, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), unboundedfollowing$())) AS nth_value_1#x, nth_value(v#x, 2, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), unboundedfollowing$())) AS nth_value_2#x, nth_value(v#x, 3, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), unboundedfollowing$())) AS nth_value_3#x, first(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), unboundedfollowing$())) AS first_value#x, any_value(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), unboundedfollowing$())) AS any_value#x, last(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), unboundedfollowing$())) AS last_value#x], [id#x ASC NULLS FIRST]
          +- Project [content#x, id#x, v#x]
             +- SubqueryAlias test_ignore_null
-               +- View (`test_ignore_null`, [content#x,id#x,v#x])
+               +- View (`test_ignore_null`, [content#x, id#x, v#x])
                   +- Project [cast(content#x as string) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string) AS v#x]
                      +- Project [content#x, id#x, v#x]
                         +- SubqueryAlias test_ignore_null
@@ -1215,7 +1215,7 @@ Sort [id#x ASC NULLS FIRST], true
       +- Window [nth_value(v#x, 1, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS nth_value_1#x, nth_value(v#x, 2, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS nth_value_2#x, nth_value(v#x, 3, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS nth_value_3#x, first(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS first_value#x, any_value(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS any_value#x, last(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS last_value#x], [id#x ASC NULLS FIRST]
          +- Project [content#x, id#x, v#x]
             +- SubqueryAlias test_ignore_null
-               +- View (`test_ignore_null`, [content#x,id#x,v#x])
+               +- View (`test_ignore_null`, [content#x, id#x, v#x])
                   +- Project [cast(content#x as string) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string) AS v#x]
                      +- Project [content#x, id#x, v#x]
                         +- SubqueryAlias test_ignore_null
@@ -1244,7 +1244,7 @@ Sort [id#x ASC NULLS FIRST], true
       +- Window [nth_value(v#x, 1, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS nth_value_1#x, nth_value(v#x, 2, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS nth_value_2#x, nth_value(v#x, 3, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS nth_value_3#x, first(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS first_value#x, any_value(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS any_value#x, last(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS last_value#x], [id#x ASC NULLS FIRST]
          +- Project [content#x, id#x, v#x]
             +- SubqueryAlias test_ignore_null
-               +- View (`test_ignore_null`, [content#x,id#x,v#x])
+               +- View (`test_ignore_null`, [content#x, id#x, v#x])
                   +- Project [cast(content#x as string) AS content#x, cast(id#x as int) AS id#x, cast(v#x as string) AS v#x]
                      +- Project [content#x, id#x, v#x]
                         +- SubqueryAlias test_ignore_null
@@ -1259,8 +1259,10 @@ FROM
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1004",
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
   "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
     "windowName" : "w"
   }
 }
@@ -1274,8 +1276,10 @@ FROM
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1004",
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
   "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
     "windowName" : "w"
   }
 }
@@ -1284,7 +1288,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 create or replace temp view t1 (p, o) as values (1, 1), (1, 1), (1, 2), (2, 1), (2, 1), (2, 2)
 -- !query analysis
-CreateViewCommand `t1`, [(p,None), (o,None)], values (1, 1), (1, 1), (1, 2), (2, 1), (2, 1), (2, 2), false, true, LocalTempView, true
+CreateViewCommand `t1`, [(p,None), (o,None)], values (1, 1), (1, 1), (1, 2), (2, 1), (2, 1), (2, 2), false, true, LocalTempView, UNSUPPORTED, true
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -1299,7 +1303,7 @@ Project [p#x, o#x, rnk#x]
             +- Window [dense_rank(o#x) windowspecdefinition(p#x, o#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rnk#x], [p#x], [o#x ASC NULLS FIRST]
                +- Project [p#x, o#x]
                   +- SubqueryAlias t1
-                     +- View (`t1`, [p#x,o#x])
+                     +- View (`t1`, [p#x, o#x])
                         +- Project [cast(col1#x as int) AS p#x, cast(col2#x as int) AS o#x]
                            +- LocalRelation [col1#x, col2#x]
 
@@ -1315,7 +1319,7 @@ Project [cate#x, val#x, r#x]
             +- Window [rank(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS r#x], [cate#x], [val#x ASC NULLS FIRST]
                +- Project [cate#x, val#x]
                   +- SubqueryAlias testdata
-                     +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                     +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                         +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                            +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                               +- SubqueryAlias testData
@@ -1333,7 +1337,7 @@ Project [cate#x, val#x, r#x]
             +- Window [rank(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS r#x], [cate#x], [val#x ASC NULLS FIRST]
                +- Project [cate#x, val#x]
                   +- SubqueryAlias testdata
-                     +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                     +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                         +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                            +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                               +- SubqueryAlias testData
@@ -1351,7 +1355,7 @@ Project [cate#x, val#x, r#x]
             +- Window [dense_rank(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS r#x], [cate#x], [val#x ASC NULLS FIRST]
                +- Project [cate#x, val#x]
                   +- SubqueryAlias testdata
-                     +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                     +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                         +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                            +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                               +- SubqueryAlias testData
@@ -1369,7 +1373,7 @@ Project [cate#x, val#x, r#x]
             +- Window [dense_rank(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS r#x], [cate#x], [val#x ASC NULLS FIRST]
                +- Project [cate#x, val#x]
                   +- SubqueryAlias testdata
-                     +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                     +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                         +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                            +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                               +- SubqueryAlias testData
@@ -1387,7 +1391,7 @@ Project [cate#x, val#x, r#x]
             +- Window [row_number() windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS r#x], [cate#x], [val#x ASC NULLS FIRST]
                +- Project [cate#x, val#x]
                   +- SubqueryAlias testdata
-                     +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                     +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                         +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                            +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                               +- SubqueryAlias testData
@@ -1405,7 +1409,7 @@ Project [cate#x, val#x, r#x]
             +- Window [row_number() windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS r#x], [cate#x], [val#x ASC NULLS FIRST]
                +- Project [cate#x, val#x]
                   +- SubqueryAlias testdata
-                     +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                     +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                         +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
                            +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                               +- SubqueryAlias testData

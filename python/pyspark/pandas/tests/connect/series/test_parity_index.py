@@ -21,7 +21,11 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class SeriesParityIndexTests(SeriesIndexMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
+class SeriesParityIndexTests(
+    SeriesIndexMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
+):
     pass
 
 
