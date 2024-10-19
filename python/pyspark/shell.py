@@ -30,7 +30,7 @@ import sys
 
 import pyspark
 from pyspark.core.context import SparkContext
-from pyspark.logger import SPARK_LOG_SCHEMA
+from pyspark.logger import SPARK_LOG_SCHEMA # noqa: F401
 from pyspark.sql import SparkSession
 from pyspark.sql.context import SQLContext
 from pyspark.sql.utils import is_remote
