@@ -84,7 +84,7 @@ license: |
 
 - Since Spark 3.2, `spark.storage.replication.proactive` is enabled by default which means Spark tries to replenish in case of the loss of cached RDD block replicas due to executor failures. To restore the behavior before Spark 3.2, you can set `spark.storage.replication.proactive` to `false`.
 
-- In Spark 3.2, `spark.launcher.childConnectionTimeout` is deprecated (typo) though still works. Use `spark.launcher.childConnectionTimeout` instead.
+- In Spark 3.2, `spark.launcher.childConectionTimeout` is deprecated (typo) though still works. Use `spark.launcher.childConnectionTimeout` instead.
 
 - In Spark 3.2, support for Apache Mesos as a resource manager is deprecated and will be removed in a future version. 
 
