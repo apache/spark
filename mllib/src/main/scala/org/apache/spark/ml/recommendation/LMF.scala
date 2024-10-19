@@ -541,7 +541,7 @@ object LMFModel extends MLReadable[LMFModel] {
 @Since("4.0.0")
 class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] with LMFParams
   with DefaultParamsWritable {
-  
+
   @Since("4.0.0")
   def this() = this(Identifiable.randomUID("lmf"))
 

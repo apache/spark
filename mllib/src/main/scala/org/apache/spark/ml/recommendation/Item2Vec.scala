@@ -160,7 +160,8 @@ private[recommendation] trait Item2VecParams extends Item2VecModelParams
    * @group param
    */
   final val minCount = new IntParam(this, "minCount", "the minimum number of times" +
-    " a item must appear to be included in the Item2Vec factorization (>= 0)", ParamValidators.gtEq(0))
+    " a item must appear to be included in the Item2Vec factorization (>= 0)",
+    ParamValidators.gtEq(0))
 
   /** @group getParam */
   def getMinCount: Int = $(minCount)
