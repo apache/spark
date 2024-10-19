@@ -290,13 +290,15 @@ class Item2VecModel private[ml] (
     transformSchema(dataset.schema)
     val sequences = datasetWithIndex
       .select(validatedInputs, col(idxCol))
+      .as[(Array[Long], Long)]
       .rdd
-      .map{case Row(seq: Array[Long], idx: Long) => (idx, seq)}
+      .map{case (seq: Array[Long], idx: Long) => (idx, seq)}
       .repartition($(numPartitions))
 
     val factors = contextFactors
+      .as[(Long, Array[Float], Float)]
       .rdd
-      .map{case Row(itemId: Long, f: Array[Float], b: Float) => itemId -> (f :+ b)}
+      .map{case (itemId: Long, f: Array[Float], b: Float) => itemId -> (f :+ b)}
 
     val basePartitioner = new HashPartitioner($(numPartitions))
 
@@ -505,8 +507,9 @@ class Item2Vec(@Since("4.0.0") override val uid: String)
 
     val sequences = dataset
       .select(validatedInputs)
+      .as[Array[Long]]
       .rdd
-      .map{case Row(seq: Array[Long]) => seq}
+      .map{case (seq: Array[Long]) => seq}
       .repartition(numExecutors * numCores / $(parallelism))
       .persist(StorageLevel.fromString($(intermediateStorageLevel)))
 
