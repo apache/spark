@@ -24,6 +24,7 @@ import java.util.{ArrayList => JArrayList, List => JList, Locale, Map => JMap, S
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
@@ -1140,6 +1141,68 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     partitions.asScala.toSeq
   }
 
+  private def getPartitionNamesWithCount(hive: Hive, table: Table): (Int, Seq[String]) = {
+    val partitionNames = hive.getPartitionNames(
+      table.getDbName, table.getTableName, -1).asScala.toSeq
+    (partitionNames.length, partitionNames)
+  }
+
+  private def getPartitionsInBatches(
+      hive: Hive,
+      table: Table,
+      initialBatchSize: Int,
+      partNames: Seq[String]): java.util.Collection[Partition] = {
+    val maxRetries = SQLConf.get.metastorePartitionBatchRetryCount
+    val decayingFactor = 2
+
+    if (initialBatchSize <= 0) {
+      throw new IllegalArgumentException(s"Invalid batch size $initialBatchSize provided " +
+        s"for fetching partitions.Batch size must be greater than 0")
+    }
+
+    if (maxRetries < 0) {
+      throw new IllegalArgumentException(s"Invalid number of maximum retries $maxRetries " +
+        s"provided for fetching partitions.It must be a non-negative integer value")
+    }
+
+    logInfo(s"Breaking your request into small batches of '$initialBatchSize'.")
+
+    var batchSize = initialBatchSize
+    val processedPartitions = mutable.ListBuffer[Partition]()
+    var retryCount = 0
+    var index = 0
+
+    def getNextBatchSize(): Int = {
+      val currentBatchSize = batchSize
+      batchSize = (batchSize / decayingFactor) max 1
+      currentBatchSize
+    }
+
+    var currentBatchSize = getNextBatchSize()
+    var partitions: java.util.Collection[Partition] = null
+
+    while (index < partNames.size && retryCount <= maxRetries) {
+      val batch = partNames.slice(index, index + currentBatchSize)
+
+      try {
+        partitions = hive.getPartitionsByNames(table, batch.asJava)
+        processedPartitions ++= partitions.asScala
+        index += batch.size
+      } catch {
+        case ex: Exception =>
+          logWarning(s"Caught exception while fetching partitions for batch '$batch'.", ex)
+          retryCount += 1
+          currentBatchSize = getNextBatchSize()
+          logInfo(s"Further reducing batch size to '$currentBatchSize'.")
+          if (retryCount > maxRetries) {
+            logError(s"Failed to fetch partitions for the request. Retries count exceeded.")
+          }
+      }
+    }
+
+    processedPartitions.asJava
+  }
+
   private def prunePartitionsFastFallback(
       hive: Hive,
       table: Table,
@@ -1157,11 +1220,19 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       }
     }
 
+    val batchSize = SQLConf.get.getHiveMetaStoreBatchSize
+
     if (!SQLConf.get.metastorePartitionPruningFastFallback ||
         predicates.isEmpty ||
         predicates.exists(hasTimeZoneAwareExpression)) {
+      val (count, partNames) = getPartitionNamesWithCount(hive, table)
       recordHiveCall()
-      getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
+      if(count < batchSize || batchSize == -1) {
+        getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
+      }
+      else {
+        getPartitionsInBatches(hive, table, batchSize, partNames)
+      }
     } else {
       try {
         val partitionSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
@@ -1193,8 +1264,14 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         case ex: HiveException if ex.getCause.isInstanceOf[MetaException] =>
           logWarning("Caught Hive MetaException attempting to get partition metadata by " +
             "filter from client side. Falling back to fetching all partition metadata", ex)
+          val (count, partNames) = getPartitionNamesWithCount(hive, table)
           recordHiveCall()
-          getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
+          if(count < batchSize || batchSize == -1) {
+            getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
+          }
+          else {
+            getPartitionsInBatches(hive, table, batchSize, partNames)
+          }
       }
     }
   }
