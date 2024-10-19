@@ -725,7 +725,12 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
       (entry.id, entry.f.slice(0, $(rank)), if ($(fitIntercept)) entry.f($(rank)) else 0f)
     }.toDF("id", "features", "intercept")
 
-    val model = new LMFModel(uid, $(rank), userDF, itemDF).setBlockSize($(blockSize))
+    val model = new LMFModel(uid, $(rank), userDF, itemDF)
+      .setUserCol($(userCol))
+      .setItemCol($(itemCol))
+      .setPredictionCol($(predictionCol))
+      .setColdStartStrategy($(coldStartStrategy))
+      .setBlockSize($(blockSize))
       .setParent(this)
     copyValues(model)
   }
