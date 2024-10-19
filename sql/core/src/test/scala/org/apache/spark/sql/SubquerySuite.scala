@@ -2755,6 +2755,16 @@ class SubquerySuite extends QueryTest
     }
   }
 
+  test("stuffing") {
+    withTable("v1", "v2") {
+      sql("create or replace temp view v1(c1, c2) as values (1, 2), (1, 3), (2, 2)")
+      sql("create or replace temp view v2(col1, col2) as values (1, 2), (1, 3), (2, 2)")
+      val df = sql("select col1, sum(col2) in (select c2 from v1) from v2 group by col1")
+      checkAnswer(df,
+        Row(1, false) :: Row(2, true) :: Nil)
+    }
+  }
+
   test("SPARK-45580: Handle case where a nested subquery becomes an existence join") {
     withTempView("t1", "t2", "t3") {
       Seq((1), (2), (3), (7)).toDF("a").persist().createOrReplaceTempView("t1")
