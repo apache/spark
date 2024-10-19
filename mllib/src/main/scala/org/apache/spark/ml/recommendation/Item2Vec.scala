@@ -251,12 +251,12 @@ private[recommendation] trait Item2VecParams extends Item2VecModelParams
   def getFinalStorageLevel: String = $(finalStorageLevel)
 
   /**
-   * Param to decide whether to verbose loss values.
+   * Param to verbose loss.
    * Default: false
    * @group expertParam
    */
   val verbose: BooleanParam = new BooleanParam(this, "verbose",
-    "whether to verbose loss values")
+    "verbose loss")
 
   /** @group expertGetParam */
   def getVerbose: Boolean = $(verbose)
