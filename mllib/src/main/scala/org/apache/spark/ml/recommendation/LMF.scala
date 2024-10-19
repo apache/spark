@@ -533,7 +533,7 @@ object LMFModel extends MLReadable[LMFModel] {
  * `1/n` ratings end up on the same executors as the factors for them. Then, on each executor,
  * in-memory optimization is performed for the ratings and factors on it. In the case of
  * implicit feedback, negative samples are sampled from the factors on the executor,
- * according to the paper “Distributed negative sampling for word embeddings” available at
+ * according to the paper "Distributed negative sampling for word embeddings" available at
  * https://ojs.aaai.org/index.php/AAAI/article/view/10931/10790.
  *
  * @param uid
