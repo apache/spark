@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.util.UUID
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Predicate, SortOrder, UnsafeProjection}
@@ -90,6 +92,7 @@ class EventTimeStatsAccum(protected var currentStats: EventTimeStats = EventTime
  * period. Note that event time is measured in milliseconds.
  */
 case class EventTimeWatermarkExec(
+    nodeId: UUID,
     eventTime: Attribute,
     delay: CalendarInterval,
     child: SparkPlan) extends UnaryExecNode {

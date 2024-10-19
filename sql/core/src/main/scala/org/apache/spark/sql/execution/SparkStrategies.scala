@@ -425,8 +425,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case _ if !plan.isStreaming => Nil
 
-      case EventTimeWatermark(columnName, delay, child) =>
-        EventTimeWatermarkExec(columnName, delay, planLater(child)) :: Nil
+      case EventTimeWatermark(nodeId, columnName, delay, child) =>
+        EventTimeWatermarkExec(nodeId, columnName, delay, planLater(child)) :: Nil
 
       case UpdateEventTimeWatermarkColumn(columnName, delay, child) =>
         // we expect watermarkDelay to be resolved before physical planning.

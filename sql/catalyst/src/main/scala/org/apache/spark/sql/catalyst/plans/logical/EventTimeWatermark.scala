@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import java.util.concurrent.TimeUnit
+import java.util.UUID
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark.updateEventTimeColumn
@@ -69,6 +70,7 @@ object EventTimeWatermark {
  * Used to mark a user specified column as holding the event time for a row.
  */
 case class EventTimeWatermark(
+    nodeId: UUID,
     eventTime: Attribute,
     delay: CalendarInterval,
     child: LogicalPlan) extends UnaryNode {

@@ -573,7 +573,8 @@ class Dataset[T] private[sql](
     require(!IntervalUtils.isNegative(parsedDelay),
       s"delay threshold ($delayThreshold) should not be negative.")
     EliminateEventTimeWatermark(
-      EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan))
+      EventTimeWatermark(util.UUID.randomUUID(), UnresolvedAttribute(eventTime),
+        parsedDelay, logicalPlan))
   }
 
   /** @inheritdoc */
