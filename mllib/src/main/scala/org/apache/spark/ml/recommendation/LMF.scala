@@ -691,7 +691,7 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
     val numExecutors = Try(dataset.sparkSession.sparkContext
       .getConf.get("spark.executor.instances").toInt).getOrElse($(numPartitions))
     val numCores = Try(dataset.sparkSession.sparkContext
-      .getConf.get("spark.executor.cores").toInt).getOrElse(1)
+      .getConf.get("spark.executor.cores").toInt).getOrElse($(parallelism))
 
     val ratings = dataset
       .select(validatedUsers, validatedItems, validatedLabels, validatedWeights)
