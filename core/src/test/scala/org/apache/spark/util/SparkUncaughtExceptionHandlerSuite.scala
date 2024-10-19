@@ -86,7 +86,7 @@ object ThrowableTypes extends Enumeration {
   // we should also identify that fatal error and exit with the
   // correct exit code.
   val NestedOOMError = ThrowableTypesVal(
-    "DeepNestedFatalError",
+    "NestedFatalError",
     new RuntimeException("Nonfatal Level 1",
       new RuntimeException("Nonfatal Level 2",
         new RuntimeException("Nonfatal Level 3",
@@ -94,7 +94,7 @@ object ThrowableTypes extends Enumeration {
   )
 
   val NestedSparkFatalException = ThrowableTypesVal(
-    "DeepNestedMixedFatalErrors",
+    "NestedMixedFatalErrors",
     new RuntimeException("Nonfatal Level 1",
       new RuntimeException("Nonfatal Level 2",
         new SparkFatalException(new OutOfMemoryError())))
