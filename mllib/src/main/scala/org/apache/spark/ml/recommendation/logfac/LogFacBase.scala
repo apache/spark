@@ -95,7 +95,7 @@ private[ml] abstract class LogFacBase[T](
   }
 
   private def checkpoint(emb: RDD[ItemData],
-                         path: String,
+                         path: String
                         )(implicit sqlc: SQLContext): RDD[ItemData] = {
     import sqlc.implicits._
     if (emb != null) {
