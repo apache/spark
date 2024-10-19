@@ -782,7 +782,7 @@ object LMF extends DefaultParamsReadable[LMF] with Logging {
                           lambdaI,
                           useBias,
                           implicitPrefs,
-                          seed: Long,
+                          seed,
                           intermediateRDDStorageLevel,
                           finalRDDStorageLevel,
                           checkpointPath,
