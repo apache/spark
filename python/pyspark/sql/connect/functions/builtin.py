@@ -1498,7 +1498,7 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
 lead.__doc__ = pysparkfuncs.lead.__doc__
 
 
-def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = None) -> Column:
+def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = False) -> Column:
     if ignoreNulls is None:
         return _invoke_function("nth_value", _to_col(col), lit(offset))
     else:
@@ -2236,7 +2236,7 @@ size.__doc__ = pysparkfuncs.size.__doc__
 
 
 def slice(
-    col: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]
+    x: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]
 ) -> Column:
     start = _enum_to_value(start)
     if isinstance(start, (Column, str)):
@@ -2260,7 +2260,7 @@ def slice(
             messageParameters={"arg_name": "length", "arg_type": type(length).__name__},
         )
 
-    return _invoke_function_over_columns("slice", col, _start, _length)
+    return _invoke_function_over_columns("slice", x, _start, _length)
 
 
 slice.__doc__ = pysparkfuncs.slice.__doc__
@@ -4195,6 +4195,7 @@ unwrap_udt.__doc__ = pysparkfuncs.unwrap_udt.__doc__
 def udf(
     f: Optional[Union[Callable[..., Any], "DataTypeOrString"]] = None,
     returnType: "DataTypeOrString" = StringType(),
+    *,
     useArrow: Optional[bool] = None,
 ) -> Union["UserDefinedFunctionLike", Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]]:
     if f is None or isinstance(f, (str, DataType)):
