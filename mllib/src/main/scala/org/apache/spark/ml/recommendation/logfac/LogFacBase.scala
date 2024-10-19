@@ -214,7 +214,7 @@ private[ml] abstract class LogFacBase[T](
       }
     }
 
-    emb.persist(finalRDDStorageLevel)
+    emb = emb.map(identity).persist(finalRDDStorageLevel)
     emb.count()
 
     cached.foreach(_.unpersist())
