@@ -257,7 +257,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             logger.info("{}: creating a new shuffle merge metadata since received " +
               "shuffleMergeId {} is higher than latest shuffleMergeId {}",
               MDC.of(LogKeys.APP_ATTEMPT_SHUFFLE_MERGE_ID$.MODULE$,
-                currrentAppAttemptShuffleMergeId),
+                currentAppAttemptShuffleMergeId),
               MDC.of(LogKeys.SHUFFLE_MERGE_ID$.MODULE$, shuffleMergeId),
               MDC.of(LogKeys.LATEST_SHUFFLE_MERGE_ID$.MODULE$, latestShuffleMergeId));
             submitCleanupTask(() ->
