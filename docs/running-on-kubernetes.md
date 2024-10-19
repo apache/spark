@@ -242,7 +242,7 @@ A typical example of this using S3 is via passing the following options:
 --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
 --conf spark.hadoop.fs.s3a.fast.upload=true
 --conf spark.hadoop.fs.s3a.secret.key=....
---conf spark.driver.extraJavaOptions=-Divvy.cache.dir=/tmp -Divvy.home=/tmp
+--conf spark.driver.extraJavaOptions=-Divy.cache.dir=/tmp -Divy.home=/tmp
 file:///full/path/to/app.jar
 ```
 The app jar file will be uploaded to the S3 and then when the driver is launched it will be downloaded
