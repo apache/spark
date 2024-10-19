@@ -518,7 +518,8 @@ class Item2Vec(@Since("4.0.0") override val uid: String)
       SamplingMode.withName($(samplingMode)), $(fitIntercept), $(seed),
       StorageLevel.fromString($(intermediateStorageLevel)),
       StorageLevel.fromString($(finalStorageLevel)),
-      get(checkpointPath), get(checkpointInterval).getOrElse(-1)).train(sequences)
+      get(checkpointPath), get(checkpointInterval).getOrElse(-1))
+      .train(sequences)(dataset.sqlContext)
 
     sequences.unpersist()
     val dim = $(rank)

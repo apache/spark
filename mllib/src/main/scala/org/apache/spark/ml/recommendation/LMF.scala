@@ -715,7 +715,8 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
       $(implicitPrefs), get(labelCol).isDefined, get(weightCol).isDefined,
       $(seed), StorageLevel.fromString($(intermediateStorageLevel)),
       StorageLevel.fromString($(finalStorageLevel)),
-      get(checkpointPath), get(checkpointInterval).getOrElse(-1)).train(ratings)
+      get(checkpointPath), get(checkpointInterval).getOrElse(-1))
+      .train(ratings)(dataset.sqlContext)
 
     ratings.unpersist()
 

@@ -24,7 +24,7 @@ import scala.util.Try
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{HashPartitioner, Partitioner, SparkContext}
+import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.recommendation.logfac.local.{ItemData, Optimizer, Opts}
 import org.apache.spark.ml.recommendation.logfac.pair.LongPairMulti
@@ -96,8 +96,7 @@ private[ml] abstract class LogFacBase[T](
 
   private def checkpoint(emb: RDD[ItemData],
                          path: String,
-                        )(implicit sc: SparkContext): RDD[ItemData] = {
-    val sqlc = new SQLContext(sc)
+                        )(implicit sqlc: SQLContext): RDD[ItemData] = {
     import sqlc.implicits._
     if (emb != null) {
       emb.map(itemData => (itemData.t, itemData.id, itemData.cn, itemData.f))
@@ -123,7 +122,7 @@ private[ml] abstract class LogFacBase[T](
 
   protected def initialize(data: RDD[T]): RDD[ItemData]
 
-  private[recommendation] def train(data: RDD[T]): RDD[ItemData] = {
+  private[recommendation] def train(data: RDD[T])(implicit sqlc: SQLContext): RDD[ItemData] = {
     val sparkContext = data.sparkContext
 
     val latest = if (checkpointPath.isDefined) {
@@ -139,7 +138,7 @@ private[ml] abstract class LogFacBase[T](
     val cached = ArrayBuffer.empty[RDD[ItemData]]
 
     var emb = latest
-      .map(x => checkpoint(null, checkpointPath.get + "/" + x._1 + "_" + x._2)(sparkContext))
+      .map(x => checkpoint(null, checkpointPath.get + "/" + x._1 + "_" + x._2))
       .getOrElse{cacheAndCount(initialize(data))}
     cached += emb
 
@@ -202,7 +201,7 @@ private[ml] abstract class LogFacBase[T](
         cached += emb
 
         if (checkpointInterval > 0 && (checkpointIter + 1) % checkpointInterval == 0) {
-          emb = checkpoint(emb, checkpointPath.get + "/" + curEpoch + "_" + (pI + 1))(sparkContext)
+          emb = checkpoint(emb, checkpointPath.get + "/" + curEpoch + "_" + (pI + 1))
 
           cached.foreach(_.unpersist())
           cached.clear()

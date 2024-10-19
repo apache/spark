@@ -26,7 +26,7 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{ACCURACY, EPR}
 import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.ml.recommendation.logfac.pair.LongPairMulti
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
+import org.apache.spark.ml.util.MLTest
 
 
 class OptimizerSuite extends MLTest with Logging {
