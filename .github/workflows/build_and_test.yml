@@ -58,6 +58,7 @@ jobs:
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
       image_url: ${{ steps.infra-image-outputs.outputs.image_url }}
+      image_docs_url: ${{ steps.infra-image-docs-outputs.outputs.image_docs_url }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -134,6 +135,14 @@ jobs:
         IMG_NAME="apache-spark-ci-image:${{ inputs.branch }}-${{ github.run_id }}"
         IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
         echo "image_url=$IMG_URL" >> $GITHUB_OUTPUT
+    - name: Generate infra image URL (Documentation)
+      id: infra-image-docs-outputs
+      run: |
+        # Convert to lowercase to meet Docker repo name requirement
+        REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+        IMG_NAME="apache-spark-ci-image-docs:${{ inputs.branch }}-${{ github.run_id }}"
+        IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
+        echo "image_docs_url=$IMG_URL" >> $GITHUB_OUTPUT
 
   # Build: build Spark and run the tests for specified modules.
   build:
@@ -345,12 +354,23 @@ jobs:
         id: docker_build
         uses: docker/build-push-action@v6
         with:
-          context: ./dev/infra/
+          context: ./dev/infra/base/
           push: true
           tags: |
             ${{ needs.precondition.outputs.image_url }}
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ inputs.branch }}
+      - name: Build and push (Documentation)
+        id: docker_build_docs
+        uses: docker/build-push-action@v6
+        with:
+          context: ./dev/infra/docs/
+          push: true
+          tags: |
+            ${{ needs.precondition.outputs.image_docs_url }}
+          # Use the infra image cache to speed up
+          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:${{ inputs.branch }}
+
 
   pyspark:
     needs: [precondition, infra-image]
@@ -776,7 +796,7 @@ jobs:
       PYSPARK_PYTHON: python3.9
       GITHUB_PREV_SHA: ${{ github.event.before }}
     container:
-      image: ${{ needs.precondition.outputs.image_url }}
+      image: ${{ needs.precondition.outputs.image_docs_url }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
