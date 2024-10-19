@@ -632,9 +632,11 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
   def setPow(value: Double): this.type = set(pow, value)
 
   /** @group expertSetParam */
+  @Since("4.0.0")
   def setRegParamU(value: Double): this.type = set(regParamU, value)
 
   /** @group expertSetParam */
+  @Since("4.0.0")
   def setRegParamI(value: Double): this.type = set(regParamI, value)
 
   /** @group expertSetParam */
