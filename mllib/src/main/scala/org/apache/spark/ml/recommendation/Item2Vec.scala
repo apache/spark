@@ -279,6 +279,8 @@ class Item2VecModel private[ml] (
    */
   @Since("4.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
+    import dataset.sqlContext.implicits._
+
     val validatedInputs = checkArrayLongs(dataset, $(inputCol))
 
     val idxCol = Identifiable.randomUID("__i2v_idx")
@@ -288,13 +290,13 @@ class Item2VecModel private[ml] (
     transformSchema(dataset.schema)
     val sequences = datasetWithIndex
       .select(validatedInputs, col(idxCol))
-      .rdd
-      .map { case Row(seq: Array[Long], idx: Long) => (idx, seq)}
+      .as[(Array[Long], Long)].rdd
+      .map { case (seq: Array[Long], idx: Long) => (idx, seq)}
       .repartition($(numPartitions))
 
     val factors = contextFactors
-      .rdd
-      .map{case Row(itemId: Long, f: Array[Float], b: Float) => itemId -> (f :+ b)}
+      .as[(Long, Array[Float], Float)].rdd
+      .map{case (itemId: Long, f: Array[Float], b: Float) => itemId -> (f :+ b)}
 
     val basePartitioner = new HashPartitioner($(numPartitions))
 
@@ -503,8 +505,7 @@ class Item2Vec(@Since("4.0.0") override val uid: String)
 
     val sequences = dataset
       .select(validatedInputs)
-      .rdd
-      .map { case Row(seq: Array[Long]) => seq}
+      .as[Array[Long]].rdd
       .repartition(numExecutors * numCores / $(parallelism))
       .persist(StorageLevel.fromString($(intermediateStorageLevel)))
 
