@@ -1359,7 +1359,7 @@ class BaseUDTFTestsMixin:
                 assertSchemaEqual(df.schema, expected_schema)
                 assertDataFrameEqual(df, expected_results)
 
-    def test_udtf_with_analyze_arbitary_number_arguments(self):
+    def test_udtf_with_analyze_arbitrary_number_arguments(self):
         class TestUDTF:
             @staticmethod
             def analyze(*args: AnalyzeArgument) -> AnalyzeResult:

@@ -1631,7 +1631,7 @@ class SparkSession(SparkConversionMixin):
         |  3|  6|
         +---+---+
 
-        And substitude named parameters with the `:` prefix by SQL literals.
+        And substitute named parameters with the `:` prefix by SQL literals.
 
         >>> from pyspark.sql.functions import create_map
         >>> spark.sql(

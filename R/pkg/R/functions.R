@@ -2859,7 +2859,7 @@ setClassUnion("characterOrstructTypeOrColumn", c("character", "structType", "Col
 #' @details
 #' \code{from_json}: Parses a column containing a JSON string into a Column of \code{structType}
 #' with the specified \code{schema} or array of \code{structType} if \code{as.json.array} is set
-#' to \code{TRUE}. If the string is unparseable, the Column will contain the value NA.
+#' to \code{TRUE}. If the string is unparsable, the Column will contain the value NA.
 #'
 #' @rdname column_collection_functions
 #' @param as.json.array indicating if input string is JSON array of objects or a single object.
@@ -2941,7 +2941,7 @@ setMethod("schema_of_json", signature(x = "characterOrColumn"),
 #' @details
 #' \code{from_csv}: Parses a column containing a CSV string into a Column of \code{structType}
 #' with the specified \code{schema}.
-#' If the string is unparseable, the Column will contain the value NA.
+#' If the string is unparsable, the Column will contain the value NA.
 #'
 #' @rdname column_collection_functions
 #' @aliases from_csv from_csv,Column,characterOrstructTypeOrColumn-method

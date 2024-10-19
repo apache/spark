@@ -260,14 +260,14 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         with self.assertRaisesRegex(Exception, "Model expected 3 inputs, but received 4 columns"):
             preds = self.df.withColumn("preds", sum_cols(*columns)).toPandas()
 
-        # muliple scalar columns with one tensor_input_shape => single numpy array
+        # multiple scalar columns with one tensor_input_shape => single numpy array
         sum_cols = predict_batch_udf(
             array_sum_fn, return_type=DoubleType(), batch_size=5, input_tensor_shapes=[[4]]
         )
         preds = self.df.withColumn("preds", sum_cols(struct(*columns))).toPandas()
         self.assertTrue(np.array_equal(np.sum(self.data, axis=1), preds["preds"].to_numpy()))
 
-        # muliple scalar columns with wrong tensor_input_shape => ERROR
+        # multiple scalar columns with wrong tensor_input_shape => ERROR
         sum_cols = predict_batch_udf(
             array_sum_fn, return_type=DoubleType(), batch_size=5, input_tensor_shapes=[[3]]
         )

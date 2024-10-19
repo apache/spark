@@ -170,7 +170,7 @@ def _parallelFitTasks(
 
     if active_session is None:
         raise RuntimeError(
-            "An active SparkSession is required for running cross valiator fit tasks."
+            "An active SparkSession is required for running cross validator fit tasks."
         )
 
     def get_single_task(index: int, param_map: Any) -> Callable[[], Tuple[int, float]]:

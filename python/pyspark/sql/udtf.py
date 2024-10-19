@@ -122,7 +122,7 @@ class AnalyzeResult:
         The schema that the Python UDTF will return.
     withSinglePartition : bool
         If true, the UDTF is specifying for Catalyst to repartition all rows of the input TABLE
-        argument to one collection for consumption by exactly one instance of the correpsonding
+        argument to one collection for consumption by exactly one instance of the corresponding
         UDTF class.
     partitionBy : sequence of :class:`PartitioningColumn`
         If non-empty, this is a sequence of expressions that the UDTF is specifying for Catalyst to

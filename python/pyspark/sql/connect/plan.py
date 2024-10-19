@@ -206,7 +206,7 @@ class LogicalPlan:
                     try:
                         params[name] = getattr(self, "_" + name)
                     except AttributeError:
-                        pass  # Simpy ignore
+                        pass  # Simply ignore
         return params
 
     def print(self, indent: int = 0) -> str:

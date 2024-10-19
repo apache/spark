@@ -2746,7 +2746,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         pyspark.errors.exceptions.captured.AnalysisException: Column name#0 are ambiguous...
 
         A better approach is to assign aliases to the dataframes, and then reference
-        the ouptut columns from the join operation using these aliases:
+        the output columns from the join operation using these aliases:
 
         >>> df.alias("a").join(
         ...     df.alias("b"), sf.col("a.name") == sf.col("b.name"), "outer"
@@ -4226,7 +4226,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         groupingSets : sequence of sequence of columns or str
             Individual set of columns to group on.
         cols : :class:`Column` or str
-            Addional grouping columns specified by users.
+            Additional grouping columns specified by users.
             Those columns are shown as the output columns after aggregation.
 
         Returns
