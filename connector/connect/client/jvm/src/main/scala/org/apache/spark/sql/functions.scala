@@ -6686,7 +6686,7 @@ object functions {
   // scalastyle:off line.size.limit
   /**
    * (Scala-specific) Parses a column containing a JSON string into a `StructType` with the
-   * specified schema. Returns `null`, in the case of an unparseable string.
+   * specified schema. Returns `null`, in the case of an unparsable string.
    *
    * @param e
    *   a string column containing JSON data.
@@ -6709,7 +6709,7 @@ object functions {
   /**
    * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
    * as keys type, `StructType` or `ArrayType` with the specified schema. Returns `null`, in the
-   * case of an unparseable string.
+   * case of an unparsable string.
    *
    * @param e
    *   a string column containing JSON data.
@@ -6732,7 +6732,7 @@ object functions {
   // scalastyle:off line.size.limit
   /**
    * (Java-specific) Parses a column containing a JSON string into a `StructType` with the
-   * specified schema. Returns `null`, in the case of an unparseable string.
+   * specified schema. Returns `null`, in the case of an unparsable string.
    *
    * @param e
    *   a string column containing JSON data.
@@ -6755,7 +6755,7 @@ object functions {
   /**
    * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
    * as keys type, `StructType` or `ArrayType` with the specified schema. Returns `null`, in the
-   * case of an unparseable string.
+   * case of an unparsable string.
    *
    * @param e
    *   a string column containing JSON data.
@@ -6777,7 +6777,7 @@ object functions {
 
   /**
    * Parses a column containing a JSON string into a `StructType` with the specified schema.
-   * Returns `null`, in the case of an unparseable string.
+   * Returns `null`, in the case of an unparsable string.
    *
    * @param e
    *   a string column containing JSON data.
@@ -6793,7 +6793,7 @@ object functions {
   /**
    * Parses a column containing a JSON string into a `MapType` with `StringType` as keys type,
    * `StructType` or `ArrayType` with the specified schema. Returns `null`, in the case of an
-   * unparseable string.
+   * unparsable string.
    *
    * @param e
    *   a string column containing JSON data.
@@ -6810,7 +6810,7 @@ object functions {
   /**
    * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
    * as keys type, `StructType` or `ArrayType` with the specified schema. Returns `null`, in the
-   * case of an unparseable string.
+   * case of an unparsable string.
    *
    * @param e
    *   a string column containing JSON data.
@@ -6834,7 +6834,7 @@ object functions {
   /**
    * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
    * as keys type, `StructType` or `ArrayType` with the specified schema. Returns `null`, in the
-   * case of an unparseable string.
+   * case of an unparsable string.
    *
    * @param e
    *   a string column containing JSON data.
@@ -6859,7 +6859,7 @@ object functions {
   /**
    * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
    * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema. Returns
-   * `null`, in the case of an unparseable string.
+   * `null`, in the case of an unparsable string.
    *
    * @param e
    *   a string column containing JSON data.
@@ -6877,7 +6877,7 @@ object functions {
   /**
    * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
    * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema. Returns
-   * `null`, in the case of an unparseable string.
+   * `null`, in the case of an unparsable string.
    *
    * @param e
    *   a string column containing JSON data.
@@ -7193,7 +7193,7 @@ object functions {
   // scalastyle:off line.size.limit
   /**
    * Parses a column containing a CSV string into a `StructType` with the specified schema.
-   * Returns `null`, in the case of an unparseable string.
+   * Returns `null`, in the case of an unparsable string.
    *
    * @param e
    *   a string column containing CSV data.
@@ -7215,7 +7215,7 @@ object functions {
   // scalastyle:off line.size.limit
   /**
    * (Java-specific) Parses a column containing a CSV string into a `StructType` with the
-   * specified schema. Returns `null`, in the case of an unparseable string.
+   * specified schema. Returns `null`, in the case of an unparsable string.
    *
    * @param e
    *   a string column containing CSV data.
@@ -7315,7 +7315,7 @@ object functions {
   // scalastyle:off line.size.limit
   /**
    * Parses a column containing a XML string into the data type corresponding to the specified
-   * schema. Returns `null`, in the case of an unparseable string.
+   * schema. Returns `null`, in the case of an unparsable string.
    *
    * @param e
    *   a string column containing XML data.
@@ -7337,7 +7337,7 @@ object functions {
 
   /**
    * (Java-specific) Parses a column containing a XML string into a `StructType` with the
-   * specified schema. Returns `null`, in the case of an unparseable string.
+   * specified schema. Returns `null`, in the case of an unparsable string.
    *
    * @param e
    *   a string column containing XML data.
@@ -7365,7 +7365,7 @@ object functions {
   // scalastyle:off line.size.limit
   /**
    * (Java-specific) Parses a column containing a XML string into a `StructType` with the
-   * specified schema. Returns `null`, in the case of an unparseable string.
+   * specified schema. Returns `null`, in the case of an unparsable string.
    *
    * @param e
    *   a string column containing XML data.
@@ -7382,7 +7382,7 @@ object functions {
   // scalastyle:off line.size.limit
   /**
    * (Java-specific) Parses a column containing a XML string into the data type corresponding to
-   * the specified schema. Returns `null`, in the case of an unparseable string.
+   * the specified schema. Returns `null`, in the case of an unparsable string.
    *
    * @param e
    *   a string column containing XML data.
@@ -7403,7 +7403,7 @@ object functions {
 
   /**
    * Parses a column containing a XML string into the data type corresponding to the specified
-   * schema. Returns `null`, in the case of an unparseable string.
+   * schema. Returns `null`, in the case of an unparsable string.
    *
    * @param e
    *   a string column containing XML data.

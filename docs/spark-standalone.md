@@ -337,7 +337,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>
     The pattern for app ID generation based on Java `String.format` method.
     The default value is `app-%s-%04d` which represents the existing app id string, e.g.,
-    `app-20231031224509-0008`. Plesae be careful to generate unique IDs.
+    `app-20231031224509-0008`. Please be careful to generate unique IDs.
   </td>
   <td>4.0.0</td>
 </tr>
@@ -774,7 +774,7 @@ In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spa
     <td><code>spark.deploy.recoveryDirectory</code></td>
     <td>""</td>
     <td>The directory in which Spark will store recovery state, accessible from the Master's perspective.
-      Note that the directory should be clearly manualy if <code>spark.deploy.recoveryMode</code>,
+      Note that the directory should be clearly manually if <code>spark.deploy.recoveryMode</code>,
       <code>spark.deploy.recoverySerializer</code>, or <code>spark.deploy.recoveryCompressionCodec</code> is changed.
     </td>
     <td>0.8.1</td>

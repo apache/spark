@@ -104,7 +104,7 @@ abstract class AvroSuite
   // stable ID option is on.
   //
   // @param types           Avro types that contain in an Avro union type
-  // @param expectedSchema  expeted SQL schema, provided in DDL string form
+  // @param expectedSchema  expected SQL schema, provided in DDL string form
   // @param fieldsAndRow    A list of rows to be appended to the Avro file and the expected
   // converted SQL rows
   private def checkUnionStableId(

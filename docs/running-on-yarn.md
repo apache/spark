@@ -670,7 +670,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>false</td>
   <td>
     Set to true for applications that have higher security requirements and prefer that their
-    secret is not saved in the db. The shuffle data of such applications wll not be recovered after
+    secret is not saved in the db. The shuffle data of such applications will not be recovered after
     the External Shuffle Service restarts.
   </td>
   <td>3.5.0</td>

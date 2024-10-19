@@ -242,7 +242,7 @@ A typical example of this using S3 is via passing the following options:
 --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
 --conf spark.hadoop.fs.s3a.fast.upload=true
 --conf spark.hadoop.fs.s3a.secret.key=....
---conf spark.driver.extraJavaOptions=-Divy.cache.dir=/tmp -Divy.home=/tmp
+--conf spark.driver.extraJavaOptions=-Divvy.cache.dir=/tmp -Divvy.home=/tmp
 file:///full/path/to/app.jar
 ```
 The app jar file will be uploaded to the S3 and then when the driver is launched it will be downloaded
@@ -1863,7 +1863,7 @@ Spark allows users to specify a custom Kubernetes schedulers.
   ```
 
 ##### Build
-To create a Spark distribution along with Volcano suppport like those distributed by the Spark [Downloads page](https://spark.apache.org/downloads.html), also see more in ["Building Spark"](https://spark.apache.org/docs/latest/building-spark.html):
+To create a Spark distribution along with Volcano support like those distributed by the Spark [Downloads page](https://spark.apache.org/downloads.html), also see more in ["Building Spark"](https://spark.apache.org/docs/latest/building-spark.html):
 
 ```bash
 ./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phive -Phive-thriftserver -Pkubernetes -Pvolcano

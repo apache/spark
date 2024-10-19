@@ -244,14 +244,14 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             // Higher shuffleMergeId seen for the shuffle ID meaning new stage attempt is being
             // run for the shuffle ID. Close and clean up old shuffleMergeId files,
             // happens in the indeterminate stage retries
-            AppAttemptShuffleMergeId currrentAppAttemptShuffleMergeId =
+            AppAttemptShuffleMergeId currentAppAttemptShuffleMergeId =
                 new AppAttemptShuffleMergeId(appShuffleInfo.appId, appShuffleInfo.attemptId,
                     shuffleId, latestShuffleMergeId);
             logger.info("{}: creating a new shuffle merge metadata since received " +
                 "shuffleMergeId {} is higher than latest shuffleMergeId {}",
-                currrentAppAttemptShuffleMergeId, shuffleMergeId, latestShuffleMergeId);
+                currentAppAttemptShuffleMergeId, shuffleMergeId, latestShuffleMergeId);
             submitCleanupTask(() ->
-                closeAndDeleteOutdatedPartitions(currrentAppAttemptShuffleMergeId,
+                closeAndDeleteOutdatedPartitions(currentAppAttemptShuffleMergeId,
                     mergePartitionsInfo.shuffleMergePartitions));
             return new AppShuffleMergePartitionsInfo(shuffleMergeId, false);
           } else {

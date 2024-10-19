@@ -72,7 +72,7 @@ DECLARE [ OR REPLACE ] [ VARIABLE ]
 -- The dense form of declaring a variable with default
 DECLARE five = 5;
 
--- STRING variable initialialized to `NULL`
+-- STRING variable initialized to `NULL`
 DECLARE some_var STRING;
 ```
 

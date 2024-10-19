@@ -40,7 +40,7 @@ license: |
 
 ## Upgrading from Core 3.3 to 3.4
 
-- Since Spark 3.4, Spark driver will own `PersistentVolumnClaim`s and try to reuse if they are not assigned to live executors. To restore the behavior before Spark 3.4, you can set `spark.kubernetes.driver.ownPersistentVolumeClaim` to `false` and `spark.kubernetes.driver.reusePersistentVolumeClaim` to `false`.
+- Since Spark 3.4, Spark driver will own `PersistentVolumeClaim`s and try to reuse if they are not assigned to live executors. To restore the behavior before Spark 3.4, you can set `spark.kubernetes.driver.ownPersistentVolumeClaim` to `false` and `spark.kubernetes.driver.reusePersistentVolumeClaim` to `false`.
 
 - Since Spark 3.4, Spark driver will track shuffle data when dynamic allocation is enabled without shuffle service. To restore the behavior before Spark 3.4, you can set `spark.dynamicAllocation.shuffleTracking.enabled` to `false`.
 
@@ -62,7 +62,7 @@ license: |
 
 - Since Spark 3.2, `spark.storage.replication.proactive` is enabled by default which means Spark tries to replenish in case of the loss of cached RDD block replicas due to executor failures. To restore the behavior before Spark 3.2, you can set `spark.storage.replication.proactive` to `false`.
 
-- In Spark 3.2, `spark.launcher.childConectionTimeout` is deprecated (typo) though still works. Use `spark.launcher.childConnectionTimeout` instead.
+- In Spark 3.2, `spark.launcher.childConnectionTimeout` is deprecated (typo) though still works. Use `spark.launcher.childConnectionTimeout` instead.
 
 - In Spark 3.2, support for Apache Mesos as a resource manager is deprecated and will be removed in a future version. 
 
