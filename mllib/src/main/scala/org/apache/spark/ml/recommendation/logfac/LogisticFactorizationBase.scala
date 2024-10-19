@@ -158,9 +158,6 @@ private[ml] abstract class LogisticFactorizationBase[T](
       }
 
       ((if (curEpoch == startEpoch) startIter else 0) until numPartitions).foreach { pI =>
-        val progress = (1.0 * curEpoch.toDouble * numPartitions + pI) /
-          (numIterations * numPartitions)
-
         val partitioner2 = new HashPartitioner(numPartitions) {
           override def getPartition(item: Any): Int = {
             val bucket = LogisticFactorizationBase.hash(
