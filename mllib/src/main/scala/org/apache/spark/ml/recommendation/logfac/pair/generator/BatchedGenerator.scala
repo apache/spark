@@ -78,7 +78,7 @@ private[ml] class BatchedGenerator(private val pairGenerator: Iterator[LongPair]
         val result = LongPairMulti(part,
           left(part).toArray, right(part).toArray,
           if (label == null) null else label(part).toArray,
-          if (weight == null) null else weight(part).toArray,
+          if (weight == null) null else weight(part).toArray
         )
 
         left(part).clear()
