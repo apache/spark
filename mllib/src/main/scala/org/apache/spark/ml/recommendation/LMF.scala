@@ -185,7 +185,7 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
 
   /**
    * Param for number partitions used for factorization (positive).
-   * Default: 1
+   * Default: 5
    * @group param
    */
   val numPartitions: IntParam = new IntParam(this, "numPartitions",
@@ -269,11 +269,11 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
   /** @group expertGetParam */
   def getFinalStorageLevel: String = $(finalStorageLevel)
 
-  setDefault(rank -> 10, implicitPrefs -> true, maxIter -> 10,
+  setDefault(rank -> 10, implicitPrefs -> true, maxIter -> 5,
     negative -> 10, fitIntercept -> false,
     stepSize -> 0.025, pow -> 0.0, regParamU -> 0.0, regParamI -> 0.0,
     minUserCount -> 1, minItemCount -> 1, userCol -> "user",
-    itemCol -> "item", maxIter -> 1, numPartitions -> 1, coldStartStrategy -> "nan",
+    itemCol -> "item", maxIter -> 1, numPartitions -> 5, coldStartStrategy -> "nan",
     intermediateStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name(),
     finalStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name())
 
