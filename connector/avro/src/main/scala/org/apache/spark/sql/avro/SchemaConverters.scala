@@ -188,7 +188,7 @@ object SchemaConverters {
                   val temp_name = s"member_${s.getName.toLowerCase(Locale.ROOT)}"
                   if (fieldNameSet.contains(temp_name)) {
                     throw new IncompatibleSchemaException(
-                      "Cannot generate stable indentifier for Avro union type due to name " +
+                      "Cannot generate stable identifier for Avro union type due to name " +
                       s"conflict of type name ${s.getName}")
                   }
                   fieldNameSet.add(temp_name)

@@ -121,7 +121,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
     val oldExecute = executions.putIfAbsent(executeHolder.operationId, executeHolder)
     if (oldExecute != null) {
-      // the existence of this should alrady be checked by SparkConnectExecutionManager
+      // the existence of this should already be checked by SparkConnectExecutionManager
       throw new IllegalStateException(
         s"ExecuteHolder with opId=${executeHolder.operationId} already exists!")
     }
@@ -216,7 +216,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
   private[connect] def setCustomInactiveTimeoutMs(newInactiveTimeoutMs: Option[Long]): Unit = {
     customInactiveTimeoutMs = newInactiveTimeoutMs
-    logInfo(s"Session $key inactive timout set to $customInactiveTimeoutMs ms.")
+    logInfo(s"Session $key inactive timeout set to $customInactiveTimeoutMs ms.")
   }
 
   /**

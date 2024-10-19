@@ -47,7 +47,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # Disable the shared namespace so pyspark.sql.functions, etc point the regular
         # PySpark libraries.
         os.environ["PYSPARK_NO_NAMESPACE_SHARE"] = "1"
-        cls.connect = cls.spark  # Switch Spark Connect session and regular PySpark sesion.
+        cls.connect = cls.spark  # Switch Spark Connect session and regular PySpark session.
         cls.spark = PySparkSession._instantiatedSession
         assert cls.spark is not None
 

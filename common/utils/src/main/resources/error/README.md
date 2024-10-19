@@ -83,7 +83,7 @@ You should not introduce new uncategorized errors. Instead, convert them to prop
 Error messages provide a descriptive, human-readable representation of the error.
 The message format accepts string parameters via the HTML tag syntax: e.g. <relationName>.
 
-The values passed to the message shoudl not themselves be messages.
+The values passed to the message should not themselves be messages.
 They should be: runtime-values, keywords, identifiers, or other values that are not translated.
 
 The quality of the error message should match the
@@ -883,7 +883,7 @@ The following SQLSTATEs are collated from:
 |42K0J    |42   |Syntax error or Access Rule violation             |K0J     |Property not found.                                         |Spark          |N       |Spark                                                                       |
 |42KD0    |42   |Syntax error or Access Rule violation             |KD0     |Ambiguous name reference.                                   |Databricks     |N       |Databricks                                                                  |
 |42KD1    |42   |Syntax error or Access Rule violation             |KD1     |Operation not supported in READ ONLY session mode.          |Databricks     |N       |Databricks                                                                  |
-|42KD2    |42   |Syntax error or Access Rule violation             |KD2     |The source and target table names of a SYNC operaton must be the same.|Databricks     |N       |Databricks                                                                  |
+|42KD2    |42   |Syntax error or Access Rule violation             |KD2     |The source and target table names of a SYNC operation must be the same.|Databricks     |N       |Databricks                                                                  |
 |42KD3    |42   |Syntax error or Access Rule violation             |KD3     |A column can not be added as specified.                     |Databricks     |N       |Databricks                                                                  |
 |42KD4    |42   |Syntax error or Access Rule violation             |KD4     |Operation not supported because table schema has changed.   |Databricks     |N       |Databricks                                                                  |
 |42KD5    |42   |Syntax error or Access Rule violation             |KD5     |Cannot create file or path.                                 |Databricks     |N       |Databricks                                                                  |

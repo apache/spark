@@ -236,7 +236,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           assert(finished == false)
         } else {
           // If it wasn't sent, time deadline must have been reached before stream became available,
-          // or it was intterupted. Will exit in the next loop iterattion.
+          // or it was interrupted. Will exit in the next loop iterattion.
           assert(deadlineLimitReached || interrupted)
         }
       } else if (streamFinished) {
