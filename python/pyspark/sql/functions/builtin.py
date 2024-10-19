@@ -14533,7 +14533,7 @@ def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
 
 @_try_remote_functions
 def slice(
-    col: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]
+    x: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]
 ) -> Column:
     """
     Array function: Returns a new array column by slicing the input array column from
@@ -14547,7 +14547,7 @@ def slice(
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    x : :class:`~pyspark.sql.Column` or str
         Input array column or column name to be sliced.
     start : :class:`~pyspark.sql.Column`, str, or int
         The start index for the slice operation. If negative, starts the index from the
@@ -14604,7 +14604,7 @@ def slice(
     length = _enum_to_value(length)
     length = lit(length) if isinstance(length, int) else length
 
-    return _invoke_function_over_columns("slice", col, start, length)
+    return _invoke_function_over_columns("slice", x, start, length)
 
 
 @_try_remote_functions
