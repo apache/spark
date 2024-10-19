@@ -269,25 +269,13 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
   /** @group expertGetParam */
   def getFinalStorageLevel: String = $(finalStorageLevel)
 
-  /**
-   * Param to verbose loss.
-   * Default: false
-   * @group expertParam
-   */
-  val verbose: BooleanParam = new BooleanParam(this, "verbose",
-    "verbose loss")
-
-  /** @group expertGetParam */
-  def getVerbose: Boolean = $(verbose)
-
   setDefault(rank -> 10, implicitPrefs -> true, maxIter -> 10,
     negative -> 10, fitIntercept -> false,
     stepSize -> 0.025, pow -> 0.0, regParamU -> 0.0, regParamI -> 0.0,
     minUserCount -> 1, minItemCount -> 1, userCol -> "user",
     itemCol -> "item", maxIter -> 1, numPartitions -> 1, coldStartStrategy -> "nan",
     intermediateStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name(),
-    finalStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name(),
-    verbose -> false)
+    finalStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name())
 
   /**
    * Validates and transforms the input schema.
@@ -651,10 +639,6 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
 
   /** @group expertSetParam */
   @Since("4.0.0")
-  def setVerbose(value: Boolean): this.type = set(verbose, value)
-
-  /** @group expertSetParam */
-  @Since("4.0.0")
   def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
 
   /** @group expertSetParam */
@@ -721,7 +705,7 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
     instr.logParams(this, rank, negative, maxIter, stepSize, parallelism,
       numPartitions, pow, minUserCount, minItemCount, regParamU, regParamI,
       fitIntercept, implicitPrefs, intermediateStorageLevel, finalStorageLevel,
-      checkpointPath, checkpointInterval, verbose, blockSize)
+      checkpointPath, checkpointInterval, blockSize)
 
     val result = new LMF.Backend($(rank), $(negative), $(maxIter), $(stepSize),
       $(parallelism), $(numPartitions), $(pow),
@@ -729,7 +713,7 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
       $(implicitPrefs), get(labelCol).isDefined, get(weightCol).isDefined,
       $(seed), StorageLevel.fromString($(intermediateStorageLevel)),
       StorageLevel.fromString($(finalStorageLevel)),
-      get(checkpointPath), get(checkpointInterval).getOrElse(-1), $(verbose)).train(ratings)
+      get(checkpointPath), get(checkpointInterval).getOrElse(-1)).train(ratings)
 
     ratings.unpersist()
 
@@ -780,8 +764,7 @@ object LMF extends DefaultParamsReadable[LMF] with Logging {
                           intermediateRDDStorageLevel: StorageLevel,
                           finalRDDStorageLevel: StorageLevel,
                           checkpointPath: Option[String],
-                          checkpointInterval: Int,
-                          verbose: Boolean
+                          checkpointInterval: Int
                 ) extends LogisticFactorizationBase[(Long, Long, Float, Float)](
                           dotVectorSize,
                           negative,
@@ -798,8 +781,7 @@ object LMF extends DefaultParamsReadable[LMF] with Logging {
                           intermediateRDDStorageLevel,
                           finalRDDStorageLevel,
                           checkpointPath,
-                          checkpointInterval,
-                          verbose
+                          checkpointInterval
   ) {
 
     override protected def gamma: Double = 1.0 / negative

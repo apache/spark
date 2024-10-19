@@ -83,8 +83,7 @@ private[ml] abstract class LogisticFactorizationBase[T](
              intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
              finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
              checkpointPath: Option[String] = None,
-             checkpointInterval: Int = -1,
-             verbose: Boolean = false)
+             checkpointInterval: Int = -1)
   extends Serializable with Logging {
 
   protected def gamma: Double = 1.0
@@ -191,18 +190,14 @@ private[ml] abstract class LogisticFactorizationBase[T](
           val opts = if (implicitPrefs) {
             Opts.implicitOpts(dotVectorSize, useBias, negative, pow.toFloat,
               learningRate.toFloat, lambdaU.toFloat, lambdaI.toFloat,
-              gamma.toFloat, verbose)
+              gamma.toFloat, false)
           } else {
             Opts.explicitOpts(dotVectorSize, useBias, learningRate.toFloat,
-              lambdaU.toFloat, lambdaI.toFloat, verbose)
+              lambdaU.toFloat, lambdaI.toFloat, false)
           }
           val sg = Optimizer(opts, eItLR)
 
           sg.optimize(sIt, numThread, remapInplace = true)
-          if (verbose) {
-            log.debug(
-              "LOSS: " + sg.loss.doubleValue() +"\t" + sg.lossReg.doubleValue())
-          }
 
           sg.flush()
         }.persist(intermediateRDDStorageLevel)
