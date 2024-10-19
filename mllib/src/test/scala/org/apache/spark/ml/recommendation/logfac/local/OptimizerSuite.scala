@@ -29,7 +29,7 @@ import org.apache.spark.ml.recommendation.logfac.pair.LongPairMulti
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 
 
-class OptimizerSuite extends MLTest with DefaultReadWriteTest with Logging {
+class OptimizerSuite extends MLTest with Logging {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -75,10 +75,10 @@ class OptimizerSuite extends MLTest with DefaultReadWriteTest with Logging {
     val itemCounts = trainData.groupMapReduce(_._2)(_ => 1L)(_ + _)
 
     val optimizer = Optimizer(opts,
-      trueUserFactors.map{case (i, f) => new ItemData(ItemData.TYPE_LEFT,
+      trueUserFactors.map{case (i, _) => new ItemData(ItemData.TYPE_LEFT,
         i, userCounts.getOrElse(i, 0L),
         Optimizer.initEmbedding(opts.dim, opts.useBias, random))}.iterator ++
-        trueItemFactors.map{case (i, f) => new ItemData(ItemData.TYPE_RIGHT,
+        trueItemFactors.map{case (i, _) => new ItemData(ItemData.TYPE_RIGHT,
           i, itemCounts.getOrElse(i, 0L),
           Optimizer.initEmbedding(opts.dim, opts.useBias, random))}.iterator)
 
@@ -134,10 +134,10 @@ class OptimizerSuite extends MLTest with DefaultReadWriteTest with Logging {
     val itemCounts = trainData.groupMapReduce(_._2)(_ => 1L)(_ + _)
 
     val optimizer = Optimizer(opts,
-      trueUserFactors.map{case (i, f) => new ItemData(ItemData.TYPE_LEFT,
+      trueUserFactors.map{case (i, _) => new ItemData(ItemData.TYPE_LEFT,
         i, userCounts.getOrElse(i, 0L),
         Optimizer.initEmbedding(opts.dim, opts.useBias, random))}.iterator ++
-        trueItemFactors.map{case (i, f) => new ItemData(ItemData.TYPE_RIGHT,
+        trueItemFactors.map{case (i, _) => new ItemData(ItemData.TYPE_RIGHT,
           i, itemCounts.getOrElse(i, 0L),
           Optimizer.initEmbedding(opts.dim, opts.useBias, random))}.iterator)
 
