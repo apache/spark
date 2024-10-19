@@ -538,13 +538,13 @@ object LMFModel extends MLReadable[LMFModel] {
  * unobserved samples of the matrix are treated as negative outcomes from a Bernoulli distribution.
  *
  * The general approach is iterative. During each iteration, both factor matrices are partitioned
- * into n groups according to some hash function (the partitioning is different for each of the
+ * into `n` groups according to some hash function (the partitioning is different for each of the
  * factor matrices). Ratings are also partitioned according to the partitioning of the factor
- * matrices. Then, at a fixed first partitioning, n subiterations are performed, at each of which
+ * matrices. Then, at a fixed first partitioning, `n` subiterations are performed, at each of which
  * the i-th cyclic shift of the second partitioning is processed. Thus, at each subiterations,
- * 1/n ratings end up on the same executors as the factors for them. Then, on each executor,
+ * `1/n` ratings end up on the same executors as the factors for them. Then, on each executor,
  * in-memory optimization is performed for the ratings and factors on it. In the case of
- * implicit feedback, negative samples are sampled from the number of factors on the executor,
+ * implicit feedback, negative samples are sampled from the factors on the executor,
  * according to the paper “Distributed negative sampling for word embeddings” available at
  * https://ojs.aaai.org/index.php/AAAI/article/view/10931/10790.
  *
