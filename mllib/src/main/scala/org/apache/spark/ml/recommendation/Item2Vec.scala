@@ -198,7 +198,7 @@ private[recommendation] trait Item2VecParams extends Item2VecModelParams
     "samplingMode (WINDOW or ITEM2VEC)", ParamValidators.inArray(Array("WINDOW", "ITEM2VEC")))
 
   /** @group getParam */
-  final def getSamplingModel: String = $(samplingMode)
+  final def getSamplingMode: String = $(samplingMode)
 
   /**
    * Param for path where the intermediate state will be saved.
@@ -240,6 +240,7 @@ private[recommendation] trait Item2VecParams extends Item2VecModelParams
   def getFinalStorageLevel: String = $(finalStorageLevel)
 
   setDefault(rank -> 10, maxIter -> 5, windowSize -> 10,
+    inputCol -> "input", outputCol -> "output",
     negative -> 10, fitIntercept -> false, samplingMode -> "ITEM2VEC",
     stepSize -> 0.025, pow -> 0.0, regParam -> 0.0, maxIter -> 1,
     numPartitions -> 5, minCount -> 1, inputCol -> "input",
@@ -423,7 +424,7 @@ class Item2Vec(@Since("4.0.0") override val uid: String)
 
   /** @group setParam */
   @Since("4.0.0")
-  def setSamplingModeSize(value: String): this.type = set(samplingMode, value)
+  def setSamplingMode(value: String): this.type = set(samplingMode, value)
 
   /** @group setParam */
   @Since("4.0.0")
