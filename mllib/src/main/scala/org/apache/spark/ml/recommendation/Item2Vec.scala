@@ -25,13 +25,14 @@ import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 
-import org.apache.spark.Partitioner
+import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.recommendation.logfac.LogisticFactorizationBase
+import org.apache.spark.ml.recommendation.logfac.LogFacBase
 import org.apache.spark.ml.recommendation.logfac.local.{ItemData, Optimizer}
 import org.apache.spark.ml.recommendation.logfac.pair.LongPairMulti
 import org.apache.spark.ml.recommendation.logfac.pair.generator.BatchedGenerator
@@ -44,33 +45,26 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
+import org.apache.spark.util.collection.OpenHashMap
 
 
 /**
  * Common params for Item2Vec and Item2VecModel.
  */
-private[recommendation] trait Item2VecModelParams extends Params with HasPredictionCol
-  with HasBlockSize {
+private[recommendation] trait Item2VecModelParams extends Params
+  with HasInputCol with HasOutputCol {
 
   /**
-   * Param for the column name for context item ids.
-   * Default: "context"
+   * Param for number partitions used for factorization (positive).
+   * Default: 5
    * @group param
    */
-  val contextCol = new Param[String](this, "contextCol", "column name for context item ids.")
+  val numPartitions: IntParam = new IntParam(this, "numPartitions",
+    "number partitions to be used to split the data (> 0)",
+    ParamValidators.gt(0))
 
   /** @group getParam */
-  final def getContextCol: String = $(contextCol)
-
-  /**
-   * Param for the column name for item ids.
-   * Default: "item"
-   * @group param
-   */
-  val itemCol = new Param[String](this, "itemCol", "column name for item ids.")
-
-  /** @group getParam */
-  final def getItemCol: String = $(itemCol)
+  def getNumPartitions: Int = $(numPartitions)
 
   /**
    * Attempts to safely cast a context/item id to an Long. Throws an exception if the value is
@@ -109,15 +103,22 @@ private[recommendation] trait Item2VecModelParams extends Params with HasPredict
     }
   }
 
-  setDefault(blockSize -> 4096, contextCol -> "context", itemCol -> "item")
+  /**
+   * Validate and transform the input schema.
+   */
+  @Since("4.0.0")
+  protected def validateAndTransformSchema(schema: StructType): StructType = {
+    SchemaUtils.checkColumnType(schema, $(inputCol), new ArrayType(LongType, false))
+    SchemaUtils.appendColumn(schema, $(outputCol), new ArrayType(FloatType, false))
+  }
 }
 
 /**
  * Common params for Item2Vec.
  */
 private[recommendation] trait Item2VecParams extends Item2VecModelParams
-  with HasInputCol with HasMaxIter with HasCheckpointInterval
-  with HasSeed with HasStepSize with HasParallelism with HasFitIntercept {
+  with HasMaxIter with HasCheckpointInterval with HasSeed
+  with HasStepSize with HasParallelism with HasFitIntercept {
 
   /**
    * Param for dimension of the item embeddings.
@@ -130,15 +131,17 @@ private[recommendation] trait Item2VecParams extends Item2VecModelParams
   def getRank: Int = $(rank)
 
   /**
-   * The minimum number of times a context must appear to be included in the Item2Vec factorization.
-   * Default: 1
-   * @group param
+   * The window size in WINDOW mode and the number of samples in ITEM2VEC mode (> 0).
+   * Default: 10
+   * @group expertParam
    */
-  final val minCount = new IntParam(this, "minCount", "the minimum number of times" +
-    " a item must appear to be included in the Item2Vec factorization (> 0)", ParamValidators.gt(0))
+  final val windowSize = new IntParam(
+    this, "windowSize", "the window size in WINDOW mode and the number of " +
+      "samples in ITEM2VEC mode (> 0)",
+    ParamValidators.gt(0))
 
-  /** @group getParam */
-  def getMinCount: Int = $(minCount)
+  /** @group expertGetParam */
+  def getWindowSize: Int = $(windowSize)
 
   /**
    * Param for the number of negative samples per positive sample (> 0).
@@ -152,28 +155,50 @@ private[recommendation] trait Item2VecParams extends Item2VecModelParams
   def getNegative: Int = $(negative)
 
   /**
-   * Param for the number of negative samples per positive sample (> 0).
-   * Default: 10
-   * @group param
-   */
-  val windowSize = new IntParam(this, "windowSize",
-    "size of the window in WINDOW mode and number of samples in ITEM2VEC mode (> 0)",
-    ParamValidators.gt(0))
-
-  /** @group getParam */
-  def getWindowSize: Int = $(windowSize)
-
-  /**
-   * Param for number partitions used for factorization (positive).
+   * The minimum number of times a item must appear to be included in the Item2Vec factorization.
    * Default: 1
    * @group param
    */
-  val numPartitions: IntParam = new IntParam(this, "numPartitions",
-    "number partitions to be used to split the data (> 0)",
-    ParamValidators.gt(0))
+  final val minCount = new IntParam(this, "minCount", "the minimum number of times" +
+    " a item must appear to be included in the Item2Vec factorization (> 0)", ParamValidators.gt(0))
 
   /** @group getParam */
-  def getNumPartitions: Int = $(numPartitions)
+  def getMinCount: Int = $(minCount)
+
+  /**
+   * Param for factors regularization (&gt;= 0).
+   * Default: 0
+   * @group param
+   */
+  final val regParam: DoubleParam = new DoubleParam(this, "regParam",
+    "regularization parameter for embeddings (>= 0)", ParamValidators.gtEq(0))
+
+  /** @group getParam */
+  final def getRegParam: Double = $(regParam)
+
+  /**
+   * Param for the for skewness of the negative sampling distribution.
+   * The probability of sampling item as negative is c_i^pow / sum(c_j^pow for all j).
+   *
+   * Default: 0.0
+   * @group param
+   */
+  val pow = new DoubleParam(this, "pow", "power for negative sampling (>= 0)",
+    ParamValidators.gtEq(0))
+
+  /** @group param */
+  def getPow: Double = $(pow)
+
+  /**
+   * Param for sampling mode (WINDOW or ITEM2VEC).
+   * Default: ITEM2VEC
+   * @group param
+   */
+  final val samplingMode: Param[String] = new Param[String](this, "samplingMode",
+    "samplingMode (WINDOW or ITEM2VEC)", ParamValidators.inArray(Array("WINDOW", "ITEM2VEC")))
+
+  /** @group getParam */
+  final def getSamplingModel: String = $(samplingMode)
 
   /**
    * Param for path where the intermediate state will be saved.
@@ -185,42 +210,6 @@ private[recommendation] trait Item2VecParams extends Item2VecModelParams
 
   /** @group getParam */
   def getCheckpointPath: String = $(checkpointPath)
-
-  /**
-   * Param for factors regularization parameter (&gt;= 0).
-   * Default: 0
-   * @group expertParam
-   */
-  final val regParam: DoubleParam = new DoubleParam(this, "regParam",
-    "regularization parameter for embeddings (>= 0)", ParamValidators.gtEq(0))
-
-  /** @group getParam */
-  final def getRegParam: Double = $(regParam)
-
-  /**
-   * Param for sampling mode (WINDOW or ITEM2VEC).
-   * Default: ITEM2VEC
-   * @group expertParam
-   */
-  final val samplingMode: Param[String] = new Param[String](this, "samplingMode",
-    "samplingMode (WINDOW or ITEM2VEC)", ParamValidators.inArray(Array("WINDOW", "ITEM2VEC")))
-
-  /** @group getParam */
-  final def getSamplingModel: String = $(samplingMode)
-
-  /**
-   * Param for the for skewness of the negative sampling distribution.
-   * The probability of sampling item as negative is c_i^pow / sum(c_j^pow for all j).
-   *
-   * Default: 0.0
-   * @group expertParam
-   */
-  val pow = new DoubleParam(this, "pow", "power for negative sampling (>= 0)",
-    ParamValidators.gtEq(0))
-
-  /** @group expertGetParam */
-  def getPow: Double = $(pow)
-
 
   /**
    * Param for StorageLevel for intermediate datasets. Pass in a string representation of
@@ -250,26 +239,13 @@ private[recommendation] trait Item2VecParams extends Item2VecModelParams
   /** @group expertGetParam */
   def getFinalStorageLevel: String = $(finalStorageLevel)
 
-  /**
-   * Param to verbose loss.
-   * Default: false
-   * @group expertParam
-   */
-  val verbose: BooleanParam = new BooleanParam(this, "verbose",
-    "verbose loss")
-
-  /** @group expertGetParam */
-  def getVerbose: Boolean = $(verbose)
-
-  setDefault(rank -> 10, maxIter -> 10, windowSize -> 10,
+  setDefault(rank -> 10, maxIter -> 5, windowSize -> 10,
     negative -> 10, fitIntercept -> false, samplingMode -> "ITEM2VEC",
-    stepSize -> 0.025, pow -> 0.0, regParam -> 0.0, maxIter -> 1, numPartitions -> 1,
-    minCount -> 1, inputCol -> "input",
+    stepSize -> 0.025, pow -> 0.0, regParam -> 0.0, maxIter -> 1,
+    numPartitions -> 5, minCount -> 1, inputCol -> "input",
     intermediateStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name(),
-    finalStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name(),
-    verbose -> false)
+    finalStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name())
 }
-
 
 /**
  * Model fitted by Item2Vec.
@@ -287,76 +263,82 @@ class Item2VecModel private[ml] (
                              @transient val contextFactors: DataFrame,
                              @transient val itemFactors: DataFrame)
   extends Model[Item2VecModel] with Item2VecModelParams with MLWritable {
-  
-  /** @group setParam */
-  @Since("4.0.0")
-  def setContextCol(value: String): this.type = set(contextCol, value)
 
   /** @group setParam */
   @Since("4.0.0")
-  def setItemCol(value: String): this.type = set(itemCol, value)
+  def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
   @Since("4.0.0")
-  def setPredictionCol(value: String): this.type = set(predictionCol, value)
+  def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
-   * Set block size for stacking input data in matrices.
-   * Default is 4096.
-   *
-   * @group expertSetParam
+   * Transform a sequence column to a vector column to represent the whole sequence. The transform
+   * is performed by averaging all item vectors it contains.
    */
   @Since("4.0.0")
-  def setBlockSize(value: Int): this.type = set(blockSize, value)
-
-  private val predict = udf { (featuresA: Seq[Float], interceptA: Float,
-                               featuresB: Seq[Float], interceptB: Float) =>
-    if (featuresA != null && featuresB != null) {
-      var dotProduct = 0.0f
-      var i = 0
-      while (i < rank) {
-        dotProduct += featuresA(i) * featuresB(i)
-        i += 1
-      }
-      dotProduct += interceptA
-      dotProduct += interceptB
-      dotProduct
-    } else {
-      Float.NaN
-    }
-  }
-
-  @Since("4.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema)
-    // create a new column named map(predictionCol) by running the predict UDF.
-    val validatedContexts = checkLongs(dataset, $(contextCol))
-    val validatedItems = checkLongs(dataset, $(itemCol))
+    val validatedInputs = checkArrayLongs(dataset, $(inputCol))
 
-    val validatedInputAlias = Identifiable.randomUID("__Item2Vec_validated_input")
-    val itemFactorsAlias = Identifiable.randomUID("__Item2Vec_item_factors")
-    val contextFactorsAlias = Identifiable.randomUID("__Item2Vec_context_factors")
-    val predictions = dataset
-      .withColumns(Seq($(contextCol), $(itemCol)), Seq(validatedContexts, validatedItems))
-      .alias(validatedInputAlias)
-      .join(contextFactors.alias(contextFactorsAlias),
-        col(s"${validatedInputAlias}.${$(contextCol)}") ===
-          col(s"${contextFactorsAlias}.id"), "left")
-      .join(itemFactors.alias(itemFactorsAlias),
-        col(s"${validatedInputAlias}.${$(itemCol)}") === col(s"${itemFactorsAlias}.id"), "left")
-      .select(col(s"${validatedInputAlias}.*"),
-        predict(col(s"${contextFactorsAlias}.features"), col(s"${contextFactorsAlias}.intercept"),
-          col(s"${itemFactorsAlias}.features"), col(s"${itemFactorsAlias}.intercept"))
-          .alias($(predictionCol)))
-    predictions
+    val idxCol = Identifiable.randomUID("__i2v_idx")
+    val datasetWithIndex = dataset.withColumn(idxCol,
+      monotonically_increasing_id())
+
+    transformSchema(dataset.schema)
+    val sequences = datasetWithIndex
+      .select(validatedInputs, col(idxCol))
+      .rdd
+      .map { case Row(seq: Array[Long], idx: Long) => (idx, seq)}
+      .repartition($(numPartitions))
+
+    val factors = contextFactors
+      .rdd
+      .map{case Row(itemId: Long, f: Array[Float], b: Float) => itemId -> (f :+ b)}
+
+    val basePartitioner = new HashPartitioner($(numPartitions))
+
+    val result = dataset.sqlContext.createDataFrame(
+      (0 until $(numPartitions)).map{p =>
+      sequences.zipPartitions(factors.partitionBy(new HashPartitioner($(numPartitions)) {
+        override def getPartition(key: Any): Int = {
+          (basePartitioner.getPartition(key) + p) % numPartitions
+        }
+      })) {(sIt, fIt) =>
+        val blas = BLAS.nativeBLAS
+        val hashMap = new OpenHashMap[Long, Array[Float]]()
+        fIt.foreach(entry => hashMap.update(entry._1, entry._2))
+        sIt.map{case (idx, seq) =>
+          val f = Array.fill(rank)(0f)
+          var n = 0
+          seq.iterator.filter(hashMap.contains)
+            .foreach{i => blas.saxpy(rank, 1.0f, hashMap(i), 0, 1, f, 0, 1); n += 1}
+          idx -> (f, n)
+        }
+      }
+    }.reduce(_.union(_))
+        .reduceByKey{case ((f1, n1), (f2, n2)) =>
+          val result = f1.clone()
+          f2.indices.foreach(i => result(i) += f2(i))
+          f1 -> (n1 + n2)
+        }.filter(_._2._2 > 0)
+        .map{case (idx, (f, n)) => idx -> f.map(_ / n)}
+        .map{case (idx, f) => Row(idx, (f.take(rank), f(rank)))},
+      new StructType()
+        .add(StructField(idxCol, LongType, nullable = false))
+        .add(StructField($(outputCol),
+          new StructType()
+            .add("features", ArrayType(FloatType, containsNull = false), nullable = false)
+            .add("intercept", FloatType, nullable = false)))
+    )
+
+    datasetWithIndex
+      .join(result, idxCol)
+      .drop(idxCol)
   }
 
   @Since("4.0.0")
   override def transformSchema(schema: StructType): StructType = {
-    // context and item will be cast to Long
-    SchemaUtils.checkNumericType(schema, $(contextCol))
-    SchemaUtils.checkNumericType(schema, $(itemCol))
-    SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
+    validateAndTransformSchema(schema)
   }
 
   @Since("4.0.0")
@@ -371,65 +353,6 @@ class Item2VecModel private[ml] (
   @Since("4.0.0")
   override def toString: String = {
     s"Item2VecModel: uid=$uid, rank=$rank"
-  }
-
-  /**
-   * Returns top `numItems` items recommended for each context, for all contexts.
-   * @param numItems max number of recommendations for each context
-   * @return a DataFrame of (contextCol: Long, recommendations), where recommendations are
-   *         stored as an array of (itemCol: Long, rating: Float) Rows.
-   */
-  @Since("4.0.0")
-  def recommendForAllContexts(numItems: Int): DataFrame = {
-    recommendForAll(rank, contextFactors, itemFactors,
-      $(contextCol), $(itemCol), numItems, $(blockSize))
-  }
-
-  /**
-   * Returns top `numItems` items recommended for each context id in the input data set.
-   * Note that if there are duplicate ids in the input dataset, only one set of
-   * recommendations per unique id will be returned.
-   * @param dataset a Dataset containing a column of context ids. The column name
-   *                must match `contextCol`.
-   * @param numItems max number of recommendations for each context.
-   * @return a DataFrame of (contextCol: Long, recommendations), where recommendations are
-   *         stored as an array of (itemCol: Long, rating: Float) Rows.
-   */
-  @Since("4.0.0")
-  def recommendForContextSubset(dataset: Dataset[_], numItems: Int): DataFrame = {
-    val srcFactorSubset = getSourceFactorSubset(
-      dataset, contextFactors, $(contextCol))
-    recommendForAll(
-      rank, srcFactorSubset, itemFactors, $(contextCol), $(itemCol), numItems, $(blockSize))
-  }
-
-  /**
-   * Returns top `numContexts` contexts recommended for each item, for all items.
-   * @param numContexts max number of recommendations for each item
-   * @return a DataFrame of (itemCol: Long, recommendations), where recommendations are
-   *         stored as an array of (contextCol: Long, rating: Float) Rows.
-   */
-  @Since("4.0.0")
-  def recommendForAllItems(numContexts: Int): DataFrame = {
-    recommendForAll(
-      rank, itemFactors, contextFactors, $(itemCol), $(contextCol), numContexts, $(blockSize))
-  }
-
-  /**
-   * Returns top `numContexts` contexts recommended for each item id in the input data set.
-   * Note that if there are duplicate ids in the input dataset, only one set of
-   * recommendations per unique id will be returned.
-   * @param dataset a Dataset containing a column of item ids. The column name must match `itemCol`.
-   * @param numContexts max number of recommendations for each item.
-   * @return a DataFrame of (itemCol: Long, recommendations), where recommendations are
-   *         stored as an array of (contextCol: Long, rating: Float) Rows.
-   */
-  @Since("4.0.0")
-  def recommendForItemSubset(dataset: Dataset[_], numContexts: Int): DataFrame = {
-    val srcFactorSubset = getSourceFactorSubset(
-      dataset, itemFactors, $(itemCol))
-    recommendForAll(rank,
-      srcFactorSubset, contextFactors, $(itemCol), $(contextCol), numContexts, $(blockSize))
   }
 }
 
@@ -507,15 +430,7 @@ class Item2Vec(@Since("4.0.0") override val uid: String)
 
   /** @group setParam */
   @Since("4.0.0")
-  def setContextCol(value: String): this.type = set(contextCol, value)
-
-  /** @group setParam */
-  @Since("4.0.0")
-  def setItemCol(value: String): this.type = set(itemCol, value)
-
-  /** @group setParam */
-  @Since("4.0.0")
-  def setPredictionCol(value: String): this.type = set(predictionCol, value)
+  def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
   @Since("4.0.0")
@@ -547,6 +462,10 @@ class Item2Vec(@Since("4.0.0") override val uid: String)
 
   /** @group setParam */
   @Since("4.0.0")
+  def setPow(value: Double): this.type = set(pow, value)
+
+  /** @group setParam */
+  @Since("4.0.0")
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
 
   /** @group setParam */
@@ -559,28 +478,11 @@ class Item2Vec(@Since("4.0.0") override val uid: String)
 
   /** @group expertSetParam */
   @Since("4.0.0")
-  def setPow(value: Double): this.type = set(pow, value)
-
-  /** @group expertSetParam */
-  @Since("4.0.0")
-  def setVerbose(value: Boolean): this.type = set(verbose, value)
-
-  /** @group expertSetParam */
-  @Since("4.0.0")
   def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
 
   /** @group expertSetParam */
   @Since("4.0.0")
   def setFinalStorageLevel(value: String): this.type = set(finalStorageLevel, value)
-
-  /**
-   * Set block size for stacking input data in matrices.
-   * Default is 4096.
-   *
-   * @group expertSetParam
-   */
-  @Since("4.0.0")
-  def setBlockSize(value: Int): this.type = set(blockSize, value)
 
   @Since("4.0.0")
   override def fit(dataset: Dataset[_]): Item2VecModel = instrumented { instr =>
@@ -597,7 +499,7 @@ class Item2Vec(@Since("4.0.0") override val uid: String)
     val numCores = Try(dataset.sparkSession.sparkContext
       .getConf.get("spark.executor.cores").toInt).getOrElse(1)
 
-    val ratings = dataset
+    val sequences = dataset
       .select(validatedInputs)
       .rdd
       .map { case Row(seq: Array[Long]) => seq}
@@ -608,37 +510,36 @@ class Item2Vec(@Since("4.0.0") override val uid: String)
     instr.logDataset(dataset)
     instr.logParams(this, rank, negative, maxIter, stepSize, parallelism,
       numPartitions, pow, minCount, regParam, fitIntercept, intermediateStorageLevel,
-      finalStorageLevel, checkpointPath, checkpointInterval, verbose, blockSize)
+      finalStorageLevel, checkpointPath, checkpointInterval)
 
     val result = new Item2Vec.Backend($(rank), $(windowSize), $(negative), $(maxIter),
-      $(stepSize), $(parallelism), $(numPartitions), $(pow),
-      $(minCount), $(regParam), SamplingMode.withName($(samplingMode)), $(fitIntercept),
-      $(seed), StorageLevel.fromString($(intermediateStorageLevel)),
+      $(stepSize), $(parallelism), $(numPartitions), $(pow), $(minCount), $(regParam),
+      SamplingMode.withName($(samplingMode)), $(fitIntercept), $(seed),
+      StorageLevel.fromString($(intermediateStorageLevel)),
       StorageLevel.fromString($(finalStorageLevel)),
-      get(checkpointPath), get(checkpointInterval).getOrElse(-1), $(verbose)).train(ratings)
+      get(checkpointPath), get(checkpointInterval).getOrElse(-1)).train(sequences)
 
-    ratings.unpersist()
-
+    sequences.unpersist()
+    val dim = $(rank)
+    val useBias = $(fitIntercept)
     val contextDF = result.filter(_.t == ItemData.TYPE_LEFT).map{entry =>
-      (entry.id, entry.f.slice(0, $(rank)), if ($(fitIntercept)) entry.f($(rank)) else 0f)
+      (entry.id, entry.f.slice(0, dim), if (useBias) entry.f(dim) else 0f)
     }.toDF("id", "features", "intercept")
 
     val itemDF = result.filter(_.t == ItemData.TYPE_RIGHT).map{entry =>
-      (entry.id, entry.f.slice(0, $(rank)), if ($(fitIntercept)) entry.f($(rank)) else 0f)
+      (entry.id, entry.f.slice(0, dim), if (useBias) entry.f(dim) else 0f)
     }.toDF("id", "features", "intercept")
 
     val model = new Item2VecModel(uid, $(rank), contextDF, itemDF)
-      .setBlockSize($(blockSize))
-      .setContextCol($(contextCol))
-      .setItemCol($(itemCol))
-      .setPredictionCol($(predictionCol))
+      .setInputCol($(inputCol))
+      .setOutputCol($(outputCol))
       .setParent(this)
     copyValues(model)
   }
 
   @Since("4.0.0")
   override def transformSchema(schema: StructType): StructType = {
-    schema
+    validateAndTransformSchema(schema)
   }
 
   @Since("4.0.0")
@@ -667,9 +568,8 @@ object Item2Vec extends DefaultParamsReadable[Item2Vec] with Logging {
                                          intermediateRDDStorageLevel: StorageLevel,
                                          finalRDDStorageLevel: StorageLevel,
                                          checkpointPath: Option[String],
-                                         checkpointInterval: Int,
-                                         verbose: Boolean
-                               ) extends LogisticFactorizationBase[Array[Long]](
+                                         checkpointInterval: Int
+                               ) extends LogFacBase[Array[Long]](
                                          dotVectorSize,
                                          negative,
                                          numIterations,
@@ -680,13 +580,12 @@ object Item2Vec extends DefaultParamsReadable[Item2Vec] with Logging {
                                          lambda,
                                          lambda,
                                          useBias,
-                                         false,
-                                         seed: Long,
+                                         implicitPrefs = true,
+                                         seed,
                                          intermediateRDDStorageLevel,
                                          finalRDDStorageLevel,
                                          checkpointPath,
-                                         checkpointInterval,
-                                         verbose
+                                         checkpointInterval
                                        ) {
 
     override protected def gamma: Double = 1.0
