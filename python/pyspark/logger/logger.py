@@ -30,6 +30,7 @@ SPARK_LOG_SCHEMA = (
     "logger STRING"
 )
 
+
 class JSONFormatter(logging.Formatter):
     """
     Custom JSON formatter for logging records.
