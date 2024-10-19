@@ -316,7 +316,8 @@ class Item2VecModel private[ml] (
         }
       }
     }.reduce(_.union(_))
-        .reduceByKey{case ((f1, n1), (f2, n2)) =>
+        .reduceByKey{(a, b) =>
+          val ((f1, n1), (f2, n2)) = (a, b)
           val result = f1.clone()
           f2.indices.foreach(i => result(i) += f2(i))
           f1 -> (n1 + n2)
