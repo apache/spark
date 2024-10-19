@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.recommendation.logistic.local
+package org.apache.spark.ml.recommendation.logfac.local
 
 import java.util.Random
 import java.util.concurrent.atomic.AtomicLong
@@ -25,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{ACCURACY, EPR}
 import org.apache.spark.ml.linalg.BLAS
-import org.apache.spark.ml.recommendation.logistic.pair.LongPairMulti
+import org.apache.spark.ml.recommendation.logfac.pair.LongPairMulti
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 
 

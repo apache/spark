@@ -14,11 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.ml.recommendation.logistic.pair.generator
+package org.apache.spark.ml.recommendation.logfac.pair.generator
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.ml.recommendation.logistic.pair.{LongPair, LongPairMulti}
+import org.apache.spark.ml.recommendation.logfac.pair.{LongPair, LongPairMulti}
 
 
 

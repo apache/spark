@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.ml.recommendation.logistic.pair
+package org.apache.spark.ml.recommendation.logfac.pair
 
 import javax.annotation.Nullable
 

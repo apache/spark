@@ -14,10 +14,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.ml.recommendation.logistic.pair.generator.w2v
+package org.apache.spark.ml.recommendation.logfac.pair.generator.w2v
 
 import org.apache.spark.Partitioner
-import org.apache.spark.ml.recommendation.logistic.pair.LongPair
+import org.apache.spark.ml.recommendation.logfac.pair.LongPair
 
 private[ml] abstract class PairGenerator(private val sent: Iterator[Array[Long]],
                                          protected val partitioner1: Partitioner,

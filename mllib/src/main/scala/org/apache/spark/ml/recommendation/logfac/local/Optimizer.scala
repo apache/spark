@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.recommendation.logistic.local
+package org.apache.spark.ml.recommendation.logfac.local
 
 import java.util
 import java.util.concurrent.ThreadLocalRandom
@@ -26,7 +26,7 @@ import com.google.common.util.concurrent.AtomicDouble
 import dev.ludovic.netlib.blas.{BLAS => NetlibBLAS}
 
 import org.apache.spark.ml.linalg.BLAS
-import org.apache.spark.ml.recommendation.logistic.pair.LongPairMulti
+import org.apache.spark.ml.recommendation.logfac.pair.LongPairMulti
 import org.apache.spark.util.collection.OpenHashMap
 
 private[ml] object Optimizer {

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.recommendation.logistic.local
+package org.apache.spark.ml.recommendation.logfac.local
 
 private[ml] object ItemData {
   val TYPE_LEFT = false

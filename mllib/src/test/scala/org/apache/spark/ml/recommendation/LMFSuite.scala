@@ -21,7 +21,7 @@ package org.apache.spark.ml.recommendation
 import java.util.Random
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.recommendation.logistic.local.OptimizerSuite
+import org.apache.spark.ml.recommendation.logfac.local.OptimizerSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf

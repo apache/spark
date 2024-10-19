@@ -30,11 +30,11 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasBlockSize, _}
-import org.apache.spark.ml.recommendation.logistic.LogisticFactorizationBase
-import org.apache.spark.ml.recommendation.logistic.local.ItemData
-import org.apache.spark.ml.recommendation.logistic.pair.{LongPair, LongPairMulti}
-import org.apache.spark.ml.recommendation.logistic.pair.generator.BatchedGenerator
+import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.recommendation.logfac.LogisticFactorizationBase
+import org.apache.spark.ml.recommendation.logfac.local.ItemData
+import org.apache.spark.ml.recommendation.logfac.pair.{LongPair, LongPairMulti}
+import org.apache.spark.ml.recommendation.logfac.pair.generator.BatchedGenerator
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
@@ -826,7 +826,7 @@ object LMF extends DefaultParamsReadable[LMF] with Logging {
           it.map { case ((t, w), n) =>
             rnd.setSeed(w ^ seed)
             new ItemData(t, w, n,
-              logistic.local.Optimizer.initEmbedding(dotVectorSize, useBias, rnd))
+              logfac.local.Optimizer.initEmbedding(dotVectorSize, useBias, rnd))
           }
         }
     }

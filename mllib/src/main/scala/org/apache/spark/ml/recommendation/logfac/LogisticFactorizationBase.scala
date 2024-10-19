@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.ml.recommendation.logistic
+package org.apache.spark.ml.recommendation.logfac
 
 import java.util.Random
 
@@ -26,8 +26,8 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{HashPartitioner, Partitioner, SparkContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.recommendation.logistic.local.{ItemData, Optimizer, Opts}
-import org.apache.spark.ml.recommendation.logistic.pair.LongPairMulti
+import org.apache.spark.ml.recommendation.logfac.local.{ItemData, Optimizer, Opts}
+import org.apache.spark.ml.recommendation.logfac.pair.LongPairMulti
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{SaveMode, SQLContext}
 import org.apache.spark.storage.StorageLevel

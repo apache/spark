@@ -30,13 +30,13 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasBlockSize, _}
-import org.apache.spark.ml.recommendation.logistic.LogisticFactorizationBase
-import org.apache.spark.ml.recommendation.logistic.local.{ItemData, Optimizer}
-import org.apache.spark.ml.recommendation.logistic.pair.LongPairMulti
-import org.apache.spark.ml.recommendation.logistic.pair.generator.BatchedGenerator
-import org.apache.spark.ml.recommendation.logistic.pair.generator.w2v.{Item2VecGenerator, SamplingMode, WindowGenerator}
-import org.apache.spark.ml.recommendation.logistic.pair.generator.w2v.SamplingMode.SamplingMode
+import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.recommendation.logfac.LogisticFactorizationBase
+import org.apache.spark.ml.recommendation.logfac.local.{ItemData, Optimizer}
+import org.apache.spark.ml.recommendation.logfac.pair.LongPairMulti
+import org.apache.spark.ml.recommendation.logfac.pair.generator.BatchedGenerator
+import org.apache.spark.ml.recommendation.logfac.pair.generator.w2v.{Item2VecGenerator, SamplingMode, WindowGenerator}
+import org.apache.spark.ml.recommendation.logfac.pair.generator.w2v.SamplingMode.SamplingMode
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.rdd.RDD
