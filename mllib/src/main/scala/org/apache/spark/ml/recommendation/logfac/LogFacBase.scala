@@ -17,19 +17,16 @@
 package org.apache.spark.ml.recommendation.logfac
 
 import java.util.Random
-
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-
 import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.recommendation.logfac.local.{ItemData, Optimizer, Opts}
 import org.apache.spark.ml.recommendation.logfac.pair.LongPairMulti
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{SaveMode, SQLContext}
+import org.apache.spark.sql.{Row, SQLContext, SaveMode}
 import org.apache.spark.storage.StorageLevel
 
 private[ml] object LogFacBase {
@@ -106,8 +103,9 @@ private[ml] abstract class LogFacBase[T](
     }
 
     cacheAndCount(sqlc.read.parquet(path)
-      .as[(Boolean, Long, Long, Array[Float])].rdd
-      .map(e => new ItemData(e._1, e._2, e._3, e._4)))
+      .rdd
+      .map{case Row(t: Boolean, id: Long, cn: Long, f: Array[Float]) =>
+        new ItemData(t, id, cn, f)})
   }
 
   private def listFiles(path: String): Array[String] = {
