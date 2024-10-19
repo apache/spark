@@ -26,8 +26,8 @@ on:
     - 'master'
     - 'branch-*'
     paths:
-    - 'dev/infra/base/Dockerfile'
-    - 'dev/infra/docs/Dockerfile'
+    - 'dev/infra/Dockerfile'
+    - 'dev/spark-test-image/docs/Dockerfile'
     - '.github/workflows/build_infra_images_cache.yml'
   # Create infra image when cutting down branches/tags
   create:
@@ -54,7 +54,7 @@ jobs:
         id: docker_build
         uses: docker/build-push-action@v6
         with:
-          context: ./dev/infra/base/
+          context: ./dev/infra/
           push: true
           tags: ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ github.ref_name }}-static
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ github.ref_name }}
@@ -62,13 +62,15 @@ jobs:
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
       - name: Build and push (Documentation)
+        if: inputs.branch != 'branch-3.4' && inputs.branch != 'branch-3.5'
         id: docker_build_docs
         uses: docker/build-push-action@v6
         with:
-          context: ./dev/infra/docs/
+          context: ./dev/spark-test-image/docs/
           push: true
           tags: ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:${{ github.ref_name }}-static
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:${{ github.ref_name }}
           cache-to: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:${{ github.ref_name }},mode=max
       - name: Image digest (Documentation)
+        if: inputs.branch != 'branch-3.4' && inputs.branch != 'branch-3.5'
         run: echo ${{ steps.docker_build_docs.outputs.digest }}
