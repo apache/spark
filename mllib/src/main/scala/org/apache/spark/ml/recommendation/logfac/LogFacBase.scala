@@ -32,7 +32,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{SaveMode, SQLContext}
 import org.apache.spark.storage.StorageLevel
 
-private[ml] object LogisticFactorizationBase {
+private[ml] object LogFacBase {
   private val PART_TABLE_TOTAL_SIZE = 10000000
 
   private def shuffle(arr: Array[Int], rnd: Random) = {
@@ -67,7 +67,7 @@ private[ml] object LogisticFactorizationBase {
   }
 }
 
-private[ml] abstract class LogisticFactorizationBase[T](
+private[ml] abstract class LogFacBase[T](
              dotVectorSize: Int = 10,
              negative: Int = 10,
              numIterations: Int = 1,
@@ -146,21 +146,21 @@ private[ml] abstract class LogisticFactorizationBase[T](
     val (startEpoch, startIter) = latest.getOrElse((0, 0))
     var checkpointIter = startEpoch * numPartitions + startIter
 
-    val partitionTable = sparkContext.broadcast(LogisticFactorizationBase
+    val partitionTable = sparkContext.broadcast(LogFacBase
       .createPartitionTable(numPartitions, new Random(seed)))
 
     (startEpoch until numIterations).foreach {curEpoch =>
 
       val partitioner1 = new HashPartitioner(numPartitions) {
         override def getPartition(item: Any): Int = {
-          LogisticFactorizationBase.hash(item.asInstanceOf[Long], curEpoch, this.numPartitions)
+          LogFacBase.hash(item.asInstanceOf[Long], curEpoch, this.numPartitions)
         }
       }
 
       ((if (curEpoch == startEpoch) startIter else 0) until numPartitions).foreach { pI =>
         val partitioner2 = new HashPartitioner(numPartitions) {
           override def getPartition(item: Any): Int = {
-            val bucket = LogisticFactorizationBase.hash(
+            val bucket = LogFacBase.hash(
               item.asInstanceOf[Long],
               curEpoch,
               partitionTable.value.length)

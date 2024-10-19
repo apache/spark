@@ -31,7 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.recommendation.logfac.LogisticFactorizationBase
+import org.apache.spark.ml.recommendation.logfac.LogFacBase
 import org.apache.spark.ml.recommendation.logfac.local.ItemData
 import org.apache.spark.ml.recommendation.logfac.pair.{LongPair, LongPairMulti}
 import org.apache.spark.ml.recommendation.logfac.pair.generator.BatchedGenerator
@@ -765,7 +765,7 @@ object LMF extends DefaultParamsReadable[LMF] with Logging {
                           finalRDDStorageLevel: StorageLevel,
                           checkpointPath: Option[String],
                           checkpointInterval: Int
-                ) extends LogisticFactorizationBase[(Long, Long, Float, Float)](
+                ) extends LogFacBase[(Long, Long, Float, Float)](
                           dotVectorSize,
                           negative,
                           numIterations,
