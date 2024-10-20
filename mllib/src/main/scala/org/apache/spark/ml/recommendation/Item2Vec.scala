@@ -274,6 +274,10 @@ class Item2VecModel private[ml] (
   @Since("4.0.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  /** @group setParam */
+  @Since("4.0.0")
+  def setNumPartitions(value: Int): this.type = set(numPartitions, value)
+
   /**
    * Transform a sequence column to a vector column to represent the whole sequence. The transform
    * is performed by averaging all item vectors it contains.
@@ -504,7 +508,7 @@ class Item2Vec(@Since("4.0.0") override val uid: String)
     val numExecutors = Try(dataset.sparkSession.sparkContext
       .getConf.get("spark.executor.instances").toInt).getOrElse($(numPartitions))
     val numCores = Try(dataset.sparkSession.sparkContext
-      .getConf.get("spark.executor.cores").toInt).getOrElse(1)
+      .getConf.get("spark.executor.cores").toInt).getOrElse($(parallelism))
 
     val sequences = dataset
       .select(validatedInputs)
@@ -542,6 +546,7 @@ class Item2Vec(@Since("4.0.0") override val uid: String)
     val model = new Item2VecModel(uid, $(rank), contextDF, itemDF)
       .setInputCol($(inputCol))
       .setOutputCol($(outputCol))
+      .setNumPartitions($(numPartitions))
       .setParent(this)
     copyValues(model)
   }
