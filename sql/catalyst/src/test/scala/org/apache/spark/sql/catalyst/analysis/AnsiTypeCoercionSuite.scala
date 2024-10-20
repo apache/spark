@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeWithCaseAccentSensitivity}
+import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeWithCollation}
 import org.apache.spark.sql.types._
 
 class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
@@ -1057,11 +1057,11 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
       ArrayType(IntegerType))
     shouldCast(
       ArrayType(StringType),
-      AbstractArrayType(StringTypeWithCaseAccentSensitivity),
+      AbstractArrayType(StringTypeWithCollation),
       ArrayType(StringType))
     shouldCast(
       ArrayType(IntegerType),
-      AbstractArrayType(StringTypeWithCaseAccentSensitivity),
+      AbstractArrayType(StringTypeWithCollation),
       ArrayType(StringType))
     shouldCast(
       ArrayType(StringType),
@@ -1075,11 +1075,11 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
       ArrayType(ArrayType(IntegerType)))
     shouldCast(
       ArrayType(ArrayType(StringType)),
-      AbstractArrayType(AbstractArrayType(StringTypeWithCaseAccentSensitivity)),
+      AbstractArrayType(AbstractArrayType(StringTypeWithCollation)),
       ArrayType(ArrayType(StringType)))
     shouldCast(
       ArrayType(ArrayType(IntegerType)),
-      AbstractArrayType(AbstractArrayType(StringTypeWithCaseAccentSensitivity)),
+      AbstractArrayType(AbstractArrayType(StringTypeWithCollation)),
       ArrayType(ArrayType(StringType)))
     shouldCast(
       ArrayType(ArrayType(StringType)),
@@ -1088,16 +1088,16 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
 
     // Invalid casts involving casting arrays into non-complex types.
     shouldNotCast(ArrayType(IntegerType), IntegerType)
-    shouldNotCast(ArrayType(StringType), StringTypeWithCaseAccentSensitivity)
+    shouldNotCast(ArrayType(StringType), StringTypeWithCollation)
     shouldNotCast(ArrayType(StringType), IntegerType)
-    shouldNotCast(ArrayType(IntegerType), StringTypeWithCaseAccentSensitivity)
+    shouldNotCast(ArrayType(IntegerType), StringTypeWithCollation)
 
     // Invalid casts involving casting arrays of arrays into arrays of non-complex types.
     shouldNotCast(ArrayType(ArrayType(IntegerType)), AbstractArrayType(IntegerType))
     shouldNotCast(ArrayType(ArrayType(StringType)),
-      AbstractArrayType(StringTypeWithCaseAccentSensitivity))
+      AbstractArrayType(StringTypeWithCollation))
     shouldNotCast(ArrayType(ArrayType(StringType)), AbstractArrayType(IntegerType))
     shouldNotCast(ArrayType(ArrayType(IntegerType)),
-      AbstractArrayType(StringTypeWithCaseAccentSensitivity))
+      AbstractArrayType(StringTypeWithCollation))
   }
 }
