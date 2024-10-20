@@ -5493,7 +5493,7 @@ class TargetEncoderModel(
 
     @property
     @since("4.0.0")
-    def encodings(self) -> dict[str, dict[float, float]]:
+    def encodings(self) -> List[Dict[float, float]]:
         """
         Fitted mappings for each feature to being encoded.
         The dictionary contains a dictionary for each input column.

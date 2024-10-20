@@ -47,7 +47,7 @@ private[ml] trait TargetEncoderBase extends Params with HasLabelCol
   override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
     "How to handle invalid data during transform(). " +
       "Options are 'keep' (invalid data presented as an extra categorical feature) " +
-      "or error (throw an error). Note that this Param is only used during transform; " +
+      "or 'error' (throw an error). Note that this Param is only used during transform; " +
       "during fitting, invalid data will result in an error.",
     ParamValidators.inArray(TargetEncoder.supportedHandleInvalids))
 
@@ -55,10 +55,11 @@ private[ml] trait TargetEncoderBase extends Params with HasLabelCol
 
   @Since("4.0.0")
   val targetType: Param[String] = new Param[String](this, "targetType",
-    "How to handle invalid data during transform(). " +
-      "Options are 'keep' (invalid data presented as an extra categorical feature) " +
-      "or error (throw an error). Note that this Param is only used during transform; " +
-      "during fitting, invalid data will result in an error.",
+    "Type of label considered during fit(). " +
+      "Options are 'binary' and 'continuous'. When 'binary', estimates are calculated as " +
+      "conditional probability of the target given each category. When 'continuous', " +
+      "estimates are calculated as the average of the target given each category" +
+      "Note that this Param is only used during fitting.",
     ParamValidators.inArray(TargetEncoder.supportedTargetTypes))
 
   setDefault(targetType -> TargetEncoder.TARGET_BINARY)
@@ -67,7 +68,9 @@ private[ml] trait TargetEncoderBase extends Params with HasLabelCol
 
   @Since("4.0.0")
   val smoothing: DoubleParam = new DoubleParam(this, "smoothing",
-    "lower bound of the output feature range",
+    "Smoothing factor for encodings. Smoothing blends in-class estimates with overall estimates " +
+    "according to the relative size of the particular class on the whole dataset, reducing the " +
+    "risk of overfitting due to unreliable estimates",
     ParamValidators.gtEq(0.0))
 
   setDefault(smoothing -> 0.0)
@@ -82,7 +85,8 @@ private[ml] trait TargetEncoderBase extends Params with HasLabelCol
                           else if (isSet(outputCols)) $(outputCols)
                           else inputFeatures.map{field: String => s"${field}_indexed"}
 
-  private[feature] def validateSchema(schema: StructType,
+  private[feature] def validateSchema(
+                                      schema: StructType,
                                       fitting: Boolean): StructType = {
 
     require(inputFeatures.length > 0,
@@ -181,37 +185,20 @@ class TargetEncoder @Since("4.0.0") (@Since("4.0.0") override val uid: String)
   override def fit(dataset: Dataset[_]): TargetEncoderModel = {
     validateSchema(dataset.schema, fitting = true)
 
-    val feature_types = inputFeatures.map{
-      feature => dataset.schema(feature).dataType
-    }
-    val label_type = dataset.schema($(labelCol)).dataType
-
     val stats = dataset
-      .select((inputFeatures :+ $(labelCol)).map(col).toIndexedSeq: _*)
+      .select((inputFeatures :+ $(labelCol)).map(col(_).cast(DoubleType)).toIndexedSeq: _*)
       .rdd.treeAggregate(
         Array.fill(inputFeatures.length) {
           Map.empty[Option[Double], (Double, Double)]
         })(
         (agg, row: Row) => if (!row.isNullAt(inputFeatures.length)) {
-          val label = label_type match {
-            case ByteType => row.getByte(inputFeatures.length).toDouble
-            case ShortType => row.getShort(inputFeatures.length).toDouble
-            case IntegerType => row.getInt(inputFeatures.length).toDouble
-            case LongType => row.getLong(inputFeatures.length).toDouble
-            case DoubleType => row.getDouble(inputFeatures.length)
-          }
+          val label = row.getDouble(inputFeatures.length)
           inputFeatures.indices.map {
             feature => {
               val category: Option[Double] = {
                 if (row.isNullAt(feature)) None // null category
                 else {
-                  val value: Double = feature_types(feature) match {
-                    case ByteType => row.getByte(feature).toDouble
-                    case ShortType => row.getShort(feature).toDouble
-                    case IntegerType => row.getInt(feature).toDouble
-                    case LongType => row.getLong(feature).toDouble
-                    case DoubleType => row.getDouble(feature)
-                  }
+                  val value = row.getDouble(feature)
                   if (value < 0.0 || value != value.toInt) throw new SparkException(
                     s"Values from column ${inputFeatures(feature)} must be indices, " +
                       s"but got $value.")
@@ -262,12 +249,12 @@ class TargetEncoder @Since("4.0.0") (@Since("4.0.0") override val uid: String)
           }
         }.toArray)
 
-    // encodings: Map[feature, Map[Some(category), encoding]]
-    val encodings: Map[String, Map[Option[Double], Double]] =
-      inputFeatures.zip(stats).map {
-        case (feature, stat) =>
+    // encodings: Array[Map[Some(category), encoding]]
+    val encodings: Array[Map[Option[Double], Double]] =
+      stats.map {
+        stat =>
           val (global_count, global_stat) = stat.get(TargetEncoder.UNSEEN_CATEGORY).get
-          feature -> stat.map {
+          stat.map {
             case (cat, (class_count, class_stat)) => cat -> {
               val weight = class_count / (class_count + $(smoothing)) // smoothing weight
               $(targetType) match {
@@ -280,7 +267,7 @@ class TargetEncoder @Since("4.0.0") (@Since("4.0.0") override val uid: String)
               }
             }
           }
-      }.toMap
+      }
 
     val model = new TargetEncoderModel(uid, encodings).setParent(this)
     copyValues(model)
@@ -316,17 +303,40 @@ object TargetEncoder extends DefaultParamsReadable[TargetEncoder] {
 @Since("4.0.0")
 class TargetEncoderModel private[ml] (
      @Since("4.0.0") override val uid: String,
-     @Since("4.0.0") val encodings: Map[String, Map[Option[Double], Double]])
+     @Since("4.0.0") val encodings: Array[Map[Option[Double], Double]])
   extends Model[TargetEncoderModel] with TargetEncoderBase with MLWritable {
+
+  /** @group setParam */
+  @Since("4.0.0")
+  def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
+  @Since("4.0.0")
+  def setOutputCol(value: String): this.type = set(outputCol, value)
+
+  /** @group setParam */
+  @Since("4.0.0")
+  def setInputCols(values: Array[String]): this.type = set(inputCols, values)
+
+  /** @group setParam */
+  @Since("4.0.0")
+  def setOutputCols(values: Array[String]): this.type = set(outputCols, values)
+
+  /** @group setParam */
+  @Since("4.0.0")
+  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
 
   @Since("4.0.0")
   override def transformSchema(schema: StructType): StructType = {
-    inputFeatures.zip(outputFeatures)
-      .foldLeft(validateSchema(schema, fitting = false)) {
-        case (newSchema, fieldName) =>
-          val field = schema(fieldName._1)
-          newSchema.add(StructField(fieldName._2, field.dataType, field.nullable))
-      }
+    if (outputFeatures.length == encodings.length) {
+      outputFeatures.filter(_ != null)
+        .foldLeft(validateSchema(schema, fitting = false)) {
+          case (newSchema, outputField) =>
+            newSchema.add(StructField(outputField, DoubleType, nullable = false))
+        }
+    } else throw new SparkException("The number of features does not match the number of " +
+                                    s"encodings in the model (${encodings.length}). " +
+                                    s"Found ${outputFeatures.length}  features)")
   }
 
   @Since("4.0.0")
@@ -369,21 +379,20 @@ class TargetEncoderModel private[ml] (
       }
 
     dataset.withColumns(
-      inputFeatures.zip(outputFeatures).map {
-        feature =>
-          feature._2 -> (encodings.get(feature._1) match {
-            case Some(dict) =>
-              apply_encodings(dict)(col(feature._1))
-                .as(feature._2, NominalAttribute.defaultAttr
-                  .withName(feature._2)
-                  .withNumValues(dict.size)
-                  .withValues(dict.values.toSet.toArray.map(_.toString)).toMetadata())
-            case None =>
-              throw new SparkException(s"No encodings found for ${feature._1}.")
-              col(feature._1)
-          })
-      }.toMap)
-  }
+      inputFeatures.zip(outputFeatures).zip(encodings)
+        .filter{
+          case ((featureIn, featureOut), _) => (featureIn != null) && (featureOut != null)
+        }.map {
+          case ((featureIn, featureOut), mapping) =>
+            featureOut ->
+                apply_encodings(mapping)(col(featureIn))
+                  .as(featureOut, NominalAttribute.defaultAttr
+                    .withName(featureOut)
+                    .withNumValues(mapping.values.toSet.size)
+                    .withValues(mapping.values.toSet.toArray.map(_.toString)).toMetadata())
+        }.toMap)
+
+    }
 
 
   @Since("4.0.0")
@@ -398,7 +407,7 @@ class TargetEncoderModel private[ml] (
   @Since("4.0.0")
   override def toString: String = {
     s"TargetEncoderModel: uid=$uid, " +
-      s" handleInvalid=${$(handleInvalid)}, targetType=${$(targetType)}, " +
+      s"handleInvalid=${$(handleInvalid)}, targetType=${$(targetType)}, " +
       s"numInputCols=${inputFeatures.length}, numOutputCols=${outputFeatures.length}, " +
       s"smoothing=${$(smoothing)}"
   }
@@ -411,7 +420,7 @@ object TargetEncoderModel extends MLReadable[TargetEncoderModel] {
   private[TargetEncoderModel]
   class TargetEncoderModelWriter(instance: TargetEncoderModel) extends MLWriter {
 
-    private case class Data(encodings: Map[String, Map[Option[Double], Double]])
+    private case class Data(encodings: Array[Map[Option[Double], Double]])
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
@@ -431,7 +440,7 @@ object TargetEncoderModel extends MLReadable[TargetEncoderModel] {
       val data = sparkSession.read.parquet(dataPath)
         .select("encodings")
         .head()
-      val encodings = data.getAs[Map[String, Map[Option[Double], Double]]](0)
+      val encodings = data.getAs[Array[Map[Option[Double], Double]]](0)
       val model = new TargetEncoderModel(metadata.uid, encodings)
       metadata.getAndSetParams(model)
       model

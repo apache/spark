@@ -82,14 +82,15 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
 
     val model = encoder.fit(df)
 
-    val expected_encodings = Map(
-      "input1" ->
+    val expected_encodings = Array(
         Map(Some(0.0) -> 1.0/3, Some(1.0) -> 2.0/3, Some(2.0) -> 1.0/3, Some(-1.0) -> 4.0/9),
-      "input2" -> Map(Some(3.0) -> 0.0, Some(4.0) -> 1.0, Some(-1.0) -> 4.0/9),
-      "input3" -> HashMap(Some(5.0) -> 1.0/3, Some(6.0) -> 2.0/3, Some(7.0) -> 0.0,
-        Some(8.0) -> 1.0, Some(9.0) -> 0.0, Some(-1.0) -> 4.0/9))
+        Map(Some(3.0) -> 0.0, Some(4.0) -> 1.0, Some(-1.0) -> 4.0/9),
+        HashMap(Some(5.0) -> 1.0/3, Some(6.0) -> 2.0/3, Some(7.0) -> 0.0,
+          Some(8.0) -> 1.0, Some(9.0) -> 0.0, Some(-1.0) -> 4.0/9))
 
-    assert(model.encodings.equals(expected_encodings))
+    model.encodings.zip(expected_encodings).foreach{
+      case (actual, expected) => actual.equals(expected)
+    }
 
     testTransformer[(Double, Double, Double, Double, Double, Double)](
       df.select("input1", "input2", "input3",
@@ -121,13 +122,15 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
 
     val model = encoder.fit(df)
 
-    val expected_encodings = Map(
-      "input1" -> Map(Some(0.0) -> 40.0, Some(1.0) -> 50.0, Some(2.0) -> 60.0, Some(-1.0) -> 50.0),
-      "input2" -> Map(Some(3.0) -> 50.0, Some(4.0) -> 50.0, Some(-1.0) -> 50.0),
-      "input3" -> HashMap(Some(5.0) -> 20.0, Some(6.0) -> 50.0, Some(7.0) -> 70.0,
+    val expected_encodings = Array(
+      Map(Some(0.0) -> 40.0, Some(1.0) -> 50.0, Some(2.0) -> 60.0, Some(-1.0) -> 50.0),
+      Map(Some(3.0) -> 50.0, Some(4.0) -> 50.0, Some(-1.0) -> 50.0),
+      HashMap(Some(5.0) -> 20.0, Some(6.0) -> 50.0, Some(7.0) -> 70.0,
         Some(8.0) -> 80.0, Some(9.0) -> 90.0, Some(-1.0) -> 50.0))
 
-    assert(model.encodings.equals(expected_encodings))
+    model.encodings.zip(expected_encodings).foreach{
+      case (actual, expected) => actual.equals(expected)
+    }
 
     testTransformer[(Double, Double, Double, Double, Double, Double)](
       df.select("input1", "input2", "input3",
@@ -160,13 +163,15 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
 
     val model = encoder.fit(df)
 
-    val expected_encodings = Map(
-      "input1" -> Map(Some(0.0) -> 42.5, Some(1.0) -> 50.0, Some(2.0) -> 57.5, Some(-1.0) -> 50.0),
-      "input2" -> Map(Some(3.0) -> 50.0, Some(4.0) -> 50.0, Some(-1.0) -> 50.0),
-      "input3" -> HashMap(Some(5.0) -> 27.5, Some(6.0) -> 50.0, Some(7.0) -> 60.0,
+    val expected_encodings = Array(
+      Map(Some(0.0) -> 42.5, Some(1.0) -> 50.0, Some(2.0) -> 57.5, Some(-1.0) -> 50.0),
+      Map(Some(3.0) -> 50.0, Some(4.0) -> 50.0, Some(-1.0) -> 50.0),
+      HashMap(Some(5.0) -> 27.5, Some(6.0) -> 50.0, Some(7.0) -> 60.0,
         Some(8.0) -> 65.0, Some(9.0) -> 70.0, Some(-1.0) -> 50.0))
 
-    assert(model.encodings.equals(expected_encodings))
+    model.encodings.zip(expected_encodings).foreach{
+      case (actual, expected) => actual.equals(expected)
+    }
 
     testTransformer[(Double, Double, Double, Double, Double, Double)](
       df.select("input1", "input2", "input3",
@@ -314,20 +319,22 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
 
     val model = encoder.fit(df_null)
 
-    val expected_encodings = Map(
-      "input1" -> Map(Some(0.0) -> 40.0, Some(1.0) -> 50.0, Some(2.0) -> 60.0, Some(-1.0) -> 50.0),
-      "input2" -> Map(Some(3.0) -> 50.0, Some(4.0) -> 50.0, Some(-1.0) -> 50.0),
-      "input3" -> HashMap(Some(5.0) -> 20.0, Some(6.0) -> 50.0, Some(7.0) -> 70.0,
+    val expected_encodings = Array(
+      Map(Some(0.0) -> 40.0, Some(1.0) -> 50.0, Some(2.0) -> 60.0, Some(-1.0) -> 50.0),
+      Map(Some(3.0) -> 50.0, Some(4.0) -> 50.0, Some(-1.0) -> 50.0),
+      HashMap(Some(5.0) -> 20.0, Some(6.0) -> 50.0, Some(7.0) -> 70.0,
         Some(8.0) -> 80.0, None -> 90.0, Some(-1.0) -> 50.0))
 
-    assert(model.encodings.equals(expected_encodings))
+    model.encodings.zip(expected_encodings).foreach{
+      case (actual, expected) => actual.equals(expected)
+    }
 
     val output = model.transform(df_null)
 
     assert_true(
       output("output1") === output("continuousExpected1") &&
-        output("output1") === output("continuousExpected1") &&
-        output("output1") === output("continuousExpected1"))
+        output("output2") === output("continuousExpected2") &&
+        output("output3") === output("continuousExpected3"))
 
   }
 
@@ -355,8 +362,8 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
 
     assert_true(
       output("output1") === output("continuousExpected1") &&
-        output("output1") === output("continuousExpected1") &&
-        output("output1") === output("continuousExpected1"))
+        output("output2") === output("continuousExpected2") &&
+        output("output3") === output("continuousExpected3"))
 
   }
 
@@ -401,15 +408,15 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
 
     val model = encoder.fit(df_nolabel)
 
-    val expected_encodings = Map(
-      "input1" -> Map(Some(0.0) -> 40.0, Some(1.0) -> 50.0, Some(2.0) -> 60.0, Some(-1.0) -> 50.0),
-      "input2" -> Map(Some(3.0) -> 50.0, Some(4.0) -> 50.0, Some(-1.0) -> 50.0),
-      "input3" -> HashMap(Some(5.0) -> 20.0, Some(6.0) -> 50.0, Some(7.0) -> 70.0,
+    val expected_encodings = Array(
+      Map(Some(0.0) -> 40.0, Some(1.0) -> 50.0, Some(2.0) -> 60.0, Some(-1.0) -> 50.0),
+      Map(Some(3.0) -> 50.0, Some(4.0) -> 50.0, Some(-1.0) -> 50.0),
+      HashMap(Some(5.0) -> 20.0, Some(6.0) -> 50.0, Some(7.0) -> 70.0,
         Some(8.0) -> 80.0, Some(9.0) -> 90.0, Some(-1.0) -> 50.0))
 
-    print(model.encodings)
-
-    assert(model.encodings.equals(expected_encodings))
+    model.encodings.zip(expected_encodings).foreach{
+      case (actual, expected) => actual.equals(expected)
+    }
 
   }
 
@@ -429,12 +436,36 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
 
     val ex = intercept[SparkException] {
       val model = encoder.fit(df_non_binary)
-      print(model.encodings)
+      print(model.encodings.mkString)
     }
 
     assert(ex.isInstanceOf[SparkException])
     assert(ex.getMessage.contains(
       "Values from column binaryLabel must be binary (0,1) but got 2.0"))
+
+  }
+
+  test("TargetEncoder - features renamed") {
+
+    val df = spark
+      .createDataFrame(sc.parallelize(data), schema)
+
+    val encoder = new TargetEncoder()
+      .setLabelCol("continuousLabel")
+      .setTargetType(TargetEncoder.TARGET_CONTINUOUS)
+      .setInputCols(Array("input1", "input2", "input3"))
+      .setOutputCols(Array("output1", "output2", "output3"))
+
+    val model = encoder.fit(df)
+      .setInputCols(Array("input1", "renamed_input2", null))
+      .setOutputCols(Array(null, "renamed_output2", "renamed_output3"))
+
+    val df_renamed = df
+      .drop("input1", "input3")
+      .withColumnRenamed("input2", "renamed_input2")
+
+    val output = model.transform(df_renamed)
+    assert(output.filter(col("renamed_output2") === col("continuousExpected2")).count() ==0)
 
   }
 
