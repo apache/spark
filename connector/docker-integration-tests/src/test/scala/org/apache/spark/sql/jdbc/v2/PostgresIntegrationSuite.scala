@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
 
-import org.apache.spark.{SparkConf, SparkSQLException, SparkRuntimeException}
+import org.apache.spark.{SparkConf, SparkSQLException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
