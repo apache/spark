@@ -31,6 +31,7 @@ from pyspark.sql.readwriter import DataFrameWriterV2 as ClassicDataFrameWriterV2
 from pyspark.sql.window import Window as ClassicWindow
 from pyspark.sql.window import WindowSpec as ClassicWindowSpec
 import pyspark.sql.functions as ClassicFunctions
+from pyspark.sql.group import GroupedData as ClassicGroupedData
 
 if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
@@ -43,6 +44,7 @@ if should_test_connect:
     from pyspark.sql.connect.window import Window as ConnectWindow
     from pyspark.sql.connect.window import WindowSpec as ConnectWindowSpec
     import pyspark.sql.connect.functions as ConnectFunctions
+    from pyspark.sql.connect.group import GroupedData as ConnectGroupedData
 
 
 class ConnectCompatibilityTestsMixin:
@@ -351,6 +353,22 @@ class ConnectCompatibilityTestsMixin:
             ClassicFunctions,
             ConnectFunctions,
             "Functions",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_grouping_compatibility(self):
+        """Test Grouping compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = {"transformWithStateInPandas"}
+        expected_missing_classic_methods = set()
+        self.check_compatibility(
+            ClassicGroupedData,
+            ConnectGroupedData,
+            "Grouping",
             expected_missing_connect_properties,
             expected_missing_classic_properties,
             expected_missing_connect_methods,
