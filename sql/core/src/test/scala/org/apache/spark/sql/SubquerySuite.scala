@@ -2757,11 +2757,29 @@ class SubquerySuite extends QueryTest
 
   test("stuffing") {
     withTable("v1", "v2") {
-      sql("create or replace temp view v1(c1, c2) as values (1, 2), (1, 3), (2, 2)")
-      sql("create or replace temp view v2(col1, col2) as values (1, 2), (1, 3), (2, 2)")
-      val df = sql("select col1, sum(col2) in (select c2 from v1) from v2 group by col1")
-      checkAnswer(df,
-        Row(1, false) :: Row(2, true) :: Nil)
+      sql("""create or replace temp view v1 (c1, c2, c3) as values
+            |(1, 2, 2), (1, 5, 3), (2, 0, 4), (3, 7, 7), (3, 8, 8)""".stripMargin)
+      sql("""create or replace temp view v2 (col1, col2, col3) as values
+            |(1, 2, 2), (1, 3, 3), (2, 2, 4), (3, 7, 7), (3, 1, 1)""".stripMargin)
+
+      val df1 = sql("select col1, sum(col2) in (select c3 from v1) from v2 group by col1")
+      checkAnswer(df1,
+        Row(1, false) :: Row(2, true) :: Row(3, true) :: Nil)
+
+      val df2 = sql("""select
+                      | col1,
+                      | sum(col2) in (select c3 from v1) and sum(col3) in (select c2 from v1) as x
+                      |from v2 group by col1
+                      |order by col1""".stripMargin)
+      checkAnswer(df2,
+        Row(1, false) :: Row(2, false) :: Row(3, true) :: Nil)
+
+      val df3 = sql("""select col1, (sum(col2), sum(col3)) in (select c3, c2 from v1) as x
+                      |from v2
+                      |group by col1
+                      |order by col1;""".stripMargin)
+      checkAnswer(df3,
+        Row(1, false) :: Row(2, false) :: Row(3, true) :: Nil)
     }
   }
 
