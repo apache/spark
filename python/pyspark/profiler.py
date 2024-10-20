@@ -459,6 +459,12 @@ class MemoryProfiler(Profiler):
     def _show_results(
         code_map: CodeMapDict, stream: Optional[Any] = None, precision: int = 1
     ) -> None:
+        if has_memory_profiler:
+            raise PySparkRuntimeError(
+                errorClass="MISSING_LIBRARY_FOR_PROFILER",
+                messageParameters={},
+            )
+
         if stream is None:
             stream = sys.stdout
         template = "{0:>6} {1:>12} {2:>12}  {3:>10}   {4:<}"
