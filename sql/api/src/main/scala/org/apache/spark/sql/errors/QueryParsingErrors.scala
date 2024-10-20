@@ -60,7 +60,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def mergeStatementWithoutWhenClauseError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0008", ctx)
+    new ParseException(errorClass = "MERGE_WITHOUT_WHEN", ctx)
   }
 
   def nonLastMatchedClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
