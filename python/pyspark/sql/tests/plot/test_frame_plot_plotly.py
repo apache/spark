@@ -18,7 +18,6 @@
 import unittest
 from datetime import datetime
 
-import pyspark.sql.plot  # noqa: F401
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -26,10 +25,17 @@ from pyspark.testing.sqlutils import (
     have_numpy,
     plotly_requirement_message,
     numpy_requirement_message,
+    have_pandas,
+    pandas_requirement_message,
 )
 
+if have_plotly and have_pandas:
+    import pyspark.sql.plot  # noqa: F401
 
-@unittest.skipIf(not have_plotly, plotly_requirement_message)
+
+@unittest.skipIf(
+    not have_plotly or not have_pandas, plotly_requirement_message or pandas_requirement_message
+)
 class DataFramePlotPlotlyTestsMixin:
     @property
     def sdf(self):
