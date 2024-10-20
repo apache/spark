@@ -3422,6 +3422,12 @@
     ],
     "sqlState" : "23K01"
   },
+  "MERGE_WITHOUT_WHEN" : {
+    "message" : [
+      "There must be at least one WHEN clause in a MERGE statement."
+    ],
+    "sqlState" : "42601"
+  },
   "MISSING_AGGREGATION" : {
     "message" : [
       "The non-aggregating expression <expression> is based on columns which are not participating in the GROUP BY clause.",
@@ -5659,11 +5665,6 @@
   "_LEGACY_ERROR_TEMP_0006" : {
     "message" : [
       "The number of inserted values cannot match the fields."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0008" : {
-    "message" : [
-      "There must be at least one WHEN clause in a MERGE statement."
     ]
   },
   "_LEGACY_ERROR_TEMP_0012" : {
