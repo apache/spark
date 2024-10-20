@@ -636,7 +636,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(murmur3Hash1, interpretedHash1)
       checkEvaluation(murmur3Hash2, interpretedHash2)
 
-      if (CollationFactory.fetchCollation(collation).supportsBinaryEquality) {
+      if (CollationFactory.fetchCollation(collation).isUtf8BinaryType) {
         assert(interpretedHash1 != interpretedHash2)
       } else {
         assert(interpretedHash1 == interpretedHash2)
