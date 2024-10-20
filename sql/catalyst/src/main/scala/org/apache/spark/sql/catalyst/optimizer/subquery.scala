@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION, OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION,
@@ -267,15 +268,10 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       }
     case a: Aggregate if aggregateExprsNestedInSubquery(a.aggregateExpressions) =>
       print("Matched on aggregate!!\n")
-      // extract out the aggregate expressions
 
-      print("Named expressions are ")
-      print(s"${a.aggregateExpressions.map(_.getClass.getName).mkString(",")}\n")
-
-      // split expressions depending on whether they contain an InSubquery
-      // with an aggregate expression
-      val (withInsubquery, withoutInsubquery) =
-        a.aggregateExpressions.partition(aggregateExprContainsNestedInSubquery(_))
+      // find expressions with an in-subquery whose values contain aggregates
+      val withInsubquery = a.aggregateExpressions.filter(aggregateExprContainsNestedInSubquery(_))
+      print(s"withInsubquery is ${withInsubquery}\n")
 
       // extract the aggregate expressions from withInsubquery
       val inSubqueryMapping = withInsubquery.map { e =>
@@ -286,15 +282,16 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       }
       val inSubqueryMap = inSubqueryMapping.toMap
       val aggregateExprs = inSubqueryMapping.flatMap(_._2)
-      val aggregateExprAliases = aggregateExprs.zipWithIndex
-        .map(a => Alias(a._1, s"__aggregate_alias_${a._2}")())
+      val aggregateExprAliases = aggregateExprs.map(a => Alias(a, toPrettySQL(a))())
       val aggregateExprAliasMap = aggregateExprs.zip(aggregateExprAliases).toMap
       val aggregateExprAttrs = aggregateExprAliases.map(_.toAttribute)
       val aggregateExprAttrMap = aggregateExprs.zip(aggregateExprAttrs).toMap
 
+      // create Aggregate operator without the in-subqueries that contain aggregates,
+      // just the aggregates themselves and the other aggregate expressions.
       val newAggregateExpressions = a.aggregateExpressions.flatMap { ae =>
-        // if this is an expression contain insubquery and aggregates, patch
-        // replace with just the aggregate
+        // if this is expression contains an in-subquery with aggregates in values,
+        // replace with just the aggregates
         if (inSubqueryMap.contains(ae)) {
           // replace the expression with the aliased aggregate exprs
           inSubqueryMap(ae).map(aggregateExprAliasMap(_))
@@ -302,8 +299,11 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           Seq(ae)
         }
       }
-
       val newAggregate = a.copy(aggregateExpressions = newAggregateExpressions)
+
+      // Create a projection with the in-subquery expressions that contain aggregates, replacing
+      // the aggregates with an attribute references to the output of the Aggregate operator.
+      // Also include the other output of the Aggregate operator.
       val projList = a.aggregateExpressions.map { ae =>
         if (inSubqueryMap.contains(ae)) {
           ae.transform {
@@ -315,16 +315,8 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           ae.toAttribute
         }
       }
-      // want to create Aggregate with withoutInsubquery expressions, plus
-      // aliased aggregate expressions
-      // Put on top of that a projection with attributes for withoutInsubquery
-      // expressions plus InSubquery expressions patched with attributes for
-      // aggregate expressions. Might also need to patch group-by expressions as well,
-      // not sure.
 
-      print(s"withoutInsubquery ${withoutInsubquery}\n")
-      print(s"withInsubquery ${withInsubquery}\n")
-      print(s"inSubqueryMapping is ${inSubqueryMapping}\n")
+      // reapply this rule, now with a Project as parent to the Aggregate
       apply(Project(projList, newAggregate))
 
     case u: UnaryNode if u.expressions.exists(
