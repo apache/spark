@@ -1,5 +1,0 @@
-{% assign current_page_segments = page.dir | split: "/" | where_exp: "element","element != ''" %}
-{% assign rel_path_to_root = "" %}
-{% for i in (1..current_page_segments.size) %}
-  {% assign rel_path_to_root = rel_path_to_root | append: "../" %}
-{% endfor %}

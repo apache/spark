@@ -18,7 +18,6 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
-{% include rel_path_to_root.html %}
 
 # Quick Example
 Let’s say you want to maintain a running word count of text data received from a data server listening on a TCP socket. Let’s see how you can express this using Structured Streaming. You can see the full code in

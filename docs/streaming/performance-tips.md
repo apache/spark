@@ -18,7 +18,6 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
-{% include rel_path_to_root.html %}
 
 # Asynchronous Progress Tracking
 ## What is it?

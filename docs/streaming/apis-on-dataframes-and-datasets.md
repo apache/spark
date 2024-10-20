@@ -18,7 +18,6 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
-{% include rel_path_to_root.html %}
 
 # API using Datasets and DataFrames
 Since Spark 2.0, DataFrames and Datasets can represent static, bounded data, as well as streaming, unbounded data. Similar to static Datasets/DataFrames, you can use the common entry point `SparkSession`
