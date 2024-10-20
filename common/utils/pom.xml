@@ -156,11 +156,16 @@
             <configuration>
               <!-- Execute the shell script to generate the spark build information. -->
               <target>
-                <exec executable="${shell}">
+                <exec executable="${shell}" resultproperty="return.code">
                   <arg value="${project.basedir}/../../build/${spark-build-info-script}"/>
                   <arg value="${project.build.directory}/extra-resources"/>
                   <arg value="${project.version}"/>
                 </exec>
+                <fail message="Generate the spark build information failed.">
+                  <condition>
+                    <isfailure code="${return.code}"/>
+                  </condition>
+                </fail>
               </target>
             </configuration>
             <goals>
