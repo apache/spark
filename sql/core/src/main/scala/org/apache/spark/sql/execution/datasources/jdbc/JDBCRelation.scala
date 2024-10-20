@@ -242,14 +242,14 @@ private[sql] object JDBCRelation extends Logging {
   def getSchema(resolver: Resolver, jdbcOptions: JDBCOptions): StructType = {
     val dialect = JdbcDialects.get(jdbcOptions.url)
     val tableSchema = JdbcUtils.classifyException(
-      errorClass = "FAILED_JDBC.GET_TABLES",
+      errorClass = "...",
       messageParameters = Map(
         "query" -> dialect.getSchemaQuery(jdbcOptions.tableOrQuery),
         "url" -> jdbcOptions.url),
       dialect = dialect,
       description =
         s"Failed to fetch schema for: ${dialect.getSchemaQuery(jdbcOptions.tableOrQuery)}",
-      isRuntime = true) {
+      isRuntime = false) {
       JDBCRDD.resolveTable(jdbcOptions)
     }
     jdbcOptions.customSchema match {

@@ -1417,7 +1417,7 @@
       },
       "GET_SCHEMA" : {
         "message" : [
-          "Schema fetching for an external query or a table."
+          "Schema fetching for an external query or a table: <query>."
         ]
       },
       "SYNTAX_ERROR" : {

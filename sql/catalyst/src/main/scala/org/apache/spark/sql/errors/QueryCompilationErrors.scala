@@ -1662,6 +1662,26 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "operation" -> operation))
   }
 
+  def jdbcGeneratedQuerySyntaxError(url: String, query: String): Throwable = {
+    new AnalysisException(
+      errorClass = "FAILED_JDBC.SYNTAX_ERROR",
+      messageParameters = Map(
+        "query" -> query,
+        "url" -> url
+      )
+    )
+  }
+
+  def jdbcGeneratedQueryGetSchemaError(url: String, query: String): Throwable = {
+    new AnalysisException(
+      errorClass = "FAILED_JDBC.GET_SCHEMA",
+      messageParameters = Map(
+        "query" -> query,
+        "url" -> url
+      )
+    )
+  }
+
   def schemaNotSpecifiedForSchemaRelationProviderError(className: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1132",

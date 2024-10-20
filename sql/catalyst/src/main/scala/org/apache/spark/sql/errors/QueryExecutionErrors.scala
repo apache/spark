@@ -931,9 +931,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "jdbcQueryString" -> jdbcQueryString))
   }
 
-  def jdbcGeneratedQuerySyntaxError(url: String, query: String): Throwable = {
+  def jdbcGeneratedQueryExecutionError(url: String, query: String): Throwable = {
     new SparkRuntimeException(
-      errorClass = "FAILED_JDBC.SYNTAX_ERROR",
+      errorClass = "FAILED_JDBC.EXECUTE_QUERY",
       messageParameters = Map(
         "query" -> query,
         "url" -> url

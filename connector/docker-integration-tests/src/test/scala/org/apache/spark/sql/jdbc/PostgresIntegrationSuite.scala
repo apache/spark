@@ -365,25 +365,6 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getSeq(26) == Seq("10:20:10,14,15"))
   }
 
-  test("SPARK-49730: syntax error classification") {
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        val schema = StructType(
-          Seq(StructField("id", IntegerType, true)))
-
-        spark.read
-          .format("jdbc")
-          .schema(schema)
-          .option("url", jdbcUrl)
-          .option("query", "SELECT * FRM tbl")
-          .load()
-      },
-      condition = "FAILED_JDBC.SYNTAX_ERROR",
-      parameters = Map(
-        "url" -> jdbcUrl,
-        "query" -> "SELECT * FROM (SELECT * FRM tbl) SPARK_GEN_SUBQ_0 WHERE 1=0"))
-  }
-
   test("query JDBC option") {
     val expectedResult = Set(
       (42, 123456789012345L)

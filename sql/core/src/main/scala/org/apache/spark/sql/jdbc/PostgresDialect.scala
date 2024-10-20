@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.{Expression, NamedReference}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
@@ -267,6 +267,17 @@ private case class PostgresDialect()
       case sqlException: SQLException =>
         sqlException.getSQLState match {
           // https://www.postgresql.org/docs/14/errcodes-appendix.html
+          case "42601" if errorClass == "..." =>
+            // scalastyle:off println
+            println("syntax error")
+            // scalastyle:on println
+            throw QueryCompilationErrors.jdbcGeneratedQuerySyntaxError(
+              messageParameters.get("url").getOrElse(""),
+              messageParameters.get("query").getOrElse(""))
+          case "42P01" if errorClass == "..." =>
+            throw QueryCompilationErrors.jdbcGeneratedQueryGetSchemaError(
+              messageParameters.get("url").getOrElse(""),
+              messageParameters.get("query").getOrElse(""))
           case "42P07" =>
             if (errorClass == "FAILED_JDBC.CREATE_INDEX") {
               throw new IndexAlreadyExistsException(

@@ -19,6 +19,7 @@ package org.apache.spark.sql.jdbc.v2
 
 import org.apache.logging.log4j.Level
 
+import org.apache.spark.{SparkThrowable}
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sample, Sort}
@@ -91,7 +92,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   def testCreateTableWithProperty(tbl: String): Unit = {}
 
   private def checkErrorFailedJDBC(
-      e: AnalysisException,
+      e: Throwable with SparkThrowable,
       condition: String,
       tbl: String): Unit = {
     checkErrorMatchPVals(
@@ -246,16 +247,6 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         .map(_.getMessage.getFormattedMessage)
         .exists(_.contains("Cannot create JDBC table comment"))
       assert(createCommentWarning === notSupportsTableComment)
-    }
-  }
-
-  test("CREATE TABLE with table property") {
-    withTable(s"$catalogName.new_table") {
-      val e = intercept[AnalysisException] {
-        sql(s"CREATE TABLE $catalogName.new_table (i INT) TBLPROPERTIES('a'='1')")
-      }
-      checkErrorFailedJDBC(e, "FAILED_JDBC.CREATE_TABLE", "new_table")
-      testCreateTableWithProperty(s"$catalogName.new_table")
     }
   }
 

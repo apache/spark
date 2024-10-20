@@ -169,6 +169,59 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     }
   }
 
+  test("SPARK-49730: syntax error classification") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        val schema = StructType(
+          Seq(StructField("id", IntegerType, true)))
+
+        spark.read
+          .format("jdbc")
+          .schema(schema)
+          .option("url", jdbcUrl)
+          .option("query", "SELECT * FRM range(10)")
+          .load()
+      },
+      condition = "FAILED_JDBC.SYNTAX_ERROR",
+      parameters = Map(
+        "url" -> jdbcUrl,
+        "query" -> "SELECT * FROM (SELECT * FRM range(10)) SPARK_GEN_SUBQ_0 WHERE 1=0"))
+  }
+
+  test("SPARK-49730: get_schema error classification") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        val schema = StructType(
+          Seq(StructField("id", IntegerType, true)))
+
+        spark.read
+          .format("jdbc")
+          .schema(schema)
+          .option("url", jdbcUrl)
+          .option("query", "SELECT * FROM non_existent_table")
+          .load()
+      },
+      condition = "FAILED_JDBC.GET_SCHEMA",
+      parameters = Map(
+        "url" -> jdbcUrl,
+        "query" -> "SELECT * FROM (SELECT * FROM non_existent_table) SPARK_GEN_SUBQ_8 WHERE 1=0"))
+  }
+
+  test("SPARK-49730: create_table error classification") {
+    val e = intercept[AnalysisException] {
+      sql(s"CREATE TABLE mysql.new_table (i INT) TBLPROPERTIES('a'='1')")
+    }
+
+    checkErrorMatchPVals(
+      exception = e,
+      condition = "FAILED_JDBC.CREATE_TABLE",
+      parameters = Map(
+        "url" -> "jdbc:.*",
+        "tableName" -> s"`new_table`"
+      )
+    )
+  }
+
   override def testDatetime(tbl: String): Unit = {
     val df1 = sql(s"SELECT name FROM $tbl WHERE " +
       "dayofyear(date1) > 100 AND dayofmonth(date1) > 10 ")

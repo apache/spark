@@ -217,9 +217,17 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
-           case 15335 if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
-             val newTable = messageParameters("newName")
-             throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
+          case 15335 if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
+            val newTable = messageParameters("newName")
+            throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
+          case 102 | 122 | 142 | 148 | 156 | 319 | 336 =>
+            throw QueryCompilationErrors.jdbcGeneratedQuerySyntaxError(
+              messageParameters.get("url").getOrElse(""),
+              messageParameters.get("query").getOrElse(""))
+          case 208 if errorClass == "..." => // Error code for "Invalid object name"
+            throw QueryCompilationErrors.jdbcGeneratedQueryGetSchemaError(
+              messageParameters.get("url").getOrElse(""),
+              messageParameters.get("query").getOrElse(""))
           case _ =>
             super.classifyException(e, errorClass, messageParameters, description, isRuntime)
         }
