@@ -7170,7 +7170,7 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
     |    4|            2.0|
     +-----+---------------+
 
-    Example 2: The input values could be invalid
+    Example 2: Return NULL for invalid input values
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1), (2), (0), (-1), (NULL) AS t(value)")
