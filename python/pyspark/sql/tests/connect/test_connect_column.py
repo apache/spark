@@ -60,7 +60,7 @@ if should_test_connect:
         JVM_LONG_MIN,
         JVM_LONG_MAX,
     )
-    from pyspark.errors.exceptions.connect import SparkConnectGrpcException
+    from pyspark.errors.exceptions.connect import SparkConnectException
 
 
 class SparkConnectColumnTests(SparkConnectSQLTestCase):

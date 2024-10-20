@@ -16,7 +16,7 @@
 #
 
 """PySpark Functions with Spark Connect"""
-from pyspark.testing.connectutils import should_test_connect
+from pyspark.testing import should_test_connect
 
 if should_test_connect:
     from pyspark.sql.connect.functions.builtin import *  # noqa: F401,F403
