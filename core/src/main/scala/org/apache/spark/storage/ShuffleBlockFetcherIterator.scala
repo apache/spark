@@ -38,6 +38,7 @@ import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.config.SHUFFLE_LOCAL_READ_ENABLE
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.shuffle.checksum.{Cause, ShuffleChecksumHelper}
@@ -393,6 +394,8 @@ final class ShuffleBlockFetcherIterator(
     // Partition to local, host-local, push-merged-local, remote (includes push-merged-remote)
     // blocks.Remote blocks are further split into FetchRequests of size at most maxBytesInFlight
     // in order to limit the amount of data in flight
+
+    val localReadEnable = blockManager.conf.get(SHUFFLE_LOCAL_READ_ENABLE)
     val collectedRemoteRequests = new ArrayBuffer[FetchRequest]
     var localBlockBytes = 0L
     var hostLocalBlockBytes = 0L
@@ -420,7 +423,7 @@ final class ShuffleBlockFetcherIterator(
         localBlocks ++= mergedBlockInfos.map(info => (info.blockId, info.mapIndex))
         localBlockBytes += mergedBlockInfos.map(_.size).sum
       } else if (blockManager.hostLocalDirManager.isDefined &&
-        address.host == blockManager.blockManagerId.host) {
+        address.host == blockManager.blockManagerId.host && localReadEnable) {
         val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
           blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
         numBlocksToFetch += mergedBlockInfos.size

@@ -104,6 +104,15 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val SHUFFLE_LOCAL_READ_ENABLE =
+    ConfigBuilder("spark.shuffle.load.read.enable")
+      .doc("When true, executors with the same host will read the shuffle data" +
+        "of each other's tasks directly from the local directory.When false," +
+        "only each other's shuffle data will be accessed via network communication.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val DRIVER_USER_CLASS_PATH_FIRST =
     ConfigBuilder("spark.driver.userClassPathFirst")
       .version("1.3.0")
