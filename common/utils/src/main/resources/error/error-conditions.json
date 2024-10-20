@@ -571,7 +571,7 @@
       },
       "IMPLICIT" : {
         "message" : [
-          "Error occurred due to the mismatch between multiple implicit non-default collations. Use COLLATE function to set the collation explicitly."
+          "Error occurred due to the mismatch between implicit collations: [<implicitTypes>]. Use COLLATE function to set the collation explicitly."
         ]
       }
     },
@@ -2150,6 +2150,12 @@
     },
     "sqlState" : "22022"
   },
+  "INVALID_CORRUPT_RECORD_TYPE" : {
+    "message" : [
+      "The column <columnName> for corrupt records must have the nullable STRING type, but got <actualType>."
+    ],
+    "sqlState" : "42804"
+  },
   "INVALID_CURSOR" : {
     "message" : [
       "The cursor is invalid."
@@ -3416,6 +3422,12 @@
     ],
     "sqlState" : "23K01"
   },
+  "MERGE_WITHOUT_WHEN" : {
+    "message" : [
+      "There must be at least one WHEN clause in a MERGE statement."
+    ],
+    "sqlState" : "42601"
+  },
   "MISSING_AGGREGATION" : {
     "message" : [
       "The non-aggregating expression <expression> is based on columns which are not participating in the GROUP BY clause.",
@@ -3453,6 +3465,12 @@
       "Window specification is not defined in the WINDOW clause for <windowName>. For more information about WINDOW clauses, please refer to '<docroot>/sql-ref-syntax-qry-select-window.html'."
     ],
     "sqlState" : "42P20"
+  },
+  "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS" : {
+    "message" : [
+      "<clause1> and <clause2> cannot coexist in the same SQL pipe operator using '|>'. Please separate the multiple result clauses into separate pipe operators and then retry the query again."
+    ],
+    "sqlState" : "42000"
   },
   "MULTIPLE_TIME_TRAVEL_SPEC" : {
     "message" : [
@@ -3826,6 +3844,12 @@
       "Syntax error, unexpected empty statement."
     ],
     "sqlState" : "42617"
+  },
+  "PARSE_MODE_UNSUPPORTED" : {
+    "message" : [
+      "The function <funcName> doesn't support the <mode> mode. Acceptable modes are PERMISSIVE and FAILFAST."
+    ],
+    "sqlState" : "42601"
   },
   "PARSE_SYNTAX_ERROR" : {
     "message" : [
@@ -4974,6 +4998,11 @@
           "Catalog <catalogName> does not support <operation>."
         ]
       },
+      "CLAUSE_WITH_PIPE_OPERATORS" : {
+        "message" : [
+          "The SQL pipe operator syntax using |> does not support <clauses>."
+        ]
+      },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
         "message" : [
           "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY."
@@ -5638,11 +5667,6 @@
       "The number of inserted values cannot match the fields."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0008" : {
-    "message" : [
-      "There must be at least one WHEN clause in a MERGE statement."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0012" : {
     "message" : [
       "DISTRIBUTE BY is not supported."
@@ -6035,19 +6059,9 @@
       "Column statistics serialization is not supported for column <colName> of data type: <dataType>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1097" : {
-    "message" : [
-      "The field for corrupt records must be string type and nullable."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1098" : {
     "message" : [
       "DataType '<x>' is not supported by <className>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1099" : {
-    "message" : [
-      "<funcName>() doesn't support the <mode> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1103" : {
@@ -6519,16 +6533,6 @@
       "<action> is not allowed on <tableName> since its partition metadata is not stored in the Hive metastore. To import this information into the metastore, run `msck repair table <tableName>`."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1252" : {
-    "message" : [
-      "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1253" : {
-    "message" : [
-      "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1255" : {
     "message" : [
       "Cannot drop built-in function '<functionName>'."
@@ -6862,11 +6866,6 @@
   "_LEGACY_ERROR_TEMP_2041" : {
     "message" : [
       "<methodName> is not implemented."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2042" : {
-    "message" : [
-      "<message>. If necessary set <ansiConfig> to false to bypass this error."
     ]
   },
   "_LEGACY_ERROR_TEMP_2045" : {
@@ -7264,11 +7263,6 @@
   "_LEGACY_ERROR_TEMP_2164" : {
     "message" : [
       "Initial type <dataType> must be an <arrayType>, a <structType> or a <mapType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2165" : {
-    "message" : [
-      "Malformed records are detected in schema inference. Parse Mode: <failFastMode>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2166" : {
@@ -8101,11 +8095,6 @@
       "No handler for UDF/UDAF/UDTF '<clazz>': <e>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3085" : {
-    "message" : [
-      "from_avro() doesn't support the <name> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3086" : {
     "message" : [
       "Cannot persist <tableName> into Hive metastore as table property keys may not start with 'spark.sql.': <invalidKeys>"
@@ -8614,11 +8603,6 @@
   "_LEGACY_ERROR_TEMP_3226" : {
     "message" : [
       "Cannot delete map key"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3227" : {
-    "message" : [
-      "Cannot find field: <fieldName>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3228" : {

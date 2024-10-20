@@ -19,11 +19,9 @@ import unittest
 
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, LongType, DoubleType
 from pyspark.sql.utils import is_remote
-
 from pyspark.sql import functions as SF
-from pyspark.sql.connect import functions as CF
-
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
+from pyspark.testing.connectutils import should_test_connect
 from pyspark.testing.sqlutils import (
     have_pandas,
     have_pyarrow,
@@ -37,6 +35,9 @@ if have_pyarrow:
 
 if have_pandas:
     import pandas as pd
+
+if should_test_connect:
+    from pyspark.sql.connect import functions as CF
 
 
 class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):

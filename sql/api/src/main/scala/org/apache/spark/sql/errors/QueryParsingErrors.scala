@@ -60,7 +60,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def mergeStatementWithoutWhenClauseError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0008", ctx)
+    new ParseException(errorClass = "MERGE_WITHOUT_WHEN", ctx)
   }
 
   def nonLastMatchedClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
@@ -79,6 +79,25 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE",
       messageParameters = Map("partKey" -> toSQLId(key)),
+      ctx)
+  }
+
+  def clausesWithPipeOperatorsUnsupportedError(
+      ctx: QueryOrganizationContext,
+      clauses: String): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.CLAUSE_WITH_PIPE_OPERATORS",
+      messageParameters = Map("clauses" -> clauses),
+      ctx)
+  }
+
+  def multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
+      ctx: QueryOrganizationContext,
+      clause1: String,
+      clause2: String): Throwable = {
+    new ParseException(
+      errorClass = "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS",
+      messageParameters = Map("clause1" -> clause1, "clause2" -> clause2),
       ctx)
   }
 
