@@ -19,6 +19,8 @@ license: |
   limitations under the License.
 ---
 
+* Table of contents
+
 # Asynchronous Progress Tracking
 ## What is it?
 
