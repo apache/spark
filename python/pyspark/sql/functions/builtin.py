@@ -13190,7 +13190,7 @@ def try_parse_url(
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame(
-    ...   [("https://spark.apache.org/path?query=1", "QUERY", "query")],
+    ...   [("inva lid://spark.apache.org/path?query=1", "QUERY", "query")],
     ...   ["url", "part", "key"]
     ... )
     >>> df.select(sf.try_parse_url(df.url, df.part, df.key)).show()
