@@ -419,46 +419,6 @@ case class Acosh(child: Expression)
 }
 
 /**
- * Try to convert a num from one base to another
- *
- * @param numExpr the number to be converted
- * @param fromBaseExpr from which base
- * @param toBaseExpr to which base
- */
-@ExpressionDescription(
-  usage = "_FUNC_(num, from_base, to_base) - Convert `num` from `from_base` to `to_base`.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('100', 2, 10);
-       4
-      > SELECT _FUNC_(-10, 16, -10);
-       -16
-      > SELECT _FUNC_('9223372036854775807', 36, 16);
-       FFFFFFFFFFFFFFFF
-  """,
-  since = "4.0.0",
-  group = "math_funcs")
-case class TryConv(
-    numExpr: Expression,
-    fromBaseExpr: Expression,
-    toBaseExpr: Expression,
-    replacement: Expression)
-  extends RuntimeReplaceable with InheritAnalysisRules {
-
-  def this(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression) =
-    this(numExpr, fromBaseExpr, toBaseExpr,
-      Conv(numExpr, fromBaseExpr, toBaseExpr, failOnError = false))
-
-  override protected def withNewChildInternal(newChild: Expression): Expression = {
-    copy(replacement = newChild)
-  }
-
-  override def parameters: Seq[Expression] = Seq(numExpr, fromBaseExpr, toBaseExpr)
-
-  override def prettyName: String = "try_conv"
-}
-
-/**
  * Convert a num from one base to another
  *
  * @param numExpr the number to be converted

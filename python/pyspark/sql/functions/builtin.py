@@ -7249,44 +7249,6 @@ def log2(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def try_conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
-    """
-    This is a special version of `conv` that performs the same operation, but "wraps" the result
-    instead of throwing an exception on overflow in the number converted.
-
-    .. versionadded:: 4.0.0
-
-    Parameters
-    ----------
-    col : :class:`~pyspark.sql.Column` or str
-        a column to convert base for.
-    fromBase: int
-        from base number.
-    toBase: int
-        to base number.
-
-    Returns
-    -------
-    :class:`~pyspark.sql.Column`
-        logariphm of given value.
-
-    Examples
-    --------
-    >>> df = spark.createDataFrame([("010101",)], ['n'])
-    >>> df.select(try_conv(df.n, 2, 16).alias('hex')).collect()
-    [Row(hex='15')]
-    >>> df1 = spark.createDataFrame([("92233720368547758070",)], ['n'])
-    >>> df.select(try_conv(df.n, 10, 16).alias('converted')).collect()
-    [Row(converted='FFFFFFFFFFFFFFFF')]
-    """
-    from pyspark.sql.classic.column import _to_java_column
-
-    return _invoke_function(
-        "try_conv", _to_java_column(col), _enum_to_value(fromBase), _enum_to_value(toBase)
-    )
-
-
-@_try_remote_functions
 def conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
     """
     Convert a number in a string column from one base to another.
