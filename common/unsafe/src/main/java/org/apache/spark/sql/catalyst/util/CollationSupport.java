@@ -704,7 +704,7 @@ public final class CollationSupport {
 
   private static final UTF8String lowercaseRegexPrefix = UTF8String.fromString("(?ui)");
   public static UTF8String lowercaseRegex(final UTF8String regex) {
-    return UTF8String.concat(lowercaseRegexPrefix, regex);
+    return regex.numBytes() != 0 ? UTF8String.concat(lowercaseRegexPrefix, regex) : regex;
   }
   public static UTF8String collationAwareRegex(final UTF8String regex, final int collationId) {
     return supportsLowercaseRegex(collationId) ? lowercaseRegex(regex) : regex;
