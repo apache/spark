@@ -104,6 +104,8 @@ object SchemaConverters extends Logging {
       recursiveFieldMaxDepth: Int): SchemaType = {
     avroSchema.getType match {
       case INT => avroSchema.getLogicalType match {
+        case d: CustomDecimal =>
+          SchemaType(DecimalType(d.precision, d.scale), nullable = false)
         case _: Date => SchemaType(DateType, nullable = false)
         case _ =>
           val catalystTypeAttrValue = avroSchema.getProp(CATALYST_TYPE_PROP_NAME)
