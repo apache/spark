@@ -854,7 +854,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
        |""".stripMargin
     val analyzedPlan = sql(query).queryExecution.analyzed
     analyzedPlan.collect {
-      case Aggregate(_, aggregateExpressions, _) =>
+      case Aggregate(_, aggregateExpressions, _, _) =>
         val extracted = aggregateExpressions.collect {
           case Alias(child, _) => child
           case a: Attribute => a

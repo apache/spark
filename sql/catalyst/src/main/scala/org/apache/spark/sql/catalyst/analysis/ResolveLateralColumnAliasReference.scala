@@ -196,7 +196,7 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
         if ruleApplicableOnOperator(aggOriginal, aggOriginal.aggregateExpressions)
           && aggOriginal.aggregateExpressions.exists(
             _.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
-        val agg @ Aggregate(groupingExpressions, aggregateExpressions, _) =
+        val agg @ Aggregate(groupingExpressions, aggregateExpressions, _, _) =
           aggOriginal.mapChildren(apply0)
 
         // Check if current Aggregate is eligible to lift up with Project: the aggregate
