@@ -973,24 +973,9 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    formatterOption.map { tf =>
-      val timestampFormatter = ctx.addReferenceObj("timestampFormatter", tf)
-      defineCodeGen(ctx, ev, (timestamp, _) => {
-        s"""UTF8String.fromString($timestampFormatter.format($timestamp))"""
-      })
-    }.getOrElse {
-      val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
-      val ldf = LegacyDateFormats.getClass.getName.stripSuffix("$")
-      val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-      defineCodeGen(ctx, ev, (timestamp, format) => {
-        s"""|UTF8String.fromString($tf$$.MODULE$$.apply(
-            |  $format.toString(),
-            |  $zid,
-            |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
-            |  false)
-            |.format($timestamp))""".stripMargin
-      })
-    }
+    val expr = ctx.addReferenceObj("this", this)
+    defineCodeGen(ctx, ev,
+      (timestamp, format) => s"(UTF8String) $expr.nullSafeEval($timestamp, $format)")
   }
 
   override def prettyName: String = "date_format"
@@ -1456,23 +1441,9 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    formatterOption.map { f =>
-      val formatterName = ctx.addReferenceObj("formatter", f)
-      defineCodeGen(ctx, ev, (seconds, _) =>
-        s"UTF8String.fromString($formatterName.format($seconds * 1000000L))")
-    }.getOrElse {
-      val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
-      val ldf = LegacyDateFormats.getClass.getName.stripSuffix("$")
-      val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-      defineCodeGen(ctx, ev, (seconds, format) =>
-        s"""
-           |UTF8String.fromString(
-           |  $tf$$.MODULE$$.apply($format.toString(),
-           |  $zid,
-           |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
-           |  false).format($seconds * 1000000L))
-           |""".stripMargin)
-    }
+    val expr = ctx.addReferenceObj("this", this)
+    defineCodeGen(ctx, ev,
+      (seconds, format) => s"(UTF8String) $expr.nullSafeEval($seconds, $format)")
   }
 
   override protected def formatString: Expression = format
