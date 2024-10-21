@@ -277,21 +277,22 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def ansiDateTimeError(e: Exception): SparkDateTimeException = {
+  def ansiDateTimeArgumentOutOfRange(e: Exception): SparkDateTimeException = {
     new SparkDateTimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2000",
+      errorClass = "DATETIME_ARGUMENT_OUT_OF_RANGE",
       messageParameters = Map(
-        "message" -> e.getMessage,
+        "rangeMessage" -> e.getMessage,
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
       context = Array.empty,
       summary = "")
   }
 
-  def ansiIllegalArgumentError(message: String): SparkIllegalArgumentException = {
+  def invalidIntervalWithMicrosecondsError(funcName: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2000",
+      errorClass = "INVALID_PARAMETER_VALUE.INTERVAL_WITH_MICROSECONDS",
       messageParameters = Map(
-        "message" -> message,
+        "parameter" -> toSQLId("interval"),
+        "functionName" -> toSQLId(funcName),
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
