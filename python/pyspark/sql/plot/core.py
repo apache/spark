@@ -359,9 +359,7 @@ class PySparkPlotAccessor:
             )
         return self(kind="pie", x=x, y=y, **kwargs)
 
-    def box(
-        self, column: Union[str, List[str]], precision: float = 0.01, **kwargs: Any
-    ) -> "Figure":
+    def box(self, column: Union[str, List[str]], **kwargs: Any) -> "Figure":
         """
         Make a box plot of the DataFrame columns.
 
@@ -377,11 +375,10 @@ class PySparkPlotAccessor:
         ----------
         column: str or list of str
             Column name or list of names to be used for creating the boxplot.
-        precision: float, default = 0.01
-            This argument is used by pyspark to compute approximate statistics
-            for building a boxplot.
         **kwargs
-            Additional keyword arguments.
+            Extra arguments to `precision`: refer to a float that is used by
+            pyspark to compute approximate statistics for building a boxplot.
+            The default value is 0.01. Use smaller values to get more precise statistics.
 
         Returns
         -------
@@ -404,7 +401,7 @@ class PySparkPlotAccessor:
         >>> df.plot.box(column="math_score")  # doctest: +SKIP
         >>> df.plot.box(column=["math_score", "english_score"])  # doctest: +SKIP
         """
-        return self(kind="box", column=column, precision=precision, **kwargs)
+        return self(kind="box", column=column, **kwargs)
 
     def kde(
         self,
