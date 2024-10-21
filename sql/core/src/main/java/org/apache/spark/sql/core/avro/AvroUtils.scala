@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.avro
+package org.apache.spark.sql.core.avro
 
 import java.io.{FileNotFoundException, IOException}
 import java.util.Locale
@@ -34,10 +34,10 @@ import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{CODEC_LEVEL, CODEC_NAME, CONFIG, PATH}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.avro.AvroCompressionCodec._
-import org.apache.spark.sql.avro.AvroOptions.IGNORE_EXTENSION
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.core.avro.AvroCompressionCodec._
+import org.apache.spark.sql.core.avro.AvroOptions.IGNORE_EXTENSION
 import org.apache.spark.sql.execution.datasources.OutputWriterFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -45,9 +45,9 @@ import org.apache.spark.util.Utils
 
 private[sql] object AvroUtils extends Logging {
   def inferSchema(
-      spark: SparkSession,
-      options: Map[String, String],
-      files: Seq[FileStatus]): Option[StructType] = {
+                   spark: SparkSession,
+                   options: Map[String, String],
+                   files: Seq[FileStatus]): Option[StructType] = {
     val conf = spark.sessionState.newHadoopConfWithOptions(options)
     val parsedOptions = new AvroOptions(options, conf)
 
@@ -96,10 +96,10 @@ private[sql] object AvroUtils extends Logging {
   }
 
   def prepareWrite(
-      sqlConf: SQLConf,
-      job: Job,
-      options: Map[String, String],
-      dataSchema: StructType): OutputWriterFactory = {
+                    sqlConf: SQLConf,
+                    job: Job,
+                    options: Map[String, String],
+                    dataSchema: StructType): OutputWriterFactory = {
     val parsedOptions = new AvroOptions(options, job.getConfiguration)
     val outputAvroSchema: Schema = parsedOptions.schema
       .getOrElse(SchemaConverters.toAvroType(dataSchema, nullable = false,
@@ -144,10 +144,10 @@ private[sql] object AvroUtils extends Logging {
   }
 
   private def inferAvroSchemaFromFiles(
-      files: Seq[FileStatus],
-      conf: Configuration,
-      ignoreExtension: Boolean,
-      ignoreCorruptFiles: Boolean): Schema = {
+                                        files: Seq[FileStatus],
+                                        conf: Configuration,
+                                        ignoreExtension: Boolean,
+                                        ignoreCorruptFiles: Boolean): Schema = {
     // Schema evolution is not supported yet. Here we only pick first random readable sample file to
     // figure out the schema of the whole dataset.
     val avroReader = files.iterator.map { f =>
@@ -234,9 +234,9 @@ private[sql] object AvroUtils extends Logging {
 
   /** Wrapper for a pair of matched fields, one Catalyst and one corresponding Avro field. */
   private[sql] case class AvroMatchedField(
-      catalystField: StructField,
-      catalystPosition: Int,
-      avroField: Schema.Field)
+                                            catalystField: StructField,
+                                            catalystPosition: Int,
+                                            avroField: Schema.Field)
 
   /**
    * Helper class to perform field lookup/matching on Avro schemas.
@@ -254,11 +254,11 @@ private[sql] object AvroUtils extends Logging {
    *                             otherwise, perform field matching using field names.
    */
   class AvroSchemaHelper(
-      avroSchema: Schema,
-      catalystSchema: StructType,
-      avroPath: Seq[String],
-      catalystPath: Seq[String],
-      positionalFieldMatch: Boolean) {
+                          avroSchema: Schema,
+                          catalystSchema: StructType,
+                          avroPath: Seq[String],
+                          catalystPath: Seq[String],
+                          positionalFieldMatch: Boolean) {
     if (avroSchema.getType != Schema.Type.RECORD) {
       throw new IncompatibleSchemaException(
         s"Attempting to treat ${avroSchema.getName} as a RECORD, but it was: ${avroSchema.getType}")
@@ -322,7 +322,7 @@ private[sql] object AvroUtils extends Logging {
      * @param name The name of the field to search for.
      * @return `Some(match)` if a matching Avro field is found, otherwise `None`.
      */
-    private[avro] def getFieldByName(name: String): Option[Schema.Field] = {
+    def getFieldByName(name: String): Option[Schema.Field] = {
 
       // get candidates, ignoring case of field name
       val candidates = fieldMap.getOrElse(name.toLowerCase(Locale.ROOT), Seq.empty)

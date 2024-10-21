@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.avro
+package org.apache.spark.sql.core.avro
 
 import java.net.URI
 
