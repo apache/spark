@@ -44,7 +44,8 @@ private[spark] object KubernetesExecutorBackend extends Logging {
       workerUrl: Option[String],
       resourcesFileOpt: Option[String],
       resourceProfileId: Int,
-      podName: String)
+      podName: String,
+      blockManagerPort: Int)
 
   def main(args: Array[String]): Unit = {
     val createFn: (RpcEnv, Arguments, SparkEnv, ResourceProfile, String) =>
@@ -125,6 +126,7 @@ private[spark] object KubernetesExecutorBackend extends Logging {
       }
 
       driverConf.set(EXECUTOR_ID, execId)
+      driverConf.set(BLOCK_MANAGER_PORT, arguments.blockManagerPort)
       val env = SparkEnv.createExecutorEnv(driverConf, execId, arguments.bindAddress,
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
 
@@ -149,6 +151,7 @@ private[spark] object KubernetesExecutorBackend extends Logging {
     var workerUrl: Option[String] = None
     var resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID
     var podName: String = null
+    var blockManagerPort = 0
 
     var argv = args.toList
     while (!argv.isEmpty) {
@@ -185,6 +188,9 @@ private[spark] object KubernetesExecutorBackend extends Logging {
         case ("--podName") :: value :: tail =>
           podName = value
           argv = tail
+        case ("--blockManagerPort") :: value :: tail =>
+          blockManagerPort = value.toInt
+          argv = tail
         case Nil =>
         case tail =>
           // scalastyle:off println
@@ -208,7 +214,7 @@ private[spark] object KubernetesExecutorBackend extends Logging {
     }
 
     Arguments(driverUrl, executorId, bindAddress, hostname, cores, appId, workerUrl,
-      resourcesFileOpt, resourceProfileId, podName)
+      resourcesFileOpt, resourceProfileId, podName, blockManagerPort)
   }
 
   private def printUsageAndExit(classNameForEntry: String): Unit = {
