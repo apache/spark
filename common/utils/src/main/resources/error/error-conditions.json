@@ -2072,6 +2072,12 @@
     ],
     "sqlState" : "22003"
   },
+  "INVALID_ATTRIBUTE_NAME_SYNTAX": {
+    "message": [
+      "Syntax error in attribute name: <name>."
+    ],
+    "sqlState": "42601"
+  },
   "INVALID_BITMAP_POSITION" : {
     "message" : [
       "The 0-indexed bitmap position <bitPosition> is out of bounds. The bitmap has <bitmapNumBits> bits (<bitmapNumBytes> bytes)."
@@ -5958,11 +5964,6 @@
   "_LEGACY_ERROR_TEMP_1048" : {
     "message" : [
       "<hintName> Hint expects a partition number as a parameter."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1049" : {
-    "message" : [
-      "Syntax error in attribute name: <name>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1050" : {
