@@ -220,7 +220,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
    * Returns a collation name.
    */
   override def visitCollateClause(ctx: CollateClauseContext): String = withOrigin(ctx) {
-    ctx.identifier.getText
+    ctx.qualifiedName.getText
   }
 
   /**
