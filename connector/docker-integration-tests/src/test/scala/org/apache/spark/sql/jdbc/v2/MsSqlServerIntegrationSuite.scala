@@ -135,7 +135,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
   }
 
   test("SPARK-49730: syntax error classification") {
-    checkError(
+    checkErrorMatchPVals(
       exception = intercept[AnalysisException] {
         val schema = StructType(
           Seq(StructField("id", IntegerType, true)))
@@ -150,11 +150,11 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
       condition = "FAILED_JDBC.SYNTAX_ERROR",
       parameters = Map(
         "url" -> jdbcUrl,
-        "query" -> "SELECT * FROM (SELECT * FRM range(10)) SPARK_GEN_SUBQ_0 WHERE 1=0"))
+        "query" -> "SELECT * FRM range(10)"))
   }
 
   test("SPARK-49730: get_schema error classification") {
-    checkError(
+    checkErrorMatchPVals(
       exception = intercept[AnalysisException] {
         val schema = StructType(
           Seq(StructField("id", IntegerType, true)))
@@ -169,7 +169,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
       condition = "FAILED_JDBC.GET_SCHEMA",
       parameters = Map(
         "url" -> jdbcUrl,
-        "query" -> "SELECT * FROM (SELECT * FROM non_existent_table) SPARK_GEN_SUBQ_8 WHERE 1=0"))
+        "query" -> "SELECT * FROM non_existent_table"))
   }
 
   test("SPARK-47994: SQLServer does not support 1 or 0 as boolean type in CASE WHEN filter") {

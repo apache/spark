@@ -231,7 +231,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
   }
 
   test("SPARK-49730: syntax error classification") {
-    checkError(
+    checkErrorMatchPVals(
       exception = intercept[AnalysisException] {
         val schema = StructType(
           Seq(StructField("id", IntegerType, true)))
@@ -246,11 +246,11 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       condition = "FAILED_JDBC.SYNTAX_ERROR",
       parameters = Map(
         "url" -> jdbcUrl,
-        "query" -> "SELECT * FROM (SELECT * FRM range(10)) SPARK_GEN_SUBQ_738 WHERE 1=0"))
+        "query" -> "SELECT * FRM range(10)"))
   }
 
   test("SPARK-49730: get_schema error classification") {
-    checkError(
+    checkErrorMatchPVals(
       exception = intercept[AnalysisException] {
         val schema = StructType(
           Seq(StructField("id", IntegerType, true)))
@@ -265,7 +265,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       condition = "FAILED_JDBC.GET_SCHEMA",
       parameters = Map(
         "url" -> jdbcUrl,
-        "query" -> "SELECT * FROM (SELECT * FROM non_existent_table) SPARK_GEN_SUBQ_746 WHERE 1=0"))
+        "query" -> "SELECT * FROM non_existent_table"))
   }
 
   test("SPARK-49730: create_table error classification") {
