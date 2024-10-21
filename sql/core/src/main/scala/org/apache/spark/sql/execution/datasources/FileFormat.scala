@@ -122,21 +122,13 @@ trait FileFormat {
   }
 
   /**
-   * Exactly the same as [[buildReader]] except that the reader function returned by this method
-   * appends partition values to [[InternalRow]]s produced by the reader function [[buildReader]]
-   * returns.
+   * Helper function for [[buildReaderWithPartitionValues]] and
+   * [[JsonFileFormat.buildReaderWithPartitionValuesAndVariantMetrics]]
    */
-  def buildReaderWithPartitionValues(
-      sparkSession: SparkSession,
-      dataSchema: StructType,
+  protected def buildReaderWithPartitionValuesHelper(
+      dataReader: PartitionedFile => Iterator[InternalRow],
       partitionSchema: StructType,
-      requiredSchema: StructType,
-      filters: Seq[Filter],
-      options: Map[String, String],
-      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
-    val dataReader = buildReader(
-      sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
-
+      requiredSchema: StructType): PartitionedFile => Iterator[InternalRow] = {
     new (PartitionedFile => Iterator[InternalRow]) with Serializable {
       private val fullSchema = toAttributes(requiredSchema) ++ toAttributes(partitionSchema)
 
@@ -163,6 +155,24 @@ trait FileFormat {
         }
       }
     }
+  }
+
+  /**
+   * Exactly the same as [[buildReader]] except that the reader function returned by this method
+   * appends partition values to [[InternalRow]]s produced by the reader function [[buildReader]]
+   * returns.
+   */
+  def buildReaderWithPartitionValues(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String],
+      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+    val dataReader = buildReader(
+      sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
+    buildReaderWithPartitionValuesHelper(dataReader, partitionSchema, requiredSchema)
   }
 
   /**
