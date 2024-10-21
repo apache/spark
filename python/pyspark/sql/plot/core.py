@@ -15,18 +15,26 @@
 # limitations under the License.
 #
 
+import math
+
 from typing import Any, TYPE_CHECKING, List, Optional, Union
 from types import ModuleType
-from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
+from pyspark.errors import (
+    PySparkRuntimeError,
+    PySparkTypeError,
+    PySparkValueError,
+)
 from pyspark.sql import Column, functions as F
 from pyspark.sql.types import NumericType
 from pyspark.sql.utils import is_remote, require_minimum_plotly_version
+from pandas.core.dtypes.inference import is_integer
 
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame, Row
     from pyspark.sql._typing import ColumnOrName
     import pandas as pd
+    import numpy as np
     from plotly.graph_objs import Figure
 
 
@@ -351,9 +359,7 @@ class PySparkPlotAccessor:
             )
         return self(kind="pie", x=x, y=y, **kwargs)
 
-    def box(
-        self, column: Union[str, List[str]], precision: float = 0.01, **kwargs: Any
-    ) -> "Figure":
+    def box(self, column: Union[str, List[str]], **kwargs: Any) -> "Figure":
         """
         Make a box plot of the DataFrame columns.
 
@@ -369,11 +375,10 @@ class PySparkPlotAccessor:
         ----------
         column: str or list of str
             Column name or list of names to be used for creating the boxplot.
-        precision: float, default = 0.01
-            This argument is used by pyspark to compute approximate statistics
-            for building a boxplot.
         **kwargs
-            Additional keyword arguments.
+            Extra arguments to `precision`: refer to a float that is used by
+            pyspark to compute approximate statistics for building a boxplot.
+            The default value is 0.01. Use smaller values to get more precise statistics.
 
         Returns
         -------
@@ -396,7 +401,128 @@ class PySparkPlotAccessor:
         >>> df.plot.box(column="math_score")  # doctest: +SKIP
         >>> df.plot.box(column=["math_score", "english_score"])  # doctest: +SKIP
         """
-        return self(kind="box", column=column, precision=precision, **kwargs)
+        return self(kind="box", column=column, **kwargs)
+
+    def kde(
+        self,
+        column: Union[str, List[str]],
+        bw_method: Union[int, float],
+        ind: Union["np.ndarray", int, None] = None,
+        **kwargs: Any,
+    ) -> "Figure":
+        """
+        Generate Kernel Density Estimate plot using Gaussian kernels.
+
+        In statistics, kernel density estimation (KDE) is a non-parametric way to
+        estimate the probability density function (PDF) of a random variable. This
+        function uses Gaussian kernels and includes automatic bandwidth determination.
+
+        Parameters
+        ----------
+        column: str or list of str
+            Column name or list of names to be used for creating the kde plot.
+        bw_method : int or float
+            The method used to calculate the estimator bandwidth.
+            See KernelDensity in PySpark for more information.
+        ind : NumPy array or integer, optional
+            Evaluation points for the estimated PDF. If None (default),
+            1000 equally spaced points are used. If `ind` is a NumPy array, the
+            KDE is evaluated at the points passed. If `ind` is an integer,
+            `ind` number of equally spaced points are used.
+        **kwargs : optional
+            Additional keyword arguments.
+
+        Returns
+        -------
+        :class:`plotly.graph_objs.Figure`
+
+        Examples
+        --------
+        >>> data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
+        >>> columns = ["length", "width", "species"]
+        >>> df = spark.createDataFrame(data, columns)
+        >>> df.plot.kde(column=["length", "width"], bw_method=0.3)  # doctest: +SKIP
+        >>> df.plot.kde(column="length", bw_method=0.3)  # doctest: +SKIP
+        """
+        return self(kind="kde", column=column, bw_method=bw_method, ind=ind, **kwargs)
+
+
+class PySparkKdePlotBase:
+    @staticmethod
+    def get_ind(sdf: "DataFrame", ind: Union["np.ndarray", int, None]) -> "np.ndarray":
+        from pyspark.sql.pandas.utils import require_minimum_numpy_version
+
+        require_minimum_numpy_version()
+        import numpy as np
+
+        def calc_min_max() -> "Row":
+            if len(sdf.columns) > 1:
+                min_col = F.least(*map(F.min, sdf))  # type: ignore
+                max_col = F.greatest(*map(F.max, sdf))  # type: ignore
+            else:
+                min_col = F.min(sdf.columns[-1])
+                max_col = F.max(sdf.columns[-1])
+            return sdf.select(min_col, max_col).first()  # type: ignore
+
+        if ind is None:
+            min_val, max_val = calc_min_max()
+            sample_range = max_val - min_val
+            ind = np.linspace(
+                min_val - 0.5 * sample_range,
+                max_val + 0.5 * sample_range,
+                1000,
+            )
+        elif is_integer(ind):
+            min_val, max_val = calc_min_max()
+            sample_range = max_val - min_val
+            ind = np.linspace(
+                min_val - 0.5 * sample_range,
+                max_val + 0.5 * sample_range,
+                ind,
+            )
+        return ind  # type: ignore
+
+    @staticmethod
+    def compute_kde_col(
+        input_col: Column,
+        bw_method: Union[int, float],
+        ind: "np.ndarray",
+    ) -> Column:
+        # refers to org.apache.spark.mllib.stat.KernelDensity
+        assert bw_method is not None and isinstance(
+            bw_method, (int, float)
+        ), "'bw_method' must be set as a scalar number."
+
+        assert ind is not None, "'ind' must be a scalar array."
+
+        bandwidth = float(bw_method)
+        points = [float(i) for i in ind]
+        log_std_plus_half_log2_pi = math.log(bandwidth) + 0.5 * math.log(2 * math.pi)
+
+        def norm_pdf(
+            mean: Column,
+            std: Column,
+            log_std_plus_half_log2_pi: Column,
+            x: Column,
+        ) -> Column:
+            x0 = x - mean
+            x1 = x0 / std
+            log_density = -0.5 * x1 * x1 - log_std_plus_half_log2_pi
+            return F.exp(log_density)
+
+        return F.array(
+            [
+                F.avg(
+                    norm_pdf(
+                        input_col.cast("double"),
+                        F.lit(bandwidth),
+                        F.lit(log_std_plus_half_log2_pi),
+                        F.lit(point),
+                    )
+                )
+                for point in points
+            ]
+        )
 
 
 class PySparkBoxPlotBase:
