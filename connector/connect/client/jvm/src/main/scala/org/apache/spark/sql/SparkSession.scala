@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql
 
+import java.math.BigInteger
 import java.net.URI
 import java.nio.file.{Files, Paths}
 import java.util.concurrent.ConcurrentHashMap
@@ -343,6 +344,11 @@ class SparkSession private[sql] (
 
   private[sql] def semanticHash(plan: proto.Plan): Int = {
     client.semanticHash(plan).getSemanticHash.getResult
+  }
+
+  private[sql] def sizeInBytes(relation: proto.Relation): BigInteger = {
+    val bytes = client.sizeInBytes(relation).getSizeInBytes.getResult.toByteArray
+    new BigInteger(bytes)
   }
 
   private[sql] def timeZoneId: String = conf.get(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)

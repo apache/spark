@@ -664,6 +664,41 @@ class DataFrame:
         ...
 
     @dispatch_df_method
+    def sizeInBytesApproximation(self) -> int:
+        """Returns the approximate size in bytes of a DataFrame.
+
+        The estimate is based on the total size of the input files and the transformations
+        in the logical plan. The size returned is based on the worst-case scenario,
+        e.g. a full cross-join is assumed for join operations. For in-memory only DataFrames,
+        such as those created with spark.createDataFrame, it will return a very large value.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        int
+            Size in bytes estimated from optimized plan
+
+        Examples:
+        ---------
+        Example 1: Size of a csv file with 100 integer values
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     # Write a Dataframe with 100 integer values
+        ...     spark.createDataFrame(
+        ...         [{"val": 5} for _ in range(100)]
+        ...     ).repartition(1).write.csv(d, mode="overwrite")
+        ...
+        ...     # Read the resulted CSV file as DataFrame
+        ...     df = spark.read.format("csv").load(d)
+        ...
+        ...     # Returns the size of the DataFrame
+        ...     df.sizeInBytesApproximation()
+        200
+        """
+        ...
+
+    @dispatch_df_method
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
     ) -> None:
