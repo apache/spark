@@ -1,2 +1,2 @@
-Project [invoke(ParseUrlEvaluator(Vector(g#5257, g#5257, g#5257),false).evaluate(g#0, g#0, g#0)) AS parse_url(g, g, g)#0]
+Project [invoke(ParseUrlEvaluator(null,null,null,false).evaluate(g#0, g#0, g#0)) AS parse_url(g, g, g)#0]
 +- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

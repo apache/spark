@@ -19,36 +19,16 @@ package org.apache.spark.sql.catalyst.expressions.url
 import java.net.{URI, URISyntaxException}
 import java.util.regex.Pattern
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.unsafe.types.UTF8String
 
 case class ParseUrlEvaluator(
-    children: Seq[Expression],
+    cachedUrl: URI,
+    cachedExtractPartFunc: URI => String,
+    cachedPattern: Pattern,
     failOnError: Boolean) {
 
   import ParseUrlEvaluator._
-
-  // If the url is a constant, cache the URL object so that we don't need to convert url
-  // from UTF8String to String to URL for every row.
-  @transient private lazy val cachedUrl = children.head match {
-    case Literal(url: UTF8String, _) if url ne null => getUrl(url, failOnError)
-    case _ => null
-  }
-
-  // If the key is a constant, cache the Pattern object so that we don't need to convert key
-  // from UTF8String to String to StringBuilder to String to Pattern for every row.
-  @transient private lazy val cachedPattern = children(2) match {
-    case Literal(key: UTF8String, _) if key ne null => getPattern(key)
-    case _ => null
-  }
-
-  // If the partToExtract is a constant, cache the Extract part function so that we don't need
-  // to check the partToExtract for every row.
-  @transient private lazy val cachedExtractPartFunc = children(1) match {
-    case Literal(part: UTF8String, _) => getExtractPartFunc(part)
-    case _ => null
-  }
 
   private def extractValueFromQuery(query: UTF8String, pattern: Pattern): UTF8String = {
     val m = pattern.matcher(query.toString)
@@ -77,53 +57,6 @@ case class ParseUrlEvaluator(
       } else {
         null
       }
-    }
-  }
-
-  private def getPattern(key: UTF8String): Pattern = {
-    Pattern.compile(REGEXPREFIX + key.toString + REGEXSUBFIX)
-  }
-
-  private def getUrl(url: UTF8String, failOnError: Boolean): URI = {
-    try {
-      new URI(url.toString)
-    } catch {
-      case e: URISyntaxException if failOnError =>
-        throw QueryExecutionErrors.invalidUrlError(url, e)
-      case _: URISyntaxException => null
-    }
-  }
-
-  private def getExtractPartFunc(partToExtract: UTF8String): URI => String = {
-
-    // partToExtract match {
-    //   case HOST => _.toURL().getHost
-    //   case PATH => _.toURL().getPath
-    //   case QUERY => _.toURL().getQuery
-    //   case REF => _.toURL().getRef
-    //   case PROTOCOL => _.toURL().getProtocol
-    //   case FILE => _.toURL().getFile
-    //   case AUTHORITY => _.toURL().getAuthority
-    //   case USERINFO => _.toURL().getUserInfo
-    //   case _ => (url: URI) => null
-    // }
-
-    partToExtract match {
-      case HOST => _.getHost
-      case PATH => _.getRawPath
-      case QUERY => _.getRawQuery
-      case REF => _.getRawFragment
-      case PROTOCOL => _.getScheme
-      case FILE =>
-        (url: URI) =>
-          if (url.getRawQuery ne null) {
-            url.getRawPath + "?" + url.getRawQuery
-          } else {
-            url.getRawPath
-          }
-      case AUTHORITY => _.getRawAuthority
-      case USERINFO => _.getRawUserInfo
-      case _ => (url: URI) => null
     }
   }
 
@@ -162,4 +95,51 @@ object ParseUrlEvaluator {
   private val USERINFO = UTF8String.fromString("USERINFO")
   private val REGEXPREFIX = "(&|^)"
   private val REGEXSUBFIX = "=([^&]*)"
+
+  def getPattern(key: UTF8String): Pattern = {
+    Pattern.compile(REGEXPREFIX + key.toString + REGEXSUBFIX)
+  }
+
+  def getUrl(url: UTF8String, failOnError: Boolean): URI = {
+    try {
+      new URI(url.toString)
+    } catch {
+      case e: URISyntaxException if failOnError =>
+        throw QueryExecutionErrors.invalidUrlError(url, e)
+      case _: URISyntaxException => null
+    }
+  }
+
+  def getExtractPartFunc(partToExtract: UTF8String): URI => String = {
+
+    // partToExtract match {
+    //   case HOST => _.toURL().getHost
+    //   case PATH => _.toURL().getPath
+    //   case QUERY => _.toURL().getQuery
+    //   case REF => _.toURL().getRef
+    //   case PROTOCOL => _.toURL().getProtocol
+    //   case FILE => _.toURL().getFile
+    //   case AUTHORITY => _.toURL().getAuthority
+    //   case USERINFO => _.toURL().getUserInfo
+    //   case _ => (url: URI) => null
+    // }
+
+    partToExtract match {
+      case HOST => _.getHost
+      case PATH => _.getRawPath
+      case QUERY => _.getRawQuery
+      case REF => _.getRawFragment
+      case PROTOCOL => _.getScheme
+      case FILE =>
+        (url: URI) =>
+          if (url.getRawQuery ne null) {
+            url.getRawPath + "?" + url.getRawQuery
+          } else {
+            url.getRawPath
+          }
+      case AUTHORITY => _.getRawAuthority
+      case USERINFO => _.getRawUserInfo
+      case _ => (url: URI) => null
+    }
+  }
 }

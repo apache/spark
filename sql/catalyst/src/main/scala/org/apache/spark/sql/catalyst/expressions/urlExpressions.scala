@@ -193,8 +193,33 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ParseUrl =
     copy(children = newChildren)
 
+  // If the url is a constant, cache the URL object so that we don't need to convert url
+  // from UTF8String to String to URL for every row.
+  @transient private lazy val cachedUrl = children.head match {
+    case Literal(url: UTF8String, _) if url ne null => ParseUrlEvaluator.getUrl(url, failOnError)
+    case _ => null
+  }
+
+  // If the partToExtract is a constant, cache the Extract part function so that we don't need
+  // to check the partToExtract for every row.
+  @transient private lazy val cachedExtractPartFunc = children(1) match {
+    case Literal(part: UTF8String, _) => ParseUrlEvaluator.getExtractPartFunc(part)
+    case _ => null
+  }
+
+  // If the key is a constant, cache the Pattern object so that we don't need to convert key
+  // from UTF8String to String to StringBuilder to String to Pattern for every row.
+  @transient private lazy val cachedPattern = children.size match {
+    case 3 => children(2) match {
+      case Literal(key: UTF8String, _) if key ne null => ParseUrlEvaluator.getPattern(key)
+      case _ => null
+    }
+    case _ => null
+  }
+
   @transient
-  private lazy val evaluator: ParseUrlEvaluator = ParseUrlEvaluator(children, failOnError)
+  private lazy val evaluator: ParseUrlEvaluator = ParseUrlEvaluator(
+    cachedUrl, cachedExtractPartFunc, cachedPattern, failOnError)
 
   override def replacement: Expression = Invoke(
     Literal.create(evaluator, ObjectType(classOf[ParseUrlEvaluator])),
