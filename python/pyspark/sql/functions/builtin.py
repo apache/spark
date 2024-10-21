@@ -20323,7 +20323,7 @@ def try_make_interval(
 ) -> Column:
     """
     This is a special version of `make_interval` that performs the same operation, but returns a
-    NULL value instead of raising an error if the decoding cannot be performed.
+    NULL value instead of raising an error if interval cannot be created.
 
     .. versionadded:: 4.0.0
 
