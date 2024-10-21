@@ -60,6 +60,7 @@ object RecordType extends Enumeration {
     recordType match {
       case PUT_RECORD => "update"
       case DELETE_RECORD => "delete"
+      case MERGE_RECORD => "append"
       case _ => throw StateStoreErrors.unsupportedOperationException(
         "getRecordTypeAsString", recordType.toString)
     }
@@ -397,13 +398,15 @@ class StateStoreChangelogReaderV2(
  * @param startVersion start version of the changelog file to read
  * @param endVersion end version of the changelog file to read
  * @param compressionCodec de-compression method using for reading changelog file
+ * @param colFamilyNameOpt optional column family name to read from
  */
 abstract class StateStoreChangeDataReader(
     fm: CheckpointFileManager,
     stateLocation: Path,
     startVersion: Long,
     endVersion: Long,
-    compressionCodec: CompressionCodec)
+    compressionCodec: CompressionCodec,
+    colFamilyNameOpt: Option[String] = None)
   extends NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)] with Logging {
 
   assert(startVersion >= 1)
@@ -451,9 +454,12 @@ abstract class StateStoreChangeDataReader(
         finished = true
         return null
       }
-      // Todo: Does not support StateStoreChangelogReaderV2
-      changelogReader =
+
+      changelogReader = if (colFamilyNameOpt.isDefined) {
+        new StateStoreChangelogReaderV2(fm, fileIterator.next(), compressionCodec)
+      } else {
         new StateStoreChangelogReaderV1(fm, fileIterator.next(), compressionCodec)
+      }
     }
     changelogReader
   }

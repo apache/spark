@@ -24,7 +24,8 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{SparkException, SparkRuntimeException,
+  SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -234,7 +235,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     val schema = new StructType().add("str", StringType)
     val options = Map("maxCharsPerColumn" -> "2")
 
-    val exception = intercept[SparkException] {
+    val exception = intercept[SparkRuntimeException] {
       df.select(from_csv($"value", schema, options)).collect()
     }.getCause.getMessage
 
@@ -351,12 +352,10 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           df.select(from_csv($"value", schema, Map("mode" -> "DROPMALFORMED"))).collect()
         },
-        condition = "_LEGACY_ERROR_TEMP_1099",
+        condition = "PARSE_MODE_UNSUPPORTED",
         parameters = Map(
-          "funcName" -> "from_csv",
-          "mode" -> "DROPMALFORMED",
-          "permissiveMode" -> "PERMISSIVE",
-          "failFastMode" -> "FAILFAST"))
+          "funcName" -> "`from_csv`",
+          "mode" -> "DROPMALFORMED"))
     }
   }
 

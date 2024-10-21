@@ -21,9 +21,9 @@ import java.time.Duration
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, TestClass}
-import org.apache.spark.sql.functions.explode
+import org.apache.spark.sql.functions.{explode, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{ExpiredTimerInfo, InputMapRow, ListState, MapInputEvent, MapOutputEvent, MapStateTTLProcessor, OutputMode, RunningCountStatefulProcessor, StatefulProcessor, StateStoreMetricsTest, TestMapStateProcessor, TimeMode, TimerValues, TransformWithStateSuiteUtils, Trigger, TTLConfig, ValueState}
+import org.apache.spark.sql.streaming.{ExpiredTimerInfo, InputMapRow, ListState, MapInputEvent, MapOutputEvent, MapStateTTLProcessor, MaxEventTimeStatefulProcessor, OutputMode, RunningCountStatefulProcessor, RunningCountStatefulProcessorWithProcTimeTimerUpdates, StatefulProcessor, StateStoreMetricsTest, TestMapStateProcessor, TimeMode, TimerValues, TransformWithStateSuiteUtils, Trigger, TTLConfig, ValueState}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
 /** Stateful processor of single value state var with non-primitive type */
@@ -159,7 +159,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
 
         val resultDf = stateReaderDf.selectExpr(
           "key.value AS groupingKey",
-          "single_value.id AS valueId", "single_value.name AS valueName",
+          "value.id AS valueId", "value.name AS valueName",
           "partition_id")
 
         checkAnswer(resultDf,
@@ -176,17 +176,59 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         assert(ex.isInstanceOf[StateDataSourceInvalidOptionValue])
         assert(ex.getMessage.contains("State variable non-exist is not defined"))
 
-        // TODO: this should be removed when readChangeFeed is supported for value state
+        // Verify that trying to read timers in TimeMode as None fails
         val ex1 = intercept[Exception] {
           spark.read
             .format("statestore")
             .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
-            .option(StateSourceOptions.STATE_VAR_NAME, "valueState")
-            .option(StateSourceOptions.READ_CHANGE_FEED, "true")
-            .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+            .option(StateSourceOptions.READ_REGISTERED_TIMERS, true)
             .load()
         }
-        assert(ex1.isInstanceOf[StateDataSourceConflictOptions])
+        assert(ex1.isInstanceOf[StateDataSourceInvalidOptionValue])
+        assert(ex1.getMessage.contains("Registered timers are not available"))
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("state data source cdf integration - " +
+    "value state with single variable") {
+    withTempDir { tempDir =>
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key ->
+          TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new StatefulProcessorWithSingleValueVar(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          AddData(inputData, "b"),
+          CheckNewAnswer(("b", "1")),
+          StopStream
+        )
+
+        val changeFeedDf = spark.read
+            .format("statestore")
+            .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+            .option(StateSourceOptions.STATE_VAR_NAME, "valueState")
+            .option(StateSourceOptions.READ_CHANGE_FEED, true)
+            .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+            .load()
+
+        val opDf = changeFeedDf.selectExpr(
+          "change_type",
+          "key.value AS groupingKey",
+          "value.id AS valueId", "value.name AS valueName",
+          "partition_id")
+
+        checkAnswer(opDf,
+          Seq(Row("update", "a", 1L, "dummyKey", 0), Row("update", "b", 1L, "dummyKey", 1)))
       }
     }
   }
@@ -222,7 +264,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           .load()
 
         val resultDf = stateReaderDf.selectExpr(
-          "key.value", "single_value.value", "single_value.ttlExpirationMs", "partition_id")
+          "key.value", "value.value", "value.ttlExpirationMs", "partition_id")
 
         var count = 0L
         resultDf.collect().foreach { row =>
@@ -235,7 +277,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
 
         val answerDf = stateReaderDf.selectExpr(
           "key.value AS groupingKey",
-          "single_value.value.value AS valueId", "partition_id")
+          "value.value.value AS valueId", "partition_id")
         checkAnswer(answerDf,
           Seq(Row("a", 1L, 0), Row("b", 1L, 1)))
 
@@ -249,19 +291,75 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         }
         assert(ex.isInstanceOf[StateDataSourceInvalidOptionValue])
         assert(ex.getMessage.contains("State variable non-exist is not defined"))
+      }
+    }
+  }
 
-        // TODO: this should be removed when readChangeFeed is supported for TTL based state
-        // variables
-        val ex1 = intercept[Exception] {
-          spark.read
-            .format("statestore")
-            .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
-            .option(StateSourceOptions.STATE_VAR_NAME, "countState")
-            .option(StateSourceOptions.READ_CHANGE_FEED, "true")
-            .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
-            .load()
+  testWithChangelogCheckpointingEnabled("state data source cdf integration - " +
+    "value state with single variable and TTL") {
+    withTempDir { tempDir =>
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key ->
+          TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new StatefulProcessorWithTTL(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+
+        val clock = new StreamManualClock
+        testStream(result)(
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
+            checkpointLocation = tempDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          AddData(inputData, "b"),
+          AdvanceManualClock(5 * 1000),
+          CheckNewAnswer(("a", "1"), ("b", "1")),
+          AddData(inputData, "c"),
+          AdvanceManualClock(30 * 1000),
+          CheckNewAnswer(("c", "1")),
+          AddData(inputData, "d"),
+          AdvanceManualClock(30 * 1000),
+          CheckNewAnswer(("d", "1")),
+          StopStream
+        )
+
+        val stateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+          .option(StateSourceOptions.READ_CHANGE_FEED, true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+          .load()
+
+        val resultDf = stateReaderDf.selectExpr(
+          "key.value", "value.value", "value.ttlExpirationMs", "partition_id")
+
+        var count = 0L
+        resultDf.collect().foreach { row =>
+          if (!row.anyNull) {
+            count = count + 1
+            assert(row.getLong(2) > 0)
+          }
         }
-        assert(ex1.isInstanceOf[StateDataSourceConflictOptions])
+
+        // verify that 4 state rows are present
+        assert(count === 4)
+
+        val answerDf = stateReaderDf.selectExpr(
+          "change_type",
+          "key.value AS groupingKey",
+          "value.value.value AS valueId", "partition_id")
+        checkAnswer(answerDf,
+          Seq(Row("update", "a", 1L, 0),
+            Row("update", "b", 1L, 1),
+            Row("update", "c", 1L, 2),
+            Row("delete", "a", null, 0),
+            Row("delete", "b", null, 1),
+            Row("update", "d", 1L, 4),
+            Row("delete", "c", null, 2)))
       }
     }
   }
@@ -290,10 +388,12 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           StopStream
         )
 
+        // Verify that the state can be read in flattened/non-flattened modes
         val stateReaderDf = spark.read
           .format("statestore")
           .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
           .option(StateSourceOptions.STATE_VAR_NAME, "groupsList")
+          .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, false)
           .load()
 
         val listStateDf = stateReaderDf
@@ -307,6 +407,66 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         checkAnswer(listStateDf,
           Seq(Row("session1", "group1"), Row("session1", "group2"), Row("session1", "group4"),
             Row("session2", "group1"), Row("session3", "group7")))
+
+        val flattenedReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "groupsList")
+          .load()
+
+        val resultDf = flattenedReaderDf.selectExpr(
+          "key.value AS groupingKey",
+          "list_element.value AS valueList")
+        checkAnswer(resultDf,
+          Seq(Row("session1", "group1"), Row("session1", "group2"), Row("session1", "group4"),
+            Row("session2", "group1"), Row("session3", "group7")))
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("state data source cdf integration - list state") {
+    withTempDir { tempDir =>
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName) {
+
+        val inputData = MemoryStream[(String, String)]
+        val result = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new SessionGroupsStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+          AddData(inputData, ("session1", "group2")),
+          AddData(inputData, ("session1", "group1")),
+          AddData(inputData, ("session2", "group1")),
+          CheckNewAnswer(),
+          AddData(inputData, ("session3", "group7")),
+          AddData(inputData, ("session1", "group4")),
+          CheckNewAnswer(),
+          StopStream
+        )
+
+        val flattenedReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "groupsList")
+          .option(StateSourceOptions.READ_CHANGE_FEED, true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+          .load()
+
+        val resultDf = flattenedReaderDf.selectExpr(
+          "change_type",
+          "key.value AS groupingKey",
+          "list_element.value AS valueList",
+          "partition_id")
+        checkAnswer(resultDf,
+          Seq(Row("append", "session1", "group1", 0),
+            Row("append", "session1", "group2", 0),
+            Row("append", "session1", "group4", 0),
+            Row("append", "session2", "group1", 0),
+            Row("append", "session3", "group7", 3)))
       }
     }
   }
@@ -338,10 +498,12 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           StopStream
         )
 
+        // Verify that the state can be read in flattened/non-flattened modes
         val stateReaderDf = spark.read
           .format("statestore")
           .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
           .option(StateSourceOptions.STATE_VAR_NAME, "groupsListWithTTL")
+          .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, false)
           .load()
 
         val listStateDf = stateReaderDf
@@ -368,6 +530,101 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         checkAnswer(valuesDf,
           Seq(Row("session1", "group1"), Row("session1", "group2"), Row("session1", "group4"),
           Row("session2", "group1"), Row("session3", "group7")))
+
+        val flattenedStateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "groupsListWithTTL")
+          .load()
+
+        val flattenedResultDf = flattenedStateReaderDf
+          .selectExpr("list_element.ttlExpirationMs AS ttlExpirationMs")
+        var flattenedCount = 0L
+        flattenedResultDf.collect().foreach { row =>
+          flattenedCount = flattenedCount + 1
+          assert(row.getLong(0) > 0)
+        }
+
+        // verify that 5 state rows are present
+        assert(flattenedCount === 5)
+
+        val outputDf = flattenedStateReaderDf
+          .selectExpr("key.value AS groupingKey",
+            "list_element.value.value AS groupId")
+
+        checkAnswer(outputDf,
+          Seq(Row("session1", "group1"), Row("session1", "group2"), Row("session1", "group4"),
+          Row("session2", "group1"), Row("session3", "group7")))
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("state data source cdf integration - list state and TTL") {
+    withTempDir { tempDir =>
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key ->
+          TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+        val inputData = MemoryStream[(String, String)]
+        val result = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new SessionGroupsStatefulProcessorWithTTL(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+
+        val clock = new StreamManualClock
+        testStream(result)(
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
+            checkpointLocation = tempDir.getCanonicalPath),
+          AddData(inputData, ("session1", "group2")),
+          AddData(inputData, ("session1", "group1")),
+          AddData(inputData, ("session2", "group1")),
+          AdvanceManualClock(5 * 1000),
+          CheckNewAnswer(),
+          AddData(inputData, ("session3", "group7")),
+          AddData(inputData, ("session1", "group4")),
+          AdvanceManualClock(30 * 1000),
+          CheckNewAnswer(),
+          StopStream
+        )
+
+        val flattenedStateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "groupsListWithTTL")
+          .option(StateSourceOptions.READ_CHANGE_FEED, true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+          .load()
+
+        val flattenedResultDf = flattenedStateReaderDf
+          .selectExpr("list_element.ttlExpirationMs AS ttlExpirationMs")
+        var flattenedCount = 0L
+        flattenedResultDf.collect().foreach { row =>
+          if (!row.anyNull) {
+            flattenedCount = flattenedCount + 1
+            assert(row.getLong(0) > 0)
+          }
+        }
+
+        // verify that 6 state rows are present
+        assert(flattenedCount === 6)
+
+        val outputDf = flattenedStateReaderDf
+          .selectExpr(
+            "change_type",
+            "key.value AS groupingKey",
+            "list_element.value.value AS groupId",
+            "partition_id")
+
+        checkAnswer(outputDf,
+          Seq(Row("append", "session1", "group1", 0),
+            Row("append", "session1", "group2", 0),
+            Row("append", "session1", "group4", 0),
+            Row("append", "session2", "group1", 0),
+            Row("append", "session3", "group7", 3),
+            Row("delete", "session1", null, 0),
+            Row("delete", "session2", null, 0),
+            Row("update", "session1", "group4", 0)))
       }
     }
   }
@@ -397,10 +654,12 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           StopStream
         )
 
+        // Verify that the state can be read in flattened/non-flattened modes
         val stateReaderDf = spark.read
           .format("statestore")
           .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
           .option(StateSourceOptions.STATE_VAR_NAME, "sessionState")
+          .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, false)
           .load()
 
         val resultDf = stateReaderDf.selectExpr(
@@ -412,6 +671,76 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
               Map(Row("v1") -> Row("10"), Row("v2") -> Row("5"))),
             Row("k2",
               Map(Row("v2") -> Row("3"))))
+        )
+
+        val flattenedStateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "sessionState")
+          .load()
+
+        val outputDf = flattenedStateReaderDf
+          .selectExpr("key.value AS groupingKey",
+            "user_map_key.value AS mapKey",
+            "user_map_value.value AS mapValue")
+
+        checkAnswer(outputDf,
+          Seq(
+            Row("k1", "v1", "10"),
+            Row("k1", "v2", "5"),
+            Row("k2", "v2", "3"))
+        )
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("state data source cdf integration - " +
+   "map state with single variable") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { tempDir =>
+        val inputData = MemoryStream[InputMapRow]
+        val result = inputData.toDS()
+          .groupByKey(x => x.key)
+          .transformWithState(new TestMapStateProcessor(),
+            TimeMode.None(),
+            OutputMode.Append())
+        testStream(result, OutputMode.Append())(
+          StartStream(checkpointLocation = tempDir.getCanonicalPath),
+          AddData(inputData, InputMapRow("k1", "updateValue", ("v1", "10"))),
+          AddData(inputData, InputMapRow("k1", "exists", ("", ""))),
+          AddData(inputData, InputMapRow("k2", "exists", ("", ""))),
+          CheckNewAnswer(("k1", "exists", "true"), ("k2", "exists", "false")),
+
+          AddData(inputData, InputMapRow("k1", "updateValue", ("v2", "5"))),
+          AddData(inputData, InputMapRow("k2", "updateValue", ("v2", "3"))),
+          ProcessAllAvailable(),
+          StopStream
+        )
+
+        val flattenedStateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "sessionState")
+          .option(StateSourceOptions.READ_CHANGE_FEED, true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+          .load()
+
+        val outputDf = flattenedStateReaderDf
+          .selectExpr(
+            "change_type",
+            "key.value AS groupingKey",
+            "user_map_key.value AS mapKey",
+            "user_map_value.value AS mapValue",
+            "partition_id")
+
+        checkAnswer(outputDf,
+          Seq(
+            Row("update", "k1", "v1", "10", 4L),
+            Row("update", "k1", "v2", "5", 4L),
+            Row("update", "k2", "v2", "3", 2L))
         )
       }
     }
@@ -463,10 +792,12 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           StopStream
         )
 
+        // Verify that the state can be read in flattened/non-flattened modes
         val stateReaderDf = spark.read
           .format("statestore")
           .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
           .option(StateSourceOptions.STATE_VAR_NAME, "mapState")
+          .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, false)
           .load()
 
         val resultDf = stateReaderDf.selectExpr(
@@ -478,6 +809,195 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
               Map(Row("key2") -> Row(Row(2), 61000L),
                 Row("key1") -> Row(Row(1), 61000L))))
         )
+
+        val flattenedStateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "mapState")
+          .load()
+
+        val outputDf = flattenedStateReaderDf
+          .selectExpr("key.value AS groupingKey",
+            "user_map_key.value AS mapKey",
+            "user_map_value.value.value AS mapValue",
+            "user_map_value.ttlExpirationMs AS ttlTimestamp")
+
+        checkAnswer(outputDf,
+          Seq(
+            Row("k1", "key1", 1, 61000L),
+            Row("k1", "key2", 2, 61000L))
+        )
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("state data source cdf integration - " +
+   "map state TTL with single variable") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { tempDir =>
+        val inputStream = MemoryStream[MapInputEvent]
+        val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+        val result = inputStream.toDS()
+          .groupByKey(x => x.key)
+          .transformWithState(
+            new MapStateTTLProcessor(ttlConfig),
+            TimeMode.ProcessingTime(),
+            OutputMode.Append())
+
+        val clock = new StreamManualClock
+        testStream(result)(
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
+            checkpointLocation = tempDir.getCanonicalPath),
+          AddData(inputStream,
+            MapInputEvent("k1", "key1", "put", 1),
+            MapInputEvent("k1", "key2", "put", 2)
+          ),
+          AdvanceManualClock(1 * 1000), // batch timestamp: 1000
+          CheckNewAnswer(),
+          AddData(inputStream,
+            MapInputEvent("k1", "key1", "get", -1),
+            MapInputEvent("k1", "key2", "get", -1)
+          ),
+          AdvanceManualClock(30 * 1000), // batch timestamp: 31000
+          CheckNewAnswer(
+            MapOutputEvent("k1", "key1", 1, isTTLValue = false, -1),
+            MapOutputEvent("k1", "key2", 2, isTTLValue = false, -1)
+          ),
+          // get values from ttl state
+          AddData(inputStream,
+            MapInputEvent("k1", "", "get_values_in_ttl_state", -1)
+          ),
+          AdvanceManualClock(1 * 1000), // batch timestamp: 32000
+          CheckNewAnswer(
+            MapOutputEvent("k1", "key1", -1, isTTLValue = true, 61000),
+            MapOutputEvent("k1", "key2", -1, isTTLValue = true, 61000)
+          ),
+          AddData(inputStream,
+            MapInputEvent("k2", "key3", "put", 3)
+          ),
+          AdvanceManualClock(30 * 1000), // batch timestamp: 62000
+          CheckNewAnswer(),
+          StopStream
+        )
+
+        val flattenedStateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "mapState")
+          .option(StateSourceOptions.READ_CHANGE_FEED, true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+          .load()
+
+        val outputDf = flattenedStateReaderDf
+          .selectExpr(
+            "change_type",
+            "key.value AS groupingKey",
+            "user_map_key.value AS mapKey",
+            "user_map_value.value.value AS mapValue",
+            "user_map_value.ttlExpirationMs AS ttlTimestamp",
+            "partition_id")
+
+        checkAnswer(outputDf,
+          Seq(
+            Row("update", "k1", "key1", 1, 61000L, 4L),
+            Row("update", "k1", "key2", 2, 61000L, 4L),
+            Row("delete", "k1", "key1", null, null, 4L),
+            Row("delete", "k1", "key2", null, null, 4L),
+            Row("update", "k2", "key3", 3, 122000L, 2L))
+        )
+      }
+    }
+  }
+
+  test("state data source - processing-time timers integration") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { tempDir =>
+        val clock = new StreamManualClock
+
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(
+            new RunningCountStatefulProcessorWithProcTimeTimerUpdates(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
+            checkpointLocation = tempDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("a", "1")), // at batch 0, ts = 1, timer = "a" -> [6] (= 1 + 5)
+          AddData(inputData, "a"),
+          AdvanceManualClock(2 * 1000),
+          CheckNewAnswer(("a", "2")), // at batch 1, ts = 3, timer = "a" -> [10.5] (3 + 7.5)
+          StopStream)
+
+        val stateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.READ_REGISTERED_TIMERS, true)
+          .load()
+
+        val resultDf = stateReaderDf.selectExpr(
+       "key.value AS groupingKey",
+          "expiration_timestamp_ms AS expiryTimestamp",
+          "partition_id")
+
+        checkAnswer(resultDf,
+          Seq(Row("a", 10500L, 0)))
+      }
+    }
+  }
+
+  test("state data source - event-time timers integration") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { tempDir =>
+        val inputData = MemoryStream[(String, Int)]
+        val result =
+          inputData.toDS()
+            .select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
+            .withWatermark("eventTime", "10 seconds")
+            .as[(String, Long)]
+            .groupByKey(_._1)
+            .transformWithState(
+              new MaxEventTimeStatefulProcessor(),
+              TimeMode.EventTime(),
+              OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = tempDir.getCanonicalPath),
+
+          AddData(inputData, ("a", 11), ("a", 13), ("a", 15)),
+          // Max event time = 15. Timeout timestamp for "a" = 15 + 5 = 20. Watermark = 15 - 10 = 5.
+          CheckNewAnswer(("a", 15)), // Output = max event time of a
+
+          AddData(inputData, ("a", 4)), // Add data older than watermark for "a"
+          CheckNewAnswer(), // No output as data should get filtered by watermark
+          StopStream)
+
+        val stateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.READ_REGISTERED_TIMERS, true)
+          .load()
+
+        val resultDf = stateReaderDf.selectExpr(
+          "key.value AS groupingKey",
+          "expiration_timestamp_ms AS expiryTimestamp",
+          "partition_id")
+
+        checkAnswer(resultDf,
+          Seq(Row("a", 20000L, 0)))
       }
     }
   }

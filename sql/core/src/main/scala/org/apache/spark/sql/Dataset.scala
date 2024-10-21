@@ -62,8 +62,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, FileTable}
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
-import org.apache.spark.sql.internal.{DataFrameWriterImpl, DataFrameWriterV2Impl, MergeIntoWriterImpl, SQLConf, ToScalaUDF}
-import org.apache.spark.sql.internal.ExpressionUtils.column
+import org.apache.spark.sql.internal.{DataFrameWriterImpl, DataFrameWriterV2Impl, MergeIntoWriterImpl, SQLConf}
 import org.apache.spark.sql.internal.TypedAggUtils.withInputType
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
@@ -303,7 +302,7 @@ class Dataset[T] private[sql](
       truncate: Int): Seq[Seq[String]] = {
     val newDf = commandResultOptimized.toDF()
     val castCols = newDf.logicalPlan.output.map { col =>
-      column(ToPrettyString(col))
+      Column(ToPrettyString(col))
     }
     val data = newDf.select(castCols: _*).take(numRows + 1)
 
@@ -413,11 +412,11 @@ class Dataset[T] private[sql](
     // Print a footer
     if (vertical && rows.tail.isEmpty) {
       // In a vertical mode, print an empty row set explicitly
-      sb.append("(0 rows)\n")
+      sb.append("(0 rows)")
     } else if (hasMoreData) {
       // For Data that has more than "numRows" records
       val rowsString = if (numRows == 1) "row" else "rows"
-      sb.append(s"only showing top $numRows $rowsString\n")
+      sb.append(s"only showing top $numRows $rowsString")
     }
 
     sb.toString()
@@ -505,7 +504,7 @@ class Dataset[T] private[sql](
         s"New column names (${colNames.size}): " + colNames.mkString(", "))
 
     val newCols = logicalPlan.output.zip(colNames).map { case (oldAttribute, newName) =>
-      column(oldAttribute).as(newName)
+      Column(oldAttribute).as(newName)
     }
     select(newCols : _*)
   }
@@ -541,13 +540,18 @@ class Dataset[T] private[sql](
   def isStreaming: Boolean = logicalPlan.isStreaming
 
   /** @inheritdoc */
-  protected[sql] def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T] = {
+  protected[sql] def checkpoint(
+      eager: Boolean,
+      reliableCheckpoint: Boolean,
+      storageLevel: Option[StorageLevel]): Dataset[T] = {
     val actionName = if (reliableCheckpoint) "checkpoint" else "localCheckpoint"
     withAction(actionName, queryExecution) { physicalPlan =>
       val internalRdd = physicalPlan.execute().map(_.copy())
       if (reliableCheckpoint) {
+        assert(storageLevel.isEmpty, "StorageLevel should not be defined for reliableCheckpoint")
         internalRdd.checkpoint()
       } else {
+        storageLevel.foreach(storageLevel => internalRdd.persist(storageLevel))
         internalRdd.localCheckpoint()
       }
 
@@ -760,18 +764,18 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   def col(colName: String): Column = colName match {
     case "*" =>
-      column(ResolvedStar(queryExecution.analyzed.output))
+      Column(ResolvedStar(queryExecution.analyzed.output))
     case _ =>
       if (sparkSession.sessionState.conf.supportQuotedRegexColumnName) {
         colRegex(colName)
       } else {
-        column(addDataFrameIdToCol(resolve(colName)))
+        Column(addDataFrameIdToCol(resolve(colName)))
       }
   }
 
   /** @inheritdoc */
   def metadataColumn(colName: String): Column =
-    column(queryExecution.analyzed.getMetadataAttributeByName(colName))
+    Column(queryExecution.analyzed.getMetadataAttributeByName(colName))
 
   // Attach the dataset id and column position to the column reference, so that we can detect
   // ambiguous self-join correctly. See the rule `DetectAmbiguousSelfJoin`.
@@ -797,11 +801,11 @@ class Dataset[T] private[sql](
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     colName match {
       case ParserUtils.escapedIdentifier(columnNameRegex) =>
-        column(UnresolvedRegex(columnNameRegex, None, caseSensitive))
+        Column(UnresolvedRegex(columnNameRegex, None, caseSensitive))
       case ParserUtils.qualifiedEscapedIdentifier(nameParts, columnNameRegex) =>
-        column(UnresolvedRegex(columnNameRegex, Some(nameParts), caseSensitive))
+        Column(UnresolvedRegex(columnNameRegex, Some(nameParts), caseSensitive))
       case _ =>
-        column(addDataFrameIdToCol(resolve(colName)))
+        Column(addDataFrameIdToCol(resolve(colName)))
     }
   }
 
@@ -865,24 +869,7 @@ class Dataset[T] private[sql](
     Filter(condition.expr, logicalPlan)
   }
 
-  /**
-   * Groups the Dataset using the specified columns, so we can run aggregation on them. See
-   * [[RelationalGroupedDataset]] for all the available aggregate functions.
-   *
-   * {{{
-   *   // Compute the average for all numeric columns grouped by department.
-   *   ds.groupBy($"department").avg()
-   *
-   *   // Compute the max age and average salary, grouped by department and gender.
-   *   ds.groupBy($"department", $"gender").agg(Map(
-   *     "salary" -> "avg",
-   *     "age" -> "max"
-   *   ))
-   * }}}
-   *
-   * @group untypedrel
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @scala.annotation.varargs
   def groupBy(cols: Column*): RelationalGroupedDataset = {
     RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.GroupByType)
@@ -914,13 +901,7 @@ class Dataset[T] private[sql](
     rdd.reduce(func)
   }
 
-  /**
-   * (Scala-specific)
-   * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key `func`.
-   *
-   * @group typedrel
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T] = {
     val withGroupingKey = AppendColumns(func, logicalPlan)
     val executed = sparkSession.sessionState.executePlan(withGroupingKey)
@@ -932,16 +913,6 @@ class Dataset[T] private[sql](
       logicalPlan.output,
       withGroupingKey.newColumns)
   }
-
-  /**
-   * (Java-specific)
-   * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key `func`.
-   *
-   * @group typedrel
-   * @since 2.0.0
-   */
-  def groupByKey[K](func: MapFunction[T, K], encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
-    groupByKey(ToScalaUDF(func))(encoder)
 
   /** @inheritdoc */
   def unpivot(
@@ -1227,7 +1198,7 @@ class Dataset[T] private[sql](
         resolver(field.name, colName)
       } match {
         case Some((colName: String, col: Column)) => col.as(colName)
-        case _ => column(field)
+        case _ => Column(field)
       }
     }
 
@@ -1297,7 +1268,7 @@ class Dataset[T] private[sql](
     val allColumns = queryExecution.analyzed.output
     val remainingCols = allColumns.filter { attribute =>
       colNames.forall(n => !resolver(attribute.name, n))
-    }.map(attribute => column(attribute))
+    }.map(attribute => Column(attribute))
     if (remainingCols.size == allColumns.size) {
       toDF()
     } else {
@@ -1558,12 +1529,7 @@ class Dataset[T] private[sql](
     sparkSession.sessionState.executePlan(deserialized)
   }
 
-  /**
-   * Represents the content of the Dataset as an `RDD` of `T`.
-   *
-   * @group basic
-   * @since 1.6.0
-   */
+  /** @inheritdoc */
   lazy val rdd: RDD[T] = {
     val objectType = exprEnc.deserializer.dataType
     rddQueryExecution.toRdd.mapPartitions { rows =>
@@ -1571,19 +1537,8 @@ class Dataset[T] private[sql](
     }
   }
 
-  /**
-   * Returns the content of the Dataset as a `JavaRDD` of `T`s.
-   * @group basic
-   * @since 1.6.0
-   */
+  /** @inheritdoc */
   def toJavaRDD: JavaRDD[T] = rdd.toJavaRDD()
-
-  /**
-   * Returns the content of the Dataset as a `JavaRDD` of `T`s.
-   * @group basic
-   * @since 1.6.0
-   */
-  def javaRDD: JavaRDD[T] = toJavaRDD
 
   protected def createTempView(
       viewName: String,
@@ -1640,28 +1595,7 @@ class Dataset[T] private[sql](
     new DataFrameWriterV2Impl[T](table, this)
   }
 
-  /**
-   * Merges a set of updates, insertions, and deletions based on a source table into
-   * a target table.
-   *
-   * Scala Examples:
-   * {{{
-   *   spark.table("source")
-   *     .mergeInto("target", $"source.id" === $"target.id")
-   *     .whenMatched($"salary" === 100)
-   *     .delete()
-   *     .whenNotMatched()
-   *     .insertAll()
-   *     .whenNotMatchedBySource($"salary" === 100)
-   *     .update(Map(
-   *       "salary" -> lit(200)
-   *     ))
-   *     .merge()
-   * }}}
-   *
-   * @group basic
-   * @since 4.0.0
-   */
+  /** @inheritdoc */
   def mergeInto(table: String, condition: Column): MergeIntoWriter[T] = {
     if (isStreaming) {
       logicalPlan.failAnalysis(
@@ -1672,12 +1606,7 @@ class Dataset[T] private[sql](
     new MergeIntoWriterImpl[T](table, this, condition)
   }
 
-  /**
-   * Interface for saving the content of the streaming Dataset out into external storage.
-   *
-   * @group basic
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def writeStream: DataStreamWriter[T] = {
     if (!isStreaming) {
       logicalPlan.failAnalysis(
@@ -1871,6 +1800,10 @@ class Dataset[T] private[sql](
   override def localCheckpoint(eager: Boolean): Dataset[T] = super.localCheckpoint(eager)
 
   /** @inheritdoc */
+  override def localCheckpoint(eager: Boolean, storageLevel: StorageLevel): Dataset[T] =
+    super.localCheckpoint(eager, storageLevel)
+
+  /** @inheritdoc */
   override def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] =
     super.joinWith(other, condition)
 
@@ -2024,9 +1957,23 @@ class Dataset[T] private[sql](
   @scala.annotation.varargs
   override def agg(expr: Column, exprs: Column*): DataFrame = super.agg(expr, exprs: _*)
 
+  /** @inheritdoc */
+  override def groupByKey[K](
+      func: MapFunction[T, K],
+      encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
+    super.groupByKey(func, encoder).asInstanceOf[KeyValueGroupedDataset[K, T]]
+
   ////////////////////////////////////////////////////////////////////////////
   // For Python API
   ////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * It adds a new long column with the name `name` that increases one by one.
+   * This is for 'distributed-sequence' default index in pandas API on Spark.
+   */
+  private[sql] def withSequenceColumn(name: String) = {
+    select(Column(DistributedSequenceID()).alias(name), col("*"))
+  }
 
   /**
    * Converts a JavaRDD to a PythonRDD.

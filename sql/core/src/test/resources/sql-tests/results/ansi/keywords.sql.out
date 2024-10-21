@@ -32,6 +32,7 @@ BUCKETS	false
 BY	false
 BYTE	false
 CACHE	false
+CALL	true
 CALLED	false
 CASCADE	false
 CASE	true
@@ -186,6 +187,7 @@ LOCK	false
 LOCKS	false
 LOGICAL	false
 LONG	false
+LOOP	false
 MACRO	false
 MAP	false
 MATCHED	false
@@ -378,6 +380,7 @@ ANY
 AS
 AUTHORIZATION
 BOTH
+CALL
 CASE
 CAST
 CHECK

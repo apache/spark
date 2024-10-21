@@ -528,6 +528,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numValueStateVars") > 0)
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numRegisteredTimers") == 0)
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
         },
         AddData(inputData, "a", "b"),
         CheckNewAnswer(("a", "2"), ("b", "1")),
@@ -536,6 +537,10 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
         CheckNewAnswer(("b", "2")),
         StopStream,
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
+        },
         StartStream(),
         AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
         CheckNewAnswer(("a", "1"), ("c", "1"))
@@ -1623,7 +1628,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
         val batch1AnsDf = batch1Df.selectExpr(
           "key.value AS groupingKey",
-          "single_value.value AS valueId")
+          "value.value AS valueId")
 
         checkAnswer(batch1AnsDf, Seq(Row("a", 2L)))
 
@@ -1636,7 +1641,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
         val batch3AnsDf = batch3Df.selectExpr(
           "key.value AS groupingKey",
-          "single_value.value AS valueId")
+          "value.value AS valueId")
         checkAnswer(batch3AnsDf, Seq(Row("a", 1L)))
       }
     }
@@ -1731,7 +1736,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
         val countStateAnsDf = countStateDf.selectExpr(
           "key.value AS groupingKey",
-          "single_value.value AS valueId")
+          "value.value AS valueId")
         checkAnswer(countStateAnsDf, Seq(Row("a", 5L)))
 
         val mostRecentDf = spark.read
@@ -1743,7 +1748,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
         val mostRecentAnsDf = mostRecentDf.selectExpr(
           "key.value AS groupingKey",
-          "single_value.value")
+          "value.value")
         checkAnswer(mostRecentAnsDf, Seq(Row("a", "str1")))
       }
     }

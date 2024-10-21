@@ -173,6 +173,36 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     )
   }
 
+  /**
+   * Checks for errors in a `SELECT` clause, such as a trailing comma or an empty select list.
+   *
+   * @param plan The logical plan of the query.
+   * @param starRemoved Whether a '*' (wildcard) was removed from the select list.
+   * @throws AnalysisException if the select list is empty or ends with a trailing comma.
+   */
+  protected def checkTrailingCommaInSelect(
+      plan: LogicalPlan,
+      starRemoved: Boolean = false): Unit = {
+    val exprList = plan match {
+      case proj: Project if proj.projectList.nonEmpty =>
+        proj.projectList
+      case agg: Aggregate if agg.aggregateExpressions.nonEmpty =>
+        agg.aggregateExpressions
+      case _ =>
+        Seq.empty
+    }
+
+    exprList.lastOption match {
+      case Some(Alias(UnresolvedAttribute(Seq(name)), _)) =>
+        if (name.equalsIgnoreCase("FROM") && plan.exists(_.isInstanceOf[OneRowRelation])) {
+          if (exprList.size > 1  || starRemoved) {
+            throw QueryCompilationErrors.trailingCommaInSelectError(exprList.last.origin)
+          }
+        }
+      case _ =>
+    }
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We should inline all CTE relations to restore the original plan shape, as the analysis check
     // may need to match certain plan shapes. For dangling CTE relations, they will still be kept
@@ -209,6 +239,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
         val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
         write.table.tableNotFound(tblName)
+
+      // We should check for trailing comma errors first, since we would get less obvious
+      // unresolved column errors if we do it bottom up
+      case proj: Project =>
+        checkTrailingCommaInSelect(proj)
+      case agg: Aggregate =>
+        checkTrailingCommaInSelect(agg)
 
       case _ =>
     }
@@ -676,6 +713,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               varName,
               c.defaultExpr.originalSQL)
 
+          case c: Call if c.resolved && c.bound && c.checkArgTypes().isFailure =>
+            c.checkArgTypes() match {
+              case mismatch: TypeCheckResult.DataTypeMismatch =>
+                c.dataTypeMismatch("CALL", mismatch)
+              case _ =>
+                throw SparkException.internalError("Invalid input for procedure")
+            }
+
           case _ => // Falls back to the following checks
         }
 
@@ -944,19 +989,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           messageParameters = Map.empty)
       }
 
-      // SPARK-18504/SPARK-18814: Block cases where GROUP BY columns
-      // are not part of the correlated columns.
-
-      // Collect the inner query expressions that are guaranteed to have a single value for each
-      // outer row. See comment on getCorrelatedEquivalentInnerExpressions.
-      val correlatedEquivalentExprs = getCorrelatedEquivalentInnerExpressions(query)
-      // Grouping expressions, except outer refs and constant expressions - grouping by an
-      // outer ref or a constant is always ok
-      val groupByExprs =
-        ExpressionSet(agg.groupingExpressions.filter(x => !x.isInstanceOf[OuterReference] &&
-          x.references.nonEmpty))
-      val nonEquivalentGroupByExprs = groupByExprs -- correlatedEquivalentExprs
-
+      val nonEquivalentGroupByExprs = nonEquivalentGroupbyCols(query, agg)
       val invalidCols = if (!SQLConf.get.getConf(
         SQLConf.LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE)) {
         nonEquivalentGroupByExprs
@@ -1036,7 +1069,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     checkOuterReference(plan, expr)
 
     expr match {
-      case ScalarSubquery(query, outerAttrs, _, _, _, _) =>
+      case ScalarSubquery(query, outerAttrs, _, _, _, _, _) =>
         // Scalar subquery must return one column as output.
         if (query.output.size != 1) {
           throw QueryCompilationErrors.subqueryReturnMoreThanOneColumn(query.output.size,
@@ -1044,15 +1077,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         }
 
         if (outerAttrs.nonEmpty) {
-          cleanQueryInScalarSubquery(query) match {
-            case a: Aggregate => checkAggregateInScalarSubquery(outerAttrs, query, a)
-            case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(outerAttrs, query, a)
-            case p: LogicalPlan if p.maxRows.exists(_ <= 1) => // Ok
-            case other =>
-              expr.failAnalysis(
-                errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-                  "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
-                messageParameters = Map.empty)
+          if (!SQLConf.get.getConf(SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN)) {
+            cleanQueryInScalarSubquery(query) match {
+              case a: Aggregate => checkAggregateInScalarSubquery(outerAttrs, query, a)
+              case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(outerAttrs, query, a)
+              case p: LogicalPlan if p.maxRows.exists(_ <= 1) => // Ok
+              case other =>
+                expr.failAnalysis(
+                  errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+                    "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
+                  messageParameters = Map.empty)
+            }
           }
 
           // Only certain operators are allowed to host subquery expression containing
@@ -1586,7 +1621,7 @@ class PreemptedError() {
   // errors have the lowest priority.
   def set(error: Exception with SparkThrowable, priority: Option[Int] = None): Unit = {
     val calculatedPriority = priority.getOrElse {
-      error.getErrorClass match {
+      error.getCondition match {
         case c if c.startsWith("INTERNAL_ERROR") => 1
         case _ => 2
       }

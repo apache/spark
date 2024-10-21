@@ -109,7 +109,7 @@ public class CollationAwareUTF8String {
     }
     // Compare the characters in the target and pattern strings.
     int matchLength = 0, codePointBuffer = -1, targetCodePoint, patternCodePoint;
-    while (targetIterator.hasNext() && patternIterator.hasNext()) {
+    while ((targetIterator.hasNext() || codePointBuffer != -1) && patternIterator.hasNext()) {
       if (codePointBuffer != -1) {
         targetCodePoint = codePointBuffer;
         codePointBuffer = -1;
@@ -211,7 +211,7 @@ public class CollationAwareUTF8String {
     }
     // Compare the characters in the target and pattern strings.
     int matchLength = 0, codePointBuffer = -1, targetCodePoint, patternCodePoint;
-    while (targetIterator.hasNext() && patternIterator.hasNext()) {
+    while ((targetIterator.hasNext() || codePointBuffer != -1) && patternIterator.hasNext()) {
       if (codePointBuffer != -1) {
         targetCodePoint = codePointBuffer;
         codePointBuffer = -1;
@@ -1363,9 +1363,9 @@ public class CollationAwareUTF8String {
 
   public static UTF8String[] splitSQL(final UTF8String input, final UTF8String delim,
       final int limit, final int collationId) {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+    if (CollationFactory.fetchCollation(collationId).isUtf8BinaryType) {
       return input.split(delim, limit);
-    } else if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
+    } else if (CollationFactory.fetchCollation(collationId).isUtf8LcaseType) {
       return lowercaseSplitSQL(input, delim, limit);
     } else {
       return icuSplitSQL(input, delim, limit, collationId);

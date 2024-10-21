@@ -148,6 +148,7 @@ Mathematical Functions
     try_multiply
     try_subtract
     unhex
+    uniform
     width_bucket
 
 
@@ -176,6 +177,7 @@ String Functions
     format_string
     initcap
     instr
+    is_valid_utf8
     lcase
     left
     length
@@ -184,11 +186,13 @@ String Functions
     lower
     lpad
     ltrim
+    make_valid_utf8
     mask
     octet_length
     overlay
     position
     printf
+    randstr
     regexp_count
     regexp_extract
     regexp_extract_all
@@ -216,9 +220,11 @@ String Functions
     trim
     try_to_binary
     try_to_number
+    try_validate_utf8
     ucase
     unbase64
     upper
+    validate_utf8
 
 
 Bitwise Functions

@@ -27,10 +27,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., 2022-CU14-ubuntu-22.04):
+ * To run this test suite for a specific version (e.g., 2022-CU15-ubuntu-22.04):
  * {{{
  *   ENABLE_DOCKER_INTEGRATION_TESTS=1
- *   MSSQLSERVER_DOCKER_IMAGE_NAME=mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
+ *   MSSQLSERVER_DOCKER_IMAGE_NAME=mcr.microsoft.com/mssql/server:2022-CU15-ubuntu-22.04
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2*MsSqlServerIntegrationSuite"
  * }}}
  */
@@ -115,7 +115,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
       exception = intercept[SparkSQLFeatureNotSupportedException] {
         sql(s"ALTER TABLE $tbl ALTER COLUMN ID DROP NOT NULL")
       },
-      condition = "_LEGACY_ERROR_TEMP_2271")
+      condition = "UNSUPPORTED_FEATURE.UPDATE_COLUMN_NULLABILITY")
   }
 
   test("SPARK-47440: SQLServer does not support boolean expression in binary comparison") {

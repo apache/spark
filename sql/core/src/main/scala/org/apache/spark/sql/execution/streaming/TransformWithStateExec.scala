@@ -548,6 +548,7 @@ case class TransformWithStateExec(
               DUMMY_VALUE_ROW_SCHEMA,
               NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
               version = stateInfo.get.storeVersion,
+              stateStoreCkptId = stateInfo.get.getStateStoreCkptId(partitionId).map(_.head),
               useColumnFamilies = true,
               storeConf = storeConf,
               hadoopConf = hadoopConfBroadcast.value.value
@@ -622,7 +623,7 @@ case class TransformWithStateExec(
       hadoopConf = hadoopConfBroadcast.value.value,
       useMultipleValuesPerKey = true)
 
-    val store = stateStoreProvider.getStore(0)
+    val store = stateStoreProvider.getStore(0, None)
     val outputIterator = f(store)
     CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator.iterator, {
       stateStoreProvider.close()
@@ -719,7 +720,8 @@ object TransformWithStateExec {
       queryRunId = UUID.randomUUID(),
       operatorId = 0,
       storeVersion = 0,
-      numPartitions = shufflePartitions
+      numPartitions = shufflePartitions,
+      stateStoreCkptIds = None
     )
 
     new TransformWithStateExec(

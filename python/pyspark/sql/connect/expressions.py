@@ -301,7 +301,7 @@ class LiteralExpression(Expression):
             return NullType()
         elif isinstance(value, (bytes, bytearray)):
             return BinaryType()
-        elif isinstance(value, bool):
+        elif isinstance(value, (bool, np.bool_)):
             return BooleanType()
         elif isinstance(value, int):
             if JVM_INT_MIN <= value <= JVM_INT_MAX:
@@ -323,10 +323,8 @@ class LiteralExpression(Expression):
             return StringType()
         elif isinstance(value, decimal.Decimal):
             return DecimalType()
-        elif isinstance(value, datetime.datetime) and is_timestamp_ntz_preferred():
-            return TimestampNTZType()
         elif isinstance(value, datetime.datetime):
-            return TimestampType()
+            return TimestampNTZType() if is_timestamp_ntz_preferred() else TimestampType()
         elif isinstance(value, datetime.date):
             return DateType()
         elif isinstance(value, datetime.timedelta):
@@ -335,23 +333,15 @@ class LiteralExpression(Expression):
             dt = _from_numpy_type(value.dtype)
             if dt is not None:
                 return dt
-            elif isinstance(value, np.bool_):
-                return BooleanType()
         elif isinstance(value, list):
             # follow the 'infer_array_from_first_element' strategy in 'sql.types._infer_type'
             # right now, it's dedicated for pyspark.ml params like array<...>, array<array<...>>
-            if len(value) == 0:
-                raise PySparkValueError(
-                    errorClass="CANNOT_BE_EMPTY",
-                    messageParameters={"item": "value"},
-                )
-            first = value[0]
-            if first is None:
+            if len(value) == 0 or value[0] is None:
                 raise PySparkTypeError(
-                    errorClass="CANNOT_INFER_ARRAY_TYPE",
+                    errorClass="CANNOT_INFER_ARRAY_ELEMENT_TYPE",
                     messageParameters={},
                 )
-            return ArrayType(LiteralExpression._infer_type(first), True)
+            return ArrayType(LiteralExpression._infer_type(value[0]), True)
 
         raise PySparkTypeError(
             errorClass="UNSUPPORTED_DATA_TYPE",
@@ -489,7 +479,17 @@ class LiteralExpression(Expression):
             ts = TimestampNTZType().fromInternal(self._value)
             if ts is not None and isinstance(ts, datetime.datetime):
                 return ts.strftime("%Y-%m-%d %H:%M:%S.%f")
-        # TODO(SPARK-49693): Refine the string representation of timedelta
+        elif isinstance(self._dataType, DayTimeIntervalType):
+            delta = DayTimeIntervalType().fromInternal(self._value)
+            if delta is not None and isinstance(delta, datetime.timedelta):
+                import pandas as pd
+
+                # Note: timedelta itself does not provide isoformat method.
+                # Both Pandas and java.time.Duration provide it, but the format
+                # is sightly different:
+                # java.time.Duration only applies HOURS, MINUTES, SECONDS units,
+                # while Pandas applies all supported units.
+                return pd.Timedelta(delta).isoformat()  # type: ignore[attr-defined]
         return f"{self._value}"
 
 
@@ -799,7 +799,7 @@ class WithField(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"WithField({self._structExpr}, {self._fieldName}, {self._valueExpr})"
+        return f"update_field({self._structExpr}, {self._fieldName}, {self._valueExpr})"
 
 
 class DropField(Expression):
@@ -823,7 +823,7 @@ class DropField(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"DropField({self._structExpr}, {self._fieldName})"
+        return f"drop_field({self._structExpr}, {self._fieldName})"
 
 
 class UnresolvedExtractValue(Expression):
@@ -847,7 +847,7 @@ class UnresolvedExtractValue(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"UnresolvedExtractValue({str(self._child)}, {str(self._extraction)})"
+        return f"{self._child}['{self._extraction}']"
 
 
 class UnresolvedRegex(Expression):

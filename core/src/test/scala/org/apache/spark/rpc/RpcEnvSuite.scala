@@ -868,23 +868,23 @@ abstract class RpcEnvSuite extends SparkFunSuite {
         val conf = createSparkConf()
 
         val file = new File(tempDir, "file")
-        Files.write(UUID.randomUUID().toString(), file, UTF_8)
+        Files.asCharSink(file, UTF_8).write(UUID.randomUUID().toString)
         val fileWithSpecialChars = new File(tempDir, "file name")
-        Files.write(UUID.randomUUID().toString(), fileWithSpecialChars, UTF_8)
+        Files.asCharSink(fileWithSpecialChars, UTF_8).write(UUID.randomUUID().toString)
         val empty = new File(tempDir, "empty")
-        Files.write("", empty, UTF_8);
+        Files.asCharSink(empty, UTF_8).write("")
         val jar = new File(tempDir, "jar")
-        Files.write(UUID.randomUUID().toString(), jar, UTF_8)
+        Files.asCharSink(jar, UTF_8).write(UUID.randomUUID().toString)
 
         val dir1 = new File(tempDir, "dir1")
         assert(dir1.mkdir())
         val subFile1 = new File(dir1, "file1")
-        Files.write(UUID.randomUUID().toString(), subFile1, UTF_8)
+        Files.asCharSink(subFile1, UTF_8).write(UUID.randomUUID().toString)
 
         val dir2 = new File(tempDir, "dir2")
         assert(dir2.mkdir())
         val subFile2 = new File(dir2, "file2")
-        Files.write(UUID.randomUUID().toString(), subFile2, UTF_8)
+        Files.asCharSink(subFile2, UTF_8).write(UUID.randomUUID().toString)
 
         val fileUri = env.fileServer.addFile(file)
         val fileWithSpecialCharsUri = env.fileServer.addFile(fileWithSpecialChars)
