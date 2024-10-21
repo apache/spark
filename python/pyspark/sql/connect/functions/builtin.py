@@ -68,6 +68,8 @@ from pyspark.sql.types import (
     StructType,
     ArrayType,
     StringType,
+    ByteType,
+    ShortType,
 )
 from pyspark.sql.utils import enum_to_value as _enum_to_value
 
@@ -267,7 +269,8 @@ def lit(col: Any) -> Column:
             )
         return array(*[lit(c) for c in col])
     elif isinstance(col, np.ndarray) and col.ndim == 1:
-        if _from_numpy_type(col.dtype) is None:
+        dt = _from_numpy_type(col.dtype)
+        if dt is None:
             raise PySparkTypeError(
                 errorClass="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
                 messageParameters={"dtype": col.dtype.name},
@@ -276,10 +279,10 @@ def lit(col: Any) -> Column:
         # NumpyArrayConverter for Py4J can not support ndarray with int8 values.
         # Actually this is not a problem for Connect, but here still convert it
         # to int16 for compatibility.
-        if col.dtype == np.int8:
-            col = col.astype(np.int16)
+        if dt == ByteType():
+            dt = ShortType()
 
-        return array(*[lit(c) for c in col])
+        return array(*[lit(c) for c in col]).cast(ArrayType(dt))
     else:
         return ConnectColumn(LiteralExpression._from_value(col))
 
