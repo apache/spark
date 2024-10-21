@@ -2072,11 +2072,11 @@
     ],
     "sqlState" : "22003"
   },
-  "INVALID_ATTRIBUTE_NAME_SYNTAX": {
-    "message": [
+  "INVALID_ATTRIBUTE_NAME_SYNTAX" : {
+    "message" : [
       "Syntax error in attribute name: <name>."
     ],
-    "sqlState": "42601"
+    "sqlState" : "42601"
   },
   "INVALID_BITMAP_POSITION" : {
     "message" : [
