@@ -7100,11 +7100,6 @@
       "Dictionary encoding should not be used because of dictionary overflow."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2104" : {
-    "message" : [
-      "End of the iterator."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2105" : {
     "message" : [
       "Could not allocate memory to grow BytesToBytesMap."

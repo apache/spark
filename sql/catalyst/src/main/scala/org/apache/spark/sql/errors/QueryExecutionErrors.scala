@@ -1081,8 +1081,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def endOfIteratorError(): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2104",
-      messageParameters = Map.empty,
+      errorClass = "INTERNAL_ERROR",
+      messageParameters = Map("message" -> "End of the iterator."),
       cause = null)
   }
 
