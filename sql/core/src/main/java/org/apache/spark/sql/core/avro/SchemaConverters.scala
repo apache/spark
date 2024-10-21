@@ -64,10 +64,10 @@ object SchemaConverters extends Logging {
    * @since 4.0.0
    */
   def toSqlType(
-                 avroSchema: Schema,
-                 useStableIdForUnionType: Boolean,
-                 stableIdPrefixForUnionType: String,
-                 recursiveFieldMaxDepth: Int = -1): SchemaType = {
+      avroSchema: Schema,
+      useStableIdForUnionType: Boolean,
+      stableIdPrefixForUnionType: String,
+      recursiveFieldMaxDepth: Int = -1): SchemaType = {
     val schema = toSqlTypeHelper(avroSchema, Map.empty, useStableIdForUnionType,
       stableIdPrefixForUnionType, recursiveFieldMaxDepth)
     // the top level record should never return null
@@ -97,11 +97,11 @@ object SchemaConverters extends Logging {
   private val CATALYST_TYPE_PROP_NAME = "spark.sql.catalyst.type"
 
   private def toSqlTypeHelper(
-                               avroSchema: Schema,
-                               existingRecordNames: Map[String, Int],
-                               useStableIdForUnionType: Boolean,
-                               stableIdPrefixForUnionType: String,
-                               recursiveFieldMaxDepth: Int): SchemaType = {
+      avroSchema: Schema,
+      existingRecordNames: Map[String, Int],
+      useStableIdForUnionType: Boolean,
+      stableIdPrefixForUnionType: String,
+      recursiveFieldMaxDepth: Int): SchemaType = {
     avroSchema.getType match {
       case INT => avroSchema.getLogicalType match {
         case _: Date => SchemaType(DateType, nullable = false)
@@ -306,10 +306,10 @@ object SchemaConverters extends Logging {
    * @since 2.4.0
    */
   def toAvroType(
-                  catalystType: DataType,
-                  nullable: Boolean = false,
-                  recordName: String = "topLevelRecord",
-                  nameSpace: String = "")
+      catalystType: DataType,
+      nullable: Boolean = false,
+      recordName: String = "topLevelRecord",
+      nameSpace: String = "")
   : Schema = {
     val builder = SchemaBuilder.builder()
 
