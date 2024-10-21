@@ -28,6 +28,10 @@ from pyspark.sql.catalog import Catalog as ClassicCatalog
 from pyspark.sql.readwriter import DataFrameReader as ClassicDataFrameReader
 from pyspark.sql.readwriter import DataFrameWriter as ClassicDataFrameWriter
 from pyspark.sql.readwriter import DataFrameWriterV2 as ClassicDataFrameWriterV2
+from pyspark.sql.window import Window as ClassicWindow
+from pyspark.sql.window import WindowSpec as ClassicWindowSpec
+import pyspark.sql.functions as ClassicFunctions
+from pyspark.sql.group import GroupedData as ClassicGroupedData
 
 if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
@@ -37,6 +41,10 @@ if should_test_connect:
     from pyspark.sql.connect.readwriter import DataFrameReader as ConnectDataFrameReader
     from pyspark.sql.connect.readwriter import DataFrameWriter as ConnectDataFrameWriter
     from pyspark.sql.connect.readwriter import DataFrameWriterV2 as ConnectDataFrameWriterV2
+    from pyspark.sql.connect.window import Window as ConnectWindow
+    from pyspark.sql.connect.window import WindowSpec as ConnectWindowSpec
+    import pyspark.sql.connect.functions as ConnectFunctions
+    from pyspark.sql.connect.group import GroupedData as ConnectGroupedData
 
 
 class ConnectCompatibilityTestsMixin:
@@ -297,6 +305,70 @@ class ConnectCompatibilityTestsMixin:
             ClassicDataFrameWriterV2,
             ConnectDataFrameWriterV2,
             "DataFrameWriterV2",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_window_compatibility(self):
+        """Test Window compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = set()
+        self.check_compatibility(
+            ClassicWindow,
+            ConnectWindow,
+            "Window",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_window_spec_compatibility(self):
+        """Test WindowSpec compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = set()
+        self.check_compatibility(
+            ClassicWindowSpec,
+            ConnectWindowSpec,
+            "WindowSpec",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_functions_compatibility(self):
+        """Test Functions compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = {"check_dependencies"}
+        self.check_compatibility(
+            ClassicFunctions,
+            ConnectFunctions,
+            "Functions",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_grouping_compatibility(self):
+        """Test Grouping compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = {"transformWithStateInPandas"}
+        expected_missing_classic_methods = set()
+        self.check_compatibility(
+            ClassicGroupedData,
+            ConnectGroupedData,
+            "Grouping",
             expected_missing_connect_properties,
             expected_missing_classic_properties,
             expected_missing_connect_methods,
