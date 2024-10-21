@@ -32,6 +32,7 @@ from pyspark.sql.window import Window as ClassicWindow
 from pyspark.sql.window import WindowSpec as ClassicWindowSpec
 import pyspark.sql.functions as ClassicFunctions
 from pyspark.sql.group import GroupedData as ClassicGroupedData
+import pyspark.sql.avro.functions as ClassicAvro
 
 if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
@@ -45,6 +46,7 @@ if should_test_connect:
     from pyspark.sql.connect.window import WindowSpec as ConnectWindowSpec
     import pyspark.sql.connect.functions as ConnectFunctions
     from pyspark.sql.connect.group import GroupedData as ConnectGroupedData
+    import pyspark.sql.connect.avro.functions as ConnectAvro
 
 
 class ConnectCompatibilityTestsMixin:
@@ -369,6 +371,28 @@ class ConnectCompatibilityTestsMixin:
             ClassicGroupedData,
             ConnectGroupedData,
             "Grouping",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_avro_compatibility(self):
+        """Test Avro compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        # The current supported Avro functions are only `from_avro` and `to_avro`.
+        # The missing methods belows are just util functions that imported to implement them.
+        expected_missing_connect_methods = {
+            "try_remote_avro_functions",
+            "cast",
+            "get_active_spark_context",
+        }
+        expected_missing_classic_methods = {"lit", "check_dependencies"}
+        self.check_compatibility(
+            ClassicAvro,
+            ConnectAvro,
+            "Avro",
             expected_missing_connect_properties,
             expected_missing_classic_properties,
             expected_missing_connect_methods,
