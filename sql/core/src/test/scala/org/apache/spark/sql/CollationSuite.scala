@@ -516,6 +516,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("SPARK-48413: Alter column with collation") {
+    val tableName = "testcat.alter_column_tbl"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (c1 STRING) USING PARQUET")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN c1 TYPE STRING COLLATE UTF8_LCASE")
+    }
+  }
+
   test("SPARK-47210: Implicit casting of collated strings") {
     val tableName = "parquet_dummy_implicit_cast_t22"
     withTable(tableName) {
