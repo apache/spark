@@ -63,7 +63,7 @@ except ImportError as e:
 have_numpy = numpy_requirement_message is None
 
 from pyspark.sql import SparkSession
-from pyspark.sql.types import ArrayType, DoubleType, UserDefinedType, Row
+from pyspark.sql.types import ArrayType, DoubleType, UserDefinedType, Row, DataType
 from pyspark.testing.utils import ReusedPySparkTestCase, PySparkErrorTestUtils
 
 
@@ -86,6 +86,10 @@ class UTCOffsetTimezone(datetime.tzinfo):
 
     def dst(self, dt):
         return self.ZERO
+
+
+class UnsupportedType(DataType):
+    """Unsupported DataType for Type Checking"""
 
 
 class ExamplePointUDT(UserDefinedType):
