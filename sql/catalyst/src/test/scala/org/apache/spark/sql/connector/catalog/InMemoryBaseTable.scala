@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow,
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
-import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
+import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram, HistogramBin}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
@@ -512,7 +512,11 @@ abstract class InMemoryBaseTable(
       }
 
       override def supportedCustomMetrics(): Array[CustomMetric] = {
-        Array(new InMemorySimpleCustomMetric)
+        Array(new InMemorySimpleCustomMetric, new InMemoryCustomDriverMetric)
+      }
+
+      override def reportDriverMetrics(): Array[CustomTaskMetric] = {
+        Array(new InMemoryCustomDriverTaskMetric(rows.size))
       }
     }
   }
@@ -753,4 +757,14 @@ class InMemorySimpleCustomMetric extends CustomMetric {
   override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
     s"in-memory rows: ${taskMetrics.sum}"
   }
+}
+
+class InMemoryCustomDriverMetric extends CustomSumMetric {
+  override def name(): String = "number_of_rows_from_driver"
+  override def description(): String = "number of rows from driver"
+}
+
+class InMemoryCustomDriverTaskMetric(value: Long) extends CustomTaskMetric {
+  override def name(): String = "number_of_rows_from_driver"
+  override def value(): Long = value
 }
