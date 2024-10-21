@@ -143,6 +143,7 @@ object JDBCRDD extends Logging {
       limit,
       sortOrders,
       offset)
+      .withDialect(dialect)
   }
   // scalastyle:on argcount
 }
@@ -175,7 +176,22 @@ class JDBCRDD(
     sparkContext,
     name = "JDBC query execution time")
 
-  private lazy val dialect = JdbcDialects.get(url)
+  /**
+   * Dialect to use instead of inferring it from the URL.
+   */
+  private var prescribedDialect: Option[JdbcDialect] = None
+
+  private lazy val dialect = prescribedDialect.getOrElse(JdbcDialects.get(url))
+
+  /**
+   * Prescribe a particular dialect to use for this RDD. If not set, the dialect will be
+   * automatically resolved from the JDBC URL. This previous behavior is preserved for binary
+   * compatibility.
+   */
+  def withDialect(dialect: JdbcDialect): JDBCRDD = {
+    prescribedDialect = Some(dialect)
+    this
+  }
 
   def generateJdbcQuery(partition: Option[JDBCPartition]): String = {
     // H2's JDBC driver does not support the setSchema() method.  We pass a
