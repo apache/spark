@@ -19,7 +19,12 @@ import inspect
 from typing import TYPE_CHECKING, Any
 
 from pyspark.errors import PySparkValueError
-from pyspark.sql.plot import PySparkPlotAccessor, PySparkBoxPlotBase, PySparkKdePlotBase, PySparkHistogramPlotBase
+from pyspark.sql.plot import (
+    PySparkPlotAccessor,
+    PySparkBoxPlotBase,
+    PySparkKdePlotBase,
+    PySparkHistogramPlotBase,
+)
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame
@@ -166,6 +171,7 @@ def plot_kde(data: "DataFrame", **kwargs: Any) -> "Figure":
     fig = express.line(pdf, x="index", y="Density", **kwargs)
     fig["layout"]["xaxis"]["title"] = None
     return fig
+
 
 def plot_histogram(data: "DataFrame", **kwargs: Any) -> "Figure":
     import plotly.graph_objs as go
