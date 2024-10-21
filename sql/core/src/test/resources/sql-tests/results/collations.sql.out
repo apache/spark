@@ -4526,21 +4526,6 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-select TRIM(utf8_binary collate utf8_binary_rtrim, utf8_lcase collate utf8_binary) from t5
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "explicitTypes" : "`string`, `string collate UTF8_BINARY_RTRIM`"
-  }
-}
-
-
--- !query
 select TRIM('ABc', utf8_binary), TRIM('ABc', utf8_lcase) from t5
 -- !query schema
 struct<TRIM(BOTH ABc FROM utf8_binary):string,TRIM(BOTH ABc FROM utf8_lcase):string collate UTF8_LCASE>
