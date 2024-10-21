@@ -59,18 +59,19 @@ private[sql] abstract class StatefulProcessor[K, I, O] extends Serializable {
    * @return
    *   \- Zero or more output rows
    */
-  def handleInputRows(
-      key: K,
-      inputRows: Iterator[I],
-      timerValues: TimerValues): Iterator[O]
+  def handleInputRows(key: K, inputRows: Iterator[I], timerValues: TimerValues): Iterator[O]
 
   /**
    * Function that will be invoked when a timer is fired for a given key. Users can choose to
    * evict state, register new timers and optionally provide output rows.
-   * @param key - grouping key
-   * @param timerValues - instance of TimerValues that provides access to current processing/event
-   * @param expiredTimerInfo - instance of ExpiredTimerInfo that provides access to expired timer
-   * @return Zero or more output rows
+   * @param key
+   *   \- grouping key
+   * @param timerValues
+   *   \- instance of TimerValues that provides access to current processing/event
+   * @param expiredTimerInfo
+   *   \- instance of ExpiredTimerInfo that provides access to expired timer
+   * @return
+   *   Zero or more output rows
    */
   def handleExpiredTimer(
       key: K,
