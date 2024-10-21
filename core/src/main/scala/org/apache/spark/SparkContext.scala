@@ -283,6 +283,8 @@ class SparkContext(config: SparkConf) extends Logging {
   // An asynchronous listener bus for Spark events
   private[spark] def listenerBus: LiveListenerBus = _listenerBus
 
+  private[spark] def heartbeatReceiver: RpcEndpointRef = _heartbeatReceiver
+
   // This function allows components created by SparkEnv to be mocked in unit tests:
   private[spark] def createSparkEnv(
       conf: SparkConf,
