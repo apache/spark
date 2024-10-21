@@ -50,7 +50,9 @@ class TransformWithStateInPandasPythonRunner(
     initialWorkerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
-    groupingKeySchema: StructType)
+    groupingKeySchema: StructType,
+    batchTimestampMs: Option[Long] = None,
+    eventTimeWatermarkForEviction: Option[Long] = None)
   extends BasePythonRunner[InType, OutType](funcs.map(_._1), evalType, argOffsets, jobArtifactUUID)
   with PythonArrowInput[InType]
   with BasicPythonArrowOutput
@@ -104,7 +106,9 @@ class TransformWithStateInPandasPythonRunner(
     executionContext.execute(
       new TransformWithStateInPandasStateServer(stateServerSocket, processorHandle,
         groupingKeySchema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes,
-        sqlConf.arrowTransformWithStateInPandasMaxRecordsPerBatch))
+        sqlConf.arrowTransformWithStateInPandasMaxRecordsPerBatch,
+        batchTimestampMs = batchTimestampMs,
+        eventTimeWatermarkForEviction = eventTimeWatermarkForEviction))
 
     context.addTaskCompletionListener[Unit] { _ =>
       logInfo(log"completion listener called")
