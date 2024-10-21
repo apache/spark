@@ -340,6 +340,12 @@ class FunctionsTestsMixin:
         )
         actual = df.select(F.try_parse_url(df.url, df.part, df.key)).collect()
         self.assertEqual(actual, [Row("1")])
+        df = self.spark.createDataFrame(
+            [("inva lid://spark.apache.org/path?query=1", "QUERY", "query")],
+            ["url", "part", "key"],
+        )
+        actual = df.select(F.try_parse_url(df.url, df.part, df.key)).collect()
+        self.assertEqual(actual, [Row(None)])
 
     def test_string_functions(self):
         string_functions = [

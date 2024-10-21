@@ -13095,8 +13095,8 @@ def try_parse_url(
     url: "ColumnOrName", partToExtract: "ColumnOrName", key: Optional["ColumnOrName"] = None
 ) -> Column:
     """
-    URL function: Extracts a specified part from a URL. If a key is provided,
-    it returns the associated query parameter value.
+    This is a special version of `parse_url` that performs the same operation, but returns a
+    NULL value instead of raising an error if the decoding cannot be performed.
 
     .. versionadded:: 4.0.0
 
@@ -13185,6 +13185,20 @@ def try_parse_url(
     +------------------------+
     |                   /path|
     +------------------------+
+
+    Example 6: Invalid URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("https://spark.apache.org/path?query=1", "QUERY", "query")],
+    ...   ["url", "part", "key"]
+    ... )
+    >>> df.select(sf.try_parse_url(df.url, df.part, df.key)).show()
+    +-----------------------------+
+    |try_parse_url(url, part, key)|
+    +-----------------------------+
+    |                         NULL|
+    +-----------------------------+
     """
     if key is not None:
         return _invoke_function_over_columns("try_parse_url", url, partToExtract, key)
