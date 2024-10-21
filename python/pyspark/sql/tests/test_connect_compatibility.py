@@ -33,6 +33,7 @@ from pyspark.sql.window import WindowSpec as ClassicWindowSpec
 import pyspark.sql.functions as ClassicFunctions
 from pyspark.sql.group import GroupedData as ClassicGroupedData
 import pyspark.sql.avro.functions as ClassicAvro
+import pyspark.sql.protobuf.functions as ClassicProtobuf
 
 if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
@@ -47,6 +48,7 @@ if should_test_connect:
     import pyspark.sql.connect.functions as ConnectFunctions
     from pyspark.sql.connect.group import GroupedData as ConnectGroupedData
     import pyspark.sql.connect.avro.functions as ConnectAvro
+    import pyspark.sql.connect.protobuf.functions as ConnectProtobuf
 
 
 class ConnectCompatibilityTestsMixin:
@@ -393,6 +395,28 @@ class ConnectCompatibilityTestsMixin:
             ClassicAvro,
             ConnectAvro,
             "Avro",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_protobuf_compatibility(self):
+        """Test Protobuf compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        # The current supported Avro functions are only `from_protobuf` and `to_protobuf`.
+        # The missing methods belows are just util functions that imported to implement them.
+        expected_missing_connect_methods = {
+            "cast",
+            "try_remote_protobuf_functions",
+            "get_active_spark_context",
+        }
+        expected_missing_classic_methods = {"lit", "check_dependencies"}
+        self.check_compatibility(
+            ClassicProtobuf,
+            ConnectProtobuf,
+            "Protobuf",
             expected_missing_connect_properties,
             expected_missing_classic_properties,
             expected_missing_connect_methods,
