@@ -21,6 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.streaming.Sink
@@ -33,6 +34,7 @@ class ForeachBatchSink[T](batchWriter: (Dataset[T], Long) => Unit, encoder: Expr
     val node = LogicalRDD.fromDataset(rdd = data.queryExecution.toRdd, originDataset = data,
       isStreaming = false)
     implicit val enc = encoder
+    implicit val withRelations: Set[RelationWrapper] = Set.empty
     val ds = Dataset.ofRows(data.sparkSession, node).as[T]
     // SPARK-47329 - for stateful queries that perform multiple operations on the dataframe, it is
     // highly recommended to persist the dataframe to prevent state stores from reloading

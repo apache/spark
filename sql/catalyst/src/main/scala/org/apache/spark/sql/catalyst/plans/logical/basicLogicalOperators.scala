@@ -2263,3 +2263,10 @@ object AsOfJoin {
     }
   }
 }
+
+case class SkipDedupRelRuleMarker(child: LogicalPlan) extends UnaryNode {
+  override protected def withNewChildInternal(newChild: LogicalPlan): SkipDedupRelRuleMarker =
+    copy(child = newChild)
+  override def output: Seq[Attribute] = child.output
+}
+

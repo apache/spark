@@ -28,6 +28,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
@@ -229,6 +230,7 @@ abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
       reset: Boolean = true,
       tryWithoutResettingFirst: Boolean = false,
       skip: Boolean = false): Unit = {
+    implicit val withRelations: Set[RelationWrapper] = Set.empty
     // testCaseName must not contain ':', which is not allowed to appear in a filename of Windows
     assert(!testCaseName.contains(":"))
 

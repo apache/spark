@@ -148,7 +148,8 @@ case class AnalysisContext(
     //    lookup a temporary function. And export to the view metadata.
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
-    outerPlan: Option[LogicalPlan] = None)
+    outerPlan: Option[LogicalPlan] = None,
+    skipDedupRelations: Boolean = false)
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -175,7 +176,8 @@ object AnalysisContext {
       originContext.relationCache,
       viewDesc.viewReferredTempViewNames,
       mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
-      viewDesc.viewReferredTempVariableNames)
+      viewDesc.viewReferredTempVariableNames,
+      skipDedupRelations = originContext.skipDedupRelations)
     set(context)
     try f finally { set(originContext) }
   }
@@ -191,6 +193,11 @@ object AnalysisContext {
     val context = originContext.copy(outerPlan = Some(outerPlan))
     set(context)
     try f finally { set(originContext) }
+  }
+
+  def setDedupRelatiionSkipFlag(flag: Boolean): Unit = {
+    val currContext = value.get()
+    set(currContext.copy(skipDedupRelations = flag))
   }
 }
 
