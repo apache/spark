@@ -199,7 +199,7 @@
     <guava.version>33.2.1-jre</guava.version>
     <gson.version>2.11.0</gson.version>
     <janino.version>3.1.9</janino.version>
-    <jersey.version>3.0.12</jersey.version>
+    <jersey.version>3.0.16</jersey.version>
     <joda.version>2.13.0</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
