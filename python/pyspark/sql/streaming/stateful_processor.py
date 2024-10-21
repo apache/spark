@@ -259,7 +259,7 @@ class StatefulProcessorHandle:
     def getMapState(
         self,
         state_name: str,
-        key_schema: Union[StructType, str],
+        user_key_schema: Union[StructType, str],
         value_schema: Union[StructType, str],
         ttl_duration_ms: Optional[int] = None,
     ) -> MapState:
@@ -272,7 +272,7 @@ class StatefulProcessorHandle:
         ----------
         state_name : str
             name of the state variable
-        key_schema : :class:`pyspark.sql.types.DataType` or str
+        user_key_schema : :class:`pyspark.sql.types.DataType` or str
             The schema of the key of map state. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
         value_schema : :class:`pyspark.sql.types.DataType` or str
@@ -285,10 +285,11 @@ class StatefulProcessorHandle:
             If ttl is not specified the state will never expire.
         """
         self.stateful_processor_api_client.get_map_state(
-            state_name, key_schema, value_schema, ttl_duration_ms
+            state_name, user_key_schema, value_schema, ttl_duration_ms
         )
         return MapState(
-            MapStateClient(self.stateful_processor_api_client, key_schema, value_schema), state_name
+            MapStateClient(self.stateful_processor_api_client, user_key_schema, value_schema),
+            state_name,
         )
 
 

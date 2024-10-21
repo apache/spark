@@ -171,12 +171,12 @@ class TransformWithStateInPandasStateServer(
         // The key row is serialized as a byte array, we need to convert it back to a Row
         val keyRow = PythonSQLUtils.toJVMRow(keyBytes, groupingKeySchema, keyRowDeserializer)
         ImplicitGroupingKeyTracker.setImplicitKey(keyRow)
-        // Reset the list state iterators for a new grouping key.
+        // Reset the list/map state iterators for a new grouping key.
         iterators = new mutable.HashMap[String, Iterator[Row]]()
         sendResponse(0)
       case ImplicitGroupingKeyRequest.MethodCase.REMOVEIMPLICITKEY =>
         ImplicitGroupingKeyTracker.removeImplicitKey()
-        // Reset the list state iterators for a new grouping key.
+        // Reset the list/map state iterators for a new grouping key.
         iterators = new mutable.HashMap[String, Iterator[Row]]()
         sendResponse(0)
       case _ =>
@@ -219,12 +219,12 @@ class TransformWithStateInPandasStateServer(
         initializeStateVariable(stateName, schema, StateVariableType.ListState, ttlDurationMs)
       case StatefulProcessorCall.MethodCase.GETMAPSTATE =>
         val stateName = message.getGetMapState.getStateName
-        val keySchema = message.getGetMapState.getSchema
+        val userKeySchema = message.getGetMapState.getSchema
         val valueSchema = message.getGetMapState.getMapStateValueSchema
         val ttlDurationMs = if (message.getGetMapState.hasTtl) {
           Some(message.getGetMapState.getTtl.getDurationMs)
         } else None
-        initializeStateVariable(stateName, keySchema, StateVariableType.MapState, ttlDurationMs,
+        initializeStateVariable(stateName, userKeySchema, StateVariableType.MapState, ttlDurationMs,
           valueSchema)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
@@ -326,7 +326,7 @@ class TransformWithStateInPandasStateServer(
           sendResponse(0)
         }
         sendIteratorAsArrowBatches(iteratorOption.get, listStateInfo.schema,
-          arrowStreamWriterForTest) {data => listStateInfo.serializer(data)}
+          arrowStreamWriterForTest) { data => listStateInfo.serializer(data)}
       case ListStateCall.MethodCase.APPENDVALUE =>
         val byteArray = message.getAppendValue.getValue.toByteArray
         val newRow = PythonSQLUtils.toJVMRow(byteArray, listStateInfo.schema,
@@ -402,28 +402,27 @@ class TransformWithStateInPandasStateServer(
         }
         if (!iteratorOption.get.hasNext) {
           sendResponse(2, s"Map state $stateName doesn't contain any entry.")
-          return
         } else {
           sendResponse(0)
-        }
-        val keyValueStateSchema: StructType = StructType(
-          Array(
-            // key row serialized as a byte array.
-            StructField("keyRow", BinaryType),
-            // value row serialized as a byte array.
-            StructField("valueRow", BinaryType)
-          )
-        )
-        sendIteratorAsArrowBatches(iteratorOption.get, keyValueStateSchema,
-          arrowStreamWriterForTest) {tuple =>
-          val keyBytes = PythonSQLUtils.toPyRow(tuple._1)
-          val valueBytes = PythonSQLUtils.toPyRow(tuple._2)
-          new GenericInternalRow(
-            Array[Any](
-              keyBytes,
-              valueBytes
+          val keyValueStateSchema: StructType = StructType(
+            Array(
+              // key row serialized as a byte array.
+              StructField("keyRow", BinaryType),
+              // value row serialized as a byte array.
+              StructField("valueRow", BinaryType)
             )
           )
+          sendIteratorAsArrowBatches(iteratorOption.get, keyValueStateSchema,
+            arrowStreamWriterForTest) {tuple =>
+            val keyBytes = PythonSQLUtils.toPyRow(tuple._1)
+            val valueBytes = PythonSQLUtils.toPyRow(tuple._2)
+            new GenericInternalRow(
+              Array[Any](
+                keyBytes,
+                valueBytes
+              )
+            )
+          }
         }
       case MapStateCall.MethodCase.KEYS =>
         val iteratorId = message.getKeys.getIteratorId
@@ -434,12 +433,11 @@ class TransformWithStateInPandasStateServer(
         }
         if (!iteratorOption.get.hasNext) {
           sendResponse(2, s"Map state $stateName doesn't contain any key.")
-          return
         } else {
           sendResponse(0)
+          sendIteratorAsArrowBatches(iteratorOption.get, mapStateInfo.keySchema,
+            arrowStreamWriterForTest) {data => mapStateInfo.keySerializer(data)}
         }
-        sendIteratorAsArrowBatches(iteratorOption.get, mapStateInfo.keySchema,
-          arrowStreamWriterForTest) {data => mapStateInfo.keySerializer(data)}
       case MapStateCall.MethodCase.VALUES =>
         val iteratorId = message.getValues.getIteratorId
         var iteratorOption = iterators.get(iteratorId)
@@ -449,12 +447,11 @@ class TransformWithStateInPandasStateServer(
         }
         if (!iteratorOption.get.hasNext) {
           sendResponse(2, s"Map state $stateName doesn't contain any value.")
-          return
         } else {
           sendResponse(0)
+          sendIteratorAsArrowBatches(iteratorOption.get, mapStateInfo.valueSchema,
+            arrowStreamWriterForTest) {data => mapStateInfo.valueSerializer(data)}
         }
-        sendIteratorAsArrowBatches(iteratorOption.get, mapStateInfo.valueSchema,
-          arrowStreamWriterForTest) {data => mapStateInfo.valueSerializer(data)}
       case MapStateCall.MethodCase.REMOVEKEY =>
         val keyBytes = message.getRemoveKey.getUserKey.toByteArray
         val keyRow = PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema,

@@ -45,8 +45,8 @@ class MapStateClient:
             self.value_schema = value_schema
         # Dictionaries to store the mapping between iterator id and a tuple of pandas DataFrame
         # and the index of the last row that was read.
-        self.key_value_dict: Dict[str, Tuple["PandasDataFrameLike", int]] = {}
-        self.dict: Dict[str, Tuple["PandasDataFrameLike", int]] = {}
+        self.user_key_value_pair_iterator_cursors: Dict[str, Tuple["PandasDataFrameLike", int]] = {}
+        self.user_key_or_value_iterator_cursors: Dict[str, Tuple["PandasDataFrameLike", int]] = {}
 
     def exists(self, state_name: str) -> bool:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
@@ -68,10 +68,12 @@ class MapStateClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error checking map state exists: {response_message[1]}")
 
-    def get_value(self, state_name: str, key: Tuple) -> Optional[Tuple]:
+    def get_value(self, state_name: str, user_key: Tuple) -> Optional[Tuple]:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
-        bytes = self._stateful_processor_api_client._serialize_to_bytes(self.user_key_schema, key)
+        bytes = self._stateful_processor_api_client._serialize_to_bytes(
+            self.user_key_schema, user_key
+        )
         get_value_call = stateMessage.GetValue(userKey=bytes)
         map_state_call = stateMessage.MapStateCall(stateName=state_name, getValue=get_value_call)
         state_variable_request = stateMessage.StateVariableRequest(mapStateCall=map_state_call)
@@ -89,10 +91,12 @@ class MapStateClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error getting value: {response_message[1]}")
 
-    def contains_key(self, state_name: str, key: Tuple) -> bool:
+    def contains_key(self, state_name: str, user_key: Tuple) -> bool:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
-        bytes = self._stateful_processor_api_client._serialize_to_bytes(self.user_key_schema, key)
+        bytes = self._stateful_processor_api_client._serialize_to_bytes(
+            self.user_key_schema, user_key
+        )
         contains_key_call = stateMessage.ContainsKey(userKey=bytes)
         map_state_call = stateMessage.MapStateCall(
             stateName=state_name, containsKey=contains_key_call
@@ -117,13 +121,13 @@ class MapStateClient:
     def update_value(
         self,
         state_name: str,
-        key: Tuple,
+        user_key: Tuple,
         value: Tuple,
     ) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
         key_bytes = self._stateful_processor_api_client._serialize_to_bytes(
-            self.user_key_schema, key
+            self.user_key_schema, user_key
         )
         value_bytes = self._stateful_processor_api_client._serialize_to_bytes(
             self.value_schema, value
@@ -145,9 +149,9 @@ class MapStateClient:
     def get_key_value_pair(self, state_name: str, iterator_id: str) -> Tuple[Tuple, Tuple]:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
-        if iterator_id in self.key_value_dict:
+        if iterator_id in self.user_key_value_pair_iterator_cursors:
             # If the state is already in the dictionary, return the next row.
-            pandas_df, index = self.key_value_dict[iterator_id]
+            pandas_df, index = self.user_key_value_pair_iterator_cursors[iterator_id]
         else:
             # If the state is not in the dictionary, fetch the state from the server.
             iterator_call = stateMessage.Iterator(iteratorId=iterator_id)
@@ -160,6 +164,11 @@ class MapStateClient:
             status = response_message[0]
             if status == 0:
                 iterator = self._stateful_processor_api_client._read_arrow_state()
+                # We need to exhaust the iterator here to make sure all the arrow batches are read,
+                # even though there is only one batch in the iterator. Otherwise, the stream might
+                # block further reads since it thinks there might still be some arrow batches left.
+                # We only need to read the first batch in the iterator because it's guaranteed that
+                # there would only be one batch sent from the JVM side.
                 data_batch = None
                 for batch in iterator:
                     if data_batch is None:
@@ -175,10 +184,10 @@ class MapStateClient:
         new_index = index + 1
         if new_index < len(pandas_df):
             # Update the index in the dictionary.
-            self.key_value_dict[iterator_id] = (pandas_df, new_index)
+            self.user_key_value_pair_iterator_cursors[iterator_id] = (pandas_df, new_index)
         else:
             # If the index is at the end of the DataFrame, remove the state from the dictionary.
-            self.key_value_dict.pop(iterator_id, None)
+            self.user_key_value_pair_iterator_cursors.pop(iterator_id, None)
         key_row_bytes = pandas_df.iloc[index, 0]
         value_row_bytes = pandas_df.iloc[index, 1]
         key_row = self._stateful_processor_api_client._deserialize_from_bytes(key_row_bytes)
@@ -188,9 +197,9 @@ class MapStateClient:
     def get_row(self, state_name: str, iterator_id: str, is_key: bool) -> Tuple:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
-        if iterator_id in self.dict:
+        if iterator_id in self.user_key_or_value_iterator_cursors:
             # If the state is already in the dictionary, return the next row.
-            pandas_df, index = self.dict[iterator_id]
+            pandas_df, index = self.user_key_or_value_iterator_cursors[iterator_id]
         else:
             # If the state is not in the dictionary, fetch the state from the server.
             if is_key:
@@ -207,6 +216,11 @@ class MapStateClient:
             status = response_message[0]
             if status == 0:
                 iterator = self._stateful_processor_api_client._read_arrow_state()
+                # We need to exhaust the iterator here to make sure all the arrow batches are read,
+                # even though there is only one batch in the iterator. Otherwise, the stream might
+                # block further reads since it thinks there might still be some arrow batches left.
+                # We only need to read the first batch in the iterator because it's guaranteed that
+                # there would only be one batch sent from the JVM side.
                 data_batch = None
                 for batch in iterator:
                     if data_batch is None:
@@ -225,10 +239,10 @@ class MapStateClient:
         new_index = index + 1
         if new_index < len(pandas_df):
             # Update the index in the dictionary.
-            self.dict[iterator_id] = (pandas_df, new_index)
+            self.user_key_or_value_iterator_cursors[iterator_id] = (pandas_df, new_index)
         else:
             # If the index is at the end of the DataFrame, remove the state from the dictionary.
-            self.dict.pop(iterator_id, None)
+            self.user_key_or_value_iterator_cursors.pop(iterator_id, None)
         pandas_row = pandas_df.iloc[index]
         return tuple(pandas_row)
 
