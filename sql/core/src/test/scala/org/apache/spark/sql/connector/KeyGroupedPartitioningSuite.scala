@@ -123,7 +123,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
 
     // Has exactly one partition.
-    val partitionValues = Seq(31).map(v => InternalRow.fromSeq(Seq(v)))
+    val partitionValues = Seq(1).map(v => InternalRow.fromSeq(Seq(v)))
     checkQueryPlan(df, distribution,
       physical.KeyGroupedPartitioning(distribution.clustering, 1, partitionValues, partitionValues))
   }
