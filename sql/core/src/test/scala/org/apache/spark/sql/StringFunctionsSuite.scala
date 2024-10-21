@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.Cast._
-import org.apache.spark.sql.execution.FormattedMode
+import org.apache.spark.sql.execution.{FormattedMode, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1352,6 +1352,36 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
               stop = 39
             )
           )
+        }
+      }
+    }
+  }
+
+  test("RegExpReplace throws the right exception when replace fails on a particular row") {
+    val tableName = "regexpReplaceException"
+    withTable(tableName) {
+      sql(s"CREATE TABLE IF NOT EXISTS $tableName(s STRING)")
+      sql(s"INSERT INTO $tableName VALUES('first last')")
+      Seq("NO_CODEGEN", "CODEGEN_ONLY").foreach { codegenMode =>
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+          val query = s"SELECT regexp_replace(s, '(?<first>[a-zA-Z]+) (?<last>[a-zA-Z]+)', " +
+            s"'$$3 $$1') FROM $tableName"
+          val df = sql(query)
+          val plan = df.queryExecution.executedPlan
+          assert(plan.isInstanceOf[WholeStageCodegenExec] == (codegenMode == "CODEGEN_ONLY"))
+          val exception = intercept[SparkRuntimeException] {
+            df.collect()
+          }
+          checkError(
+            exception = exception,
+            condition = "INVALID_REGEXP_REPLACE",
+            parameters = Map(
+              "source" -> "first last",
+              "pattern" -> "(?<first>[a-zA-Z]+) (?<last>[a-zA-Z]+)",
+              "replacement" -> "$3 $1",
+              "position" -> "1")
+          )
+          assert(exception.getCause.getMessage.contains("No group 3"))
         }
       }
     }
