@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst;
 
+import java.io.Serializable;
+
 public class JavaTypeInferenceBeans {
 
   static class JavaBeanWithGenericsA<T> {
@@ -77,6 +79,137 @@ public class JavaTypeInferenceBeans {
 
   static class JavaBeanWithGenericHierarchy extends JavaBeanWithGenericsABC<Integer> {
 
+  }
+
+  static class PersonData {
+    private String id;
+    private String firstName;
+
+    public String getId() {
+      return id;
+    }
+
+    public void setId(String id) {
+      this.id = id;
+    }
+
+    public String getFirstName() {
+      return firstName;
+    }
+
+    public void setFirstName(String firstName) {
+      this.firstName = firstName;
+    }
+  }
+
+  static class PersonDataSerializable implements Serializable {
+    private String id;
+    private String firstName;
+
+    public String getId() {
+      return id;
+    }
+
+    public void setId(String id) {
+      this.id = id;
+    }
+
+    public String getFirstName() {
+      return firstName;
+    }
+
+    public void setFirstName(String firstName) {
+      this.firstName = firstName;
+    }
+  }
+
+  static class Team<P> {
+    String name;
+    P person;
+
+    public String getName() {
+      return name;
+    }
+
+    public void setName(String name) {
+      this.name = name;
+    }
+
+    public P getPerson() {
+      return person;
+    }
+
+    public void setPerson(P person) {
+      this.person = person;
+    }
+  }
+
+  static class TeamT<T extends Serializable> {
+    String name;
+    T person;
+
+    public String getName() {
+      return name;
+    }
+
+    public void setName(String name) {
+      this.name = name;
+    }
+
+    public T getPerson() {
+      return person;
+    }
+
+    public void setPerson(T person) {
+      this.person = person;
+    }
+  }
+
+  static class Company<T> {
+    String name;
+    Team<T> team;
+
+    public String getName() {
+      return name;
+    }
+
+    public void setName(String name) {
+      this.name = name;
+    }
+
+    public Team<T> getTeam() {
+      return team;
+    }
+
+    public void setTeam(Team<T> team) {
+      this.team = team;
+    }
+  }
+
+  static class CompanyT<T extends Serializable> {
+    String name;
+    TeamT<T> team;
+
+    public String getName() {
+      return name;
+    }
+
+    public void setName(String name) {
+      this.name = name;
+    }
+
+    public TeamT<T> getTeam() {
+      return team;
+    }
+
+    public void setTeam(TeamT<T> team) {
+      this.team = team;
+    }
+  }
+
+  static class CompanyWrapperT extends CompanyT<PersonDataSerializable> {
+  }
+  static class CompanyWrapper extends Company<PersonData> {
   }
 }
 
