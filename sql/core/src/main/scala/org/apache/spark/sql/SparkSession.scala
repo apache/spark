@@ -275,6 +275,7 @@ class SparkSession private(
       Map.empty,
       managedJobTags.asScala.toMap)
     result.sessionState // force copy of SessionState
+    result.sessionState.artifactManager // force copy of ArtifactManager and its resources
     result.managedJobTags // force copy of userDefinedToRealTagsMap
     result
   }
