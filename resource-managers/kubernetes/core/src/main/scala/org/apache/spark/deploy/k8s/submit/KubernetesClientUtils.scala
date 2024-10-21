@@ -53,10 +53,10 @@ object KubernetesClientUtils extends Logging {
   }
 
   @Since("3.1.0")
-  val configMapNameExecutor: String = configMapName(s"spark-exec-${KubernetesUtils.uniqueID()}")
+  def configMapNameExecutor: String = configMapName(s"spark-exec-${KubernetesUtils.uniqueID()}")
 
   @Since("3.1.0")
-  val configMapNameDriver: String = configMapName(s"spark-drv-${KubernetesUtils.uniqueID()}")
+  def configMapNameDriver: String = configMapName(s"spark-drv-${KubernetesUtils.uniqueID()}")
 
   private def buildStringFromPropertiesMap(configMapName: String,
       propertiesMap: Map[String, String]): String = {
