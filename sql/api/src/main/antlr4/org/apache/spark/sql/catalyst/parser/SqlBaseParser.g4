@@ -1512,6 +1512,7 @@ operatorPipeRightSide
     | sample
     | joinRelation
     | operator=(UNION | EXCEPT | SETMINUS | INTERSECT) setQuantifier? right=queryTerm
+    | queryOrganization
     | AGGREGATE namedExpressionSeq? aggregationClause?
     ;
 

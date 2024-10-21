@@ -16,6 +16,8 @@
 #
 
 """PySpark Functions with Spark Connect"""
+from pyspark.testing import should_test_connect
 
-from pyspark.sql.connect.functions.builtin import *  # noqa: F401,F403
-from pyspark.sql.connect.functions import partitioning  # noqa: F401,F403
+if should_test_connect:
+    from pyspark.sql.connect.functions.builtin import *  # noqa: F401,F403
+    from pyspark.sql.connect.functions import partitioning  # noqa: F401,F403

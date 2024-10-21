@@ -59,6 +59,18 @@ create temporary view natural_join_test_t2 as select * from values
 create temporary view natural_join_test_t3 as select * from values
   ("one", 4), ("two", 5), ("one", 6) as natural_join_test_t3(k, v3);
 
+create temporary view windowTestData as select * from values
+  (null, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), "a"),
+  (1, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), "a"),
+  (1, 2L, 2.5D, date("2017-08-02"), timestamp_seconds(1502000000), "a"),
+  (2, 2147483650L, 100.001D, date("2020-12-31"), timestamp_seconds(1609372800), "a"),
+  (1, null, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), "b"),
+  (2, 3L, 3.3D, date("2017-08-03"), timestamp_seconds(1503000000), "b"),
+  (3, 2147483650L, 100.001D, date("2020-12-31"), timestamp_seconds(1609372800), "b"),
+  (null, null, null, null, null, null),
+  (3, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), null)
+  AS testData(val, val_long, val_double, val_date, val_timestamp, cate);
+
 -- SELECT operators: positive tests.
 ---------------------------------------
 
@@ -505,7 +517,7 @@ table join_test_t1 jt
 |> cross join (select * from jt);
 
 -- Set operations: positive tests.
------------------------------------
+----------------------------------
 
 -- Union all.
 table t
@@ -560,7 +572,7 @@ table t
 |> minus table t;
 
 -- Set operations: negative tests.
------------------------------------
+----------------------------------
 
 -- The UNION operator requires the same number of columns in the input relations.
 table t
@@ -570,6 +582,97 @@ table t
 -- The UNION operator requires the column types to be compatible.
 table t
 |> union all table st;
+
+-- Sorting and repartitioning operators: positive tests.
+--------------------------------------------------------
+
+-- Order by.
+table t
+|> order by x;
+
+-- Order by with a table subquery.
+(select * from t)
+|> order by x;
+
+-- Order by with a VALUES list.
+values (0, 'abc') tab(x, y)
+|> order by x;
+
+-- Limit.
+table t
+|> order by x
+|> limit 1;
+
+-- Limit with offset.
+table t
+|> where x = 1
+|> select y
+|> limit 2 offset 1;
+
+-- Offset is allowed without limit.
+table t
+|> where x = 1
+|> select y
+|> offset 1;
+
+-- LIMIT ALL and OFFSET 0 are equivalent to no LIMIT or OFFSET clause, respectively.
+table t
+|> limit all offset 0;
+
+-- Distribute by.
+table t
+|> distribute by x;
+
+-- Cluster by.
+table t
+|> cluster by x;
+
+-- Sort and distribute by.
+table t
+|> sort by x distribute by x;
+
+-- It is possible to apply a final ORDER BY clause on the result of a query containing pipe
+-- operators.
+table t
+|> order by x desc
+order by y;
+
+-- Sorting and repartitioning operators: negative tests.
+--------------------------------------------------------
+
+-- Multiple order by clauses are not supported in the same pipe operator.
+-- We add an extra "ORDER BY y" clause at the end in this test to show that the "ORDER BY x + y"
+-- clause was consumed end the of the final query, not as part of the pipe operator.
+table t
+|> order by x desc order by x + y
+order by y;
+
+-- The ORDER BY clause may only refer to column names from the previous input relation.
+table t
+|> select 1 + 2 as result
+|> order by x;
+
+-- The DISTRIBUTE BY clause may only refer to column names from the previous input relation.
+table t
+|> select 1 + 2 as result
+|> distribute by x;
+
+-- Combinations of multiple ordering and limit clauses are not supported.
+table t
+|> order by x limit 1;
+
+-- ORDER BY and SORT BY are not supported at the same time.
+table t
+|> order by x sort by x;
+
+-- The WINDOW clause is not supported yet.
+table windowTestData
+|> window w as (partition by cte order by val)
+|> select cate, sum(val) over w;
+
+-- WINDOW and LIMIT are not supported at the same time.
+table windowTestData
+|> window w as (partition by cate order by val) limit 5;
 
 -- Aggregation operators: positive tests.
 -----------------------------------------

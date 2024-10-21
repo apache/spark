@@ -321,7 +321,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    *
    * If includeCollections is true, this will return fields that are nested in maps and arrays.
    */
-  private[sql] def findNestedField(
+  private[spark] def findNestedField(
       fieldNames: Seq[String],
       includeCollections: Boolean = false,
       resolver: SqlApiAnalysis.Resolver = _ == _,

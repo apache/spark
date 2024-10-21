@@ -45,7 +45,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, IdentityColumnSpec, SupportsNamespaces, TableCatalog, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
@@ -428,7 +428,8 @@ class AstBuilder extends DataTypeAstBuilder
    * Create a top-level plan with Common Table Expressions.
    */
   override def visitQuery(ctx: QueryContext): LogicalPlan = withOrigin(ctx) {
-    val query = plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(withQueryResultClauses)
+    val query = plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(
+      withQueryResultClauses(_, _, forPipeOperators = false))
 
     // Apply CTEs
     query.optionalMap(ctx.ctes)(withCTE)
@@ -491,7 +492,7 @@ class AstBuilder extends DataTypeAstBuilder
     val selects = ctx.fromStatementBody.asScala.map { body =>
       withFromStatementBody(body, from).
         // Add organization statements.
-        optionalMap(body.queryOrganization)(withQueryResultClauses)
+        optionalMap(body.queryOrganization)(withQueryResultClauses(_, _, forPipeOperators = false))
     }
     // If there are multiple SELECT just UNION them together into one query.
     if (selects.length == 1) {
@@ -537,7 +538,8 @@ class AstBuilder extends DataTypeAstBuilder
     val inserts = ctx.multiInsertQueryBody.asScala.map { body =>
       withInsertInto(body.insertInto,
         withFromStatementBody(body.fromStatementBody, from).
-          optionalMap(body.fromStatementBody.queryOrganization)(withQueryResultClauses))
+          optionalMap(body.fromStatementBody.queryOrganization)(
+            withQueryResultClauses(_, _, forPipeOperators = false)))
     }
 
     // If there are multiple INSERTS just UNION them together into one query.
@@ -976,31 +978,37 @@ class AstBuilder extends DataTypeAstBuilder
   /**
    * Add ORDER BY/SORT BY/CLUSTER BY/DISTRIBUTE BY/LIMIT/WINDOWS clauses to the logical plan. These
    * clauses determine the shape (ordering/partitioning/rows) of the query result.
+   *
+   * If 'forPipeOperators' is true, throws an error if the WINDOW clause is present (since this is
+   * not currently supported) or if more than one clause is present (this can be useful when parsing
+   * clauses used with pipe operations which only allow one instance of these clauses each).
    */
   private def withQueryResultClauses(
       ctx: QueryOrganizationContext,
-      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+      query: LogicalPlan,
+      forPipeOperators: Boolean): LogicalPlan = withOrigin(ctx) {
     import ctx._
+    var clause = ""
 
     // Handle ORDER BY, SORT BY, DISTRIBUTE BY, and CLUSTER BY clause.
     val withOrder = if (
       !order.isEmpty && sort.isEmpty && distributeBy.isEmpty && clusterBy.isEmpty) {
-      // ORDER BY ...
+      clause = PipeOperators.orderByClause
       Sort(order.asScala.map(visitSortItem).toSeq, global = true, query)
     } else if (order.isEmpty && !sort.isEmpty && distributeBy.isEmpty && clusterBy.isEmpty) {
-      // SORT BY ...
+      clause = PipeOperators.sortByClause
       Sort(sort.asScala.map(visitSortItem).toSeq, global = false, query)
     } else if (order.isEmpty && sort.isEmpty && !distributeBy.isEmpty && clusterBy.isEmpty) {
-      // DISTRIBUTE BY ...
+      clause = PipeOperators.distributeByClause
       withRepartitionByExpression(ctx, expressionList(distributeBy), query)
     } else if (order.isEmpty && !sort.isEmpty && !distributeBy.isEmpty && clusterBy.isEmpty) {
-      // SORT BY ... DISTRIBUTE BY ...
+      clause = PipeOperators.sortByDistributeByClause
       Sort(
         sort.asScala.map(visitSortItem).toSeq,
         global = false,
         withRepartitionByExpression(ctx, expressionList(distributeBy), query))
     } else if (order.isEmpty && sort.isEmpty && distributeBy.isEmpty && !clusterBy.isEmpty) {
-      // CLUSTER BY ...
+      clause = PipeOperators.clusterByClause
       val expressions = expressionList(clusterBy)
       Sort(
         expressions.map(SortOrder(_, Ascending)),
@@ -1014,17 +1022,33 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     // WINDOWS
-    val withWindow = withOrder.optionalMap(windowClause)(withWindowClause)
+    val withWindow = withOrder.optionalMap(windowClause) {
+      withWindowClause
+    }
+    if (forPipeOperators && windowClause != null) {
+      throw QueryParsingErrors.clausesWithPipeOperatorsUnsupportedError(
+        ctx, s"the ${PipeOperators.windowClause} clause")
+    }
 
     // OFFSET
     // - OFFSET 0 is the same as omitting the OFFSET clause
     val withOffset = withWindow.optional(offset) {
+      if (forPipeOperators && clause.nonEmpty) {
+        throw QueryParsingErrors.multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
+          ctx, clause, PipeOperators.offsetClause)
+      }
+      clause = PipeOperators.offsetClause
       Offset(typedVisit(offset), withWindow)
     }
 
     // LIMIT
     // - LIMIT ALL is the same as omitting the LIMIT clause
     withOffset.optional(limit) {
+      if (forPipeOperators && clause.nonEmpty && clause != PipeOperators.offsetClause) {
+        throw QueryParsingErrors.multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
+          ctx, clause, PipeOperators.limitClause)
+      }
+      clause = PipeOperators.limitClause
       Limit(typedVisit(limit), withOffset)
     }
   }
@@ -3264,7 +3288,7 @@ class AstBuilder extends DataTypeAstBuilder
     } catch {
       case e: SparkArithmeticException =>
         throw new ParseException(
-          errorClass = e.getErrorClass,
+          errorClass = e.getCondition,
           messageParameters = e.getMessageParameters.asScala.toMap,
           ctx)
     }
@@ -3560,7 +3584,7 @@ class AstBuilder extends DataTypeAstBuilder
         // Keep error class of SparkIllegalArgumentExceptions and enrich it with query context
         case se: SparkIllegalArgumentException =>
           val pe = new ParseException(
-            errorClass = se.getErrorClass,
+            errorClass = se.getCondition,
             messageParameters = se.getMessageParameters.asScala.toMap,
             ctx)
           pe.setStackTrace(se.getStackTrace)
@@ -3717,58 +3741,6 @@ class AstBuilder extends DataTypeAstBuilder
     withOrigin(ctx) {
       getDefaultExpression(ctx.expression(), "GENERATED").originalSQL
     }
-
-  /**
-   * Parse and verify IDENTITY column definition.
-   *
-   * @param ctx      The parser context.
-   * @param dataType The data type of column defined as IDENTITY column. Used for verification.
-   * @return Tuple containing start, step and allowExplicitInsert.
-   */
-  protected def visitIdentityColumn(
-      ctx: IdentityColumnContext,
-      dataType: DataType): IdentityColumnSpec = {
-    if (dataType != LongType && dataType != IntegerType) {
-      throw QueryParsingErrors.identityColumnUnsupportedDataType(ctx, dataType.toString)
-    }
-    // We support two flavors of syntax:
-    // (1) GENERATED ALWAYS AS IDENTITY (...)
-    // (2) GENERATED BY DEFAULT AS IDENTITY (...)
-    // (1) forbids explicit inserts, while (2) allows.
-    val allowExplicitInsert = ctx.BY() != null && ctx.DEFAULT() != null
-    val (start, step) = visitIdentityColSpec(ctx.identityColSpec())
-
-    new IdentityColumnSpec(start, step, allowExplicitInsert)
-  }
-
-  override def visitIdentityColSpec(ctx: IdentityColSpecContext): (Long, Long) = {
-    val defaultStart = 1
-    val defaultStep = 1
-    if (ctx == null) {
-      return (defaultStart, defaultStep)
-    }
-    var (start, step): (Option[Long], Option[Long]) = (None, None)
-    ctx.sequenceGeneratorOption().asScala.foreach { option =>
-      if (option.start != null) {
-        if (start.isDefined) {
-          throw QueryParsingErrors.identityColumnDuplicatedSequenceGeneratorOption(ctx, "START")
-        }
-        start = Some(option.start.getText.toLong)
-      } else if (option.step != null) {
-        if (step.isDefined) {
-          throw QueryParsingErrors.identityColumnDuplicatedSequenceGeneratorOption(ctx, "STEP")
-        }
-        step = Some(option.step.getText.toLong)
-        if (step.get == 0L) {
-          throw QueryParsingErrors.identityColumnIllegalStep(ctx)
-        }
-      } else {
-        throw SparkException
-            .internalError(s"Invalid identity column sequence generator option: ${option.getText}")
-      }
-    }
-    (start.getOrElse(defaultStart), step.getOrElse(defaultStep))
-  }
 
   /**
    * Create an optional comment string.
@@ -5891,6 +5863,18 @@ class AstBuilder extends DataTypeAstBuilder
     if (!SQLConf.get.getConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED)) {
       operationNotAllowed("Operator pipe SQL syntax using |>", ctx)
     }
+    // This helper function adds a table subquery boundary between the new operator to be added
+    // (such as a filter or sort) and the input plan if one does not already exist. This helps the
+    // analyzer behave as if we had added the corresponding SQL clause after a table subquery
+    // containing the input plan.
+    def withSubqueryAlias(): LogicalPlan = left match {
+      case s: SubqueryAlias =>
+        s
+      case u: UnresolvedRelation =>
+        u
+      case _ =>
+        SubqueryAlias(SubqueryAlias.generateSubqueryName(), left)
+    }
     Option(ctx.selectClause).map { c =>
       withSelectQuerySpecification(
         ctx = ctx,
@@ -5903,18 +5887,7 @@ class AstBuilder extends DataTypeAstBuilder
         relation = left,
         isPipeOperatorSelect = true)
     }.getOrElse(Option(ctx.whereClause).map { c =>
-      // Add a table subquery boundary between the new filter and the input plan if one does not
-      // already exist. This helps the analyzer behave as if we had added the WHERE clause after a
-      // table subquery containing the input plan.
-      val withSubqueryAlias = left match {
-        case s: SubqueryAlias =>
-          s
-        case u: UnresolvedRelation =>
-          u
-        case _ =>
-          SubqueryAlias(SubqueryAlias.generateSubqueryName(), left)
-      }
-      withWhereClause(c, withSubqueryAlias)
+      withWhereClause(c, withSubqueryAlias())
     }.getOrElse(Option(ctx.pivotClause()).map { c =>
       if (ctx.unpivotClause() != null) {
         throw QueryParsingErrors.unpivotWithPivotInFromClauseNotAllowedError(ctx)
@@ -5932,10 +5905,9 @@ class AstBuilder extends DataTypeAstBuilder
     }.getOrElse(Option(ctx.operator).map { c =>
       val all = Option(ctx.setQuantifier()).exists(_.ALL != null)
       visitSetOperationImpl(left, plan(ctx.right), all, c.getType)
-    }.getOrElse(
-      visitOperatorPipeAggregate(ctx, left)
-    )))))))
-  }
+    }.getOrElse(Option(ctx.queryOrganization).map { c =>
+      withQueryResultClauses(c, withSubqueryAlias(), forPipeOperators = true)
+      }
 
   private def visitOperatorPipeAggregate(
       ctx: OperatorPipeRightSideContext, left: LogicalPlan): LogicalPlan = {
