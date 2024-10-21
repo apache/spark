@@ -3273,6 +3273,8 @@ class NumpyArrayConverter:
             return gateway.jvm.double
         elif nt == np.dtype("bool"):
             return gateway.jvm.boolean
+        elif np.isdtype(nt, np.str_):
+            return gateway.jvm.String
 
         return None
 
@@ -3286,15 +3288,12 @@ class NumpyArrayConverter:
         assert gateway is not None
         plist = obj.tolist()
 
-        if len(obj) > 0 and isinstance(plist[0], str):
-            jtpe = gateway.jvm.String
-        else:
-            jtpe = self._from_numpy_type_to_java_type(obj.dtype, gateway)
-            if jtpe is None:
-                raise PySparkTypeError(
-                    errorClass="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
-                    messageParameters={"dtype": str(obj.dtype)},
-                )
+        jtpe = self._from_numpy_type_to_java_type(obj.dtype, gateway)
+        if jtpe is None:
+            raise PySparkTypeError(
+                errorClass="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
+                messageParameters={"dtype": str(obj.dtype)},
+            )
         jarr = gateway.new_array(jtpe, len(obj))
         for i in range(len(plist)):
             jarr[i] = plist[i]
