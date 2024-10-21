@@ -896,9 +896,20 @@ object FunctionRegistry {
   /** Registry for internal functions used by Connect and the Column API. */
   private[sql] val internal: SimpleFunctionRegistry = new SimpleFunctionRegistry
 
-  private def registerInternalExpression[T <: Expression : ClassTag](name: String): Unit = {
-    val (info, builder) = FunctionRegistryBase.build(name, None)
-    internal.internalRegisterFunction(FunctionIdentifier(name), info, builder)
+  private def registerInternalExpression[T <: Expression : ClassTag](
+      name: String,
+      setAlias: Boolean = false): Unit = {
+    val (info, builder) = FunctionRegistryBase.build[T](name, None)
+    val newBuilder = if (setAlias) {
+      (expressions: Seq[Expression]) => {
+        val expr = builder(expressions)
+        expr.setTagValue(FUNC_ALIAS, name)
+        expr
+      }
+    } else {
+      builder
+    }
+    internal.internalRegisterFunction(FunctionIdentifier(name), info, newBuilder)
   }
 
   registerInternalExpression[Product]("product")
@@ -912,6 +923,7 @@ object FunctionRegistry {
   registerInternalExpression[Days]("days")
   registerInternalExpression[Hours]("hours")
   registerInternalExpression[UnwrapUDT]("unwrap_udt")
+  registerInternalExpression[MonotonicallyIncreasingID]("distributed_id", setAlias = true)
   registerInternalExpression[DistributedSequenceID]("distributed_sequence_id")
   registerInternalExpression[PandasProduct]("pandas_product")
   registerInternalExpression[PandasStddev]("pandas_stddev")

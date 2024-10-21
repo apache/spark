@@ -599,16 +599,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("methodName" -> methodName))
   }
 
-  def arithmeticOverflowError(e: ArithmeticException): SparkArithmeticException = {
-    new SparkArithmeticException(
-      errorClass = "_LEGACY_ERROR_TEMP_2042",
-      messageParameters = Map(
-        "message" -> e.getMessage,
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = Array.empty,
-      summary = "")
-  }
-
   def binaryArithmeticCauseOverflowError(
       eval1: Short,
       symbol: String,
@@ -1151,8 +1141,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def statisticNotRecognizedError(stats: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2114",
-      messageParameters = Map("stats" -> stats))
+      errorClass = "UNRECOGNIZED_STATISTIC",
+      messageParameters = Map("stats" -> toSQLId(stats)))
   }
 
   def unknownColumnError(unknownColumn: String): SparkIllegalArgumentException = {
@@ -1408,10 +1398,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "mapType" -> MapType.simpleString))
   }
 
-  def malformedRecordsDetectedInSchemaInferenceError(e: Throwable): Throwable = {
+  def malformedRecordsDetectedInSchemaInferenceError(e: Throwable, badRecord: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2165",
+      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       messageParameters = Map(
+        "badRecord" -> badRecord,
         "failFastMode" -> FailFastMode.name),
       cause = e)
   }

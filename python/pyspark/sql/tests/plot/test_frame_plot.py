@@ -18,11 +18,21 @@
 import unittest
 from pyspark.errors import PySparkValueError
 from pyspark.sql import Row
-from pyspark.sql.plot import PySparkSampledPlotBase, PySparkTopNPlotBase
-from pyspark.testing.sqlutils import ReusedSQLTestCase, have_plotly, plotly_requirement_message
+from pyspark.testing.sqlutils import (
+    ReusedSQLTestCase,
+    have_plotly,
+    plotly_requirement_message,
+    have_pandas,
+    pandas_requirement_message,
+)
+
+if have_plotly and have_pandas:
+    from pyspark.sql.plot import PySparkSampledPlotBase, PySparkTopNPlotBase
 
 
-@unittest.skipIf(not have_plotly, plotly_requirement_message)
+@unittest.skipIf(
+    not have_plotly or not have_pandas, plotly_requirement_message or pandas_requirement_message
+)
 class DataFramePlotTestsMixin:
     def test_backend(self):
         accessor = self.spark.range(2).plot

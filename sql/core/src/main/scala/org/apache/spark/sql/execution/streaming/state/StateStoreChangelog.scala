@@ -60,6 +60,7 @@ object RecordType extends Enumeration {
     recordType match {
       case PUT_RECORD => "update"
       case DELETE_RECORD => "delete"
+      case MERGE_RECORD => "append"
       case _ => throw StateStoreErrors.unsupportedOperationException(
         "getRecordTypeAsString", recordType.toString)
     }

@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeWithCaseAccentSensitivity}
+import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeWithCollation}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SQLOpenHashSet
 import org.apache.spark.unsafe.UTF8StringBuilder
@@ -1349,7 +1349,7 @@ case class Reverse(child: Expression)
 
   // Input types are utilized by type coercion in ImplicitTypeCasts.
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(StringTypeWithCaseAccentSensitivity, ArrayType))
+    Seq(TypeCollection(StringTypeWithCollation, ArrayType))
 
   override def dataType: DataType = child.dataType
 
@@ -2135,12 +2135,12 @@ case class ArrayJoin(
     this(array, delimiter, Some(nullReplacement))
 
   override def inputTypes: Seq[AbstractDataType] = if (nullReplacement.isDefined) {
-    Seq(AbstractArrayType(StringTypeWithCaseAccentSensitivity),
-      StringTypeWithCaseAccentSensitivity,
-        StringTypeWithCaseAccentSensitivity)
+    Seq(AbstractArrayType(StringTypeWithCollation),
+      StringTypeWithCollation,
+        StringTypeWithCollation)
   } else {
-    Seq(AbstractArrayType(StringTypeWithCaseAccentSensitivity),
-        StringTypeWithCaseAccentSensitivity)
+    Seq(AbstractArrayType(StringTypeWithCollation),
+        StringTypeWithCollation)
   }
 
   override def children: Seq[Expression] = if (nullReplacement.isDefined) {
@@ -2861,7 +2861,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   with QueryErrorsBase {
 
   private def allowedTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity, BinaryType, ArrayType)
+    Seq(StringTypeWithCollation, BinaryType, ArrayType)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CONCAT)
 

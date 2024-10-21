@@ -1637,6 +1637,21 @@ class FunctionsTestsMixin:
         result = df.select(uniform(F.lit(10), F.lit(20)).alias("x")).selectExpr("x > 5").collect()
         self.assertEqual([Row(True)], result)
 
+    def test_string_validation(self):
+        df = self.spark.createDataFrame([("abc",)], ["a"])
+        # test is_valid_utf8
+        result_is_valid_utf8 = df.select(F.is_valid_utf8(df.a).alias("r")).collect()
+        self.assertEqual([Row(r=True)], result_is_valid_utf8)
+        # test make_valid_utf8
+        result_make_valid_utf8 = df.select(F.make_valid_utf8(df.a).alias("r")).collect()
+        self.assertEqual([Row(r="abc")], result_make_valid_utf8)
+        # test validate_utf8
+        result_validate_utf8 = df.select(F.validate_utf8(df.a).alias("r")).collect()
+        self.assertEqual([Row(r="abc")], result_validate_utf8)
+        # test try_validate_utf8
+        result_try_validate_utf8 = df.select(F.try_validate_utf8(df.a).alias("r")).collect()
+        self.assertEqual([Row(r="abc")], result_try_validate_utf8)
+
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):
     pass

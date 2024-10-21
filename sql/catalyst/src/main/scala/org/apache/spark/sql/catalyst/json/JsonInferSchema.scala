@@ -69,7 +69,8 @@ class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
       case DropMalformedMode =>
         None
       case FailFastMode =>
-        throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(e)
+        throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(
+          e, columnNameOfCorruptRecord)
     }
   }
 

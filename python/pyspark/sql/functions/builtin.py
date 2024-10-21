@@ -41,7 +41,7 @@ from typing import (
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.column import Column
-from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 from pyspark.sql.types import ArrayType, DataType, StringType, StructType, _from_numpy_type
 
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
@@ -4921,44 +4921,44 @@ def array_agg(col: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
     >>> df.agg(sf.sort_array(sf.array_agg('c'))).show()
-    +------------------------------+
-    |sort_array(array_agg(c), true)|
-    +------------------------------+
-    |                     [1, 1, 2]|
-    +------------------------------+
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |                        [1, 1, 2]|
+    +---------------------------------+
 
     Example 2: Using array_agg function on a string column
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([["apple"],["apple"],["banana"]], ["c"])
     >>> df.agg(sf.sort_array(sf.array_agg('c'))).show(truncate=False)
-    +------------------------------+
-    |sort_array(array_agg(c), true)|
-    +------------------------------+
-    |[apple, apple, banana]        |
-    +------------------------------+
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |[apple, apple, banana]           |
+    +---------------------------------+
 
     Example 3: Using array_agg function on a column with null values
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([[1],[None],[2]], ["c"])
     >>> df.agg(sf.sort_array(sf.array_agg('c'))).show()
-    +------------------------------+
-    |sort_array(array_agg(c), true)|
-    +------------------------------+
-    |                        [1, 2]|
-    +------------------------------+
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |                           [1, 2]|
+    +---------------------------------+
 
     Example 4: Using array_agg function on a column with different data types
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([[1],["apple"],[2]], ["c"])
     >>> df.agg(sf.sort_array(sf.array_agg('c'))).show()
-    +------------------------------+
-    |sort_array(array_agg(c), true)|
-    +------------------------------+
-    |                 [1, 2, apple]|
-    +------------------------------+
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |                    [1, 2, apple]|
+    +---------------------------------+
     """
     return _invoke_function_over_columns("array_agg", col)
 
@@ -5590,7 +5590,7 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
 
 
 @_try_remote_functions
-def broadcast(df: DataFrame) -> DataFrame:
+def broadcast(df: "ParentDataFrame") -> "ParentDataFrame":
     """
     Marks a DataFrame as small enough for use in broadcast joins.
 
@@ -5621,7 +5621,7 @@ def broadcast(df: DataFrame) -> DataFrame:
     from py4j.java_gateway import JVMView
 
     sc = _get_active_spark_context()
-    return DataFrame(cast(JVMView, sc._jvm).functions.broadcast(df._jdf), df.sparkSession)
+    return ParentDataFrame(cast(JVMView, sc._jvm).functions.broadcast(df._jdf), df.sparkSession)
 
 
 @_try_remote_functions
@@ -7157,27 +7157,46 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
 
     Examples
     --------
+    Example 1: Specify both base number and the input value
+
     >>> from pyspark.sql import functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1), (2), (4) AS t(value)")
-    >>> df.select(sf.log(2.0, df.value).alias('log2_value')).show()
-    +----------+
-    |log2_value|
-    +----------+
-    |       0.0|
-    |       1.0|
-    |       2.0|
-    +----------+
+    >>> df.select("*", sf.log(2.0, df.value)).show()
+    +-----+---------------+
+    |value|LOG(2.0, value)|
+    +-----+---------------+
+    |    1|            0.0|
+    |    2|            1.0|
+    |    4|            2.0|
+    +-----+---------------+
 
-    And Natural logarithm
+    Example 2: Return NULL for invalid input values
 
-    >>> df.select(sf.log(df.value).alias('ln_value')).show()
-    +------------------+
-    |          ln_value|
-    +------------------+
-    |               0.0|
-    |0.6931471805599453|
-    |1.3862943611198906|
-    +------------------+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1), (2), (0), (-1), (NULL) AS t(value)")
+    >>> df.select("*", sf.log(3.0, df.value)).show()
+    +-----+------------------+
+    |value|   LOG(3.0, value)|
+    +-----+------------------+
+    |    1|               0.0|
+    |    2|0.6309297535714...|
+    |    0|              NULL|
+    |   -1|              NULL|
+    | NULL|              NULL|
+    +-----+------------------+
+
+    Example 3: Specify only the input value (Natural logarithm)
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1), (2), (4) AS t(value)")
+    >>> df.select("*", sf.log(df.value)).show()
+    +-----+------------------+
+    |value|         ln(value)|
+    +-----+------------------+
+    |    1|               0.0|
+    |    2|0.6931471805599...|
+    |    4|1.3862943611198...|
+    +-----+------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -7205,13 +7224,22 @@ def ln(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(4,)], ['a'])
-    >>> df.select(ln('a')).show()
-    +------------------+
-    |             ln(a)|
-    +------------------+
-    |1.3862943611198906|
-    +------------------+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(10).select("*", sf.ln('id')).show()
+    +---+------------------+
+    | id|            ln(id)|
+    +---+------------------+
+    |  0|              NULL|
+    |  1|               0.0|
+    |  2|0.6931471805599...|
+    |  3|1.0986122886681...|
+    |  4|1.3862943611198...|
+    |  5|1.6094379124341...|
+    |  6| 1.791759469228...|
+    |  7|1.9459101490553...|
+    |  8|2.0794415416798...|
+    |  9|2.1972245773362...|
+    +---+------------------+
     """
     return _invoke_function_over_columns("ln", col)
 
@@ -7237,13 +7265,22 @@ def log2(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(4,)], ['a'])
-    >>> df.select(log2('a').alias('log2')).show()
-    +----+
-    |log2|
-    +----+
-    | 2.0|
-    +----+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(10).select("*", sf.log2('id')).show()
+    +---+------------------+
+    | id|          LOG2(id)|
+    +---+------------------+
+    |  0|              NULL|
+    |  1|               0.0|
+    |  2|               1.0|
+    |  3| 1.584962500721...|
+    |  4|               2.0|
+    |  5| 2.321928094887...|
+    |  6| 2.584962500721...|
+    |  7| 2.807354922057...|
+    |  8|               3.0|
+    |  9|3.1699250014423...|
+    +---+------------------+
     """
     return _invoke_function_over_columns("log2", col)
 
@@ -7274,9 +7311,16 @@ def conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("010101",)], ['n'])
-    >>> df.select(conv(df.n, 2, 16).alias('hex')).collect()
-    [Row(hex='15')]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("010101",), ( "101",), ("001",)], ['n'])
+    >>> df.select("*", sf.conv(df.n, 2, 16)).show()
+    +------+--------------+
+    |     n|conv(n, 2, 16)|
+    +------+--------------+
+    |010101|            15|
+    |   101|             5|
+    |   001|             1|
+    +------+--------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -7307,9 +7351,22 @@ def factorial(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(5,)], ['n'])
-    >>> df.select(factorial(df.n).alias('f')).collect()
-    [Row(f=120)]
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(10).select("*", sf.factorial('id')).show()
+    +---+-------------+
+    | id|factorial(id)|
+    +---+-------------+
+    |  0|            1|
+    |  1|            1|
+    |  2|            2|
+    |  3|            6|
+    |  4|           24|
+    |  5|          120|
+    |  6|          720|
+    |  7|         5040|
+    |  8|        40320|
+    |  9|       362880|
+    +---+-------------+
     """
     return _invoke_function_over_columns("factorial", col)
 
@@ -8712,31 +8769,31 @@ def dateadd(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     >>> spark.createDataFrame(
     ...     [('2015-04-08', 2,)], ['dt', 'add']
     ... ).select(sf.dateadd("dt", 1)).show()
-    +--------------+
-    |dateadd(dt, 1)|
-    +--------------+
-    |    2015-04-09|
-    +--------------+
+    +---------------+
+    |date_add(dt, 1)|
+    +---------------+
+    |     2015-04-09|
+    +---------------+
 
     >>> import pyspark.sql.functions as sf
     >>> spark.createDataFrame(
     ...     [('2015-04-08', 2,)], ['dt', 'add']
     ... ).select(sf.dateadd("dt", sf.lit(2))).show()
-    +--------------+
-    |dateadd(dt, 2)|
-    +--------------+
-    |    2015-04-10|
-    +--------------+
+    +---------------+
+    |date_add(dt, 2)|
+    +---------------+
+    |     2015-04-10|
+    +---------------+
 
     >>> import pyspark.sql.functions as sf
     >>> spark.createDataFrame(
     ...     [('2015-04-08', 2,)], ['dt', 'add']
     ... ).select(sf.dateadd("dt", -1)).show()
-    +---------------+
-    |dateadd(dt, -1)|
-    +---------------+
-    |     2015-04-07|
-    +---------------+
+    +----------------+
+    |date_add(dt, -1)|
+    +----------------+
+    |      2015-04-07|
+    +----------------+
     """
     days = _enum_to_value(days)
     days = lit(days) if isinstance(days, int) else days
@@ -9678,7 +9735,7 @@ def from_utc_timestamp(timestamp: "ColumnOrName", tz: Union[Column, str]) -> Col
 
 
 @_try_remote_functions
-def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
+def to_utc_timestamp(timestamp: "ColumnOrName", tz: Union[Column, str]) -> Column:
     """
     This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
     takes a timestamp which is timezone-agnostic, and interprets it as a timestamp in the given
@@ -10343,11 +10400,11 @@ def current_database() -> Column:
     Examples
     --------
     >>> spark.range(1).select(current_database()).show()
-    +------------------+
-    |current_database()|
-    +------------------+
-    |           default|
-    +------------------+
+    +----------------+
+    |current_schema()|
+    +----------------+
+    |         default|
+    +----------------+
     """
     return _invoke_function("current_database")
 
@@ -11195,6 +11252,127 @@ def encode(col: "ColumnOrName", charset: str) -> Column:
     from pyspark.sql.classic.column import _to_java_column
 
     return _invoke_function("encode", _to_java_column(col), _enum_to_value(charset))
+
+
+@_try_remote_functions
+def is_valid_utf8(str: "ColumnOrName") -> Column:
+    """
+    Returns true if the input is a valid UTF-8 string, otherwise returns false.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        A column of strings, each representing a UTF-8 byte sequence.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        whether the input string is a valid UTF-8 string.
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.is_valid_utf8(sf.lit("SparkSQL"))).show()
+    +-----------------------+
+    |is_valid_utf8(SparkSQL)|
+    +-----------------------+
+    |                   true|
+    +-----------------------+
+    """
+    return _invoke_function_over_columns("is_valid_utf8", str)
+
+
+@_try_remote_functions
+def make_valid_utf8(str: "ColumnOrName") -> Column:
+    """
+    Returns a new string in which all invalid UTF-8 byte sequences, if any, are replaced by the
+    Unicode replacement character (U+FFFD).
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        A column of strings, each representing a UTF-8 byte sequence.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the valid UTF-8 version of the given input string.
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.make_valid_utf8(sf.lit("SparkSQL"))).show()
+    +-------------------------+
+    |make_valid_utf8(SparkSQL)|
+    +-------------------------+
+    |                 SparkSQL|
+    +-------------------------+
+    """
+    return _invoke_function_over_columns("make_valid_utf8", str)
+
+
+@_try_remote_functions
+def validate_utf8(str: "ColumnOrName") -> Column:
+    """
+    Returns the input value if it corresponds to a valid UTF-8 string, or emits an error otherwise.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        A column of strings, each representing a UTF-8 byte sequence.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the input string if it is a valid UTF-8 string, error otherwise.
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.validate_utf8(sf.lit("SparkSQL"))).show()
+    +-----------------------+
+    |validate_utf8(SparkSQL)|
+    +-----------------------+
+    |               SparkSQL|
+    +-----------------------+
+    """
+    return _invoke_function_over_columns("validate_utf8", str)
+
+
+@_try_remote_functions
+def try_validate_utf8(str: "ColumnOrName") -> Column:
+    """
+    Returns the input value if it corresponds to a valid UTF-8 string, or NULL otherwise.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        A column of strings, each representing a UTF-8 byte sequence.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the input string if it is a valid UTF-8 string, null otherwise.
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.try_validate_utf8(sf.lit("SparkSQL"))).show()
+    +---------------------------+
+    |try_validate_utf8(SparkSQL)|
+    +---------------------------+
+    |                   SparkSQL|
+    +---------------------------+
+    """
+    return _invoke_function_over_columns("try_validate_utf8", str)
 
 
 @_try_remote_functions
