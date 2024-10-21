@@ -574,6 +574,22 @@ struct<>
 
 
 -- !query
+insert into t5 values ('İo', 'İo', 'İo ')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t5 values ('İo', 'İo ', 'İo')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 insert into t5 values ('İo', 'İo', 'i̇o')
 -- !query schema
 struct<>
@@ -758,6 +774,8 @@ abc abc
 efd2 efd2
 i̇o i̇o
 sitTing sitTing
+İo  İo 
+İo İo
 İo İo
 
 
@@ -807,6 +825,8 @@ abcdcba SQL
 bbAbAAbA SQL
 efd2 SQL
 kitten SQL
+İo  SQL
+İo SQL
 İo SQL
 İo SQL
 
@@ -828,6 +848,8 @@ abc,word	abc,word
 efd2,word	efd2,word
 i̇o,word	İo,word
 sitTing,word	kitten,word
+İo ,word	İo,word
+İo,word	İo ,word
 İo,word	İo,word
 
 
@@ -848,6 +870,8 @@ abc,word	abc,word
 efd2,word	efd2,word
 i̇o,word	İo,word
 sitTing,word	kitten,word
+İo ,word	İo,word
+İo,word	İo ,word
 İo,word	İo,word
 
 
@@ -867,6 +891,8 @@ abcdcba
 bbAbAAbA
 efd2
 kitten
+İo
+İo
 İo
 İo
 
@@ -919,6 +945,8 @@ efd2
 kitten
 İo
 İo
+İo
+İo
 
 
 -- !query
@@ -937,6 +965,8 @@ abcdcba
 bbAbAAbA
 efd2
 kitten
+İo
+İo
 İo
 İo
 
@@ -959,6 +989,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -979,6 +1011,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -1013,7 +1047,9 @@ struct<split_part(s, utf8_binary, 1):string>
 
 
 
+
 bbAbaAbA
+İo
 
 
 -- !query
@@ -1056,6 +1092,8 @@ struct<split_part(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lca
 
 
 
+
+ 
 b
 
 
@@ -1100,6 +1138,8 @@ struct<split_part(utf8_binary, a, 3):string,split_part(utf8_lcase, a, 3):string 
 	
 	
 	
+	
+	
 A	
 A	
 A
@@ -1110,6 +1150,30 @@ select split_part(utf8_binary, 'a' collate utf8_lcase, 3), split_part(utf8_lcase
 -- !query schema
 struct<split_part(utf8_binary, collate(a, utf8_lcase), 3):string collate UTF8_LCASE,split_part(utf8_lcase, collate(a, utf8_binary), 3):string>
 -- !query output
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	A
+	A
+	A
+
+
+-- !query
+select split_part(utf8_binary, 'a ' collate utf8_lcase_rtrim, 3), split_part(utf8_lcase, 'a' collate utf8_binary, 3) from t5
+-- !query schema
+struct<split_part(utf8_binary, collate(a , utf8_lcase_rtrim), 3):string collate UTF8_LCASE_RTRIM,split_part(utf8_lcase, collate(a, utf8_binary), 3):string>
+-- !query output
+	
+	
 	
 	
 	
@@ -1146,6 +1210,8 @@ select contains(s, utf8_binary) from t5
 struct<contains(s, utf8_binary):boolean>
 -- !query output
 false
+false
+true
 true
 true
 true
@@ -1187,6 +1253,8 @@ false
 false
 false
 false
+false
+true
 true
 true
 true
@@ -1203,6 +1271,8 @@ struct<contains(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase
 false
 false
 false
+false
+true
 true
 true
 true
@@ -1251,6 +1321,8 @@ false	false
 false	false
 false	false
 false	false
+false	false
+false	false
 false	true
 true	false
 true	true
@@ -1266,6 +1338,30 @@ select contains(utf8_binary, 'AaAA' collate utf8_lcase), contains(utf8_lcase, 'A
 -- !query schema
 struct<contains(utf8_binary, collate(AaAA, utf8_lcase)):boolean,contains(utf8_lcase, collate(AAa, utf8_binary)):boolean>
 -- !query output
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+true	false
+true	false
+true	true
+
+
+-- !query
+select contains(utf8_binary, 'AaAA ' collate utf8_lcase_rtrim), contains(utf8_lcase, 'AAa ' collate utf8_binary_rtrim) from t5
+-- !query schema
+struct<contains(utf8_binary, collate(AaAA , utf8_lcase_rtrim)):boolean,contains(utf8_lcase, collate(AAa , utf8_binary_rtrim)):boolean>
+-- !query output
+false	false
+false	false
 false	false
 false	false
 false	false
@@ -1313,7 +1409,9 @@ struct<substring_index(s, utf8_binary, 1):string>
 
 
 
+
 bbAbaAbA
+İo
 
 
 -- !query
@@ -1349,6 +1447,8 @@ efd2
 kitten
 İo
 İo
+İo
+İo
 
 
 -- !query
@@ -1367,6 +1467,8 @@ abcdcba
 bbAb
 efd2
 kitten
+İo
+İo
 İo
 İo
 
@@ -1415,6 +1517,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -1435,6 +1539,30 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
+
+
+-- !query
+select substring_index(utf8_binary, 'AaAA ' collate utf8_lcase_rtrim, 2), substring_index(utf8_lcase, 'AAa' collate utf8_binary, 2) from t5
+-- !query schema
+struct<substring_index(utf8_binary, collate(AaAA , utf8_lcase_rtrim), 2):string collate UTF8_LCASE_RTRIM,substring_index(utf8_lcase, collate(AAa, utf8_binary), 2):string>
+-- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+a	aaAaAAaA
+a	aaAaaAaA
+a	aaAaaAaAaaAaaAaAaaAaaAaA
+abc	abc
+abcdcba	aBcDCbA
+bbAbAAbA	a
+efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -1458,6 +1586,8 @@ select instr(s, utf8_binary) from t5
 struct<instr(s, utf8_binary):int>
 -- !query output
 0
+0
+1
 1
 1
 1
@@ -1499,6 +1629,8 @@ struct<instr(utf8_binary, collate(utf8_lcase, utf8_binary)):int>
 0
 0
 0
+0
+1
 1
 1
 1
@@ -1515,6 +1647,8 @@ struct<instr(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase)):
 0
 0
 0
+0
+1
 1
 1
 1
@@ -1563,6 +1697,8 @@ struct<instr(utf8_binary, a):int,instr(utf8_lcase, a):int>
 0	0
 0	0
 0	0
+0	0
+0	0
 0	1
 1	1
 1	1
@@ -1578,6 +1714,8 @@ select instr(utf8_binary, 'AaAA' collate utf8_lcase), instr(utf8_lcase, 'AAa' co
 -- !query schema
 struct<instr(utf8_binary, collate(AaAA, utf8_lcase)):int,instr(utf8_lcase, collate(AAa, utf8_binary)):int>
 -- !query output
+0	0
+0	0
 0	0
 0	0
 0	0
@@ -1615,6 +1753,8 @@ struct<find_in_set(s, utf8_binary):int>
 -- !query output
 0
 0
+0
+1
 1
 1
 1
@@ -1656,6 +1796,8 @@ struct<find_in_set(utf8_binary, collate(utf8_lcase, utf8_binary)):int>
 0
 0
 0
+0
+0
 1
 1
 1
@@ -1668,6 +1810,8 @@ select find_in_set(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase
 -- !query schema
 struct<find_in_set(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase)):int>
 -- !query output
+0
+0
 0
 0
 0
@@ -1697,8 +1841,10 @@ struct<find_in_set(utf8_binary, aaAaaAaA,i̇o):int,find_in_set(utf8_lcase, aaAaa
 0	0
 0	0
 0	0
+0	0
 0	1
 0	1
+0	2
 0	2
 0	2
 
@@ -1716,9 +1862,33 @@ struct<find_in_set(utf8_binary, collate(aaAaaAaA,i̇o, utf8_lcase)):int,find_in_
 0	0
 0	0
 0	0
+0	0
 1	0
 1	0
 1	1
+2	0
+2	0
+2	2
+
+
+-- !query
+select find_in_set(utf8_binary, 'aaAaaAaA,i̇o ' collate utf8_lcase_rtrim), find_in_set(utf8_lcase, 'aaAaaAaA,i̇o' collate utf8_binary) from t5
+-- !query schema
+struct<find_in_set(utf8_binary, collate(aaAaaAaA,i̇o , utf8_lcase_rtrim)):int,find_in_set(utf8_lcase, collate(aaAaaAaA,i̇o, utf8_binary)):int>
+-- !query output
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+1	0
+1	0
+1	1
+2	0
+2	0
 2	0
 2	2
 
@@ -1744,6 +1914,8 @@ select startswith(s, utf8_binary) from t5
 struct<startswith(s, utf8_binary):boolean>
 -- !query output
 false
+false
+true
 true
 true
 true
@@ -1785,6 +1957,8 @@ false
 false
 false
 false
+false
+true
 true
 true
 true
@@ -1802,6 +1976,8 @@ false
 false
 false
 false
+false
+true
 true
 true
 true
@@ -1854,6 +2030,8 @@ false	false
 false	false
 false	false
 false	false
+false	false
+false	false
 false	true
 false	true
 false	true
@@ -1864,6 +2042,30 @@ select startswith(utf8_binary, 'aaAaaAaA' collate utf8_lcase), startswith(utf8_l
 -- !query schema
 struct<startswith(utf8_binary, collate(aaAaaAaA, utf8_lcase)):boolean,startswith(utf8_lcase, collate(aaAaaAaA, utf8_binary)):boolean>
 -- !query output
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+true	false
+true	true
+true	true
+
+
+-- !query
+select startswith(utf8_binary, 'aaAaaAaA ' collate utf8_lcase_rtrim), startswith(utf8_lcase, 'aaAaaAaA' collate utf8_binary) from t5
+-- !query schema
+struct<startswith(utf8_binary, collate(aaAaaAaA , utf8_lcase_rtrim)):boolean,startswith(utf8_lcase, collate(aaAaaAaA, utf8_binary)):boolean>
+-- !query output
+false	false
+false	false
 false	false
 false	false
 false	false
@@ -1889,6 +2091,8 @@ struct<translate(utf8_lcase, utf8_lcase, 12345):string collate UTF8_LCASE>
 11111111
 111111111111111111111111
 12
+12
+123
 123
 123
 123
@@ -1947,6 +2151,8 @@ efd2
 kitten
 İo
 İo
+İo
+İo
 
 
 -- !query
@@ -1993,6 +2199,8 @@ efd2	efd2
 i̇o	İo
 sitTing	kitten
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -2013,6 +2221,30 @@ efd2	efd2
 i̇o	İo
 sitTing	kitten
 İo	İo
+İo	İo 
+İo 	İo
+
+
+-- !query
+select translate(utf8_lcase, 'aBc ' collate utf8_binary_rtrim, '12345'), translate(utf8_binary, 'aBc' collate utf8_lcase, '12345') from t5
+-- !query schema
+struct<translate(utf8_lcase, collate(aBc , utf8_binary_rtrim), 12345):string collate UTF8_BINARY_RTRIM,translate(utf8_binary, collate(aBc, utf8_lcase), 12345):string collate UTF8_LCASE>
+-- !query output
+1	22121121
+11A11A1A	11111111
+11A11A1A11A11A1A11A11A1A	11111111
+11A1AA1A	11111111
+123DCbA	123d321
+1b3	123
+Hello,4world!4Ni3e4d1y.	Hello, world! Ni3e d1y.
+SQL	Sp1rk
+Something4else.4Nothing4here.	Something else. Nothing here.
+efd2	efd2
+i̇o	İo
+sitTing	kitten
+İo	İo
+İo	İo 
+İo4	İo
 
 
 -- !query
@@ -2047,7 +2279,9 @@ abc
 abc
 abc
 abc
+abc
 bbAbaAbA
+İo
 
 
 -- !query
@@ -2079,9 +2313,11 @@ abc
 abc
 abc
 abc
+abc 
 abcdcba
 bbAbAAbA
 kitten
+İo
 İo
 
 
@@ -2101,8 +2337,10 @@ abc
 abc
 abc
 abc
+abc 
 bbabcbabcabcbabc
 kitten
+İo
 
 
 -- !query
@@ -2149,6 +2387,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -2169,6 +2409,30 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
+
+
+-- !query
+select replace(utf8_binary, 'aaAaaAaA ' collate utf8_lcase_rtrim, 'abc'), replace(utf8_lcase, 'aaAaaAaA' collate utf8_binary, 'abc') from t5
+-- !query schema
+struct<replace(utf8_binary, collate(aaAaaAaA , utf8_lcase_rtrim), abc):string collate UTF8_LCASE_RTRIM,replace(utf8_lcase, collate(aaAaaAaA, utf8_binary), abc):string>
+-- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	abc
+aaAaAAaA	abcabcabc
+abc	abc
+abcdcba	aBcDCbA
+bbAbAAbA	a
+efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -2192,6 +2456,8 @@ select endswith(s, utf8_binary) from t5
 struct<endswith(s, utf8_binary):boolean>
 -- !query output
 false
+false
+true
 true
 true
 true
@@ -2233,6 +2499,8 @@ false
 false
 false
 false
+false
+false
 true
 true
 true
@@ -2246,6 +2514,8 @@ select endswith(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) f
 -- !query schema
 struct<endswith(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase)):boolean>
 -- !query output
+false
+false
 false
 false
 false
@@ -2302,6 +2572,8 @@ false	false
 false	false
 false	false
 false	false
+false	false
+false	false
 false	true
 false	true
 false	true
@@ -2312,6 +2584,30 @@ select endswith(utf8_binary, 'aaAaaAaA' collate utf8_lcase), endswith(utf8_lcase
 -- !query schema
 struct<endswith(utf8_binary, collate(aaAaaAaA, utf8_lcase)):boolean,endswith(utf8_lcase, collate(aaAaaAaA, utf8_binary)):boolean>
 -- !query output
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+false	false
+true	false
+true	true
+true	true
+
+
+-- !query
+select endswith(utf8_binary, 'aaAaaAaA ' collate utf8_lcase_rtrim), endswith(utf8_lcase, 'aaAaaAaA' collate utf8_binary) from t5
+-- !query schema
+struct<endswith(utf8_binary, collate(aaAaaAaA , utf8_lcase_rtrim)):boolean,endswith(utf8_lcase, collate(aaAaaAaA, utf8_binary)):boolean>
+-- !query output
+false	false
+false	false
 false	false
 false	false
 false	false
@@ -2343,7 +2639,9 @@ abcdcbaabcdcbaabcdcba	aBcDCbAaBcDCbA
 bbAbAAbAbbAbAAbAbbAbAAbA	aa
 efd2efd2efd2	efd2efd2
 kittenkittenkitten	sitTingsitTing
+İo İo İo 	İoİo
 İoİoİo	i̇oi̇o
+İoİoİo	İo İo 
 İoİoİo	İoİo
 
 
@@ -2363,7 +2661,9 @@ abcdcbaabcdcbaabcdcba	aBcDCbAaBcDCbA
 bbAbAAbAbbAbAAbAbbAbAAbA	aa
 efd2efd2efd2	efd2efd2
 kittenkittenkitten	sitTingsitTing
+İo İo İo 	İoİo
 İoİoİo	i̇oi̇o
+İoİoİo	İo İo 
 İoİoİo	İoİo
 
 
@@ -2375,6 +2675,8 @@ struct<ascii(utf8_binary):int,ascii(utf8_lcase):int>
 101	101
 107	115
 304	105
+304	304
+304	304
 304	304
 72	72
 83	83
@@ -2395,6 +2697,8 @@ struct<ascii(collate(utf8_binary, utf8_lcase)):int,ascii(collate(utf8_lcase, utf
 101	101
 107	115
 304	105
+304	304
+304	304
 304	304
 72	72
 83	83
@@ -2452,6 +2756,8 @@ ZWZkMg==	ZWZkMg==
 a2l0dGVu	c2l0VGluZw==
 xLBv	acyHbw==
 xLBv	xLBv
+xLBv	xLBvIA==
+xLBvIA==	xLBv
 
 
 -- !query
@@ -2472,6 +2778,8 @@ ZWZkMg==	ZWZkMg==
 a2l0dGVu	c2l0VGluZw==
 xLBv	acyHbw==
 xLBv	xLBv
+xLBv	xLBvIA==
+xLBvIA==	xLBv
 
 
 -- !query
@@ -2492,6 +2800,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -2512,6 +2822,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -2550,6 +2862,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -2570,6 +2884,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -2590,6 +2906,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -2610,6 +2928,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -2629,6 +2949,8 @@ struct<sentences(utf8_binary, , ):array<array<string>>,sentences(utf8_lcase, , )
 [["efd2"]]	[["efd2"]]
 [["kitten"]]	[["sitTing"]]
 [["İo"]]	[["i̇o"]]
+[["İo"]]	[["İo"]]
+[["İo"]]	[["İo"]]
 [["İo"]]	[["İo"]]
 
 
@@ -2650,6 +2972,8 @@ struct<sentences(collate(utf8_binary, utf8_lcase), , ):array<array<string collat
 [["kitten"]]	[["sitTing"]]
 [["İo"]]	[["i̇o"]]
 [["İo"]]	[["İo"]]
+[["İo"]]	[["İo"]]
+[["İo"]]	[["İo"]]
 
 
 -- !query
@@ -2670,6 +2994,8 @@ SOMETHING ELSE. NOTHING HERE.	SOMETHING ELSE. NOTHING HERE.
 SPARK	SQL
 İO	İO
 İO	İO
+İO	İO 
+İO 	İO
 
 
 -- !query
@@ -2690,6 +3016,8 @@ SOMETHING ELSE. NOTHING HERE.	SOMETHING ELSE. NOTHING HERE.
 SPARK	SQL
 İO	İO
 İO	İO
+İO	İO 
+İO 	İO
 
 
 -- !query
@@ -2707,6 +3035,8 @@ efd2	efd2
 hello, world! nice day.	hello, world! nice day.
 i̇o	i̇o
 i̇o	i̇o
+i̇o	i̇o 
+i̇o 	i̇o
 kitten	sitting
 something else. nothing here.	something else. nothing here.
 spark	sql
@@ -2727,6 +3057,8 @@ efd2	efd2
 hello, world! nice day.	hello, world! nice day.
 i̇o	i̇o
 i̇o	i̇o
+i̇o	i̇o 
+i̇o 	i̇o
 kitten	sitting
 something else. nothing here.	something else. nothing here.
 spark	sql
@@ -2750,6 +3082,8 @@ Something Else. Nothing Here.	Something Else. Nothing Here.
 Spark	Sql
 İo	İo
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -2770,6 +3104,8 @@ Something Else. Nothing Here.	Something Else. Nothing Here.
 Spark	Sql
 İo	İo
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -2803,6 +3139,8 @@ abcdcba
 bbAbAAbA
 efd2
 kitten
+İo
+İo
 İo
 İo
 
@@ -2840,6 +3178,8 @@ eefd2
 ksitTing
 İi̇o
 İİo
+İİo
+İİo
 
 
 -- !query
@@ -2859,6 +3199,8 @@ baAbAAbA
 eefd2
 ksitTing
 İi̇o
+İİo
+İİo
 İİo
 
 
@@ -2880,6 +3222,8 @@ ead2	ead2
 katten	satTing
 İa	iao
 İa	İa
+İa	İa 
+İa 	İa
 
 
 -- !query
@@ -2899,6 +3243,8 @@ bAaAAAbA	aAAa
 eAaAA	eAAa
 kAaAAn	sAAaing
 İAaAA	iAAa
+İAaAA	İAAa
+İAaAA	İAAa
 İAaAA	İAAa
 
 
@@ -2944,6 +3290,8 @@ S162	S400
 S535	S535
 İo	I000
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -2964,6 +3312,8 @@ S162	S400
 S535	S535
 İo	I000
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -2973,8 +3323,10 @@ struct<length(utf8_binary):int,length(utf8_lcase):int>
 -- !query output
 2	2
 2	3
+2	3
 23	23
 29	29
+3	2
 3	3
 4	4
 5	3
@@ -2993,8 +3345,10 @@ struct<length(collate(utf8_binary, utf8_lcase)):int,length(collate(utf8_lcase, u
 -- !query output
 2	2
 2	3
+2	3
 23	23
 29	29
+3	2
 3	3
 4	4
 5	3
@@ -3016,6 +3370,8 @@ struct<bit_length(utf8_binary):int,bit_length(utf8_lcase):int>
 24	24
 24	24
 24	32
+24	32
+32	24
 32	32
 40	24
 48	56
@@ -3036,6 +3392,8 @@ struct<bit_length(collate(utf8_binary, utf8_lcase)):int,bit_length(collate(utf8_
 24	24
 24	24
 24	32
+24	32
+32	24
 32	32
 40	24
 48	56
@@ -3056,6 +3414,8 @@ struct<octet_length(utf8_binary):int,octet_length(utf8_lcase):int>
 3	3
 3	3
 3	4
+3	4
+4	3
 4	4
 5	3
 6	7
@@ -3076,6 +3436,8 @@ struct<octet_length(collate(utf8_binary, utf8_lcase)):int,octet_length(collate(u
 3	3
 3	3
 3	4
+3	4
+4	3
 4	4
 5	3
 6	7
@@ -3127,6 +3489,8 @@ struct<levenshtein(s, utf8_binary):int>
 0
 0
 0
+0
+1
 1
 
 
@@ -3157,6 +3521,8 @@ struct<levenshtein(utf8_binary, collate(utf8_lcase, utf8_binary)):int>
 0
 0
 1
+1
+1
 16
 2
 4
@@ -3177,6 +3543,8 @@ struct<levenshtein(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lc
 0
 0
 1
+1
+1
 16
 2
 4
@@ -3193,8 +3561,10 @@ struct<levenshtein(utf8_binary, a):int,levenshtein(utf8_lcase, a):int>
 2	2
 2	2
 2	3
+2	3
 22	22
 29	29
+3	2
 4	3
 4	4
 6	6
@@ -3221,6 +3591,8 @@ struct<levenshtein(utf8_binary, collate(AaAA, utf8_lcase), 3):int,levenshtein(ut
 -1	3
 -1	3
 -1	3
+-1	3
+-1	3
 -1	4
 3	3
 
@@ -3230,6 +3602,8 @@ select is_valid_utf8(utf8_binary), is_valid_utf8(utf8_lcase) from t5
 -- !query schema
 struct<is_valid_utf8(utf8_binary):boolean,is_valid_utf8(utf8_lcase):boolean>
 -- !query output
+true	true
+true	true
 true	true
 true	true
 true	true
@@ -3263,6 +3637,8 @@ true	true
 true	true
 true	true
 true	true
+true	true
+true	true
 
 
 -- !query
@@ -3283,6 +3659,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -3303,6 +3681,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -3323,6 +3703,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -3343,6 +3725,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -3363,6 +3747,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -3383,6 +3769,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -3400,7 +3788,9 @@ el	el
 fd	fd
 it	it
 o	o
+o	o 
 o	̇o
+o 	o
 om	om
 pa	QL
 
@@ -3420,7 +3810,9 @@ el	el
 fd	fd
 it	it
 o	o
+o	o 
 o	̇o
+o 	o
 om	om
 pa	QL
 
@@ -3439,8 +3831,10 @@ bc	bc
 d2	d2
 e.	e.
 en	ng
+o 	İo
 rk	QL
 y.	y.
+İo	o 
 İo	İo
 İo	̇o
 
@@ -3459,8 +3853,10 @@ bc	bc
 d2	d2
 e.	e.
 en	ng
+o 	İo
 rk	QL
 y.	y.
+İo	o 
 İo	İo
 İo	̇o
 
@@ -3483,6 +3879,8 @@ ef	ef
 ki	si
 İo	i̇
 İo	İo
+İo	İo
+İo	İo
 
 
 -- !query
@@ -3502,6 +3900,8 @@ bb	a
 ef	ef
 ki	si
 İo	i̇
+İo	İo
+İo	İo
 İo	İo
 
 
@@ -3536,6 +3936,8 @@ abcdcbaa
 bbAbaAbA
 efd2efd2
 kittenki
+İoİo İo 
+İoİoİoİo
 İoİoİoİo
 İoİoİoİo
 
@@ -3571,7 +3973,9 @@ abcdcbaa
 bbAbAAbA
 efd2efd2
 kittensi
+İo İoİoİ
 İoi̇oi̇o
+İoİo İo 
 İoİoİoİo
 
 
@@ -3591,8 +3995,32 @@ abcdcbaa
 bbAbAAbA
 efd2efd2
 kittensi
+İo İoİoİ
 İoi̇oi̇o
+İoİo İo 
 İoİoİoİo
+
+
+-- !query
+select lpad(utf8_binary collate utf8_binary_rtrim, 8, utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query schema
+struct<lpad(collate(utf8_binary, utf8_binary_rtrim), 8, collate(utf8_lcase, utf8_binary_rtrim)):string collate UTF8_BINARY_RTRIM>
+-- !query output
+Hello, w
+SQLSpark
+Somethin
+aaAaAAaA
+aaAaAAaA
+aaAaAAaA
+aabcdcba
+abcababc
+bbAbAAbA
+efd2efd2
+i̇oi̇oİo
+sikitten
+İo İo İo
+İoİoİoİo
+İoİoİİo
 
 
 -- !query
@@ -3611,7 +4039,9 @@ abcdcbaa	aBcDCbAa
 bbAbAAbA	aaaaaaaa
 efd2aaaa	efd2aaaa
 kittenaa	sitTinga
+İo aaaaa	İoaaaaaa
 İoaaaaaa	i̇oaaaaa
+İoaaaaaa	İo aaaaa
 İoaaaaaa	İoaaaaaa
 
 
@@ -3631,7 +4061,9 @@ abcdcbaA	aBcDCbAA
 bbAbAAbA	aAAaAAaA
 efd2AaAA	efd2AAaA
 kittenAa	sitTingA
+İo AaAAA	İoAAaAAa
 İoAaAAAa	i̇oAAaAA
+İoAaAAAa	İo AAaAA
 İoAaAAAa	İoAAaAAa
 
 
@@ -3666,6 +4098,8 @@ abcababc
 bbAbaAbA
 efd2efd2
 kikitten
+İo İo İo
+İoİoİoİo
 İoİoİoİo
 İoİoİoİo
 
@@ -3702,7 +4136,9 @@ bbAbAAbA
 efd2efd2
 i̇oi̇oİo
 sikitten
+İo İo İo
 İoİoİoİo
+İoİoİİo
 
 
 -- !query
@@ -3722,7 +4158,31 @@ bbAbAAbA
 efd2efd2
 i̇oi̇oİo
 sikitten
+İo İo İo
 İoİoİoİo
+İoİoİİo
+
+
+-- !query
+select lpad(utf8_binary collate utf8_binary_rtrim, 8, utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query schema
+struct<lpad(collate(utf8_binary, utf8_binary_rtrim), 8, collate(utf8_lcase, utf8_binary_rtrim)):string collate UTF8_BINARY_RTRIM>
+-- !query output
+Hello, w
+SQLSpark
+Somethin
+aaAaAAaA
+aaAaAAaA
+aaAaAAaA
+aabcdcba
+abcababc
+bbAbAAbA
+efd2efd2
+i̇oi̇oİo
+sikitten
+İo İo İo
+İoİoİoİo
+İoİoİİo
 
 
 -- !query
@@ -3739,6 +4199,8 @@ aaaSpark	aaaaaSQL
 aaaaaabc	aaaaaabc
 aaaaaaİo	aaaaaaİo
 aaaaaaİo	aaaaai̇o
+aaaaaaİo	aaaaaİo 
+aaaaaİo 	aaaaaaİo
 aaaaefd2	aaaaefd2
 aabcdcba	aaBcDCbA
 aakitten	asitTing
@@ -3753,6 +4215,8 @@ struct<lpad(utf8_binary, 8, collate(AaAA, utf8_lcase)):string collate UTF8_LCASE
 AaAAAabc	AAaAAabc
 AaAAAaİo	AAaAAaİo
 AaAAAaİo	AAaAAi̇o
+AaAAAaİo	AAaAAİo 
+AaAAAİo 	AAaAAaİo
 AaAAefd2	AAaAefd2
 AaASpark	AAaAASQL
 Aabcdcba	AaBcDCbA
@@ -3798,6 +4262,8 @@ struct<locate(s, utf8_binary, 1):int>
 1
 1
 1
+1
+1
 
 
 -- !query
@@ -3827,6 +4293,8 @@ struct<locate(utf8_binary, collate(utf8_lcase, utf8_binary), 1):int>
 0
 0
 0
+0
+1
 1
 1
 1
@@ -3840,6 +4308,8 @@ select locate(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase, 3) 
 -- !query schema
 struct<locate(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase), 3):int>
 -- !query output
+0
+0
 0
 0
 0
@@ -3898,6 +4368,8 @@ struct<locate(utf8_binary, a, 1):int,locate(utf8_lcase, a, 1):int>
 0	0
 0	0
 0	0
+0	0
+0	0
 0	1
 
 
@@ -3906,6 +4378,30 @@ select locate(utf8_binary, 'AaAA' collate utf8_lcase, 4), locate(utf8_lcase, 'AA
 -- !query schema
 struct<locate(utf8_binary, collate(AaAA, utf8_lcase), 4):int,locate(utf8_lcase, collate(AAa, utf8_binary), 4):int>
 -- !query output
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+0	0
+
+
+-- !query
+select locate(utf8_binary, 'AaAA ' collate utf8_binary_rtrim, 4), locate(utf8_lcase, 'AAa ' collate utf8_binary, 4) from t5
+-- !query schema
+struct<locate(utf8_binary, collate(AaAA , utf8_binary_rtrim), 4):int,locate(utf8_lcase, collate(AAa , utf8_binary), 4):int>
+-- !query output
+0	0
+0	0
 0	0
 0	0
 0	0
@@ -3972,6 +4468,8 @@ struct<TRIM(BOTH utf8_binary FROM collate(utf8_lcase, utf8_binary)):string>
 
 
 
+
+ 
 BcDCbA
 QL
 a
@@ -3995,6 +4493,8 @@ struct<TRIM(BOTH collate(utf8_binary, utf8_lcase) FROM collate(utf8_lcase, utf8_
 
 
 
+
+ 
 QL
 sitTing
 
@@ -4026,6 +4526,21 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+select TRIM(utf8_binary collate utf8_binary_rtrim, utf8_lcase collate utf8_binary) from t5
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "`string`, `string collate UTF8_BINARY_RTRIM`"
+  }
+}
+
+
+-- !query
 select TRIM('ABc', utf8_binary), TRIM('ABc', utf8_lcase) from t5
 -- !query schema
 struct<TRIM(BOTH ABc FROM utf8_binary):string,TRIM(BOTH ABc FROM utf8_lcase):string collate UTF8_LCASE>
@@ -4043,6 +4558,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -4063,6 +4580,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -4085,6 +4604,8 @@ select BTRIM(s, utf8_binary) from t5
 -- !query schema
 struct<btrim(s, utf8_binary):string>
 -- !query output
+
+
 
 
 
@@ -4128,6 +4649,8 @@ struct<btrim(utf8_binary, collate(utf8_lcase, utf8_binary)):string>
 
 
 
+
+ 
 bbAbAAbA
 d
 kitte
@@ -4149,6 +4672,8 @@ struct<btrim(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase)):
 
 
 
+
+ 
 bbAbAAb
 kitte
 park
@@ -4182,6 +4707,28 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+select BTRIM(utf8_binary collate utf8_binary_rtrim, utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query schema
+struct<btrim(collate(utf8_binary, utf8_binary_rtrim), collate(utf8_lcase, utf8_binary_rtrim)):string collate UTF8_BINARY_RTRIM>
+-- !query output
+
+
+
+
+
+
+
+
+
+
+bbAbAAbA
+d
+kitte
+park
+İ
+
+
+-- !query
 select BTRIM('ABc', utf8_binary), BTRIM('ABc', utf8_lcase) from t5
 -- !query schema
 struct<btrim(ABc, utf8_binary):string,btrim(ABc, utf8_lcase):string collate UTF8_LCASE>
@@ -4189,6 +4736,8 @@ struct<btrim(ABc, utf8_binary):string,btrim(ABc, utf8_lcase):string collate UTF8
 AB	
 AB	
 AB	B
+ABc	ABc
+ABc	ABc
 ABc	ABc
 ABc	ABc
 ABc	ABc
@@ -4208,6 +4757,8 @@ struct<btrim(collate(ABc, utf8_lcase), utf8_binary):string collate UTF8_LCASE,bt
 -- !query output
 	
 	AA
+ABc	AAa
+ABc	AAa
 ABc	AAa
 ABc	AAa
 ABc	AAa
@@ -4272,6 +4823,8 @@ struct<TRIM(LEADING utf8_binary FROM collate(utf8_lcase, utf8_binary)):string>
 
 
 
+
+ 
 BcDCbA
 QL
 a
@@ -4295,6 +4848,8 @@ struct<TRIM(LEADING collate(utf8_binary, utf8_lcase) FROM collate(utf8_lcase, ut
 
 
 
+
+ 
 QL
 sitTing
 
@@ -4326,6 +4881,28 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+select LTRIM(utf8_binary collate utf8_binary_rtrim, utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query schema
+struct<TRIM(LEADING collate(utf8_binary, utf8_binary_rtrim) FROM collate(utf8_lcase, utf8_binary_rtrim)):string collate UTF8_BINARY_RTRIM>
+-- !query output
+
+
+
+
+
+
+
+
+
+ 
+BcDCbA
+QL
+a
+i̇o
+sitTing
+
+
+-- !query
 select LTRIM('ABc', utf8_binary), LTRIM('ABc', utf8_lcase) from t5
 -- !query schema
 struct<TRIM(LEADING ABc FROM utf8_binary):string,TRIM(LEADING ABc FROM utf8_lcase):string collate UTF8_LCASE>
@@ -4343,6 +4920,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -4363,6 +4942,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -4386,6 +4967,20 @@ select RTRIM(s, utf8_binary) from t5
 struct<TRIM(TRAILING s FROM utf8_binary):string>
 -- !query output
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+İo
 
 
 -- !query
@@ -4416,11 +5011,13 @@ struct<TRIM(TRAILING utf8_binary FROM collate(utf8_lcase, utf8_binary)):string>
 
 
 
+
 SQL
 a
 aBcDCbA
 i̇
 sitTing
+İo
 
 
 -- !query
@@ -4439,8 +5036,10 @@ struct<TRIM(TRAILING collate(utf8_binary, utf8_lcase) FROM collate(utf8_lcase, u
 
 
 
+
 SQL
 sitTing
+İo
 
 
 -- !query
@@ -4470,6 +5069,28 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+select RTRIM(utf8_binary collate utf8_binary_rtrim, utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query schema
+struct<TRIM(TRAILING collate(utf8_binary, utf8_binary_rtrim) FROM collate(utf8_lcase, utf8_binary_rtrim)):string collate UTF8_BINARY_RTRIM>
+-- !query output
+
+
+
+
+
+
+
+
+
+
+SQL
+a
+aBcDCbA
+i̇
+sitTing
+
+
+-- !query
 select RTRIM('ABc', utf8_binary), RTRIM('ABc', utf8_lcase) from t5
 -- !query schema
 struct<TRIM(TRAILING ABc FROM utf8_binary):string,TRIM(TRAILING ABc FROM utf8_lcase):string collate UTF8_LCASE>
@@ -4487,6 +5108,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
@@ -4507,6 +5130,8 @@ efd2	efd2
 kitten	sitTing
 İo	i̇o
 İo	İo
+İo	İo 
+İo 	İo
 
 
 -- !query
