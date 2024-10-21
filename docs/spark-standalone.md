@@ -376,7 +376,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>
     The pattern for app ID generation based on Java `String.format` method.
     The default value is `app-%s-%04d` which represents the existing app id string, e.g.,
-    `app-20231031224509-0008`. Plesae be careful to generate unique IDs.
+    `app-20231031224509-0008`. Please be careful to generate unique IDs.
   </td>
   <td>4.0.0</td>
 </tr>

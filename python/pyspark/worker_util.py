@@ -107,8 +107,8 @@ def setup_memory_limits(memory_limit_mb: int) -> None:
 
         except (resource.error, OSError, ValueError) as e:
             # not all systems support resource limits, so warn instead of failing
-            curent = currentframe()
-            lineno = getframeinfo(curent).lineno + 1 if curent is not None else 0
+            current = currentframe()
+            lineno = getframeinfo(current).lineno + 1 if current is not None else 0
             if "__file__" in globals():
                 print(
                     warnings.formatwarning(

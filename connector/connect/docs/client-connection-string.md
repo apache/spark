@@ -2,7 +2,7 @@
 
 From the client perspective, Spark Connect mostly behaves as any other GRPC
 client and can be configured as such. However, to make it easy to use from
-different programming languages and to have a homogenous connection surface
+different programming languages and to have a homogeneous connection surface
 this document proposes what the user surface is for connecting to a
 Spark Connect endpoint.
 
@@ -136,7 +136,7 @@ server_url = "sc://myhost.com:443/;use_ssl=true;token=ABCDEFG"
 
 As mentioned above, Spark Connect uses a regular GRPC client and the server path
 cannot be configured to remain compatible with the GRPC standard and HTTP. For
-example the following examles are invalid.
+example the following examples are invalid.
 
 ```python
 server_url = "sc://myhost.com:443/mypathprefix/;token=AAAAAAA"

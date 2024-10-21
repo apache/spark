@@ -74,7 +74,7 @@ class ParamsReadWrite(Params):
 
     def _get_extra_metadata(self) -> Any:
         """
-        Returns exta metadata of the instance
+        Returns extra metadata of the instance
         """
         return None
 
