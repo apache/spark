@@ -202,7 +202,7 @@ def plot_histogram(data: "DataFrame", **kwargs: Any) -> "Figure":
                 y=series,
                 name=series.name,
                 text=text_bins,
-                hovertemplate=("variable=" + series.name + "<br>value=%{text}<br>count=%{y}"),
+                hovertemplate=("variable=" + str(series.name) + "<br>value=%{text}<br>count=%{y}"),
             )
         )
 
