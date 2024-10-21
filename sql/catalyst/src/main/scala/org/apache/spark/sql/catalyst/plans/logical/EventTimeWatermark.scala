@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import java.util.concurrent.TimeUnit
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark.updateEventTimeColumn

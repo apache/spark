@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.{UUID, TimeZone}
+import java.util.{TimeZone, UUID}
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
