@@ -89,6 +89,12 @@ trait V2PartitionCommand extends UnaryCommand {
 }
 
 /**
+ * Trait to add to v1 ddl commands so that we can still catch those plan nodes
+ * in the catalyst analyzer rules.
+ */
+trait V1DDLCommand {}
+
+/**
  * Append data to an existing table.
  */
 case class AppendData(
