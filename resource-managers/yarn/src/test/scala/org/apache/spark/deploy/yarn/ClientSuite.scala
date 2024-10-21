@@ -671,6 +671,34 @@ class ClientSuite extends SparkFunSuite
     assertUserClasspathUrls(cluster = true, replacementRootPath)
   }
 
+  test("SPARK-49923: test SUBMIT_JAVA_OPTION_PURE_MODE enabled, JVM parameters cannot be set") {
+    val sparkConf = new SparkConf()
+
+    sparkConf.set("spark.driver.defaultJavaOptions", "-Xmx1024m")
+      .set("spark.executor.defaultJavaOptions", "-Xmx1024m")
+      .set("spark.driver.extraJavaOptions", "-Xmx1024m")
+      .set("spark.executor.extraJavaOptions", "-Xmx1024m")
+      .set(SUBMIT_JAVA_OPTION_PURE_MODE, true)
+
+    intercept[IllegalArgumentException] {
+      ResourceRequestHelper.validateJavaOptions(sparkConf)
+    }
+  }
+
+  test("SPARK-49923: test SUBMIT_JAVA_OPTION_PURE_MODE disabled, JVM parameters can be set") {
+    val sparkConf = new SparkConf()
+
+    sparkConf.set("spark.driver.defaultJavaOptions", "-Xmx1024m")
+      .set("spark.executor.defaultJavaOptions", "-Xmx1024m")
+      .set("spark.driver.extraJavaOptions", "-Xmx1024m")
+      .set("spark.executor.extraJavaOptions", "-Xmx1024m")
+      .set(SUBMIT_JAVA_OPTION_PURE_MODE, false)
+
+    noException should be thrownBy {
+      ResourceRequestHelper.validateJavaOptions(sparkConf)
+    }
+  }
+
   test("SPARK-44306: test directoriesToBePreloaded") {
     val sparkConf = new SparkConf()
       .set(YARN_CLIENT_STAT_CACHE_PRELOAD_PER_DIRECTORY_THRESHOLD, 3)
