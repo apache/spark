@@ -3464,7 +3464,7 @@ object SQLConf {
       "sources will fallback to Data Source V1 code path.")
     .version("3.0.0")
     .stringConf
-    .createWithDefault("avro,csv,json,kafka,orc,parquet,text")
+    .createWithDefault("avro,csv,json,kafka,orc,parquet,text,xml")
 
   val ALLOW_EMPTY_SCHEMAS_FOR_WRITES = buildConf("spark.sql.legacy.allowEmptySchemaWrite")
     .internal()
