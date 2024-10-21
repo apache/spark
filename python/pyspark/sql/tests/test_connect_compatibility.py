@@ -33,6 +33,8 @@ from pyspark.sql.window import WindowSpec as ClassicWindowSpec
 import pyspark.sql.functions as ClassicFunctions
 from pyspark.sql.group import GroupedData as ClassicGroupedData
 import pyspark.sql.avro.functions as ClassicAvro
+from pyspark.sql.streaming.query import StreamingQuery as ClassicStreamingQuery
+from pyspark.sql.streaming.query import StreamingQueryManager as ClassicStreamingQueryManager
 
 if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
@@ -47,6 +49,10 @@ if should_test_connect:
     import pyspark.sql.connect.functions as ConnectFunctions
     from pyspark.sql.connect.group import GroupedData as ConnectGroupedData
     import pyspark.sql.connect.avro.functions as ConnectAvro
+    from pyspark.sql.connect.streaming.query import StreamingQuery as ConnectStreamingQuery
+    from pyspark.sql.connect.streaming.query import (
+        StreamingQueryManager as ConnectStreamingQueryManager,
+    )
 
 
 class ConnectCompatibilityTestsMixin:
@@ -393,6 +399,38 @@ class ConnectCompatibilityTestsMixin:
             ClassicAvro,
             ConnectAvro,
             "Avro",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_streaming_query_compatibility(self):
+        """Test Streaming Query compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = set()
+        self.check_compatibility(
+            ClassicStreamingQuery,
+            ConnectStreamingQuery,
+            "StreamingQuery",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_streaming_query_manager_compatibility(self):
+        """Test Streaming Query Manager compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = {"close"}
+        self.check_compatibility(
+            ClassicStreamingQueryManager,
+            ConnectStreamingQueryManager,
+            "StreamingQueryManager",
             expected_missing_connect_properties,
             expected_missing_classic_properties,
             expected_missing_connect_methods,
