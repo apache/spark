@@ -245,6 +245,8 @@ case class DivideInterval(
        NULL
       > SELECT _FUNC_(0, 1, 0, 1, 0, 0, 100.000001);
        1 months 1 days 1 minutes 40.000001 seconds
+      > SELECT _FUNC_(2147483647);
+       NULL
   """,
   since = "4.0.0",
   group = "datetime_funcs")
@@ -326,8 +328,6 @@ case class TryMakeInterval(
        NULL
       > SELECT _FUNC_(0, 1, 0, 1, 0, 0, 100.000001);
        1 months 1 days 1 minutes 40.000001 seconds
-      > SELECT _FUNC_(2147483647);
-       NULL
   """,
   since = "3.0.0",
   group = "datetime_funcs")

@@ -383,12 +383,19 @@ class FunctionsTestsMixin:
         actual = df.select(F.collation(F.collate("name", "UNICODE"))).distinct().collect()
         self.assertEqual([Row("UNICODE")], actual)
 
-def test_try_conv(self):
-    df = self.spark.createDataFrame(
-        [("92233720368547758070",), ("-92233720368547758070",)], ["num"]
-    )
-    actual = df.select(F.try_conv(df.num, 10, 16).alias("res")).collect()
-    self.assertEqual([Row(res="FFFFFFFFFFFFFFFF"), Row(res="FFFFFFFFFFFFFFFF")], actual)
+    def test_try_conv(self):
+        df = self.spark.createDataFrame(
+            [("92233720368547758070",), ("-92233720368547758070",)], ["num"]
+        )
+        actual = df.select(F.try_conv(df.num, 10, 16).alias("res")).collect()
+        self.assertEqual([Row(res="FFFFFFFFFFFFFFFF"), Row(res="FFFFFFFFFFFFFFFF")], actual)
+
+    def test_try_make_interval(self):
+        df = self.spark.createDataFrame(
+            [(2147483647,)], ["num"]
+        )
+        actual = df.select(F.try_make_interval(df.num).alias("res")).collect()
+        self.assertEqual([Row(res=None)], actual)
 
     def test_octet_length_function(self):
         # SPARK-36751: add octet length api for python
