@@ -27,7 +27,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingZoneIds, UTC_OPT}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant.VariantUtil._
@@ -121,7 +121,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("to_json valid input") {
     def check(expectedJson: String, value: Array[Byte], metadata: Array[Byte]): Unit = {
       checkEvaluation(
-        StructsToJson(Map.empty, Literal(new VariantVal(value, metadata)), UTC_OPT),
+        StructsToJson(Map.empty, Literal(new VariantVal(value, metadata))),
         expectedJson
       )
     }
@@ -145,7 +145,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("to_json with large offsets and sizes") {
     def check(expectedJson: String, value: Array[Byte], metadata: Array[Byte]): Unit = {
       checkEvaluation(
-        StructsToJson(Map.empty, Literal(new VariantVal(value, metadata)), UTC_OPT),
+        StructsToJson(Map.empty, Literal(new VariantVal(value, metadata))),
         expectedJson
       )
     }
@@ -186,7 +186,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("to_json large binary") {
     def check(expectedJson: String, value: Array[Byte], metadata: Array[Byte]): Unit = {
       checkEvaluation(
-        StructsToJson(Map.empty, Literal(new VariantVal(value, metadata)), UTC_OPT),
+        StructsToJson(Map.empty, Literal(new VariantVal(value, metadata))),
         expectedJson
       )
     }
@@ -609,7 +609,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("variant_get timestamp") {
-    outstandingZoneIds.foreach { zid =>
+    DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid.getId) {
         def toMicros(time: LocalDateTime, zoneId: ZoneId): Long = {
           val instant = time.atZone(zoneId).toInstant
@@ -797,9 +797,9 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // one-past-the-end position (i.e. the sum of all string lengths).
     val emptyMetadata = Array[Byte](VERSION, 0, 0)
 
-    def checkToJson(value: Array[Byte], expected: String, timeZone: String = "UTC"): Unit = {
+    def checkToJson(value: Array[Byte], expected: String): Unit = {
       val input = Literal(new VariantVal(value, emptyMetadata))
-      checkEvaluation(StructsToJson(Map.empty, input, Some(timeZone)), expected)
+      checkEvaluation(StructsToJson(Map.empty, input), expected)
     }
 
     def checkToJsonFail(value: Array[Byte], id: Int): Unit = {
@@ -908,14 +908,13 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkCast(timestampHeader ++ time6, DateType, -719893)
     }
 
-    val timeZone = "America/Los_Angeles"
-    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-      checkToJson(timestampHeader ++ time1, "\"1969-12-31 16:00:00-08:00\"", timeZone)
-      checkToJson(timestampHeader ++ time2, "\"2011-03-13 03:00:00-07:00\"", timeZone)
-      checkToJson(timestampHeader ++ time3, "\"2011-03-13 01:59:59.999999-08:00\"", timeZone)
-      checkToJson(timestampHeader ++ time4, "\"-290308-12-21 12:06:07.224192-07:52\"", timeZone)
-      checkToJson(timestampHeader ++ time5, "\"+294247-01-09 20:00:54.775807-08:00\"", timeZone)
-      checkToJson(timestampHeader ++ time6, "\"-0002-12-31 16:07:02-07:52\"", timeZone)
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      checkToJson(timestampHeader ++ time1, "\"1969-12-31 16:00:00-08:00\"")
+      checkToJson(timestampHeader ++ time2, "\"2011-03-13 03:00:00-07:00\"")
+      checkToJson(timestampHeader ++ time3, "\"2011-03-13 01:59:59.999999-08:00\"")
+      checkToJson(timestampHeader ++ time4, "\"-290308-12-21 12:06:07.224192-07:52\"")
+      checkToJson(timestampHeader ++ time5, "\"+294247-01-09 20:00:54.775807-08:00\"")
+      checkToJson(timestampHeader ++ time6, "\"-0002-12-31 16:07:02-07:52\"")
 
       checkCast(timestampHeader ++ time1, DateType, -1)
       checkCast(timestampHeader ++ time2, DateType, 15046)
@@ -954,11 +953,11 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("cast to variant/to_variant_object") {
     def check[T : TypeTag](input: T, expectedJson: String,
-      toVariantObject: Boolean = false, timeZone: String = "UTC"): Unit = {
+                           toVariantObject: Boolean = false): Unit = {
       val expr =
         if (toVariantObject) ToVariantObject(Literal.create(input))
         else Cast(Literal.create(input), VariantType, evalMode = EvalMode.ANSI)
-      checkEvaluation(StructsToJson(Map.empty, expr, Some(timeZone)), expectedJson)
+      checkEvaluation(StructsToJson(Map.empty, expr), expectedJson)
     }
 
     def checkFailure[T: TypeTag](input: T, toVariantObject: Boolean = false): Unit = {
@@ -1033,10 +1032,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       check(Literal(0L, TimestampNTZType), "\"1970-01-01 00:00:00\"")
     }
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
-      check(Literal(0L, TimestampType), "\"1969-12-31 16:00:00-08:00\"",
-        timeZone = "America/Los_Angeles")
-      check(Literal(0L, TimestampNTZType), "\"1970-01-01 00:00:00\"",
-        timeZone = "America/Los_Angeles")
+      check(Literal(0L, TimestampType), "\"1969-12-31 16:00:00-08:00\"")
+      check(Literal(0L, TimestampNTZType), "\"1970-01-01 00:00:00\"")
     }
 
     check(Array(null, "a", "b", "c"), """[null,"a","b","c"]""")

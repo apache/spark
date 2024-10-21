@@ -682,7 +682,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val input = Literal(
       ArrayBasedMapData(Map(UTF8String.fromString("test") -> InternalRow(1))), schema)
     checkEvaluation(
-      StructsToJson(Map.empty, input, UTC_OPT),
+      StructsToJson(Map.empty, input),
       """{"test":{"a":1}}"""
     )
   }
@@ -692,7 +692,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       StructType(StructField("b", IntegerType) :: Nil))
     val input = Literal(ArrayBasedMapData(Map(InternalRow(1) -> InternalRow(2))), schema)
     checkEvaluation(
-      StructsToJson(Map.empty, input, UTC_OPT),
+      StructsToJson(Map.empty, input),
       """{"[1]":{"b":2}}"""
     )
   }
@@ -701,7 +701,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val schema = MapType(StringType, IntegerType)
     val input = Literal(ArrayBasedMapData(Map(UTF8String.fromString("a") -> 1)), schema)
     checkEvaluation(
-      StructsToJson(Map.empty, input, UTC_OPT),
+      StructsToJson(Map.empty, input),
       """{"a":1}"""
     )
   }
@@ -729,8 +729,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   test("from/to json - interval support") {
     val schema = StructType(StructField("i", CalendarIntervalType) :: Nil)
     checkEvaluation(
-      JsonToStructs(schema, Map.empty, Literal.create("""{"i":"1 year 1 day"}""", StringType),
-        UTC_OPT),
+      JsonToStructs(schema, Map.empty, Literal.create("""{"i":"1 year 1 day"}""", StringType)),
       InternalRow(new CalendarInterval(12, 1, 0)))
 
     Seq(MapType(CalendarIntervalType, IntegerType), MapType(IntegerType, CalendarIntervalType))
