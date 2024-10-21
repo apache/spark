@@ -333,6 +333,20 @@ class FunctionsTestsMixin:
         rndn2 = df.select("key", F.randn(0)).collect()
         self.assertEqual(sorted(rndn1), sorted(rndn2))
 
+    def test_try_parse_url(self):
+        df = self.spark.createDataFrame(
+            [("https://spark.apache.org/path?query=1", "QUERY", "query")],
+            ["url", "part", "key"],
+        )
+        actual = df.select(F.try_parse_url(df.url, df.part, df.key)).collect()
+        self.assertEqual(actual, [Row("1")])
+        df = self.spark.createDataFrame(
+            [("inva lid://spark.apache.org/path?query=1", "QUERY", "query")],
+            ["url", "part", "key"],
+        )
+        actual = df.select(F.try_parse_url(df.url, df.part, df.key)).collect()
+        self.assertEqual(actual, [Row(None)])
+
     def test_string_functions(self):
         string_functions = [
             "upper",
