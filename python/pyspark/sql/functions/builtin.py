@@ -7275,8 +7275,8 @@ def try_conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
     >>> df = spark.createDataFrame([("010101",)], ['n'])
     >>> df.select(try_conv(df.n, 2, 16).alias('hex')).collect()
     [Row(hex='15')]
-    >>> df1 = spark.createDataFrame([("9223372036854775807",)], ['n'])
-    >>> df.select(try_conv(df.n, 36, 16).alias('converted')).collect()
+    >>> df1 = spark.createDataFrame([("92233720368547758070",)], ['n'])
+    >>> df.select(try_conv(df.n, 10, 16).alias('converted')).collect()
     [Row(converted='FFFFFFFFFFFFFFFF')]
     """
     from pyspark.sql.classic.column import _to_java_column
