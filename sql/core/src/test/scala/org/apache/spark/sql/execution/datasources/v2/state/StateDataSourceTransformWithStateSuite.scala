@@ -23,7 +23,7 @@ import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, TestClass}
 import org.apache.spark.sql.functions.{explode, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{ExpiredTimerInfo, InputMapRow, ListState, MapInputEvent, MapOutputEvent, MapStateTTLProcessor, MaxEventTimeStatefulProcessor, OutputMode, RunningCountStatefulProcessor, RunningCountStatefulProcessorWithProcTimeTimerUpdates, StatefulProcessor, StateStoreMetricsTest, TestMapStateProcessor, TimeMode, TimerValues, TransformWithStateSuiteUtils, Trigger, TTLConfig, ValueState}
+import org.apache.spark.sql.streaming.{InputMapRow, ListState, MapInputEvent, MapOutputEvent, MapStateTTLProcessor, MaxEventTimeStatefulProcessor, OutputMode, RunningCountStatefulProcessor, RunningCountStatefulProcessorWithProcTimeTimerUpdates, StatefulProcessor, StateStoreMetricsTest, TestMapStateProcessor, TimeMode, TimerValues, TransformWithStateSuiteUtils, Trigger, TTLConfig, ValueState}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
 /** Stateful processor of single value state var with non-primitive type */
@@ -40,8 +40,7 @@ class StatefulProcessorWithSingleValueVar extends RunningCountStatefulProcessor 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     val count = _valueState.getOption().getOrElse(TestClass(0L, "dummyKey")).id + 1
     _valueState.update(TestClass(count, "dummyKey"))
     Iterator((key, count.toString))
@@ -62,8 +61,7 @@ class StatefulProcessorWithTTL
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + 1
     if (count == 3) {
       _countState.clear()
@@ -89,8 +87,7 @@ class SessionGroupsStatefulProcessor extends
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, String)],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[String] = {
+      timerValues: TimerValues): Iterator[String] = {
     inputRows.foreach { inputRow =>
       _groupsList.appendValue(inputRow._2)
     }
@@ -112,8 +109,7 @@ class SessionGroupsStatefulProcessorWithTTL extends
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, String)],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[String] = {
+      timerValues: TimerValues): Iterator[String] = {
     inputRows.foreach { inputRow =>
       _groupsListWithTTL.appendValue(inputRow._2)
     }
