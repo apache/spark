@@ -491,7 +491,7 @@ class StreamingQueryManager:
         """
         return [StreamingQuery(jsq) for jsq in self._jsqm.active()]
 
-    def get(self, id: str) -> Optional[StreamingQuery]:
+    def get(self, id: str) -> Optional["StreamingQuery"]:
         """
         Returns an active query from this :class:`SparkSession`.
 
