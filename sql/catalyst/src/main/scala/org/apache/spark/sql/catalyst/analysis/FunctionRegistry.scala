@@ -466,6 +466,7 @@ object FunctionRegistry {
     expression[TryAesDecrypt]("try_aes_decrypt"),
     expression[TryReflect]("try_reflect"),
     expression[TryUrlDecode]("try_url_decode"),
+    expression[TryMakeInterval]("try_make_interval"),
     expression[TryConv]("try_conv"),
 
     // aggregate functions

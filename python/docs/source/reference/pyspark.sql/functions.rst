@@ -302,6 +302,7 @@ Date and Timestamp Functions
     to_unix_timestamp
     to_utc_timestamp
     trunc
+    try_make_interval
     try_to_timestamp
     unix_date
     unix_micros
