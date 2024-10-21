@@ -5907,7 +5907,10 @@ class AstBuilder extends DataTypeAstBuilder
       visitSetOperationImpl(left, plan(ctx.right), all, c.getType)
     }.getOrElse(Option(ctx.queryOrganization).map { c =>
       withQueryResultClauses(c, withSubqueryAlias(), forPipeOperators = true)
-      }
+    }.getOrElse(
+      visitOperatorPipeAggregate(ctx, left)
+    ))))))))
+  }
 
   private def visitOperatorPipeAggregate(
       ctx: OperatorPipeRightSideContext, left: LogicalPlan): LogicalPlan = {
