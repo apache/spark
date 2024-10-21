@@ -1111,6 +1111,12 @@
     ],
     "sqlState" : "42K03"
   },
+  "DATETIME_FIELD_OUT_OF_BOUNDS" : {
+    "message" : [
+      "The value <badValue> you entered for <unit> is not valid. Please provide a value between <range>. To disable strict validation, you can turn off ANSI mode by setting <ansiConfig> to \"false\"."
+    ],
+    "sqlState" : "22008"
+  },
   "DATETIME_OVERFLOW" : {
     "message" : [
       "Datetime operation overflow: <operation>."
