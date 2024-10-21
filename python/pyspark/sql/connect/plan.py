@@ -1350,6 +1350,20 @@ class Transpose(LogicalPlan):
         return plan
 
 
+class UnresolvedTableValuedFunction(LogicalPlan):
+    def __init__(self, name: str, args: Sequence[Column]):
+        super().__init__(None)
+        self._name = name
+        self._args = args
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.unresolved_table_valued_function.function_name = self._name
+        for arg in self._args:
+            plan.unresolved_table_valued_function.arguments.append(arg.to_plan(session))
+        return plan
+
+
 class CollectMetrics(LogicalPlan):
     """Logical plan object for a CollectMetrics operation."""
 

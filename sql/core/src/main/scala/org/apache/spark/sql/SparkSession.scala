@@ -675,6 +675,9 @@ class SparkSession private(
   /** @inheritdoc */
   def readStream: DataStreamReader = new DataStreamReader(self)
 
+  /** @inheritdoc */
+  def tvf: TableValuedFunction = new TableValuedFunction(self)
+
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
   object implicits extends SQLImplicits {

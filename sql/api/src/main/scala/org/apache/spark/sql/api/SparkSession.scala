@@ -630,6 +630,13 @@ abstract class SparkSession extends Serializable with Closeable {
   def readStream: DataStreamReader
 
   /**
+   * Returns a [[TableValuedFunction]] that can be used to call a table-valued function (TVF).
+   *
+   * @since 4.0.0
+   */
+  def tvf: TableValuedFunction
+
+  /**
    * (Scala-specific) Implicit methods available in Scala for converting common Scala objects into
    * `DataFrame`s.
    *
