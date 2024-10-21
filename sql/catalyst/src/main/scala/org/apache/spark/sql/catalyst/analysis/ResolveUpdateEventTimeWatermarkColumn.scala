@@ -36,7 +36,7 @@ object ResolveUpdateEventTimeWatermarkColumn extends Rule[LogicalPlan] {
     _.containsPattern(UPDATE_EVENT_TIME_WATERMARK_COLUMN), ruleId) {
     case u: UpdateEventTimeWatermarkColumn if u.delay.isEmpty && u.childrenResolved =>
       val existingWatermarkDelay = u.child.collect {
-        case EventTimeWatermark(_, delay, _) => delay
+        case EventTimeWatermark(_, _, delay, _) => delay
       }
 
       if (existingWatermarkDelay.isEmpty) {
