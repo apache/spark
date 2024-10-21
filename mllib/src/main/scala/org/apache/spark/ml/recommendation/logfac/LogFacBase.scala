@@ -51,8 +51,12 @@ private[ml] object LogFacBase {
 
   def createPartitionTable(numPartitions: Int, rnd: Random): Array[Array[Int]] = {
     val nBuckets = PART_TABLE_TOTAL_SIZE / numPartitions
-    val result = Array.fill(nBuckets)((0 until numPartitions).toArray)
-    (0 until nBuckets).foreach(i => shuffle(result(i), rnd))
+    val result = Array.fill(numPartitions)(Array.fill(nBuckets)(0))
+    (0 until nBuckets).foreach{i =>
+      val arr = (0 until numPartitions).toArray
+      shuffle(arr, rnd)
+      (0 until numPartitions).foreach(j => result(j)(i) = arr(j))
+    }
     result
   }
 
@@ -147,8 +151,8 @@ private[ml] abstract class LogFacBase[T](
     val (startEpoch, startIter) = latest.getOrElse((0, 0))
     var checkpointIter = startEpoch * numPartitions + startIter
 
-    val partitionTable = sparkContext.broadcast(LogFacBase
-      .createPartitionTable(numPartitions, new Random(seed)))
+    val partitionTable = LogFacBase
+      .createPartitionTable(numPartitions, new Random(seed))
 
     (startEpoch until numIterations).foreach {curEpoch =>
 
@@ -159,13 +163,14 @@ private[ml] abstract class LogFacBase[T](
       }
 
       ((if (curEpoch == startEpoch) startIter else 0) until numPartitions).foreach { pI =>
+        val bucket2part = partitionTable(pI)
         val partitioner2 = new HashPartitioner(numPartitions) {
           override def getPartition(item: Any): Int = {
             val bucket = LogFacBase.hash(
               item.asInstanceOf[Long],
               curEpoch,
-              partitionTable.value.length)
-            partitionTable.value.apply(bucket).apply(pI)
+              bucket2part.length)
+            bucket2part(bucket)
           }
         }
 
