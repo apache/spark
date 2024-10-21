@@ -418,6 +418,41 @@ case class Acosh(child: Expression)
   override protected def withNewChildInternal(newChild: Expression): Acosh = copy(child = newChild)
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """_FUNC_(num, from_base, to_base) - This is a special version of `conv` that performs the same operation, but "wraps" the result instead of throwing an exception on overflow in the number converted.""",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('100', 2, 10);
+       4
+      > SELECT _FUNC_(-10, 16, -10);
+       -16
+      > SELECT _FUNC_('92233720368547758070', 10, 16);
+       FFFFFFFFFFFFFFFF
+  """,
+  since = "4.0.0",
+  group = "math_funcs")
+// scalastyle:on line.size.limit
+case class TryConv(
+    numExpr: Expression,
+    fromBaseExpr: Expression,
+    toBaseExpr: Expression,
+    replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+
+  def this(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression) =
+    this(numExpr, fromBaseExpr, toBaseExpr,
+      Conv(numExpr, fromBaseExpr, toBaseExpr, ansiEnabled = false))
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(replacement = newChild)
+  }
+
+  override def parameters: Seq[Expression] = Seq(numExpr, fromBaseExpr, toBaseExpr)
+
+  override def prettyName: String = "try_conv"
+}
+
 /**
  * Convert a num from one base to another
  *
