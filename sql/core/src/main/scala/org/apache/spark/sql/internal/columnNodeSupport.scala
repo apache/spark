@@ -21,6 +21,7 @@ import scala.language.implicitConversions
 import UserDefinedFunctionUtils.toScalaUDF
 
 import org.apache.spark.SparkException
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.{Column, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.{analysis, expressions, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.analysis.{MultiAlias, UnresolvedAlias}
@@ -247,7 +248,8 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
   }
 }
 
-private[sql] object ColumnNodeToExpressionConverter extends ColumnNodeToExpressionConverter {
+@DeveloperApi
+object ColumnNodeToExpressionConverter extends ColumnNodeToExpressionConverter {
   override protected def parser: ParserInterface = {
     SparkSession.getActiveSession.map(_.sessionState.sqlParser).getOrElse {
       new SparkSqlParser()
@@ -260,7 +262,8 @@ private[sql] object ColumnNodeToExpressionConverter extends ColumnNodeToExpressi
 /**
  * [[ColumnNode]] wrapper for an [[Expression]].
  */
-private[sql] case class ExpressionColumnNode private(
+@DeveloperApi
+case class ExpressionColumnNode private(
     expression: Expression,
     override val origin: Origin = CurrentOrigin.get) extends ColumnNode {
   override def normalize(): ExpressionColumnNode = {
