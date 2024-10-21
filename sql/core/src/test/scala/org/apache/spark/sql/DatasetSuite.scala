@@ -2802,6 +2802,13 @@ class DatasetSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-49961: transform type should be consistent") {
+    val ds = Seq(1, 2).toDS()
+    val f: Dataset[Int] => Dataset[Int] = d => d.selectExpr("(value + 1) value").as[Int]
+    val transformed = ds.transform(f)
+    assert(transformed.collect().sorted === Array(2, 3))
+  }
 }
 
 class DatasetLargeResultCollectingSuite extends QueryTest
