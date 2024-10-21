@@ -1877,7 +1877,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         urlStr: String,
         partToExtract: String,
         key: String): Unit = {
-      checkEvaluation(ParseUrl(Seq(urlStr, partToExtract, key)), expected)
+      checkEvaluation(ParseUrl(Seq(urlStr, partToExtract, key)).replacement, expected)
     }
 
     checkParseUrl("spark.apache.org", "http://spark.apache.org/path?query=1", "HOST")
@@ -1905,7 +1905,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // exceptional cases
     intercept[java.util.regex.PatternSyntaxException] {
       evaluateWithoutCodegen(ParseUrl(Seq(Literal("http://spark.apache.org/path?"),
-        Literal("QUERY"), Literal("???"))))
+        Literal("QUERY"), Literal("???"))).replacement)
     }
 
     // arguments checking
@@ -1956,7 +1956,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "inputType" -> "\"INT\"")))
 
     // Test escaping of arguments
-    GenerateUnsafeProjection.generate(ParseUrl(Seq(Literal("\"quote"), Literal("\"quote"))) :: Nil)
+    GenerateUnsafeProjection.generate(
+      ParseUrl(Seq(Literal("\"quote"), Literal("\"quote"))).replacement :: Nil)
   }
 
   test("SPARK-33468: ParseUrl in ANSI mode should fail if input string is not a valid url") {
