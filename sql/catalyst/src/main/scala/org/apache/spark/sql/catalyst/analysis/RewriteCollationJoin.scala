@@ -36,7 +36,7 @@ object RewriteCollationJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case j @ Join(_, _, _, Some(condition), _) =>
       val newCondition = condition transform {
-        case e @ Equality(l: AttributeReference, r: AttributeReference) =>
+        case e @ Equality(l, r) =>
           e.withNewChildren(Seq(processExpression(l, l.dataType), processExpression(r, r.dataType)))
       }
       if (!newCondition.fastEquals(condition)) {
