@@ -4715,6 +4715,12 @@
     ],
     "sqlState" : "42704"
   },
+  "UNRECOGNIZED_STATISTIC" : {
+    "message" : [
+      "The statistic <stats> is not recognized. Valid statistics include `count`, `count_distinct`, `approx_count_distinct`, `mean`, `stddev`, `min`, `max`, and percentile values."
+    ],
+    "sqlState" : "42704"
+  },
   "UNRESOLVABLE_TABLE_VALUED_FUNCTION" : {
     "message" : [
       "Could not resolve <name> to a table-valued function.",
@@ -7148,11 +7154,6 @@
   "_LEGACY_ERROR_TEMP_2113" : {
     "message" : [
       "Unable to parse <stats> as a percentile."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2114" : {
-    "message" : [
-      "<stats> is not a recognised statistic."
     ]
   },
   "_LEGACY_ERROR_TEMP_2115" : {
