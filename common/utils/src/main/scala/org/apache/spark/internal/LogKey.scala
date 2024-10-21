@@ -476,6 +476,7 @@ private[spark] object LogKeys {
   case object NUM_DRIVERS extends LogKey
   case object NUM_DROPPED_PARTITIONS extends LogKey
   case object NUM_EFFECTIVE_RULE_OF_RUNS extends LogKey
+  case object NUM_ELEMENTS_SPILL_RECORDS extends LogKey
   case object NUM_ELEMENTS_SPILL_THRESHOLD extends LogKey
   case object NUM_EVENTS extends LogKey
   case object NUM_EXAMPLES extends LogKey
