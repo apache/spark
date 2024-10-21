@@ -507,12 +507,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     }
     // Here we exercise some error cases.
     val df = Seq((0)).toDF("a")
-    var expr = uniform(lit(10), lit("a"))
+    var expr = uniform(lit(10), lit("a"), lit(1))
     checkError(
       intercept[AnalysisException](df.select(expr)),
       condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "sqlExpr" -> "\"uniform(10, a)\"",
+        "sqlExpr" -> "\"uniform(10, a, 1)\"",
         "paramIndex" -> "second",
         "inputSql" -> "\"a\"",
         "inputType" -> "\"STRING\"",
@@ -525,7 +525,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         callSitePattern = "",
         startIndex = 0,
         stopIndex = 0))
-    expr = uniform(col("a"), lit(10))
+    expr = uniform(col("a"), lit(10), lit(1))
     checkError(
       intercept[AnalysisException](df.select(expr)),
       condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
@@ -533,7 +533,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "inputName" -> "`min`",
         "inputType" -> "integer or floating-point",
         "inputExpr" -> "\"a\"",
-        "sqlExpr" -> "\"uniform(a, 10)\""),
+        "sqlExpr" -> "\"uniform(a, 10, 1)\""),
       context = ExpectedContext(
         contextType = QueryContextType.DataFrame,
         fragment = "uniform",
