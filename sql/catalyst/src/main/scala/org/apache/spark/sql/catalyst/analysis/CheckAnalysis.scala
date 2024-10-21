@@ -1549,7 +1549,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           val sameTypeExceptCollations =
             DataType.equalsIgnoreCompatibleCollation(field.dataType, newDataType)
           newDataType match {
-            case _ if sameTypeExceptCollations =>
+            case _ if sameTypeExceptCollations => // Allow changing type collations.
             case _: StructType => alter.failAnalysis(
               "CANNOT_UPDATE_FIELD.STRUCT_TYPE",
               Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
