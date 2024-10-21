@@ -2731,6 +2731,27 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       }
     }
   }
+
+  test("spark 50005: Can't overwrite a table that is also being read from") {
+    val tableName1 = "t1"
+    val tableName2 = "t2"
+    withTable(tableName1, tableName2) {
+      sql(s"CREATE TABLE $tableName1 (a STRING, b INT) USING parquet")
+      sql(s"CREATE TABLE $tableName2 (a STRING, b INT) USING parquet")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""
+              |INSERT OVERWRITE TABLE $tableName1
+              |SELECT * FROM $tableName2 tb
+              |WHERE NOT EXISTS(SELECT ta.b FROM $tableName1 ta WHERE tb.b = ta.b)
+              |""".stripMargin)
+        },
+        condition = "UNSUPPORTED_OVERWRITE.TABLE",
+        parameters = Map("table" -> s"`spark_catalog`.`default`.`$tableName1`")
+      )
+    }
+  }
 }
 
 class FileExistingTestFileSystem extends RawLocalFileSystem {
