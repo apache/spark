@@ -56,7 +56,8 @@ case class InsertIntoHadoopFsRelationCommand(
     mode: SaveMode,
     catalogTable: Option[CatalogTable],
     fileIndex: Option[FileIndex],
-    outputColumnNames: Seq[String])
+    outputColumnNames: Seq[String],
+    fillStaticPartitions: Map[String, String] = Map.empty)
   extends V1WriteCommand {
 
   private lazy val parameters = CaseInsensitiveMap(options)
@@ -102,7 +103,7 @@ case class InsertIntoHadoopFsRelationCommand(
     // may be relevant to the insertion job.
     if (partitionsTrackedByCatalog) {
       matchingPartitions = sparkSession.sessionState.catalog.listPartitions(
-        catalogTable.get.identifier, Some(staticPartitions))
+        catalogTable.get.identifier, Some(staticPartitions ++ fillStaticPartitions))
       initialMatchingPartitions = matchingPartitions.map(_.spec)
       customPartitionLocations = getCustomPartitionLocations(
         fs, catalogTable.get, qualifiedOutputPath, matchingPartitions)
