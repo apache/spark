@@ -1546,7 +1546,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             .map(dt => col.field.copy(dataType = dt))
             .getOrElse(col.field)
           val newDataType = a.dataType.get
+          val sameTypeExceptCollations =
+            DataType.equalsIgnoreCompatibleCollation(field.dataType, newDataType)
           newDataType match {
+            case _ if sameTypeExceptCollations => // Allow changing type collations.
             case _: StructType => alter.failAnalysis(
               "CANNOT_UPDATE_FIELD.STRUCT_TYPE",
               Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
@@ -1576,7 +1579,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             case _ => Cast.canUpCast(from, to)
           }
 
-          if (!canAlterColumnType(field.dataType, newDataType)) {
+          if (!sameTypeExceptCollations && !canAlterColumnType(field.dataType, newDataType)) {
             alter.failAnalysis(
               errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
               messageParameters = Map(
