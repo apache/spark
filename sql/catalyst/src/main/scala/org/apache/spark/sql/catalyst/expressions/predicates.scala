@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.immutable
 import scala.collection.immutable.TreeSet
 
 import org.apache.spark.internal.Logging
@@ -29,9 +30,10 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.catalyst.util.{CollationAwareUTF8String, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -655,6 +657,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 
   @transient lazy val set: Set[Any] = child.dataType match {
+    case st: StringType if st.supportsLowercaseEquality => new InSet.LCaseSet(hset)
     case t: AtomicType if !t.isInstanceOf[BinaryType] => hset
     case _: NullType => hset
     case _ =>
@@ -765,6 +768,23 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 
   override protected def withNewChildInternal(newChild: Expression): InSet = copy(child = newChild)
+}
+
+object InSet {
+  class LCaseSet(inputSet: Set[Any]) extends immutable.Set[Any] {
+    private val strSet = inputSet.map { s =>
+      if (s == null) null
+      else CollationAwareUTF8String.lowerCaseCodePoints(s.asInstanceOf[UTF8String])
+    }
+    override def incl(elem: Any): Set[Any] = inputSet.incl(elem)
+    override def excl(elem: Any): Set[Any] = inputSet.excl(elem)
+    override def iterator: Iterator[Any] = inputSet.iterator
+
+    override def contains(elem: Any): Boolean = {
+      assert(elem != null, "InSet guarantees non-null input")
+      strSet.contains(CollationAwareUTF8String.lowerCaseCodePoints(elem.asInstanceOf[UTF8String]))
+    }
+  }
 }
 
 @ExpressionDescription(
