@@ -185,6 +185,7 @@ object ParseUrl {
   """,
   since = "4.0.0",
   group = "url_funcs")
+// scalastyle:on line.size.limit
 case class TryParseUrl(params: Seq[Expression], replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
   def this(children: Seq[Expression]) = this(children, ParseUrl(children, failOnError = false))
