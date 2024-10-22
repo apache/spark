@@ -30,16 +30,15 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
-import org.apache.spark.sql.catalyst.expressions.json.{JsonExpressionEvalUtils, JsonExpressionUtils, JsonToStructsEvaluator}
+import org.apache.spark.sql.catalyst.expressions.json.{JsonExpressionEvalUtils, JsonExpressionUtils, JsonToStructsEvaluator, StructsToJsonEvaluator}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, RUNTIME_REPLACEABLE, TreePattern}
-import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 private[this] sealed trait PathInstruction
@@ -748,13 +747,14 @@ case class StructsToJson(
     child: Expression,
     timeZoneId: Option[String] = None)
   extends UnaryExpression
-  with TimeZoneAwareExpression
-  with CodegenFallback
+  with RuntimeReplaceable
   with ExpectsInputTypes
-  with NullIntolerant
+  with TimeZoneAwareExpression
   with QueryErrorsBase {
 
   override def nullable: Boolean = true
+
+  override def nodePatternsInternal(): Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
 
   def this(options: Map[String, String], child: Expression) = this(options, child, None)
 
@@ -767,44 +767,7 @@ case class StructsToJson(
       timeZoneId = None)
 
   @transient
-  lazy val writer = new CharArrayWriter()
-
-  @transient
-  lazy val gen = new JacksonGenerator(
-    inputSchema, writer, new JSONOptions(options, timeZoneId.get))
-
-  @transient
-  lazy val inputSchema = child.dataType
-
-  // This converts rows to the JSON output according to the given schema.
-  @transient
-  lazy val converter: Any => UTF8String = {
-    def getAndReset(): UTF8String = {
-      gen.flush()
-      val json = writer.toString
-      writer.reset()
-      UTF8String.fromString(json)
-    }
-
-    inputSchema match {
-      case _: StructType =>
-        (row: Any) =>
-          gen.write(row.asInstanceOf[InternalRow])
-          getAndReset()
-      case _: ArrayType =>
-        (arr: Any) =>
-          gen.write(arr.asInstanceOf[ArrayData])
-          getAndReset()
-      case _: MapType =>
-        (map: Any) =>
-          gen.write(map.asInstanceOf[MapData])
-          getAndReset()
-      case _: VariantType =>
-        (v: Any) =>
-          gen.write(v.asInstanceOf[VariantVal])
-          getAndReset()
-    }
-  }
+  private lazy val inputSchema = child.dataType
 
   override def dataType: DataType = SQLConf.get.defaultStringType
 
@@ -820,14 +783,23 @@ case class StructsToJson(
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def nullSafeEval(value: Any): Any = converter(value)
-
   override def inputTypes: Seq[AbstractDataType] = TypeCollection(ArrayType, StructType) :: Nil
 
   override def prettyName: String = "to_json"
 
   override protected def withNewChildInternal(newChild: Expression): StructsToJson =
     copy(child = newChild)
+
+  @transient
+  private lazy val evaluator = StructsToJsonEvaluator(options, inputSchema, timeZoneId)
+
+  override def replacement: Expression = Invoke(
+    Literal.create(evaluator, ObjectType(classOf[StructsToJsonEvaluator])),
+    "evaluate",
+    dataType,
+    Seq(child),
+    Seq(child.dataType)
+  )
 }
 
 /**
