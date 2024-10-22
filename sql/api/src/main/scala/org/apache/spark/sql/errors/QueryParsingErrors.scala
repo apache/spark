@@ -60,7 +60,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def mergeStatementWithoutWhenClauseError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0008", ctx)
+    new ParseException(errorClass = "MERGE_WITHOUT_WHEN", ctx)
   }
 
   def nonLastMatchedClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
@@ -79,6 +79,25 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE",
       messageParameters = Map("partKey" -> toSQLId(key)),
+      ctx)
+  }
+
+  def clausesWithPipeOperatorsUnsupportedError(
+      ctx: QueryOrganizationContext,
+      clauses: String): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.CLAUSE_WITH_PIPE_OPERATORS",
+      messageParameters = Map("clauses" -> clauses),
+      ctx)
+  }
+
+  def multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
+      ctx: QueryOrganizationContext,
+      clause1: String,
+      clause2: String): Throwable = {
+    new ParseException(
+      errorClass = "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS",
+      messageParameters = Map("clause1" -> clause1, "clause2" -> clause2),
       ctx)
   }
 
@@ -516,8 +535,11 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0043", ctx)
   }
 
-  def intervalValueOutOfRangeError(ctx: IntervalContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0044", ctx)
+  def intervalValueOutOfRangeError(input: String, ctx: IntervalContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
+      messageParameters = Map("input" -> input),
+      ctx)
   }
 
   def invalidTimeZoneDisplacementValueError(ctx: SetTimeZoneContext): Throwable = {
@@ -621,9 +643,8 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   def unsupportedFunctionNameError(funcName: Seq[String], ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      messageParameters = Map(
-        "statement" -> toSQLStmt("CREATE TEMPORARY FUNCTION"),
-        "funcName" -> toSQLId(funcName)),
+      messageParameters =
+        Map("statement" -> toSQLStmt("CREATE TEMPORARY FUNCTION"), "name" -> toSQLId(funcName)),
       ctx)
   }
 
@@ -665,7 +686,14 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
       messageParameters =
-        Map("statement" -> toSQLStmt("DROP TEMPORARY FUNCTION"), "funcName" -> toSQLId(name)),
+        Map("statement" -> toSQLStmt("DROP TEMPORARY FUNCTION"), "name" -> toSQLId(name)),
+      ctx)
+  }
+
+  def invalidNameForSetCatalog(name: Seq[String], ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
+      messageParameters = Map("statement" -> toSQLStmt("SET CATALOG"), "name" -> toSQLId(name)),
       ctx)
   }
 

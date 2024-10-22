@@ -401,9 +401,6 @@ object functions {
   def count_min_sketch(e: Column, eps: Column, confidence: Column): Column =
     count_min_sketch(e, eps, confidence, lit(SparkClassUtils.random.nextLong))
 
-  private[spark] def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
-    Column.internalFn("collect_top_k", e, lit(num), lit(reverse))
-
   /**
    * Aggregate function: returns the Pearson Correlation Coefficient for two columns.
    *
@@ -1904,7 +1901,8 @@ object functions {
    * @group string_funcs
    * @since 4.0.0
    */
-  def randstr(length: Column): Column = Column.fn("randstr", length)
+  def randstr(length: Column): Column =
+    randstr(length, lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns a string of the specified length whose characters are chosen uniformly at random from
@@ -3770,7 +3768,8 @@ object functions {
    * @group math_funcs
    * @since 4.0.0
    */
-  def uniform(min: Column, max: Column): Column = Column.fn("uniform", min, max)
+  def uniform(min: Column, max: Column): Column =
+    uniform(min, max, lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns a random value with independent and identically distributed (i.i.d.) values with the
@@ -3913,6 +3912,44 @@ object functions {
    */
   def encode(value: Column, charset: String): Column =
     Column.fn("encode", value, lit(charset))
+
+  /**
+   * Returns true if the input is a valid UTF-8 string, otherwise returns false.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def is_valid_utf8(str: Column): Column =
+    Column.fn("is_valid_utf8", str)
+
+  /**
+   * Returns a new string in which all invalid UTF-8 byte sequences, if any, are replaced by the
+   * Unicode replacement character (U+FFFD).
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def make_valid_utf8(str: Column): Column =
+    Column.fn("make_valid_utf8", str)
+
+  /**
+   * Returns the input value if it corresponds to a valid UTF-8 string, or emits a
+   * SparkIllegalArgumentException exception otherwise.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def validate_utf8(str: Column): Column =
+    Column.fn("validate_utf8", str)
+
+  /**
+   * Returns the input value if it corresponds to a valid UTF-8 string, or NULL otherwise.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def try_validate_utf8(str: Column): Column =
+    Column.fn("try_validate_utf8", str)
 
   /**
    * Formats numeric column x to a format like '#,###,###.##', rounded to d decimal places with
@@ -4064,7 +4101,14 @@ object functions {
    * @group string_funcs
    * @since 2.3.0
    */
-  def ltrim(e: Column, trimString: String): Column = Column.fn("ltrim", lit(trimString), e)
+  def ltrim(e: Column, trimString: String): Column = ltrim(e, lit(trimString))
+
+  /**
+   * Trim the specified character string from left end for the specified string column.
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def ltrim(e: Column, trim: Column): Column = Column.fn("ltrim", trim, e)
 
   /**
    * Calculates the byte length for the specified string column.
@@ -4261,7 +4305,14 @@ object functions {
    * @group string_funcs
    * @since 2.3.0
    */
-  def rtrim(e: Column, trimString: String): Column = Column.fn("rtrim", lit(trimString), e)
+  def rtrim(e: Column, trimString: String): Column = rtrim(e, lit(trimString))
+
+  /**
+   * Trim the specified character string from right end for the specified string column.
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def rtrim(e: Column, trim: Column): Column = Column.fn("rtrim", trim, e)
 
   /**
    * Returns the soundex code for the specified expression.
@@ -4447,7 +4498,14 @@ object functions {
    * @group string_funcs
    * @since 2.3.0
    */
-  def trim(e: Column, trimString: String): Column = Column.fn("trim", lit(trimString), e)
+  def trim(e: Column, trimString: String): Column = trim(e, lit(trimString))
+
+  /**
+   * Trim the specified character from both ends for the specified string column.
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def trim(e: Column, trim: Column): Column = Column.fn("trim", trim, e)
 
   /**
    * Converts a string column to upper case.

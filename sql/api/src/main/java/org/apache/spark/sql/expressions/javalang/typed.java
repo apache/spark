@@ -19,13 +19,13 @@ package org.apache.spark.sql.expressions.javalang;
 
 import org.apache.spark.api.java.function.MapFunction;
 import org.apache.spark.sql.TypedColumn;
-import org.apache.spark.sql.execution.aggregate.TypedAverage;
-import org.apache.spark.sql.execution.aggregate.TypedCount;
-import org.apache.spark.sql.execution.aggregate.TypedSumDouble;
-import org.apache.spark.sql.execution.aggregate.TypedSumLong;
+import org.apache.spark.sql.internal.TypedAverage;
+import org.apache.spark.sql.internal.TypedCount;
+import org.apache.spark.sql.internal.TypedSumDouble;
+import org.apache.spark.sql.internal.TypedSumLong;
 
 /**
- * Type-safe functions available for {@link org.apache.spark.sql.Dataset} operations in Java.
+ * Type-safe functions available for {@link org.apache.spark.sql.api.Dataset} operations in Java.
  *
  * Scala users should use {@link org.apache.spark.sql.expressions.scalalang.typed}.
  *

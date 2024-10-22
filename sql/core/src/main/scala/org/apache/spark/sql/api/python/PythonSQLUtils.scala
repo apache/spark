@@ -36,7 +36,6 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.python.EvaluatePython
-import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -144,48 +143,6 @@ private[sql] object PythonSQLUtils extends Logging {
     }
   }
 
-  def castTimestampNTZToLong(c: Column): Column =
-    Column.internalFn("timestamp_ntz_to_long", c)
-
-  def ewm(e: Column, alpha: Double, ignoreNA: Boolean): Column =
-    Column.internalFn("ewm", e, lit(alpha), lit(ignoreNA))
-
-  def nullIndex(e: Column): Column = Column.internalFn("null_index", e)
-
-  def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
-    Column.internalFn("collect_top_k", e, lit(num), lit(reverse))
-
-  def binary_search(e: Column, value: Column): Column =
-    Column.internalFn("array_binary_search", e, value)
-
-  def pandasProduct(e: Column, ignoreNA: Boolean): Column =
-    Column.internalFn("pandas_product", e, lit(ignoreNA))
-
-  def pandasStddev(e: Column, ddof: Int): Column =
-    Column.internalFn("pandas_stddev", e, lit(ddof))
-
-  def pandasVariance(e: Column, ddof: Int): Column =
-    Column.internalFn("pandas_var", e, lit(ddof))
-
-  def pandasSkewness(e: Column): Column =
-    Column.internalFn("pandas_skew", e)
-
-  def pandasKurtosis(e: Column): Column =
-    Column.internalFn("pandas_kurt", e)
-
-  def pandasMode(e: Column, ignoreNA: Boolean): Column =
-    Column.internalFn("pandas_mode", e, lit(ignoreNA))
-
-  def pandasCovar(col1: Column, col2: Column, ddof: Int): Column =
-    Column.internalFn("pandas_covar", col1, col2, lit(ddof))
-
-  /**
-   * A long column that increases one by one.
-   * This is for 'distributed-sequence' default index in pandas API on Spark.
-   */
-  def distributed_sequence_id(): Column =
-    Column.internalFn("distributed_sequence_id")
-
   def unresolvedNamedLambdaVariable(name: String): Column =
     Column(internal.UnresolvedNamedLambdaVariable.apply(name))
 
@@ -197,14 +154,11 @@ private[sql] object PythonSQLUtils extends Logging {
 
   def namedArgumentExpression(name: String, e: Column): Column = NamedArgumentExpression(name, e)
 
-  def distributedIndex(): Column = {
-    val expr = MonotonicallyIncreasingID()
-    expr.setTagValue(FunctionRegistry.FUNC_ALIAS, "distributed_index")
-    expr
-  }
-
   @scala.annotation.varargs
   def fn(name: String, arguments: Column*): Column = Column.fn(name, arguments: _*)
+
+  @scala.annotation.varargs
+  def internalFn(name: String, inputs: Column*): Column = Column.internalFn(name, inputs: _*)
 }
 
 /**

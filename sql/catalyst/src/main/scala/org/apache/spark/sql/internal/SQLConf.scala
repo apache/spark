@@ -759,6 +759,17 @@ object SQLConf {
       .checkValue(_ > 0, "The initial number of partitions must be positive.")
       .createOptional
 
+  lazy val TRIM_COLLATION_ENABLED =
+    buildConf("spark.sql.collation.trim.enabled")
+      .internal()
+      .doc(
+        "Trim collation feature is under development and its use should be done under this" +
+        "feature flag. Trim collation trims trailing whitespaces from strings."
+      )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
   val DEFAULT_COLLATION =
     buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
       .doc("Sets default collation to use for string literals, parameter markers or the string" +
@@ -771,7 +782,7 @@ object SQLConf {
             CollationFactory.fetchCollation(collationName)
             true
           } catch {
-            case e: SparkException if e.getErrorClass == "COLLATION_INVALID_NAME" => false
+            case e: SparkException if e.getCondition == "COLLATION_INVALID_NAME" => false
           }
         },
         "DEFAULT_COLLATION",
@@ -2192,6 +2203,15 @@ object SQLConf {
       .version("4.0.0")
       .intConf
       .createWithDefault(3)
+
+  // The feature is still in development, so it is still internal.
+  val STATE_STORE_CHECKPOINT_FORMAT_VERSION =
+    buildConf("spark.sql.streaming.stateStore.checkpointFormatVersion")
+      .internal()
+      .doc("The version of the approach of doing state store checkpoint")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(1)
 
   val STATE_STORE_COMPRESSION_CODEC =
     buildConf("spark.sql.streaming.stateStore.compression.codec")
@@ -5482,6 +5502,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     }
   }
 
+  def trimCollationEnabled: Boolean = getConf(TRIM_COLLATION_ENABLED)
+
   override def defaultStringType: StringType = {
     if (getConf(DEFAULT_COLLATION).toUpperCase(Locale.ROOT) == "UTF8_BINARY") {
       StringType
@@ -5510,6 +5532,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def streamingMaintenanceInterval: Long = getConf(STREAMING_MAINTENANCE_INTERVAL)
 
   def stateStoreCompressionCodec: String = getConf(STATE_STORE_COMPRESSION_CODEC)
+
+  def stateStoreCheckpointFormatVersion: Int = getConf(STATE_STORE_CHECKPOINT_FORMAT_VERSION)
 
   def checkpointRenamedFileCheck: Boolean = getConf(CHECKPOINT_RENAMEDFILE_CHECK_ENABLED)
 

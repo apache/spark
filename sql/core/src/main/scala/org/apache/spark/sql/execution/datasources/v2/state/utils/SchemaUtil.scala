@@ -49,17 +49,17 @@ object SchemaUtil {
       valueSchema: StructType,
       transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo],
       stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema]): StructType = {
-    if (sourceOptions.readChangeFeed) {
+    if (transformWithStateVariableInfoOpt.isDefined) {
+      require(stateStoreColFamilySchemaOpt.isDefined)
+      generateSchemaForStateVar(transformWithStateVariableInfoOpt.get,
+        stateStoreColFamilySchemaOpt.get, sourceOptions)
+    } else if (sourceOptions.readChangeFeed) {
       new StructType()
         .add("batch_id", LongType)
         .add("change_type", StringType)
         .add("key", keySchema)
         .add("value", valueSchema)
         .add("partition_id", IntegerType)
-    } else if (transformWithStateVariableInfoOpt.isDefined) {
-      require(stateStoreColFamilySchemaOpt.isDefined)
-      generateSchemaForStateVar(transformWithStateVariableInfoOpt.get,
-        stateStoreColFamilySchemaOpt.get, sourceOptions)
     } else {
       new StructType()
         .add("key", keySchema)
@@ -230,36 +230,48 @@ object SchemaUtil {
       "map_value" -> classOf[MapType],
       "user_map_key" -> classOf[StructType],
       "user_map_value" -> classOf[StructType],
+      "expiration_timestamp_ms" -> classOf[LongType],
       "partition_id" -> classOf[IntegerType])
 
-    val expectedFieldNames = if (sourceOptions.readChangeFeed) {
-      Seq("batch_id", "change_type", "key", "value", "partition_id")
-    } else if (transformWithStateVariableInfoOpt.isDefined) {
+    val expectedFieldNames = if (transformWithStateVariableInfoOpt.isDefined) {
       val stateVarInfo = transformWithStateVariableInfoOpt.get
       val stateVarType = stateVarInfo.stateVariableType
 
       stateVarType match {
         case ValueState =>
-          Seq("key", "value", "partition_id")
+          if (sourceOptions.readChangeFeed) {
+            Seq("batch_id", "change_type", "key", "value", "partition_id")
+          } else {
+            Seq("key", "value", "partition_id")
+          }
 
         case ListState =>
-          if (sourceOptions.flattenCollectionTypes) {
+          if (sourceOptions.readChangeFeed) {
+            Seq("batch_id", "change_type", "key", "list_element", "partition_id")
+          } else if (sourceOptions.flattenCollectionTypes) {
             Seq("key", "list_element", "partition_id")
           } else {
             Seq("key", "list_value", "partition_id")
           }
 
         case MapState =>
-          if (sourceOptions.flattenCollectionTypes) {
+          if (sourceOptions.readChangeFeed) {
+            Seq("batch_id", "change_type", "key", "user_map_key", "user_map_value", "partition_id")
+          } else if (sourceOptions.flattenCollectionTypes) {
             Seq("key", "user_map_key", "user_map_value", "partition_id")
           } else {
             Seq("key", "map_value", "partition_id")
           }
 
+        case TimerState =>
+          Seq("key", "expiration_timestamp_ms", "partition_id")
+
         case _ =>
           throw StateDataSourceErrors
             .internalError(s"Unsupported state variable type $stateVarType")
       }
+    } else if (sourceOptions.readChangeFeed) {
+      Seq("batch_id", "change_type", "key", "value", "partition_id")
     } else {
       Seq("key", "value", "partition_id")
     }
@@ -282,13 +294,29 @@ object SchemaUtil {
 
     stateVarType match {
       case ValueState =>
-        new StructType()
-          .add("key", stateStoreColFamilySchema.keySchema)
-          .add("value", stateStoreColFamilySchema.valueSchema)
-          .add("partition_id", IntegerType)
+        if (stateSourceOptions.readChangeFeed) {
+          new StructType()
+            .add("batch_id", LongType)
+            .add("change_type", StringType)
+            .add("key", stateStoreColFamilySchema.keySchema)
+            .add("value", stateStoreColFamilySchema.valueSchema)
+            .add("partition_id", IntegerType)
+        } else {
+          new StructType()
+            .add("key", stateStoreColFamilySchema.keySchema)
+            .add("value", stateStoreColFamilySchema.valueSchema)
+            .add("partition_id", IntegerType)
+        }
 
       case ListState =>
-        if (stateSourceOptions.flattenCollectionTypes) {
+        if (stateSourceOptions.readChangeFeed) {
+          new StructType()
+            .add("batch_id", LongType)
+            .add("change_type", StringType)
+            .add("key", stateStoreColFamilySchema.keySchema)
+            .add("list_element", stateStoreColFamilySchema.valueSchema)
+            .add("partition_id", IntegerType)
+        } else if (stateSourceOptions.flattenCollectionTypes) {
           new StructType()
             .add("key", stateStoreColFamilySchema.keySchema)
             .add("list_element", stateStoreColFamilySchema.valueSchema)
@@ -309,7 +337,15 @@ object SchemaUtil {
           valueType = stateStoreColFamilySchema.valueSchema
         )
 
-        if (stateSourceOptions.flattenCollectionTypes) {
+        if (stateSourceOptions.readChangeFeed) {
+          new StructType()
+            .add("batch_id", LongType)
+            .add("change_type", StringType)
+            .add("key", groupingKeySchema)
+            .add("user_map_key", userKeySchema)
+            .add("user_map_value", stateStoreColFamilySchema.valueSchema)
+            .add("partition_id", IntegerType)
+        } else if (stateSourceOptions.flattenCollectionTypes) {
           new StructType()
             .add("key", groupingKeySchema)
             .add("user_map_key", userKeySchema)
@@ -321,6 +357,14 @@ object SchemaUtil {
             .add("map_value", valueMapSchema)
             .add("partition_id", IntegerType)
         }
+
+      case TimerState =>
+        val groupingKeySchema = SchemaUtil.getSchemaAsDataType(
+          stateStoreColFamilySchema.keySchema, "key")
+        new StructType()
+          .add("key", groupingKeySchema)
+          .add("expiration_timestamp_ms", LongType)
+          .add("partition_id", IntegerType)
 
       case _ =>
         throw StateDataSourceErrors.internalError(s"Unsupported state variable type $stateVarType")
@@ -407,9 +451,30 @@ object SchemaUtil {
         unifyMapStateRowPair(store.iterator(stateVarName),
           compositeKeySchema, partitionId, stateSourceOptions)
 
+      case StateVariableType.TimerState =>
+        store
+          .iterator(stateVarName)
+          .map { pair =>
+            unifyTimerRow(pair.key, compositeKeySchema, partitionId)
+          }
+
       case _ =>
         throw new IllegalStateException(
           s"Unsupported state variable type: $stateVarType")
     }
+  }
+
+  private def unifyTimerRow(
+      rowKey: UnsafeRow,
+      groupingKeySchema: StructType,
+      partitionId: Int): InternalRow = {
+    val groupingKey = rowKey.get(0, groupingKeySchema).asInstanceOf[UnsafeRow]
+    val expirationTimestamp = rowKey.getLong(1)
+
+    val row = new GenericInternalRow(3)
+    row.update(0, groupingKey)
+    row.update(1, expirationTimestamp)
+    row.update(2, partitionId)
+    row
   }
 }

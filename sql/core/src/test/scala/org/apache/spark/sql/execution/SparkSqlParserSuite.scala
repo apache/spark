@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, Un
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, GreaterThan, Literal, NullsFirst, SortOrder, UnresolvedWindowExpression, UnspecifiedFrame, WindowSpecDefinition, WindowSpecReference}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{FILTER, LOCAL_RELATION, PROJECT, UNRESOLVED_RELATION}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, RefreshResource}
@@ -887,24 +887,85 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       // Basic selection.
       // Here we check that every parsed plan contains a projection and a source relation or
       // inline table.
-      def checkPipeSelect(query: String): Unit = {
+      def check(query: String, patterns: Seq[TreePattern]): Unit = {
         val plan: LogicalPlan = parser.parsePlan(query)
-        assert(plan.containsPattern(PROJECT))
+        assert(patterns.exists(plan.containsPattern))
         assert(plan.containsAnyPattern(UNRESOLVED_RELATION, LOCAL_RELATION))
       }
+      def checkPipeSelect(query: String): Unit = check(query, Seq(PROJECT))
       checkPipeSelect("TABLE t |> SELECT 1 AS X")
       checkPipeSelect("TABLE t |> SELECT 1 AS X, 2 AS Y |> SELECT X + Y AS Z")
       checkPipeSelect("VALUES (0), (1) tab(col) |> SELECT col * 2 AS result")
       // Basic WHERE operators.
-      def checkPipeWhere(query: String): Unit = {
-        val plan: LogicalPlan = parser.parsePlan(query)
-        assert(plan.containsPattern(FILTER))
-        assert(plan.containsAnyPattern(UNRESOLVED_RELATION, LOCAL_RELATION))
-      }
+      def checkPipeWhere(query: String): Unit = check(query, Seq(FILTER))
       checkPipeWhere("TABLE t |> WHERE X = 1")
       checkPipeWhere("TABLE t |> SELECT X, LENGTH(Y) AS Z |> WHERE X + LENGTH(Y) < 4")
       checkPipeWhere("TABLE t |> WHERE X = 1 AND Y = 2 |> WHERE X + Y = 3")
       checkPipeWhere("VALUES (0), (1) tab(col) |> WHERE col < 1")
+      // PIVOT and UNPIVOT operations
+      def checkPivotUnpivot(query: String): Unit = check(query, Seq(PIVOT, UNPIVOT))
+      checkPivotUnpivot(
+        """
+          |SELECT * FROM VALUES
+          |  ("dotNET", 2012, 10000),
+          |  ("Java", 2012, 20000),
+          |  ("dotNET", 2012, 5000),
+          |  ("dotNET", 2013, 48000),
+          |  ("Java", 2013, 30000)
+          |  AS courseSales(course, year, earnings)
+          ||> PIVOT (
+          |  SUM(earnings)
+          |  FOR course IN ('dotNET', 'Java')
+          |)
+          |""".stripMargin)
+      checkPivotUnpivot(
+        """
+          |SELECT * FROM VALUES
+          |  ("dotNET", 15000, 48000, 22500),
+          |  ("Java", 20000, 30000, NULL)
+          |  AS courseEarnings(course, `2012`, `2013`, `2014`)
+          ||> UNPIVOT (
+          |  earningsYear FOR year IN (`2012`, `2013`, `2014`)
+          |)
+          |""".stripMargin)
+      // Sampling operations
+      def checkSample(query: String): Unit = {
+        val plan: LogicalPlan = parser.parsePlan(query)
+        assert(plan.collectFirst(_.isInstanceOf[Sample]).nonEmpty)
+        assert(plan.containsAnyPattern(UNRESOLVED_RELATION, LOCAL_RELATION))
+      }
+      checkSample("TABLE t |> TABLESAMPLE (50 PERCENT)")
+      checkSample("TABLE t |> TABLESAMPLE (5 ROWS)")
+      checkSample("TABLE t |> TABLESAMPLE (BUCKET 4 OUT OF 10)")
+      // Joins.
+      def checkPipeJoin(query: String): Unit = check(query, Seq(JOIN))
+      Seq("", "INNER", "LEFT", "LEFT OUTER", "SEMI", "LEFT SEMI", "RIGHT", "RIGHT OUTER", "FULL",
+        "FULL OUTER", "ANTI", "LEFT ANTI", "CROSS").foreach { joinType =>
+        checkPipeJoin(s"TABLE t |> $joinType JOIN other ON (t.x = other.x)")
+      }
+      // Set operations
+      def checkDistinct(query: String): Unit = check(query, Seq(DISTINCT_LIKE))
+      def checkExcept(query: String): Unit = check(query, Seq(EXCEPT))
+      def checkIntersect(query: String): Unit = check(query, Seq(INTERSECT))
+      def checkUnion(query: String): Unit = check(query, Seq(UNION))
+      checkDistinct("TABLE t |> UNION DISTINCT TABLE t")
+      checkExcept("TABLE t |> EXCEPT ALL TABLE t")
+      checkExcept("TABLE t |> EXCEPT DISTINCT TABLE t")
+      checkExcept("TABLE t |> MINUS ALL TABLE t")
+      checkExcept("TABLE t |> MINUS DISTINCT TABLE t")
+      checkIntersect("TABLE t |> INTERSECT ALL TABLE t")
+      checkUnion("TABLE t |> UNION ALL TABLE t")
+      // Sorting and distributing operators.
+      def checkSort(query: String): Unit = check(query, Seq(SORT))
+      def checkRepartition(query: String): Unit = check(query, Seq(REPARTITION_OPERATION))
+      def checkLimit(query: String): Unit = check(query, Seq(LIMIT))
+      checkSort("TABLE t |> ORDER BY x")
+      checkSort("TABLE t |> SELECT x |> SORT BY x")
+      checkLimit("TABLE t |> LIMIT 1")
+      checkLimit("TABLE t |> LIMIT 2 OFFSET 1")
+      checkRepartition("TABLE t |> DISTRIBUTE BY x |> WHERE x = 1")
+      checkRepartition("TABLE t |> CLUSTER BY x |> TABLESAMPLE (100 PERCENT)")
+      checkRepartition("TABLE t |> SORT BY x DISTRIBUTE BY x")
     }
   }
 }

@@ -215,7 +215,7 @@ class HistogramPlotBase(NumericPlotBase):
 
         # refers to org.apache.spark.ml.feature.Bucketizer#binarySearchForBuckets
         def binary_search_for_buckets(value: Column):
-            index = SF.binary_search(F.lit(bins), value)
+            index = SF.array_binary_search(F.lit(bins), value)
             bucket = F.when(index >= 0, index).otherwise(-index - 2)
             unboundErrMsg = F.lit(f"value %s out of the bins bounds: [{bins[0]}, {bins[-1]}]")
             return (
@@ -857,14 +857,12 @@ class PandasOnSparkPlotAccessor(PandasObject):
 
         Parameters
         ----------
-        **kwds : optional
-            Additional keyword arguments are documented in
+        **kwds : dict, optional
+            Extra arguments to `precision`: refer to a float that is used by
+            pandas-on-Spark to compute approximate statistics for building a
+            boxplot. The default value is 0.01. Use smaller values to get more
+            precise statistics. Additional keyword arguments are documented in
             :meth:`pyspark.pandas.Series.plot`.
-
-        precision: scalar, default = 0.01
-            This argument is used by pandas-on-Spark to compute approximate statistics
-            for building a boxplot. Use *smaller* values to get more precise
-            statistics (matplotlib-only).
 
         Returns
         -------
