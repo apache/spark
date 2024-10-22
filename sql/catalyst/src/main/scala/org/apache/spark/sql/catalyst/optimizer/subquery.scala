@@ -297,13 +297,15 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       val newAggregate = a.copy(aggregateExpressions = newAggregateExpressions)
 
       // Create a projection with the in-subquery expressions that contain aggregates, replacing
-      // the aggregates with an attribute references to the output of the Aggregate operator.
-      // Also include the other output of the Aggregate operator.
+      // the aggregate expressions with attribute references to the output of the Aggregate
+      // operator. Also include the other output of the Aggregate operator.
       val projList = a.aggregateExpressions.map { ae =>
+        // if this expression contains an in-subquery that uses an aggregate, we
+        // need to do something special
         if (inSubqueryMap.contains(ae)) {
           ae.transform {
-            // patch the aggregate expression with an attribute
-            case a: AggregateExpression if aggregateExprAttrMap.contains(a) =>
+            // patch any aggregate expression with its corresponding attribute
+            case a: AggregateExpression =>
               aggregateExprAttrMap(a)
           }.asInstanceOf[NamedExpression]
         } else {
