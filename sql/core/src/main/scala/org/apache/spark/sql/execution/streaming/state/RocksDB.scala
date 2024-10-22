@@ -160,17 +160,17 @@ class RocksDB(
   private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
   @volatile protected var loadedVersion: Long = -1L   // -1 = nothing valid is loaded
 
-  // variables to manage checkpoint ID. Once a checkpoingting finishes, it nees to return
-  // the `lastCommittedStateStoreCkptId` as the committed checkpointID, as well as
-  // `LastCommitBasedStateStoreCkptId` as the checkpontID of the previous version that is based on.
+  // variables to manage checkpoint ID. Once a checkpointing finishes, it needs to return
+  // `lastCommittedStateStoreCkptId` as the committed checkpointID, as well as
+  // `lastCommitBasedStateStoreCkptId` as the checkpontID of the previous version that is based on.
   // `loadedStateStoreCkptId` is the checkpointID for the current live DB. After the batch finishes
-  // and checkpoint finishes, it will turn into `LastCommitBasedStateStoreCkptId`.
+  // and checkpoint finishes, it will turn into `lastCommitBasedStateStoreCkptId`.
   // `sessionStateStoreCkptId` store an ID to be used for future checkpoints. It will be used as
   // `lastCommittedStateStoreCkptId` after the checkpoint is committed. It will be reused until
   // we have to use a new one. We have to update `sessionStateStoreCkptId` if we reload a previous
-  // batch version, because we have to use a new checkpointID for re-committing a version.
+  // batch version, as we would have to use a new checkpointID for re-committing a version.
   // The reusing is to help debugging but is not required for the algorithm to work.
-  protected var LastCommitBasedStateStoreCkptId: Option[String] = None
+  protected var lastCommitBasedStateStoreCkptId: Option[String] = None
   protected var lastCommittedStateStoreCkptId: Option[String] = None
   protected var loadedStateStoreCkptId: Option[String] = None
   protected var sessionStateStoreCkptId: Option[String] = None
@@ -373,7 +373,7 @@ class RocksDB(
     try {
       if (loadedVersion != version ||
         (enableStateStoreCheckpointIds && stateStoreCkptId.isDefined &&
-          (loadedStateStoreCkptId.isEmpty || stateStoreCkptId.get != loadedStateStoreCkptId.get))) {
+        (loadedStateStoreCkptId.isEmpty || stateStoreCkptId.get != loadedStateStoreCkptId.get))) {
         closeDB(ignoreException = false)
 
         val latestSnapshotVersionsAndUniqueIds =
@@ -391,7 +391,8 @@ class RocksDB(
           if (latestSnapshotVersionsAndUniqueIds.length == 0) {
             (0L, None)
           } else if (latestSnapshotVersionsAndUniqueIds.length == 1) {
-            latestSnapshotVersionsAndUniqueIds.head
+            getLatestSnapshotVersionAndUniqueIdFromLineage(
+              currLineage.get, latestSnapshotVersionsAndUniqueIds)
           } else {
             logInfo(log"Multiple snapshots found for the version. Found: ${MDC(LogKeys.LINEAGE,
               printLineage(latestSnapshotVersionsAndUniqueIds))}. " +
@@ -412,7 +413,6 @@ class RocksDB(
         // reset the last snapshot version to the latest available snapshot version
         lastSnapshotVersion = latestSnapshotVersion
 
-        loadedVersion = latestSnapshotVersion
         // Initialize maxVersion upon successful load from DFS
         fileManager.setMaxSeenVersion(version)
 
@@ -444,8 +444,7 @@ class RocksDB(
         fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
       }
       if (enableStateStoreCheckpointIds) {
-        LastCommitBasedStateStoreCkptId = None
-        lastCommittedStateStoreCkptId = None
+        lastCommitBasedStateStoreCkptId = None
         loadedStateStoreCkptId = stateStoreCkptId
         sessionStateStoreCkptId = Some(java.util.UUID.randomUUID.toString)
       }
@@ -459,7 +458,7 @@ class RocksDB(
     } catch {
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded data
-        LastCommitBasedStateStoreCkptId = None
+        lastCommitBasedStateStoreCkptId = None
         lastCommittedStateStoreCkptId = None
         loadedStateStoreCkptId = None
         sessionStateStoreCkptId = None
@@ -794,14 +793,14 @@ class RocksDB(
       }
 
       if (enableStateStoreCheckpointIds) {
-        LastCommitBasedStateStoreCkptId = loadedStateStoreCkptId
+        lastCommitBasedStateStoreCkptId = loadedStateStoreCkptId
         lastCommittedStateStoreCkptId = sessionStateStoreCkptId
         loadedStateStoreCkptId = sessionStateStoreCkptId
         versionToUniqueIdLineage = versionToUniqueIdLineage :+ (newVersion, sessionStateStoreCkptId)
         logInfo(log"Update checkpoint IDs and lineage: ${MDC(
           LogKeys.LOADED_CHECKPOINT_ID, loadedStateStoreCkptId)}," +
           log" ${MDC(LogKeys.LAST_COMMITTED_CHECKPOINT_ID, lastCommittedStateStoreCkptId)}," +
-          log" ${MDC(LogKeys.LAST_COMMIT_BASED_CHECKPOINT_ID, LastCommitBasedStateStoreCkptId)}," +
+          log" ${MDC(LogKeys.LAST_COMMIT_BASED_CHECKPOINT_ID, lastCommitBasedStateStoreCkptId)}," +
           log" ${MDC(LogKeys.LINEAGE, printLineage(versionToUniqueIdLineage))}")
       }
 
@@ -892,7 +891,7 @@ class RocksDB(
     changelogWriter.foreach(_.abort())
     // Make sure changelogWriter gets recreated next time.
     changelogWriter = None
-    LastCommitBasedStateStoreCkptId = None
+    lastCommitBasedStateStoreCkptId = None
     lastCommittedStateStoreCkptId = None
     loadedStateStoreCkptId = None
     sessionStateStoreCkptId = None
@@ -960,12 +959,17 @@ class RocksDB(
   /** Get the write buffer manager and cache */
   def getWriteBufferManagerAndCache(): (WriteBufferManager, Cache) = (writeBufferManager, lruCache)
 
+  /**
+   * Called by RocksDBStateStoreProvider to retrieve the checkpoint information to be
+   * passed back to the stateful operator. It will return the information for the latest
+   * state store checkpointing.
+   */
   def getLatestCheckpointInfo(partitionId: Int): StateStoreCheckpointInfo = {
     StateStoreCheckpointInfo(
       partitionId,
       loadedVersion,
       lastCommittedStateStoreCkptId,
-      LastCommitBasedStateStoreCkptId)
+      lastCommitBasedStateStoreCkptId)
   }
 
   /** Get current instantaneous statistics */
@@ -1059,6 +1063,7 @@ class RocksDB(
     uniqueId: Option[String] = None): RocksDBSnapshot = {
     val (dfsFileSuffix, immutableFileMapping) = rocksDBFileMapping.createSnapshotFileMapping(
       fileManager, checkpointDir, version)
+
     RocksDBSnapshot(checkpointDir, version, numKeysOnWritingVersion,
       columnFamilyMapping, maxColumnFamilyId, dfsFileSuffix, immutableFileMapping, uniqueId)
   }
@@ -1267,8 +1272,8 @@ class RocksDBFileMapping {
   // it cannot be reused in this version). In this scenario, the local mapping to this DFS file
   // will be cleared, and function will return None.
   def getDfsFile(
-    fileManager: RocksDBFileManager,
-    localFileName: String): Option[RocksDBImmutableFile] = {
+      fileManager: RocksDBFileManager,
+      localFileName: String): Option[RocksDBImmutableFile] = {
     localFileMappings.get(localFileName).map { case (dfsFileCommitVersion, dfsFile) =>
       val dfsFileSuffix = fileManager.dfsFileSuffix(dfsFile)
       val versionSnapshotInfo = RocksDBVersionSnapshotInfo(dfsFileCommitVersion, dfsFileSuffix)
@@ -1284,9 +1289,9 @@ class RocksDBFileMapping {
   }
 
   private def mapToDfsFile(
-    localFileName: String,
-    dfsFile: RocksDBImmutableFile,
-    version: Long): Unit = {
+      localFileName: String,
+      dfsFile: RocksDBImmutableFile,
+      version: Long): Unit = {
     localFileMappings.put(localFileName, (version, dfsFile))
   }
 

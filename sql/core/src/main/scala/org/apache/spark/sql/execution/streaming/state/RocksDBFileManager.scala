@@ -153,6 +153,7 @@ class RocksDBFileManager(
 
   @volatile private var rootDirChecked: Boolean = false
 
+  // (version, checkpointUniqueId) -> immutable files
   private val versionToRocksDBFiles =
     new ConcurrentHashMap[(Long, Option[String]), Seq[RocksDBImmutableFile]]()
 
@@ -812,9 +813,11 @@ class RocksDBFileManager(
     val extension = FilenameUtils.getExtension(localFileName)
     s"$baseName-$dfsFileSuffix.$extension"
   }
+
   def dfsFileSuffix(immutableFile: RocksDBImmutableFile): String = {
     val suffixStart = immutableFile.dfsFileName.indexOf('-')
     val suffixEnd = immutableFile.dfsFileName.indexOf('.')
+
     immutableFile.dfsFileName.substring(suffixStart + 1, suffixEnd)
   }
 
@@ -864,8 +867,6 @@ class RocksDBFileManager(
       topLevelOtherFiles.toImmutableArraySeq)
   }
 }
-
-//    versionToRocksDBFiles: ConcurrentHashMap[(Long, Option[String]), Seq[RocksDBImmutableFile]],
 
 /**
  * Metrics regarding RocksDB file sync between local and DFS.
