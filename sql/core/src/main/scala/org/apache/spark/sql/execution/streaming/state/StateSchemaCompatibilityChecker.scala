@@ -42,7 +42,9 @@ case class StateSchemaValidationResult(
 case class AvroSerde(
   keySerializer: AvroSerializer,
   valueSerializer: AvroSerializer,
-  valueDeserializer: AvroDeserializer
+  valueDeserializer: AvroDeserializer,
+  userKeySerializer: Option[AvroSerializer] = None,
+  userKeyDeserializer: Option[AvroDeserializer] = None
 ) extends Serializable
 
 // Used to represent the schema of a column family in the state store

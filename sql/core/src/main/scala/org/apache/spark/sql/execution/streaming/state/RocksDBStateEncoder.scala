@@ -305,11 +305,103 @@ class PrefixKeyScanStateEncoder(
 
   override def supportPrefixKeyScan: Boolean = true
 
-  override def encodeKeyBytes(row: Array[Byte]): Array[Byte] =
-    throw new UnsupportedOperationException
+  /**
+   * Encode a byte array using the prefix key format:
+   * [column family prefix (if enabled)][prefix key length (4 bytes)]
+   * [prefix key bytes][remaining bytes]
+   *
+   * The input byte array is expected to be pre-formatted with:
+   * [prefix key bytes][remaining bytes]
+   * where the prefix key is the first portion corresponding to numColsPrefixKey
+   */
+  override def encodeKeyBytes(row: Array[Byte]): Array[Byte] = {
+    if (row == null) return null
 
-  override def decodeKeyBytes(keyBytes: Array[Byte]): Array[Byte] =
-    throw new UnsupportedOperationException
+    // Get prefix key and remaining portions from the input row
+    val prefixKeyLen = row.length / (keySchema.length) * numColsPrefixKey
+    val prefixKeyBytes = new Array[Byte](prefixKeyLen)
+    val remainingBytes = new Array[Byte](row.length - prefixKeyLen)
+
+    // Split the input row into prefix and remaining portions
+    System.arraycopy(row, 0, prefixKeyBytes, 0, prefixKeyLen)
+    System.arraycopy(row, prefixKeyLen, remainingBytes, 0, remainingBytes.length)
+
+    // Encode the prefix key bytes
+    val prefixKeyEncoded = encodeByteArray(prefixKeyBytes)
+    val remainingEncoded = encodeByteArray(remainingBytes)
+
+    // Allocate space for the full encoded result including:
+    // - Column family prefix (if enabled)
+    // - Length of prefix key (4 bytes)
+    // - Encoded prefix key
+    // - Encoded remaining bytes
+    val (encodedBytes, startingOffset) = encodeColumnFamilyPrefix(
+      prefixKeyEncoded.length + remainingEncoded.length + 4
+    )
+
+    // Write the length of the prefix key
+    Platform.putInt(encodedBytes, startingOffset, prefixKeyEncoded.length)
+
+    // Copy the prefix key bytes
+    Platform.copyMemory(
+      prefixKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
+      encodedBytes, startingOffset + 4,
+      prefixKeyEncoded.length
+    )
+
+    // Copy the remaining bytes
+    Platform.copyMemory(
+      remainingEncoded, Platform.BYTE_ARRAY_OFFSET,
+      encodedBytes, startingOffset + 4 + prefixKeyEncoded.length,
+      remainingEncoded.length
+    )
+
+    encodedBytes
+  }
+
+  /**
+   * Decode a byte array that was encoded with the prefix key format:
+   * [column family prefix (if enabled)][prefix key length (4 bytes)][prefix key bytes][remaining bytes]
+   *
+   * Returns a byte array in the format:
+   * [prefix key bytes][remaining bytes]
+   */
+  override def decodeKeyBytes(keyBytes: Array[Byte]): Array[Byte] = {
+    if (keyBytes == null) return null
+
+    // Read the prefix key length
+    val prefixKeyEncodedLen = Platform.getInt(keyBytes, decodeKeyStartOffset)
+
+    // Extract the prefix key bytes
+    val prefixKeyEncoded = new Array[Byte](prefixKeyEncodedLen)
+    Platform.copyMemory(
+      keyBytes, decodeKeyStartOffset + 4,
+      prefixKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
+      prefixKeyEncodedLen
+    )
+
+    // Calculate and extract the remaining bytes
+    val remainingKeyEncodedLen = keyBytes.length - 4 - prefixKeyEncodedLen -
+      offsetForColFamilyPrefix
+    val remainingKeyEncoded = new Array[Byte](remainingKeyEncodedLen)
+    Platform.copyMemory(
+      keyBytes, decodeKeyStartOffset + 4 + prefixKeyEncodedLen,
+      remainingKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
+      remainingKeyEncodedLen
+    )
+
+    // Decode both parts
+    val prefixKeyDecoded = decodeToByteArray(prefixKeyEncoded)
+    val remainingKeyDecoded = decodeToByteArray(remainingKeyEncoded)
+
+    // Combine prefix and remaining parts into final result
+    val result = new Array[Byte](prefixKeyDecoded.length + remainingKeyDecoded.length)
+    System.arraycopy(prefixKeyDecoded, 0, result, 0, prefixKeyDecoded.length)
+    System.arraycopy(remainingKeyDecoded, 0, result, prefixKeyDecoded.length,
+      remainingKeyDecoded.length)
+
+    result
+  }
 }
 
 /**
