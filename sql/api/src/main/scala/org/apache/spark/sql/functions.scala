@@ -2420,6 +2420,16 @@ object functions {
   def ceiling(e: Column): Column = Column.fn("ceiling", e)
 
   /**
+   * This is a special version of `conv` that performs the same operation, but "wraps" the result
+   * instead of throwing an exception on overflow in the number converted.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def try_conv(num: Column, fromBase: Int, toBase: Int): Column =
+    Column.fn("try_conv", num, lit(fromBase), lit(toBase))
+
+  /**
    * Convert a number in a string column from one base to another.
    *
    * @group math_funcs
@@ -7961,6 +7971,23 @@ object functions {
     Column.fn("make_dt_interval")
 
   /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group url_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
+    Column.fn("try_make_interval", years, months, weeks, days, hours, mins, secs)
+
+  /**
    * Make interval from years, months, weeks, days, hours, mins and secs.
    *
    * @group datetime_funcs
@@ -7975,6 +8002,22 @@ object functions {
       mins: Column,
       secs: Column): Column =
     Column.fn("make_interval", years, months, weeks, days, hours, mins, secs)
+
+  /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group url_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column,
+      mins: Column): Column =
+    Column.fn("try_make_interval", years, months, weeks, days, hours, mins)
 
   /**
    * Make interval from years, months, weeks, days, hours and mins.
@@ -7992,6 +8035,21 @@ object functions {
     Column.fn("make_interval", years, months, weeks, days, hours, mins)
 
   /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group url_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column): Column =
+    Column.fn("try_make_interval", years, months, weeks, days, hours)
+
+  /**
    * Make interval from years, months, weeks, days and hours.
    *
    * @group datetime_funcs
@@ -8006,6 +8064,16 @@ object functions {
     Column.fn("make_interval", years, months, weeks, days, hours)
 
   /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group url_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(years: Column, months: Column, weeks: Column, days: Column): Column =
+    Column.fn("try_make_interval", years, months, weeks, days)
+
+  /**
    * Make interval from years, months, weeks and days.
    *
    * @group datetime_funcs
@@ -8013,6 +8081,16 @@ object functions {
    */
   def make_interval(years: Column, months: Column, weeks: Column, days: Column): Column =
     Column.fn("make_interval", years, months, weeks, days)
+
+  /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group url_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(years: Column, months: Column, weeks: Column): Column =
+    Column.fn("try_make_interval", years, months, weeks)
 
   /**
    * Make interval from years, months and weeks.
@@ -8024,6 +8102,16 @@ object functions {
     Column.fn("make_interval", years, months, weeks)
 
   /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group url_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(years: Column, months: Column): Column =
+    Column.fn("try_make_interval", years, months)
+
+  /**
    * Make interval from years and months.
    *
    * @group datetime_funcs
@@ -8033,6 +8121,16 @@ object functions {
     Column.fn("make_interval", years, months)
 
   /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group url_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(years: Column): Column =
+    Column.fn("try_make_interval", years)
+
+  /**
    * Make interval from years.
    *
    * @group datetime_funcs
@@ -8040,6 +8138,16 @@ object functions {
    */
   def make_interval(years: Column): Column =
     Column.fn("make_interval", years)
+
+  /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group url_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(): Column =
+    Column.fn("try_make_interval")
 
   /**
    * Make interval.
