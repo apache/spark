@@ -1516,7 +1516,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-49730: syntax error classification") {
-    checkError(
+    checkErrorMatchPVals(
       exception = intercept[SparkRuntimeException] {
         val schema = StructType(
           Seq(StructField("id", IntegerType, true, defaultMetadata(IntegerType))))
@@ -1531,7 +1531,9 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       condition = "FAILED_JDBC.SYNTAX_ERROR",
       parameters = Map(
         "url" -> urlWithUserAndPass,
-        "query" -> "SELECT * FROM (SELECT * FRM tbl) SPARK_GEN_SUBQ_0 WHERE 1=0"))
+        "query" ->
+          "SELECT \\* FROM \\(SELECT \\* FRM tbl\\) SPARK_GEN_SUBQ_\\d+ WHERE 1=0")
+    )
   }
 
   test("unsupported types") {

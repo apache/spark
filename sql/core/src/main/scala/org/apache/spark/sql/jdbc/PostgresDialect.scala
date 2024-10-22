@@ -268,9 +268,6 @@ private case class PostgresDialect()
         sqlException.getSQLState match {
           // https://www.postgresql.org/docs/14/errcodes-appendix.html
           case "42601" if errorClass == "..." =>
-            // scalastyle:off println
-            println("syntax error")
-            // scalastyle:on println
             throw QueryCompilationErrors.jdbcGeneratedQuerySyntaxError(
               messageParameters.get("url").getOrElse(""),
               messageParameters.get("query").getOrElse(""))
