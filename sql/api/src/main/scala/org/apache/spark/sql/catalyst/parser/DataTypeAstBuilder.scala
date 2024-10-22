@@ -111,7 +111,14 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       val endStr = ctx.to.getText.toLowerCase(Locale.ROOT)
       val end = YearMonthIntervalType.stringToField(endStr)
       if (end <= start) {
-        throw QueryParsingErrors.fromToIntervalUnsupportedError(startStr, endStr, ctx)
+        val intervalInput = ctx.getText()
+        val pattern = "'([^']*)'".r
+
+        val input = pattern.findFirstMatchIn(intervalInput) match {
+          case Some(m) => m.group(1)
+          case None => ""
+        }
+        throw QueryParsingErrors.fromToIntervalUnsupportedError(input, startStr, endStr, ctx)
       }
       YearMonthIntervalType(start, end)
     } else {
@@ -126,7 +133,14 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       val endStr = ctx.to.getText.toLowerCase(Locale.ROOT)
       val end = DayTimeIntervalType.stringToField(endStr)
       if (end <= start) {
-        throw QueryParsingErrors.fromToIntervalUnsupportedError(startStr, endStr, ctx)
+        val intervalInput = ctx.getText()
+        val pattern = "'([^']*)'".r
+
+        val input = pattern.findFirstMatchIn(intervalInput) match {
+          case Some(m) => m.group(1)
+          case None => ""
+        }
+        throw QueryParsingErrors.fromToIntervalUnsupportedError(input, startStr, endStr, ctx)
       }
       DayTimeIntervalType(start, end)
     } else {

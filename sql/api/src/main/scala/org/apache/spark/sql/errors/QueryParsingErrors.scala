@@ -281,12 +281,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def fromToIntervalUnsupportedError(
+      input: String,
       from: String,
       to: String,
       ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0028",
-      messageParameters = Map("from" -> from, "to" -> to),
+      errorClass = "INVALID_INTERVAL_FORMAT.UNSUPPORTED_FROM_TO_EXPRESSION",
+      messageParameters = Map("input" -> input, "from" -> from, "to" -> to),
       ctx)
   }
 

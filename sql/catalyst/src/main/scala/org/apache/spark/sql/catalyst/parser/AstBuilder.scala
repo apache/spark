@@ -3570,7 +3570,14 @@ class AstBuilder extends DataTypeAstBuilder
             IntervalUtils.fromDayTimeString(value,
               DayTimeIntervalType.stringToField(from), DayTimeIntervalType.stringToField(to))
           case _ =>
-            throw QueryParsingErrors.fromToIntervalUnsupportedError(from, to, ctx)
+            val intervalInput = ctx.getText()
+            val pattern = "'([^']*)'".r
+
+            val input = pattern.findFirstMatchIn(intervalInput) match {
+              case Some(m) => m.group(1)
+              case None => ""
+            }
+            throw QueryParsingErrors.fromToIntervalUnsupportedError(input, from, to, ctx)
         }
       } catch {
         // Keep error class of SparkIllegalArgumentExceptions and enrich it with query context
