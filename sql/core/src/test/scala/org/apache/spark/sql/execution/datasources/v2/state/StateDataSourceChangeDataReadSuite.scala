@@ -90,7 +90,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
           .option(StateSourceOptions.CHANGE_END_BATCH_ID, 2)
           .load(tempDir.getAbsolutePath)
       }
-      assert(exc.getErrorClass === "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE")
+      assert(exc.getCondition === "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE")
     }
   }
 
@@ -103,7 +103,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
           .option(StateSourceOptions.CHANGE_END_BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
-      assert(exc.getErrorClass === "STDS_INVALID_OPTION_VALUE.IS_NEGATIVE")
+      assert(exc.getCondition === "STDS_INVALID_OPTION_VALUE.IS_NEGATIVE")
     }
   }
 
@@ -116,7 +116,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
           .option(StateSourceOptions.CHANGE_END_BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
-      assert(exc.getErrorClass === "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE")
+      assert(exc.getCondition === "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE")
     }
   }
 
@@ -130,7 +130,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
           .option(StateSourceOptions.CHANGE_END_BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
-      assert(exc.getErrorClass === "STDS_CONFLICT_OPTIONS")
+      assert(exc.getCondition === "STDS_CONFLICT_OPTIONS")
     }
   }
 

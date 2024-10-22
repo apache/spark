@@ -78,8 +78,19 @@ class ListStateClient:
             status = response_message[0]
             if status == 0:
                 iterator = self._stateful_processor_api_client._read_arrow_state()
-                batch = next(iterator)
-                pandas_df = batch.to_pandas()
+                # We need to exhaust the iterator here to make sure all the arrow batches are read,
+                # even though there is only one batch in the iterator. Otherwise, the stream might
+                # block further reads since it thinks there might still be some arrow batches left.
+                # We only need to read the first batch in the iterator because it's guaranteed that
+                # there would only be one batch sent from the JVM side.
+                data_batch = None
+                for batch in iterator:
+                    if data_batch is None:
+                        data_batch = batch
+                if data_batch is None:
+                    # TODO(SPARK-49233): Classify user facing errors.
+                    raise PySparkRuntimeError("Error getting next list state row.")
+                pandas_df = data_batch.to_pandas()
                 index = 0
             else:
                 raise StopIteration()

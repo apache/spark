@@ -34,6 +34,30 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
     }
   }
 
+  def testWithMaxRecordsPerPartition(name: String, maxRecordsPerPartition: Long)(
+      f: KafkaOffsetRangeCalculator => Unit): Unit = {
+    val options = new CaseInsensitiveStringMap(
+      Map("maxRecordsPerPartition" -> maxRecordsPerPartition.toString).asJava)
+    test(s"with maxRecordsPerPartition = $maxRecordsPerPartition: $name") {
+      f(KafkaOffsetRangeCalculator(options))
+    }
+  }
+
+  def testWithMinPartitionsAndMaxRecordsPerPartition(
+      name: String,
+      minPartitions: Int,
+      maxRecordsPerPartition: Long)(f: KafkaOffsetRangeCalculator => Unit): Unit = {
+    val options = new CaseInsensitiveStringMap(
+      Map(
+        "minPartitions" -> minPartitions.toString,
+        "maxRecordsPerPartition" -> maxRecordsPerPartition.toString).asJava)
+    test(
+      s"with minPartitions = $minPartitions " +
+        s"and maxRecordsPerPartition = $maxRecordsPerPartition: $name") {
+      f(KafkaOffsetRangeCalculator(options))
+    }
+  }
+
   test("with no minPartition: N TopicPartitions to N offset ranges") {
     val calc = KafkaOffsetRangeCalculator(CaseInsensitiveStringMap.empty())
     assert(
@@ -251,6 +275,59 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
           KafkaOffsetRange(tp3, 2500, 5000, None),
           KafkaOffsetRange(tp3, 5000, 7500, None),
           KafkaOffsetRange(tp3, 7500, 10000, None)))
+  }
+
+  testWithMaxRecordsPerPartition("SPARK-49259: 1 TopicPartition to N offset ranges", 4) { calc =>
+    assert(
+      calc.getRanges(Seq(KafkaOffsetRange(tp1, 1, 5))) == Seq(KafkaOffsetRange(tp1, 1, 5, None)))
+
+    assert(
+      calc.getRanges(Seq(KafkaOffsetRange(tp1, 1, 2))) == Seq(KafkaOffsetRange(tp1, 1, 2, None)))
+
+    assert(
+      calc.getRanges(Seq(KafkaOffsetRange(tp1, 1, 6)), executorLocations = Seq("location")) ==
+        Seq(KafkaOffsetRange(tp1, 1, 3, None), KafkaOffsetRange(tp1, 3, 6, None))
+    ) // location pref not set when maxRecordsPerPartition is set
+  }
+
+  testWithMaxRecordsPerPartition("SPARK-49259: N TopicPartition to N offset ranges", 20) { calc =>
+    assert(
+      calc.getRanges(
+        Seq(
+          KafkaOffsetRange(tp1, 1, 40),
+          KafkaOffsetRange(tp2, 1, 50),
+          KafkaOffsetRange(tp3, 1, 60))) ==
+        Seq(
+          KafkaOffsetRange(tp1, 1, 20, None),
+          KafkaOffsetRange(tp1, 20, 40, None),
+          KafkaOffsetRange(tp2, 1, 17, None),
+          KafkaOffsetRange(tp2, 17, 33, None),
+          KafkaOffsetRange(tp2, 33, 50, None),
+          KafkaOffsetRange(tp3, 1, 20, None),
+          KafkaOffsetRange(tp3, 20, 40, None),
+          KafkaOffsetRange(tp3, 40, 60, None)))
+  }
+
+  testWithMinPartitionsAndMaxRecordsPerPartition(
+    "SPARK-49259: 1 TopicPartition with low minPartitions value",
+    1,
+    20) { calc =>
+    assert(
+      calc.getRanges(Seq(KafkaOffsetRange(tp1, 1, 40))) ==
+        Seq(KafkaOffsetRange(tp1, 1, 20, None), KafkaOffsetRange(tp1, 20, 40, None)))
+  }
+
+  testWithMinPartitionsAndMaxRecordsPerPartition(
+    "SPARK-49259: 1 TopicPartition with high minPartitions value",
+    4,
+    20) { calc =>
+    assert(
+      calc.getRanges(Seq(KafkaOffsetRange(tp1, 1, 40))) ==
+        Seq(
+          KafkaOffsetRange(tp1, 1, 10, None),
+          KafkaOffsetRange(tp1, 10, 20, None),
+          KafkaOffsetRange(tp1, 20, 30, None),
+          KafkaOffsetRange(tp1, 30, 40, None)))
   }
 
   private val tp1 = new TopicPartition("t1", 1)

@@ -87,85 +87,86 @@ object TimeWindowing extends Rule[LogicalPlan] {
 
         val window = windowExpressions.head
 
+        // time window is provided as time column of window function, replace it with WindowTime
         if (StructType.acceptsType(window.timeColumn.dataType)) {
-          return p.transformExpressions {
+          p.transformExpressions {
             case t: TimeWindow => t.copy(timeColumn = WindowTime(window.timeColumn))
           }
-        }
-
-        val metadata = window.timeColumn match {
-          case a: Attribute => a.metadata
-          case _ => Metadata.empty
-        }
-
-        val newMetadata = new MetadataBuilder()
-          .withMetadata(metadata)
-          .putBoolean(TimeWindow.marker, true)
-          .build()
-
-        def getWindow(i: Int, dataType: DataType): Expression = {
-          val timestamp = PreciseTimestampConversion(window.timeColumn, dataType, LongType)
-          val remainder = (timestamp - window.startTime) % window.slideDuration
-          val lastStart = timestamp - CaseWhen(Seq((LessThan(remainder, 0),
-            remainder + window.slideDuration)), Some(remainder))
-          val windowStart = lastStart - i * window.slideDuration
-          val windowEnd = windowStart + window.windowDuration
-
-          // We make sure value fields are nullable since the dataType of TimeWindow defines them
-          // as nullable.
-          CreateNamedStruct(
-            Literal(WINDOW_START) ::
-              PreciseTimestampConversion(windowStart, LongType, dataType).castNullable() ::
-              Literal(WINDOW_END) ::
-              PreciseTimestampConversion(windowEnd, LongType, dataType).castNullable() ::
-              Nil)
-        }
-
-        val windowAttr = AttributeReference(
-          WINDOW_COL_NAME, window.dataType, metadata = newMetadata)()
-
-        if (window.windowDuration == window.slideDuration) {
-          val windowStruct = Alias(getWindow(0, window.timeColumn.dataType), WINDOW_COL_NAME)(
-            exprId = windowAttr.exprId, explicitMetadata = Some(newMetadata))
-
-          val replacedPlan = p transformExpressions {
-            case t: TimeWindow => windowAttr
-          }
-
-          // For backwards compatibility we add a filter to filter out nulls
-          val filterExpr = IsNotNull(window.timeColumn)
-
-          replacedPlan.withNewChildren(
-            Project(windowStruct +: child.output,
-              Filter(filterExpr, child)) :: Nil)
         } else {
-          val overlappingWindows =
-            math.ceil(window.windowDuration * 1.0 / window.slideDuration).toInt
-          val windows =
-            Seq.tabulate(overlappingWindows)(i =>
-              getWindow(i, window.timeColumn.dataType))
+          val metadata = window.timeColumn match {
+            case a: Attribute => a.metadata
+            case _ => Metadata.empty
+          }
 
-          val projections = windows.map(_ +: child.output)
+          val newMetadata = new MetadataBuilder()
+            .withMetadata(metadata)
+            .putBoolean(TimeWindow.marker, true)
+            .build()
 
-          // When the condition windowDuration % slideDuration = 0 is fulfilled,
-          // the estimation of the number of windows becomes exact one,
-          // which means all produced windows are valid.
-          val filterExpr =
-          if (window.windowDuration % window.slideDuration == 0) {
-            IsNotNull(window.timeColumn)
+          def getWindow(i: Int, dataType: DataType): Expression = {
+            val timestamp = PreciseTimestampConversion(window.timeColumn, dataType, LongType)
+            val remainder = (timestamp - window.startTime) % window.slideDuration
+            val lastStart = timestamp - CaseWhen(Seq((LessThan(remainder, 0),
+              remainder + window.slideDuration)), Some(remainder))
+            val windowStart = lastStart - i * window.slideDuration
+            val windowEnd = windowStart + window.windowDuration
+
+            // We make sure value fields are nullable since the dataType of TimeWindow defines them
+            // as nullable.
+            CreateNamedStruct(
+              Literal(WINDOW_START) ::
+                PreciseTimestampConversion(windowStart, LongType, dataType).castNullable() ::
+                Literal(WINDOW_END) ::
+                PreciseTimestampConversion(windowEnd, LongType, dataType).castNullable() ::
+                Nil)
+          }
+
+          val windowAttr = AttributeReference(
+            WINDOW_COL_NAME, window.dataType, metadata = newMetadata)()
+
+          if (window.windowDuration == window.slideDuration) {
+            val windowStruct = Alias(getWindow(0, window.timeColumn.dataType), WINDOW_COL_NAME)(
+              exprId = windowAttr.exprId, explicitMetadata = Some(newMetadata))
+
+            val replacedPlan = p transformExpressions {
+              case t: TimeWindow => windowAttr
+            }
+
+            // For backwards compatibility we add a filter to filter out nulls
+            val filterExpr = IsNotNull(window.timeColumn)
+
+            replacedPlan.withNewChildren(
+              Project(windowStruct +: child.output,
+                Filter(filterExpr, child)) :: Nil)
           } else {
-            window.timeColumn >= windowAttr.getField(WINDOW_START) &&
-              window.timeColumn < windowAttr.getField(WINDOW_END)
+            val overlappingWindows =
+              math.ceil(window.windowDuration * 1.0 / window.slideDuration).toInt
+            val windows =
+              Seq.tabulate(overlappingWindows)(i =>
+                getWindow(i, window.timeColumn.dataType))
+
+            val projections = windows.map(_ +: child.output)
+
+            // When the condition windowDuration % slideDuration = 0 is fulfilled,
+            // the estimation of the number of windows becomes exact one,
+            // which means all produced windows are valid.
+            val filterExpr =
+            if (window.windowDuration % window.slideDuration == 0) {
+              IsNotNull(window.timeColumn)
+            } else {
+              window.timeColumn >= windowAttr.getField(WINDOW_START) &&
+                window.timeColumn < windowAttr.getField(WINDOW_END)
+            }
+
+            val substitutedPlan = Filter(filterExpr,
+              Expand(projections, windowAttr +: child.output, child))
+
+            val renamedPlan = p transformExpressions {
+              case t: TimeWindow => windowAttr
+            }
+
+            renamedPlan.withNewChildren(substitutedPlan :: Nil)
           }
-
-          val substitutedPlan = Filter(filterExpr,
-            Expand(projections, windowAttr +: child.output, child))
-
-          val renamedPlan = p transformExpressions {
-            case t: TimeWindow => windowAttr
-          }
-
-          renamedPlan.withNewChildren(substitutedPlan :: Nil)
         }
       } else if (numWindowExpr > 1) {
         throw QueryCompilationErrors.multiTimeWindowExpressionsNotSupportedError(p)
@@ -210,74 +211,74 @@ object SessionWindowing extends Rule[LogicalPlan] {
         val session = sessionExpressions.head
 
         if (StructType.acceptsType(session.timeColumn.dataType)) {
-          return p transformExpressions {
+          p transformExpressions {
             case t: SessionWindow => t.copy(timeColumn = WindowTime(session.timeColumn))
           }
-        }
-
-        val metadata = session.timeColumn match {
-          case a: Attribute => a.metadata
-          case _ => Metadata.empty
-        }
-
-        val newMetadata = new MetadataBuilder()
-          .withMetadata(metadata)
-          .putBoolean(SessionWindow.marker, true)
-          .build()
-
-        val sessionAttr = AttributeReference(
-          SESSION_COL_NAME, session.dataType, metadata = newMetadata)()
-
-        val sessionStart =
-          PreciseTimestampConversion(session.timeColumn, session.timeColumn.dataType, LongType)
-        val gapDuration = session.gapDuration match {
-          case expr if expr.dataType == CalendarIntervalType =>
-            expr
-          case expr if Cast.canCast(expr.dataType, CalendarIntervalType) =>
-            Cast(expr, CalendarIntervalType)
-          case other =>
-            throw QueryCompilationErrors.sessionWindowGapDurationDataTypeError(other.dataType)
-        }
-        val sessionEnd = PreciseTimestampConversion(session.timeColumn + gapDuration,
-          session.timeColumn.dataType, LongType)
-
-        // We make sure value fields are nullable since the dataType of SessionWindow defines them
-        // as nullable.
-        val literalSessionStruct = CreateNamedStruct(
-          Literal(SESSION_START) ::
-            PreciseTimestampConversion(sessionStart, LongType, session.timeColumn.dataType)
-              .castNullable() ::
-            Literal(SESSION_END) ::
-            PreciseTimestampConversion(sessionEnd, LongType, session.timeColumn.dataType)
-              .castNullable() ::
-            Nil)
-
-        val sessionStruct = Alias(literalSessionStruct, SESSION_COL_NAME)(
-          exprId = sessionAttr.exprId, explicitMetadata = Some(newMetadata))
-
-        val replacedPlan = p transformExpressions {
-          case s: SessionWindow => sessionAttr
-        }
-
-        val filterByTimeRange = if (gapDuration.foldable) {
-          val interval = gapDuration.eval().asInstanceOf[CalendarInterval]
-          interval == null || interval.months + interval.days + interval.microseconds <= 0
         } else {
-          true
-        }
+          val metadata = session.timeColumn match {
+            case a: Attribute => a.metadata
+            case _ => Metadata.empty
+          }
 
-        // As same as tumbling window, we add a filter to filter out nulls.
-        // And we also filter out events with negative or zero or invalid gap duration.
-        val filterExpr = if (filterByTimeRange) {
-          IsNotNull(session.timeColumn) &&
-            (sessionAttr.getField(SESSION_END) > sessionAttr.getField(SESSION_START))
-        } else {
-          IsNotNull(session.timeColumn)
-        }
+          val newMetadata = new MetadataBuilder()
+            .withMetadata(metadata)
+            .putBoolean(SessionWindow.marker, true)
+            .build()
 
-        replacedPlan.withNewChildren(
-          Filter(filterExpr,
-            Project(sessionStruct +: child.output, child)) :: Nil)
+          val sessionAttr = AttributeReference(
+            SESSION_COL_NAME, session.dataType, metadata = newMetadata)()
+
+          val sessionStart =
+            PreciseTimestampConversion(session.timeColumn, session.timeColumn.dataType, LongType)
+          val gapDuration = session.gapDuration match {
+            case expr if expr.dataType == CalendarIntervalType =>
+              expr
+            case expr if Cast.canCast(expr.dataType, CalendarIntervalType) =>
+              Cast(expr, CalendarIntervalType)
+            case other =>
+              throw QueryCompilationErrors.sessionWindowGapDurationDataTypeError(other.dataType)
+          }
+          val sessionEnd = PreciseTimestampConversion(session.timeColumn + gapDuration,
+            session.timeColumn.dataType, LongType)
+
+          // We make sure value fields are nullable since the dataType of SessionWindow defines them
+          // as nullable.
+          val literalSessionStruct = CreateNamedStruct(
+            Literal(SESSION_START) ::
+              PreciseTimestampConversion(sessionStart, LongType, session.timeColumn.dataType)
+                .castNullable() ::
+              Literal(SESSION_END) ::
+              PreciseTimestampConversion(sessionEnd, LongType, session.timeColumn.dataType)
+                .castNullable() ::
+              Nil)
+
+          val sessionStruct = Alias(literalSessionStruct, SESSION_COL_NAME)(
+            exprId = sessionAttr.exprId, explicitMetadata = Some(newMetadata))
+
+          val replacedPlan = p transformExpressions {
+            case s: SessionWindow => sessionAttr
+          }
+
+          val filterByTimeRange = if (gapDuration.foldable) {
+            val interval = gapDuration.eval().asInstanceOf[CalendarInterval]
+            interval == null || interval.months + interval.days + interval.microseconds <= 0
+          } else {
+            true
+          }
+
+          // As same as tumbling window, we add a filter to filter out nulls.
+          // And we also filter out events with negative or zero or invalid gap duration.
+          val filterExpr = if (filterByTimeRange) {
+            IsNotNull(session.timeColumn) &&
+              (sessionAttr.getField(SESSION_END) > sessionAttr.getField(SESSION_START))
+          } else {
+            IsNotNull(session.timeColumn)
+          }
+
+          replacedPlan.withNewChildren(
+            Filter(filterExpr,
+              Project(sessionStruct +: child.output, child)) :: Nil)
+        }
       } else if (numWindowExpr > 1) {
         throw QueryCompilationErrors.multiTimeWindowExpressionsNotSupportedError(p)
       } else {

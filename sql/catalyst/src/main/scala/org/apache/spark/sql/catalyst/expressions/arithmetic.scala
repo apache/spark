@@ -298,7 +298,7 @@ abstract class BinaryArithmetic extends BinaryOperator
           case "+" => "try_add"
           case "-" => "try_subtract"
           case "*" => "try_multiply"
-          case _ => ""
+          case _ => "unknown_function"
         }
         val overflowCheck = if (failOnError) {
           val javaType = CodeGenerator.boxedType(dataType)

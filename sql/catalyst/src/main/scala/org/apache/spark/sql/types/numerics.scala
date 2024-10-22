@@ -55,7 +55,12 @@ private[sql] object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOr
 
 
 private[sql] object ShortExactNumeric extends ShortIsIntegral with Ordering.ShortOrdering {
-  private def checkOverflow(res: Int, x: Short, y: Short, op: String, hint: String): Unit = {
+  private def checkOverflow(
+      res: Int,
+      x: Short,
+      y: Short,
+      op: String,
+      hint: String = "unknown_function"): Unit = {
     if (res > Short.MaxValue || res < Short.MinValue) {
       throw QueryExecutionErrors.binaryArithmeticCauseOverflowError(x, op, y, hint)
     }

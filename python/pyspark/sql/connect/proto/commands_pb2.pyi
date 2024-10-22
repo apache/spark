@@ -2188,6 +2188,7 @@ class CheckpointCommand(google.protobuf.message.Message):
     RELATION_FIELD_NUMBER: builtins.int
     LOCAL_FIELD_NUMBER: builtins.int
     EAGER_FIELD_NUMBER: builtins.int
+    STORAGE_LEVEL_FIELD_NUMBER: builtins.int
     @property
     def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The logical plan to checkpoint."""
@@ -2197,22 +2198,46 @@ class CheckpointCommand(google.protobuf.message.Message):
     """
     eager: builtins.bool
     """(Required) Whether to checkpoint this dataframe immediately."""
+    @property
+    def storage_level(self) -> pyspark.sql.connect.proto.common_pb2.StorageLevel:
+        """(Optional) For local checkpoint, the storage level to use."""
     def __init__(
         self,
         *,
         relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
         local: builtins.bool = ...,
         eager: builtins.bool = ...,
+        storage_level: pyspark.sql.connect.proto.common_pb2.StorageLevel | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["relation", b"relation"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_storage_level",
+            b"_storage_level",
+            "relation",
+            b"relation",
+            "storage_level",
+            b"storage_level",
+        ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "eager", b"eager", "local", b"local", "relation", b"relation"
+            "_storage_level",
+            b"_storage_level",
+            "eager",
+            b"eager",
+            "local",
+            b"local",
+            "relation",
+            b"relation",
+            "storage_level",
+            b"storage_level",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_storage_level", b"_storage_level"]
+    ) -> typing_extensions.Literal["storage_level"] | None: ...
 
 global___CheckpointCommand = CheckpointCommand
 

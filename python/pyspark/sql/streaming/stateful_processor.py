@@ -20,6 +20,11 @@ from typing import Any, List, TYPE_CHECKING, Iterator, Optional, Union, Tuple
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.streaming.list_state_client import ListStateClient, ListStateIterator
+from pyspark.sql.streaming.map_state_client import (
+    MapStateClient,
+    MapStateIterator,
+    MapStateKeyValuePairIterator,
+)
 from pyspark.sql.streaming.value_state_client import ValueStateClient
 from pyspark.sql.types import StructType
 
@@ -56,7 +61,7 @@ class ValueState:
         """
         return self._value_state_client.get(self._state_name)
 
-    def update(self, new_value: Any) -> None:
+    def update(self, new_value: Tuple) -> None:
         """
         Update the value of the state.
         """
@@ -121,6 +126,77 @@ class ListState:
         self._list_state_client.clear(self._state_name)
 
 
+class MapState:
+    """
+    Class used for arbitrary stateful operations with transformWithState to capture single map
+    state.
+
+    .. versionadded:: 4.0.0
+    """
+
+    def __init__(
+        self,
+        map_state_client: MapStateClient,
+        state_name: str,
+    ) -> None:
+        self._map_state_client = map_state_client
+        self._state_name = state_name
+
+    def exists(self) -> bool:
+        """
+        Whether state exists or not.
+        """
+        return self._map_state_client.exists(self._state_name)
+
+    def get_value(self, key: Tuple) -> Optional[Tuple]:
+        """
+        Get the state value for given user key if it exists.
+        """
+        return self._map_state_client.get_value(self._state_name, key)
+
+    def contains_key(self, key: Tuple) -> bool:
+        """
+        Check if the user key is contained in the map.
+        """
+        return self._map_state_client.contains_key(self._state_name, key)
+
+    def update_value(self, key: Tuple, value: Tuple) -> None:
+        """
+        Update value for given user key.
+        """
+        return self._map_state_client.update_value(self._state_name, key, value)
+
+    def iterator(self) -> Iterator[Tuple[Tuple, Tuple]]:
+        """
+        Get the map associated with grouping key.
+        """
+        return MapStateKeyValuePairIterator(self._map_state_client, self._state_name)
+
+    def keys(self) -> Iterator[Tuple]:
+        """
+        Get the list of keys present in map associated with grouping key.
+        """
+        return MapStateIterator(self._map_state_client, self._state_name, True)
+
+    def values(self) -> Iterator[Tuple]:
+        """
+        Get the list of values present in map associated with grouping key.
+        """
+        return MapStateIterator(self._map_state_client, self._state_name, False)
+
+    def remove_key(self, key: Tuple) -> None:
+        """
+        Remove user key from map state.
+        """
+        return self._map_state_client.remove_key(self._state_name, key)
+
+    def clear(self) -> None:
+        """
+        Remove this state.
+        """
+        self._map_state_client.clear(self._state_name)
+
+
 class StatefulProcessorHandle:
     """
     Represents the operation handle provided to the stateful processor used in transformWithState
@@ -156,7 +232,9 @@ class StatefulProcessorHandle:
         self.stateful_processor_api_client.get_value_state(state_name, schema, ttl_duration_ms)
         return ValueState(ValueStateClient(self.stateful_processor_api_client), state_name, schema)
 
-    def getListState(self, state_name: str, schema: Union[StructType, str]) -> ListState:
+    def getListState(
+        self, state_name: str, schema: Union[StructType, str], ttl_duration_ms: Optional[int] = None
+    ) -> ListState:
         """
         Function to create new or return existing single value state variable of given type.
         The user must ensure to call this function only within the `init()` method of the
@@ -169,9 +247,50 @@ class StatefulProcessorHandle:
         schema : :class:`pyspark.sql.types.DataType` or str
             The schema of the state variable. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        ttlDurationMs: int
+            Time to live duration of the state in milliseconds. State values will not be returned
+            past ttlDuration and will be eventually removed from the state store. Any state update
+            resets the expiration time to current processing time plus ttlDuration.
+            If ttl is not specified the state will never expire.
         """
-        self.stateful_processor_api_client.get_list_state(state_name, schema)
+        self.stateful_processor_api_client.get_list_state(state_name, schema, ttl_duration_ms)
         return ListState(ListStateClient(self.stateful_processor_api_client), state_name, schema)
+
+    def getMapState(
+        self,
+        state_name: str,
+        user_key_schema: Union[StructType, str],
+        value_schema: Union[StructType, str],
+        ttl_duration_ms: Optional[int] = None,
+    ) -> MapState:
+        """
+        Function to create new or return existing single map state variable of given type.
+        The user must ensure to call this function only within the `init()` method of the
+        :class:`StatefulProcessor`.
+
+        Parameters
+        ----------
+        state_name : str
+            name of the state variable
+        user_key_schema : :class:`pyspark.sql.types.DataType` or str
+            The schema of the key of map state. The value can be either a
+            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        value_schema : :class:`pyspark.sql.types.DataType` or str
+            The schema of the value of map state The value can be either a
+            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        ttl_duration_ms: int
+            Time to live duration of the state in milliseconds. State values will not be returned
+            past ttlDuration and will be eventually removed from the state store. Any state update
+            resets the expiration time to current processing time plus ttlDuration.
+            If ttl is not specified the state will never expire.
+        """
+        self.stateful_processor_api_client.get_map_state(
+            state_name, user_key_schema, value_schema, ttl_duration_ms
+        )
+        return MapState(
+            MapStateClient(self.stateful_processor_api_client, user_key_schema, value_schema),
+            state_name,
+        )
 
 
 class StatefulProcessor(ABC):

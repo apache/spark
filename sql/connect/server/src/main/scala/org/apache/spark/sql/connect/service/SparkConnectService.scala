@@ -345,7 +345,7 @@ object SparkConnectService extends Logging {
     val kvStore = sc.statusStore.store.asInstanceOf[ElementTrackingStore]
     listener = new SparkConnectServerListener(kvStore, sc.conf)
     sc.listenerBus.addToStatusQueue(listener)
-    uiTab = if (sc.getConf.get(UI_ENABLED)) {
+    uiTab = if (sc.conf.get(UI_ENABLED)) {
       Some(
         new SparkConnectServerTab(
           new SparkConnectServerAppStatusStore(kvStore),
