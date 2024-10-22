@@ -177,7 +177,7 @@ private[spark] class Executor(
   // Whether to monitor killed / interrupted tasks
   private val taskReaperEnabled = conf.get(TASK_REAPER_ENABLED)
 
-  private val killOnFatalErrorDepth = conf.get(KILL_ON_FATAL_DEPTH)
+  private val killOnFatalErrorDepth = conf.get(KILL_ON_FATAL_ERROR_DEPTH)
 
   private val systemLoader = Utils.getContextOrSparkClassLoader
 

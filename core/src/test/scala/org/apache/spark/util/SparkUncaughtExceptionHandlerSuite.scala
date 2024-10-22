@@ -94,7 +94,7 @@ object ThrowableTypes extends Enumeration {
   )
 
   val NestedSparkFatalException = ThrowableTypesVal(
-    "NestedMixedFatalErrors",
+    "NestedSparkFatalException",
     new RuntimeException("Nonfatal Level 1",
       new RuntimeException("Nonfatal Level 2",
         new SparkFatalException(new OutOfMemoryError())))

@@ -21,7 +21,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.executor.{ExecutorExitCode, KilledByTaskReaperException}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.THREAD
-import org.apache.spark.internal.config.KILL_ON_FATAL_DEPTH
+import org.apache.spark.internal.config.KILL_ON_FATAL_ERROR_DEPTH
 
 /**
  * The default uncaught exception handler for Spark daemons. It terminates the whole process for
@@ -39,14 +39,14 @@ private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: 
   }
 
   // The maximum depth to search in the exception cause chain for a fatal error,
-  // as defined by killOnFatalErrorDepth in Executor.scala.
+  // as defined by KILL_ON_FATAL_ERROR_DEPTH.
   //
   // SPARK-50034: When this handler is called, there is a fatal error in the cause chain within
   // the specified depth. We should identify that fatal error and exit with the
   // correct exit code.
   private val killOnFatalErrorDepth: Int =
     // At this point SparkEnv might be None
-    Option(SparkEnv.get).map(_.conf.get(KILL_ON_FATAL_DEPTH)).getOrElse(5)
+    Option(SparkEnv.get).map(_.conf.get(KILL_ON_FATAL_ERROR_DEPTH)).getOrElse(5)
 
 
   override def uncaughtException(thread: Thread, exception: Throwable): Unit = {
