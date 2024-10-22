@@ -797,7 +797,7 @@ public class CollationAwareUTF8String {
    */
   public static int lowercaseIndexOf(final UTF8String target, final UTF8String pattern,
       final int start) {
-    if (pattern.numChars() == 0) return target.indexOfEmpty(target, start);
+    if (pattern.numChars() == 0) return target.indexOfEmpty(start);
     if (target.isFullAscii() && pattern.isFullAscii()) {
       return target.toLowerCase().indexOf(pattern.toLowerCase(), start);
     }
@@ -811,7 +811,7 @@ public class CollationAwareUTF8String {
 
   public static int indexOf(final UTF8String target, final UTF8String pattern,
       final int start, final int collationId) {
-    if (pattern.numBytes() == 0) return target.indexOfEmpty(target, start);
+    if (pattern.numBytes() == 0) return target.indexOfEmpty(start);
     if (target.numBytes() == 0) return MATCH_NOT_FOUND;
     // Initialize the string search with respect to the specified ICU collation.
     String targetStr = target.toValidString();
