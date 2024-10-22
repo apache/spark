@@ -170,8 +170,13 @@ object UrlCodec {
   """,
   since = "2.0.0",
   group = "url_funcs")
-case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends Expression with ExpectsInputTypes with RuntimeReplaceable {
+case class ParseUrl(
+    children: Seq[Expression],
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
+  extends Expression
+  with ExpectsInputTypes
+  with RuntimeReplaceable {
+
   def this(children: Seq[Expression]) = this(children, SQLConf.get.ansiEnabled)
 
   override def nullable: Boolean = true
@@ -210,8 +215,11 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
 
   // If the key is a constant, cache the Pattern object so that we don't need to convert key
   // from UTF8String to String to StringBuilder to String to Pattern for every row.
-  @transient private lazy val cachedPattern = () => children(2) match {
-    case Literal(key: UTF8String, _) if key ne null => ParseUrlEvaluator.getPattern(key)
+  @transient private lazy val cachedPattern = children.size match {
+    case 3 => children(2) match {
+      case Literal(key: UTF8String, _) if key ne null => () => ParseUrlEvaluator.getPattern(key)
+      case _ => null
+    }
     case _ => null
   }
 
