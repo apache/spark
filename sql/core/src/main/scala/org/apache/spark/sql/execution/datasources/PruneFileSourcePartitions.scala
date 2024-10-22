@@ -49,18 +49,18 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case op @ PhysicalOperation(projects, filters,
-        logicalRelation @
-          LogicalRelation(fsRelation @
+        RelationAndCatalogTable(
+          logicalRelation,
+          fsRelation@
             HadoopFsRelation(
-              catalogFileIndex: CatalogFileIndex,
-              partitionSchema,
-              _,
-              _,
-              _,
-              _),
+            catalogFileIndex: CatalogFileIndex,
+            partitionSchema,
             _,
             _,
-            _))
+            _,
+            _),
+          _)
+        )
         if filters.nonEmpty && fsRelation.partitionSchema.nonEmpty =>
       val normalizedFilters = DataSourceStrategy.normalizeExprs(
         filters.filter { f =>

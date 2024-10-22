@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.SparkException
+
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.{SparkSession, Strategy}
@@ -36,14 +36,14 @@ import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, Identit
 import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TruncatableTable}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
-import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
+import org.apache.spark.sql.connector.expressions.filter.{Predicate, And => V2And, Not => V2Not, Or => V2Or}
 import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command.CommandUtils
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation, PushableColumnAndNestedColumn}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation, PushableColumnAndNestedColumn, RelationAndCatalogTable}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
@@ -312,8 +312,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             case _ =>
               throw QueryCompilationErrors.tableDoesNotSupportDeletesError(table)
           }
-        case LogicalRelation(_, _, catalogTable, _) =>
-          val tableIdentifier = catalogTable.get.identifier
+        case RelationAndCatalogTable(_, _, Some(catalogTable)) =>
+          val tableIdentifier = catalogTable.identifier
           throw QueryCompilationErrors.unsupportedTableOperationError(
             tableIdentifier,
             "DELETE")

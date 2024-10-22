@@ -522,14 +522,14 @@ final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFram
       case (true, SaveMode.Overwrite) =>
         // Get all input data source or hive relations of the query.
         val srcRelations = df.logicalPlan.collect {
-          case LogicalRelation(src: BaseRelation, _, _, _) => src
+          case l: LogicalRelation => l.relation
           case relation: HiveTableRelation => relation.tableMeta.identifier
         }
 
         val tableRelation = df.sparkSession.table(qualifiedIdent).queryExecution.analyzed
         EliminateSubqueryAliases(tableRelation) match {
           // check if the table is a data source table (the relation is a BaseRelation).
-          case LogicalRelation(dest: BaseRelation, _, _, _) if srcRelations.contains(dest) =>
+          case l: LogicalRelation if srcRelations.contains(l.relation) =>
             throw QueryCompilationErrors.cannotOverwriteTableThatIsBeingReadFromError(
               qualifiedIdent)
           // check hive table relation when overwrite mode

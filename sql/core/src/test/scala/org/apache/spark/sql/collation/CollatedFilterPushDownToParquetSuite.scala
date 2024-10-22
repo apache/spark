@@ -18,13 +18,13 @@
 package org.apache.spark.sql.collation
 
 import org.apache.parquet.schema.MessageType
-
 import org.apache.spark.SparkConf
+
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation, RelationAndCatalogTable}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -231,7 +231,7 @@ class CollatedFilterPushDownToParquetV1Suite extends CollatedFilterPushDownToPar
     var maybeRelation: Option[HadoopFsRelation] = None
     val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
       case PhysicalOperation(_, filters,
-          LogicalRelation(relation: HadoopFsRelation, _, _, _)) =>
+          RelationAndCatalogTable(_, relation: HadoopFsRelation, _)) =>
         maybeRelation = Some(relation)
         filters
     }.flatten

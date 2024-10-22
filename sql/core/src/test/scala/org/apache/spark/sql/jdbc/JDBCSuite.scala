@@ -28,8 +28,8 @@ import scala.util.Random
 
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
-
 import org.apache.spark.{SparkException, SparkSQLException}
+
 import org.apache.spark.sql.{AnalysisException, DataFrame, Observation, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeTestUtils}
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, RelationAndCatalogTable}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.functions.{lit, percentile_approx}
@@ -308,7 +308,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   // Check whether the tables are fetched in the expected degree of parallelism
   def checkNumPartitions(df: DataFrame, expectedNumPartitions: Int): Unit = {
     val jdbcRelations = df.queryExecution.analyzed.collect {
-      case LogicalRelation(r: JDBCRelation, _, _, _) => r
+      case RelationAndCatalogTable(_, r: JDBCRelation, _) => r
     }
     assert(jdbcRelations.length == 1)
     assert(jdbcRelations.head.parts.length == expectedNumPartitions,
@@ -1667,7 +1667,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
       val quotedPrtColName = testH2Dialect.quoteIdentifier(expectedColumnName)
       df.logicalPlan match {
-        case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
+        case RelationAndCatalogTable(_, JDBCRelation(_, parts, _), _) =>
           val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
           assert(whereClauses === Set(
             s"$quotedPrtColName < 2 or $quotedPrtColName is null",
@@ -1809,7 +1809,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       .load()
 
     df1.logicalPlan match {
-      case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
+      case RelationAndCatalogTable(_, JDBCRelation(_, parts, _), _) =>
         val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
         assert(whereClauses === Set(
           """"D" < '2018-07-11' or "D" is null""",
@@ -1829,7 +1829,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       .load()
 
     df2.logicalPlan match {
-      case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
+      case RelationAndCatalogTable(_, JDBCRelation(_, parts, _), _) =>
         val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
         assert(whereClauses === Set(
           """"T" < '2018-07-15 20:50:32.5' or "T" is null""",

@@ -22,7 +22,7 @@ import java.net.URI
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, RelationAndCatalogTable}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, Metadata, MetadataBuilder, StructType}
 
@@ -134,7 +134,7 @@ class PathOptionSuite extends DataSourceTest with SharedSparkSession {
 
   private def getPathOption(tableName: String): Option[String] = {
     spark.table(tableName).queryExecution.analyzed.collect {
-      case LogicalRelation(r: TestOptionsRelation, _, _, _) => r.pathOption
+      case RelationAndCatalogTable(_, r: TestOptionsRelation, _) => r.pathOption
     }.head
   }
 

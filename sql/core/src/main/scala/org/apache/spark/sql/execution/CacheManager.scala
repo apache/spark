@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
-import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation, RelationAndCatalogTable}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
@@ -220,7 +220,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
 
     plan match {
-      case LogicalRelation(_, _, Some(catalogTable), _) =>
+      case RelationAndCatalogTable(_, _, Some(catalogTable)) =>
         isSameName(catalogTable.identifier.nameParts)
 
       case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _) =>

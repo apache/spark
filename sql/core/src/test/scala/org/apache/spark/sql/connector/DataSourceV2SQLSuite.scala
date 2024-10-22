@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector
 
 import java.sql.Timestamp
 import java.time.{Duration, LocalDate, Period}
+
 import java.util
 import java.util.Locale
 
@@ -26,6 +27,7 @@ import scala.concurrent.duration.MICROSECONDS
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
@@ -43,7 +45,7 @@ import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RelationAndCatalogTable}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -3746,7 +3748,7 @@ class DataSourceV2SQLSuiteV1Filter
         sql("INSERT INTO " + tableName + " VALUES('Bob')")
         val df = sql("SELECT * FROM " + tableName)
         assert(df.queryExecution.analyzed.exists {
-          case LogicalRelation(_: HadoopFsRelation, _, _, _) => true
+          case RelationAndCatalogTable(_, relation: HadoopFsRelation, _)) => true
           case _ => false
         })
         checkAnswer(df, Row("Bob"))

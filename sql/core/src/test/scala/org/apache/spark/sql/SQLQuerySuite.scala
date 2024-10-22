@@ -27,8 +27,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
 
 import org.apache.commons.io.FileUtils
-
 import org.apache.spark.{AccumulatorSuite, SPARK_DOC_ROOT, SparkArithmeticException, SparkDateTimeException, SparkException, SparkNumberFormatException, SparkRuntimeException}
+
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRow, Hex}
@@ -43,7 +43,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate._
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation, RelationAndCatalogTable}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -4885,7 +4885,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       )
       checkAnswer(df2, df1)
       val relations = df2.queryExecution.analyzed.collect {
-        case LogicalRelation(fs: HadoopFsRelation, _, _, _) => fs
+        case RelationAndCatalogTable(_, fs: HadoopFsRelation, _) => fs
       }
       assert(relations.size == 1)
       assert(relations.head.options == Map("key1" -> "1", "key2" -> "2"))

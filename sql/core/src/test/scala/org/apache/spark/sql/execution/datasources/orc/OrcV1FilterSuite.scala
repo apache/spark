@@ -19,12 +19,12 @@ package org.apache.spark.sql.execution.datasources.orc
 import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentImpl
-
 import org.apache.spark.SparkConf
+
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Predicate}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation, RelationAndCatalogTable}
 import org.apache.spark.sql.execution.datasources.orc.OrcShimUtils.{Operator, SearchArgument}
 import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.SQLConf
@@ -49,7 +49,8 @@ class OrcV1FilterSuite extends OrcFilterSuite {
 
     var maybeRelation: Option[HadoopFsRelation] = None
     val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-      case PhysicalOperation(_, filters, LogicalRelation(orcRelation: HadoopFsRelation, _, _, _)) =>
+      case PhysicalOperation(_, filters,
+        RelationAndCatalogTable(_, orcRelation: HadoopFsRelation, _)) =>
         maybeRelation = Some(orcRelation)
         filters
     }.flatten.reduceLeftOption(And)
@@ -94,7 +95,8 @@ class OrcV1FilterSuite extends OrcFilterSuite {
 
     var maybeRelation: Option[HadoopFsRelation] = None
     val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-      case PhysicalOperation(_, filters, LogicalRelation(orcRelation: HadoopFsRelation, _, _, _)) =>
+      case PhysicalOperation(_, filters,
+        RelationAndCatalogTable(_, orcRelation: HadoopFsRelation, _)) =>
         maybeRelation = Some(orcRelation)
         filters
     }.flatten.reduceLeftOption(And)
