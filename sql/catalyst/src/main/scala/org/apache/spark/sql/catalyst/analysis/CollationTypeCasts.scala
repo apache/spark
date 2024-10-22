@@ -174,7 +174,7 @@ object CollationTypeCasts extends TypeCoercionRule {
       case size if size > 1 =>
         throw QueryCompilationErrors
           .explicitCollationMismatchError(
-            explicitTypes.map(t => StringType(t).typeName)
+            explicitTypes.map(t => StringType(t))
           )
       // Only implicit or default collations present
       case 0 =>

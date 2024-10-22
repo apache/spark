@@ -1263,6 +1263,38 @@ class FunctionsTestsMixin:
             },
         )
 
+    @unittest.skipIf(not have_numpy, "NumPy not installed")
+    def test_str_ndarray(self):
+        import numpy as np
+
+        for arr in [
+            np.array([], np.str_),
+            np.array(["a"], np.str_),
+            np.array([1, 2, 3], np.str_),
+        ]:
+            self.assertEqual(
+                [("a", "array<string>")],
+                self.spark.range(1).select(F.lit(arr).alias("a")).dtypes,
+            )
+
+    @unittest.skipIf(not have_numpy, "NumPy not installed")
+    def test_empty_ndarray(self):
+        import numpy as np
+
+        arr_dtype_to_spark_dtypes = [
+            ("int8", [("b", "array<smallint>")]),
+            ("int16", [("b", "array<smallint>")]),
+            ("int32", [("b", "array<int>")]),
+            ("int64", [("b", "array<bigint>")]),
+            ("float32", [("b", "array<float>")]),
+            ("float64", [("b", "array<double>")]),
+        ]
+        for t, expected_spark_dtypes in arr_dtype_to_spark_dtypes:
+            arr = np.array([]).astype(t)
+            self.assertEqual(
+                expected_spark_dtypes, self.spark.range(1).select(F.lit(arr).alias("b")).dtypes
+            )
+
     def test_binary_math_function(self):
         funcs, expected = zip(
             *[(F.atan2, 0.13664), (F.hypot, 8.07527), (F.pow, 2.14359), (F.pmod, 1.1)]

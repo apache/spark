@@ -243,7 +243,7 @@ class QueryExecution(
   def toRdd: RDD[InternalRow] = lazyToRdd.get
 
   /** Get the metrics observed during the execution of the query plan. */
-  def observedMetrics: Map[String, Row] = CollectMetricsExec.collect(executedPlan)
+  def observedMetrics: Map[String, Row] = CollectMetricsExec.collect(executedPlan, Some(analyzed))
 
   protected def preparations: Seq[Rule[SparkPlan]] = {
     QueryExecution.preparations(sparkSession,
