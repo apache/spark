@@ -133,7 +133,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
   override def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType] = {
     findTightestCommonType(t1, t2)
       .orElse(findWiderTypeForDecimal(t1, t2))
-      .orElse(findWiderTypeForString(t1, t2))
+      .orElse(AnsiStringPromotionTypeCoercion.findWiderTypeForString(t1, t2))
       .orElse(findTypeForComplex(t1, t2, findWiderTypeForTwo))
   }
 
@@ -226,47 +226,13 @@ object AnsiTypeCoercion extends TypeCoercionBase {
   override def canCast(from: DataType, to: DataType): Boolean = Cast.canAnsiCast(from, to)
 
   object PromoteStrings extends TypeCoercionRule {
-    private def castExpr(expr: Expression, targetType: DataType): Expression = {
-      expr.dataType match {
-        case NullType => Literal.create(null, targetType)
-        case l if l != targetType => Cast(expr, targetType)
-        case _ => expr
-      }
-    }
 
     override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-
-      case b @ BinaryOperator(left, right)
-        if findWiderTypeForString(left.dataType, right.dataType).isDefined =>
-        val promoteType = findWiderTypeForString(left.dataType, right.dataType).get
-        b.withNewChildren(Seq(castExpr(left, promoteType), castExpr(right, promoteType)))
-
-      case Abs(e @ StringTypeExpression(), failOnError) => Abs(Cast(e, DoubleType), failOnError)
-      case m @ UnaryMinus(e @ StringTypeExpression(), _) =>
-        m.withNewChildren(Seq(Cast(e, DoubleType)))
-      case UnaryPositive(e @ StringTypeExpression()) => UnaryPositive(Cast(e, DoubleType))
-
-      case d @ DateAdd(left @ StringTypeExpression(), _) =>
-        d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateAdd(_, right @ StringTypeExpression()) =>
-        d.copy(days = Cast(right, IntegerType))
-      case d @ DateSub(left @ StringTypeExpression(), _) =>
-        d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(_, right @ StringTypeExpression()) =>
-        d.copy(days = Cast(right, IntegerType))
-
-      case s @ SubtractDates(left @ StringTypeExpression(), _, _) =>
-        s.copy(left = Cast(s.left, DateType))
-      case s @ SubtractDates(_, right @ StringTypeExpression(), _) =>
-        s.copy(right = Cast(s.right, DateType))
-      case t @ TimeAdd(left @ StringTypeExpression(), _, _) =>
-        t.copy(start = Cast(t.start, TimestampType))
-      case t @ SubtractTimestamps(left @ StringTypeExpression(), _, _, _) =>
-        t.copy(left = Cast(t.left, t.right.dataType))
-      case t @ SubtractTimestamps(_, right @ StringTypeExpression(), _, _) =>
-        t.copy(right = Cast(right, t.left.dataType))
+      case withChildrenResolved
+          if AnsiStringPromotionTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
+        AnsiStringPromotionTypeCoercion.apply(withChildrenResolved)
     }
   }
 
@@ -282,9 +248,9 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case g if !g.childrenResolved => g
-
-      case g: GetDateField if AnyTimestampTypeExpression.unapply(g.child) =>
-        g.withNewChildren(Seq(Cast(g.child, DateType)))
+      case withChildrenResolved
+          if AnsiGetDateFieldOperationsTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
+        AnsiGetDateFieldOperationsTypeCoercion.apply(withChildrenResolved)
     }
   }
 
@@ -292,21 +258,9 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-
-      case d @ DateAdd(AnyTimestampTypeExpression(), _) =>
-        d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(AnyTimestampTypeExpression(), _) =>
-        d.copy(startDate = Cast(d.startDate, DateType))
-
-      case s @ SubtractTimestamps(DateTypeExpression(), AnyTimestampTypeExpression(), _, _) =>
-        s.copy(left = Cast(s.left, s.right.dataType))
-      case s @ SubtractTimestamps(AnyTimestampTypeExpression(), DateTypeExpression(), _, _) =>
-        s.copy(right = Cast(s.right, s.left.dataType))
-      case s @ SubtractTimestamps(AnyTimestampTypeExpression(), AnyTimestampTypeExpression(), _, _)
-        if s.left.dataType != s.right.dataType =>
-        val newLeft = castIfNotSameType(s.left, TimestampNTZType)
-        val newRight = castIfNotSameType(s.right, TimestampNTZType)
-        s.copy(left = newLeft, right = newRight)
+      case withChildrenResolved
+          if AnsiDateTimeOperationsTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
+        AnsiDateTimeOperationsTypeCoercion.apply(withChildrenResolved)
     }
   }
 
