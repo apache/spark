@@ -142,7 +142,6 @@ class ListStateImpl[S](
       entryCount += 1
       TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
     }
-    // updateEntryCount(encodedKey, entryCount)
   }
 
   private def putUnsafeRow(newState: Array[S]): Unit = {
@@ -171,11 +170,9 @@ class ListStateImpl[S](
 
     if (usingAvro) {
       val encodedKey: Array[Byte] = avroTypesEncoder.encodeGroupingKey()
-      // val entryCount = getEntryCount(encodedKey)
       val encodedValue = avroTypesEncoder.encodeValue(newState)
       store.merge(encodedKey, encodedValue, stateName)
       TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
-      // updateEntryCount(encodedKey, entryCount + 1)
     } else {
       val encodedKey = unsafeRowTypesEncoder.encodeGroupingKey()
       val entryCount = getEntryCount(encodedKey)
@@ -192,14 +189,11 @@ class ListStateImpl[S](
 
     if (usingAvro) {
       val encodedKey: Array[Byte] = avroTypesEncoder.encodeGroupingKey()
-      // var entryCount = getEntryCount(encodedKey)
       newState.foreach { v =>
         val encodedValue = avroTypesEncoder.encodeValue(v)
         store.merge(encodedKey, encodedValue, stateName)
-        // entryCount += 1
         TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
       }
-      // updateEntryCount(encodedKey, entryCount)
     } else {
       val encodedKey = unsafeRowTypesEncoder.encodeGroupingKey()
       var entryCount = getEntryCount(encodedKey)

@@ -274,7 +274,7 @@ class StatefulProcessorHandleImpl(
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
     verifyStateVarOperations("get_list_state", CREATED)
     val resultState = new ListStateImpl[T](
-      store, stateName, keyEncoder, valEncoder, avroSerde = None, metrics)
+      store, stateName, keyEncoder, valEncoder, schemas(stateName).avroSerde, metrics)
     TWSMetricsUtils.incrementMetric(metrics, "numListStateVars")
     resultState
   }
