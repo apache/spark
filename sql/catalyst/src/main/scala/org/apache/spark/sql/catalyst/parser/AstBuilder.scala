@@ -1517,7 +1517,7 @@ class AstBuilder extends DataTypeAstBuilder
               errorClass = "PARSE_SYNTAX_ERROR",
               messageParameters = Map(
                 "error" -> s"'$error'",
-                "hint" -> s": extra input '$error''"),
+                "hint" -> s": extra input '$error'"),
               n)
           }
           visitNamedExpression(n)

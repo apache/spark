@@ -165,7 +165,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'ROLLUP'",
-    "hint" : ": extra input 'ROLLUP''"
+    "hint" : ": extra input 'ROLLUP'"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -186,7 +186,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'CUBE'",
-    "hint" : ": extra input 'CUBE''"
+    "hint" : ": extra input 'CUBE'"
   },
   "queryContext" : [ {
     "objectType" : "",
