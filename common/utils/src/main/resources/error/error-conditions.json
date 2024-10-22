@@ -2074,7 +2074,7 @@
   },
   "INVALID_ATTRIBUTE_NAME_SYNTAX" : {
     "message" : [
-      "Syntax error in attribute name: <name>."
+      "Syntax error in the attribute name: <name>. Check that backticks appear in pairs, a quoted string is a complete name part and use a backtick only inside quoted name parts."
     ],
     "sqlState" : "42601"
   },
