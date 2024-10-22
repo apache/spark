@@ -231,10 +231,15 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("aBc", "UTF8_LCASE", Set("b", "aa", "xyz")) -> false,
       ("aBc", "UTF8_LCASE", Set("b", "AbC", null)) -> true,
       (null, "UTF8_LCASE", Set("b", "AbC", null)) -> null,
+      (" aa", "UTF8_BINARY_RTRIM", Set(" aa")) -> true,
+      (" aa ", "UTF8_BINARY_RTRIM", Set(" aa")) -> true,
+      ("a  ", "UTF8_BINARY_RTRIM", Set()) -> false,
+      ("a  ", "UTF8_BINARY_RTRIM", Set("a", "b", null)) -> true,
+      (null, "UTF8_BINARY_RTRIM", Set("1", "2")) -> null
     ).foreach { case ((elem, collation, inputSet), result) =>
-      val hset = inputSet.map(UTF8String.fromString).asInstanceOf[Set[Any]]
+      val iset = inputSet.map(UTF8String.fromString).asInstanceOf[Set[Any]]
       checkEvaluation(
-        InSet(Literal.create(elem, StringType(collation)), hset),
+        InSet(Literal.create(elem, StringType(collation)), iset),
         result
       )
     }

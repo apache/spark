@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.{CollationAwareUTF8String, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{CollationAwareUTF8String, CollationFactory, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -657,7 +657,14 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 
   @transient lazy val set: Set[Any] = child.dataType match {
-    case st: StringType if st.supportsLowercaseEquality => new InSet.LCaseSet(hset)
+    case st: StringType =>
+      if (st.supportsBinaryEquality) {
+        hset
+      } else if (st.supportsLowercaseEquality) {
+        new InSet.LCaseSet(hset)
+      } else {
+        new InSet.CollationSet(hset, st.collationId)
+      }
     case t: AtomicType if !t.isInstanceOf[BinaryType] => hset
     case _: NullType => hset
     case _ =>
@@ -783,6 +790,19 @@ object InSet {
     override def contains(elem: Any): Boolean = {
       assert(elem != null, "InSet guarantees non-null input")
       strSet.contains(CollationAwareUTF8String.lowerCaseCodePoints(elem.asInstanceOf[UTF8String]))
+    }
+  }
+  class CollationSet(inputSet: Set[Any], collationId: Int) extends immutable.Set[Any] {
+    private val collation = CollationFactory.fetchCollation(collationId)
+    override def incl(elem: Any): Set[Any] = inputSet.incl(elem)
+    override def excl(elem: Any): Set[Any] = inputSet.excl(elem)
+    override def iterator: Iterator[Any] = inputSet.iterator
+
+    override def contains(elem: Any): Boolean = {
+      assert(elem != null, "InSet guarantees non-null input")
+      inputSet.exists { p =>
+        collation.equalsFunction(p.asInstanceOf[UTF8String], elem.asInstanceOf[UTF8String])
+      }
     }
   }
 }
