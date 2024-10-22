@@ -13091,6 +13091,122 @@ def substr(
 
 
 @_try_remote_functions
+def try_parse_url(
+    url: "ColumnOrName", partToExtract: "ColumnOrName", key: Optional["ColumnOrName"] = None
+) -> Column:
+    """
+    This is a special version of `parse_url` that performs the same operation, but returns a
+    NULL value instead of raising an error if the parsing cannot be performed.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    url : :class:`~pyspark.sql.Column` or str
+        A column of strings, each representing a URL.
+    partToExtract : :class:`~pyspark.sql.Column` or str
+        A column of strings, each representing the part to extract from the URL.
+    key : :class:`~pyspark.sql.Column` or str, optional
+        A column of strings, each representing the key of a query parameter in the URL.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column of strings, each representing the value of the extracted part from the URL.
+
+    Examples
+    --------
+    Example 1: Extracting the query part from a URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("https://spark.apache.org/path?query=1", "QUERY")],
+    ...   ["url", "part"]
+    ... )
+    >>> df.select(sf.try_parse_url(df.url, df.part)).show()
+    +------------------------+
+    |try_parse_url(url, part)|
+    +------------------------+
+    |                 query=1|
+    +------------------------+
+
+    Example 2: Extracting the value of a specific query parameter from a URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("https://spark.apache.org/path?query=1", "QUERY", "query")],
+    ...   ["url", "part", "key"]
+    ... )
+    >>> df.select(sf.try_parse_url(df.url, df.part, df.key)).show()
+    +-----------------------------+
+    |try_parse_url(url, part, key)|
+    +-----------------------------+
+    |                            1|
+    +-----------------------------+
+
+    Example 3: Extracting the protocol part from a URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("https://spark.apache.org/path?query=1", "PROTOCOL")],
+    ...   ["url", "part"]
+    ... )
+    >>> df.select(sf.try_parse_url(df.url, df.part)).show()
+    +------------------------+
+    |try_parse_url(url, part)|
+    +------------------------+
+    |                   https|
+    +------------------------+
+
+    Example 4: Extracting the host part from a URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("https://spark.apache.org/path?query=1", "HOST")],
+    ...   ["url", "part"]
+    ... )
+    >>> df.select(sf.try_parse_url(df.url, df.part)).show()
+    +------------------------+
+    |try_parse_url(url, part)|
+    +------------------------+
+    |        spark.apache.org|
+    +------------------------+
+
+    Example 5: Extracting the path part from a URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("https://spark.apache.org/path?query=1", "PATH")],
+    ...   ["url", "part"]
+    ... )
+    >>> df.select(sf.try_parse_url(df.url, df.part)).show()
+    +------------------------+
+    |try_parse_url(url, part)|
+    +------------------------+
+    |                   /path|
+    +------------------------+
+
+    Example 6: Invalid URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("inva lid://spark.apache.org/path?query=1", "QUERY", "query")],
+    ...   ["url", "part", "key"]
+    ... )
+    >>> df.select(sf.try_parse_url(df.url, df.part, df.key)).show()
+    +-----------------------------+
+    |try_parse_url(url, part, key)|
+    +-----------------------------+
+    |                         NULL|
+    +-----------------------------+
+    """
+    if key is not None:
+        return _invoke_function_over_columns("try_parse_url", url, partToExtract, key)
+    else:
+        return _invoke_function_over_columns("try_parse_url", url, partToExtract)
+
+
+@_try_remote_functions
 def parse_url(
     url: "ColumnOrName", partToExtract: "ColumnOrName", key: Optional["ColumnOrName"] = None
 ) -> Column:
