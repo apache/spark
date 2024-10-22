@@ -3119,6 +3119,11 @@
           "Unsupported function name <funcName>."
         ]
       },
+      "UNSUPPORTED_SQL_STATEMENT" : {
+        "message" : [
+          "Unsupported SQL statement: <sqlText>."
+        ]
+      },
       "VARIABLE_TYPE_OR_DEFAULT_REQUIRED" : {
         "message" : [
           "The definition of a SQL variable requires either a datatype or a DEFAULT clause.",
@@ -5756,11 +5761,6 @@
   "_LEGACY_ERROR_TEMP_0038" : {
     "message" : [
       "CTE definition can't have duplicate names: <duplicateNames>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0039" : {
-    "message" : [
-      "Unsupported SQL statement."
     ]
   },
   "_LEGACY_ERROR_TEMP_0043" : {
