@@ -3273,7 +3273,7 @@ class NumpyArrayConverter:
             return gateway.jvm.double
         elif nt == np.dtype("bool"):
             return gateway.jvm.boolean
-        elif np.isdtype(nt, np.str_):
+        elif nt.type == np.dtype("str"):
             return gateway.jvm.String
 
         return None
