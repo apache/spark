@@ -953,7 +953,14 @@ object Unsafe {
 
 object DockerIntegrationTests {
   // This serves to override the override specified in DependencyOverrides:
-  lazy val settings = Seq(dependencyOverrides)
+  lazy val settings = Seq(
+    dependencyOverrides += {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "guava.version").asInstanceOf[String]
+      "com.google.guava" % "guava" % guavaVersion
+    }
+  )
 }
 
 /**
