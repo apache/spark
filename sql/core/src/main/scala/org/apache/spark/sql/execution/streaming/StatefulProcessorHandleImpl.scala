@@ -146,25 +146,18 @@ class StatefulProcessorHandleImpl(
     resultState
   }
 
-  // For testing
+  // This method is for unit-testing ValueState, as the avroSerde will not be
+  // populated unless the handle is created through the TransformWithStateExec operator
 
-  private[sql] def getValueStateWithSerde[T](
+  private[sql] def getValueStateWithAvro[T](
       stateName: String,
-      valEncoder: Encoder[T]): ValueState[T] = {
+      valEncoder: Encoder[T],
+      useAvro: Boolean): ValueState[T] = {
     verifyStateVarOperations("get_value_state", CREATED)
-    val avroSerde = new StateStoreColumnFamilySchemaUtils(true).getValueStateSchema[T](
-      stateName, keyEncoder, valEncoder, hasTtl = false).avroSerde
+    val avroSerde = if (useAvro) new StateStoreColumnFamilySchemaUtils(true).getValueStateSchema[T](
+      stateName, keyEncoder, valEncoder, hasTtl = false).avroSerde else None
     val resultState = new ValueStateImpl[T](
       store, stateName, keyEncoder, valEncoder, avroSerde)
-    resultState
-  }
-
-  private[sql] def getValueStateWithoutSerde[T](
-      stateName: String,
-      valEncoder: Encoder[T]): ValueState[T] = {
-    verifyStateVarOperations("get_value_state", CREATED)
-    val resultState = new ValueStateImpl[T](
-      store, stateName, keyEncoder, valEncoder, None)
     resultState
   }
 
@@ -185,17 +178,23 @@ class StatefulProcessorHandleImpl(
     valueStateWithTTL
   }
 
-  private[sql] def getValueStateWithoutSerde[T](
+  // This method is for unit-testing ValueState, as the avroSerde will not be
+  // populated unless the handle is created through the TransformWithStateExec operator
+  private[sql] def getValueStateWithAvro[T](
       stateName: String,
       valEncoder: Encoder[T],
-      ttlConfig: TTLConfig): ValueState[T] = {
+      ttlConfig: TTLConfig,
+      useAvro: Boolean): ValueState[T] = {
     verifyStateVarOperations("get_value_state", CREATED)
     validateTTLConfig(ttlConfig, stateName)
 
     assert(batchTimestampMs.isDefined)
+    val avroSerde = if (useAvro) new StateStoreColumnFamilySchemaUtils(true).getValueStateSchema[T](
+      stateName, keyEncoder, valEncoder, hasTtl = false).avroSerde else None
+
     val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
       keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get,
-      None, metrics)
+      avroSerde, metrics)
     ttlStates.add(valueStateWithTTL)
     TWSMetricsUtils.incrementMetric(metrics, "numValueStateWithTTLVars")
 
