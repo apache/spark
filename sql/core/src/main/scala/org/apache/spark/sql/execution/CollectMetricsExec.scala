@@ -21,7 +21,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, NamedExpression, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -99,30 +98,13 @@ object CollectMetricsExec extends AdaptiveSparkPlanHelper {
   /**
    * Recursively collect all collected metrics from a query tree.
    */
-  def collect(physicalPlan: SparkPlan, analyzedOpt: Option[LogicalPlan]): Map[String, Row] = {
-    val collectorsInLogicalPlan = analyzedOpt.map {
-      _.collectWithSubqueries {
-        case c: CollectMetrics => c
-      }
-    }.getOrElse(Seq.empty[CollectMetrics])
-    val metrics = collectWithSubqueries(physicalPlan) {
+  def collect(plan: SparkPlan): Map[String, Row] = {
+    val metrics = collectWithSubqueries(plan) {
       case collector: CollectMetricsExec =>
         Map(collector.name -> collector.collectedMetrics)
       case tableScan: InMemoryTableScanExec =>
-        CollectMetricsExec.collect(
-          tableScan.relation.cachedPlan, tableScan.relation.cachedPlan.logicalLink)
+        CollectMetricsExec.collect(tableScan.relation.cachedPlan)
     }
-    val metricsCollected = metrics.reduceOption(_ ++ _).getOrElse(Map.empty)
-    val initialMetricsForMissing = collectorsInLogicalPlan.flatMap { collector =>
-      if (!metricsCollected.contains(collector.name)) {
-        val exec = CollectMetricsExec(collector.name, collector.metrics,
-          EmptyRelationExec(LocalRelation(collector.child.output)))
-        val initialMetrics = exec.collectedMetrics
-        Some((collector.name -> initialMetrics))
-      } else {
-        None
-      }
-    }.toMap
-    metricsCollected ++ initialMetricsForMissing
+    metrics.reduceOption(_ ++ _).getOrElse(Map.empty)
   }
 }
