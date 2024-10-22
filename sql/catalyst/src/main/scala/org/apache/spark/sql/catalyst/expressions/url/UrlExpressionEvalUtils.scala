@@ -23,9 +23,9 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.unsafe.types.UTF8String
 
 case class ParseUrlEvaluator(
-    cachedUrl: URI,
+    cachedUrl: () => URI,
     cachedExtractPartFunc: URI => String,
-    cachedPattern: Pattern,
+    cachedPattern: () => Pattern,
     failOnError: Boolean) {
 
   import ParseUrlEvaluator._
@@ -48,8 +48,8 @@ case class ParseUrlEvaluator(
   }
 
   private def parseUrlWithoutKey(url: UTF8String, partToExtract: UTF8String): UTF8String = {
-    if (cachedUrl ne null) {
-      extractFromUrl(cachedUrl, partToExtract)
+    if ((cachedUrl ne null) && (cachedUrl.apply() ne null)) {
+      extractFromUrl(cachedUrl.apply(), partToExtract)
     } else {
       val currentUrl = getUrl(url, failOnError)
       if (currentUrl ne null) {
@@ -76,8 +76,8 @@ case class ParseUrlEvaluator(
       return null
     }
 
-    if (cachedPattern ne null) {
-      extractValueFromQuery(query, cachedPattern)
+    if ((cachedPattern ne null) && (cachedPattern.apply() ne null)) {
+      extractValueFromQuery(query, cachedPattern.apply())
     } else {
       extractValueFromQuery(query, getPattern(key))
     }

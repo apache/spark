@@ -196,7 +196,8 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
   // If the url is a constant, cache the URL object so that we don't need to convert url
   // from UTF8String to String to URL for every row.
   @transient private lazy val cachedUrl = children.head match {
-    case Literal(url: UTF8String, _) if url ne null => ParseUrlEvaluator.getUrl(url, failOnError)
+    case Literal(url: UTF8String, _) if url ne null =>
+      () => ParseUrlEvaluator.getUrl(url, failOnError)
     case _ => null
   }
 
@@ -209,11 +210,8 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
 
   // If the key is a constant, cache the Pattern object so that we don't need to convert key
   // from UTF8String to String to StringBuilder to String to Pattern for every row.
-  @transient private lazy val cachedPattern = children.size match {
-    case 3 => children(2) match {
-      case Literal(key: UTF8String, _) if key ne null => ParseUrlEvaluator.getPattern(key)
-      case _ => null
-    }
+  @transient private lazy val cachedPattern = () => children(2) match {
+    case Literal(key: UTF8String, _) if key ne null => ParseUrlEvaluator.getPattern(key)
     case _ => null
   }
 
