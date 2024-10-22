@@ -757,7 +757,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
         while ($matcher.find()) {
           try {
             $matcher.appendReplacement($termResult, $termLastReplacement);
-          } catch (Exception e) {
+          } catch (Throwable e) {
             if (scala.util.control.NonFatal.apply(e)) {
               throw QueryExecutionErrors.invalidRegexpReplaceError($source, $regexp.toString(),
                 $rep.toString(), $pos, e);
