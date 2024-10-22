@@ -267,19 +267,14 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
         }
       }
     case a: Aggregate if aggregateExprsNestedInSubquery(a.aggregateExpressions) =>
-      print("Matched on aggregate!!\n")
-
       // find expressions with an in-subquery whose values contain aggregates
       val withInsubquery = a.aggregateExpressions.filter(aggregateExprContainsNestedInSubquery(_))
-      print(s"withInsubquery is ${withInsubquery}\n")
 
       // extract the aggregate expressions from withInsubquery
       val inSubqueryMapping = withInsubquery.map { e =>
-        val aggregateExpressions = e.collect {
-          case a: AggregateExpression => a
-        }
-        (e, aggregateExpressions)
+        (e, extractAggregateExpressions(e))
       }
+
       val inSubqueryMap = inSubqueryMapping.toMap
       val aggregateExprs = inSubqueryMapping.flatMap(_._2)
       val aggregateExprAliases = aggregateExprs.map(a => Alias(a, toPrettySQL(a))())
