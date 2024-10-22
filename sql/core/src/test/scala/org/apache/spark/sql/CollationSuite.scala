@@ -520,8 +520,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     val tableName = "testcat.alter_column_tbl"
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName (c1 STRING) USING PARQUET")
-      sql(s"ALTER TABLE $tableName ALTER COLUMN c1 TYPE STRING COLLATE UTF8_LCASE")
       sql(s"INSERT INTO $tableName VALUES ('a')")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN c1 TYPE STRING COLLATE UTF8_LCASE")
       checkAnswer(sql(s"SELECT collation(c1) FROM $tableName"), Seq(Row("UTF8_LCASE")))
     }
   }
