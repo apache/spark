@@ -101,6 +101,10 @@ class MemoryStateStore extends StateStore() {
     throw new UnsupportedOperationException("Doesn't support bytearray operations")
   }
 
+  override def merge(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
+    throw new UnsupportedOperationException("Doesn't support bytearray operations")
+  }
+
   override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {
     StateStoreCheckpointInfo(id.partitionId, version + 1, None, None)
   }
