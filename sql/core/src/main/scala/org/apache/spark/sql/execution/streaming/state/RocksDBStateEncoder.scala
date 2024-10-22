@@ -924,14 +924,14 @@ class SingleValueStateEncoder(valueSchema: StructType)
   }
 
   override def encodeValueBytes(row: Array[Byte]): Array[Byte] = {
-    throw new UnsupportedOperationException
+    encodeByteArray(row)
   }
 
   override def decodeValueBytes(valueBytes: Array[Byte]): Array[Byte] = {
-    throw new UnsupportedOperationException
+    decodeToByteArray(valueBytes)
   }
 
   override def decodeValuesBytes(valueBytes: Array[Byte]): Iterator[Array[Byte]] = {
-    throw new UnsupportedOperationException
+    throw new IllegalStateException("This encoder doesn't support multiple values!")
   }
 }

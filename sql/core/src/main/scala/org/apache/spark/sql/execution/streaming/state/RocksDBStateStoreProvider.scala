@@ -351,7 +351,7 @@ private[sql] class RocksDBStateStoreProvider
       verifyColFamilyOperations("put", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      rocksDB.put(kvEncoder._1.encodeKeyBytes(key), value)
+      rocksDB.put(kvEncoder._1.encodeKeyBytes(key), kvEncoder._2.encodeValueBytes(value))
     }
 
     override def remove(key: Array[Byte], colFamilyName: String): Unit = {
@@ -368,7 +368,7 @@ private[sql] class RocksDBStateStoreProvider
       verifyColFamilyOperations("get", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      rocksDB.get(kvEncoder._1.encodeKeyBytes(key))
+      kvEncoder._2.decodeValueBytes(rocksDB.get(kvEncoder._1.encodeKeyBytes(key)))
     }
 
     override def valuesIterator(key: Array[Byte], colFamilyName: String): Iterator[Array[Byte]] = {

@@ -316,8 +316,9 @@ class ValueStateSuite extends StateVariableSuiteBase {
         batchTimestampMs = Some(timestampMs))
 
       val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
-      val testState: ValueStateImplWithTTL[String] = handle.getValueState[String]("testState",
-        Encoders.STRING, ttlConfig).asInstanceOf[ValueStateImplWithTTL[String]]
+      val testState: ValueStateImplWithTTL[String] = handle.getValueStateWithoutSerde[String](
+        "testState", Encoders.STRING, ttlConfig)
+        .asInstanceOf[ValueStateImplWithTTL[String]]
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update("v1")
       assert(testState.get() === "v1")
@@ -336,7 +337,8 @@ class ValueStateSuite extends StateVariableSuiteBase {
         TimeMode.ProcessingTime(), batchTimestampMs = Some(ttlExpirationMs))
 
       val nextBatchTestState: ValueStateImplWithTTL[String] =
-        nextBatchHandle.getValueState[String]("testState", Encoders.STRING, ttlConfig)
+        nextBatchHandle.getValueStateWithoutSerde[String](
+            "testState", Encoders.STRING, ttlConfig)
           .asInstanceOf[ValueStateImplWithTTL[String]]
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
@@ -400,7 +402,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
 
       val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
       val testState: ValueStateImplWithTTL[POJOTestClass] =
-        handle.getValueState[POJOTestClass]("testState",
+        handle.getValueStateWithoutSerde[POJOTestClass]("testState",
         Encoders.bean(classOf[POJOTestClass]), ttlConfig)
           .asInstanceOf[ValueStateImplWithTTL[POJOTestClass]]
       ImplicitGroupingKeyTracker.setImplicitKey(TestClass(1L, "k1"))

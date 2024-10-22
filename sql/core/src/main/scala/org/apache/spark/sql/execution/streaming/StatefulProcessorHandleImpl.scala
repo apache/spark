@@ -159,6 +159,15 @@ class StatefulProcessorHandleImpl(
     resultState
   }
 
+  private[sql] def getValueStateWithoutSerde[T](
+      stateName: String,
+      valEncoder: Encoder[T]): ValueState[T] = {
+    verifyStateVarOperations("get_value_state", CREATED)
+    val resultState = new ValueStateImpl[T](
+      store, stateName, keyEncoder, valEncoder, None)
+    resultState
+  }
+
   override def getValueState[T](
       stateName: String,
       valEncoder: Encoder[T],
@@ -170,6 +179,23 @@ class StatefulProcessorHandleImpl(
     val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
       keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get,
       schemas(stateName).avroSerde, metrics)
+    ttlStates.add(valueStateWithTTL)
+    TWSMetricsUtils.incrementMetric(metrics, "numValueStateWithTTLVars")
+
+    valueStateWithTTL
+  }
+
+  private[sql] def getValueStateWithoutSerde[T](
+      stateName: String,
+      valEncoder: Encoder[T],
+      ttlConfig: TTLConfig): ValueState[T] = {
+    verifyStateVarOperations("get_value_state", CREATED)
+    validateTTLConfig(ttlConfig, stateName)
+
+    assert(batchTimestampMs.isDefined)
+    val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
+      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get,
+      None, metrics)
     ttlStates.add(valueStateWithTTL)
     TWSMetricsUtils.incrementMetric(metrics, "numValueStateWithTTLVars")
 
