@@ -17,8 +17,11 @@
 
 package org.apache.spark.ml.recommendation
 
+import java.util.Random
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
+import org.apache.spark.sql.functions.{array, explode, mean}
 
 class Item2VecSuite extends MLTest with DefaultReadWriteTest with Logging {
 
@@ -83,6 +86,61 @@ class Item2VecSuite extends MLTest with DefaultReadWriteTest with Logging {
       .toArray.sortBy(-_._2).map(_._1).take(20).toSet
 
     assert((5L to 15L).forall(recs.contains))
+  }
+
+  test("Item2Vec transform") {
+    val spark = this.spark
+    import spark.sqlContext.implicits._
+    val rnd = new Random(239)
+
+    val i2v = new Item2Vec()
+    val left = Array.fill(100)(
+      rnd.nextLong() -> (Array.fill(10)(rnd.nextFloat()), rnd.nextFloat())
+    ).toMap
+
+    val right = Array.fill(100)(
+      rnd.nextLong() -> (Array.fill(10)(rnd.nextFloat()), rnd.nextFloat())
+    ).toMap
+
+    val leftDF = sc.parallelize(left.toSeq.map(e => (e._1, e._2._1, e._2._2)))
+      .toDF("id", "features", "intercept")
+    val rightDF = sc.parallelize(right.toSeq.map(e => (e._1, e._2._1, e._2._2)))
+      .toDF("id", "features", "intercept")
+
+    val model = new Item2VecModel(i2v.uid, 10, leftDF, rightDF)
+      .setInputCol("sequence")
+      .setOutputCol("mean")
+      .setNumPartitions(10)
+
+    val keys = left.keys.toArray
+    val data = Array.fill(1000)(rnd.nextLong() -> Array.fill(10)(keys(rnd.nextInt(keys.length))))
+      .toSeq
+
+    val actualMean = model
+      .transform(sc.parallelize(data).toDF("rnd", "sequence"))
+      .select("rnd", "mean.features", "mean.intercept")
+      .as[(Long, Array[Float], Float)]
+      .map(e => e._1 -> (e._2, e._3))
+      .collect().toMap
+
+    val trueMean = data
+      .toDF("rnd", "sequence")
+      .select($"rnd", explode($"sequence").alias("id"))
+      .join(leftDF, "id")
+      .groupBy("rnd")
+      .agg(
+        array((0 until model.rank)
+          .map(i => mean($"features".getItem(i)).cast("float")): _*).alias("features"),
+        mean($"intercept").cast("float").alias("intercept")
+      ).as[(Long, Array[Float], Float)]
+      .map(e => e._1 -> (e._2, e._3))
+      .collect().toMap
+
+    assert(trueMean.size == actualMean.size)
+    trueMean.foreach {case (rnd, (f, b)) =>
+      f.zip(actualMean(rnd)._1).foreach(e => assert(Math.abs(e._1 - e._2) < 1e-5))
+      assert(Math.abs(b - actualMean(rnd)._2) < 1e-5)
+    }
   }
 }
 

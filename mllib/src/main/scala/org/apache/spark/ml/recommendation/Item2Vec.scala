@@ -318,22 +318,21 @@ class Item2VecModel private[ml] (
         val hashMap = new OpenHashMap[Long, Array[Float]]()
         fIt.foreach(entry => hashMap.update(entry._1, entry._2))
         sIt.map{case (idx, seq) =>
-          val f = Array.fill(rank)(0f)
+          val f = Array.fill(rank + 1)(0f)
           var n = 0
           seq.iterator.filter(hashMap.contains)
-            .foreach{i => blas.saxpy(rank, 1.0f, hashMap(i), 0, 1, f, 0, 1); n += 1}
+            .foreach{i => blas.saxpy(rank + 1, 1.0f, hashMap(i), 0, 1, f, 0, 1); n += 1}
           idx -> (f, n)
-        }
+        }.filter(_._2._2 > 0)
       }
     }.reduce(_.union(_))
         .reduceByKey{(a, b) =>
           val ((f1, n1), (f2, n2)) = (a, b)
           val result = f1.clone()
           f2.indices.foreach(i => result(i) += f2(i))
-          f1 -> (n1 + n2)
-        }.filter(_._2._2 > 0)
-        .map{case (idx, (f, n)) => idx -> f.map(_ / n)}
-        .map{case (idx, f) => Row(idx, (f.take(rank), f(rank)))},
+          result -> (n1 + n2)
+        }.map{case (idx, (f, n)) => idx -> f.map(_ / n)}
+        .map{case (idx, f) => Row(idx, Row(f.take(rank), f(rank)))},
       new StructType()
         .add(StructField(idxCol, LongType, nullable = false))
         .add(StructField($(outputCol),
