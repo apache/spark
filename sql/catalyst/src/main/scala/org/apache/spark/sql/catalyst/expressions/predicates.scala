@@ -778,7 +778,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 }
 
 object InSet {
-  class LCaseSet(inputSet: Set[Any]) extends immutable.Set[Any] {
+  class LCaseSet(inputSet: Set[Any]) extends immutable.Set[Any] with Serializable {
     private val strSet = inputSet.map { s =>
       if (s == null) null
       else CollationAwareUTF8String.lowerCaseCodePoints(s.asInstanceOf[UTF8String])
@@ -792,7 +792,8 @@ object InSet {
       strSet.contains(CollationAwareUTF8String.lowerCaseCodePoints(elem.asInstanceOf[UTF8String]))
     }
   }
-  class CollationSet(inputSet: Set[Any], collationId: Int) extends immutable.Set[Any] {
+  class CollationSet(inputSet: Set[Any], collationId: Int)
+    extends immutable.Set[Any] with Serializable {
     private val collation = CollationFactory.fetchCollation(collationId)
     override def incl(elem: Any): Set[Any] = inputSet.incl(elem)
     override def excl(elem: Any): Set[Any] = inputSet.excl(elem)
