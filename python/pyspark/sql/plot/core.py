@@ -452,9 +452,6 @@ class PySparkPlotAccessor:
         Draw one histogram of the DataFrame’s columns.
 
         A `histogram`_ is a representation of the distribution of data.
-        This function calls :meth:`plotting.backend.plot`,
-        on each series in the DataFrame, resulting in one histogram per column.
-        This is useful when the DataFrame’s Series are in a similar scale.
 
         .. _histogram: https://en.wikipedia.org/wiki/Histogram
 
@@ -610,7 +607,7 @@ class PySparkHistogramPlotBase:
         # determines which bucket a given value falls into, based on predefined bin intervals
         # refers to org.apache.spark.ml.feature.Bucketizer#binarySearchForBuckets
         def binary_search_for_buckets(value: Column) -> Column:
-            index = _array_binary_search(F.lit(bins), value)
+            index = array_binary_search(F.lit(bins), value)
             bucket = F.when(index >= 0, index).otherwise(-index - 2)
             unboundErrMsg = F.lit(f"value %s out of the bins bounds: [{bins[0]}, {bins[-1]}]")
             return (
@@ -801,5 +798,5 @@ def collect_top_k(col: Column, num: int, reverse: bool) -> Column:
     return _invoke_internal_function_over_columns("collect_top_k", col, F.lit(num), F.lit(reverse))
 
 
-def _array_binary_search(col: Column, value: Column) -> Column:
+def array_binary_search(col: Column, value: Column) -> Column:
     return _invoke_internal_function_over_columns("array_binary_search", col, value)
