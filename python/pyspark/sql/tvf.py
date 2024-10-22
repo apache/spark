@@ -28,7 +28,7 @@ __all__ = ["TableValuedFunction"]
 
 class TableValuedFunction:
     """
-    Interface for creating table-valued functions in Spark SQL.
+    Interface for invoking table-valued functions in Spark SQL.
     """
 
     def __init__(self, sparkSession: SparkSession):
