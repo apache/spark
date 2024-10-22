@@ -13096,7 +13096,7 @@ def try_parse_url(
 ) -> Column:
     """
     This is a special version of `parse_url` that performs the same operation, but returns a
-    NULL value instead of raising an error if the decoding cannot be performed.
+    NULL value instead of raising an error if the parsing cannot be performed.
 
     .. versionadded:: 4.0.0
 

@@ -169,11 +169,9 @@ object ParseUrl {
   private val REGEXSUBFIX = "=([^&]*)"
 }
 
-/**
- * Extracts a part from a URL
- */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(url, partToExtract[, key]) - Extracts a part from a URL.",
+  usage = "_FUNC_(url, partToExtract[, key]) - This is a special version of `parse_url` that performs the same operation, but returns a NULL value instead of raising an error if the parsing cannot be performed.",
   examples = """
     Examples:
       > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'HOST');
