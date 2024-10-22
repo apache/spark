@@ -140,6 +140,35 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
     }
   }
 
+  test("ctas with union") {
+    val tableName = "tbl_union"
+    withSessionCollationAndTable("UTF8_LCASE", tableName) {
+      sql(s"""
+           |CREATE TABLE $tableName USING $dataSource AS
+           |SELECT 'a' = 'A' AS c1
+           |UNION
+           |SELECT 'b' = 'B' AS c1
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableName"),
+        Seq(Row(false)))
+    }
+
+    withSessionCollationAndTable("UTF8_LCASE", tableName) {
+      sql(s"""
+             |CREATE TABLE $tableName USING $dataSource AS
+             |SELECT 'a' = 'A' AS c1
+             |UNION ALL
+             |SELECT 'b' = 'B' AS c1
+             |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableName"),
+        Seq(Row(false), Row(false)))
+    }
+  }
+
   test("add column") {
     val tableName = "tbl_add_col"
     withSessionCollationAndTable("UTF8_LCASE", tableName) {
@@ -247,6 +276,26 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
       checkAnswer(sql(s"SELECT MAX(c1) FROM $tableName"), Seq(Row("½")))
     }
     // scalastyle:on nonascii
+  }
+
+  test("union operation with subqueries") {
+    withSessionCollation("UTF8_LCASE") {
+      checkAnswer(
+        sql(s"""
+             |SELECT 'a' = 'A'
+             |UNION
+             |SELECT 'b' = 'B'
+             |""".stripMargin),
+        Seq(Row(true)))
+
+      checkAnswer(
+        sql(s"""
+               |SELECT 'a' = 'A'
+               |UNION ALL
+               |SELECT 'b' = 'B'
+               |""".stripMargin),
+        Seq(Row(true), Row(true)))
+    }
   }
 
   test("literals in insert inherit session level collation") {

@@ -24,11 +24,11 @@ import org.apache.spark.sql.types.{DataType, DefaultStringType, StringType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
- * Replaces default string types in DDL commands. DDL commands should have a default collation
+ * Resolves default string types in DDL commands. DDL commands should have a default collation
  * based on the object's collation, however, this is not implemented yet. So, we will just use
  * UTF8_BINARY for now.
  */
-object ReplaceDefaultStringType extends Rule[LogicalPlan] {
+object ResolveDefaultStringType extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan resolveOperators {
       case createTable: V2CreateTablePlan =>
@@ -66,8 +66,7 @@ object ReplaceDefaultStringType extends Rule[LogicalPlan] {
         cast.copy(dataType = replaceDefaultStringType(cast.dataType, newType))
 
       case Literal(value, dt) if SchemaUtils.hasDefaultStringType(dt) =>
-        val replaced = replaceDefaultStringType(dt, newType)
-        Literal(value, replaced)
+        Literal(value, replaceDefaultStringType(dt, newType))
 
       case other => other
     }
