@@ -288,6 +288,7 @@ try:
             "pyspark.sql.connect.streaming.worker",
             "pyspark.sql.functions",
             "pyspark.sql.pandas",
+            "pyspark.sql.plot",
             "pyspark.sql.protobuf",
             "pyspark.sql.streaming",
             "pyspark.sql.worker",
@@ -312,6 +313,7 @@ try:
             "pyspark.errors",
             "pyspark.errors.exceptions",
             "pyspark.examples.src.main.python",
+            "pyspark.logger",
         ],
         include_package_data=True,
         package_dir={
@@ -372,6 +374,7 @@ try:
             "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",
             "Programming Language :: Python :: 3.12",
+            "Programming Language :: Python :: 3.13",
             "Programming Language :: Python :: Implementation :: CPython",
             "Programming Language :: Python :: Implementation :: PyPy",
             "Typing :: Typed",

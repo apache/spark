@@ -34,8 +34,9 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LIKE_FAMLIY, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{CollationSupport, GenericArrayData, StringUtils}
-import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.types.{StringTypeAnyCollation, StringTypeBinaryLcase}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.types.{
+  StringTypeBinaryLcase, StringTypeWithCollation}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -46,7 +47,7 @@ abstract class StringRegexExpression extends BinaryExpression
   def matches(regex: Pattern, str: String): Boolean
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeBinaryLcase, StringTypeAnyCollation)
+    Seq(StringTypeBinaryLcase, StringTypeWithCollation)
 
   final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
   final lazy val collationRegexFlags: Int = CollationSupport.collationAwareRegexFlags(collationId)
@@ -79,6 +80,13 @@ abstract class StringRegexExpression extends BinaryExpression
     } else {
       matches(regex, input1.asInstanceOf[UTF8String].toString)
     }
+  }
+}
+
+private[catalyst] object StringRegexExpression {
+  def expressionToEscapeChar(e: Expression): Char = e match {
+    case StringLiteral(v) if v.length == 1 => v.charAt(0)
+    case _ => throw QueryCompilationErrors.invalidEscapeChar(e)
   }
 }
 
@@ -136,6 +144,9 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
   extends StringRegexExpression {
 
   def this(left: Expression, right: Expression) = this(left, right, '\\')
+
+  def this(left: Expression, right: Expression, escapeChar: Expression) =
+    this(left, right, StringRegexExpression.expressionToEscapeChar(escapeChar))
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v, escapeChar)
 
@@ -259,13 +270,16 @@ case class ILike(
     escapeChar: Char) extends RuntimeReplaceable
   with ImplicitCastInputTypes with BinaryLike[Expression] {
 
+  def this(left: Expression, right: Expression, escapeChar: Expression) =
+    this(left, right, StringRegexExpression.expressionToEscapeChar(escapeChar))
+
   override lazy val replacement: Expression = Like(Lower(left), Lower(right), escapeChar)
 
   def this(left: Expression, right: Expression) =
     this(left, right, '\\')
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeBinaryLcase, StringTypeAnyCollation)
+    Seq(StringTypeBinaryLcase, StringTypeWithCollation)
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): Expression = {
@@ -554,7 +568,7 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
 
   override def dataType: DataType = ArrayType(str.dataType, containsNull = false)
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeBinaryLcase, StringTypeAnyCollation, IntegerType)
+    Seq(StringTypeBinaryLcase, StringTypeWithCollation, IntegerType)
   override def first: Expression = str
   override def second: Expression = regex
   override def third: Expression = limit
@@ -698,7 +712,8 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
   override def dataType: DataType = subject.dataType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeBinaryLcase, StringTypeAnyCollation, StringTypeBinaryLcase, IntegerType)
+    Seq(StringTypeBinaryLcase,
+      StringTypeWithCollation, StringTypeBinaryLcase, IntegerType)
   final lazy val collationId: Int = subject.dataType.asInstanceOf[StringType].collationId
   override def prettyName: String = "regexp_replace"
 
@@ -786,7 +801,7 @@ abstract class RegExpExtractBase
   final override val nodePatterns: Seq[TreePattern] = Seq(REGEXP_EXTRACT_FAMILY)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeBinaryLcase, StringTypeAnyCollation, IntegerType)
+    Seq(StringTypeBinaryLcase, StringTypeWithCollation, IntegerType)
   override def first: Expression = subject
   override def second: Expression = regexp
   override def third: Expression = idx
@@ -1039,7 +1054,7 @@ case class RegExpCount(left: Expression, right: Expression)
   override def children: Seq[Expression] = Seq(left, right)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeBinaryLcase, StringTypeAnyCollation)
+    Seq(StringTypeBinaryLcase, StringTypeWithCollation)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): RegExpCount =
@@ -1079,7 +1094,7 @@ case class RegExpSubStr(left: Expression, right: Expression)
   override def children: Seq[Expression] = Seq(left, right)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeBinaryLcase, StringTypeAnyCollation)
+    Seq(StringTypeBinaryLcase, StringTypeWithCollation)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): RegExpSubStr =

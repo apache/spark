@@ -23,21 +23,23 @@ import java.util
 import java.util.Locale
 
 import scala.util.Using
+import scala.util.control.NonFatal
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.LogKeys.COLUMN_NAME
 import org.apache.spark.internal.MDC
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.connector.expressions.{Expression, NamedReference}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
 
 
-private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
+private case class PostgresDialect()
+  extends JdbcDialect with SQLConfHelper with NoLegacyJDBCError {
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql")
@@ -259,7 +261,8 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
       e: Throwable,
       errorClass: String,
       messageParameters: Map[String, String],
-      description: String): AnalysisException = {
+      description: String,
+      isRuntime: Boolean): Throwable with SparkThrowable = {
     e match {
       case sqlException: SQLException =>
         sqlException.getSQLState match {
@@ -278,7 +281,7 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
               if (tblRegexp.nonEmpty) {
                 throw QueryCompilationErrors.tableAlreadyExistsError(tblRegexp.get.group(1))
               } else {
-                super.classifyException(e, errorClass, messageParameters, description)
+                super.classifyException(e, errorClass, messageParameters, description, isRuntime)
               }
             }
           case "42704" if errorClass == "FAILED_JDBC.DROP_INDEX" =>
@@ -290,10 +293,33 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
-          case _ => super.classifyException(e, errorClass, messageParameters, description)
+          case _ =>
+            super.classifyException(e, errorClass, messageParameters, description, isRuntime)
         }
       case unsupported: UnsupportedOperationException => throw unsupported
-      case _ => super.classifyException(e, errorClass, messageParameters, description)
+      case _ => super.classifyException(e, errorClass, messageParameters, description, isRuntime)
+    }
+  }
+
+  class PostgresSQLBuilder extends JDBCSQLBuilder {
+    override def visitExtract(field: String, source: String): String = {
+      field match {
+        case "DAY_OF_YEAR" => s"EXTRACT(DOY FROM $source)"
+        case "YEAR_OF_WEEK" => s"EXTRACT(YEAR FROM $source)"
+        case "DAY_OF_WEEK" => s"EXTRACT(DOW FROM $source)"
+        case _ => super.visitExtract(field, source)
+      }
+    }
+  }
+
+  override def compileExpression(expr: Expression): Option[String] = {
+    val postgresSQLBuilder = new PostgresSQLBuilder()
+    try {
+      Some(postgresSQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
     }
   }
 

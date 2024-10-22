@@ -18,6 +18,7 @@ import unittest
 
 import numpy as np
 
+from pyspark.loose_version import LooseVersion
 from pyspark.ml.functions import predict_batch_udf
 from pyspark.sql.functions import array, struct, col
 from pyspark.sql.types import ArrayType, DoubleType, IntegerType, StructType, StructField, FloatType
@@ -193,6 +194,10 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         batch_sizes = preds["preds"].to_numpy()
         self.assertTrue(all(batch_sizes <= batch_size))
 
+    # TODO(SPARK-49793): enable the test below
+    @unittest.skipIf(
+        LooseVersion(np.__version__) >= LooseVersion("2"), "Caching does not work with numpy 2"
+    )
     def test_caching(self):
         def make_predict_fn():
             # emulate loading a model, this should only be invoked once (per worker process)

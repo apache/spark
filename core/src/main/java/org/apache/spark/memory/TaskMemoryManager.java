@@ -18,15 +18,10 @@
 package org.apache.spark.memory;
 
 import javax.annotation.concurrent.GuardedBy;
+import java.io.InterruptedIOException;
 import java.io.IOException;
 import java.nio.channels.ClosedByInterruptException;
-import java.util.Arrays;
-import java.util.ArrayList;
-import java.util.BitSet;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -122,6 +117,30 @@ public class TaskMemoryManager {
   private volatile long acquiredButNotUsed = 0L;
 
   /**
+   * Current off heap memory usage by this task.
+   */
+  private long currentOffHeapMemory = 0L;
+
+  private final Object offHeapMemoryLock = new Object();
+
+  /*
+   * Current on heap memory usage by this task.
+   */
+  private long currentOnHeapMemory = 0L;
+
+  private final Object onHeapMemoryLock = new Object();
+
+  /**
+   * Peak off heap memory usage by this task.
+   */
+  private volatile long peakOffHeapMemory = 0L;
+
+  /**
+   * Peak on heap memory usage by this task.
+   */
+  private volatile long peakOnHeapMemory = 0L;
+
+  /**
    * Construct a new TaskMemoryManager.
    */
   public TaskMemoryManager(MemoryManager memoryManager, long taskAttemptId) {
@@ -201,6 +220,19 @@ public class TaskMemoryManager {
         logger.debug("Task {} acquired {} for {}", taskAttemptId, Utils.bytesToString(got),
           requestingConsumer);
       }
+
+      if (mode == MemoryMode.OFF_HEAP) {
+        synchronized (offHeapMemoryLock) {
+          currentOffHeapMemory += got;
+          peakOffHeapMemory = Math.max(peakOffHeapMemory, currentOffHeapMemory);
+        }
+      } else {
+        synchronized (onHeapMemoryLock) {
+          currentOnHeapMemory += got;
+          peakOnHeapMemory = Math.max(peakOnHeapMemory, currentOnHeapMemory);
+        }
+      }
+
       return got;
     }
   }
@@ -244,7 +276,7 @@ public class TaskMemoryManager {
         cList.remove(idx);
         return 0;
       }
-    } catch (ClosedByInterruptException e) {
+    } catch (ClosedByInterruptException | InterruptedIOException e) {
       // This called by user to kill a task (e.g: speculative task).
       logger.error("error while calling spill() on {}", e,
         MDC.of(LogKeys.MEMORY_CONSUMER$.MODULE$, consumerToSpill));
@@ -253,8 +285,12 @@ public class TaskMemoryManager {
       logger.error("error while calling spill() on {}", e,
         MDC.of(LogKeys.MEMORY_CONSUMER$.MODULE$, consumerToSpill));
       // checkstyle.off: RegexpSinglelineJava
-      throw new SparkOutOfMemoryError("error while calling spill() on " + consumerToSpill + " : "
-        + e.getMessage());
+      throw new SparkOutOfMemoryError(
+        "_LEGACY_ERROR_TEMP_3300",
+        new HashMap<String, String>() {{
+          put("consumerToSpill", consumerToSpill.toString());
+          put("message", e.getMessage());
+        }});
       // checkstyle.on: RegexpSinglelineJava
     }
   }
@@ -268,6 +304,15 @@ public class TaskMemoryManager {
         consumer);
     }
     memoryManager.releaseExecutionMemory(size, taskAttemptId, consumer.getMode());
+    if (consumer.getMode() == MemoryMode.OFF_HEAP) {
+      synchronized (offHeapMemoryLock) {
+        currentOffHeapMemory -= size;
+      }
+    } else {
+      synchronized (onHeapMemoryLock) {
+        currentOnHeapMemory -= size;
+      }
+    }
   }
 
   /**
@@ -505,5 +550,20 @@ public class TaskMemoryManager {
    */
   public MemoryMode getTungstenMemoryMode() {
     return tungstenMemoryMode;
+  }
+
+  /**
+   * Returns peak task-level off-heap memory usage in bytes.
+   *
+   */
+  public long getPeakOnHeapExecutionMemory() {
+    return peakOnHeapMemory;
+  }
+
+  /**
+   * Returns peak task-level on-heap memory usage in bytes.
+   */
+  public long getPeakOffHeapExecutionMemory() {
+    return peakOffHeapMemory;
   }
 }

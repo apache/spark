@@ -862,7 +862,7 @@ class StringMethods:
         --------
         Returning a Series of booleans using only a literal pattern.
 
-        >>> s1 = ps.Series(['Mouse', 'dog', 'house and parrot', '23', np.NaN])
+        >>> s1 = ps.Series(['Mouse', 'dog', 'house and parrot', '23', np.nan])
         >>> s1.str.contains('og', regex=False)
         0    False
         1     True
@@ -965,7 +965,7 @@ class StringMethods:
 
         Examples
         --------
-        >>> s = ps.Series(['A', 'B', 'Aaba', 'Baca', np.NaN, 'CABA', 'cat'])
+        >>> s = ps.Series(['A', 'B', 'Aaba', 'Baca', np.nan, 'CABA', 'cat'])
         >>> s.str.count('a')
         0    0.0
         1    0.0
@@ -1327,7 +1327,7 @@ class StringMethods:
 
         return self._data.pandas_on_spark.transform_batch(pandas_ljust)
 
-    def match(self, pat: str, case: bool = True, flags: int = 0, na: Any = np.NaN) -> "ps.Series":
+    def match(self, pat: str, case: bool = True, flags: int = 0, na: Any = np.nan) -> "ps.Series":
         """
         Determine if each string matches a regular expression.
 
@@ -1353,7 +1353,7 @@ class StringMethods:
 
         Examples
         --------
-        >>> s = ps.Series(['Mouse', 'dog', 'house and parrot', '23', np.NaN])
+        >>> s = ps.Series(['Mouse', 'dog', 'house and parrot', '23', np.nan])
         >>> s.str.match('dog')
         0    False
         1     True

@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Literal, NonFoldableLiteral, RangeFrame, SortOrder, SpecifiedWindowFrame, UnaryMinus, UnspecifiedFrame}
+import org.apache.spark.sql.catalyst.expressions.{Literal, NonFoldableLiteral}
 import org.apache.spark.sql.catalyst.optimizer.EliminateWindowPartitions
 import org.apache.spark.sql.catalyst.plans.logical.{Window => WindowNode}
-import org.apache.spark.sql.expressions.{Window, WindowSpec}
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{ExpressionColumnNode, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.CalendarIntervalType
 
@@ -186,7 +186,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
           $"key",
           count("key").over(
             Window.partitionBy($"value").orderBy($"key").rowsBetween(2147483648L, 0)))),
-      errorClass = "INVALID_BOUNDARY.START",
+      condition = "INVALID_BOUNDARY.START",
       parameters = Map(
         "invalidValue" -> "2147483648L",
         "boundary" -> "`start`",
@@ -200,7 +200,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
           $"key",
           count("key").over(
             Window.partitionBy($"value").orderBy($"key").rowsBetween(0, 2147483648L)))),
-      errorClass = "INVALID_BOUNDARY.END",
+      condition = "INVALID_BOUNDARY.END",
       parameters = Map(
         "invalidValue" -> "2147483648L",
         "boundary" -> "`end`",
@@ -226,7 +226,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         df.select(
           min("key").over(window.rangeBetween(Window.unboundedPreceding, 1)))
       ),
-      errorClass = "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
+      condition = "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
       parameters = Map(
         "orderSpec" -> """key#\d+ ASC NULLS FIRST,value#\d+ ASC NULLS FIRST""",
         "sqlExpr" -> (""""\(ORDER BY key ASC NULLS FIRST, value ASC NULLS FIRST RANGE """ +
@@ -242,7 +242,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         df.select(
           min("key").over(window.rangeBetween(-1, Window.unboundedFollowing)))
       ),
-      errorClass = "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
+      condition = "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
       parameters = Map(
         "orderSpec" -> """key#\d+ ASC NULLS FIRST,value#\d+ ASC NULLS FIRST""",
         "sqlExpr" -> (""""\(ORDER BY key ASC NULLS FIRST, value ASC NULLS FIRST RANGE """ +
@@ -258,7 +258,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         df.select(
           min("key").over(window.rangeBetween(-1, 1)))
       ),
-      errorClass = "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
+      condition = "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
       parameters = Map(
         "orderSpec" -> """key#\d+ ASC NULLS FIRST,value#\d+ ASC NULLS FIRST""",
         "sqlExpr" -> (""""\(ORDER BY key ASC NULLS FIRST, value ASC NULLS FIRST RANGE """ +
@@ -287,7 +287,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         df.select(
           min("value").over(window.rangeBetween(Window.unboundedPreceding, 1)))
       ),
-      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+      condition = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
       parameters = Map(
         "location" -> "upper",
         "exprType" -> "\"STRING\"",
@@ -303,7 +303,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         df.select(
           min("value").over(window.rangeBetween(-1, Window.unboundedFollowing)))
       ),
-      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+      condition = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
       parameters = Map(
         "location" -> "lower",
         "exprType" -> "\"STRING\"",
@@ -319,7 +319,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         df.select(
           min("value").over(window.rangeBetween(-1, 1)))
       ),
-      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+      condition = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
       parameters = Map(
         "location" -> "lower",
         "exprType" -> "\"STRING\"",
@@ -503,16 +503,16 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
 
   test("Window frame bounds lower and upper do not have the same type") {
     val df = Seq((1L, "1"), (1L, "1")).toDF("key", "value")
-    val windowSpec = new WindowSpec(
-      Seq(Column("value").expr),
-      Seq(SortOrder(Column("key").expr, Ascending)),
-      SpecifiedWindowFrame(RangeFrame, Literal.create(null, CalendarIntervalType), Literal(2))
-    )
+
+    val windowSpec = Window.partitionBy($"value").orderBy($"key".asc).withFrame(
+      internal.WindowFrame.Range,
+      internal.WindowFrame.Value(ExpressionColumnNode(Literal.create(null, CalendarIntervalType))),
+      internal.WindowFrame.Value(lit(2).node))
     checkError(
       exception = intercept[AnalysisException] {
         df.select($"key", count("key").over(windowSpec)).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_DIFF_TYPES",
+      condition = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_DIFF_TYPES",
       parameters = Map(
         "sqlExpr" -> "\"RANGE BETWEEN NULL FOLLOWING AND 2 FOLLOWING\"",
         "lower" -> "\"NULL\"",
@@ -526,16 +526,15 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
 
   test("Window frame lower bound is not a literal") {
     val df = Seq((1L, "1"), (1L, "1")).toDF("key", "value")
-    val windowSpec = new WindowSpec(
-      Seq(Column("value").expr),
-      Seq(SortOrder(Column("key").expr, Ascending)),
-      SpecifiedWindowFrame(RangeFrame, NonFoldableLiteral(1), Literal(2))
-    )
+    val windowSpec = Window.partitionBy($"value").orderBy($"key".asc).withFrame(
+      internal.WindowFrame.Range,
+      internal.WindowFrame.Value(ExpressionColumnNode(NonFoldableLiteral(1))),
+      internal.WindowFrame.Value(lit(2).node))
     checkError(
       exception = intercept[AnalysisException] {
         df.select($"key", count("key").over(windowSpec)).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_WITHOUT_FOLDABLE",
+      condition = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_WITHOUT_FOLDABLE",
       parameters = Map(
         "sqlExpr" -> "\"RANGE BETWEEN nonfoldableliteral() FOLLOWING AND 2 FOLLOWING\"",
         "location" -> "lower",
@@ -546,8 +545,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-41805: Reuse expressions in WindowSpecDefinition") {
     val ds = Seq((1, 1), (1, 2), (1, 3), (2, 1), (2, 2)).toDF("n", "i")
-    val sortOrder = SortOrder($"n".cast("string").expr, Ascending)
-    val window = new WindowSpec(Seq($"n".expr), Seq(sortOrder), UnspecifiedFrame)
+    val window = Window.partitionBy($"n").orderBy($"n".cast("string").asc)
     val df = ds.select(sum("i").over(window), avg("i").over(window))
     val ws = df.queryExecution.analyzed.collect { case w: WindowNode => w }
     assert(ws.size === 1)
@@ -557,9 +555,10 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-41793: Incorrect result for window frames defined by a range clause on large " +
     "decimals") {
-    val window = new WindowSpec(Seq($"a".expr), Seq(SortOrder($"b".expr, Ascending)),
-      SpecifiedWindowFrame(RangeFrame,
-        UnaryMinus(Literal(BigDecimal(10.2345))), Literal(BigDecimal(6.7890))))
+    val window = Window.partitionBy($"a").orderBy($"b".asc).withFrame(
+      internal.WindowFrame.Range,
+      internal.WindowFrame.Value((-lit(BigDecimal(10.2345))).node),
+      internal.WindowFrame.Value(lit(BigDecimal(10.2345)).node))
 
     val df = Seq(
       1 -> "11342371013783243717493546650944543.47",

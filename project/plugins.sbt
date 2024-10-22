@@ -17,34 +17,33 @@
 
 addSbtPlugin("software.purpledragon" % "sbt-checkstyle-plugin" % "4.0.1")
 
-// sbt-checkstyle-plugin uses an old version of checkstyle. Match it to Maven's.
 // If you are changing the dependency setting for checkstyle plugin,
 // please check pom.xml in the root of the source tree too.
-libraryDependencies += "com.puppycrawl.tools" % "checkstyle" % "10.15.0"
+libraryDependencies += "com.puppycrawl.tools" % "checkstyle" % "10.17.0"
 
 // checkstyle uses guava 33.1.0-jre.
 libraryDependencies += "com.google.guava" % "guava" % "33.1.0-jre"
 
-addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "2.2.0")
+addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "2.3.0")
 
 addSbtPlugin("com.github.sbt" % "sbt-eclipse" % "6.2.0")
 
 addSbtPlugin("org.scalastyle" %% "scalastyle-sbt-plugin" % "1.0.0")
 
-addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "1.1.3")
+addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "1.1.4")
 
 addSbtPlugin("com.github.sbt" % "sbt-unidoc" % "0.5.0")
 
 addSbtPlugin("io.spray" % "sbt-revolver" % "0.10.0")
 
-libraryDependencies += "org.ow2.asm"  % "asm" % "9.7"
+libraryDependencies += "org.ow2.asm"  % "asm" % "9.7.1"
 
-libraryDependencies += "org.ow2.asm"  % "asm-commons" % "9.7"
+libraryDependencies += "org.ow2.asm"  % "asm-commons" % "9.7.1"
 
 addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.8.3")
 
 addSbtPlugin("com.github.sbt" % "sbt-pom-reader" % "2.4.0")
 
-addSbtPlugin("net.aichler" % "sbt-jupiter-interface" % "0.11.1")
+addSbtPlugin("com.github.sbt.junit" % "sbt-jupiter-interface" % "0.13.0")
 
 addSbtPlugin("com.thesamet" % "sbt-protoc" % "1.0.7")

@@ -143,6 +143,28 @@ SELECT * FROM UDTFWithSinglePartition(1, invalid_arg_name => 2);
 SELECT * FROM UDTFWithSinglePartition(1, initial_count => 2);
 SELECT * FROM UDTFWithSinglePartition(initial_count => 1, initial_count => 2);
 SELECT * FROM UDTFInvalidPartitionByOrderByParseError(TABLE(t2));
+-- Exercise the UDTF partitioning bug.
+SELECT * FROM UDTFPartitionByIndexingBug(
+    TABLE(
+        SELECT
+            5 AS unused_col,
+            'hi' AS partition_col,
+            1.0 AS double_col
+
+        UNION ALL
+
+        SELECT
+            4 AS unused_col,
+            'hi' AS partition_col,
+            1.0 AS double_col
+    )
+);
+-- Exercise a query with both a valid TABLE argument and an invalid unresolved column reference.
+-- The 'eval' method of this UDTF would later throw an exception, but that is not relevant here
+-- because the analysis of this query should fail before that point. We just want to make sure that
+-- this analysis failure returns a reasonable error message.
+SELECT * FROM
+    InvalidEvalReturnsNoneToNonNullableColumnScalarType(TABLE(SELECT 1 AS X), unresolved_column);
 
 -- cleanup
 DROP VIEW t1;

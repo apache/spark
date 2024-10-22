@@ -227,10 +227,43 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
 
       spark.range(1).collect()
 
-      assert(jobTags.contains(jobTag))
+      spark.sparkContext.listenerBus.waitUntilEmpty()
+      assert(jobTags.get.contains(jobTag))
       assert(sqlJobTags.contains(jobTag))
     } finally {
       spark.sparkContext.removeJobTag(jobTag)
+      spark.stop()
+    }
+  }
+
+  test("jobGroupId property") {
+    val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
+    val JobGroupId = "test-JobGroupId"
+    try {
+      spark.sparkContext.setJobGroup(JobGroupId, "job Group id")
+
+      var jobGroupIdOpt: Option[String] = None
+      var sqlJobGroupIdOpt: Option[String] = None
+      spark.sparkContext.addSparkListener(new SparkListener {
+        override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+          jobGroupIdOpt = Some(jobStart.properties.getProperty(SparkContext.SPARK_JOB_GROUP_ID))
+        }
+
+        override def onOtherEvent(event: SparkListenerEvent): Unit = {
+          event match {
+            case e: SparkListenerSQLExecutionStart =>
+              sqlJobGroupIdOpt = e.jobGroupId
+          }
+        }
+      })
+
+      spark.range(1).collect()
+
+      spark.sparkContext.listenerBus.waitUntilEmpty()
+      assert(jobGroupIdOpt.contains(JobGroupId))
+      assert(sqlJobGroupIdOpt.contains(JobGroupId))
+    } finally {
+      spark.sparkContext.clearJobGroup()
       spark.stop()
     }
   }

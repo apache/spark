@@ -176,7 +176,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       sql("CREATE TABLE h2.bad_test.new_table(i INT, j STRING)")
     }
     checkError(exp,
-      errorClass = "SCHEMA_NOT_FOUND",
+      condition = "SCHEMA_NOT_FOUND",
       parameters = Map("schemaName" -> "`bad_test`"))
   }
 
@@ -200,7 +200,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $tableName ADD COLUMNS (c3 DOUBLE)")
         },
-        errorClass = "FIELD_ALREADY_EXISTS",
+        condition = "FIELD_ALREADY_EXISTS",
         parameters = Map(
           "op" -> "add",
           "fieldNames" -> "`c3`",
@@ -239,7 +239,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $tableName RENAME COLUMN C TO C0")
         },
-        errorClass = "FIELD_ALREADY_EXISTS",
+        condition = "FIELD_ALREADY_EXISTS",
         parameters = Map(
           "op" -> "rename",
           "fieldNames" -> "`C0`",
@@ -279,14 +279,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1331",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
         parameters = Map(
-          "fieldName" -> "bad_column",
-          "table" -> "h2.test.alt_table",
-          "schema" ->
-            """root
-              | |-- C2: integer (nullable = true)
-              |""".stripMargin),
+          "objectName" -> "`bad_column`",
+          "proposal" -> "`C2`"),
         context = ExpectedContext(sqlText, 0, 51))
     }
     // Drop a column to not existing table and namespace
@@ -319,22 +316,18 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1331",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
         parameters = Map(
-          "fieldName" -> "bad_column",
-          "table" -> "h2.test.alt_table",
-          "schema" ->
-            """root
-              | |-- ID: double (nullable = true)
-              | |-- deptno: double (nullable = true)
-              |""".stripMargin),
+          "objectName" -> "`bad_column`",
+          "proposal" -> "`ID`, `deptno`"),
         context = ExpectedContext(sqlText, 0, 64))
       // Update column to wrong type
       checkError(
         exception = intercept[ParseException] {
           sql(s"ALTER TABLE $tableName ALTER COLUMN id TYPE bad_type")
         },
-        errorClass = "UNSUPPORTED_DATATYPE",
+        condition = "UNSUPPORTED_DATATYPE",
         parameters = Map("typeName" -> "\"BAD_TYPE\""),
         context = ExpectedContext("bad_type", 51, 58))
     }
@@ -368,15 +361,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1331",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
         parameters = Map(
-          "fieldName" -> "bad_column",
-          "table" -> "h2.test.alt_table",
-          "schema" ->
-            """root
-              | |-- ID: integer (nullable = true)
-              | |-- deptno: integer (nullable = true)
-              |""".stripMargin),
+          "objectName" -> "`bad_column`",
+          "proposal" -> "`ID`, `deptno`"),
         context = ExpectedContext(sqlText, 0, 66))
     }
     // Update column nullability in not existing table and namespace
@@ -404,7 +393,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("CREATE NAMESPACE h2.test_namespace LOCATION './samplepath'")
           },
-          errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND",
+          condition = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND",
           sqlState = "0A000",
           parameters = Map("cmd" -> toSQLStmt("CREATE NAMESPACE ... LOCATION ...")))
       }
@@ -427,7 +416,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
             exception = intercept[AnalysisException] {
               sql(s"ALTER NAMESPACE h2.test_namespace SET LOCATION '/tmp/loc_test_2'")
             },
-            errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND_WITH_PROPERTY",
+            condition = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND_WITH_PROPERTY",
             sqlState = "0A000",
             parameters = Map(
               "cmd" -> toSQLStmt("SET NAMESPACE"),
@@ -437,7 +426,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
             exception = intercept[AnalysisException] {
               sql(s"ALTER NAMESPACE h2.test_namespace SET PROPERTIES('a'='b')")
             },
-            errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND_WITH_PROPERTY",
+            condition = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND_WITH_PROPERTY",
             sqlState = "0A000",
             parameters = Map(
               "cmd" -> toSQLStmt("SET NAMESPACE"),
@@ -455,7 +444,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $tableName ALTER COLUMN ID COMMENT 'test'")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1305",
+        condition = "_LEGACY_ERROR_TEMP_1305",
         parameters = Map("change" ->
           "org.apache.spark.sql.connector.catalog.TableChange\\$UpdateColumnComment.*"),
         matchPVals = true)
@@ -465,14 +454,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1331",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
         parameters = Map(
-          "fieldName" -> "bad_column",
-          "table" -> "h2.test.alt_table",
-          "schema" ->
-            """root
-              | |-- ID: integer (nullable = true)
-              |""".stripMargin),
+          "objectName" -> "`bad_column`",
+          "proposal" -> "`ID`"),
         context = ExpectedContext(sqlText, 0, 67))
     }
     // Update column comments in not existing table and namespace
@@ -504,15 +490,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql(sqlText)
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1331",
+          condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          sqlState = "42703",
           parameters = Map(
-            "fieldName" -> "C2",
-            "table" -> "h2.test.alt_table",
-            "schema" ->
-              """root
-                | |-- c1: integer (nullable = true)
-                | |-- c2: integer (nullable = true)
-                |""".stripMargin),
+            "objectName" -> "`C2`",
+            "proposal" -> "`c1`, `c2`"),
           context = ExpectedContext(sqlText, 0, 51))
       }
 
@@ -531,15 +513,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql(sqlText)
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1331",
+          condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          sqlState = "42703",
           parameters = Map(
-            "fieldName" -> "C3",
-            "table" -> "h2.test.alt_table",
-            "schema" ->
-              """root
-                | |-- c1: integer (nullable = true)
-                | |-- c3: integer (nullable = true)
-                |""".stripMargin),
+            "objectName" -> "`C3`",
+            "proposal" -> "`c1`, `c3`"),
           context = ExpectedContext(sqlText, 0, sqlText.length - 1))
       }
 
@@ -557,14 +535,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql(sqlText)
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1331",
+          condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          sqlState = "42703",
           parameters = Map(
-            "fieldName" -> "C1",
-            "table" -> "h2.test.alt_table",
-            "schema" ->
-              """root
-                | |-- c1: integer (nullable = true)
-                |""".stripMargin),
+            "objectName" -> "`C1`",
+            "proposal" -> "`c1`"),
           context = ExpectedContext(sqlText, 0, sqlText.length - 1))
       }
 
@@ -582,14 +557,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql(sqlText)
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1331",
+          condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          sqlState = "42703",
           parameters = Map(
-            "fieldName" -> "C1",
-            "table" -> "h2.test.alt_table",
-            "schema" ->
-              """root
-                | |-- c1: double (nullable = true)
-                |""".stripMargin),
+            "objectName" -> "`C1`",
+            "proposal" -> "`c1`"),
           context = ExpectedContext(sqlText, 0, sqlText.length - 1))
       }
 
@@ -619,15 +591,15 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
   test("CREATE TABLE with table property") {
     withTable("h2.test.new_table") {
-      checkError(
+      checkErrorMatchPVals(
         exception = intercept[AnalysisException] {
           sql("CREATE TABLE h2.test.new_table(i INT, j STRING)" +
             " TBLPROPERTIES('ENGINE'='tableEngineName')")
         },
-        errorClass = "FAILED_JDBC.UNCLASSIFIED",
+        condition = "FAILED_JDBC.CREATE_TABLE",
         parameters = Map(
-          "url" -> "jdbc:",
-          "message" -> "Failed table creation: test.new_table"))
+          "url" -> "jdbc:.*",
+          "tableName" -> "`test`.`new_table`"))
     }
   }
 
@@ -639,14 +611,14 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-42904: CREATE TABLE with char/varchar with invalid char length") {
-    checkError(
+    checkErrorMatchPVals(
       exception = intercept[AnalysisException]{
         sql("CREATE TABLE h2.test.new_table(c CHAR(1000000001))")
       },
-      errorClass = "FAILED_JDBC.UNCLASSIFIED",
+      condition = "FAILED_JDBC.CREATE_TABLE",
       parameters = Map(
-        "url" -> "jdbc:",
-        "message" -> "Failed table creation: test.new_table"))
+        "url" -> "jdbc:.*",
+        "tableName" -> "`test`.`new_table`"))
   }
 
   test("SPARK-42955: Skip classifyException and wrap AnalysisException for SparkThrowable") {
@@ -654,7 +626,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkIllegalArgumentException](
         sql("CREATE TABLE h2.test.new_table(c array<int>)")
       ),
-      errorClass = "_LEGACY_ERROR_TEMP_2082",
+      condition = "_LEGACY_ERROR_TEMP_2082",
       parameters = Map("catalogString" -> "array<int>")
     )
   }

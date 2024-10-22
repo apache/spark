@@ -21,7 +21,8 @@ import java.sql.Timestamp
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.functions.{expr, lit, window}
+import org.apache.spark.sql.functions.{count, expr, lit, timestamp_seconds, window}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This test ensures that any optimizations done by Spark SQL optimizer are
@@ -448,6 +449,164 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
         // Note that LocalRelation <empty> is actually a batch source (Range) but due to
         // a bug, it was incorrect marked to the streaming. SPARK-47305 fixed the bug.
         CheckNewAnswer()
+      )
+    }
+  }
+
+  test("SPARK-48481: DISTINCT with empty stream source should retain AGGREGATE") {
+    def doTest(numExpectedStatefulOperatorsForOneEmptySource: Int): Unit = {
+      withTempView("tv1", "tv2") {
+        val inputStream1 = MemoryStream[Int]
+        val ds1 = inputStream1.toDS()
+        ds1.registerTempTable("tv1")
+
+        val inputStream2 = MemoryStream[Int]
+        val ds2 = inputStream2.toDS()
+        ds2.registerTempTable("tv2")
+
+        // DISTINCT is rewritten to AGGREGATE, hence an AGGREGATEs for each source
+        val unioned = spark.sql(
+          """
+            | WITH u AS (
+            |   SELECT DISTINCT value AS value FROM tv1
+            | ), v AS (
+            |   SELECT DISTINCT value AS value FROM tv2
+            | )
+            | SELECT value FROM u UNION ALL SELECT value FROM v
+            |""".stripMargin
+        )
+
+        testStream(unioned, OutputMode.Update())(
+          MultiAddData(inputStream1, 1, 1, 2)(inputStream2, 1, 1, 2),
+          CheckNewAnswer(1, 2, 1, 2),
+          Execute { qe =>
+            val stateOperators = qe.lastProgress.stateOperators
+            // Aggregate should be "stateful" one
+            assert(stateOperators.length === 2)
+            stateOperators.zipWithIndex.foreach { case (op, id) =>
+              assert(op.numRowsUpdated === 2, s"stateful OP ID: $id")
+            }
+          },
+          AddData(inputStream2, 2, 2, 3),
+          // NOTE: this is probably far from expectation to have 2 as output given user intends
+          // deduplicate, but the behavior is still correct with rewritten node and output mode:
+          // Aggregate & Update mode.
+          // TODO: Probably we should disallow DISTINCT or rewrite to
+          //  dropDuplicates(WithinWatermark) for streaming source?
+          CheckNewAnswer(2, 3),
+          Execute { qe =>
+            val stateOperators = qe.lastProgress.stateOperators
+            // Aggregate should be "stateful" one
+            assert(stateOperators.length === numExpectedStatefulOperatorsForOneEmptySource)
+            val opWithUpdatedRows = stateOperators.zipWithIndex.filterNot(_._1.numRowsUpdated == 0)
+            assert(opWithUpdatedRows.length === 1)
+            // If this were dropDuplicates, numRowsUpdated should have been 1.
+            assert(opWithUpdatedRows.head._1.numRowsUpdated === 2,
+              s"stateful OP ID: ${opWithUpdatedRows.head._2}")
+          },
+          AddData(inputStream1, 4, 4, 5),
+          CheckNewAnswer(4, 5),
+          Execute { qe =>
+            val stateOperators = qe.lastProgress.stateOperators
+            assert(stateOperators.length === numExpectedStatefulOperatorsForOneEmptySource)
+            val opWithUpdatedRows = stateOperators.zipWithIndex.filterNot(_._1.numRowsUpdated == 0)
+            assert(opWithUpdatedRows.length === 1)
+            assert(opWithUpdatedRows.head._1.numRowsUpdated === 2,
+              s"stateful OP ID: ${opWithUpdatedRows.head._2}")
+          }
+        )
+      }
+    }
+
+    doTest(numExpectedStatefulOperatorsForOneEmptySource = 2)
+
+    withSQLConf(SQLConf.STREAMING_OPTIMIZE_ONE_ROW_PLAN_ENABLED.key -> "true") {
+      doTest(numExpectedStatefulOperatorsForOneEmptySource = 1)
+    }
+  }
+
+  test("SPARK-49699: observe node is not pruned out from PruneFilters") {
+    val input1 = MemoryStream[Int]
+    val df = input1.toDF()
+      .withColumn("eventTime", timestamp_seconds($"value"))
+      .observe("observation", count(lit(1)).as("rows"))
+      // Enforce PruneFilters to come into play and prune subtree. We could do the same
+      // with the reproducer of SPARK-48267, but let's just be simpler.
+      .filter(expr("false"))
+
+    testStream(df)(
+      AddData(input1, 1, 2, 3),
+      CheckNewAnswer(),
+      Execute { qe =>
+        val observeRow = qe.lastExecution.observedMetrics.get("observation")
+        assert(observeRow.get.getAs[Long]("rows") == 3L)
+      }
+    )
+  }
+
+  test("SPARK-49699: watermark node is not pruned out from PruneFilters") {
+    // NOTE: The test actually passes without SPARK-49699, because of the trickiness of
+    // filter pushdown and PruneFilters. Unlike observe node, the `false` filter is pushed down
+    // below to watermark node, hence PruneFilters rule does not prune out watermark node even
+    // before SPARK-49699. Propagate empty relation does not also propagate emptiness into
+    // watermark node, so the node is retained. The test is added for preventing regression.
+
+    val input1 = MemoryStream[Int]
+    val df = input1.toDF()
+      .withColumn("eventTime", timestamp_seconds($"value"))
+      .withWatermark("eventTime", "0 second")
+      // Enforce PruneFilter to come into play and prune subtree. We could do the same
+      // with the reproducer of SPARK-48267, but let's just be simpler.
+      .filter(expr("false"))
+
+    testStream(df)(
+      AddData(input1, 1, 2, 3),
+      CheckNewAnswer(),
+      Execute { qe =>
+        // If the watermark node is pruned out, this would be null.
+        assert(qe.lastProgress.eventTime.get("watermark") != null)
+      }
+    )
+  }
+
+  test("SPARK-49699: stateful operator node is not pruned out from PruneFilters") {
+    val input1 = MemoryStream[Int]
+    val df = input1.toDF()
+      .groupBy("value")
+      .count()
+      // Enforce PruneFilter to come into play and prune subtree. We could do the same
+      // with the reproducer of SPARK-48267, but let's just be simpler.
+      .filter(expr("false"))
+
+    testStream(df, OutputMode.Complete())(
+      AddData(input1, 1, 2, 3),
+      CheckNewAnswer(),
+      Execute { qe =>
+        assert(qe.lastProgress.stateOperators.length == 1)
+      }
+    )
+  }
+
+  test("SPARK-50007: default metrics is provided even observe node is pruned out") {
+    // We disable SPARK-49699 to test the case observe node is pruned out.
+    withSQLConf(SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key -> "true") {
+      val input1 = MemoryStream[Int]
+      val df = input1.toDF()
+        .withColumn("eventTime", timestamp_seconds($"value"))
+        .observe("observation", count(lit(1)).as("rows"))
+        // Enforce PruneFilters to come into play and prune subtree. We could do the same
+        // with the reproducer of SPARK-48267, but let's just be simpler.
+        .filter(expr("false"))
+
+      testStream(df)(
+        AddData(input1, 1, 2, 3),
+        CheckNewAnswer(),
+        Execute { qe =>
+          val observeRow = qe.lastExecution.observedMetrics.get("observation")
+          // This should produce the default value of metrics. Before SPARK-50007, the test fails
+          // because `observeRow` is None. (Spark fails to find the metrics by name.)
+          assert(observeRow.get.getAs[Long]("rows") == 0L)
+        }
       )
     }
   }

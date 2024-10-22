@@ -33,6 +33,7 @@ from pyspark.sql.streaming.listener import (
     QueryProgressEvent,
     QueryIdleEvent,
     QueryTerminatedEvent,
+    StreamingQueryProgress,
 )
 from pyspark.sql.streaming.query import (
     StreamingQuery as PySparkStreamingQuery,
@@ -84,8 +85,8 @@ class StreamingQuery:
         if timeout is not None:
             if not isinstance(timeout, (int, float)) or timeout <= 0:
                 raise PySparkValueError(
-                    error_class="VALUE_NOT_POSITIVE",
-                    message_parameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
+                    errorClass="VALUE_NOT_POSITIVE",
+                    messageParameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
                 )
             cmd.await_termination.timeout_ms = int(timeout * 1000)
             terminated = self._execute_streaming_query_cmd(cmd).await_termination.terminated
@@ -110,21 +111,21 @@ class StreamingQuery:
     status.__doc__ = PySparkStreamingQuery.status.__doc__
 
     @property
-    def recentProgress(self) -> List[Dict[str, Any]]:
+    def recentProgress(self) -> List[StreamingQueryProgress]:
         cmd = pb2.StreamingQueryCommand()
         cmd.recent_progress = True
         progress = self._execute_streaming_query_cmd(cmd).recent_progress.recent_progress_json
-        return [json.loads(p) for p in progress]
+        return [StreamingQueryProgress.fromJson(json.loads(p)) for p in progress]
 
     recentProgress.__doc__ = PySparkStreamingQuery.recentProgress.__doc__
 
     @property
-    def lastProgress(self) -> Optional[Dict[str, Any]]:
+    def lastProgress(self) -> Optional[StreamingQueryProgress]:
         cmd = pb2.StreamingQueryCommand()
         cmd.last_progress = True
         progress = self._execute_streaming_query_cmd(cmd).recent_progress.recent_progress_json
         if len(progress) > 0:
-            return json.loads(progress[-1])
+            return StreamingQueryProgress.fromJson(json.loads(progress[-1]))
         else:
             return None
 
@@ -181,7 +182,7 @@ class StreamingQuery:
         cmd.query_id.run_id = self._run_id
         exec_cmd = pb2.Command()
         exec_cmd.streaming_query_command.CopyFrom(cmd)
-        (_, properties) = self._session.client.execute_command(exec_cmd)
+        (_, properties, _) = self._session.client.execute_command(exec_cmd)
         return cast(pb2.StreamingQueryCommandResult, properties["streaming_query_command_result"])
 
 
@@ -202,7 +203,7 @@ class StreamingQueryManager:
 
     active.__doc__ = PySparkStreamingQueryManager.active.__doc__
 
-    def get(self, id: str) -> Optional[StreamingQuery]:
+    def get(self, id: str) -> Optional["StreamingQuery"]:
         cmd = pb2.StreamingQueryManagerCommand()
         cmd.get_query = id
         response = self._execute_streaming_query_manager_cmd(cmd)
@@ -219,8 +220,8 @@ class StreamingQueryManager:
         if timeout is not None:
             if not isinstance(timeout, (int, float)) or timeout <= 0:
                 raise PySparkValueError(
-                    error_class="VALUE_NOT_POSITIVE",
-                    message_parameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
+                    errorClass="VALUE_NOT_POSITIVE",
+                    messageParameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
                 )
             cmd.await_any_termination.timeout_ms = int(timeout * 1000)
             terminated = self._execute_streaming_query_manager_cmd(
@@ -260,7 +261,7 @@ class StreamingQueryManager:
     ) -> pb2.StreamingQueryManagerCommandResult:
         exec_cmd = pb2.Command()
         exec_cmd.streaming_query_manager_command.CopyFrom(cmd)
-        (_, properties) = self._session.client.execute_command(exec_cmd)
+        (_, properties, _) = self._session.client.execute_command(exec_cmd)
         return cast(
             pb2.StreamingQueryManagerCommandResult,
             properties["streaming_query_manager_command_result"],
@@ -401,8 +402,8 @@ class StreamingQueryListenerBus:
             return QueryIdleEvent.fromJson(json.loads(event.event_json))
         else:
             raise PySparkValueError(
-                error_class="UNKNOWN_VALUE_FOR",
-                message_parameters={"var": f"proto.StreamingQueryEventType: {event.event_type}"},
+                errorClass="UNKNOWN_VALUE_FOR",
+                messageParameters={"var": f"proto.StreamingQueryEventType: {event.event_type}"},
             )
 
     def post_to_all(

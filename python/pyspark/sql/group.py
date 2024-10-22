@@ -32,7 +32,7 @@ __all__ = ["GroupedData"]
 
 
 def dfapi(f: Callable[..., DataFrame]) -> Callable[..., DataFrame]:
-    def _api(self: "GroupedData") -> DataFrame:
+    def _api(self: "GroupedData") -> "DataFrame":
         name = f.__name__
         jdf = getattr(self._jgd, name)()
         return DataFrame(jdf, self.session)
@@ -43,7 +43,7 @@ def dfapi(f: Callable[..., DataFrame]) -> Callable[..., DataFrame]:
 
 
 def df_varargs_api(f: Callable[..., DataFrame]) -> Callable[..., DataFrame]:
-    def _api(self: "GroupedData", *cols: str) -> DataFrame:
+    def _api(self: "GroupedData", *cols: str) -> "DataFrame":
         from pyspark.sql.classic.column import _to_seq
 
         name = f.__name__
@@ -80,14 +80,14 @@ class GroupedData(PandasGroupedOpsMixin):
             return super().__repr__()
 
     @overload
-    def agg(self, *exprs: Column) -> DataFrame:
+    def agg(self, *exprs: Column) -> "DataFrame":
         ...
 
     @overload
-    def agg(self, __exprs: Dict[str, str]) -> DataFrame:
+    def agg(self, __exprs: Dict[str, str]) -> "DataFrame":
         ...
 
-    def agg(self, *exprs: Union[Column, Dict[str, str]]) -> DataFrame:
+    def agg(self, *exprs: Union[Column, Dict[str, str]]) -> "DataFrame":
         """Compute aggregates and returns the result as a :class:`DataFrame`.
 
         The available aggregate functions can be:
@@ -190,7 +190,7 @@ class GroupedData(PandasGroupedOpsMixin):
         return DataFrame(jdf, self.session)
 
     @dfapi
-    def count(self) -> DataFrame:  # type: ignore[empty-body]
+    def count(self) -> "DataFrame":  # type: ignore[empty-body]
         """Counts the number of records for each group.
 
         .. versionadded:: 1.3.0
@@ -241,7 +241,7 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    def avg(self, *cols: str) -> DataFrame:  # type: ignore[empty-body]
+    def avg(self, *cols: str) -> "DataFrame":  # type: ignore[empty-body]
         """Computes average values for each numeric columns for each group.
 
         :func:`mean` is an alias for :func:`avg`.
@@ -292,7 +292,7 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    def max(self, *cols: str) -> DataFrame:  # type: ignore[empty-body]
+    def max(self, *cols: str) -> "DataFrame":  # type: ignore[empty-body]
         """Computes the max value for each numeric columns for each group.
 
         .. versionadded:: 1.3.0
@@ -336,7 +336,7 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    def min(self, *cols: str) -> DataFrame:  # type: ignore[empty-body]
+    def min(self, *cols: str) -> "DataFrame":  # type: ignore[empty-body]
         """Computes the min value for each numeric column for each group.
 
         .. versionadded:: 1.3.0
@@ -493,7 +493,8 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Compute the sum of earnings for each year by course with each course as a separate column
 
-        >>> df1.groupBy("year").pivot("course", ["dotNET", "Java"]).sum("earnings").show()
+        >>> df1.groupBy("year").pivot(
+        ...     "course", ["dotNET", "Java"]).sum("earnings").sort("year").show()
         +----+------+-----+
         |year|dotNET| Java|
         +----+------+-----+
@@ -503,14 +504,15 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Or without specifying column values (less efficient)
 
-        >>> df1.groupBy("year").pivot("course").sum("earnings").show()
+        >>> df1.groupBy("year").pivot("course").sum("earnings").sort("year").show()
         +----+-----+------+
         |year| Java|dotNET|
         +----+-----+------+
         |2012|20000| 15000|
         |2013|30000| 48000|
         +----+-----+------+
-        >>> df2.groupBy("sales.year").pivot("sales.course").sum("sales.earnings").show()
+        >>> df2.groupBy(
+        ...     "sales.year").pivot("sales.course").sum("sales.earnings").sort("year").show()
         ... # doctest: +SKIP
         +----+-----+------+
         |year| Java|dotNET|

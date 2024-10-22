@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCom
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, TableWritePrivilege, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -158,6 +158,8 @@ class PlanResolutionSuite extends AnalysisTest {
         case name => throw new NoSuchTableException(Seq(name))
       }
     })
+    when(newCatalog.loadTable(any(), any[java.util.Set[TableWritePrivilege]]()))
+      .thenCallRealMethod()
     when(newCatalog.name()).thenReturn("testcat")
     newCatalog
   }
@@ -175,6 +177,8 @@ class PlanResolutionSuite extends AnalysisTest {
         case name => throw new NoSuchTableException(Seq(name))
       }
     })
+    when(newCatalog.loadTable(any(), any[java.util.Set[TableWritePrivilege]]()))
+      .thenCallRealMethod()
     when(newCatalog.name()).thenReturn(CatalogManager.SESSION_CATALOG_NAME)
     newCatalog
   }
@@ -260,7 +264,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(sql)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = parameters,
       context = context
     )
@@ -302,7 +306,7 @@ class PlanResolutionSuite extends AnalysisTest {
         exception = intercept[SparkUnsupportedOperationException] {
           parseAndResolve(query)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_2067",
+        condition = "_LEGACY_ERROR_TEMP_2067",
         parameters = Map("transform" -> transform))
     }
   }
@@ -319,7 +323,7 @@ class PlanResolutionSuite extends AnalysisTest {
         exception = intercept[SparkUnsupportedOperationException] {
           parseAndResolve(query)
         },
-        errorClass = "UNSUPPORTED_FEATURE.MULTIPLE_BUCKET_TRANSFORMS",
+        condition = "UNSUPPORTED_FEATURE.MULTIPLE_BUCKET_TRANSFORMS",
         parameters = Map.empty)
     }
   }
@@ -413,7 +417,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parseAndResolve(v2)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0032",
+      condition = "_LEGACY_ERROR_TEMP_0032",
       parameters = Map("pathOne" -> "/tmp/file", "pathTwo" -> "/tmp/file"),
       context = ExpectedContext(
         fragment = v2,
@@ -759,7 +763,7 @@ class PlanResolutionSuite extends AnalysisTest {
     }
     checkError(
       e,
-      errorClass = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
+      condition = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
       parameters = Map("catalogName" -> "`testcat`", "operation" -> "views"))
   }
 
@@ -1203,7 +1207,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[AnalysisException] {
         parseAndResolve(sql6, checkAnalysis = true)
       },
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map("objectName" -> "`DEFAULT`", "proposal" -> "`i`, `s`"),
       context = ExpectedContext(
         fragment = "DEFAULT",
@@ -1215,7 +1219,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[AnalysisException] {
         parseAndResolve(sql7, checkAnalysis = true)
       },
-      errorClass = "NO_DEFAULT_COLUMN_VALUE_AVAILABLE",
+      condition = "NO_DEFAULT_COLUMN_VALUE_AVAILABLE",
       parameters = Map("colName" -> "`x`")
     )
   }
@@ -1263,7 +1267,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[AnalysisException] {
         parseAndResolve(sql2, checkAnalysis = true)
       },
-      errorClass = "NO_DEFAULT_COLUMN_VALUE_AVAILABLE",
+      condition = "NO_DEFAULT_COLUMN_VALUE_AVAILABLE",
       parameters = Map("colName" -> "`x`")
     )
 
@@ -1272,7 +1276,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[AnalysisException] {
         parseAndResolve(sql3, checkAnalysis = true)
       },
-      errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+      condition = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
       parameters = Map(
         "tableName" -> "`testcat`.`tab2`",
         "tableColumns" -> "`i`, `x`",
@@ -1333,18 +1337,11 @@ class PlanResolutionSuite extends AnalysisTest {
             exception = intercept[AnalysisException] {
               parseAndResolve(sql3)
             },
-            errorClass = "_LEGACY_ERROR_TEMP_1331",
+            condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+            sqlState = "42703",
             parameters = Map(
-              "fieldName" -> "j",
-              "table" -> "spark_catalog.default.v1Table",
-              "schema" ->
-                """root
-                  | |-- i: integer (nullable = true)
-                  | |-- s: string (nullable = true)
-                  | |-- point: struct (nullable = true)
-                  | |    |-- x: integer (nullable = true)
-                  | |    |-- y: integer (nullable = true)
-                  |""".stripMargin),
+              "objectName" -> "`j`",
+              "proposal" -> "`i`, `s`, `point`"),
             context = ExpectedContext(fragment = sql3, start = 0, stop = 55))
 
           val sql4 = s"ALTER TABLE $tblName ALTER COLUMN point.x TYPE bigint"
@@ -1353,10 +1350,19 @@ class PlanResolutionSuite extends AnalysisTest {
           }
           checkError(
             exception = e2,
-            errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+            condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
             sqlState = "0A000",
             parameters = Map("tableName" -> "`spark_catalog`.`default`.`v1Table`",
               "operation" -> "ALTER COLUMN with qualified column"))
+
+          checkError(
+            exception = intercept[AnalysisException] {
+              parseAndResolve(s"ALTER TABLE $tblName ALTER COLUMN i SET NOT NULL")
+            },
+            condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+            sqlState = "0A000",
+            parameters = Map("tableName" -> "`spark_catalog`.`default`.`v1Table`",
+              "operation" -> "ALTER COLUMN ... SET NOT NULL"))
         } else {
           parsed1 match {
             case AlterColumn(
@@ -1401,7 +1407,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parseAndResolve(sql)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" ->
         "ALTER TABLE table ALTER COLUMN requires a TYPE, a SET/DROP, a COMMENT, or a FIRST/AFTER"),
       context = ExpectedContext(fragment = sql, start = 0, stop = 33))
@@ -1417,18 +1423,11 @@ class PlanResolutionSuite extends AnalysisTest {
             exception = intercept[AnalysisException] {
               parseAndResolve(sql)
             },
-            errorClass = "_LEGACY_ERROR_TEMP_1331",
+            condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+            sqlState = "42703",
             parameters = Map(
-              "fieldName" -> "I",
-              "table" -> "spark_catalog.default.v1Table",
-              "schema" ->
-                """root
-                  | |-- i: integer (nullable = true)
-                  | |-- s: string (nullable = true)
-                  | |-- point: struct (nullable = true)
-                  | |    |-- x: integer (nullable = true)
-                  | |    |-- y: integer (nullable = true)
-                  |""".stripMargin),
+              "objectName" -> "`I`",
+              "proposal" -> "`i`, `s`, `point`"),
             context = ExpectedContext(fragment = sql, start = 0, stop = 55))
         } else {
           val actual = parseAndResolve(sql)
@@ -1945,7 +1944,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[AnalysisException] {
         parseAndResolve(mergeWithDefaultReferenceInMergeCondition, checkAnalysis = true)
       },
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map("objectName" -> "`DEFAULT`",
         "proposal" -> "`target`.`i`, `source`.`i`, `target`.`s`, `source`.`s`"),
       context = ExpectedContext(
@@ -1974,7 +1973,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[AnalysisException] {
         parseAndResolve(mergeWithDefaultReferenceAsPartOfComplexExpression)
       },
-      errorClass = "DEFAULT_PLACEMENT_INVALID",
+      condition = "DEFAULT_PLACEMENT_INVALID",
       parameters = Map.empty)
 
     val mergeWithDefaultReferenceForNonNullableCol =
@@ -1989,7 +1988,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[AnalysisException] {
         parseAndResolve(mergeWithDefaultReferenceForNonNullableCol)
       },
-      errorClass = "NO_DEFAULT_COLUMN_VALUE_AVAILABLE",
+      condition = "NO_DEFAULT_COLUMN_VALUE_AVAILABLE",
       parameters = Map("colName" -> "`x`")
     )
 
@@ -2094,7 +2093,7 @@ class PlanResolutionSuite extends AnalysisTest {
       // resolve column `i` as it's ambiguous.
       checkError(
         exception = intercept[AnalysisException](parseAndResolve(sql2)),
-        errorClass = "AMBIGUOUS_REFERENCE",
+        condition = "AMBIGUOUS_REFERENCE",
         parameters = Map("name" -> "`i`", "referenceNames" -> referenceNames(target, "i")),
         context = ExpectedContext(
           fragment = "i",
@@ -2110,7 +2109,7 @@ class PlanResolutionSuite extends AnalysisTest {
       // resolve column `s` as it's ambiguous.
       checkError(
         exception = intercept[AnalysisException](parseAndResolve(sql3)),
-        errorClass = "AMBIGUOUS_REFERENCE",
+        condition = "AMBIGUOUS_REFERENCE",
         parameters = Map("name" -> "`s`", "referenceNames" -> referenceNames(target, "s")),
         context = ExpectedContext(
           fragment = "s",
@@ -2126,7 +2125,7 @@ class PlanResolutionSuite extends AnalysisTest {
       // resolve column `s` as it's ambiguous.
       checkError(
         exception = intercept[AnalysisException](parseAndResolve(sql4)),
-        errorClass = "AMBIGUOUS_REFERENCE",
+        condition = "AMBIGUOUS_REFERENCE",
         parameters = Map("name" -> "`s`", "referenceNames" -> referenceNames(target, "s")),
         context = ExpectedContext(
           fragment = "s",
@@ -2142,7 +2141,7 @@ class PlanResolutionSuite extends AnalysisTest {
       // resolve column `s` as it's ambiguous.
       checkError(
         exception = intercept[AnalysisException](parseAndResolve(sql5)),
-        errorClass = "AMBIGUOUS_REFERENCE",
+        condition = "AMBIGUOUS_REFERENCE",
         parameters = Map("name" -> "`s`", "referenceNames" -> referenceNames(target, "s")),
         context = ExpectedContext(
           fragment = "s",
@@ -2202,7 +2201,7 @@ class PlanResolutionSuite extends AnalysisTest {
       // update value in not matched by source clause can only reference the target table.
       checkError(
         exception = intercept[AnalysisException](parseAndResolve(sql7)),
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map("objectName" -> s"${toSQLId(source)}.`s`", "proposal" -> "`i`, `s`"),
         context = ExpectedContext(
           fragment = s"$source.s",
@@ -2236,7 +2235,7 @@ class PlanResolutionSuite extends AnalysisTest {
          |WHEN MATCHED THEN UPDATE SET *""".stripMargin
     checkError(
       exception = intercept[AnalysisException](parseAndResolve(sql2)),
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map("objectName" -> "`s`", "proposal" -> "`i`, `x`"),
       context = ExpectedContext(fragment = sql2, start = 0, stop = 80))
 
@@ -2248,7 +2247,7 @@ class PlanResolutionSuite extends AnalysisTest {
         |WHEN NOT MATCHED THEN INSERT *""".stripMargin
     checkError(
       exception = intercept[AnalysisException](parseAndResolve(sql3)),
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map("objectName" -> "`s`", "proposal" -> "`i`, `x`"),
       context = ExpectedContext(fragment = sql3, start = 0, stop = 80))
 
@@ -2443,7 +2442,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val sql = "CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING)"
     checkError(
       exception = parseException(parsePlan)(sql),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "':'", "hint" -> ""))
   }
 
@@ -2592,49 +2591,49 @@ class PlanResolutionSuite extends AnalysisTest {
     val sql1 = createTableHeader("TBLPROPERTIES('test' = 'test2')")
     checkError(
       exception = parseException(parsePlan)(sql1),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "TBLPROPERTIES"),
       context = ExpectedContext(fragment = sql1, start = 0, stop = 117))
 
     val sql2 = createTableHeader("LOCATION '/tmp/file'")
     checkError(
       exception = parseException(parsePlan)(sql2),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "LOCATION"),
       context = ExpectedContext(fragment = sql2, start = 0, stop = 95))
 
     val sql3 = createTableHeader("COMMENT 'a table'")
     checkError(
       exception = parseException(parsePlan)(sql3),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "COMMENT"),
       context = ExpectedContext(fragment = sql3, start = 0, stop = 89))
 
     val sql4 = createTableHeader("CLUSTERED BY(b) INTO 256 BUCKETS")
     checkError(
       exception = parseException(parsePlan)(sql4),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "CLUSTERED BY"),
       context = ExpectedContext(fragment = sql4, start = 0, stop = 119))
 
     val sql5 = createTableHeader("PARTITIONED BY (k int)")
     checkError(
       exception = parseException(parsePlan)(sql5),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "PARTITIONED BY"),
       context = ExpectedContext(fragment = sql5, start = 0, stop = 99))
 
     val sql6 = createTableHeader("STORED AS parquet")
     checkError(
       exception = parseException(parsePlan)(sql6),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "STORED AS/BY"),
       context = ExpectedContext(fragment = sql6, start = 0, stop = 89))
 
     val sql7 = createTableHeader("ROW FORMAT SERDE 'parquet.hive.serde.ParquetHiveSerDe'")
     checkError(
       exception = parseException(parsePlan)(sql7),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "ROW FORMAT"),
       context = ExpectedContext(fragment = sql7, start = 0, stop = 163))
   }
@@ -2775,7 +2774,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         extractTableDesc(s4)
       },
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "STORED BY"),
       context = ExpectedContext(
         fragment = "STORED BY 'storage.handler.class.name'",
@@ -2868,7 +2867,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(query)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map(
         "message" -> "CREATE TEMPORARY TABLE ..., use CREATE TEMPORARY VIEW instead"),
       context = ExpectedContext(fragment = query, start = 0, stop = 48))
@@ -2940,7 +2939,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(query1)
       },
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "CREATE TABLE ... SKEWED BY"),
       context = ExpectedContext(fragment = query1, start = 0, stop = 72))
 
@@ -2949,7 +2948,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(query2)
       },
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "CREATE TABLE ... SKEWED BY"),
       context = ExpectedContext(fragment = query2, start = 0, stop = 96))
 
@@ -2958,7 +2957,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(query3)
       },
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "CREATE TABLE ... SKEWED BY"),
       context = ExpectedContext(fragment = query3, start = 0, stop = 118))
   }
@@ -3013,7 +3012,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(query1)
       },
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "STORED BY"),
       context = ExpectedContext(
         fragment = "STORED BY 'org.papachi.StorageHandler'",
@@ -3025,7 +3024,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(query2)
       },
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "STORED BY"),
       context = ExpectedContext(
         fragment = "STORED BY 'org.mamachi.StorageHandler' WITH SERDEPROPERTIES ('k1'='v1')",

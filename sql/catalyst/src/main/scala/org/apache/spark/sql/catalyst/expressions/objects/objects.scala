@@ -322,13 +322,14 @@ case class StaticInvoke(
     val evaluate = if (returnNullable && !method.getReturnType.isPrimitive) {
       if (CodeGenerator.defaultValue(dataType) == "null") {
         s"""
-          ${ev.value} = $callFunc;
+          ${ev.value} = ($javaType) $callFunc;
           ${ev.isNull} = ${ev.value} == null;
         """
       } else {
         val boxedResult = ctx.freshName("boxedResult")
+        val boxedJavaType = CodeGenerator.boxedType(dataType)
         s"""
-          ${CodeGenerator.boxedType(dataType)} $boxedResult = $callFunc;
+          $boxedJavaType $boxedResult = ($boxedJavaType) $callFunc;
           ${ev.isNull} = $boxedResult == null;
           if (!${ev.isNull}) {
             ${ev.value} = $boxedResult;
@@ -336,7 +337,7 @@ case class StaticInvoke(
         """
       }
     } else {
-      s"${ev.value} = $callFunc;"
+      s"${ev.value} = ($javaType) $callFunc;"
     }
 
     val code = code"""
@@ -360,6 +361,15 @@ case class StaticInvoke(
       super.stringArgs.toSeq.dropRight(1).iterator
     }
   }
+
+  override def toString: String =
+    s"static_invoke(${
+      if (objectName.startsWith("org.apache.spark.")) {
+        cls.getSimpleName
+      } else {
+        objectName
+      }
+    }.$functionName(${arguments.mkString(", ")}))"
 }
 
 /**
@@ -509,7 +519,8 @@ case class Invoke(
     ev.copy(code = code)
   }
 
-  override def toString: String = s"$targetObject.$functionName"
+  override def toString: String =
+    s"invoke($targetObject.$functionName(${arguments.mkString(", ")}))"
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Invoke =
     copy(targetObject = newChildren.head, arguments = newChildren.tail)
@@ -1917,16 +1928,12 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
 
   override def flatArguments: Iterator[Any] = Iterator(child)
 
-  private val errMsg = "Null value appeared in non-nullable field:" +
-    walkedTypePath.mkString("\n", "\n", "\n") +
-    "If the schema is inferred from a Scala tuple/case class, or a Java bean, " +
-    "please try to use scala.Option[_] or other nullable types " +
-    "(e.g. java.lang.Integer instead of int/scala.Int)."
+  private val errMsg = walkedTypePath.mkString("\n", "\n", "\n")
 
   override def eval(input: InternalRow): Any = {
     val result = child.eval(input)
     if (result == null) {
-      throw new NullPointerException(errMsg)
+      throw QueryExecutionErrors.notNullAssertViolation(errMsg)
     }
     result
   }
@@ -1940,7 +1947,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
 
     val code = childGen.code + code"""
       if (${childGen.isNull}) {
-        throw new NullPointerException($errMsgField);
+        throw QueryExecutionErrors.notNullAssertViolation($errMsgField);
       }
      """
     ev.copy(code = code, isNull = FalseLiteral, value = childGen.value)
@@ -2017,8 +2024,6 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
 
   override val dataType: DataType = externalDataType
 
-  private lazy val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
-
   private lazy val checkType: (Any) => Boolean = expected match {
     case _: DecimalType =>
       (value: Any) => {
@@ -2051,14 +2056,12 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
     if (checkType(input)) {
       input
     } else {
-      throw new RuntimeException(s"${input.getClass.getName}$errMsg")
+      throw QueryExecutionErrors.invalidExternalTypeError(
+        input.getClass.getName, expected, child)
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    // Use unnamed reference that doesn't create a local field here to reduce the number of fields
-    // because errMsgField is used only when the type doesn't match.
-    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
     val input = child.genCode(ctx)
     val obj = input.value
     def genCheckTypes(classes: Seq[Class[_]]): String = {
@@ -2084,6 +2087,13 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
         s"$obj instanceof ${CodeGenerator.boxedType(dataType)}"
     }
 
+    // Use unnamed reference that doesn't create a local field here to reduce the number of fields
+    // because errMsgField is used only when the type doesn't match.
+    val expectedTypeField = ctx.addReferenceObj(
+      "expectedTypeField", expected)
+    val childExpressionMsgField = ctx.addReferenceObj(
+      "childExpressionMsgField", child)
+
     val code = code"""
       ${input.code}
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -2091,7 +2101,8 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
         if ($typeCheck) {
           ${ev.value} = (${CodeGenerator.boxedType(dataType)}) $obj;
         } else {
-          throw new RuntimeException($obj.getClass().getName() + $errMsgField);
+          throw QueryExecutionErrors.invalidExternalTypeError(
+            $obj.getClass().getName(), $expectedTypeField, $childExpressionMsgField);
         }
       }
 

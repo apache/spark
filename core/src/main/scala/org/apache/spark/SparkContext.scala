@@ -27,6 +27,7 @@ import scala.collection.Map
 import scala.collection.concurrent.{Map => ScalaConcurrentMap}
 import scala.collection.immutable
 import scala.collection.mutable.HashMap
+import scala.concurrent.{Future, Promise}
 import scala.jdk.CollectionConverters._
 import scala.reflect.{classTag, ClassTag}
 import scala.util.control.NonFatal
@@ -421,7 +422,7 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     // HADOOP-19097 Set fs.s3a.connection.establish.timeout to 30s
     // We can remove this after Apache Hadoop 3.4.1 releases
-    conf.setIfMissing("spark.hadoop.fs.s3a.connection.establish.timeout", "30s")
+    conf.setIfMissing("spark.hadoop.fs.s3a.connection.establish.timeout", "30000")
     // This should be set as early as possible.
     SparkContext.fillMissingMagicCommitterConfsIfNeeded(_conf)
 
@@ -909,10 +910,20 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @since 3.5.0
    */
-  def addJobTag(tag: String): Unit = {
-    SparkContext.throwIfInvalidTag(tag)
+  def addJobTag(tag: String): Unit = addJobTags(Set(tag))
+
+  /**
+   * Add multiple tags to be assigned to all the jobs started by this thread.
+   * See [[addJobTag]] for more details.
+   *
+   * @param tags The tags to be added. Cannot contain ',' (comma) character.
+   *
+   * @since 4.0.0
+   */
+  def addJobTags(tags: Set[String]): Unit = {
+    tags.foreach(SparkContext.throwIfInvalidTag)
     val existingTags = getJobTags()
-    val newTags = (existingTags + tag).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
+    val newTags = (existingTags ++ tags).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
     setLocalProperty(SparkContext.SPARK_JOB_TAGS, newTags)
   }
 
@@ -924,10 +935,20 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @since 3.5.0
    */
-  def removeJobTag(tag: String): Unit = {
-    SparkContext.throwIfInvalidTag(tag)
+  def removeJobTag(tag: String): Unit = removeJobTags(Set(tag))
+
+  /**
+   * Remove multiple tags to be assigned to all the jobs started by this thread.
+   * See [[removeJobTag]] for more details.
+   *
+   * @param tags The tags to be removed. Cannot contain ',' (comma) character.
+   *
+   * @since 4.0.0
+   */
+  def removeJobTags(tags: Set[String]): Unit = {
+    tags.foreach(SparkContext.throwIfInvalidTag)
     val existingTags = getJobTags()
-    val newTags = (existingTags - tag).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
+    val newTags = (existingTags -- tags).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
     if (newTags.isEmpty) {
       clearJobTags()
     } else {
@@ -2321,6 +2342,11 @@ class SparkContext(config: SparkConf) extends Logging {
       }
       _dagScheduler = null
     }
+    // In case there are still events being posted during the shutdown of plugins,
+    // invoke the shutdown of each plugin before the listenerBus is stopped.
+    Utils.tryLogNonFatalError {
+      _plugins.foreach(_.shutdown())
+    }
     if (_listenerBusStarted) {
       Utils.tryLogNonFatalError {
         listenerBus.stop()
@@ -2331,9 +2357,6 @@ class SparkContext(config: SparkConf) extends Logging {
       Utils.tryLogNonFatalError {
         env.metricsSystem.report()
       }
-    }
-    Utils.tryLogNonFatalError {
-      _plugins.foreach(_.shutdown())
     }
     Utils.tryLogNonFatalError {
       FallbackStorage.cleanUp(_conf, _hadoopConfiguration)
@@ -2631,10 +2654,26 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Cancel active jobs for the specified group. See `org.apache.spark.SparkContext.setJobGroup`
    * for more information.
+   *
+   * @param groupId the group ID to cancel
+   * @param reason reason for cancellation
+   *
+   * @since 4.0.0
+   */
+  def cancelJobGroup(groupId: String, reason: String): Unit = {
+    assertNotStopped()
+    dagScheduler.cancelJobGroup(groupId, cancelFutureJobs = false, Option(reason))
+  }
+
+  /**
+   * Cancel active jobs for the specified group. See `org.apache.spark.SparkContext.setJobGroup`
+   * for more information.
+   *
+   * @param groupId the group ID to cancel
    */
   def cancelJobGroup(groupId: String): Unit = {
     assertNotStopped()
-    dagScheduler.cancelJobGroup(groupId)
+    dagScheduler.cancelJobGroup(groupId, cancelFutureJobs = false, None)
   }
 
   /**
@@ -2642,10 +2681,61 @@ class SparkContext(config: SparkConf) extends Logging {
    * Note: the maximum number of job groups that can be tracked is set by
    * 'spark.scheduler.numCancelledJobGroupsToTrack'. Once the limit is reached and a new job group
    * is to be added, the oldest job group tracked will be discarded.
+   *
+   * @param groupId the group ID to cancel
+   * @param reason reason for cancellation
+   *
+   * @since 4.0.0
+   */
+  def cancelJobGroupAndFutureJobs(groupId: String, reason: String): Unit = {
+    assertNotStopped()
+    dagScheduler.cancelJobGroup(groupId, cancelFutureJobs = true, Option(reason))
+  }
+
+  /**
+   * Cancel active jobs for the specified group, as well as the future jobs in this job group.
+   * Note: the maximum number of job groups that can be tracked is set by
+   * 'spark.scheduler.numCancelledJobGroupsToTrack'. Once the limit is reached and a new job group
+   * is to be added, the oldest job group tracked will be discarded.
+   *
+   * @param groupId the group ID to cancel
    */
   def cancelJobGroupAndFutureJobs(groupId: String): Unit = {
     assertNotStopped()
-    dagScheduler.cancelJobGroup(groupId, cancelFutureJobs = true)
+    dagScheduler.cancelJobGroup(groupId, cancelFutureJobs = true, None)
+  }
+
+  /**
+   * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.
+   *
+   * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
+   * @param reason reason for cancellation.
+   * @return A future with [[ActiveJob]]s, allowing extraction of information such as Job ID and
+   *   tags.
+   */
+  private[spark] def cancelJobsWithTagWithFuture(
+      tag: String,
+      reason: String): Future[Seq[ActiveJob]] = {
+    SparkContext.throwIfInvalidTag(tag)
+    assertNotStopped()
+
+    val cancelledJobs = Promise[Seq[ActiveJob]]()
+    dagScheduler.cancelJobsWithTag(tag, Some(reason), Some(cancelledJobs))
+    cancelledJobs.future
+  }
+
+  /**
+   * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.
+   *
+   * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
+   * @param reason reason for cancellation
+   *
+   * @since 4.0.0
+   */
+  def cancelJobsWithTag(tag: String, reason: String): Unit = {
+    SparkContext.throwIfInvalidTag(tag)
+    assertNotStopped()
+    dagScheduler.cancelJobsWithTag(tag, Option(reason), cancelledJobs = None)
   }
 
   /**
@@ -2658,7 +2748,7 @@ class SparkContext(config: SparkConf) extends Logging {
   def cancelJobsWithTag(tag: String): Unit = {
     SparkContext.throwIfInvalidTag(tag)
     assertNotStopped()
-    dagScheduler.cancelJobsWithTag(tag)
+    dagScheduler.cancelJobsWithTag(tag, reason = None, cancelledJobs = None)
   }
 
   /** Cancel all jobs that have been scheduled or are running.  */
@@ -2671,7 +2761,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Cancel a given job if it's scheduled or running.
    *
    * @param jobId the job ID to cancel
-   * @param reason optional reason for cancellation
+   * @param reason reason for cancellation
    * @note Throws `InterruptedException` if the cancel message cannot be sent
    */
   def cancelJob(jobId: Int, reason: String): Unit = {
@@ -2838,7 +2928,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /** Post the environment update event once the task scheduler is ready */
-  private def postEnvironmentUpdate(): Unit = {
+  private[spark] def postEnvironmentUpdate(): Unit = {
     if (taskScheduler != null) {
       val schedulingMode = getSchedulingMode.toString
       val addedJarPaths = allAddedJars.keys.toSeq

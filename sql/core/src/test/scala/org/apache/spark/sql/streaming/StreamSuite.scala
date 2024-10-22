@@ -1326,6 +1326,63 @@ class StreamSuite extends StreamTest {
       }
     }
   }
+
+  test("isInterruptionException should correctly unwrap classic py4j InterruptedException") {
+    val e1 = new py4j.Py4JException(
+      """
+        |py4j.protocol.Py4JJavaError: An error occurred while calling o1073599.sql.
+        |: java.util.concurrent.ExecutionException: java.lang.InterruptedException
+        |""".stripMargin)
+    val febError1 = ForeachBatchUserFuncException(e1)
+    assert(StreamExecution.isInterruptionException(febError1, spark.sparkContext))
+
+    // scalastyle:off line.size.limit
+    val e2 = new py4j.Py4JException(
+      """
+        |py4j.protocol.Py4JJavaError: An error occurred while calling o2141502.saveAsTable.
+        |: org.apache.spark.SparkException: Job aborted.
+        |at org.apache.spark.sql.errors.QueryExecutionErrors$.jobAbortedError(QueryExecutionErrors.scala:882)
+        |at org.apache.spark.sql.execution.datasources.FileFormatWriter$.$anonfun$write$1(FileFormatWriter.scala:334)
+        |<REDACTED STACK TRACE>
+        |org.apache.spark.sql.execution.streaming.StreamExecution.withAttributionTags(StreamExecution.scala:82)
+        |at org.apache.spark.sql.execution.streaming.StreamExecution.org$apache$spark$sql$execution$streaming$StreamExecution$$runStream(StreamExecution.scala:339)
+        |at org.apache.spark.sql.execution.streaming.StreamExecution$$anon$1.$anonfun$run$2(StreamExecution.scala:262)
+        |at scala.runtime.java8.JFunction0$mcV$sp.apply(JFunction0$mcV$sp.java:23)
+        |at org.apache.spark.sql.execution.streaming.StreamExecution$$anon$1.run(StreamExecution.scala:262)
+        |*Caused by: java.lang.InterruptedException
+        |at java.util.concurrent.locks.AbstractQueuedSynchronizer.doAcquireSharedInterruptibly(AbstractQueuedSynchronizer.java:1000)*
+        |""".stripMargin)
+    // scalastyle:on line.size.limit
+    val febError2 = ForeachBatchUserFuncException(e2)
+    assert(StreamExecution.isInterruptionException(febError2, spark.sparkContext))
+
+    // scalastyle:off line.size.limit
+    val e3 = new py4j.Py4JException(
+      """
+        py4j.protocol.Py4JJavaError: An error occurred while calling o6032.save.
+        |: org.apache.spark.SparkException: [SPARK_JOB_CANCELLED] Job 89 cancelled part of cancelled job group a5bc7e26-f199-463e-95ad-4ec960a62d79 SQLSTATE: XXKDA
+        |at org.apache.spark.scheduler.DAGScheduler.handleJobCancellation(DAGScheduler.scala:3747)
+        |at org.apache.spark.scheduler.DAGScheduler.$anonfun$handleJobGroupCancelled$4(DAGScheduler.scala:1592)
+        |at scala.runtime.java8.JFunction1$mcVI$sp.apply(JFunction1$mcVI$sp.java:23)
+        |at scala.collection.mutable.HashSet.foreach(HashSet.scala:79)
+        |at org.apache.spark.scheduler.DAGScheduler.handleJobGroupCancelled(DAGScheduler.scala:1591)
+        |at org.apache.spark.scheduler.DAGSchedulerEventProcessLoop.doOnReceive(DAGScheduler.scala:4102)
+        |at org.apache.spark.scheduler.DAGSchedulerEventProcessLoop.onReceive(DAGScheduler.scala:4058)
+        |at org.apache.spark.scheduler.DAGSchedulerEventProcessLoop.onReceive(DAGScheduler.scala:4046)
+        |at org.apache.spark.util.EventLoop$$anon$1.run(EventLoop.scala:54)
+        |at org.apache.spark.scheduler.DAGScheduler.$anonfun$runJob$1(DAGScheduler.scala:1348)
+        |""".stripMargin)
+    // scalastyle:on line.size.limit
+    val febError3 = ForeachBatchUserFuncException(e3)
+    val prevJobId = spark.sparkContext.getLocalProperty("spark.jobGroup.id")
+    try {
+      spark.sparkContext.setLocalProperty(
+        "spark.jobGroup.id", "a5bc7e26-f199-463e-95ad-4ec960a62d79")
+      assert(StreamExecution.isInterruptionException(febError3, spark.sparkContext))
+    } finally {
+      spark.sparkContext.setLocalProperty("spark.jobGroup.id", prevJobId)
+    }
+  }
 }
 
 abstract class FakeSource extends StreamSourceProvider {
@@ -1430,7 +1487,7 @@ class TestStateStoreProvider extends StateStoreProvider {
 
   override def close(): Unit = { }
 
-  override def getStore(version: Long): StateStore = null
+  override def getStore(version: Long, stateStoreCkptId: Option[String] = None): StateStore = null
 }
 
 /** A fake source that throws `ThrowingExceptionInCreateSource.exception` in `createSource` */

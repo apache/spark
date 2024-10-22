@@ -2126,8 +2126,10 @@ private[spark] class BlockManager(
       hasRemoveBlock = true
       if (tellMaster) {
         // Only update storage level from the captured block status before deleting, so that
-        // memory size and disk size are being kept for calculating delta.
-        reportBlockStatus(blockId, blockStatus.get.copy(storageLevel = StorageLevel.NONE))
+        // memory size and disk size are being kept for calculating delta. Reset the replica
+        // count 0 in storage level to notify that it is a remove operation.
+        val storageLevel = StorageLevel(blockStatus.get.storageLevel.toInt, 0)
+        reportBlockStatus(blockId, blockStatus.get.copy(storageLevel = storageLevel))
       }
     } finally {
       if (!hasRemoveBlock) {
@@ -2164,7 +2166,10 @@ private[spark] class BlockManager(
     diskBlockManager.stop()
     rpcEnv.stop(storageEndpoint)
     blockInfoManager.clear()
-    memoryStore.clear()
+    // The memoryManager may be null if the driver plugin fails to initialize
+    if (memoryManager != null) {
+      memoryStore.clear()
+    }
     futureExecutionContext.shutdownNow()
     logInfo("BlockManager stopped")
   }

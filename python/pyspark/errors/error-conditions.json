@@ -94,9 +94,9 @@
       "Could not get batch id from <obj_name>."
     ]
   },
-  "CANNOT_INFER_ARRAY_TYPE": {
+  "CANNOT_INFER_ARRAY_ELEMENT_TYPE": {
     "message": [
-      "Can not infer Array Type from a list with None as the first element."
+      "Can not infer the element data type, an non-empty list starting with an non-None value is required."
     ]
   },
   "CANNOT_INFER_EMPTY_SCHEMA": {
@@ -134,6 +134,11 @@
       "Metadata can only be provided for a single column."
     ]
   },
+  "CANNOT_REGISTER_UDTF": {
+    "message": [
+      "Cannot register the UDTF '<name>': expected a 'UserDefinedTableFunction'. Please make sure the UDTF is correctly defined as a class, and then either wrap it in the `udtf()` function or annotate it with `@udtf(...)`."
+    ]
+  },
   "CANNOT_SET_TOGETHER": {
     "message": [
       "<arg_list> should not be set together."
@@ -147,6 +152,11 @@
   "CANNOT_WITHOUT": {
     "message": [
       "Cannot <condition1> without <condition2>."
+    ]
+  },
+  "CLASSIC_OPERATION_NOT_SUPPORTED_ON_DF": {
+    "message": [
+      "Calling property or member '<member>' is not supported in PySpark Classic, please use Spark Connect instead."
     ]
   },
   "COLLATION_INVALID_PROVIDER" : {
@@ -792,9 +802,19 @@
       "<package_name> >= <minimum_version> must be installed; however, it was not found."
     ]
   },
+  "PANDAS_UDF_OUTPUT_EXCEEDS_INPUT_ROWS" : {
+    "message": [
+      "The Pandas SCALAR_ITER UDF outputs more rows than input rows."
+    ]
+  },
   "PIPE_FUNCTION_EXITED": {
     "message": [
       "Pipe function `<func_name>` exited with error code <error_code>."
+    ]
+  },
+  "PLOT_NOT_NUMERIC_COLUMN": {
+    "message": [
+      "Argument <arg_name> must be a numerical column for plotting, got <arg_type>."
     ]
   },
   "PYTHON_HASH_SEED_NOT_SET": {
@@ -1076,6 +1096,16 @@
   "UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION": {
     "message": [
       "Function `<func_name>` should use only POSITIONAL or POSITIONAL OR KEYWORD arguments."
+    ]
+  },
+  "UNSUPPORTED_PLOT_BACKEND": {
+    "message": [
+      "`<backend>` is not supported, it should be one of the values from <supported_backends>"
+    ]
+  },
+  "UNSUPPORTED_PLOT_BACKEND_PARAM": {
+    "message": [
+      "`<backend>` does not support `<param>` set to <value>, it should be one of the values from <supported_values>"
     ]
   },
   "UNSUPPORTED_SIGNATURE": {

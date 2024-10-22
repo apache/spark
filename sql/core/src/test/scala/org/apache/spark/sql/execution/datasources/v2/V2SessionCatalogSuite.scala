@@ -26,9 +26,9 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange, V1Table}
@@ -443,13 +443,13 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     assert(table.columns === columns)
 
-    val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent,
-        TableChange.addColumn(Array("missing_col", "new_field"), StringType))
-    }
-
-    assert(exc.getMessage.contains("missing_col"))
-    assert(exc.getMessage.contains("Cannot find"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        catalog.alterTable(testIdent,
+          TableChange.addColumn(Array("missing_col", "new_field"), StringType))
+      },
+      condition = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`missing_col`", "fields" -> "`id`, `data`"))
   }
 
   test("alterTable: update column data type") {
@@ -498,13 +498,13 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     assert(table.columns === columns)
 
-    val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent,
-        TableChange.updateColumnType(Array("missing_col"), LongType))
-    }
-
-    assert(exc.getMessage.contains("missing_col"))
-    assert(exc.getMessage.contains("Cannot find"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        catalog.alterTable(testIdent,
+          TableChange.updateColumnType(Array("missing_col"), LongType))
+      },
+      condition = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`missing_col`", "fields" -> "`id`, `data`"))
   }
 
   test("alterTable: add comment") {
@@ -554,13 +554,13 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     assert(table.columns === columns)
 
-    val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent,
-        TableChange.updateColumnComment(Array("missing_col"), "comment"))
-    }
-
-    assert(exc.getMessage.contains("missing_col"))
-    assert(exc.getMessage.contains("Cannot find"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        catalog.alterTable(testIdent,
+          TableChange.updateColumnComment(Array("missing_col"), "comment"))
+      },
+      condition = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`missing_col`", "fields" -> "`id`, `data`"))
   }
 
   test("alterTable: rename top-level column") {
@@ -628,13 +628,13 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     assert(table.columns === columns)
 
-    val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent,
-        TableChange.renameColumn(Array("missing_col"), "new_name"))
-    }
-
-    assert(exc.getMessage.contains("missing_col"))
-    assert(exc.getMessage.contains("Cannot find"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        catalog.alterTable(testIdent,
+          TableChange.renameColumn(Array("missing_col"), "new_name"))
+      },
+      condition = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`missing_col`", "fields" -> "`id`, `data`"))
   }
 
   test("alterTable: multiple changes") {
@@ -702,12 +702,12 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     assert(table.columns === columns)
 
-    val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent, TableChange.deleteColumn(Array("missing_col"), false))
-    }
-
-    assert(exc.getMessage.contains("missing_col"))
-    assert(exc.getMessage.contains("Cannot find"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        catalog.alterTable(testIdent, TableChange.deleteColumn(Array("missing_col"), false))
+      },
+      condition = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`missing_col`", "fields" -> "`id`, `data`"))
 
     // with if exists it should pass
     catalog.alterTable(testIdent, TableChange.deleteColumn(Array("missing_col"), true))
@@ -725,12 +725,12 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     assert(table.columns === tableColumns)
 
-    val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent, TableChange.deleteColumn(Array("point", "z"), false))
-    }
-
-    assert(exc.getMessage.contains("z"))
-    assert(exc.getMessage.contains("Cannot find"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        catalog.alterTable(testIdent, TableChange.deleteColumn(Array("point", "z"), false))
+      },
+      condition = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`z`", "fields" -> "`x`, `y`"))
 
     // with if exists it should pass
     catalog.alterTable(testIdent, TableChange.deleteColumn(Array("point", "z"), true))
@@ -1039,7 +1039,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
     assert(catalog.namespaceExists(testNs) === false)
 
-    val exc = intercept[NoSuchDatabaseException] {
+    val exc = intercept[NoSuchNamespaceException] {
       catalog.createTable(testIdent, columns, emptyTrans, emptyProps)
     }
 
@@ -1156,7 +1156,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
     assert(catalog.namespaceExists(testNs) === false)
 
-    val exc = intercept[NoSuchDatabaseException] {
+    val exc = intercept[NoSuchNamespaceException] {
       catalog.alterNamespace(testNs, NamespaceChange.setProperty("property", "value"))
     }
 
@@ -1173,7 +1173,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
         exception = intercept[SparkUnsupportedOperationException] {
           catalog.alterNamespace(testNs, NamespaceChange.removeProperty(p))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_2069",
+        condition = "CANNOT_REMOVE_RESERVED_PROPERTY",
         parameters = Map("property" -> p))
 
     }
@@ -1184,7 +1184,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     val testIdent: IdentifierHelper = Identifier.of(Array("a", "b"), "c")
     checkError(
       exception = intercept[AnalysisException](testIdent.asTableIdentifier),
-      errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+      condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
       parameters = Map("identifier" -> "`a`.`b`.`c`")
     )
   }
@@ -1193,7 +1193,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     val testIdent: MultipartIdentifierHelper = Seq("a", "b", "c")
     checkError(
       exception = intercept[AnalysisException](testIdent.asFunctionIdentifier),
-      errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+      condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
       parameters = Map("identifier" -> "`a`.`b`.`c`")
     )
   }

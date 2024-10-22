@@ -121,7 +121,7 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
       exception = intercept[SparkUnsupportedOperationException] {
         partTable.purgePartitions(partIdents)
       },
-      errorClass = "UNSUPPORTED_FEATURE.PURGE_PARTITION",
+      condition = "UNSUPPORTED_FEATURE.PURGE_PARTITION",
       parameters = Map.empty
     )
   }
@@ -170,7 +170,7 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
       partTable.truncatePartitions(Array(InternalRow("5"), InternalRow("6")))
     }
     checkError(e,
-      errorClass = "PARTITIONS_NOT_FOUND",
+      condition = "PARTITIONS_NOT_FOUND",
       parameters = Map("partitionList" -> "PARTITION (`dt` = 6)",
       "tableName" -> "`test`.`ns`.`test_table`"))
     assert(partTable.rows === InternalRow(2, "zyx", "5") :: Nil)

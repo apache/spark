@@ -63,8 +63,12 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
             _))
         if filters.nonEmpty && fsRelation.partitionSchema.nonEmpty =>
       val normalizedFilters = DataSourceStrategy.normalizeExprs(
-        filters.filter(f => !SubqueryExpression.hasSubquery(f) &&
-          DataSourceUtils.shouldPushFilter(f, fsRelation.fileFormat.supportsCollationPushDown)),
+        filters.filter { f =>
+          f.deterministic &&
+            !SubqueryExpression.hasSubquery(f) &&
+            // Python UDFs might exist because this rule is applied before ``ExtractPythonUDFs``.
+            !f.exists(_.isInstanceOf[PythonUDF])
+        },
         logicalRelation.output)
       val (partitionKeyFilters, _) = DataSourceUtils
         .getPartitionFiltersAndDataFilters(partitionSchema, normalizedFilters)

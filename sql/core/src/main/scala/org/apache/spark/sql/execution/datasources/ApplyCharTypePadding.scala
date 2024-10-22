@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{CharType, Metadata, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -66,9 +67,10 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
             r.copy(dataCols = cleanedDataCols, partitionCols = cleanedPartCols)
           })
       }
-      paddingForStringComparison(newPlan)
+      paddingForStringComparison(newPlan, padCharCol = false)
     } else {
-      paddingForStringComparison(plan)
+      paddingForStringComparison(
+        plan, padCharCol = !conf.getConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_PREDICATE))
     }
   }
 
@@ -90,7 +92,7 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
     }
   }
 
-  private def paddingForStringComparison(plan: LogicalPlan): LogicalPlan = {
+  private def paddingForStringComparison(plan: LogicalPlan, padCharCol: Boolean): LogicalPlan = {
     plan.resolveOperatorsUpWithPruning(_.containsAnyPattern(BINARY_COMPARISON, IN)) {
       case operator => operator.transformExpressionsUpWithPruning(
         _.containsAnyPattern(BINARY_COMPARISON, IN)) {
@@ -99,12 +101,12 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
         // String literal is treated as char type when it's compared to a char type column.
         // We should pad the shorter one to the longer length.
         case b @ BinaryComparison(e @ AttrOrOuterRef(attr), lit) if lit.foldable =>
-          padAttrLitCmp(e, attr.metadata, lit).map { newChildren =>
+          padAttrLitCmp(e, attr.metadata, padCharCol, lit).map { newChildren =>
             b.withNewChildren(newChildren)
           }.getOrElse(b)
 
         case b @ BinaryComparison(lit, e @ AttrOrOuterRef(attr)) if lit.foldable =>
-          padAttrLitCmp(e, attr.metadata, lit).map { newChildren =>
+          padAttrLitCmp(e, attr.metadata, padCharCol, lit).map { newChildren =>
             b.withNewChildren(newChildren.reverse)
           }.getOrElse(b)
 
@@ -117,9 +119,10 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
               val literalCharLengths = literalChars.map(_.numChars())
               val targetLen = (length +: literalCharLengths).max
               Some(i.copy(
-                value = addPadding(e, length, targetLen),
+                value = addPadding(e, length, targetLen, alwaysPad = padCharCol),
                 list = list.zip(literalCharLengths).map {
-                  case (lit, charLength) => addPadding(lit, charLength, targetLen)
+                  case (lit, charLength) =>
+                    addPadding(lit, charLength, targetLen, alwaysPad = false)
                 } ++ nulls.map(Literal.create(_, StringType))))
             case _ => None
           }.getOrElse(i)
@@ -134,7 +137,8 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
             case (_, _: OuterReference) => Seq(right)
             case _ => Nil
           }
-          val newChildren = CharVarcharUtils.addPaddingInStringComparison(Seq(left, right))
+          val newChildren = CharVarcharUtils.addPaddingInStringComparison(
+            Seq(left, right), padCharCol)
           if (outerRefs.nonEmpty) {
             b.withNewChildren(newChildren.map(_.transform {
               case a: Attribute if outerRefs.exists(_.semanticEquals(a)) => OuterReference(a)
@@ -145,7 +149,7 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
 
         case i @ In(e @ AttrOrOuterRef(attr), list) if list.forall(_.isInstanceOf[Attribute]) =>
           val newChildren = CharVarcharUtils.addPaddingInStringComparison(
-            attr +: list.map(_.asInstanceOf[Attribute]))
+            attr +: list.map(_.asInstanceOf[Attribute]), padCharCol)
           if (e.isInstanceOf[OuterReference]) {
             i.copy(
               value = newChildren.head.transform {
@@ -162,6 +166,7 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
   private def padAttrLitCmp(
       expr: Expression,
       metadata: Metadata,
+      padCharCol: Boolean,
       lit: Expression): Option[Seq[Expression]] = {
     if (expr.dataType == StringType) {
       CharVarcharUtils.getRawType(metadata).flatMap {
@@ -174,7 +179,14 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
             if (length < stringLitLen) {
               Some(Seq(StringRPad(expr, Literal(stringLitLen)), lit))
             } else if (length > stringLitLen) {
-              Some(Seq(expr, StringRPad(lit, Literal(length))))
+              val paddedExpr = if (padCharCol) {
+                StringRPad(expr, Literal(length))
+              } else {
+                expr
+              }
+              Some(Seq(paddedExpr, StringRPad(lit, Literal(length))))
+            } else if (padCharCol)  {
+              Some(Seq(StringRPad(expr, Literal(length)), lit))
             } else {
               None
             }
@@ -186,7 +198,15 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
     }
   }
 
-  private def addPadding(expr: Expression, charLength: Int, targetLength: Int): Expression = {
-    if (targetLength > charLength) StringRPad(expr, Literal(targetLength)) else expr
+  private def addPadding(
+      expr: Expression,
+      charLength: Int,
+      targetLength: Int,
+      alwaysPad: Boolean): Expression = {
+    if (targetLength > charLength) {
+      StringRPad(expr, Literal(targetLength))
+    } else if (alwaysPad) {
+      StringRPad(expr, Literal(charLength))
+    } else expr
   }
 }

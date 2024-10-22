@@ -1,12 +1,12 @@
-OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
 AMD EPYC 7763 64-Core Processor
 metrics aggregation (50 metrics, 100000 tasks per stage):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ----------------------------------------------------------------------------------------------------------------------------------------
-1 stage(s)                                                          757            787          33          0.0   756863015.0       1.0X
-2 stage(s)                                                         1448           1611         230          0.0  1447967154.0       0.5X
-3 stage(s)                                                         2313           2394         115          0.0  2312633108.0       0.3X
+1 stage(s)                                                          565            623          52          0.0   564588687.0       1.0X
+2 stage(s)                                                         1318           1347          41          0.0  1318133868.0       0.4X
+3 stage(s)                                                         2044           2136         130          0.0  2043877303.0       0.3X
 
 Stage Count    Stage Proc. Time    Aggreg. Time
-     1              375                73
-     2              348                230
-     3              393                279
+     1              339                58
+     2              333                213
+     3              376                256

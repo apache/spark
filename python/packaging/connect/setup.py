@@ -77,6 +77,7 @@ if "SPARK_TESTING" in os.environ:
         "pyspark.sql.tests.connect.client",
         "pyspark.sql.tests.connect.shell",
         "pyspark.sql.tests.pandas",
+        "pyspark.sql.tests.plot",
         "pyspark.sql.tests.streaming",
         "pyspark.ml.tests.connect",
         "pyspark.pandas.tests",
@@ -105,6 +106,8 @@ if "SPARK_TESTING" in os.environ:
         "pyspark.pandas.tests.connect.reshape",
         "pyspark.pandas.tests.connect.series",
         "pyspark.pandas.tests.connect.window",
+        "pyspark.logger.tests",
+        "pyspark.logger.tests.connect",
     ]
 
 try:
@@ -159,6 +162,7 @@ try:
         "pyspark.sql.connect.streaming.worker",
         "pyspark.sql.functions",
         "pyspark.sql.pandas",
+        "pyspark.sql.plot",
         "pyspark.sql.protobuf",
         "pyspark.sql.streaming",
         "pyspark.sql.worker",
@@ -175,6 +179,7 @@ try:
         "pyspark.resource",
         "pyspark.errors",
         "pyspark.errors.exceptions",
+        "pyspark.logger",
     ]
 
     setup(

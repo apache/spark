@@ -785,6 +785,16 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
   }
 
   test("SPARK-26680: Stream in groupBy does not cause StackOverflowError") {
+    @scala.annotation.nowarn("cat=deprecation")
+    val groupByCols = Stream(col("key"))
+    val df = Seq((1, 2), (2, 3), (1, 3)).toDF("key", "value")
+      .groupBy(groupByCols: _*)
+      .max("value")
+
+    checkAnswer(df, Seq(Row(1, 3), Row(2, 3)))
+  }
+
+  test("SPARK-45685: LazyList in groupBy does not cause StackOverflowError") {
     val groupByCols = LazyList(col("key"))
     val df = Seq((1, 2), (2, 3), (1, 3)).toDF("key", "value")
       .groupBy(groupByCols: _*)
@@ -868,7 +878,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
             exception = intercept[SparkException] {
               sql(query).collect()
             },
-            errorClass = "INTERNAL_ERROR",
+            condition = "INTERNAL_ERROR",
             parameters = Map("message" -> expectedErrMsg),
             matchPVals = true)
         }
@@ -893,7 +903,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
             exception = intercept[SparkException] {
               sql(query).collect()
             },
-            errorClass = "INTERNAL_ERROR",
+            condition = "INTERNAL_ERROR",
             parameters = Map("message" -> expectedErrMsg),
             matchPVals = true)
         }

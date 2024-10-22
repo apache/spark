@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -415,7 +415,7 @@ abstract class HashExpression[E] extends Expression {
 
   protected def genHashString(
       ctx: CodegenContext, stringType: StringType, input: String, result: String): String = {
-    if (stringType.supportsBinaryEquality) {
+    if (stringType.supportsBinaryEquality && !stringType.usesTrimCollation) {
       val baseObject = s"$input.getBaseObject()"
       val baseOffset = s"$input.getBaseOffset()"
       val numBytes = s"$input.numBytes()"
@@ -565,7 +565,15 @@ abstract class InterpretedHashFunction {
       case a: Array[Byte] =>
         hashUnsafeBytes(a, Platform.BYTE_ARRAY_OFFSET, a.length, seed)
       case s: UTF8String =>
-        hashUnsafeBytes(s.getBaseObject, s.getBaseOffset, s.numBytes(), seed)
+        val st = dataType.asInstanceOf[StringType]
+        if (st.supportsBinaryEquality && !st.usesTrimCollation) {
+          hashUnsafeBytes(s.getBaseObject, s.getBaseOffset, s.numBytes(), seed)
+        } else {
+          val stringHash = CollationFactory
+            .fetchCollation(st.collationId)
+            .hashFunction.applyAsLong(s)
+          hashLong(stringHash, seed)
+        }
 
       case array: ArrayData =>
         val elementType = dataType match {
@@ -809,7 +817,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
 
   override protected def genHashString(
       ctx: CodegenContext, stringType: StringType, input: String, result: String): String = {
-    if (stringType.supportsBinaryEquality) {
+    if (stringType.supportsBinaryEquality && !stringType.usesTrimCollation) {
       val baseObject = s"$input.getBaseObject()"
       val baseOffset = s"$input.getBaseOffset()"
       val numBytes = s"$input.numBytes()"

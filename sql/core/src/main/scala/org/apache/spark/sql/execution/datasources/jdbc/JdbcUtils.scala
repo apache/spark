@@ -585,14 +585,26 @@ object JdbcUtils extends Logging with SQLConfHelper {
             arr => new GenericArrayData(elementConversion(et0)(arr))
           }
 
+        case IntegerType => arrayConverter[Int]((i: Int) => i)
+        case FloatType => arrayConverter[Float]((f: Float) => f)
+        case DoubleType => arrayConverter[Double]((d: Double) => d)
+        case ShortType => arrayConverter[Short]((s: Short) => s)
+        case BooleanType => arrayConverter[Boolean]((b: Boolean) => b)
+        case LongType => arrayConverter[Long]((l: Long) => l)
+
         case _ => (array: Object) => array.asInstanceOf[Array[Any]]
       }
 
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        val array = nullSafeConvert[java.sql.Array](
-          input = rs.getArray(pos + 1),
-          array => new GenericArrayData(elementConversion(et)(array.getArray)))
-        row.update(pos, array)
+        try {
+          val array = nullSafeConvert[java.sql.Array](
+            input = rs.getArray(pos + 1),
+            array => new GenericArrayData(elementConversion(et)(array.getArray())))
+          row.update(pos, array)
+        } catch {
+          case e: java.lang.ClassCastException =>
+            throw QueryExecutionErrors.wrongDatatypeInSomeRows(pos, dt)
+        }
 
     case NullType =>
       (_: ResultSet, row: InternalRow, pos: Int) => row.update(pos, null)
@@ -1262,13 +1274,14 @@ object JdbcUtils extends Logging with SQLConfHelper {
       errorClass: String,
       messageParameters: Map[String, String],
       dialect: JdbcDialect,
-      description: String)(f: => T): T = {
+      description: String,
+      isRuntime: Boolean)(f: => T): T = {
     try {
       f
     } catch {
       case e: SparkThrowable with Throwable => throw e
       case e: Throwable =>
-        throw dialect.classifyException(e, errorClass, messageParameters, description)
+        throw dialect.classifyException(e, errorClass, messageParameters, description, isRuntime)
     }
   }
 

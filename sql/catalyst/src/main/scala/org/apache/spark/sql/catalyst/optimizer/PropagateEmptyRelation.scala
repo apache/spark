@@ -58,7 +58,7 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
     case _ => false
   }
 
-  protected def empty(plan: LogicalPlan): LocalRelation =
+  protected def empty(plan: LogicalPlan): LogicalPlan =
     LocalRelation(plan.output, data = Seq.empty, isStreaming = plan.isStreaming)
 
   // Construct a project list from plan's output, while the value is always NULL.
@@ -111,7 +111,8 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
           // Except is handled as LeftAnti by `ReplaceExceptWithAntiJoin` rule.
           case LeftOuter | LeftSemi | LeftAnti if isLeftEmpty => empty(p)
           case LeftSemi if isRightEmpty | isFalseCondition => empty(p)
-          case LeftAnti if isRightEmpty | isFalseCondition => p.left
+          case LeftAnti if (isRightEmpty | isFalseCondition) && canExecuteWithoutJoin(p.left) =>
+            p.left
           case FullOuter if isLeftEmpty && isRightEmpty => empty(p)
           case LeftOuter | FullOuter if isRightEmpty && canExecuteWithoutJoin(p.left) =>
             Project(p.left.output ++ nullValueProjectList(p.right), p.left)
@@ -133,8 +134,10 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
         p
       }
 
-    // the only case can be matched here is that LogicalQueryStage is empty
-    case p: LeafNode if !p.isInstanceOf[LocalRelation] && isEmpty(p) => empty(p)
+    // Only replace a query stage if it would lead to a reduction of operators. !p.isDirectStage
+    // means the physical node it contains is partial aggregate instead of QueryStageExec, which
+    // is exactly what we want to propagate empty relation.
+    case p: LogicalQueryStage if isEmpty(p) && !p.isDirectStage => empty(p)
 
     case p: UnaryNode if p.children.nonEmpty && p.children.forall(isEmpty) => p match {
       case _: Project => empty(p)

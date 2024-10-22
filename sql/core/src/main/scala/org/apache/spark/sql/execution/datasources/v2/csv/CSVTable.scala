@@ -26,7 +26,7 @@ import org.apache.spark.sql.connector.write.{LogicalWriteInfo, Write, WriteBuild
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.csv.CSVDataSource
 import org.apache.spark.sql.execution.datasources.v2.FileTable
-import org.apache.spark.sql.types.{AtomicType, BinaryType, DataType, StructType, UserDefinedType}
+import org.apache.spark.sql.types.{AtomicType, DataType, StructType, UserDefinedType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class CSVTable(
@@ -38,7 +38,7 @@ case class CSVTable(
     fallbackFileFormat: Class[_ <: FileFormat])
   extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
   override def newScanBuilder(options: CaseInsensitiveStringMap): CSVScanBuilder =
-    CSVScanBuilder(sparkSession, fileIndex, schema, dataSchema, options)
+    CSVScanBuilder(sparkSession, fileIndex, schema, dataSchema, mergedOptions(options))
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] = {
     val parsedOptions = new CSVOptions(
@@ -55,8 +55,6 @@ case class CSVTable(
     }
 
   override def supportsDataType(dataType: DataType): Boolean = dataType match {
-    case _: BinaryType => false
-
     case _: AtomicType => true
 
     case udt: UserDefinedType[_] => supportsDataType(udt.sqlType)

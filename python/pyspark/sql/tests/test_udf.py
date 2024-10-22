@@ -35,10 +35,13 @@ from pyspark.sql.types import (
     DoubleType,
     LongType,
     ArrayType,
+    MapType,
     StructType,
     StructField,
     TimestampNTZType,
     DayTimeIntervalType,
+    VariantType,
+    VariantVal,
 )
 from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
 from pyspark.testing.sqlutils import (
@@ -125,8 +128,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_SPECIFY_RETURN_TYPE_FOR_UDF",
-            message_parameters={"arg_name": "f", "return_type": "StringType()"},
+            errorClass="CANNOT_SPECIFY_RETURN_TYPE_FOR_UDF",
+            messageParameters={"arg_name": "f", "return_type": "StringType()"},
         )
 
     def test_nondeterministic_udf(self):
@@ -234,11 +237,12 @@ class BaseUDFTestsMixin(object):
         f = udf(lambda a, b: a == b, BooleanType())
         # The udf uses attributes from both sides of join, so it is pulled out as Filter +
         # Cross join.
-        df = left.join(right, f("a", "b"))
         with self.sql_conf({"spark.sql.crossJoin.enabled": False}):
+            df = left.join(right, f("a", "b"))
             with self.assertRaisesRegex(AnalysisException, "Detected implicit cartesian product"):
                 df.collect()
         with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
+            df = left.join(right, f("a", "b"))
             self.assertEqual(df.collect(), [Row(a=1, b=1)])
 
     def test_udf_in_left_outer_join_condition(self):
@@ -324,11 +328,74 @@ class BaseUDFTestsMixin(object):
 
     def test_udf_with_filter_function(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
-        from pyspark.sql.functions import col
 
         my_filter = udf(lambda a: a < 2, BooleanType())
         sel = df.select(col("key"), col("value")).filter((my_filter(col("key"))) & (df.value < "2"))
         self.assertEqual(sel.collect(), [Row(key=1, value="1")])
+
+    def test_udf_with_variant_input(self):
+        df = self.spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v")
+
+        u = udf(lambda u: str(u), StringType())
+        with self.assertRaises(AnalysisException) as ae:
+            df.select(u(col("v"))).collect()
+
+        self.check_error(
+            exception=ae.exception,
+            errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+            messageParameters={"sqlExpr": '"<lambda>(v)"', "dataType": "VARIANT"},
+        )
+
+    def test_udf_with_complex_variant_input(self):
+        df = self.spark.range(0, 10).selectExpr(
+            "named_struct('v', parse_json(cast(id as string))) struct_of_v"
+        )
+
+        u = udf(lambda u: str(u), StringType())
+
+        with self.assertRaises(AnalysisException) as ae:
+            df.select(u(col("struct_of_v"))).collect()
+
+        self.check_error(
+            exception=ae.exception,
+            errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+            messageParameters={
+                "sqlExpr": '"<lambda>(struct_of_v)"',
+                "dataType": "STRUCT<v: VARIANT NOT NULL>",
+            },
+        )
+
+    def test_udf_with_variant_output(self):
+        # The variant value returned corresponds to a JSON string of {"a": "b"}.
+        u = udf(
+            lambda: VariantVal(bytes([2, 1, 0, 0, 2, 5, 98]), bytes([1, 1, 0, 1, 97])),
+            VariantType(),
+        )
+
+        with self.assertRaises(AnalysisException) as ae:
+            self.spark.range(0, 10).select(u()).collect()
+
+        self.check_error(
+            exception=ae.exception,
+            errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+            messageParameters={"sqlExpr": '"<lambda>()"', "dataType": "VARIANT"},
+        )
+
+    def test_udf_with_complex_variant_output(self):
+        # The variant value returned corresponds to a JSON string of {"a": "b"}.
+        u = udf(
+            lambda: {"v", VariantVal(bytes([2, 1, 0, 0, 2, 5, 98]), bytes([1, 1, 0, 1, 97]))},
+            MapType(StringType(), VariantType()),
+        )
+
+        with self.assertRaises(AnalysisException) as ae:
+            self.spark.range(0, 10).select(u()).collect()
+
+        self.check_error(
+            exception=ae.exception,
+            errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+            messageParameters={"sqlExpr": '"<lambda>()"', "dataType": "MAP<STRING, VARIANT>"},
+        )
 
     def test_udf_with_aggregate_function(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
@@ -450,8 +517,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_CALLABLE",
-            message_parameters={"arg_name": "func", "arg_type": "str"},
+            errorClass="NOT_CALLABLE",
+            messageParameters={"arg_name": "func", "arg_type": "str"},
         )
 
     def test_non_existed_udf(self):
@@ -904,7 +971,9 @@ class BaseUDFTestsMixin(object):
         df = self.spark.range(1).selectExpr("array(array(1, 2), array(3, 4)) as nested_array")
         # Input
         row = df.select(udf(lambda x: str(x))("nested_array")).first()
-        self.assertEqual(row[0], "[[1, 2], [3, 4]]")
+        self.assertIn(
+            row[0], ["[[1, 2], [3, 4]]", "[[np.int32(1), np.int32(2)], [np.int32(3), np.int32(4)]]"]
+        )
         # Output
 
         @udf(returnType=df.dtypes[0][1])
@@ -1073,8 +1142,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_CALLABLE",
-            message_parameters={"arg_name": "func", "arg_type": "str"},
+            errorClass="NOT_CALLABLE",
+            messageParameters={"arg_name": "func", "arg_type": "str"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1082,8 +1151,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_DATATYPE_OR_STR",
-            message_parameters={"arg_name": "returnType", "arg_type": "int"},
+            errorClass="NOT_DATATYPE_OR_STR",
+            messageParameters={"arg_name": "returnType", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1091,8 +1160,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_INT",
-            message_parameters={"arg_name": "evalType", "arg_type": "str"},
+            errorClass="NOT_INT",
+            messageParameters={"arg_name": "evalType", "arg_type": "str"},
         )
 
 

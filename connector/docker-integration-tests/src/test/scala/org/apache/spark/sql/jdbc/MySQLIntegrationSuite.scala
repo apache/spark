@@ -31,9 +31,9 @@ import org.apache.spark.sql.types.ShortType
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., mysql:8.3.0):
+ * To run this test suite for a specific version (e.g., mysql:9.0.1):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:8.3.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.0.1
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.MySQLIntegrationSuite"
  * }}}
@@ -351,13 +351,22 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     val df = spark.read.jdbc(jdbcUrl, "smallint_round_trip", new Properties)
     assert(df.schema.fields.head.dataType === ShortType)
   }
+
+  test("SPARK-44638: Char/Varchar in Custom Schema") {
+    val df = spark.read.option("url", jdbcUrl)
+      .option("query", "SELECT c, d from strings")
+      .option("customSchema", "c CHAR(10), d VARCHAR(10)")
+      .format("jdbc")
+      .load()
+    checkAnswer(df, Row("brown     ", "fox"))
+  }
 }
 
 
 /**
- * To run this test suite for a specific version (e.g., mysql:8.3.0):
+ * To run this test suite for a specific version (e.g., mysql:9.0.1):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:8.3.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.0.1
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly *MySQLOverMariaConnectorIntegrationSuite"
  * }}}

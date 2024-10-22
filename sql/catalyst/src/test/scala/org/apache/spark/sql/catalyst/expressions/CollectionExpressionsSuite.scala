@@ -95,7 +95,7 @@ class CollectionExpressionsSuite
     }
     checkError(
       exception = exception,
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map(
         "message" -> ("The size function doesn't support the operand type " +
           toSQLType(StringType))
@@ -133,6 +133,85 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayContains(MapKeys(m0), Literal("c")), false)
     checkEvaluation(ArrayContains(MapKeys(m0), Literal(null, StringType)), null)
     checkEvaluation(ArrayContains(MapKeys(m1), Literal("a")), null)
+  }
+
+  test("ArrayBinarySearch") {
+    // primitive type: boolean、byte、short、int、long、float、double
+    val a0_0 = Literal.create(Seq(false, true),
+      ArrayType(BooleanType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a0_0, Literal(true)), 1)
+    val a0_1 = Literal.create(Seq(null, false, true), ArrayType(BooleanType))
+    checkEvaluation(ArrayBinarySearch(a0_1, Literal(false)), 1)
+    val a0_2 = Literal.create(Seq(null, false, true), ArrayType(BooleanType))
+    checkEvaluation(ArrayBinarySearch(a0_2, Literal(null, BooleanType)), null)
+
+    val a1_0 = Literal.create(Seq(1.toByte, 2.toByte, 3.toByte),
+      ArrayType(ByteType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a1_0, Literal(3.toByte)), 2)
+    val a1_1 = Literal.create(Seq(null, 1.toByte, 2.toByte, 3.toByte), ArrayType(ByteType))
+    checkEvaluation(ArrayBinarySearch(a1_1, Literal(1.toByte)), 1)
+    val a1_2 = Literal.create(Seq(null, 1.toByte, 2.toByte, 3.toByte), ArrayType(ByteType))
+    checkEvaluation(ArrayBinarySearch(a1_2, Literal(null, ByteType)), null)
+    val a1_3 = Literal.create(Seq(1.toByte, 3.toByte, 4.toByte),
+      ArrayType(ByteType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a1_3, Literal(2.toByte, ByteType)), -2)
+
+    val a2_0 = Literal.create(Seq(1.toShort, 2.toShort, 3.toShort),
+      ArrayType(ShortType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a2_0, Literal(1.toShort)), 0)
+    val a2_1 = Literal.create(Seq(null, 1.toShort, 2.toShort, 3.toShort), ArrayType(ShortType))
+    checkEvaluation(ArrayBinarySearch(a2_1, Literal(2.toShort)), 2)
+    val a2_2 = Literal.create(Seq(null, 1.toShort, 2.toShort, 3.toShort), ArrayType(ShortType))
+    checkEvaluation(ArrayBinarySearch(a2_2, Literal(null, ShortType)), null)
+    val a2_3 = Literal.create(Seq(1.toShort, 3.toShort, 4.toShort),
+      ArrayType(ShortType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a2_3, Literal(2.toShort, ShortType)), -2)
+
+    val a3_0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a3_0, Literal(2)), 1)
+    val a3_1 = Literal.create(Seq(null, 1, 2, 3), ArrayType(IntegerType))
+    checkEvaluation(ArrayBinarySearch(a3_1, Literal(2)), 2)
+    val a3_2 = Literal.create(Seq(null, 1, 2, 3), ArrayType(IntegerType))
+    checkEvaluation(ArrayBinarySearch(a3_2, Literal(null, IntegerType)), null)
+    val a3_3 = Literal.create(Seq(1, 3, 4), ArrayType(IntegerType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a3_3, Literal(2, IntegerType)), -2)
+
+    val a4_0 = Literal.create(Seq(1L, 2L, 3L), ArrayType(LongType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a4_0, Literal(2L)), 1)
+    val a4_1 = Literal.create(Seq(null, 1L, 2L, 3L), ArrayType(LongType))
+    checkEvaluation(ArrayBinarySearch(a4_1, Literal(2L)), 2)
+    val a4_2 = Literal.create(Seq(null, 1L, 2L, 3L), ArrayType(LongType))
+    checkEvaluation(ArrayBinarySearch(a4_2, Literal(null, LongType)), null)
+    val a4_3 = Literal.create(Seq(1L, 3L, 4L), ArrayType(LongType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a4_3, Literal(2L, LongType)), -2)
+
+    val a5_0 = Literal.create(Seq(1.0F, 2.0F, 3.0F), ArrayType(FloatType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a5_0, Literal(3.0F)), 2)
+    val a5_1 = Literal.create(Seq(null, 1.0F, 2.0F, 3.0F), ArrayType(FloatType))
+    checkEvaluation(ArrayBinarySearch(a5_1, Literal(1.0F)), 1)
+    val a5_2 = Literal.create(Seq(null, 1.0F, 2.0F, 3.0F), ArrayType(FloatType))
+    checkEvaluation(ArrayBinarySearch(a5_2, Literal(null, FloatType)), null)
+    val a5_3 = Literal.create(Seq(1.0F, 2.0F, 3.0F), ArrayType(FloatType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a5_3, Literal(1.1F, FloatType)), -2)
+
+    val a6_0 = Literal.create(Seq(1.0d, 2.0d, 3.0d), ArrayType(DoubleType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a6_0, Literal(1.0d)), 0)
+    val a6_1 = Literal.create(Seq(null, 1.0d, 2.0d, 3.0d), ArrayType(DoubleType))
+    checkEvaluation(ArrayBinarySearch(a6_1, Literal(1.0d)), 1)
+    val a6_2 = Literal.create(Seq(null, 1.0d, 2.0d, 3.0d), ArrayType(DoubleType))
+    checkEvaluation(ArrayBinarySearch(a6_2, Literal(null, DoubleType)), null)
+    val a6_3 = Literal.create(Seq(1.0d, 2.0d, 3.0d), ArrayType(DoubleType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a6_3, Literal(1.1d, DoubleType)), -2)
+
+    // string
+    val a7_0 = Literal.create(Seq("a", "b", "c"), ArrayType(StringType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a7_0, Literal("a")), 0)
+    val a7_1 = Literal.create(Seq(null, "a", "b", "c"), ArrayType(StringType))
+    checkEvaluation(ArrayBinarySearch(a7_1, Literal("c")), 3)
+    val a7_2 = Literal.create(Seq(null, "a", "b", "c"), ArrayType(StringType))
+    checkEvaluation(ArrayBinarySearch(a7_2, Literal(null, StringType)), null)
+    val a7_3 = Literal.create(Seq("a", "c", "d"), ArrayType(StringType, containsNull = false))
+    checkEvaluation(ArrayBinarySearch(a7_3, Literal(UTF8String.fromString("b"), StringType)), -2)
   }
 
   test("MapEntries") {
@@ -187,7 +266,7 @@ class CollectionExpressionsSuite
 
     checkErrorInExpression[SparkRuntimeException](
       MapConcat(Seq(m0, m1)),
-      errorClass = "DUPLICATED_MAP_KEY",
+      condition = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "a",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
@@ -347,7 +426,7 @@ class CollectionExpressionsSuite
 
     checkErrorInExpression[SparkRuntimeException](
       MapFromEntries(ai4),
-      errorClass = "DUPLICATED_MAP_KEY",
+      condition = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "1",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
@@ -379,7 +458,7 @@ class CollectionExpressionsSuite
 
     checkErrorInExpression[SparkRuntimeException](
       MapFromEntries(as4),
-      errorClass = "DUPLICATED_MAP_KEY",
+      condition = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "a",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
@@ -641,7 +720,7 @@ class CollectionExpressionsSuite
     checkEvaluation(Slice(a0, Literal(-1), Literal(2)), Seq(6))
     checkErrorInExpression[SparkRuntimeException](
       expression = Slice(a0, Literal(1), Literal(-1)),
-      errorClass = "INVALID_PARAMETER_VALUE.LENGTH",
+      condition = "INVALID_PARAMETER_VALUE.LENGTH",
       parameters = Map(
         "parameter" -> toSQLId("length"),
         "length" -> (-1).toString,
@@ -649,7 +728,7 @@ class CollectionExpressionsSuite
       ))
     checkErrorInExpression[SparkRuntimeException](
       expression = Slice(a0, Literal(0), Literal(1)),
-      errorClass = "INVALID_PARAMETER_VALUE.START",
+      condition = "INVALID_PARAMETER_VALUE.START",
       parameters = Map(
         "parameter" -> toSQLId("start"),
         "functionName" -> toSQLId("slice")
@@ -831,7 +910,7 @@ class CollectionExpressionsSuite
     // SPARK-43393: test Sequence overflow checking
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(Int.MinValue), Literal(Int.MaxValue), Literal(1)),
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
       parameters = Map(
         "numberOfElements" -> (BigInt(Int.MaxValue) - BigInt { Int.MinValue } + 1).toString,
         "functionName" -> toSQLId("sequence"),
@@ -839,7 +918,7 @@ class CollectionExpressionsSuite
         "parameter" -> toSQLId("count")))
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(0L), Literal(Long.MaxValue), Literal(1L)),
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
       parameters = Map(
         "numberOfElements" -> (BigInt(Long.MaxValue) + 1).toString,
         "functionName" -> toSQLId("sequence"),
@@ -847,7 +926,7 @@ class CollectionExpressionsSuite
         "parameter" -> toSQLId("count")))
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(0L), Literal(Long.MinValue), Literal(-1L)),
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
       parameters = Map(
         "numberOfElements" -> ((0 - BigInt(Long.MinValue)) + 1).toString(),
         "functionName" -> toSQLId("sequence"),
@@ -855,7 +934,7 @@ class CollectionExpressionsSuite
         "parameter" -> toSQLId("count")))
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(Long.MinValue), Literal(Long.MaxValue), Literal(1L)),
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
       parameters = Map(
         "numberOfElements" -> (BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1).toString,
         "functionName" -> toSQLId("sequence"),
@@ -863,7 +942,7 @@ class CollectionExpressionsSuite
         "parameter" -> toSQLId("count")))
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(Long.MaxValue), Literal(Long.MinValue), Literal(-1L)),
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
       parameters = Map(
         "numberOfElements" -> (BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1).toString,
         "functionName" -> toSQLId("sequence"),
@@ -871,7 +950,7 @@ class CollectionExpressionsSuite
         "parameter" -> toSQLId("count")))
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(Long.MaxValue), Literal(-1L), Literal(-1L)),
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
       parameters = Map(
         "numberOfElements" -> (BigInt(Long.MaxValue) - BigInt { -1L } + 1).toString,
         "functionName" -> toSQLId("sequence"),
@@ -2214,6 +2293,14 @@ class CollectionExpressionsSuite
       evaluateWithMutableProjection(Shuffle(ai0, seed2)))
     assert(evaluateWithUnsafeProjection(Shuffle(ai0, seed1)) !==
       evaluateWithUnsafeProjection(Shuffle(ai0, seed2)))
+
+    val seed3 = Literal.create(r.nextInt())
+    assert(evaluateWithoutCodegen(new Shuffle(ai0, seed3)) ===
+      evaluateWithoutCodegen(new Shuffle(ai0, seed3)))
+    assert(evaluateWithMutableProjection(new Shuffle(ai0, seed3)) ===
+      evaluateWithMutableProjection(new Shuffle(ai0, seed3)))
+    assert(evaluateWithUnsafeProjection(new Shuffle(ai0, seed3)) ===
+      evaluateWithUnsafeProjection(new Shuffle(ai0, seed3)))
   }
 
   test("Array Except") {

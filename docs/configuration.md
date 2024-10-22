@@ -103,8 +103,9 @@ such as `--master`, as shown above. `spark-submit` can accept any Spark property
 flag, but uses special flags for properties that play a part in launching the Spark application.
 Running `./bin/spark-submit --help` will show the entire list of these options.
 
-`bin/spark-submit` will also read configuration options from `conf/spark-defaults.conf`, in which
-each line consists of a key and a value separated by whitespace. For example:
+When configurations are specified via the `--conf/-c` flags, `bin/spark-submit` will also read
+configuration options from `conf/spark-defaults.conf`, in which each line consists of a key and
+a value separated by whitespace. For example:
 
     spark.master            spark://5.6.7.8:7077
     spark.executor.memory   4g
@@ -112,7 +113,8 @@ each line consists of a key and a value separated by whitespace. For example:
     spark.serializer        org.apache.spark.serializer.KryoSerializer
 
 In addition, a property file with Spark configurations can be passed to `bin/spark-submit` via
-the `--properties-file` parameter.
+`--properties-file` parameter. When this is set, Spark will no longer load configurations from
+`conf/spark-defaults.conf` unless another parameter `--load-spark-defaults` is provided.
 
 Any values specified as flags or in the properties file will be passed on to the application
 and merged with those specified through SparkConf. Properties set directly on the SparkConf
@@ -792,7 +794,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.redaction.regex</code></td>
-  <td>(?i)secret|password|token|access[.]key</td>
+  <td>(?i)secret|password|token|access[.]?key</td>
   <td>
     Regex to decide which Spark configuration properties and environment variables in driver and
     executor environments contain sensitive information. When this regex matches a property key or
@@ -1028,13 +1030,31 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.4.0</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.file.merge.buffer</code></td>
+  <td>32k</td>
+  <td>
+    Size of the in-memory buffer for each shuffle file input stream, in KiB unless otherwise
+    specified. These buffers use off-heap buffers and are related to the number of files in
+    the shuffle file. Too large buffers should be avoided.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.unsafe.file.output.buffer</code></td>
   <td>32k</td>
   <td>
-    The file system for this buffer size after each partition is written in unsafe shuffle writer.
-    In KiB unless otherwise specified.
+    Deprecated since Spark 4.0, please use <code>spark.shuffle.localDisk.file.output.buffer</code>.
   </td>
   <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.localDisk.file.output.buffer</code></td>
+  <td>32k</td>
+  <td>
+    The file system for this buffer size after each partition is written in all local disk shuffle writers.
+    In KiB unless otherwise specified.
+  </td>
+  <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.spill.diskWriteBufferSize</code></td>
@@ -1213,6 +1233,19 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.2.1</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.accurateBlockSkewedFactor</code></td>
+  <td>-1.0</td>
+  <td>
+    A shuffle block is considered as skewed and will be accurately recorded in
+    <code>HighlyCompressedMapStatus</code> if its size is larger than this factor multiplying
+    the median shuffle block size or <code>spark.shuffle.accurateBlockThreshold</code>. It is
+    recommended to set this parameter to be the same as
+    <code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code>. Set to -1.0 to disable this
+    feature by default.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.registration.timeout</code></td>
   <td>5000</td>
   <td>
@@ -1312,7 +1345,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.checksum.algorithm</code></td>
   <td>ADLER32</td>
   <td>
-    The algorithm is used to calculate the shuffle checksum. Currently, it only supports built-in algorithms of JDK, e.g., ADLER32, CRC32.
+    The algorithm is used to calculate the shuffle checksum. Currently, it only supports built-in algorithms of JDK, e.g., ADLER32, CRC32 and CRC32C.
   </td>
   <td>3.2.0</td>
 </tr>
@@ -1656,7 +1689,7 @@ Apart from these, the following properties are also available, and may be useful
     which will be also effective when accessing the application on history server. The new log urls must be
     permanent, otherwise you might have dead link for executor log urls.
     <p/>
-    For now, only YARN mode supports this configuration
+    For now, only YARN and K8s cluster manager supports this configuration
   </td>
   <td>3.0.0</td>
 </tr>
@@ -1723,6 +1756,10 @@ Apart from these, the following properties are also available, and may be useful
     <br /><code>spark.ui.filters=com.test.filter1</code>
     <br /><code>spark.com.test.filter1.param.name1=foo</code>
     <br /><code>spark.com.test.filter1.param.name2=bar</code>
+    <br />
+    <br />Note that some filter requires additional dependencies. For example,
+    the built-in <code>org.apache.spark.ui.JWSFilter</code> requires
+    <code>jjwt-impl</code> and <code>jjwt-jackson</code> jar files.
   </td>
   <td>1.0.0</td>
 </tr>
@@ -1890,6 +1927,14 @@ Apart from these, the following properties are also available, and may be useful
     no worker is spawned, it works in single-threaded mode. When value > 0, it triggers
     asynchronous mode, corresponding number of threads are spawned. More workers improve
     performance, but also increase memory cost.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.io.compression.lzf.parallel.enabled</code></td>
+  <td>false</td>
+  <td>
+    When true, LZF compression will use multiple threads to compress data in parallel.
   </td>
   <td>4.0.0</td>
 </tr>
@@ -2807,8 +2852,35 @@ Apart from these, the following properties are also available, and may be useful
     If set to "true", prevent Spark from scheduling tasks on executors that have been excluded
     due to too many task failures. The algorithm used to exclude executors and nodes can be further
     controlled by the other "spark.excludeOnFailure" configuration options.
+    This config will be overriden by "spark.excludeOnFailure.application.enabled" and 
+    "spark.excludeOnFailure.taskAndStage.enabled" to specify exclusion enablement on individual
+    levels.
   </td>
   <td>2.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.excludeOnFailure.application.enabled</code></td>
+  <td>
+    false
+  </td>
+  <td>
+    If set to "true", enables excluding executors for the entire application due to too many task
+    failures and prevent Spark from scheduling tasks on them.
+    This config overrides "spark.excludeOnFailure.enabled". 
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.excludeOnFailure.taskAndStage.enabled</code></td>
+  <td>
+    false
+  </td>
+  <td>
+    If set to "true", enables excluding executors on a task set level due to too many task
+    failures and prevent Spark from scheduling tasks on them.
+    This config overrides "spark.excludeOnFailure.enabled". 
+  </td>
+  <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.excludeOnFailure.timeout</code></td>
@@ -3544,7 +3616,7 @@ External users can query the static sql config values via `SparkSession.conf` or
 </tr>
 </table>
 
-### SparkR
+### SparkR (deprecated)
 
 <table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
@@ -3689,21 +3761,22 @@ Starting from version 4.0.0, `spark-submit` has adopted the [JSON Template Layou
 
 To configure the layout of structured logging, start with the `log4j2.properties.template` file.
 
-To query Spark logs using Spark SQL, you can use the following Python code snippet:
+To query Spark logs using Spark SQL, you can use the following code snippets:
 
+**Python:**
 ```python
-from pyspark.util import LogUtils
+from pyspark.logger import SPARK_LOG_SCHEMA
 
-logDf = spark.read.schema(LogUtils.LOG_SCHEMA).json("path/to/logs")
+logDf = spark.read.schema(SPARK_LOG_SCHEMA).json("path/to/logs")
 ```
 
-Or using the following Scala code snippet:
+**Scala:**
 ```scala
-import org.apache.spark.util.LogUtils.LOG_SCHEMA
+import org.apache.spark.util.LogUtils.SPARK_LOG_SCHEMA
 
-val logDf = spark.read.schema(LOG_SCHEMA).json("path/to/logs")
+val logDf = spark.read.schema(SPARK_LOG_SCHEMA).json("path/to/logs")
 ```
-
+**Note**: If you're using the interactive shell (pyspark shell or spark-shell), you can omit the import statement in the code because SPARK_LOG_SCHEMA is already available in the shell's context.
 ## Plain Text Logging
 If you prefer plain text logging, you have two options:
 - Disable structured JSON logging by setting the Spark configuration `spark.log.structuredLogging.enabled` to `false`.

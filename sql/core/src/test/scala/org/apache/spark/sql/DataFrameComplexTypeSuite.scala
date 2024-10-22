@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.objects.MapObjects
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, BooleanType, Decimal, DoubleType, IntegerType, MapType, StringType, StructField, StructType}
@@ -37,6 +38,15 @@ import org.apache.spark.unsafe.types.CalendarInterval
  */
 class DataFrameComplexTypeSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
+
+  test("ArrayTransform with scan input") {
+    withTempPath { f =>
+      spark.sql("select array(array(1, null, 3), array(4, 5, null), array(null, 8, 9)) as a")
+        .write.parquet(f.getAbsolutePath)
+      val df = spark.read.parquet(f.getAbsolutePath).selectExpr("transform(a, (x, i) -> x)")
+      checkAnswer(df, Row(Seq(Seq(1, null, 3), Seq(4, 5, null), Seq(null, 8, 9))))
+    }
+  }
 
   test("UDF on struct") {
     val f = udf((a: String) => a)
@@ -82,8 +92,8 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSparkSession {
 
       // items: Seq[Int] => items.map { item => Seq(Struct(item)) }
       val result = df.select(
-        new Column(MapObjects(
-          (item: Expression) => array(struct(new Column(item))).expr,
+        column(MapObjects(
+          (item: Expression) => array(struct(column(item))).expr,
           $"items".expr,
           df.schema("items").dataType.asInstanceOf[ArrayType].elementType
         )) as "items"

@@ -54,7 +54,7 @@ class HiveContextCompatibilitySuite extends SparkFunSuite {
 
   test("basic operations") {
     val _hc = hc
-    import _hc.implicits._
+    import _hc.sparkSession.implicits._
     val df1 = (1 to 20).map { i => (i, i) }.toDF("a", "x")
     val df2 = (1 to 100).map { i => (i, i % 10, i % 2 == 0) }.toDF("a", "b", "c")
       .select($"a", $"b")
@@ -71,7 +71,7 @@ class HiveContextCompatibilitySuite extends SparkFunSuite {
 
   test("basic DDLs") {
     val _hc = hc
-    import _hc.implicits._
+    import _hc.sparkSession.implicits._
     val databases = hc.sql("SHOW DATABASES").collect().map(_.getString(0))
     assert(databases.toSeq == Seq("default"))
     hc.sql("CREATE DATABASE mee_db")

@@ -20,12 +20,13 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.catalyst.{DeserializerBuildHelper, InternalRow, JavaTypeInference, ScalaReflection, SerializerBuildHelper}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.{Deserializer, Serializer}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, InitializeJavaBean, Invoke, NewInstance}
+import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, InitializeJavaBean, NewInstance}
 import org.apache.spark.sql.catalyst.optimizer.{ReassignLambdaVariableID, SimplifyCasts}
 import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LeafNode, LocalRelation}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -53,9 +54,9 @@ object ExpressionEncoder {
 
   def apply[T](enc: AgnosticEncoder[T]): ExpressionEncoder[T] = {
     new ExpressionEncoder[T](
+      enc,
       SerializerBuildHelper.createSerializer(enc),
-      DeserializerBuildHelper.createDeserializer(enc),
-      enc.clsTag)
+      DeserializerBuildHelper.createDeserializer(enc))
   }
 
   def apply(schema: StructType): ExpressionEncoder[Row] = apply(schema, lenient = false)
@@ -68,107 +69,6 @@ object ExpressionEncoder {
   def javaBean[T](beanClass: Class[T]): ExpressionEncoder[T] = {
      apply(JavaTypeInference.encoderFor(beanClass))
   }
-
-  /**
-   * Given a set of N encoders, constructs a new encoder that produce objects as items in an
-   * N-tuple.  Note that these encoders should be unresolved so that information about
-   * name/positional binding is preserved.
-   * When `useNullSafeDeserializer` is true, the deserialization result for a child will be null if
-   * the input is null. It is false by default as most deserializers handle null input properly and
-   * don't require an extra null check. Some of them are null-tolerant, such as the deserializer for
-   * `Option[T]`, and we must not set it to true in this case.
-   */
-  def tuple(
-      encoders: Seq[ExpressionEncoder[_]],
-      useNullSafeDeserializer: Boolean = false): ExpressionEncoder[_] = {
-    if (encoders.length > 22) {
-      throw QueryExecutionErrors.elementsOfTupleExceedLimitError()
-    }
-
-    encoders.foreach(_.assertUnresolved())
-
-    val cls = Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}")
-
-    val newSerializerInput = BoundReference(0, ObjectType(cls), nullable = true)
-    val serializers = encoders.zipWithIndex.map { case (enc, index) =>
-      val boundRefs = enc.objSerializer.collect { case b: BoundReference => b }.distinct
-      assert(boundRefs.size == 1, "object serializer should have only one bound reference but " +
-        s"there are ${boundRefs.size}")
-
-      val originalInputObject = boundRefs.head
-      val newInputObject = Invoke(
-        newSerializerInput,
-        s"_${index + 1}",
-        originalInputObject.dataType,
-        returnNullable = originalInputObject.nullable)
-
-      val newSerializer = enc.objSerializer.transformUp {
-        case BoundReference(0, _, _) => newInputObject
-      }
-
-      Alias(newSerializer, s"_${index + 1}")()
-    }
-    val newSerializer = CreateStruct(serializers)
-
-    def nullSafe(input: Expression, result: Expression): Expression = {
-      If(IsNull(input), Literal.create(null, result.dataType), result)
-    }
-
-    val newDeserializerInput = GetColumnByOrdinal(0, newSerializer.dataType)
-    val childrenDeserializers = encoders.zipWithIndex.map { case (enc, index) =>
-      val getColExprs = enc.objDeserializer.collect { case c: GetColumnByOrdinal => c }.distinct
-      assert(getColExprs.size == 1, "object deserializer should have only one " +
-        s"`GetColumnByOrdinal`, but there are ${getColExprs.size}")
-
-      val input = GetStructField(newDeserializerInput, index)
-      val childDeserializer = enc.objDeserializer.transformUp {
-        case GetColumnByOrdinal(0, _) => input
-      }
-
-      if (useNullSafeDeserializer && enc.objSerializer.nullable) {
-        nullSafe(input, childDeserializer)
-      } else {
-        childDeserializer
-      }
-    }
-    val newDeserializer =
-      NewInstance(cls, childrenDeserializers, ObjectType(cls), propagateNull = false)
-
-    new ExpressionEncoder[Any](
-      nullSafe(newSerializerInput, newSerializer),
-      nullSafe(newDeserializerInput, newDeserializer),
-      ClassTag(cls))
-  }
-
-  // Tuple1
-  def tuple[T](e: ExpressionEncoder[T]): ExpressionEncoder[Tuple1[T]] =
-    tuple(Seq(e)).asInstanceOf[ExpressionEncoder[Tuple1[T]]]
-
-  def tuple[T1, T2](
-      e1: ExpressionEncoder[T1],
-      e2: ExpressionEncoder[T2]): ExpressionEncoder[(T1, T2)] =
-    tuple(Seq(e1, e2)).asInstanceOf[ExpressionEncoder[(T1, T2)]]
-
-  def tuple[T1, T2, T3](
-      e1: ExpressionEncoder[T1],
-      e2: ExpressionEncoder[T2],
-      e3: ExpressionEncoder[T3]): ExpressionEncoder[(T1, T2, T3)] =
-    tuple(Seq(e1, e2, e3)).asInstanceOf[ExpressionEncoder[(T1, T2, T3)]]
-
-  def tuple[T1, T2, T3, T4](
-      e1: ExpressionEncoder[T1],
-      e2: ExpressionEncoder[T2],
-      e3: ExpressionEncoder[T3],
-      e4: ExpressionEncoder[T4]): ExpressionEncoder[(T1, T2, T3, T4)] =
-    tuple(Seq(e1, e2, e3, e4)).asInstanceOf[ExpressionEncoder[(T1, T2, T3, T4)]]
-
-  def tuple[T1, T2, T3, T4, T5](
-      e1: ExpressionEncoder[T1],
-      e2: ExpressionEncoder[T2],
-      e3: ExpressionEncoder[T3],
-      e4: ExpressionEncoder[T4],
-      e5: ExpressionEncoder[T5]): ExpressionEncoder[(T1, T2, T3, T4, T5)] =
-    tuple(Seq(e1, e2, e3, e4, e5)).asInstanceOf[ExpressionEncoder[(T1, T2, T3, T4, T5)]]
 
   private val anyObjectType = ObjectType(classOf[Any])
 
@@ -187,6 +87,8 @@ object ExpressionEncoder {
       }
       constructProjection(row).get(0, anyObjectType).asInstanceOf[T]
     } catch {
+      case e: SparkRuntimeException if e.getCondition == "NOT_NULL_ASSERT_VIOLATION" =>
+        throw e
       case e: Exception =>
         throw QueryExecutionErrors.expressionDecodingError(e, expressions)
     }
@@ -213,6 +115,8 @@ object ExpressionEncoder {
       inputRow(0) = t
       extractProjection(inputRow)
     } catch {
+      case e: SparkRuntimeException if e.getCondition == "NOT_NULL_ASSERT_VIOLATION" =>
+        throw e
       case e: Exception =>
         throw QueryExecutionErrors.expressionEncodingError(e, expressions)
     }
@@ -223,6 +127,7 @@ object ExpressionEncoder {
  * A generic encoder for JVM objects that uses Catalyst Expressions for a `serializer`
  * and a `deserializer`.
  *
+ * @param encoder the `AgnosticEncoder` for type `T`.
  * @param objSerializer An expression that can be used to encode a raw object to corresponding
  *                   Spark SQL representation that can be a primitive column, array, map or a
  *                   struct. This represents how Spark SQL generally serializes an object of
@@ -231,13 +136,15 @@ object ExpressionEncoder {
  *                        representation. This represents how Spark SQL generally deserializes
  *                        a serialized value in Spark SQL representation back to an object of
  *                        type `T`.
- * @param clsTag A classtag for `T`.
  */
 case class ExpressionEncoder[T](
+    encoder: AgnosticEncoder[T],
     objSerializer: Expression,
-    objDeserializer: Expression,
-    clsTag: ClassTag[T])
-  extends Encoder[T] {
+    objDeserializer: Expression)
+  extends Encoder[T]
+  with ToAgnosticEncoder[T] {
+
+  override def clsTag: ClassTag[T] = encoder.clsTag
 
   /**
    * A sequence of expressions, one for each top-level field that can be used to

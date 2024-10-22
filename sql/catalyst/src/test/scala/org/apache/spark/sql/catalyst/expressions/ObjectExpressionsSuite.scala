@@ -82,7 +82,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[SparkException] {
         Invoke(inputObject, "zeroArgNotExistMethod", IntegerType).eval(inputRow)
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" ->
         ("Couldn't find method zeroArgNotExistMethod with arguments " +
           "() on class java.lang.Object.")
@@ -98,7 +98,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           Seq(Literal.fromObject(UTF8String.fromString("dummyInputString"))),
           Seq(StringType)).eval(inputRow)
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" ->
         ("Couldn't find method oneArgNotExistMethod with arguments " +
           "(class org.apache.spark.unsafe.types.UTF8String) on class java.lang.Object.")
@@ -417,7 +417,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         exception = intercept[SparkRuntimeException] {
           testMapObjects(collection, classOf[scala.collection.Map[Int, Int]], inputType)
         },
-        errorClass = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
+        condition = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
         parameters = Map("cls" -> "scala.collection.Map"))
     }
   }
@@ -547,13 +547,55 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkObjectExprEvaluation(validateType, input, InternalRow.fromSeq(Seq(Row(input))))
     }
 
-    checkExceptionInExpression[RuntimeException](
+    checkExceptionInExpression[SparkRuntimeException](
       ValidateExternalType(
         GetExternalRowField(inputObject, index = 0, fieldName = "c0"),
         DoubleType,
         DoubleType),
       InternalRow.fromSeq(Seq(Row(1))),
-      "java.lang.Integer is not a valid external type for schema of double")
+      "The external type java.lang.Integer is not valid for the type \"DOUBLE\"")
+  }
+
+  test("SPARK-49044 ValidateExternalType should return child in error") {
+    val inputObject = BoundReference(0, ObjectType(classOf[Row]), nullable = true)
+    Seq(
+      (true, BooleanType),
+      (2.toByte, ByteType),
+      (5.toShort, ShortType),
+      (23, IntegerType),
+      (61L, LongType),
+      (1.0f, FloatType),
+      (10.0, DoubleType),
+      ("abcd".getBytes, BinaryType),
+      ("abcd", StringType),
+      (BigDecimal.valueOf(10), DecimalType.IntDecimal),
+      (IntervalUtils.stringToInterval(UTF8String.fromString("interval 3 day")),
+        CalendarIntervalType),
+      (java.math.BigDecimal.valueOf(10), DecimalType.BigIntDecimal),
+      (Array(3, 2, 1), ArrayType(IntegerType))
+    ).foreach { case (input, dt) =>
+      val enc = RowEncoder.encoderForDataType(dt, lenient = false)
+      val validateType = ValidateExternalType(
+        GetExternalRowField(inputObject, index = 0, fieldName = "c0"),
+        dt,
+        EncoderUtils.lenientExternalDataTypeFor(enc))
+      checkObjectExprEvaluation(validateType, input, InternalRow.fromSeq(Seq(Row(input))))
+    }
+
+    checkErrorInExpression[SparkRuntimeException](
+      expression = ValidateExternalType(
+        GetExternalRowField(inputObject, index = 0, fieldName = "c0"),
+        DoubleType,
+        DoubleType),
+      inputRow = InternalRow.fromSeq(Seq(Row(1))),
+      condition = "INVALID_EXTERNAL_TYPE",
+      parameters = Map[String, String](
+        "externalType" -> "java.lang.Integer",
+        "type" -> "\"DOUBLE\"",
+        "expr" -> ("\"getexternalrowfield(input[0, org.apache.spark.sql.Row, true], " +
+          "0, c0)\"")
+      )
+    )
   }
 
   private def javaMapSerializerFor(
@@ -713,6 +755,31 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val genCode = StaticInvoke(TestFun.getClass, IntegerType, "foo", arguments).genCode(ctx)
     assert(!genCode.code.toString.contains("boxedResult"))
   }
+
+  test("StaticInvoke call return `any` method") {
+    val cls = TestStaticInvokeReturnAny.getClass
+    Seq((0, IntegerType, true), (1, IntegerType, true), (2, IntegerType, false)).foreach {
+      case (arg, argDataType, returnNullable) =>
+        val dataType = arg match {
+          case 0 => ObjectType(classOf[java.lang.Integer])
+          case 1 => ShortType
+          case 2 => ObjectType(classOf[java.lang.Long])
+        }
+        val arguments = Seq(Literal(arg, argDataType))
+        val inputTypes = Seq(IntegerType)
+        val expected = arg match {
+          case 0 => java.lang.Integer.valueOf(1)
+          case 1 => 0.toShort
+          case 2 => java.lang.Long.valueOf(2)
+        }
+        val inputRow = InternalRow.fromSeq(Seq(arg))
+        checkObjectExprEvaluation(
+          StaticInvoke(cls, dataType, "func", arguments, inputTypes,
+            returnNullable = returnNullable),
+          expected,
+          inputRow)
+    }
+  }
 }
 
 class TestBean extends Serializable {
@@ -748,3 +815,10 @@ case object TestFun {
   def foo(left: Int, right: Int): Int = left + right
 }
 
+object TestStaticInvokeReturnAny {
+  def func(input: Int): Any = input match {
+    case 0 => java.lang.Integer.valueOf(1)
+    case 1 => 0.toShort
+    case 2 => java.lang.Long.valueOf(2)
+  }
+}

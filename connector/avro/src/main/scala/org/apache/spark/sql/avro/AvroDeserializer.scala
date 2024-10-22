@@ -51,14 +51,16 @@ private[sql] class AvroDeserializer(
     datetimeRebaseSpec: RebaseSpec,
     filters: StructFilters,
     useStableIdForUnionType: Boolean,
-    stableIdPrefixForUnionType: String) {
+    stableIdPrefixForUnionType: String,
+    recursiveFieldMaxDepth: Int) {
 
   def this(
       rootAvroType: Schema,
       rootCatalystType: DataType,
       datetimeRebaseMode: String,
       useStableIdForUnionType: Boolean,
-      stableIdPrefixForUnionType: String) = {
+      stableIdPrefixForUnionType: String,
+      recursiveFieldMaxDepth: Int) = {
     this(
       rootAvroType,
       rootCatalystType,
@@ -66,7 +68,8 @@ private[sql] class AvroDeserializer(
       RebaseSpec(LegacyBehaviorPolicy.withName(datetimeRebaseMode)),
       new NoopFilters,
       useStableIdForUnionType,
-      stableIdPrefixForUnionType)
+      stableIdPrefixForUnionType,
+      recursiveFieldMaxDepth)
   }
 
   private lazy val decimalConversions = new DecimalConversion()
@@ -128,7 +131,8 @@ private[sql] class AvroDeserializer(
         s"schema is incompatible (avroType = $avroType, sqlType = ${catalystType.sql})"
 
     val realDataType = SchemaConverters.toSqlType(
-      avroType, useStableIdForUnionType, stableIdPrefixForUnionType).dataType
+      avroType, useStableIdForUnionType, stableIdPrefixForUnionType,
+      recursiveFieldMaxDepth).dataType
 
     (avroType.getType, catalystType) match {
       case (NULL, NullType) => (updater, ordinal, _) =>
@@ -140,6 +144,12 @@ private[sql] class AvroDeserializer(
 
       case (INT, IntegerType) => (updater, ordinal, value) =>
         updater.setInt(ordinal, value.asInstanceOf[Int])
+
+      case (INT, LongType) => (updater, ordinal, value) =>
+        updater.setLong(ordinal, value.asInstanceOf[Int])
+
+      case (INT, DoubleType) => (updater, ordinal, value) =>
+        updater.setDouble(ordinal, value.asInstanceOf[Int])
 
       case (INT, dt: DatetimeType)
         if preventReadingIncorrectType && realDataType.isInstanceOf[YearMonthIntervalType] =>
@@ -193,6 +203,9 @@ private[sql] class AvroDeserializer(
 
       case (FLOAT, FloatType) => (updater, ordinal, value) =>
         updater.setFloat(ordinal, value.asInstanceOf[Float])
+
+      case (FLOAT, DoubleType) => (updater, ordinal, value) =>
+        updater.setDouble(ordinal, value.asInstanceOf[Float])
 
       case (DOUBLE, DoubleType) => (updater, ordinal, value) =>
         updater.setDouble(ordinal, value.asInstanceOf[Double])

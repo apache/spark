@@ -247,12 +247,12 @@ def _validate_udtf_handler(cls: Any, returnType: Optional[Union[StructType, str]
 
     if not isinstance(cls, type):
         raise PySparkTypeError(
-            error_class="INVALID_UDTF_HANDLER_TYPE", message_parameters={"type": type(cls).__name__}
+            errorClass="INVALID_UDTF_HANDLER_TYPE", messageParameters={"type": type(cls).__name__}
         )
 
     if not hasattr(cls, "eval"):
         raise PySparkAttributeError(
-            error_class="INVALID_UDTF_NO_EVAL", message_parameters={"name": cls.__name__}
+            errorClass="INVALID_UDTF_NO_EVAL", messageParameters={"name": cls.__name__}
         )
 
     has_analyze = hasattr(cls, "analyze")
@@ -261,12 +261,12 @@ def _validate_udtf_handler(cls: Any, returnType: Optional[Union[StructType, str]
     )
     if returnType is None and not has_analyze_staticmethod:
         raise PySparkAttributeError(
-            error_class="INVALID_UDTF_RETURN_TYPE", message_parameters={"name": cls.__name__}
+            errorClass="INVALID_UDTF_RETURN_TYPE", messageParameters={"name": cls.__name__}
         )
     if returnType is not None and has_analyze:
         raise PySparkAttributeError(
-            error_class="INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE",
-            message_parameters={"name": cls.__name__},
+            errorClass="INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE",
+            messageParameters={"name": cls.__name__},
         )
 
 
@@ -316,8 +316,8 @@ class UserDefinedTableFunction:
                 parsed = self._returnType
             if not isinstance(parsed, StructType):
                 raise PySparkTypeError(
-                    error_class="UDTF_RETURN_TYPE_MISMATCH",
-                    message_parameters={
+                    errorClass="UDTF_RETURN_TYPE_MISMATCH",
+                    messageParameters={
                         "name": self._name,
                         "return_type": f"{parsed}",
                     },
@@ -342,8 +342,8 @@ class UserDefinedTableFunction:
         except pickle.PicklingError as e:
             if "CONTEXT_ONLY_VALID_ON_DRIVER" in str(e):
                 raise PySparkPicklingError(
-                    error_class="UDTF_SERIALIZATION_ERROR",
-                    message_parameters={
+                    errorClass="UDTF_SERIALIZATION_ERROR",
+                    messageParameters={
                         "name": self._name,
                         "message": "it appears that you are attempting to reference SparkSession "
                         "inside a UDTF. SparkSession can only be used on the driver, "
@@ -352,8 +352,8 @@ class UserDefinedTableFunction:
                     },
                 ) from None
             raise PySparkPicklingError(
-                error_class="UDTF_SERIALIZATION_ERROR",
-                message_parameters={
+                errorClass="UDTF_SERIALIZATION_ERROR",
+                messageParameters={
                     "name": self._name,
                     "message": "Please check the stack trace and make sure the "
                     "function is serializable.",
@@ -373,7 +373,7 @@ class UserDefinedTableFunction:
         return judtf
 
     def __call__(self, *args: "ColumnOrName", **kwargs: "ColumnOrName") -> "DataFrame":
-        from pyspark.sql.classic.column import _to_java_column, _to_java_expr, _to_seq
+        from pyspark.sql.classic.column import _to_java_column, _to_seq
 
         from pyspark.sql import DataFrame, SparkSession
 
@@ -382,11 +382,7 @@ class UserDefinedTableFunction:
 
         assert sc._jvm is not None
         jcols = [_to_java_column(arg) for arg in args] + [
-            sc._jvm.Column(
-                sc._jvm.org.apache.spark.sql.catalyst.expressions.NamedArgumentExpression(
-                    key, _to_java_expr(value)
-                )
-            )
+            sc._jvm.PythonSQLUtils.namedArgumentExpression(key, _to_java_column(value))
             for key, value in kwargs.items()
         ]
 
@@ -461,10 +457,18 @@ class UDTFRegistration:
         >>> spark.sql("SELECT * FROM VALUES (0, 1), (1, 2) t(x, y), LATERAL plus_one(x)").collect()
         [Row(x=0, y=1, c1=0, c2=1), Row(x=1, y=2, c1=1, c2=2)]
         """
+        if not isinstance(f, UserDefinedTableFunction):
+            raise PySparkTypeError(
+                errorClass="CANNOT_REGISTER_UDTF",
+                messageParameters={
+                    "name": name,
+                },
+            )
+
         if f.evalType not in [PythonEvalType.SQL_TABLE_UDF, PythonEvalType.SQL_ARROW_TABLE_UDF]:
             raise PySparkTypeError(
-                error_class="INVALID_UDTF_EVAL_TYPE",
-                message_parameters={
+                errorClass="INVALID_UDTF_EVAL_TYPE",
+                messageParameters={
                     "name": name,
                     "eval_type": "SQL_TABLE_UDF, SQL_ARROW_TABLE_UDF",
                 },

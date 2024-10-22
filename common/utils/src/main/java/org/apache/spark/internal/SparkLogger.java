@@ -130,7 +130,7 @@ public class SparkLogger {
 
   public void warn(String msg, Throwable throwable, MDC... mdcs) {
     if (mdcs == null || mdcs.length == 0) {
-      slf4jLogger.warn(msg);
+      slf4jLogger.warn(msg, throwable);
     } else if (slf4jLogger.isWarnEnabled()) {
       withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.warn(mt.message, mt.throwable));
     }
@@ -158,7 +158,7 @@ public class SparkLogger {
 
   public void info(String msg, Throwable throwable, MDC... mdcs) {
     if (mdcs == null || mdcs.length == 0) {
-      slf4jLogger.info(msg);
+      slf4jLogger.info(msg, throwable);
     } else if (slf4jLogger.isInfoEnabled()) {
       withLogContext(msg, mdcs, throwable, mt -> slf4jLogger.info(mt.message, mt.throwable));
     }

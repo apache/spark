@@ -893,7 +893,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
   "sqlState" : "42000",
   "messageParameters" : {
-    "funcName" : "`default`.`myDoubleAvg`",
+    "name" : "`default`.`myDoubleAvg`",
     "statement" : "DROP TEMPORARY FUNCTION"
   },
   "queryContext" : [ {
@@ -983,6 +983,79 @@ drop table t2
 -- !query analysis
 DropTable false, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t2
+
+
+-- !query
+DECLARE agg = 'max'
+-- !query analysis
+CreateVariable defaultvalueexpression(max, 'max'), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.agg
+
+
+-- !query
+DECLARE col = 'c1'
+-- !query analysis
+CreateVariable defaultvalueexpression(c1, 'c1'), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.col
+
+
+-- !query
+DECLARE tab = 'T'
+-- !query analysis
+CreateVariable defaultvalueexpression(T, 'T'), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.tab
+
+
+-- !query
+WITH S(c1, c2) AS (VALUES(1, 2), (2, 3)),
+     T(c1, c2) AS (VALUES ('a', 'b'), ('c', 'd'))
+SELECT IDENTIFIER(agg)(IDENTIFIER(col)) FROM IDENTIFIER(tab)
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias S
+:     +- Project [col1#x AS c1#x, col2#x AS c2#x]
+:        +- LocalRelation [col1#x, col2#x]
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias T
+:     +- Project [col1#x AS c1#x, col2#x AS c2#x]
+:        +- LocalRelation [col1#x, col2#x]
++- Aggregate [max(c1#x) AS max(c1)#x]
+   +- SubqueryAlias T
+      +- CTERelationRef xxxx, true, [c1#x, c2#x], false
+
+
+-- !query
+WITH S(c1, c2) AS (VALUES(1, 2), (2, 3)),
+     T(c1, c2) AS (VALUES ('a', 'b'), ('c', 'd'))
+SELECT IDENTIFIER('max')(IDENTIFIER('c1')) FROM IDENTIFIER('T')
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias S
+:     +- Project [col1#x AS c1#x, col2#x AS c2#x]
+:        +- LocalRelation [col1#x, col2#x]
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias T
+:     +- Project [col1#x AS c1#x, col2#x AS c2#x]
+:        +- LocalRelation [col1#x, col2#x]
++- Aggregate [max(c1#x) AS max(c1)#x]
+   +- SubqueryAlias T
+      +- CTERelationRef xxxx, true, [c1#x, c2#x], false
+
+
+-- !query
+WITH ABC(c1, c2) AS (VALUES(1, 2), (2, 3))
+SELECT IDENTIFIER('max')(IDENTIFIER('c1')) FROM IDENTIFIER('A' || 'BC')
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias ABC
+:     +- Project [col1#x AS c1#x, col2#x AS c2#x]
+:        +- LocalRelation [col1#x, col2#x]
++- Aggregate [max(c1#x) AS max(c1)#x]
+   +- SubqueryAlias ABC
+      +- CTERelationRef xxxx, true, [c1#x, c2#x], false
 
 
 -- !query

@@ -39,8 +39,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.{LogEntry, Logging, LogKeys, MDC}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
@@ -64,6 +63,8 @@ private[deploy] object SparkSubmitAction extends Enumeration {
  */
 private[spark] class SparkSubmit extends Logging {
 
+  override protected def logName: String = classOf[SparkSubmit].getName
+
   import DependencyUtils._
   import SparkSubmit._
 
@@ -78,12 +79,12 @@ private[spark] class SparkSubmit extends Logging {
     } else {
       // For non-shell applications, enable structured logging if it's not explicitly disabled
       // via the configuration `spark.log.structuredLogging.enabled`.
-      if (sparkConf.getBoolean(STRUCTURED_LOGGING_ENABLED.key, defaultValue = true)) {
-        Logging.enableStructuredLogging()
-      } else {
-        Logging.disableStructuredLogging()
-      }
+      Utils.resetStructuredLogging(sparkConf)
     }
+
+    // We should initialize log again after `spark.log.structuredLogging.enabled` effected
+    Logging.uninitialize()
+
     // Initialize logging if it hasn't been done yet. Keep track of whether logging needs to
     // be reset before the application starts.
     val uninitLog = initializeLogIfNecessary(true, silent = true)
@@ -747,6 +748,8 @@ private[spark] class SparkSubmit extends Logging {
           (clusterManager & opt.clusterManager) != 0) {
         if (opt.clOption != null) { childArgs += opt.clOption += opt.value }
         if (opt.confKey != null) {
+          // Used in SparkConnectClient because Spark Connect client does not have SparkConf.
+          if (opt.confKey == "spark.remote") System.setProperty("spark.remote", opt.value)
           if (opt.mergeFn.isDefined && sparkConf.contains(opt.confKey)) {
             sparkConf.set(opt.confKey, opt.mergeFn.get.apply(sparkConf.get(opt.confKey), opt.value))
           } else {
@@ -1074,6 +1077,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
   private val SPARK_SHELL = "spark-shell"
   private val PYSPARK_SHELL = "pyspark-shell"
   private val SPARKR_SHELL = "sparkr-shell"
+  private val CONNECT_SHELL = "connect-shell"
   private val SPARKR_PACKAGE_ARCHIVE = "sparkr.zip"
   private val R_PACKAGE_ARCHIVE = "rpkg.zip"
 
@@ -1097,17 +1101,31 @@ object SparkSubmit extends CommandLineUtils with Logging {
         new SparkSubmitArguments(args.toImmutableArraySeq) {
           override protected def logInfo(msg: => String): Unit = self.logInfo(msg)
 
+          override protected def logInfo(entry: LogEntry): Unit = self.logInfo(entry)
+
           override protected def logWarning(msg: => String): Unit = self.logWarning(msg)
 
+          override protected def logWarning(entry: LogEntry): Unit = self.logWarning(entry)
+
           override protected def logError(msg: => String): Unit = self.logError(msg)
+
+          override protected def logError(entry: LogEntry): Unit = self.logError(entry)
         }
       }
 
       override protected def logInfo(msg: => String): Unit = printMessage(msg)
 
+      override protected def logInfo(entry: LogEntry): Unit = printMessage(entry.message)
+
       override protected def logWarning(msg: => String): Unit = printMessage(s"Warning: $msg")
 
+      override protected def logWarning(entry: LogEntry): Unit =
+        printMessage(s"Warning: ${entry.message}")
+
       override protected def logError(msg: => String): Unit = printMessage(s"Error: $msg")
+
+      override protected def logError(entry: LogEntry): Unit =
+        printMessage(s"Error: ${entry.message}")
 
       override def doSubmit(args: Array[String]): Unit = {
         try {
@@ -1134,7 +1152,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
    * Return whether the given primary resource represents a shell.
    */
   private[deploy] def isShell(res: String): Boolean = {
-    (res == SPARK_SHELL || res == PYSPARK_SHELL || res == SPARKR_SHELL)
+    (res == SPARK_SHELL || res == PYSPARK_SHELL || res == SPARKR_SHELL || res == CONNECT_SHELL)
   }
 
   /**

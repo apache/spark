@@ -85,7 +85,7 @@ public class JavaColumnExpressionSuite {
     Dataset<Row> df = spark.createDataFrame(rows, schema);
     AnalysisException e = Assertions.assertThrows(AnalysisException.class,
       () -> df.filter(df.col("a").isInCollection(Arrays.asList(new Column("b")))));
-    Assertions.assertTrue(e.getErrorClass().equals("DATATYPE_MISMATCH.DATA_DIFF_TYPES"));
+    Assertions.assertTrue(e.getCondition().equals("DATATYPE_MISMATCH.DATA_DIFF_TYPES"));
     Map<String, String> messageParameters = new HashMap<>();
     messageParameters.put("functionName", "`in`");
     messageParameters.put("dataType", "[\"INT\", \"ARRAY<INT>\"]");

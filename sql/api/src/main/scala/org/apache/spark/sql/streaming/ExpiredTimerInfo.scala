@@ -22,16 +22,11 @@ import java.io.Serializable
 import org.apache.spark.annotation.{Evolving, Experimental}
 
 /**
- * Class used to provide access to expired timer's expiry time. These values
- * are only relevant if the ExpiredTimerInfo is valid.
+ * Class used to provide access to expired timer's expiry time.
  */
 @Experimental
 @Evolving
 private[sql] trait ExpiredTimerInfo extends Serializable {
-  /**
-   * Check if provided ExpiredTimerInfo is valid.
-   */
-  def isValid(): Boolean
 
   /**
    * Get the expired timer's expiry time as milliseconds in epoch time.

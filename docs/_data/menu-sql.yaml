@@ -63,6 +63,8 @@
       url: sql-performance-tuning.html#optimizing-the-join-strategy
     - text: Adaptive Query Execution
       url: sql-performance-tuning.html#adaptive-query-execution
+    - text: Storage Partition Join
+      url: sql-performance-tuning.html#storage-partition-join
 - text: Distributed SQL Engine
   url: sql-distributed-sql-engine.html
   subitems:

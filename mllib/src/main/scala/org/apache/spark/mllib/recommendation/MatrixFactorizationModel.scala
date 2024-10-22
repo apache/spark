@@ -387,7 +387,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       import spark.implicits._
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("rank" -> model.rank)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(metadataPath(path))
       model.userFeatures.toDF("id", "features").write.parquet(userPath(path))
       model.productFeatures.toDF("id", "features").write.parquet(productPath(path))
     }

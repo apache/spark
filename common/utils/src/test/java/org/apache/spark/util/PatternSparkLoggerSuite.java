@@ -54,6 +54,12 @@ public class PatternSparkLoggerSuite extends SparkLoggerSuiteBase {
   }
 
   @Override
+  String expectedPatternForBasicMsgWithEscapeChar(Level level) {
+    return toRegexPattern(level,
+      ".*<level> <className>: This is a log message\\nThis is a new line \\t other msg\\n");
+  }
+
+  @Override
   String expectedPatternForBasicMsgWithException(Level level) {
     return toRegexPattern(level, """
         .*<level> <className>: This is a log message

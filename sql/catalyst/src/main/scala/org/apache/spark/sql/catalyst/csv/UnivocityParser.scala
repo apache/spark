@@ -21,12 +21,13 @@ import java.io.InputStream
 
 import scala.util.control.NonFatal
 
+import com.univocity.parsers.common.TextParsingException
 import com.univocity.parsers.csv.CsvParser
 
-import org.apache.spark.SparkUpgradeException
+import org.apache.spark.{SparkRuntimeException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
-import org.apache.spark.sql.catalyst.expressions.{Cast, EmptyRow, ExprUtils, GenericInternalRow, Literal}
+import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.{ExecutionErrors, QueryExecutionErrors}
@@ -253,6 +254,9 @@ class UnivocityParser(
     case _: StringType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)
 
+    case _: BinaryType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options)(_.getBytes)
+
     case CalendarIntervalType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
         IntervalUtils.safeStringToInterval(UTF8String.fromString(datum))
@@ -260,12 +264,14 @@ class UnivocityParser(
 
     case ym: YearMonthIntervalType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
-        Cast(Literal(datum), ym).eval(EmptyRow)
+        IntervalUtils.castStringToYMInterval(
+          UTF8String.fromString(datum), ym.startField, ym.endField)
       }
 
     case dt: DayTimeIntervalType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
-        Cast(Literal(datum), dt).eval(EmptyRow)
+        IntervalUtils.castStringToDTInterval(
+          UTF8String.fromString(datum), dt.startField, dt.endField)
       }
 
     case udt: UserDefinedType[_] =>
@@ -289,6 +295,20 @@ class UnivocityParser(
     }
   }
 
+  private def parseLine(line: String): Array[String] = {
+    try {
+      tokenizer.parseLine(line)
+    }
+    catch {
+      case e: TextParsingException if e.getCause.isInstanceOf[ArrayIndexOutOfBoundsException] =>
+        throw new SparkRuntimeException(
+          errorClass = "MALFORMED_CSV_RECORD",
+          messageParameters = Map("badRecord" -> line),
+          cause = e
+        )
+    }
+  }
+
   /**
    * Parses a single CSV string and turns it into either one resulting row or no row (if the
    * the record is malformed).
@@ -301,7 +321,7 @@ class UnivocityParser(
       (_: String) => Some(InternalRow.empty)
     } else {
       // parse if the columnPruning is disabled or requiredSchema is nonEmpty
-      (input: String) => convert(tokenizer.parseLine(input))
+      (input: String) => convert(parseLine(input))
     }
   }
 

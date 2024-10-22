@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 
-import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.unsafe.types.UTF8String
 
 class ExpressionImplUtilsSuite extends SparkFunSuite {
@@ -349,8 +349,71 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       exception = intercept[SparkRuntimeException] {
         f(t)
       },
-      errorClass = t.expectedErrorClassOpt.get,
+      condition = t.expectedErrorClassOpt.get,
       parameters = t.errorParamsMap
     )
   }
+
+  test("Validate UTF8 string") {
+    def validateUTF8(str: UTF8String, expected: UTF8String, except: Boolean): Unit = {
+      if (except) {
+        checkError(
+          exception = intercept[SparkIllegalArgumentException] {
+            ExpressionImplUtils.validateUTF8String(str)
+          },
+          condition = "INVALID_UTF8_STRING",
+          parameters = Map(
+            "str" -> str.getBytes.map(byte => f"\\x$byte%02X").mkString
+          )
+        )
+      } else {
+        assert(ExpressionImplUtils.validateUTF8String(str)== expected)
+      }
+    }
+    validateUTF8(UTF8String.EMPTY_UTF8,
+      UTF8String.fromString(""), except = false)
+    validateUTF8(UTF8String.fromString(""),
+      UTF8String.fromString(""), except = false)
+    validateUTF8(UTF8String.fromString("aa"),
+      UTF8String.fromString("aa"), except = false)
+    validateUTF8(UTF8String.fromString("\u0061"),
+      UTF8String.fromString("\u0061"), except = false)
+    validateUTF8(UTF8String.fromString(""),
+      UTF8String.fromString(""), except = false)
+    validateUTF8(UTF8String.fromString("abc"),
+      UTF8String.fromString("abc"), except = false)
+    validateUTF8(UTF8String.fromString("hello"),
+      UTF8String.fromString("hello"), except = false)
+    validateUTF8(UTF8String.fromBytes(Array.empty[Byte]),
+      UTF8String.fromString(""), except = false)
+    validateUTF8(UTF8String.fromBytes(Array[Byte](0x41)),
+      UTF8String.fromString("A"), except = false)
+    validateUTF8(UTF8String.fromBytes(Array[Byte](0x61)),
+      UTF8String.fromString("a"), except = false)
+    // scalastyle:off nonascii
+    validateUTF8(UTF8String.fromBytes(Array[Byte](0x80.toByte)),
+      UTF8String.fromString("\uFFFD"), except = true)
+    validateUTF8(UTF8String.fromBytes(Array[Byte](0xFF.toByte)),
+      UTF8String.fromString("\uFFFD"), except = true)
+    // scalastyle:on nonascii
+  }
+
+  test("TryValidate UTF8 string") {
+    def tryValidateUTF8(str: UTF8String, expected: UTF8String): Unit = {
+      assert(ExpressionImplUtils.tryValidateUTF8String(str) == expected)
+    }
+    tryValidateUTF8(UTF8String.fromString(""), UTF8String.fromString(""))
+    tryValidateUTF8(UTF8String.fromString("aa"), UTF8String.fromString("aa"))
+    tryValidateUTF8(UTF8String.fromString("\u0061"), UTF8String.fromString("\u0061"))
+    tryValidateUTF8(UTF8String.EMPTY_UTF8, UTF8String.fromString(""))
+    tryValidateUTF8(UTF8String.fromString(""), UTF8String.fromString(""))
+    tryValidateUTF8(UTF8String.fromString("abc"), UTF8String.fromString("abc"))
+    tryValidateUTF8(UTF8String.fromString("hello"), UTF8String.fromString("hello"))
+    tryValidateUTF8(UTF8String.fromBytes(Array.empty[Byte]), UTF8String.fromString(""))
+    tryValidateUTF8(UTF8String.fromBytes(Array[Byte](0x41)), UTF8String.fromString("A"))
+    tryValidateUTF8(UTF8String.fromBytes(Array[Byte](0x61)), UTF8String.fromString("a"))
+    tryValidateUTF8(UTF8String.fromBytes(Array[Byte](0x80.toByte)), null)
+    tryValidateUTF8(UTF8String.fromBytes(Array[Byte](0xFF.toByte)), null)
+  }
+
 }

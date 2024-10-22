@@ -389,7 +389,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
       case "SA" | "SAT" | "SATURDAY" => SATURDAY
       case _ =>
         throw new SparkIllegalArgumentException(
-          errorClass = "_LEGACY_ERROR_TEMP_3209",
+          errorClass = "ILLEGAL_DAY_OF_WEEK",
           messageParameters = Map("string" -> string.toString))
     }
   }
@@ -698,7 +698,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
       }
     } catch {
       case _: scala.MatchError =>
-        throw SparkException.internalError(s"Got the unexpected unit '$unit'.")
+        throw QueryExecutionErrors.invalidDatetimeUnitError("TIMESTAMPADD", unit)
       case _: ArithmeticException | _: DateTimeException =>
         throw QueryExecutionErrors.timestampAddOverflowError(micros, quantity, unit)
       case e: Throwable =>
@@ -736,7 +736,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
       val endLocalTs = getLocalDateTime(endTs, zoneId)
       timestampDiffMap(unitInUpperCase)(startLocalTs, endLocalTs)
     } else {
-      throw SparkException.internalError(s"Got the unexpected unit '$unit'.")
+      throw QueryExecutionErrors.invalidDatetimeUnitError("TIMESTAMPDIFF", unit)
     }
   }
 }

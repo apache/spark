@@ -212,7 +212,7 @@ object BindParameters extends ParameterizedQueryProcessor with QueryErrorsBase {
             args(posToIndex(pos))
         }
 
-      case _ => plan
+      case other => other
     }
   }
 }

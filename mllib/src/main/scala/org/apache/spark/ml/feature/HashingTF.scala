@@ -154,7 +154,7 @@ object HashingTF extends DefaultParamsReadable[HashingTF] {
     private val className = classOf[HashingTF].getName
 
     override def load(path: String): HashingTF = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       // We support loading old `HashingTF` saved by previous Spark versions.
       // Previous `HashingTF` uses `mllib.feature.HashingTF.murmur3Hash`, but new `HashingTF` uses

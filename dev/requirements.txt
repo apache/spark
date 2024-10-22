@@ -3,11 +3,11 @@ py4j>=0.10.9.7
 
 # PySpark dependencies (optional)
 numpy>=1.21
-pyarrow>=4.0.0
+pyarrow>=10.0.0
 six==1.16.0
-pandas>=1.4.4
+pandas>=2.0.0
 scipy
-plotly
+plotly>=4.8
 mlflow>=2.3.1
 scikit-learn
 matplotlib
@@ -37,6 +37,13 @@ nbsphinx
 numpydoc
 jinja2
 sphinx==4.5.0
+# With sphinx 4.5.0, we need to set the upperbound version of sphinxcontrib*, it should be removed after upgrading sphinx>=5
+sphinxcontrib-applehelp<=1.0.4
+sphinxcontrib-devhelp<=1.0.2
+sphinxcontrib-htmlhelp<=2.0.1
+sphinxcontrib-jsmath<=1.0.1
+sphinxcontrib-qthelp<=1.0.3
+sphinxcontrib-serializinghtml<=1.1.5
 sphinx-plotly-directive
 sphinx-copybutton
 docutils<0.18.0
@@ -59,6 +66,10 @@ googleapis-common-protos>=1.56.4
 mypy-protobuf==3.3.0
 googleapis-common-protos-stubs==2.2.0
 grpc-stubs==1.24.11
+
+# Debug for Spark and Spark Connect
+graphviz==0.20.3
+flameprof==0.4
 
 # TorchDistributor dependencies
 torch

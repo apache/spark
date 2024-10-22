@@ -71,10 +71,48 @@ object CollationTypeCasts extends TypeCoercionRule {
       val Seq(newStr, newPad) = collateToSingleType(Seq(str, pad))
       stringPadExpr.withNewChildren(Seq(newStr, len, newPad))
 
+    case raiseError: RaiseError =>
+      val newErrorParams = raiseError.errorParms.dataType match {
+        case MapType(StringType, StringType, _) => raiseError.errorParms
+        case _ => Cast(raiseError.errorParms, MapType(StringType, StringType))
+      }
+      raiseError.withNewChildren(Seq(raiseError.errorClass, newErrorParams))
+
+    case framelessOffsetWindow @ (_: Lag | _: Lead) =>
+      val Seq(input, offset, default) = framelessOffsetWindow.children
+      val Seq(newInput, newDefault) = collateToSingleType(Seq(input, default))
+      framelessOffsetWindow.withNewChildren(Seq(newInput, offset, newDefault))
+
+    case mapCreate : CreateMap if mapCreate.children.size % 2 == 0 =>
+      // We only take in mapCreate if it has even number of children, as otherwise it should fail
+      // with wrong number of arguments
+      val newKeys = collateToSingleType(mapCreate.keys)
+      val newValues = collateToSingleType(mapCreate.values)
+      mapCreate.withNewChildren(newKeys.zip(newValues).flatMap(pair => Seq(pair._1, pair._2)))
+
+    case splitPart: SplitPart =>
+      val Seq(str, delimiter, partNum) = splitPart.children
+      val Seq(newStr, newDelimiter) = collateToSingleType(Seq(str, delimiter))
+      splitPart.withNewChildren(Seq(newStr, newDelimiter, partNum))
+
+    case stringSplitSQL: StringSplitSQL =>
+      val Seq(str, delimiter) = stringSplitSQL.children
+      val Seq(newStr, newDelimiter) = collateToSingleType(Seq(str, delimiter))
+      stringSplitSQL.withNewChildren(Seq(newStr, newDelimiter))
+
+    case levenshtein: Levenshtein =>
+      val Seq(left, right, threshold @ _*) = levenshtein.children
+      val Seq(newLeft, newRight) = collateToSingleType(Seq(left, right))
+      levenshtein.withNewChildren(Seq(newLeft, newRight) ++ threshold)
+
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
-      _: Coalesce | _: BinaryExpression | _: ConcatWs | _: Mask | _: StringReplace |
-      _: StringTranslate | _: StringTrim | _: StringTrimLeft | _: StringTrimRight) =>
+      _: Coalesce | _: ArrayContains | _: ArrayExcept | _: ConcatWs | _: Mask | _: StringReplace |
+      _: StringTranslate | _: StringTrim | _: StringTrimLeft | _: StringTrimRight | _: ArrayAppend |
+      _: ArrayIntersect | _: ArrayPosition | _: ArrayRemove | _: ArrayUnion | _: ArraysOverlap |
+      _: Contains | _: EndsWith | _: EqualNullSafe | _: EqualTo | _: FindInSet | _: GreaterThan |
+      _: GreaterThanOrEqual | _: LessThan | _: LessThanOrEqual | _: StartsWith | _: StringInstr |
+      _: ToNumber | _: TryToNumber | _: StringToMap) =>
       val newChildren = collateToSingleType(otherExpr.children)
       otherExpr.withNewChildren(newChildren)
   }
@@ -85,11 +123,6 @@ object CollationTypeCasts extends TypeCoercionRule {
   private def extractStringType(dt: DataType): StringType = dt match {
     case st: StringType => st
     case ArrayType(et, _) => extractStringType(et)
-    case MapType(kt, vt, _) => if (hasStringType(kt)) {
-        extractStringType(kt)
-      } else {
-        extractStringType(vt)
-      }
   }
 
   /**
@@ -107,14 +140,6 @@ object CollationTypeCasts extends TypeCoercionRule {
       case st: StringType if st.collationId != castType.collationId => castType
       case ArrayType(arrType, nullable) =>
         castStringType(arrType, castType).map(ArrayType(_, nullable)).orNull
-      case MapType(keyType, valueType, nullable) =>
-        val newKeyType = castStringType(keyType, castType).getOrElse(keyType)
-        val newValueType = castStringType(valueType, castType).getOrElse(valueType)
-        if (newKeyType != keyType || newValueType != valueType) {
-          MapType(newKeyType, newValueType, nullable)
-        } else {
-          null
-        }
       case _ => null
     }
     Option(ret)
@@ -138,8 +163,6 @@ object CollationTypeCasts extends TypeCoercionRule {
   def getOutputCollation(expr: Seq[Expression]): StringType = {
     val explicitTypes = expr.filter {
         case _: Collate => true
-        case cast: Cast if cast.getTagValue(Cast.USER_SPECIFIED_CAST).isDefined =>
-          cast.dataType.isInstanceOf[StringType]
         case _ => false
       }
       .map(_.dataType.asInstanceOf[StringType].collationId)
@@ -152,7 +175,7 @@ object CollationTypeCasts extends TypeCoercionRule {
       case size if size > 1 =>
         throw QueryCompilationErrors
           .explicitCollationMismatchError(
-            explicitTypes.map(t => StringType(t).typeName)
+            explicitTypes.map(t => StringType(t))
           )
       // Only implicit or default collations present
       case 0 =>
@@ -168,7 +191,9 @@ object CollationTypeCasts extends TypeCoercionRule {
           .distinct
 
         if (implicitTypes.length > 1) {
-          throw QueryCompilationErrors.implicitCollationMismatchError()
+          throw QueryCompilationErrors.implicitCollationMismatchError(
+            implicitTypes.map(t => StringType(t))
+          )
         }
         else {
           implicitTypes.headOption.map(StringType(_)).getOrElse(SQLConf.get.defaultStringType)

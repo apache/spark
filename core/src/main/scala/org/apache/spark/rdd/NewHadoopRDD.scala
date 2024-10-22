@@ -197,7 +197,8 @@ class NewHadoopRDD[K, V](
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
     val iter = new Iterator[(K, V)] {
       private val split = theSplit.asInstanceOf[NewHadoopPartition]
-      logInfo(log"Input split: ${MDC(INPUT_SPLIT, split.serializableHadoopSplit)}")
+      logInfo(log"Task (TID ${MDC(TASK_ID, context.taskAttemptId())}) input split: " +
+        log"${MDC(INPUT_SPLIT, split.serializableHadoopSplit)}")
       private val conf = getConf
 
       private val inputMetrics = context.taskMetrics().inputMetrics

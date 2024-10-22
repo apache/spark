@@ -369,16 +369,14 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       }
 
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> sqlConf) {
-        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
-          val exception = intercept[SparkException] {
-            testIgnoreCorruptFiles(options)
-          }.getCause
-          assert(exception.getMessage().contains("is not a Parquet file"))
-          val exception2 = intercept[SparkException] {
-            testIgnoreCorruptFilesWithoutSchemaInfer(options)
-          }.getCause
-          assert(exception2.getMessage().contains("is not a Parquet file"))
-        }
+        val exception = intercept[SparkException] {
+          testIgnoreCorruptFiles(options)
+        }.getCause
+        assert(exception.getMessage().contains("is not a Parquet file"))
+        val exception2 = intercept[SparkException] {
+          testIgnoreCorruptFilesWithoutSchemaInfer(options)
+        }.getCause
+        assert(exception2.getMessage().contains("is not a Parquet file"))
       }
     }
   }
@@ -1077,7 +1075,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         val e = intercept[SparkException] {
           readParquet("d DECIMAL(3, 2)", path).collect()
         }
-        assert(e.getErrorClass.startsWith("FAILED_READ_FILE"))
+        assert(e.getCondition.startsWith("FAILED_READ_FILE"))
         assert(e.getCause.getMessage.contains("Please read this column/field as Spark BINARY type"))
       }
 

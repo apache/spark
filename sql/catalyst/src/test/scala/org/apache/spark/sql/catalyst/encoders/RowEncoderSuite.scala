@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.collection.mutable
 import scala.util.Random
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
@@ -275,9 +276,10 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
   test("RowEncoder should throw RuntimeException if input row object is null") {
     val schema = new StructType().add("int", IntegerType)
     val encoder = ExpressionEncoder(schema)
-    val e = intercept[RuntimeException](toRow(encoder, null))
-    assert(e.getCause.getMessage.contains("Null value appeared in non-nullable field"))
-    assert(e.getCause.getMessage.contains("top level Product or row object"))
+    // Check the error class only since the parameters may change depending on how we are running
+    // this test case.
+    val exception = intercept[SparkRuntimeException](toRow(encoder, null))
+    assert(exception.getCondition == "NOT_NULL_ASSERT_VIOLATION")
   }
 
   test("RowEncoder should validate external type") {
@@ -286,14 +288,16 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       val encoder = ExpressionEncoder(schema)
       toRow(encoder, Row(1.toShort))
     }
-    assert(e1.getCause.getMessage.contains("java.lang.Short is not a valid external type"))
+    assert(e1.getCause.getMessage.contains("The external type java.lang.Short " +
+      "is not valid for the type \"INT\""))
 
     val e2 = intercept[RuntimeException] {
       val schema = new StructType().add("a", StringType)
       val encoder = ExpressionEncoder(schema)
       toRow(encoder, Row(1))
     }
-    assert(e2.getCause.getMessage.contains("java.lang.Integer is not a valid external type"))
+    assert(e2.getCause.getMessage.contains("The external type java.lang.Integer " +
+      "is not valid for the type \"STRING\""))
 
     val e3 = intercept[RuntimeException] {
       val schema = new StructType().add("a",
@@ -301,14 +305,16 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       val encoder = ExpressionEncoder(schema)
       toRow(encoder, Row(1 -> "a"))
     }
-    assert(e3.getCause.getMessage.contains("scala.Tuple2 is not a valid external type"))
+    assert(e3.getCause.getMessage.contains("The external type scala.Tuple2 is not valid " +
+      "for the type \"STRUCT<b: INT, c: STRING>\""))
 
     val e4 = intercept[RuntimeException] {
       val schema = new StructType().add("a", ArrayType(TimestampType))
       val encoder = ExpressionEncoder(schema)
       toRow(encoder, Row(Array("a")))
     }
-    assert(e4.getCause.getMessage.contains("java.lang.String is not a valid external type"))
+    assert(e4.getCause.getMessage.contains("The external type java.lang.String is not valid " +
+      "for the type \"TIMESTAMP\""))
   }
 
   private def roundTripArray[T](dt: DataType, nullable: Boolean, data: Array[T]): Unit = {

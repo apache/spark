@@ -36,7 +36,7 @@ import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.util.ArrayImplicits._
 
 /** Provides utility functions to be used inside SparkSubmit. */
@@ -215,7 +215,7 @@ private[spark] object MavenUtils extends Logging {
         if (artifactInfo.getExt == "jar") {
           true
         } else {
-          logInfo(s"Skipping non-jar dependency ${artifactInfo.getId}")
+          logInfo(log"Skipping non-jar dependency ${MDC(LogKeys.ARTIFACT_ID, artifactInfo.getId)}")
           false
         }
       }
@@ -342,7 +342,7 @@ private[spark] object MavenUtils extends Logging {
   }
 
   /* Set ivy settings for location of cache, if option is supplied */
-  private def processIvyPathArg(ivySettings: IvySettings, ivyPath: Option[String]): Unit = {
+  private[util] def processIvyPathArg(ivySettings: IvySettings, ivyPath: Option[String]): Unit = {
     val alternateIvyDir = ivyPath.filterNot(_.trim.isEmpty).getOrElse {
       // To protect old Ivy-based systems like old Spark from Apache Ivy 2.5.2's incompatibility.
       System.getProperty("ivy.home",
@@ -462,14 +462,13 @@ private[spark] object MavenUtils extends Logging {
       val sysOut = System.out
       // Default configuration name for ivy
       val ivyConfName = "default"
-
-      // A Module descriptor must be specified. Entries are dummy strings
-      val md = getModuleDescriptor
-
-      md.setDefaultConf(ivyConfName)
+      var md: DefaultModuleDescriptor = null
       try {
         // To prevent ivy from logging to system out
         System.setOut(printStream)
+        // A Module descriptor must be specified. Entries are dummy strings
+        md = getModuleDescriptor
+        md.setDefaultConf(ivyConfName)
         val artifacts = extractMavenCoordinates(coordinates)
         // Directories for caching downloads through ivy and storing the jars when maven coordinates
         // are supplied to spark-submit
@@ -516,8 +515,9 @@ private[spark] object MavenUtils extends Logging {
           val failedReports = rr.getArtifactsReports(DownloadStatus.FAILED, true)
           if (failedReports.nonEmpty && noCacheIvySettings.isDefined) {
             val failedArtifacts = failedReports.map(r => r.getArtifact)
-            logInfo(s"Download failed: ${failedArtifacts.mkString("[", ", ", "]")}, " +
-              s"attempt to retry while skipping local-m2-cache.")
+            logInfo(log"Download failed: " +
+              log"${MDC(LogKeys.ARTIFACTS, failedArtifacts.mkString("[", ", ", "]"))}, " +
+              log"attempt to retry while skipping local-m2-cache.")
             failedArtifacts.foreach(artifact => {
               clearInvalidIvyCacheFiles(artifact.getModuleRevisionId, ivySettings.getDefaultCache)
             })
@@ -548,7 +548,9 @@ private[spark] object MavenUtils extends Logging {
         }
       } finally {
         System.setOut(sysOut)
-        clearIvyResolutionFiles(md.getModuleRevisionId, ivySettings.getDefaultCache, ivyConfName)
+        if (md != null) {
+          clearIvyResolutionFiles(md.getModuleRevisionId, ivySettings.getDefaultCache, ivyConfName)
+        }
       }
     }
   }
@@ -648,8 +650,9 @@ private[spark] object MavenUtils extends Logging {
       val invalidParams = groupedParams.keys.filterNot(validParams.contains).toSeq
       if (invalidParams.nonEmpty) {
         logWarning(
-          s"Invalid parameters `${invalidParams.sorted.mkString(",")}` found " +
-            s"in Ivy URI query `$uriQuery`.")
+          log"Invalid parameters `${MDC(LogKeys.INVALID_PARAMS,
+            invalidParams.sorted.mkString(","))}` " +
+            log"found in Ivy URI query `${MDC(LogKeys.URI, uriQuery)}`.")
       }
 
       (transitive, exclusionList, repos)

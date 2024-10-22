@@ -17,24 +17,31 @@
 
 package org.apache.spark.deploy.master.ui
 
+import java.util.Date
+
 import scala.io.Source
 
 import jakarta.servlet.http.HttpServletResponse.{SC_METHOD_NOT_ALLOWED, SC_OK}
 import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.master._
 import org.apache.spark.deploy.master.ui.MasterWebUISuite._
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
+import org.apache.spark.internal.config.UI.MASTER_UI_VISIBLE_ENV_VAR_PREFIXES
 import org.apache.spark.internal.config.UI.UI_KILL_ENABLED
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
 import org.apache.spark.util.Utils
 
 class ReadOnlyMasterWebUISuite extends SparkFunSuite {
 
+  import org.apache.spark.deploy.DeployTestUtils._
+
   val conf = new SparkConf()
     .set(UI_KILL_ENABLED, false)
     .set(DECOMMISSION_ENABLED, false)
+    .set(MASTER_UI_VISIBLE_ENV_VAR_PREFIXES.key, "SPARK_SCALA_")
   val securityMgr = new SecurityManager(conf)
   val rpcEnv = mock(classOf[RpcEnv])
   val master = mock(classOf[Master])
@@ -43,6 +50,14 @@ class ReadOnlyMasterWebUISuite extends SparkFunSuite {
   when(master.conf).thenReturn(conf)
   when(master.rpcEnv).thenReturn(rpcEnv)
   when(master.self).thenReturn(masterEndpointRef)
+  val desc1 = createAppDesc().copy(name = "WithUI")
+  val desc2 = desc1.copy(name = "WithoutUI", appUiUrl = "")
+  val app1 = new ApplicationInfo(new Date().getTime, "app1", desc1, new Date(), null, Int.MaxValue)
+  val app2 = new ApplicationInfo(new Date().getTime, "app2", desc2, new Date(), null, Int.MaxValue)
+  val state = new MasterStateResponse(
+    "host", 8080, None, Array.empty, Array(app1, app2), Array.empty,
+    Array.empty, Array.empty, RecoveryState.ALIVE)
+  when(masterEndpointRef.askSync[MasterStateResponse](RequestMasterState)).thenReturn(state)
   val masterWebUI = new MasterWebUI(master, 0)
 
   override def beforeAll(): Unit = {
@@ -85,5 +100,23 @@ class ReadOnlyMasterWebUISuite extends SparkFunSuite {
     assert(result.contains("Runtime Information"))
     assert(result.contains("Spark Properties"))
     assert(result.contains("Hadoop Properties"))
+  }
+
+  test("SPARK-49206: Add 'Environment Variables' table to Master 'EnvironmentPage'") {
+    val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/environment/"
+    val conn = sendHttpRequest(url, "GET", "")
+    assert(conn.getResponseCode === SC_OK)
+    val result = Source.fromInputStream(conn.getInputStream).mkString
+    assert(result.contains("Environment Variables"))
+    assert(result.contains("<tr><td>SPARK_SCALA_VERSION</td><td>2.1"))
+  }
+
+  test("SPARK-50022: Fix 'MasterPage' to hide App UI links when UI is disabled") {
+    val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/"
+    val conn = sendHttpRequest(url, "GET")
+    assert(conn.getResponseCode === SC_OK)
+    val result = Source.fromInputStream(conn.getInputStream).mkString
+    assert(result.contains("<a href=\"appUiUrl\">WithUI</a>"))
+    assert(result.contains("  WithoutUI\n"))
   }
 }
