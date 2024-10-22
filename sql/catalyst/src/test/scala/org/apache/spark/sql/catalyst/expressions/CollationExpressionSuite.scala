@@ -223,6 +223,8 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("InSet") {
     Seq(
+      ("1", "UTF8_BINARY", Set("1", "2", "3")) -> true,
+      ("aaa", "UTF8_BINARY", Set("b", "c", "Aaa")) -> false,
       ("a", "UTF8_LCASE", Set("a")) -> true,
       ("a", "UTF8_LCASE", Set("A", "b")) -> true,
       ("Belgrade", "UTF8_LCASE", Set()) -> false,
