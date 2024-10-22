@@ -1290,7 +1290,8 @@ class AstBuilder extends DataTypeAstBuilder
         withHavingClause(havingClause, Aggregate(Nil, namedExpressions, withFilter))
       }
     } else if (aggregationClause != null) {
-      val aggregate = withAggregationClause(aggregationClause, namedExpressions, withFilter)
+      val aggregate = withAggregationClause(
+        aggregationClause, namedExpressions, withFilter, allowNamedGroupingExpressions = false)
       aggregate.optionalMap(havingClause)(withHavingClause)
     } else {
       // When hitting this branch, `having` must be null.
@@ -1503,9 +1504,24 @@ class AstBuilder extends DataTypeAstBuilder
   private def withAggregationClause(
       ctx: AggregationClauseContext,
       selectExpressions: Seq[NamedExpression],
-      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+      query: LogicalPlan,
+      allowNamedGroupingExpressions: Boolean): LogicalPlan = withOrigin(ctx) {
     if (ctx.groupingExpressionsWithGroupingAnalytics.isEmpty) {
-      val groupByExpressions = namedExpressionList(ctx.groupingExpressions)
+      val groupByExpressions: Seq[Expression] =
+        ctx.groupingExpressions.asScala.map { n: NamedExpressionContext =>
+          if (!allowNamedGroupingExpressions && (n.name != null || n.identifierList != null)) {
+            // If we do not allow grouping expressions to have aliases in this context, we throw a
+            // syntax error here to specify the precise location of the error.
+            val error = (if (n.name != null) n.name else n.identifierList).getText
+            throw new ParseException(
+              errorClass = "PARSE_SYNTAX_ERROR",
+              messageParameters = Map(
+                "error" -> s"'$error'",
+                "hint" -> s": extra input '$error''"),
+              n)
+          }
+          visitNamedExpression(n)
+        }.toSeq
       if (ctx.GROUPING != null) {
         // GROUP BY ... GROUPING SETS (...)
         // `groupByExpressions` can be non-empty for Hive compatibility. It may add extra grouping
@@ -2194,14 +2210,6 @@ class AstBuilder extends DataTypeAstBuilder
    */
   private def expressionList(trees: java.util.List[ExpressionContext]): Seq[Expression] = {
     trees.asScala.map(expression).toSeq
-  }
-
-  /**
-   * Create sequence of named expressions from the given sequence of contexts.
-   */
-  private def namedExpressionList(
-      trees: java.util.List[NamedExpressionContext]): Seq[Expression] = {
-    trees.asScala.map(visitNamedExpression).toSeq
   }
 
   /**
@@ -5928,7 +5936,8 @@ class AstBuilder extends DataTypeAstBuilder
         }
       }.getOrElse(Seq.empty)
     Option(ctx.aggregationClause()).map { c: AggregationClauseContext =>
-      withAggregationClause(c, aggregateExpressions, left) match {
+      withAggregationClause(c, aggregateExpressions, left, allowNamedGroupingExpressions = true)
+      match {
         case a: Aggregate =>
           // GROUP BY ALL, GROUP BY CUBE, GROUPING_ID, GROUPING SETS, and GROUP BY ROLLUP are not
           // supported yet.

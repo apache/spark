@@ -159,20 +159,20 @@ Sort [-col1#x ASC NULLS FIRST], true
 -- !query
 SELECT a, b, c, count(d) FROM grouping GROUP BY WITH ROLLUP
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "objectName" : "`WITH`",
-    "proposal" : "`a`, `b`, `c`, `d`"
+    "error" : "'ROLLUP'",
+    "hint" : ": extra input 'ROLLUP''"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 49,
-    "stopIndex" : 52,
-    "fragment" : "WITH"
+    "startIndex" : 40,
+    "stopIndex" : 59,
+    "fragment" : "GROUP BY WITH ROLLUP"
   } ]
 }
 
@@ -180,20 +180,20 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT a, b, c, count(d) FROM grouping GROUP BY WITH CUBE
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "objectName" : "`WITH`",
-    "proposal" : "`a`, `b`, `c`, `d`"
+    "error" : "'CUBE'",
+    "hint" : ": extra input 'CUBE''"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 49,
-    "stopIndex" : 52,
-    "fragment" : "WITH"
+    "startIndex" : 40,
+    "stopIndex" : 57,
+    "fragment" : "GROUP BY WITH CUBE"
   } ]
 }
 
