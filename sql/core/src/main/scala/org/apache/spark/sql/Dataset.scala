@@ -18,8 +18,8 @@
 package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
-
 import java.util
+
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -28,8 +28,8 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 import org.apache.commons.text.StringEscapeUtils
-import org.apache.spark.TaskContext
 
+import org.apache.spark.TaskContext
 import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._

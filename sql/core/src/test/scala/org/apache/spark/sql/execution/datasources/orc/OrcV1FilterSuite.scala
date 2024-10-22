@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.datasources.orc
 import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentImpl
-import org.apache.spark.SparkConf
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Predicate}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation

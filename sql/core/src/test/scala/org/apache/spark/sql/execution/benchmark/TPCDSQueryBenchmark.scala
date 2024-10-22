@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.benchmark
 import scala.util.Try
 
 import org.apache.spark.SparkConf
-
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession

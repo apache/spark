@@ -19,7 +19,6 @@ package org.apache.spark.sql.connector
 
 import java.sql.Timestamp
 import java.time.{Duration, LocalDate, Period}
-
 import java.util
 import java.util.Locale
 
@@ -27,7 +26,6 @@ import scala.concurrent.duration.MICROSECONDS
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
@@ -3748,7 +3746,7 @@ class DataSourceV2SQLSuiteV1Filter
         sql("INSERT INTO " + tableName + " VALUES('Bob')")
         val df = sql("SELECT * FROM " + tableName)
         assert(df.queryExecution.analyzed.exists {
-          case RelationAndCatalogTable(_, relation: HadoopFsRelation, _)) => true
+          case RelationAndCatalogTable(_, relation: HadoopFsRelation, _) => true
           case _ => false
         })
         checkAnswer(df, Row("Bob"))

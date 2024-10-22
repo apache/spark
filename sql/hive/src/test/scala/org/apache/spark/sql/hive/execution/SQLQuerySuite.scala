@@ -25,8 +25,8 @@ import java.util.{Locale, Set}
 
 import com.google.common.io.{Files, FileWriteMode}
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.spark.{SPARK_DOC_ROOT, SparkException, TestUtils}
 
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, TestUtils}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
