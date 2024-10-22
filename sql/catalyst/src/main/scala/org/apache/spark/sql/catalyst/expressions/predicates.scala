@@ -786,7 +786,6 @@ object InSet {
     override def incl(elem: Any): Set[Any] = inputSet.incl(elem)
     override def excl(elem: Any): Set[Any] = inputSet.excl(elem)
     override def iterator: Iterator[Any] = inputSet.iterator
-
     override def contains(elem: Any): Boolean = {
       assert(elem != null, "InSet guarantees non-null input")
       strSet.contains(CollationAwareUTF8String.lowerCaseCodePoints(elem.asInstanceOf[UTF8String]))
@@ -794,13 +793,12 @@ object InSet {
   }
   class CollationSet(inputSet: Set[Any], collationId: Int)
     extends immutable.Set[Any] with Serializable {
-    private val collation = CollationFactory.fetchCollation(collationId)
     override def incl(elem: Any): Set[Any] = inputSet.incl(elem)
     override def excl(elem: Any): Set[Any] = inputSet.excl(elem)
     override def iterator: Iterator[Any] = inputSet.iterator
-
     override def contains(elem: Any): Boolean = {
       assert(elem != null, "InSet guarantees non-null input")
+      val collation = CollationFactory.fetchCollation(collationId)
       inputSet.exists { p =>
         collation.equalsFunction(p.asInstanceOf[UTF8String], elem.asInstanceOf[UTF8String])
       }
