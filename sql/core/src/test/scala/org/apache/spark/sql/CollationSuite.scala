@@ -519,10 +519,22 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   test("SPARK-48413: Alter column with collation") {
     val tableName = "testcat.alter_column_tbl"
     withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (c1 STRING) USING PARQUET")
-      sql(s"INSERT INTO $tableName VALUES ('a')")
+      spark.sql(
+        s"""CREATE TABLE $tableName (
+           |c1 STRING,
+           |c2 ARRAY<STRING>,
+           |c3 MAP<INT, STRING>,
+           |c4 STRUCT<t: STRING>)
+           |USING PARQUET
+           |""".stripMargin)
+      sql(s"INSERT INTO $tableName VALUES ('a', array('b'), map(1, 'c'), struct('d'))")
       sql(s"ALTER TABLE $tableName ALTER COLUMN c1 TYPE STRING COLLATE UTF8_LCASE")
-      checkAnswer(sql(s"SELECT collation(c1) FROM $tableName"), Seq(Row("UTF8_LCASE")))
+      sql(s"ALTER TABLE $tableName ALTER COLUMN c2 TYPE ARRAY<STRING COLLATE UNICODE_CI>")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN c3 TYPE MAP<INT, STRING COLLATE UTF8_BINARY>")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN c4 TYPE STRUCT<t: STRING COLLATE UNICODE>")
+      checkAnswer(sql(s"SELECT collation(c1), collation(c2[0]), " +
+        s"collation(c3[1]), collation(c4.t) FROM $tableName"),
+        Seq(Row("UTF8_LCASE", "UNICODE_CI", "UTF8_BINARY", "UNICODE")))
     }
   }
 
