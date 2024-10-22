@@ -1281,10 +1281,19 @@ class FunctionsTestsMixin:
     def test_empty_ndarray(self):
         import numpy as np
 
-        self.assertEqual(
-            [("a", "array<int>")],
-            self.spark.range(1).select(F.lit(np.array([], np.int32)).alias("a")).dtypes,
-        )
+        arr_dtype_to_spark_dtypes = [
+            ("int8", [("b", "array<smallint>")]),
+            ("int16", [("b", "array<smallint>")]),
+            ("int32", [("b", "array<int>")]),
+            ("int64", [("b", "array<bigint>")]),
+            ("float32", [("b", "array<float>")]),
+            ("float64", [("b", "array<double>")]),
+        ]
+        for t, expected_spark_dtypes in arr_dtype_to_spark_dtypes:
+            arr = np.array([]).astype(t)
+            self.assertEqual(
+                expected_spark_dtypes, self.spark.range(1).select(F.lit(arr).alias("b")).dtypes
+            )
 
     def test_binary_math_function(self):
         funcs, expected = zip(

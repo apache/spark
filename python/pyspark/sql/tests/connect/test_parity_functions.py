@@ -38,10 +38,6 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     def test_str_ndarray(self):
         super().test_str_ndarray()
 
-    @unittest.skip("SPARK-50051: Spark Connect should empty ndarray.")
-    def test_empty_ndarray(self):
-        super().test_empty_ndarray()
-
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_parity_functions import *  # noqa: F401
