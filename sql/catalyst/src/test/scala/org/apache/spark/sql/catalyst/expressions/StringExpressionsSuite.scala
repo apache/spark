@@ -1877,7 +1877,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         urlStr: String,
         partToExtract: String,
         key: String): Unit = {
-      checkEvaluation(ParseUrl(Seq(urlStr, partToExtract, key)).replacement, expected)
+      checkEvaluation(ParseUrl(Seq(urlStr, partToExtract, key)), expected)
     }
 
     checkParseUrl("spark.apache.org", "http://spark.apache.org/path?query=1", "HOST")
