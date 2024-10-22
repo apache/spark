@@ -40,7 +40,9 @@ class TableValuedFunction:
         step: int = 1,
         numPartitions: Optional[int] = None,
     ) -> DataFrame:
-        return self._sparkSession.range(start, end, step, numPartitions)  # type: ignore[return-value]
+        return self._sparkSession.range(  # type: ignore[return-value]
+            start, end, step, numPartitions
+        )
 
     range.__doc__ = PySparkTableValuedFunction.range.__doc__
 

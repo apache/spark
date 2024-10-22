@@ -1967,7 +1967,8 @@ class SparkSession(SparkConversionMixin):
     @property
     def tvf(self) -> "TableValuedFunction":
         """
-        Returns a :class:`TableValuedFunction` that can be used to call a table-valued function (TVF).
+        Returns a :class:`TableValuedFunction` that can be used to call a table-valued function
+        (TVF).
 
         .. versionadded:: 4.0.0
 
