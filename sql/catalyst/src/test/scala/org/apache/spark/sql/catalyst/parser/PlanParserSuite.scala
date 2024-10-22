@@ -237,8 +237,8 @@ class PlanParserSuite extends AnalysisTest {
     val sql1 = "EXPLAIN logical SELECT 1"
     checkError(
       exception = parseException(sql1),
-      condition = "_LEGACY_ERROR_TEMP_0039",
-      parameters = Map.empty,
+      condition = "INVALID_SQL_SYNTAX.UNSUPPORTED_SQL_STATEMENT",
+      parameters = Map("sqlText" -> "EXPLAIN logical SELECT 1"),
       context = ExpectedContext(
         fragment = sql1,
         start = 0,
@@ -247,8 +247,8 @@ class PlanParserSuite extends AnalysisTest {
     val sql2 = "EXPLAIN formatted SELECT 1"
     checkError(
       exception = parseException(sql2),
-      condition = "_LEGACY_ERROR_TEMP_0039",
-      parameters = Map.empty,
+      condition = "INVALID_SQL_SYNTAX.UNSUPPORTED_SQL_STATEMENT",
+      parameters = Map("sqlText" -> "EXPLAIN formatted SELECT 1"),
       context = ExpectedContext(
         fragment = sql2,
         start = 0,
