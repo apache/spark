@@ -2584,6 +2584,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
+  def cannotGetLatestSnapshotVersionAndUniqueIdFromLineage(
+    lineage: String, snapshotVersionAndUniqueIds: String): Throwable = {
+    new SparkException (
+      errorClass =
+        "CANNOT_LOAD_STATE_STORE.CANNOT_GET_LATEST_SNAPSHOT_VERSION_AND_UNIQUE_ID_FROM_LINEAGE",
+      messageParameters = Map(
+        "lineage" -> lineage,
+        "snapshotVersionAndUniqueIds" -> snapshotVersionAndUniqueIds),
+      cause = null)
+  }
+
   def unexpectedFileSize(
       dfsFile: Path,
       localFile: File,

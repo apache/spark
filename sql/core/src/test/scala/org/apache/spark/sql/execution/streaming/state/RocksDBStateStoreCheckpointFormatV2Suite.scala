@@ -182,7 +182,7 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
 // return their own state store checkpointID. This can happen because of task retry or
 // speculative execution.
 class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
-  with AlsoTestWithChangelogCheckpointingEnabled {
+  with AlsoTestWithRocksDBFeatures {
   import testImplicits._
 
   val providerClassName = classOf[CkptIdCollectingStateStoreProviderWrapper].getCanonicalName

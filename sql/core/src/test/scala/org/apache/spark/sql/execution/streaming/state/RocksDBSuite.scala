@@ -938,10 +938,12 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       val cpFiles = Seq()
       generateFiles(verificationDir, cpFiles)
       assert(!dfsRootDir.exists())
-      saveCheckpointFiles(fileManager, cpFiles, version = 1, numKeys = -1)
+      val fileMapping = new RocksDBFileMapping
+      saveCheckpointFiles(fileManager, cpFiles, version = 1,
+        numKeys = -1, fileMapping)
       // The dfs root dir is created even with unknown number of keys
       assert(dfsRootDir.exists())
-      loadAndVerifyCheckpointFiles(fileManager, verificationDir, version = 1, Nil, -1)
+      loadAndVerifyCheckpointFiles(fileManager, verificationDir, version = 1, Nil, -1, fileMapping)
     } finally {
       Utils.deleteRecursively(dfsRootDir)
     }
@@ -1053,8 +1055,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
         case false => None
         case true => Some(UUID.randomUUID().toString)
       }
-      saveCheckpointFiles(
-        fileManager, cpFiles1, version = 1, numKeys = 101, checkpointUniqueId = uuid)
+      val rocksDBFileMapping = new RocksDBFileMapping()
+      rocksDBFileMapping.currentVersion = 1
+      saveCheckpointFiles(fileManager, cpFiles1, version = 1,
+        numKeys = 101, rocksDBFileMapping, uuid)
       assert(fileManager.getLatestVersion() === 1)
       assert(numRemoteSSTFiles == 2) // 2 sst files copied
       assert(numRemoteLogFiles == 2)
@@ -1068,8 +1072,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
         "archive/00002.log" -> 1000,
         "archive/00003.log" -> 2000
       )
-      saveCheckpointFiles(
-        fileManager_, cpFiles1_, version = 1, numKeys = 101, checkpointUniqueId = uuid)
+      saveCheckpointFiles(fileManager_, cpFiles1_, version = 1,
+        numKeys = 101, new RocksDBFileMapping(), uuid)
       assert(fileManager_.getLatestVersion() === 1)
       assert(numRemoteSSTFiles == 4)
       assert(numRemoteLogFiles == 4)
@@ -1088,8 +1092,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
         "archive/00004.log" -> 1000,
         "archive/00005.log" -> 2000
       )
-      saveCheckpointFiles(
-        fileManager_, cpFiles2, version = 2, numKeys = 121, checkpointUniqueId = uuid)
+      saveCheckpointFiles(fileManager_, cpFiles2,
+        version = 2, numKeys = 121, new RocksDBFileMapping(), uuid)
       fileManager_.deleteOldVersions(1)
       assert(numRemoteSSTFiles <= 4) // delete files recorded in 1.zip
       assert(numRemoteLogFiles <= 5) // delete files recorded in 1.zip and orphan 00001.log
@@ -1103,8 +1107,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
         "archive/00006.log" -> 1000,
         "archive/00007.log" -> 2000
       )
-      saveCheckpointFiles(
-        fileManager_, cpFiles3, version = 3, numKeys = 131, checkpointUniqueId = uuid)
+      saveCheckpointFiles(fileManager_, cpFiles3,
+        version = 3, numKeys = 131, new RocksDBFileMapping(), uuid)
       assert(fileManager_.getLatestVersion() === 3)
       fileManager_.deleteOldVersions(1)
       assert(numRemoteSSTFiles == 1)
@@ -1139,8 +1143,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
         )
         val uuid1 = Some(UUID.randomUUID().toString)
 
-        saveCheckpointFiles(
-          fileManager, cpFiles1, version = 1, numKeys = 101, checkpointUniqueId = uuid1)
+        val rocksDBFileMapping = new RocksDBFileMapping()
+        saveCheckpointFiles(fileManager, cpFiles1,
+          version = 1, numKeys = 101, rocksDBFileMapping, uuid1)
         assert(fileManager.getLatestVersion() === 1)
         assert(numRemoteSSTFiles == 2) // 2 sst files copied
         assert(numRemoteLogFiles == 2)
@@ -1155,8 +1160,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
           "archive/00003.log" -> 2000
         )
         val uuid2 = Some(UUID.randomUUID().toString)
-        saveCheckpointFiles(
-          fileManager_, cpFiles1_, version = 1, numKeys = 101, checkpointUniqueId = uuid2)
+        saveCheckpointFiles(fileManager, cpFiles1_,
+          version = 2, numKeys = 101, rocksDBFileMapping, uuid2)
         assert(fileManager_.getLatestVersion() === 1)
         assert(numRemoteSSTFiles == 4)
         assert(numRemoteLogFiles == 4)
@@ -1177,7 +1182,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
         )
         val uuid3 = Some(UUID.randomUUID().toString)
         saveCheckpointFiles(
-          fileManager_, cpFiles2, version = 2, numKeys = 121, checkpointUniqueId = uuid3)
+          fileManager_, cpFiles2, version = 2, numKeys = 121, rocksDBFileMapping, uuid3)
         fileManager_.deleteOldVersions(1)
         assert(numRemoteSSTFiles <= 4) // delete files recorded in 1_uuid1.zip and 1_uuid2.zip
         assert(numRemoteLogFiles <= 5) // delete files recorded in 1.zip and orphan 00001.log
@@ -1193,7 +1198,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
         )
         val uuid4 = Some(UUID.randomUUID().toString)
         saveCheckpointFiles(
-          fileManager_, cpFiles3, version = 3, numKeys = 131, checkpointUniqueId = uuid4)
+          fileManager_, cpFiles3, version = 3, numKeys = 131, rocksDBFileMapping, uuid4)
         assert(fileManager_.getLatestVersion() === 3)
         fileManager_.deleteOldVersions(1)
         assert(numRemoteSSTFiles == 1)
@@ -1231,7 +1236,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
         "archive/00001.log" -> 1000,
         "archive/00002.log" -> 2000
       )
-
+      val rocksDBFileMapping = new RocksDBFileMapping()
       val uuid = if (enableStateStoreCheckpointIds) {
         Some(UUID.randomUUID().toString)
       } else {
@@ -1239,7 +1244,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       }
 
       saveCheckpointFiles(
-        fileManager, cpFiles1, version = 1, numKeys = 101, checkpointUniqueId = uuid)
+        fileManager, cpFiles1, version = 1, numKeys = 101, rocksDBFileMapping, uuid)
       fileManager.deleteOldVersions(1)
       // Should not delete orphan files even when they are older than all existing files
       // when there is only 1 version.
@@ -1257,7 +1262,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
         "archive/00004.log" -> 2000
       )
       saveCheckpointFiles(
-        fileManager, cpFiles2, version = 2, numKeys = 101, checkpointUniqueId = uuid)
+        fileManager, cpFiles2, version = 2, numKeys = 101, rocksDBFileMapping, uuid)
       assert(numRemoteSSTFiles == 5)
       assert(numRemoteLogFiles == 5)
       fileManager.deleteOldVersions(1)
@@ -1280,13 +1285,14 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
         def numRemoteSSTFiles: Int = listFiles(sstDir).length
         val logDir = s"$dfsRootDir/logs"
         def numRemoteLogFiles: Int = listFiles(logDir).length
+        val fileMapping = new RocksDBFileMapping
 
         // Verify behavior before any saved checkpoints
         assert(fileManager.getLatestVersion() === 0)
 
         // Try to load incorrect versions
         intercept[FileNotFoundException] {
-          fileManager.loadCheckpointFromDfs(1, Utils.createTempDir())
+          fileManager.loadCheckpointFromDfs(1, Utils.createTempDir(), fileMapping)
         }
 
         // Save a version of checkpoint files
@@ -1306,7 +1312,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
         }
 
         saveCheckpointFiles(
-          fileManager, cpFiles1, version = 1, numKeys = 101, checkpointUniqueId = uuid)
+          fileManager, cpFiles1, version = 1, numKeys = 101, fileMapping, uuid)
         assert(fileManager.getLatestVersion() === 1)
         assert(numRemoteSSTFiles == 2) // 2 sst files copied
         assert(numRemoteLogFiles == 2) // 2 log files copied
@@ -1321,13 +1327,16 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
           "00005.log" -> 101,
           "archive/00007.log" -> 101
         ))
+
+        // as we are loading version 1 again, the previously committed 1.zip and
+        // SST files would not be reused.
         loadAndVerifyCheckpointFiles(
-          fileManager, verificationDir, version = 1, cpFiles1, 101, checkpointUniqueId = uuid)
+          fileManager, verificationDir, version = 1, cpFiles1, 101, fileMapping, uuid)
 
         // Save SAME version again with different checkpoint files and load back again to verify
         // whether files were overwritten.
         val cpFiles1_ = Seq(
-          "sst-file1.sst" -> 10, // same SST file as before, this should get reused
+          "sst-file1.sst" -> 10, // same SST file as before, but will be uploaded again
           "sst-file2.sst" -> 25, // new SST file with same name as before, but different length
           "sst-file3.sst" -> 30, // new SST file
           "other-file1" -> 100, // same non-SST file as before, should not get copied
@@ -1337,42 +1346,50 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
           "archive/00002.log" -> 2500, // new log file with same name but different length
           "archive/00003.log" -> 3000 // new log file
         )
-        saveCheckpointFiles(
-          fileManager, cpFiles1_, version = 1, numKeys = 1001, checkpointUniqueId = uuid)
-        // 2 old + 2 new SST files
-        assert(numRemoteSSTFiles === 4, "shouldn't copy same files again")
-        // 2 old + 2 new log files
-        assert(numRemoteLogFiles === 4, "shouldn't copy same files again")
-        loadAndVerifyCheckpointFiles(
-          fileManager, verificationDir, version = 1, cpFiles1_, 1001, checkpointUniqueId = uuid)
+
+        // upload version 1 again, new checkpoint will be created and SST files from
+        // previously committed version 1 will not be reused.
+        saveCheckpointFiles(fileManager, cpFiles1_,
+          version = 1, numKeys = 1001, fileMapping, uuid)
+        assert(numRemoteSSTFiles === 5, "shouldn't reuse old version 1 SST files" +
+          " while uploading version 1 again") // 2 old + 3 new SST files
+        assert(numRemoteLogFiles === 5, "shouldn't reuse old version 1 log files" +
+          " while uploading version 1 again") // 2 old + 3 new log files
+
+        // verify checkpoint state is correct
+        loadAndVerifyCheckpointFiles(fileManager, verificationDir,
+          version = 1, cpFiles1_, 1001, fileMapping, uuid)
 
         // Save another version and verify
         val cpFiles2 = Seq(
-          "sst-file4.sst" -> 40,
+          "sst-file1.sst" -> 10, // same SST file as version 1, should be reused
+          "sst-file2.sst" -> 25, // same SST file as version 1, should be reused
+          "sst-file3.sst" -> 30, // same SST file as version 1, should be reused
+          "sst-file4.sst" -> 40, // new sst file, should be uploaded
           "other-file4" -> 400,
           "archive/00004.log" -> 4000
         )
-        saveCheckpointFiles(
-          fileManager, cpFiles2, version = 2, numKeys = 1501, checkpointUniqueId = uuid)
-        assert(numRemoteSSTFiles === 5) // 1 new file over earlier 4 files
-        assert(numRemoteLogFiles === 5) // 1 new file over earlier 4 files
-        loadAndVerifyCheckpointFiles(
-          fileManager, verificationDir, version = 2, cpFiles2, 1501, checkpointUniqueId = uuid)
+        saveCheckpointFiles(fileManager, cpFiles2,
+          version = 2, numKeys = 1501, fileMapping, uuid)
+        assert(numRemoteSSTFiles === 6) // 1 new file over earlier 5 files
+        assert(numRemoteLogFiles === 6) // 1 new file over earlier 6 files
+        loadAndVerifyCheckpointFiles(fileManager, verificationDir,
+          version = 2, cpFiles2, 1501, fileMapping, uuid)
 
         // Loading an older version should work
         loadAndVerifyCheckpointFiles(
-          fileManager, verificationDir, version = 1, cpFiles1_, 1001, checkpointUniqueId = uuid)
+          fileManager, verificationDir, version = 1, cpFiles1_, 1001, fileMapping, uuid)
 
         // Loading incorrect version should fail
         intercept[FileNotFoundException] {
           loadAndVerifyCheckpointFiles(
-            fileManager, verificationDir, version = 3, Nil, 1001, checkpointUniqueId = uuid)
+            fileManager, verificationDir, version = 3, Nil, 1001, fileMapping, uuid)
         }
 
         // Loading 0 should delete all files
         require(verificationDir.list().length > 0)
         loadAndVerifyCheckpointFiles(
-          fileManager, verificationDir, version = 0, Nil, 0, checkpointUniqueId = uuid)
+          fileManager, verificationDir, version = 0, Nil, 0, fileMapping, uuid)
       }
   }
 
@@ -1396,7 +1413,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       }
       intercept[IOException] {
         saveCheckpointFiles(
-          fileManager, cpFiles, version = 1, numKeys = 101, checkpointUniqueId = uuid)
+          fileManager, cpFiles, version = 1, numKeys = 101, new RocksDBFileMapping(), uuid)
       }
       assert(CreateAtomicTestManager.cancelCalledInCreateAtomic)
     }
@@ -2076,40 +2093,42 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
     "RocksDB load when metadata file is not overwritten") { enableStateStoreCheckpointIds =>
     val fmClass = "org.apache.spark.sql.execution.streaming.state." +
       "NoOverwriteFileSystemBasedCheckpointFileManager"
-    withTempDir { dir =>
-      val conf = dbConf.copy(minDeltasForSnapshot = 0) // create snapshot every commit
-      val hadoopConf = new Configuration()
-      hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fmClass)
+    Seq(Some(fmClass), None).foreach { fm =>
+      withTempDir { dir =>
+        val conf = dbConf.copy(minDeltasForSnapshot = 0) // create snapshot every commit
+        val hadoopConf = new Configuration()
+        fm.foreach(value =>
+          hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, value))
+        val remoteDir = dir.getCanonicalPath
+        val versionToUniqueId = new mutable.HashMap[Long, String]()
+        withDB(remoteDir, conf = conf, hadoopConf = hadoopConf,
+          enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+          versionToUniqueId = versionToUniqueId) { db =>
+          db.load(0)
+          db.put("a", "1")
+          db.commit()
 
-      val remoteDir = dir.getCanonicalPath
-      val versionToUniqueId = new mutable.HashMap[Long, String]()
-      withDB(remoteDir, conf = conf, hadoopConf = hadoopConf,
-        enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
-        versionToUniqueId = versionToUniqueId) { db =>
-        db.load(0)
-        db.put("a", "1")
-        db.commit()
+          // load previous version, will recreate snapshot on commit
+          db.load(0)
+          db.put("a", "1")
 
-        // load previous version, and recreate the snapshot
-        db.load(0)
-        db.put("a", "1")
+          // upload version 1 snapshot created previously
+          db.doMaintenance()
+          assert(snapshotVersionsPresent(remoteDir) == Seq(1))
 
-        // do not upload version 1 snapshot created previously
-        db.doMaintenance()
-        assert(snapshotVersionsPresent(remoteDir) == Seq.empty)
+          db.commit() // create snapshot again
 
-        db.commit() // create snapshot again
+          // load version 1 - should succeed
+          withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf) { db =>
+          }
 
-        // load version 1 - should succeed
-        withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf) { db =>
-        }
+          // upload recently created snapshot
+          db.doMaintenance()
+          assert(snapshotVersionsPresent(remoteDir) == Seq(1))
 
-        // upload recently created snapshot
-        db.doMaintenance()
-        assert(snapshotVersionsPresent(remoteDir) == Seq(1))
-
-        // load version 1 again - should succeed
-        withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf) { db =>
+          // load version 1 again - should succeed
+          withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf) { db =>
+          }
         }
       }
     }
@@ -2624,15 +2643,21 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       fileToLengths: Seq[(String, Int)],
       version: Int,
       numKeys: Int,
+      fileMapping: RocksDBFileMapping,
       checkpointUniqueId: Option[String] = None): Unit = {
     val checkpointDir = Utils.createTempDir().getAbsolutePath // local dir to create checkpoints
     generateFiles(checkpointDir, fileToLengths)
+    val (dfsFileSuffix, immutableFileMapping) = fileMapping.createSnapshotFileMapping(
+      fileManager, checkpointDir, version)
     fileManager.saveCheckpointToDfs(
       checkpointDir,
       version,
       numKeys,
-      fileManager.captureFileMapReference(),
+      immutableFileMapping,
       checkpointUniqueId = checkpointUniqueId)
+
+    val snapshotInfo = RocksDBVersionSnapshotInfo(version, dfsFileSuffix)
+    fileMapping.snapshotsPendingUpload.remove(snapshotInfo)
   }
 
   def loadAndVerifyCheckpointFiles(
@@ -2641,8 +2666,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       version: Int,
       expectedFiles: Seq[(String, Int)],
       expectedNumKeys: Int,
+      fileMapping: RocksDBFileMapping,
       checkpointUniqueId: Option[String] = None): Unit = {
-    val metadata = fileManager.loadCheckpointFromDfs(version, verificationDir, checkpointUniqueId)
+    val metadata = fileManager.loadCheckpointFromDfs(
+      version, verificationDir, fileMapping, checkpointUniqueId)
     val filesAndLengths =
       listFiles(verificationDir).map(f => f.getName -> f.length).toSet ++
       listFiles(verificationDir + "/archive").map(f => s"archive/${f.getName}" -> f.length()).toSet
