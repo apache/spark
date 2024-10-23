@@ -34,7 +34,7 @@ class TVFTestsMixin:
         expected = self.spark.sql("""SELECT * FROM explode(map('a', 1, 'b', 2))""")
         assertDataFrameEqual(actual=actual, expected=expected)
 
-        # emtpy
+        # empty
         actual = self.spark.tvf.explode(sf.array())
         expected = self.spark.sql("""SELECT * FROM explode(array())""")
         assertDataFrameEqual(actual=actual, expected=expected)
@@ -63,7 +63,7 @@ class TVFTestsMixin:
         expected = self.spark.sql("""SELECT * FROM explode_outer(map('a', 1, 'b', 2))""")
         assertDataFrameEqual(actual=actual, expected=expected)
 
-        # emtpy
+        # empty
         actual = self.spark.tvf.explode_outer(sf.array())
         expected = self.spark.sql("""SELECT * FROM explode_outer(array())""")
         assertDataFrameEqual(actual=actual, expected=expected)
@@ -162,7 +162,7 @@ class TVFTestsMixin:
         expected = self.spark.sql("""SELECT * FROM posexplode(map('a', 1, 'b', 2))""")
         assertDataFrameEqual(actual=actual, expected=expected)
 
-        # emtpy
+        # empty
         actual = self.spark.tvf.posexplode(sf.array())
         expected = self.spark.sql("""SELECT * FROM posexplode(array())""")
         assertDataFrameEqual(actual=actual, expected=expected)
@@ -191,7 +191,7 @@ class TVFTestsMixin:
         expected = self.spark.sql("""SELECT * FROM posexplode_outer(map('a', 1, 'b', 2))""")
         assertDataFrameEqual(actual=actual, expected=expected)
 
-        # emtpy
+        # empty
         actual = self.spark.tvf.posexplode_outer(sf.array())
         expected = self.spark.sql("""SELECT * FROM posexplode_outer(array())""")
         assertDataFrameEqual(actual=actual, expected=expected)
@@ -237,7 +237,7 @@ class TVFTestsMixin:
         )
         assertDataFrameEqual(actual=actual, expected=expected)
 
-        # emtpy
+        # empty
         actual = self.spark.tvf.variant_explode(sf.parse_json(sf.lit("[]")))
         expected = self.spark.sql("""SELECT * FROM variant_explode(parse_json('[]'))""")
         assertDataFrameEqual(actual=actual, expected=expected)
@@ -271,7 +271,7 @@ class TVFTestsMixin:
         )
         assertDataFrameEqual(actual=actual, expected=expected)
 
-        # emtpy
+        # empty
         actual = self.spark.tvf.variant_explode_outer(sf.parse_json(sf.lit("[]")))
         expected = self.spark.sql("""SELECT * FROM variant_explode_outer(parse_json('[]'))""")
         assertDataFrameEqual(actual=actual, expected=expected)

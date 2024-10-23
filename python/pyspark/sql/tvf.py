@@ -629,14 +629,12 @@ class TableValuedFunction:
     def variant_explode_outer(self, input: "ColumnOrName") -> DataFrame:
         """
         Separates a variant object/array into multiple rows containing its fields/elements.
-        Unlike variant_explode, if the given variant is not a variant object/array, or
-        the variant object/array is null or empty, then null is produced.
 
         Its result schema is `struct<pos int, key string, value variant>`. `pos` is the position of
         the field/element in its parent object/array, and `value` is the field/element value.
         `key` is the field name when exploding a variant object, or is NULL when exploding a variant
-        array. It ignores any input that is not a variant array/object, including SQL NULL, variant
-        null, and any other variant values.
+        array. Unlike variant_explode, if the given variant is not a variant array/object, including
+        SQL NULL, variant null, and any other variant values, then NULL is produced.
 
         .. versionadded:: 4.0.0
 

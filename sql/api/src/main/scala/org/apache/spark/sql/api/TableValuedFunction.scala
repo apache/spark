@@ -167,8 +167,8 @@ abstract class TableValuedFunction {
    * result schema is `struct&lt;pos int, key string, value variant&gt;`. `pos` is the position of
    * the field/element in its parent object/array, and `value` is the field/element value. `key`
    * is the field name when exploding a variant object, or is NULL when exploding a variant array.
-   * It ignores any input that is not a variant array/object, including SQL NULL, variant null,
-   * and any other variant values.
+   * Unlike variant_explode, if the given variant is not a variant array/object, including SQL
+   * NULL, variant null, and any other variant values, then NULL is produced.
    *
    * @group variant_funcs
    * @since 4.0.0
