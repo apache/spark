@@ -51,8 +51,8 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     child.output.map { in =>
       in.dataType match {
         case _: ArrayType | _: MapType | _: StructType =>
-          new StructsToJson(ioschema.inputSerdeProps.toMap, in)
-            .withTimeZone(conf.sessionLocalTimeZone)
+          StructsToJson(ioschema.inputSerdeProps.toMap, in,
+            Some(conf.sessionLocalTimeZone)).replacement
         case _ => Cast(in, StringType).withTimeZone(conf.sessionLocalTimeZone)
       }
     }
