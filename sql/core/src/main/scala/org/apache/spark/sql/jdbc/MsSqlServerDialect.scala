@@ -73,6 +73,36 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       }
     }
 
+    override def visitCaseWhen(children: Array[String]): String = {
+      // Since MsSqlServer cannot handle boolean expressions inside
+      // a CASE WHEN, it is necessary to convert those to an IIF
+      // expression that will return 1 or 0 depending on the result.
+      // Example:
+      // In:  ... CASE WHEN a = b THEN c = d ...
+      // Out: ... CASE WHEN a = b THEN IIF(c = d, 1, 0) ...
+      val sb = new StringBuilder("CASE")
+      var i = 0
+      while (i < children.length) {
+        val c = children(i)
+        val j = i + 1
+        if (j < children.length) {
+          val v = children(j)
+          sb.append(" WHEN ")
+          sb.append(c)
+          sb.append(" THEN ")
+          sb.append(MsSqlServerDialect.wrapPredicateWithIIF(v))
+        }
+        else {
+          sb.append(" ELSE ")
+          sb.append(MsSqlServerDialect.wrapPredicateWithIIF(c))
+        }
+
+        i += 2
+      }
+      sb.append(" END")
+      sb.toString
+    }
+
     override def dialectFunctionName(funcName: String): String = funcName match {
       case "VAR_POP" => "VARP"
       case "VAR_SAMP" => "VAR"
@@ -85,16 +115,21 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       // MsSqlServer does not support boolean comparison using standard comparison operators
       // We shouldn't propagate these queries to MsSqlServer
       expr match {
-        case e: Predicate => e.name() match {
-          case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
-            val Array(l, r) = e.children().map {
-              case p: Predicate => s"CASE WHEN ${inputToSQL(p)} THEN 1 ELSE 0 END"
-              case o => inputToSQL(o)
-            }
-            visitBinaryComparison(e.name(), l, r)
-          case "CASE_WHEN" => visitCaseWhen(expressionsToStringArray(e.children())) + " = 1"
-          case _ => super.build(expr)
-        }
+        case e: Predicate if (e.name() match {
+              case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" => true
+              case _ => false
+            }) =>
+          val Array(l, r) = e.children().map {
+            case p: Predicate
+              if p.name() != "ALWAYS_TRUE" && p.name() != "ALWAYS_FALSE" =>
+              s"CASE WHEN ${inputToSQL(p)} THEN 1 ELSE 0 END"
+            case o => inputToSQL(o)
+          }
+          visitBinaryComparison(e.name(), l, r)
+        // If a CASE WHEN is a predicate, appending the "= 1"
+        // because it cannot return a boolean
+        case e: Predicate if e.name() == "CASE_WHEN" =>
+          visitCaseWhen(expressionsToStringArray(e.children())) + " = 1 "
         case _ => super.build(expr)
       }
     }
@@ -250,4 +285,10 @@ private object MsSqlServerDialect {
   // https://github.com/microsoft/mssql-jdbc/blob/v9.4.1/src/main/java/microsoft/sql/Types.java
   final val GEOMETRY = -157
   final val GEOGRAPHY = -158
+
+  def wrapPredicateWithIIF(expr: String): String = {
+    if (expr != "0" && expr != "1") {
+      s"""IIF($expr, 1, 0)"""
+    } else expr
+  }
 }

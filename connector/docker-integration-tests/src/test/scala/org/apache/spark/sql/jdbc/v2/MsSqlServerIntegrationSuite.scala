@@ -146,4 +146,70 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
         |""".stripMargin)
     assert(df.collect().length == 2)
   }
+
+  test("SPARK-50087: SqlServer handle booleans in IF in SELECT test") {
+    // This doesn't compile on SqlServer unless result boolean expressions
+    // in IF / CASE WHEN are wrapped with an IIF(<>, 1, 0).
+    val df = sql(
+      s"""|WITH dummy AS (
+          |  SELECT
+          |    DISTINCT name AS full_name,
+          |    UPPER(name) AS test_type,
+          |    name,
+          |    IF(
+          |      LOWER(name) = 'adfsaef' OR LOWER(name) = 'agadg',
+          |      'agfagff',
+          |      IF(
+          |        LOWER(name) = 'adgfda' OR LOWER(name) = 'ssadf',
+          |        'sxzvfvxf',
+          |        IF(
+          |          LOWER(name) = 'sdfadsf' OR LOWER(name) = 'sadfgvad',
+          |          'sAFvadsfvcds',
+          |          LOWER(name)
+          |        )
+          |      )
+          |    ) AS test_type_name
+          |  FROM $catalogName.employee
+          |),
+          |dummy_new AS (
+          |  SELECT *
+          |  FROM dummy WHERE test_type_name = 'safcdfz'
+          |)
+          |SELECT * FROM dummy_new limit 1""".stripMargin
+    )
+    df.explain("formatted")
+    df.collect()
+  }
+
+  test("SPARK-50087: SqlServer handle booleans in CASE WHEN test") {
+    val df = sql(
+      s"""|SELECT * FROM $catalogName.employee
+          |WHERE CASE WHEN name = '1' THEN name = 'barxxyz' ELSE NOT (name = 'barxxyz') END
+          |""".stripMargin
+    )
+    df.explain("formatted")
+    df.collect()
+  }
+
+  test("SPARK-50087: SqlServer handle booleans in CASE WHEN with always true test") {
+    val df = sql(
+      s"""|SELECT * FROM $catalogName.employee
+          |WHERE CASE WHEN (name = 'barxxyz') THEN (name = 'barx') ELSE (1=1) END
+          |""".stripMargin
+    )
+    df.explain("formatted")
+    df.collect()
+  }
+
+  test("SPARK-50087: SqlServer handle booleans in nested CASE WHEN test") {
+    val df = sql(
+      s"""|SELECT * FROM $catalogName.employee
+          |WHERE CASE WHEN (name = 'barxxyz') THEN
+          | CASE WHEN (name = '5') THEN (name = 'barx') ELSE (name = 'aweda') END
+          | ELSE (name = '1') END
+          |""".stripMargin
+    )
+    df.explain("formatted")
+    df.collect()
+  }
 }
