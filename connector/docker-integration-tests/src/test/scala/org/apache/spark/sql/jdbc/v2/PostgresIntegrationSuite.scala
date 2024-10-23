@@ -23,10 +23,10 @@ import org.apache.spark.{SparkConf, SparkSQLException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
-
 /**
  * To run this test suite for a specific version (e.g., postgres:17.0-alpine)
  * {{{
@@ -125,6 +125,13 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     connection.prepareStatement(
     "CREATE TABLE datetime (name VARCHAR(32), date1 DATE, time1 TIMESTAMP)")
     .executeUpdate()
+
+    connection.prepareStatement("CREATE TABLE array_of_array_of_int (col int[][])")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO array_of_array_of_int " +
+      "VALUES (array[array[1],array[2]])").executeUpdate()
+    connection.prepareStatement("CREATE TABLE ctas_array_of_array_of_int " +
+      "AS SELECT * FROM array_of_array_of_int").executeUpdate()
   }
 
   test("Test multi-dimensional column types") {
@@ -301,5 +308,34 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     assert(rows10.length === 2)
     assert(rows10(0).getString(0) === "amy")
     assert(rows10(1).getString(0) === "alex")
+  }
+
+  test("Test reading 2d array from table created via CTAS command - negative test") {
+    withSQLConf(SQLConf.POSTGRES_PROPER_READING_OF_ARRAY_DIMENSIONALITY.key -> "false") {
+      val exception = intercept[org.apache.spark.SparkException] {
+        sql(s"SELECT * FROM $catalogName.ctas_array_of_array_of_int").collect()
+      }.getMessage
+
+      assert(exception.contains("""Bad value for type int : {{1},{2}}"""))
+    }
+  }
+
+  test("Test reading 2d array from table created via CTAS command - positive test") {
+    val rowsWithOldBehaviour =
+      withSQLConf(
+        SQLConf.POSTGRES_PROPER_READING_OF_ARRAY_DIMENSIONALITY.key -> "false"
+      ) {
+        sql(s"SELECT * FROM $catalogName.array_of_array_of_int").collect()
+      }
+
+    withSQLConf(
+      SQLConf.POSTGRES_PROPER_READING_OF_ARRAY_DIMENSIONALITY.key -> "true"
+    ) {
+      val dfWithNewBehaviour = sql(s"SELECT * FROM $catalogName.array_of_array_of_int")
+      val CTASdfWithNewBehaviour = sql(s"SELECT * FROM $catalogName.ctas_array_of_array_of_int")
+
+      checkAnswer(dfWithNewBehaviour, rowsWithOldBehaviour)
+      checkAnswer(CTASdfWithNewBehaviour, rowsWithOldBehaviour)
+    }
   }
 }

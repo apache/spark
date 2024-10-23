@@ -4463,6 +4463,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val POSTGRES_PROPER_READING_OF_ARRAY_DIMENSIONALITY =
+    buildConf("spark.sql.legacy.postgres.properReadingOfArrayDimensionality")
+      .internal()
+      .doc("When true postgres will be asked to return the dimension of array column" +
+        "by calling array_ndims(col). When false, old way of calling pg_attribute.attndims" +
+        "will be done.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val CSV_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.csv.filterPushdown.enabled")
     .doc("When true, enable filter pushdown to CSV datasource.")
     .version("3.0.0")
@@ -5727,6 +5737,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyPostgresDatetimeMappingEnabled: Boolean =
     getConf(LEGACY_POSTGRES_DATETIME_MAPPING_ENABLED)
+
+  def postgresProperReadingOfArrayDimensionality: Boolean =
+    getConf(POSTGRES_PROPER_READING_OF_ARRAY_DIMENSIONALITY)
 
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
