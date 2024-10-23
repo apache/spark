@@ -153,7 +153,7 @@ object DecimalPrecisionTypeCoercion extends SQLConfHelper {
   private def decimalAndDecimal(): PartialFunction[Expression, Expression] = {
     case b @ BinaryComparison(e1 @ DecimalExpression(p1, s1), e2 @ DecimalExpression(p2, s2))
         if p1 != p2 || s1 != s2 =>
-      val resultType = DecimalPrecisionRule.widerDecimalType(p1, s1, p2, s2)
+      val resultType = DecimalPrecision.widerDecimalType(p1, s1, p2, s2)
       val newE1 = if (e1.dataType == resultType) e1 else Cast(e1, resultType)
       val newE2 = if (e2.dataType == resultType) e2 else Cast(e2, resultType)
       b.withNewChildren(Seq(newE1, newE2))

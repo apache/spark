@@ -286,7 +286,7 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
   def ruleTest(initial: Expression, transformed: Expression): Unit = {
     val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
     comparePlans(
-      DecimalPrecisionRule(Project(Seq(Alias(initial, "a")()), testRelation)),
+      DecimalPrecision(Project(Seq(Alias(initial, "a")()), testRelation)),
       Project(Seq(Alias(transformed, "a")()), testRelation))
   }
 }

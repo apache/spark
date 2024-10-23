@@ -69,7 +69,7 @@ object ExpectsInputTypes extends QueryErrorsBase {
 
 /**
  * A mixin for the analyzer to perform implicit type casting using
- * [[org.apache.spark.sql.catalyst.analysis.TypeCoercion.ImplicitTypeCastsRule]].
+ * [[org.apache.spark.sql.catalyst.analysis.TypeCoercion.ImplicitTypeCasts]].
  */
 trait ImplicitCastInputTypes extends ExpectsInputTypes {
   // No other methods

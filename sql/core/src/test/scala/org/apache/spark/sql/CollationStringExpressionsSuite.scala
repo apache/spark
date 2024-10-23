@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.analysis.CollationTypeCastsRule
+import org.apache.spark.sql.catalyst.analysis.CollationTypeCasts
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -185,7 +185,7 @@ class CollationStringExpressionsSuite
         val expr = StringSplitSQL(
           Cast(Literal.create("1a2"), StringType("UTF8_BINARY")),
           Cast(Literal.create("a"), StringType("UTF8_LCASE")))
-        CollationTypeCastsRule.transform(expr)
+        CollationTypeCasts.transform(expr)
       },
       condition = "COLLATION_MISMATCH.IMPLICIT",
       sqlState = "42P21",
@@ -198,7 +198,7 @@ class CollationStringExpressionsSuite
         val expr = StringSplitSQL(
           Collate(Literal.create("1a2"), "UTF8_BINARY"),
           Collate(Literal.create("a"), "UTF8_LCASE"))
-        CollationTypeCastsRule.transform(expr)
+        CollationTypeCasts.transform(expr)
       },
       condition = "COLLATION_MISMATCH.EXPLICIT",
       sqlState = "42P21",

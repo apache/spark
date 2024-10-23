@@ -79,23 +79,23 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     WidenSetOperationTypes ::
     ProcedureArgumentCoercion ::
     new AnsiCombinedTypeCoercionRule(
-      CollationTypeCastsRule ::
-      InConversionRule ::
-      PromoteStringsRule ::
-      DecimalPrecisionRule ::
-      FunctionArgumentConversionRule ::
-      ConcatCoercionRule ::
-      MapZipWithCoercionRule ::
-      EltCoercionRule ::
-      CaseWhenCoercionRule ::
-      IfCoercionRule ::
-      StackCoercionRule ::
-      DivisionRule ::
-      IntegralDivisionRule ::
-      ImplicitTypeCastsRule ::
-      DateTimeOperationsRule ::
-      WindowFrameCoercionRule ::
-      GetDateFieldOperationsRule :: Nil) :: Nil
+      CollationTypeCasts ::
+      InConversion ::
+      PromoteStrings ::
+      DecimalPrecision ::
+      FunctionArgumentConversion ::
+      ConcatCoercion ::
+      MapZipWithCoercion ::
+      EltCoercion ::
+      CaseWhenCoercion ::
+      IfCoercion ::
+      StackCoercion ::
+      Division ::
+      IntegralDivision ::
+      ImplicitTypeCasts ::
+      DateTimeOperations ::
+      WindowFrameCoercion ::
+      GetDateFieldOperations :: Nil) :: Nil
 
   val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
     case (t1, t2) if t1 == t2 => Some(t1)
@@ -225,7 +225,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
 
   override def canCast(from: DataType, to: DataType): Boolean = Cast.canAnsiCast(from, to)
 
-  object PromoteStringsRule extends TypeCoercionRule {
+  object PromoteStrings extends TypeCoercionRule {
 
     override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
@@ -244,7 +244,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
    * converting Timestamp type as Date type, so we need to have this additional rule
    * to make sure the date field extraction from Timestamp columns works.
    */
-  object GetDateFieldOperationsRule extends TypeCoercionRule {
+  object GetDateFieldOperations extends TypeCoercionRule {
     override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case g if !g.childrenResolved => g
@@ -254,7 +254,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     }
   }
 
-  object DateTimeOperationsRule extends TypeCoercionRule {
+  object DateTimeOperations extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
