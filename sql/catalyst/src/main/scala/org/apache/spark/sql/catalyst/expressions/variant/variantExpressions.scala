@@ -41,7 +41,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant._
-import org.apache.spark.types.variant.VariantUtil.{IntervalFields, Type}
+import org.apache.spark.types.variant.VariantUtil.Type
 import org.apache.spark.unsafe.types._
 
 
@@ -331,7 +331,7 @@ case object VariantGet {
   def checkDataType(dataType: DataType, allowStructsAndMaps: Boolean = true): Boolean =
     dataType match {
     case _: NumericType | BooleanType | _: StringType | BinaryType | _: DatetimeType |
-        VariantType | _: DayTimeIntervalType | _: YearMonthIntervalType =>
+        VariantType =>
       true
     case ArrayType(elementType, _) => checkDataType(elementType, allowStructsAndMaps)
     case MapType(_: StringType, valueType, _) if allowStructsAndMaps =>
@@ -427,12 +427,6 @@ case object VariantGet {
           case Type.TIMESTAMP_NTZ => Literal(v.getLong, TimestampNTZType)
           case Type.FLOAT => Literal(v.getFloat, FloatType)
           case Type.BINARY => Literal(v.getBinary, BinaryType)
-          case Type.YEAR_MONTH_INTERVAL =>
-            val fields: IntervalFields = v.getYearMonthIntervalFields
-            Literal(v.getLong.toInt, YearMonthIntervalType(fields.startField, fields.endField))
-          case Type.DAY_TIME_INTERVAL =>
-            val fields: IntervalFields = v.getDayTimeIntervalFields
-            Literal(v.getLong, DayTimeIntervalType(fields.startField, fields.endField))
           // We have handled other cases and should never reach here. This case is only intended
           // to by pass the compiler exhaustiveness check.
           case _ => throw new SparkRuntimeException(
@@ -795,12 +789,6 @@ object SchemaOfVariant {
     case Type.TIMESTAMP_NTZ => TimestampNTZType
     case Type.FLOAT => FloatType
     case Type.BINARY => BinaryType
-    case Type.YEAR_MONTH_INTERVAL =>
-      val fields: IntervalFields = v.getYearMonthIntervalFields
-      YearMonthIntervalType(fields.startField, fields.endField)
-    case Type.DAY_TIME_INTERVAL =>
-      val fields: IntervalFields = v.getDayTimeIntervalFields
-      DayTimeIntervalType(fields.startField, fields.endField)
   }
 
   /**
