@@ -181,25 +181,25 @@ object RuleIdCollection {
       // In the production code path, the following rules are run in CombinedTypeCoercionRule, and
       // hence we only need to add them for unit testing.
       "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$PromoteStringLiterals" ::
-      "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$DateTimeOperations" ::
-      "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$GetDateFieldOperations" ::
-      "org.apache.spark.sql.catalyst.analysis.DecimalPrecision" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercion$BooleanEquality" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercion$DateTimeOperations" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$CaseWhenCoercion" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$ConcatCoercion" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$Division" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$EltCoercion" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$FunctionArgumentConversion" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$IfCoercion" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$ImplicitTypeCasts" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$InConversion" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$IntegralDivision" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$MapZipWithCoercion" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercion$PromoteStrings" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$StackCoercion" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$StringLiteralCoercion" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$WindowFrameCoercion" :: Nil
+      "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$DateTimeOperationsRule" ::
+      "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$GetDateFieldOperationsRule" ::
+      "org.apache.spark.sql.catalyst.analysis.DecimalPrecisionRule" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercion$BooleanEqualityRule" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercion$DateTimeOperationsRule" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$CaseWhenCoercionRule" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$ConcatCoercionRule" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$DivisionRule" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$EltCoercionRule" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$FunctionArgumentConversionRule" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$IfCoercionRule" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$ImplicitTypeCastsRule" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$InConversionRule" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$IntegralDivisionRule" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$MapZipWithCoercionRule" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercion$PromoteStringsRule" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$StackCoercionRule" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$StringLiteralCoercionRule" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$WindowFrameCoercionRule" :: Nil
     }
   }
 

@@ -2179,7 +2179,7 @@ object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
  * Speeds up aggregates on fixed-precision decimals by executing them on unscaled Long values.
  *
  * This uses the same rules for increasing the precision and scale of the output as
- * [[org.apache.spark.sql.catalyst.analysis.DecimalPrecision]].
+ * [[org.apache.spark.sql.catalyst.analysis.DecimalPrecisionRule]].
  */
 object DecimalAggregates extends Rule[LogicalPlan] {
   import Decimal.MAX_LONG_DIGITS

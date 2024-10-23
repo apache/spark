@@ -51,24 +51,24 @@ object TypeCoercion extends TypeCoercionBase {
     WidenSetOperationTypes ::
     ProcedureArgumentCoercion ::
     new CombinedTypeCoercionRule(
-      CollationTypeCasts ::
-      InConversion ::
-      PromoteStrings ::
-      DecimalPrecision ::
-      BooleanEquality ::
-      FunctionArgumentConversion ::
-      ConcatCoercion ::
-      MapZipWithCoercion ::
-      EltCoercion ::
-      CaseWhenCoercion ::
-      IfCoercion ::
-      StackCoercion ::
-      Division ::
-      IntegralDivision ::
-      ImplicitTypeCasts ::
-      DateTimeOperations ::
-      WindowFrameCoercion ::
-      StringLiteralCoercion :: Nil) :: Nil
+      CollationTypeCastsRule ::
+      InConversionRule ::
+      PromoteStringsRule ::
+      DecimalPrecisionRule ::
+      BooleanEqualityRule ::
+      FunctionArgumentConversionRule ::
+      ConcatCoercionRule ::
+      MapZipWithCoercionRule ::
+      EltCoercionRule ::
+      CaseWhenCoercionRule ::
+      IfCoercionRule ::
+      StackCoercionRule ::
+      DivisionRule ::
+      IntegralDivisionRule ::
+      ImplicitTypeCastsRule ::
+      DateTimeOperationsRule ::
+      WindowFrameCoercionRule ::
+      StringLiteralCoercionRule :: Nil) :: Nil
 
   override def canCast(from: DataType, to: DataType): Boolean = Cast.canCast(from, to)
 
@@ -315,7 +315,7 @@ object TypeCoercion extends TypeCoercionBase {
   /**
    * Promotes strings that appear in arithmetic expressions.
    */
-  object PromoteStrings extends TypeCoercionRule {
+  object PromoteStringsRule extends TypeCoercionRule {
 
     override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
@@ -329,7 +329,7 @@ object TypeCoercion extends TypeCoercionBase {
   /**
    * Changes numeric values to booleans so that expressions like true = 1 can be evaluated.
    */
-  object BooleanEquality extends TypeCoercionRule {
+  object BooleanEqualityRule extends TypeCoercionRule {
     override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
@@ -339,7 +339,7 @@ object TypeCoercion extends TypeCoercionBase {
     }
   }
 
-  object DateTimeOperations extends TypeCoercionRule {
+  object DateTimeOperationsRule extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e

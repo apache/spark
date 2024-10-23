@@ -27,7 +27,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 
-object CollationTypeCasts extends TypeCoercionRule {
+object CollationTypeCastsRule extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
     case e if !e.childrenResolved => e
     case withChildrenResolved if CollationTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>

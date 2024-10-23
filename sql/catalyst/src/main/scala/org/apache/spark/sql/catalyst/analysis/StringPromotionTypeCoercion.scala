@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.PromoteStrings.conf
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion.PromoteStringsRule.conf
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.findCommonTypeForBinaryComparison
 import org.apache.spark.sql.catalyst.expressions.{
   BinaryArithmetic,

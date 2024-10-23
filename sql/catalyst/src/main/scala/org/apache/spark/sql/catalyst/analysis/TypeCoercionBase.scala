@@ -238,7 +238,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
    *    operator type is found the original expression will be returned and an
    *    Analysis Exception will be raised at the type checking phase.
    */
-  object InConversion extends TypeCoercionRule {
+  object InConversionRule extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
@@ -250,7 +250,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
   /**
    * This ensure that the types for various functions are as expected.
    */
-  object FunctionArgumentConversion extends TypeCoercionRule {
+  object FunctionArgumentConversionRule extends TypeCoercionRule {
 
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
@@ -265,7 +265,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
    * Hive only performs integral division with the DIV operator. The arguments to / are always
    * converted to fractional types.
    */
-  object Division extends TypeCoercionRule {
+  object DivisionRule extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who has not been resolved yet,
       // as this is an extra rule which should be applied at last.
@@ -279,7 +279,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
    * The DIV operator always returns long-type value.
    * This rule cast the integral inputs to long type, to avoid overflow during calculation.
    */
-  object IntegralDivision extends TypeCoercionRule {
+  object IntegralDivisionRule extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
       case e if !e.childrenResolved => e
       case withChildrenResolved
@@ -291,7 +291,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
   /**
    * Coerces the type of different branches of a CASE WHEN statement to a common type.
    */
-  object CaseWhenCoercion extends TypeCoercionRule {
+  object CaseWhenCoercionRule extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
       case c: CaseWhen if !c.childrenResolved => c
       case withChildrenResolved if CaseWhenTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
@@ -302,7 +302,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
   /**
    * Coerces the type of different branches of If statement to a common type.
    */
-  object IfCoercion extends TypeCoercionRule {
+  object IfCoercionRule extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
       case e if !e.childrenResolved => e
       case withChildrenResolved if IfTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
@@ -313,7 +313,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
   /**
    * Coerces NullTypes in the Stack expression to the column types of the corresponding positions.
    */
-  object StackCoercion extends TypeCoercionRule {
+  object StackCoercionRule extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
       case s: Stack if !s.childrenResolved => s
       case withChildrenResolved if StackTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
@@ -327,7 +327,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
    * If `spark.sql.function.concatBinaryAsString` is false and all children types are binary,
    * the expected types are binary. Otherwise, the expected ones are strings.
    */
-  object ConcatCoercion extends TypeCoercionRule {
+  object ConcatCoercionRule extends TypeCoercionRule {
 
     override val transform: PartialFunction[Expression, Expression] = {
       case c: Concat if !c.childrenResolved => c
@@ -340,7 +340,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
    * Coerces key types of two different [[MapType]] arguments of the [[MapZipWith]] expression
    * to a common type.
    */
-  object MapZipWithCoercion extends TypeCoercionRule {
+  object MapZipWithCoercionRule extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
       case m: MapZipWith if m.arguments.exists(a => !a.resolved) => m
       case withArgumentsResolved
@@ -355,7 +355,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
    * If `spark.sql.function.eltOutputAsString` is false and all children types are binary,
    * the expected types are binary. Otherwise, the expected ones are strings.
    */
-  object EltCoercion extends TypeCoercionRule {
+  object EltCoercionRule extends TypeCoercionRule {
 
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes if unresolved or not enough children
@@ -368,7 +368,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
   /**
    * Casts types according to the expected input types for [[Expression]]s.
    */
-  object ImplicitTypeCasts extends TypeCoercionRule {
+  object ImplicitTypeCastsRule extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
@@ -380,7 +380,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
   /**
    * Cast WindowFrame boundaries to the type they operate upon.
    */
-  object WindowFrameCoercion extends TypeCoercionRule {
+  object WindowFrameCoercionRule extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
       case s @ WindowSpecDefinition(_, Seq(order), _) if !order.resolved => s
       case withOrderResolved if WindowFrameTypeCoercion.apply.isDefinedAt(withOrderResolved) =>
@@ -393,7 +393,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
    * to keep backward compatibility as a temporary workaround.
    * TODO(SPARK-28589): implement ANSI type type coercion and handle string literals.
    */
-  object StringLiteralCoercion extends TypeCoercionRule {
+  object StringLiteralCoercionRule extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e

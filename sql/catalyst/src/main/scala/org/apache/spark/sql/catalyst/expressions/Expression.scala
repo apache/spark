@@ -82,7 +82,7 @@ import org.apache.spark.sql.types._
  *                          used by operator expressions (e.g. [[Add]], [[Subtract]]) to define
  *                          expected input types without any implicit casting.
  * - [[ImplicitCastInputTypes]]: an expression that has the expected input types, which can be
- *                               implicitly castable using [[TypeCoercion.ImplicitTypeCasts]].
+ *                               implicitly castable using [[TypeCoercion.ImplicitTypeCastsRule]].
  * - [[ComplexTypeMergingExpression]]: to resolve output types of the complex expressions
  *                                     (e.g., [[CaseWhen]]).
  */

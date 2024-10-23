@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.analysis.CollationTypeCasts.{
+import org.apache.spark.sql.catalyst.analysis.CollationTypeCastsRule.{
   castStringType,
   collateToSingleType,
   getOutputCollation

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.PromoteStrings.conf
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion.PromoteStringsRule.conf
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   ArrayJoin,
@@ -98,7 +98,7 @@ abstract class TypeCoercionHelper {
    * Find the tightest common type of two types that might be used in a binary expression.
    * This handles all numeric types except fixed-precision decimals interacting with each other or
    * with primitive types, because in that case the precision and scale of the result depends on
-   * the operation. Those rules are implemented in [[DecimalPrecision]].
+   * the operation. Those rules are implemented in [[DecimalPrecisionRule]].
    */
   val findTightestCommonType: (DataType, DataType) => Option[DataType]
 
@@ -184,11 +184,11 @@ abstract class TypeCoercionHelper {
   protected def findWiderTypeForDecimal(dt1: DataType, dt2: DataType): Option[DataType] = {
     (dt1, dt2) match {
       case (t1: DecimalType, t2: DecimalType) =>
-        Some(DecimalPrecision.widerDecimalType(t1, t2))
+        Some(DecimalPrecisionRule.widerDecimalType(t1, t2))
       case (t: IntegralType, d: DecimalType) =>
-        Some(DecimalPrecision.widerDecimalType(DecimalType.forType(t), d))
+        Some(DecimalPrecisionRule.widerDecimalType(DecimalType.forType(t), d))
       case (d: DecimalType, t: IntegralType) =>
-        Some(DecimalPrecision.widerDecimalType(DecimalType.forType(t), d))
+        Some(DecimalPrecisionRule.widerDecimalType(DecimalType.forType(t), d))
       case (_: FractionalType, _: DecimalType) | (_: DecimalType, _: FractionalType) =>
         Some(DoubleType)
       case _ => None

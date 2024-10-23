@@ -49,7 +49,7 @@ import org.apache.spark.sql.types._
  * - Literals INT and LONG get turned into DECIMAL with the precision strictly needed by the value
  */
 // scalastyle:on
-object DecimalPrecision extends TypeCoercionRule {
+object DecimalPrecisionRule extends TypeCoercionRule {
   override def transform: PartialFunction[Expression, Expression] = {
     // Skip nodes whose children have not been resolved yet
     case e if !e.childrenResolved => e

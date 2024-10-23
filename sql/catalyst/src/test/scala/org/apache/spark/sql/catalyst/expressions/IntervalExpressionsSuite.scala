@@ -532,7 +532,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
 
     def checkImplicitEvaluation(expr: Expression, value: Any): Unit = {
-      val resolvedExpr = TypeCoercion.ImplicitTypeCasts.transform(expr)
+      val resolvedExpr = TypeCoercion.ImplicitTypeCastsRule.transform(expr)
       checkEvaluation(resolvedExpr, value)
     }
 
