@@ -507,11 +507,11 @@ abstract class UnresolvedStarBase(target: Option[Seq[String]]) extends Star with
    * Method used to expand a star. It uses output and metadata output attributes of the child
    * for the expansion and it supports both recursive and non-recursive data types.
    *
-   * @param childOperatorOutput the output attributes of the child operator
-   * @param childOperatorMetadataOutput the metadata output attributes of the child operator
-   * @param resolve a function to resolve the given name parts to an attribute
-   * @param suggestedAttributes a list of attributes that are suggested for expansion
-   * @param resolver the resolver used to match the name parts
+   * @param childOperatorOutput The output attributes of the child operator
+   * @param childOperatorMetadataOutput The metadata output attributes of the child operator
+   * @param resolve A function to resolve the given name parts to an attribute
+   * @param suggestedAttributes A list of attributes that are suggested for expansion
+   * @param resolver The resolver used to match the name parts
    */
   def expandStar(
       childOperatorOutput: Seq[Attribute],
