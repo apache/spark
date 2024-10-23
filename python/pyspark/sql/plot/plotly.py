@@ -16,7 +16,7 @@
 #
 
 import inspect
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, List, Optional, Union
 
 from pyspark.errors import PySparkValueError
 from pyspark.sql.plot import (
@@ -25,6 +25,7 @@ from pyspark.sql.plot import (
     PySparkKdePlotBase,
     PySparkHistogramPlotBase,
 )
+from pyspark.sql.types import NumericType, DateType, TimestampType
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame
@@ -67,9 +68,7 @@ def plot_box(data: "DataFrame", **kwargs: Any) -> "Figure":
     whis = kwargs.pop("whis", 1.5)
     # 'precision' is pyspark specific to control precision for approx_percentile
     precision = kwargs.pop("precision", 0.01)
-    colnames = kwargs.pop("column", None)
-    if isinstance(colnames, str):
-        colnames = [colnames]
+    colnames = process_column_param(kwargs.pop("column", None), data)
 
     # Plotly options
     boxpoints = kwargs.pop("boxpoints", "suspectedoutliers")
@@ -142,9 +141,7 @@ def plot_kde(data: "DataFrame", **kwargs: Any) -> "Figure":
         kwargs["color"] = "names"
 
     bw_method = kwargs.pop("bw_method", None)
-    colnames = kwargs.pop("column", None)
-    if isinstance(colnames, str):
-        colnames = [colnames]
+    colnames = process_column_param(kwargs.pop("column", None), data)
     ind = PySparkKdePlotBase.get_ind(data.select(*colnames), kwargs.pop("ind", None))
 
     kde_cols = [
@@ -177,9 +174,7 @@ def plot_histogram(data: "DataFrame", **kwargs: Any) -> "Figure":
     import plotly.graph_objs as go
 
     bins = kwargs.get("bins", 10)
-    colnames = kwargs.pop("column", None)
-    if isinstance(colnames, str):
-        colnames = [colnames]
+    colnames = (kwargs.pop("column", None), data)
     data = data.select(*colnames)
     bins = PySparkHistogramPlotBase.get_bins(data, bins)
     assert len(bins) > 2, "the number of buckets must be higher than 2."
@@ -214,3 +209,19 @@ def plot_histogram(data: "DataFrame", **kwargs: Any) -> "Figure":
     fig["layout"]["xaxis"]["title"] = "value"
     fig["layout"]["yaxis"]["title"] = "count"
     return fig
+
+
+def process_column_param(column: Optional[Union[str, List[str]]], data: "DataFrame") -> List[str]:
+    """
+    Process the provided column parameter. If a string is passed, it is converted to a list.
+    If column is None, it returns the list of numeric or datetime columns from the DataFrame.
+    """
+    if isinstance(column, str):
+        return [column]
+    if column is None:
+        return [
+            field.name
+            for field in data.schema.fields
+            if isinstance(field.dataType, (NumericType, DateType, TimestampType))
+        ]
+    return column

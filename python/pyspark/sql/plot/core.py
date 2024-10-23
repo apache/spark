@@ -360,7 +360,7 @@ class PySparkPlotAccessor:
             )
         return self(kind="pie", x=x, y=y, **kwargs)
 
-    def box(self, column: Union[str, List[str]], **kwargs: Any) -> "Figure":
+    def box(self, column: Optional[Union[str, List[str]]] = None, **kwargs: Any) -> "Figure":
         """
         Make a box plot of the DataFrame columns.
 
@@ -374,8 +374,9 @@ class PySparkPlotAccessor:
 
         Parameters
         ----------
-        column: str or list of str
-            Column name or list of names to be used for creating the boxplot.
+        column: str or list of str, optional
+            Column name or list of names to be used for creating the box plot.
+            If None (default), all numeric columns will be used.
         **kwargs
             Extra arguments to `precision`: refer to a float that is used by
             pyspark to compute approximate statistics for building a boxplot.
@@ -406,9 +407,9 @@ class PySparkPlotAccessor:
 
     def kde(
         self,
-        column: Union[str, List[str]],
         bw_method: Union[int, float],
-        ind: Union["np.ndarray", int, None] = None,
+        column: Optional[Union[str, List[str]]] = None,
+        ind: Optional[Union["np.ndarray", int]] = None,
         **kwargs: Any,
     ) -> "Figure":
         """
@@ -420,11 +421,12 @@ class PySparkPlotAccessor:
 
         Parameters
         ----------
-        column: str or list of str
-            Column name or list of names to be used for creating the kde plot.
         bw_method : int or float
             The method used to calculate the estimator bandwidth.
             See KernelDensity in PySpark for more information.
+        column: str or list of str, optional
+            Column name or list of names to be used for creating the kde plot.
+            If None (default), all numeric columns will be used.
         ind : NumPy array or integer, optional
             Evaluation points for the estimated PDF. If None (default),
             1000 equally spaced points are used. If `ind` is a NumPy array, the
@@ -447,7 +449,9 @@ class PySparkPlotAccessor:
         """
         return self(kind="kde", column=column, bw_method=bw_method, ind=ind, **kwargs)
 
-    def hist(self, column: Union[str, List[str]], bins: int = 10, **kwargs: Any) -> "Figure":
+    def hist(
+        self, column: Optional[Union[str, List[str]]] = None, bins: int = 10, **kwargs: Any
+    ) -> "Figure":
         """
         Draw one histogram of the DataFrame’s columns.
 
@@ -457,8 +461,9 @@ class PySparkPlotAccessor:
 
         Parameters
         ----------
-        column: str or list of str
-            Column name or list of names to be used for creating the histogram.
+        column: str or list of str, optional
+            Column name or list of names to be used for creating the hostogram plot.
+            If None (default), all numeric columns will be used.
         bins : integer, default 10
             Number of histogram bins to be used.
         **kwargs
@@ -481,7 +486,7 @@ class PySparkPlotAccessor:
 
 class PySparkKdePlotBase:
     @staticmethod
-    def get_ind(sdf: "DataFrame", ind: Union["np.ndarray", int, None]) -> "np.ndarray":
+    def get_ind(sdf: "DataFrame", ind: Optional[Union["np.ndarray", int]]) -> "np.ndarray":
         require_minimum_numpy_version()
         import numpy as np
 
