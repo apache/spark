@@ -49,9 +49,8 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case op @ PhysicalOperation(projects, filters,
-        RelationAndCatalogTable(
-          logicalRelation,
-          fsRelation@
+        logicalRelation @ LogicalRelationWithTable(
+          fsRelation @
             HadoopFsRelation(
             catalogFileIndex: CatalogFileIndex,
             partitionSchema,

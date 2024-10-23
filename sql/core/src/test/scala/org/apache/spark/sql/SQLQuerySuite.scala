@@ -43,7 +43,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate._
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation, RelationAndCatalogTable}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -4885,7 +4885,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       )
       checkAnswer(df2, df1)
       val relations = df2.queryExecution.analyzed.collect {
-        case RelationAndCatalogTable(_, fs: HadoopFsRelation, _) => fs
+        case LogicalRelationWithTable(fs: HadoopFsRelation, _) => fs
       }
       assert(relations.size == 1)
       assert(relations.head.options == Map("key1" -> "1", "key2" -> "2"))

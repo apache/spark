@@ -1282,7 +1282,7 @@ class ParquetV1PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
       (1 to 10).map(i => (i, i.toString)).toDF("a", "b").write.parquet(dir.getCanonicalPath)
       val queryExecution = spark.read.parquet(dir.getCanonicalPath).queryExecution
       queryExecution.analyzed.collectFirst {
-        case RelationAndCatalogTable(_,
+        case LogicalRelationWithTable(
           HadoopFsRelation(location: PartitioningAwareFileIndex, _, _, _, _, _), _) =>
           assert(location.partitionSpec() === PartitionSpec.emptySpec)
       }.getOrElse {

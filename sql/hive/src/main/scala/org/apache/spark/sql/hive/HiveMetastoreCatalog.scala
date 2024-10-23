@@ -84,7 +84,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
     catalogProxy.getCachedTable(tableIdentifier) match {
       case null => None // Cache miss
-      case RelationAndCatalogTable(logical, relation: HadoopFsRelation, _) =>
+      case logical @ LogicalRelationWithTable(relation: HadoopFsRelation, _) =>
         val cachedRelationFileFormatClass = relation.fileFormat.getClass
 
         expectedFileFormat match {

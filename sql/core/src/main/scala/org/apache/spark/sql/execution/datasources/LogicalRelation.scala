@@ -33,7 +33,7 @@ import org.apache.spark.sql.sources.BaseRelation
  * objects to help avoiding the default pattern.
  *
  * Here's the list of pattern objects:
- * - [[RelationAndCatalogTable]]
+ * - [[LogicalRelationWithTable]]
  */
 case class LogicalRelation(
     relation: BaseRelation,
@@ -115,10 +115,10 @@ object LogicalRelation {
  * [[LogicalRelation]] itself, to cover the case where other params are needed (but not required
  * to have specific value to match).
  */
-object RelationAndCatalogTable {
+object LogicalRelationWithTable {
   def unapply(plan: LogicalRelation): Option[(BaseRelation, Option[CatalogTable])] = {
     plan match {
-      case l: LogicalRelation => Some(l, l.relation, l.catalogTable)
+      case l: LogicalRelation => Some(l.relation, l.catalogTable)
 
       case _ => None
     }

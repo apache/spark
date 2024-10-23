@@ -26,7 +26,7 @@ import org.apache.orc.OrcConf
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RelationAndCatalogTable}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.orc.OrcQueryTest
 import org.apache.spark.sql.hive.{HiveSessionCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -234,7 +234,7 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
   private def checkCached(tableIdentifier: TableIdentifier): Unit = {
     getCachedDataSourceTable(tableIdentifier) match {
       case null => fail(s"Converted ${tableIdentifier.table} should be cached in the cache.")
-      case RelationAndCatalogTable(_, _: HadoopFsRelation, _) => // OK
+      case LogicalRelationWithTable(_: HadoopFsRelation, _) => // OK
       case other =>
         fail(
           s"The cached ${tableIdentifier.table} should be a HadoopFsRelation. " +

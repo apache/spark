@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.planning.NodeWithOnlyDeterministicProjectAn
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RelationAndCatalogTable}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 
 /**
@@ -73,7 +73,7 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
       _.containsAnyPattern(DYNAMIC_PRUNING_EXPRESSION, DYNAMIC_PRUNING_SUBQUERY)) {
       // pass through anything that is pushed down into PhysicalOperation
       case p @ NodeWithOnlyDeterministicProjectAndFilter(
-          RelationAndCatalogTable(_, _: HadoopFsRelation, _)) =>
+          LogicalRelationWithTable(_: HadoopFsRelation, _)) =>
         removeUnnecessaryDynamicPruningSubquery(p)
       // pass through anything that is pushed down into PhysicalOperation
       case p @ NodeWithOnlyDeterministicProjectAndFilter(
