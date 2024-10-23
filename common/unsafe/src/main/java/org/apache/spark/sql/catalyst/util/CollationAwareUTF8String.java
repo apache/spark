@@ -1275,7 +1275,7 @@ public class CollationAwareUTF8String {
     boolean ignoreSpaces = !trimString.contains(UTF8String.SPACE_UTF8) &&
       CollationFactory.ignoresSpacesInTrimFunctions(collationId, false, true);
 
-    if(!ignoreSpaces){
+    if (!ignoreSpaces) {
       return srcString.trimRight(trimString);
     }
     int lastNonSpacePosition = srcString.numChars();
@@ -1286,7 +1286,7 @@ public class CollationAwareUTF8String {
 
     StringBuilder sb = new StringBuilder();
     sb.append(srcString.trimRight().trimRight(trimString));
-    if(lastNonSpacePosition != srcString.numChars()){
+    if (lastNonSpacePosition != srcString.numChars()) {
       sb.append(srcString.substring(lastNonSpacePosition, srcString.numChars()));
     }
     return UTF8String.fromString(sb.toString());
@@ -1329,15 +1329,15 @@ public class CollationAwareUTF8String {
     // anyway. However, if it is not the case they should be ignored and then appended after
     // trimming other characters.
     int lastNonSpacePosition = srcString.numChars();
-    if (!trimString.contains(UTF8String.SPACE_UTF8) &&
-            CollationFactory.ignoresSpacesInTrimFunctions(collationId, false, true)) {
+    if  (!trimString.contains(UTF8String.SPACE_UTF8) &&
+      CollationFactory.ignoresSpacesInTrimFunctions(collationId, false, true)) {
       while (lastNonSpacePosition > 0 &&
         srcString.getByte(lastNonSpacePosition - 1) == 0x20) {
         --lastNonSpacePosition;
       }
       // In case of src string contains only spaces there is no need to do any trimming, since it's
       // already checked that trim string does not contain any spaces.
-      if(lastNonSpacePosition == 0){
+      if (lastNonSpacePosition == 0) {
         return srcString;
       }
       searchIndex = lastNonSpacePosition;
@@ -1383,7 +1383,7 @@ public class CollationAwareUTF8String {
     // trailing spaces if they were ignored
     StringBuilder sb = new StringBuilder();
     sb.append(srcString.substring(0, searchIndex));
-    if(lastNonSpacePosition != srcString.numChars()){
+    if (lastNonSpacePosition != srcString.numChars()) {
       sb.append(srcString.substring(lastNonSpacePosition, srcString.numChars()));
     }
     return searchIndex == srcString.numChars() ? srcString : UTF8String.fromString(sb.toString());
@@ -1436,7 +1436,7 @@ public class CollationAwareUTF8String {
       }
       // In case of src string contains only spaces there is no need to do any trimming, since it's
       // already checked that trim string does not contain any spaces.
-      if(lastNonSpacePosition == 0){
+      if (lastNonSpacePosition == 0) {
         return UTF8String.fromString(src);
       }
       charIndex = lastNonSpacePosition;
@@ -1473,7 +1473,7 @@ public class CollationAwareUTF8String {
     // trailing spaces if they were ignored
     StringBuilder sb = new StringBuilder();
     sb.append(src, 0, charIndex);
-    if(lastNonSpacePosition != src.length()){
+    if (lastNonSpacePosition != src.length()) {
       sb.append(src.substring(lastNonSpacePosition));
     }
     return UTF8String.fromString(sb.toString());

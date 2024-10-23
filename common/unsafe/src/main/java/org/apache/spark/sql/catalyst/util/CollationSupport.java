@@ -510,7 +510,7 @@ public final class CollationSupport {
         final UTF8String trimString,
         final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
-      if(collation.isUtf8BinaryType && !collation.supportsSpaceTrimming){
+      if (collation.isUtf8BinaryType && !collation.supportsSpaceTrimming) {
         return execBinary(srcString, trimString);
       }
 
@@ -629,7 +629,7 @@ public final class CollationSupport {
             final UTF8String trimString,
             final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
-      if(collation.isUtf8BinaryType && !collation.supportsSpaceTrimming){
+      if (collation.isUtf8BinaryType && !collation.supportsSpaceTrimming) {
         return execBinary(srcString, trimString);
       }
 
