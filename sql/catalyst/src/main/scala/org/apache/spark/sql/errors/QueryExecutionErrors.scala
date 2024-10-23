@@ -362,6 +362,24 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "groupIndex" -> groupIndex.toString()))
   }
 
+  def invalidRegexpReplaceError(
+      source: String,
+      pattern: String,
+      replacement: String,
+      position: Int,
+      cause: Throwable): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_REGEXP_REPLACE",
+      messageParameters = Map(
+        "source" -> source,
+        "pattern" -> pattern,
+        "replacement" -> replacement,
+        "position" -> position.toString
+      ),
+      cause = cause
+    )
+  }
+
   def invalidUrlError(url: UTF8String, e: URISyntaxException): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "INVALID_URL",
