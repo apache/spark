@@ -42,7 +42,15 @@ from typing import (
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame as ParentDataFrame
-from pyspark.sql.types import ArrayType, DataType, StringType, StructType, _from_numpy_type
+from pyspark.sql.types import (
+    ArrayType,
+    ByteType,
+    DataType,
+    StringType,
+    StructType,
+    NumericType,
+    _from_numpy_type,
+)
 
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
 from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
@@ -221,15 +229,35 @@ def lit(col: Any) -> Column:
                 errorClass="COLUMN_IN_LIST", messageParameters={"func_name": "lit"}
             )
         return array(*[lit(item) for item in col])
-    else:
-        if _has_numpy and isinstance(col, np.generic):
+    elif _has_numpy:
+        if isinstance(col, np.generic):
             dt = _from_numpy_type(col.dtype)
-            if dt is not None:
-                if isinstance(col, np.number):
-                    return _invoke_function("lit", col).astype(dt).alias(str(col))
-                else:
-                    return _invoke_function("lit", col)
-        return _invoke_function("lit", _enum_to_value(col))
+            if dt is None:
+                raise PySparkTypeError(
+                    errorClass="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
+                    messageParameters={"dtype": col.dtype.name},
+                )
+            if isinstance(dt, NumericType):
+                # NumpyScalarConverter for Py4J converts numeric scalar to Python scalar.
+                # E.g. numpy.int64(1) is converted to int(1).
+                # So, we need to cast it back to the original type.
+                return _invoke_function("lit", col).astype(dt).alias(str(col))
+            else:
+                return _invoke_function("lit", col)
+        elif isinstance(col, np.ndarray) and col.ndim == 1:
+            dt = _from_numpy_type(col.dtype)
+            if dt is None:
+                raise PySparkTypeError(
+                    errorClass="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
+                    messageParameters={"dtype": col.dtype.name},
+                )
+            if isinstance(dt, ByteType):
+                # NumpyArrayConverter for Py4J converts Array[Byte] to Array[Short].
+                # Cast it back to ByteType.
+                return _invoke_function("lit", col).cast(ArrayType(dt))
+            else:
+                return _invoke_function("lit", col)
+    return _invoke_function("lit", _enum_to_value(col))
 
 
 @_try_remote_functions
