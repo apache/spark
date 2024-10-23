@@ -146,3 +146,4 @@ empty.proto
 LimitedInputStream.java
 TimSort.java
 .*\.har
+mockito-extensions/*
