@@ -20,6 +20,10 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, IntegralDivide}
 import org.apache.spark.sql.types.{ByteType, IntegerType, LongType, ShortType}
 
+/**
+ * Type coercion helper that matches against [[IntegralDivide]] expressions in order to type coerce
+ * children to [[LongType]].
+ */
 object IntegralDivisionTypeCoercion {
   val apply: PartialFunction[Expression, Expression] = {
     case d @ IntegralDivide(left, right, _) =>

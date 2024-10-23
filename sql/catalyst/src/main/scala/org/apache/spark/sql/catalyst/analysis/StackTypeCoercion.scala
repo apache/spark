@@ -20,6 +20,10 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, Stack}
 import org.apache.spark.sql.types.NullType
 
+/**
+ * Type coercion helper that matches against [[Stack]] expressions in order to type coerce children
+ * that are of [[NullType]] to the expected column type.
+ */
 object StackTypeCoercion {
   val apply: PartialFunction[Expression, Expression] = {
     case s @ Stack(children) if s.hasFoldableNumRows =>

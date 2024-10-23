@@ -20,6 +20,10 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, GetDateField}
 import org.apache.spark.sql.types.{AnyTimestampTypeExpression, DateType}
 
+/**
+ * ANSI type coercion helper that matches against [[GetDateField]] expressions in order to type
+ * coerce children to [[DateType]], if necessary.
+ */
 object AnsiGetDateFieldOperationsTypeCoercion {
   val apply: PartialFunction[Expression, Expression] = {
     case g: GetDateField if AnyTimestampTypeExpression.unapply(g.child) =>

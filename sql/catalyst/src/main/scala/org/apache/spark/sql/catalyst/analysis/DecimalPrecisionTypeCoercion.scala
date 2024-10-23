@@ -42,6 +42,10 @@ import org.apache.spark.sql.types.{
   IntegralTypeExpression
 }
 
+/**
+ * Type coercion helper that matches against [[BinaryComparison]] and [[BinaryOperator]]
+ * expression in order to type coerce children to common precision.
+ */
 object DecimalPrecisionTypeCoercion extends SQLConfHelper {
 
   /**

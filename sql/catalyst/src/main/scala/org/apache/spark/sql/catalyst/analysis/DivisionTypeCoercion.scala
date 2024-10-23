@@ -20,6 +20,10 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{Cast, Divide, Expression}
 import org.apache.spark.sql.types.{DecimalType, DoubleType, NullType, NumericType}
 
+/**
+ * Type coercion helper that matches against [[Divide]] expressions in order to type coerce
+ * children to [[DoubleType]].
+ */
 object DivisionTypeCoercion {
   val apply: PartialFunction[Expression, Expression] = {
     // Decimal and Double remain the same

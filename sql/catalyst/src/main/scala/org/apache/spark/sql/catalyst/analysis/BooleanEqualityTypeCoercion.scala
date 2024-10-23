@@ -34,6 +34,10 @@ import org.apache.spark.sql.types.{
   NumericTypeExpression
 }
 
+/**
+ * Type coercion helper that matches against [[Equality]] expressions in order to type coerce
+ * children from numeric type to boolean.
+ */
 object BooleanEqualityTypeCoercion {
   private val trueValues = Seq(1.toByte, 1.toShort, 1, 1L, Decimal.ONE)
   private val falseValues = Seq(0.toByte, 0.toShort, 0, 0L, Decimal.ZERO)

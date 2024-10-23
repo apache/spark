@@ -84,6 +84,9 @@ import org.apache.spark.sql.catalyst.expressions.{
 }
 import org.apache.spark.sql.types.{MapType, StringType}
 
+/**
+ * Type coercion helper that matches against expressions in order to apply collation type coercion.
+ */
 object CollationTypeCoercion {
   val apply: PartialFunction[Expression, Expression] = {
     case ifExpr: If =>

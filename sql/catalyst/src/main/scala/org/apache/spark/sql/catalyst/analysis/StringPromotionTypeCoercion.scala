@@ -38,6 +38,11 @@ import org.apache.spark.sql.types.{
   TimestampTypeExpression
 }
 
+/**
+ * Type coercion helper that matches against [[BinaryArithmetic]] and [[BinaryComparison]]
+ * expressions in order to type coerce children to a wider type when one of the children is a
+ * string.
+ */
 object StringPromotionTypeCoercion {
 
   val apply: PartialFunction[Expression, Expression] = {

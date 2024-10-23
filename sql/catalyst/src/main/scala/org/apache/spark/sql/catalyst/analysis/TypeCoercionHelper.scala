@@ -250,6 +250,10 @@ abstract class TypeCoercionHelper {
         TimestampNTZType
     }
 
+  /**
+   * Type coercion helper that matches agaist [[In]] and [[InSubquery]] expressions in order to
+   * type coerce LHS and RHS to expected types.
+   */
   object InTypeCoercion {
     val apply: PartialFunction[Expression, Expression] = {
       // Handle type casting required between value expression and subquery output
@@ -289,6 +293,10 @@ abstract class TypeCoercionHelper {
     }
   }
 
+  /**
+   * Type coercion helper that matches against function expression in order to type coerce function
+   * argument types to expected types.
+   */
   object FunctionArgumentTypeCoercion {
     val apply: PartialFunction[Expression, Expression] = {
       case a @ CreateArray(children, _) if !haveSameType(children.map(_.dataType)) =>
@@ -391,6 +399,10 @@ abstract class TypeCoercionHelper {
     }
   }
 
+  /**
+   * Type coercion helper that matches against [[Concat]] expressions in order to type coerce
+   * expression's children to expected types.
+   */
   object ConcatTypeCoercion {
     val apply: PartialFunction[Expression, Expression] = {
       // Skip nodes if unresolved or empty children
@@ -405,6 +417,10 @@ abstract class TypeCoercionHelper {
     }
   }
 
+  /**
+   * Type coercion helper that matches against [[MapZipWith]] expressions in order to type coerce
+   * key types of input maps to a common type.
+   */
   object MapZipWithTypeCoercion {
     val apply: PartialFunction[Expression, Expression] = {
       // Lambda function isn't resolved when the rule is executed.
@@ -429,6 +445,10 @@ abstract class TypeCoercionHelper {
     }
   }
 
+  /**
+   * Type coercion helper that matches against [[Elt]] expression in order to type coerce
+   * expression's children to expected types.
+   */
   object EltTypeCoercion {
     val apply: PartialFunction[Expression, Expression] = {
       case c @ Elt(children, _) if children.size < 2 => c
@@ -448,6 +468,10 @@ abstract class TypeCoercionHelper {
     }
   }
 
+  /**
+   * Type coercion helper that matches against a [[CaseWhen]] expression in order to type coerce
+   * different branches to a common type.
+   */
   object CaseWhenTypeCoercion {
     val apply: PartialFunction[Expression, Expression] = {
       case c: CaseWhen if !haveSameType(c.inputTypesForMerging) =>
@@ -465,6 +489,10 @@ abstract class TypeCoercionHelper {
     }
   }
 
+  /**
+   * Type coercion helper that matches against an [[If]] expression in order to type coerce
+   * different branches to a common type.
+   */
   object IfTypeCoercion {
     val apply: PartialFunction[Expression, Expression] = {
       // Find tightest common type for If, if the true value and false value have different types.
@@ -483,6 +511,10 @@ abstract class TypeCoercionHelper {
     }
   }
 
+  /**
+   * Type coercion helper that matches against expression in order to type coerce expression's
+   * input types to expected types.
+   */
   object ImplicitTypeCoercion {
     val apply: PartialFunction[Expression, Expression] = {
       case b @ BinaryOperator(left, right)
@@ -583,6 +615,10 @@ abstract class TypeCoercionHelper {
     }
   }
 
+  /**
+   * Type coercion helper that matches against [[WindowFrameTypeCoercion]] expression in order to
+   * type coerce window boundaries to the type they operate upon.
+   */
   object WindowFrameTypeCoercion {
     val apply: PartialFunction[Expression, Expression] = {
       case s @ WindowSpecDefinition(
@@ -611,6 +647,10 @@ abstract class TypeCoercionHelper {
     }
   }
 
+  /**
+   * Type coercion helper that matches against date-time expressions in order to type coerce
+   * children to expected types.
+   */
   object DateTimeOperationsTypeCoercion {
     val apply: PartialFunction[Expression, Expression] = {
       case d @ DateAdd(AnyTimestampTypeExpression(), _) =>
@@ -634,6 +674,10 @@ abstract class TypeCoercionHelper {
     }
   }
 
+  /**
+   * ANSI type coercion helper that matches against date-time expressions in order to type coerce
+   * children to expected types.
+   */
   object AnsiDateTimeOperationsTypeCoercion {
     val apply: PartialFunction[Expression, Expression] = {
       case d @ DateAdd(AnyTimestampTypeExpression(), _) =>

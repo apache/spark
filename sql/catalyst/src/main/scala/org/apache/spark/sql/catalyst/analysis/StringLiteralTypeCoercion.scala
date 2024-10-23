@@ -21,6 +21,10 @@ import org.apache.spark.sql.catalyst.expressions.{Cast, DateAdd, DateSub, Expres
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
+/**
+ * Type coercion helper that matches against [[DateAdd]] and [[DateSub]] expressions in order to
+ * type coerce the second argument to [[IntegerType]], if necessary.
+ */
 object StringLiteralTypeCoercion {
   val apply: PartialFunction[Expression, Expression] = {
     case DateAdd(l, r) if r.dataType.isInstanceOf[StringType] && r.foldable =>

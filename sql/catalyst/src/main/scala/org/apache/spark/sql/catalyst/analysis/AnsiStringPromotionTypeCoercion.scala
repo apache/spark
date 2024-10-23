@@ -47,6 +47,10 @@ import org.apache.spark.sql.types.{
   TimestampType
 }
 
+/**
+ * ANSI type coercion helper that matches against expressions in order to type coerce children to
+ * a wider type when one of the children is a string.
+ */
 object AnsiStringPromotionTypeCoercion {
   val apply: PartialFunction[Expression, Expression] = {
     case b @ BinaryOperator(left, right)
