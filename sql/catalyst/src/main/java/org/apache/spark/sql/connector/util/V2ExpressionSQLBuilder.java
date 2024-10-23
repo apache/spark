@@ -219,6 +219,10 @@ public class V2ExpressionSQLBuilder {
     }
   }
 
+  protected String inputToCaseWhenSQL(Expression input) {
+    return "CASE WHEN " + inputToSQL(input) + " THEN 1 ELSE 0";
+  }
+
   protected String visitBinaryComparison(String name, String l, String r) {
     if (name.equals("<=>")) {
       return "((" + l + " IS NOT NULL AND " + r + " IS NOT NULL AND " + l + " = " + r + ") " +

@@ -19,17 +19,17 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.SQLException
 import java.util.Locale
-
 import scala.util.control.NonFatal
-
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.{Expression, NullOrdering, SortDirection}
+import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
+import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.ExpressionWithToString
 import org.apache.spark.sql.jdbc.MsSqlServerDialect.{GEOGRAPHY, GEOMETRY}
 import org.apache.spark.sql.types._
 
@@ -73,36 +73,6 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       }
     }
 
-    override def visitCaseWhen(children: Array[String]): String = {
-      // Since MsSqlServer cannot handle boolean expressions inside
-      // a CASE WHEN, it is necessary to convert those to an IIF
-      // expression that will return 1 or 0 depending on the result.
-      // Example:
-      // In:  ... CASE WHEN a = b THEN c = d ...
-      // Out: ... CASE WHEN a = b THEN IIF(c = d, 1, 0) ...
-      val sb = new StringBuilder("CASE")
-      var i = 0
-      while (i < children.length) {
-        val c = children(i)
-        val j = i + 1
-        if (j < children.length) {
-          val v = children(j)
-          sb.append(" WHEN ")
-          sb.append(c)
-          sb.append(" THEN ")
-          sb.append(MsSqlServerDialect.wrapPredicateWithIIF(v))
-        }
-        else {
-          sb.append(" ELSE ")
-          sb.append(MsSqlServerDialect.wrapPredicateWithIIF(c))
-        }
-
-        i += 2
-      }
-      sb.append(" END")
-      sb.toString
-    }
-
     override def dialectFunctionName(funcName: String): String = funcName match {
       case "VAR_POP" => "VARP"
       case "VAR_SAMP" => "VAR"
@@ -122,7 +92,24 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
               case o => inputToSQL(o)
             }
             visitBinaryComparison(e.name(), l, r)
-          case "CASE_WHEN" => visitCaseWhen(expressionsToStringArray(e.children())) + " = 1"
+          case "CASE_WHEN" =>
+            // Since MsSqlServer cannot handle boolean expressions inside
+            // a CASE WHEN, it is necessary to convert those to an IIF
+            // expression that will return 1 or 0 depending on the result.
+            // Example:
+            // In:  ... CASE WHEN a = b THEN c = d ...
+            // Out: ... CASE WHEN a = b THEN IIF(c = d, 1, 0) ...
+
+            // grouped turns Array[Expression] to Array[Array[Expression]]
+            // with a len of max 2 (final one will have only one)
+            val stringArray = e.children().grouped(2).flatMap { arr =>
+              arr.dropRight(1).map(inputToSQL) :+
+                (arr.last match {
+                  case p: Predicate => inputToCaseWhenSQL(p)
+                  case p => inputToSQL(p)
+                })
+            }
+            visitCaseWhen(stringArray.toArray) + " = 1"
           case _ => super.build(expr)
         }
         case _ => super.build(expr)
