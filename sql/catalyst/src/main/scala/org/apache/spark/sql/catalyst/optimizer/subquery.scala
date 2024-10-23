@@ -287,7 +287,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       // create a mapping from aggregate expressions to attributes
       val aggregateExprAttrMap = aggregateExprs.zip(aggregateExprAttrs).toMap
 
-      // create Aggregate operator without the offending IN-subqueries, just
+      // create an Aggregate node without the offending IN-subqueries, just
       // the aggregates themselves and all the other aggregate expressions.
       val newAggregateExpressions = a.aggregateExpressions.flatMap { ae =>
         // if this expression contains IN-subqueries with aggregates in the left-hand
