@@ -143,9 +143,6 @@ private[sql] object PythonSQLUtils extends Logging {
     }
   }
 
-  def castTimestampNTZToLong(c: Column): Column =
-    Column.internalFn("timestamp_ntz_to_long", c)
-
   def unresolvedNamedLambdaVariable(name: String): Column =
     Column(internal.UnresolvedNamedLambdaVariable.apply(name))
 
@@ -156,12 +153,6 @@ private[sql] object PythonSQLUtils extends Logging {
   }
 
   def namedArgumentExpression(name: String, e: Column): Column = NamedArgumentExpression(name, e)
-
-  def distributedIndex(): Column = {
-    val expr = MonotonicallyIncreasingID()
-    expr.setTagValue(FunctionRegistry.FUNC_ALIAS, "distributed_index")
-    expr
-  }
 
   @scala.annotation.varargs
   def fn(name: String, arguments: Column*): Column = Column.fn(name, arguments: _*)

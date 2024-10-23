@@ -233,9 +233,10 @@ SELECT * FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0038",
+  "errorClass" : "DUPLICATED_CTE_NAMES",
+  "sqlState" : "42602",
   "messageParameters" : {
-    "duplicateNames" : "'t'"
+    "duplicateNames" : "`t`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -688,9 +689,10 @@ with cte1 as (select 42), cte1 as (select 42) select * FROM cte1
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0038",
+  "errorClass" : "DUPLICATED_CTE_NAMES",
+  "sqlState" : "42602",
   "messageParameters" : {
-    "duplicateNames" : "'cte1'"
+    "duplicateNames" : "`cte1`"
   },
   "queryContext" : [ {
     "objectType" : "",

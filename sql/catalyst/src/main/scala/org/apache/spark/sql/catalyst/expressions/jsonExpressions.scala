@@ -30,17 +30,15 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
-import org.apache.spark.sql.catalyst.expressions.json.JsonExpressionUtils
-import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
-import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
+import org.apache.spark.sql.catalyst.expressions.json.{JsonExpressionEvalUtils, JsonExpressionUtils, JsonToStructsEvaluator, StructsToJsonEvaluator}
+import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, TreePattern}
-import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeWithCaseAccentSensitivity
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 private[this] sealed trait PathInstruction
@@ -135,7 +133,7 @@ case class GetJsonObject(json: Expression, path: Expression)
   override def left: Expression = json
   override def right: Expression = path
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity, StringTypeWithCaseAccentSensitivity)
+    Seq(StringTypeWithCollation, StringTypeWithCollation)
   override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = true
   override def prettyName: String = "get_json_object"
@@ -492,7 +490,7 @@ case class JsonTuple(children: Seq[Expression])
       )
     } else if (
       children.forall(
-        child => StringTypeWithCaseAccentSensitivity.acceptsType(child.dataType))) {
+        child => StringTypeWithCollation.acceptsType(child.dataType))) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       DataTypeMismatch(
@@ -638,20 +636,19 @@ case class JsonToStructs(
     timeZoneId: Option[String] = None,
     variantAllowDuplicateKeys: Boolean = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS))
   extends UnaryExpression
-  with TimeZoneAwareExpression
-  with CodegenFallback
+  with RuntimeReplaceable
   with ExpectsInputTypes
-  with NullIntolerant
+  with TimeZoneAwareExpression
   with QueryErrorsBase {
 
   // The JSON input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions. In particular, the parquet-mr encoder
   // can generate incorrect files if values are missing in columns declared as non-nullable.
-  val nullableSchema = schema.asNullable
+  private val nullableSchema: DataType = schema.asNullable
 
   override def nullable: Boolean = true
 
-  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(JSON_TO_STRUCT)
+  override def nodePatternsInternal(): Seq[TreePattern] = Seq(JSON_TO_STRUCT, RUNTIME_REPLACEABLE)
 
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
@@ -680,56 +677,12 @@ case class JsonToStructs(
         messageParameters = Map("schema" -> toSQLType(nullableSchema)))
   }
 
-  // This converts parsed rows to the desired output by the given schema.
-  @transient
-  lazy val converter = nullableSchema match {
-    case _: StructType =>
-      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
-    case _: ArrayType =>
-      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getArray(0) else null
-    case _: MapType =>
-      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getMap(0) else null
-  }
-
-  val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
-  @transient lazy val parser = {
-    val parsedOptions = new JSONOptions(options, timeZoneId.get, nameOfCorruptRecord)
-    val mode = parsedOptions.parseMode
-    if (mode != PermissiveMode && mode != FailFastMode) {
-      throw QueryCompilationErrors.parseModeUnsupportedError("from_json", mode)
-    }
-    val (parserSchema, actualSchema) = nullableSchema match {
-      case s: StructType =>
-        ExprUtils.verifyColumnNameOfCorruptRecord(s, parsedOptions.columnNameOfCorruptRecord)
-        (s, StructType(s.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)))
-      case other =>
-        (StructType(Array(StructField("value", other))), other)
-    }
-
-    val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = false)
-    val createParser = CreateJacksonParser.utf8String _
-
-    new FailureSafeParser[UTF8String](
-      input => rawParser.parse(input, createParser, identity[UTF8String]),
-      mode,
-      parserSchema,
-      parsedOptions.columnNameOfCorruptRecord)
-  }
-
   override def dataType: DataType = nullableSchema
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def nullSafeEval(json: Any): Any = nullableSchema match {
-    case _: VariantType =>
-      VariantExpressionEvalUtils.parseJson(json.asInstanceOf[UTF8String],
-        allowDuplicateKeys = variantAllowDuplicateKeys)
-    case _ =>
-      converter(parser.parse(json.asInstanceOf[UTF8String]))
-  }
-
-  override def inputTypes: Seq[AbstractDataType] = StringTypeWithCaseAccentSensitivity :: Nil
+  override def inputTypes: Seq[AbstractDataType] = StringTypeWithCollation :: Nil
 
   override def sql: String = schema match {
     case _: MapType => "entries"
@@ -737,6 +690,21 @@ case class JsonToStructs(
   }
 
   override def prettyName: String = "from_json"
+
+  @transient
+  private val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
+
+  @transient
+  lazy val evaluator: JsonToStructsEvaluator = JsonToStructsEvaluator(
+    options, nullableSchema, nameOfCorruptRecord, timeZoneId, variantAllowDuplicateKeys)
+
+  override def replacement: Expression = Invoke(
+    Literal.create(evaluator, ObjectType(classOf[JsonToStructsEvaluator])),
+    "evaluate",
+    dataType,
+    Seq(child),
+    Seq(child.dataType)
+  )
 
   override protected def withNewChildInternal(newChild: Expression): JsonToStructs =
     copy(child = newChild)
@@ -779,13 +747,14 @@ case class StructsToJson(
     child: Expression,
     timeZoneId: Option[String] = None)
   extends UnaryExpression
-  with TimeZoneAwareExpression
-  with CodegenFallback
+  with RuntimeReplaceable
   with ExpectsInputTypes
-  with NullIntolerant
+  with TimeZoneAwareExpression
   with QueryErrorsBase {
 
   override def nullable: Boolean = true
+
+  override def nodePatternsInternal(): Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
 
   def this(options: Map[String, String], child: Expression) = this(options, child, None)
 
@@ -798,44 +767,7 @@ case class StructsToJson(
       timeZoneId = None)
 
   @transient
-  lazy val writer = new CharArrayWriter()
-
-  @transient
-  lazy val gen = new JacksonGenerator(
-    inputSchema, writer, new JSONOptions(options, timeZoneId.get))
-
-  @transient
-  lazy val inputSchema = child.dataType
-
-  // This converts rows to the JSON output according to the given schema.
-  @transient
-  lazy val converter: Any => UTF8String = {
-    def getAndReset(): UTF8String = {
-      gen.flush()
-      val json = writer.toString
-      writer.reset()
-      UTF8String.fromString(json)
-    }
-
-    inputSchema match {
-      case _: StructType =>
-        (row: Any) =>
-          gen.write(row.asInstanceOf[InternalRow])
-          getAndReset()
-      case _: ArrayType =>
-        (arr: Any) =>
-          gen.write(arr.asInstanceOf[ArrayData])
-          getAndReset()
-      case _: MapType =>
-        (map: Any) =>
-          gen.write(map.asInstanceOf[MapData])
-          getAndReset()
-      case _: VariantType =>
-        (v: Any) =>
-          gen.write(v.asInstanceOf[VariantVal])
-          getAndReset()
-    }
-  }
+  private lazy val inputSchema = child.dataType
 
   override def dataType: DataType = SQLConf.get.defaultStringType
 
@@ -851,14 +783,23 @@ case class StructsToJson(
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def nullSafeEval(value: Any): Any = converter(value)
-
   override def inputTypes: Seq[AbstractDataType] = TypeCollection(ArrayType, StructType) :: Nil
 
   override def prettyName: String = "to_json"
 
   override protected def withNewChildInternal(newChild: Expression): StructsToJson =
     copy(child = newChild)
+
+  @transient
+  private lazy val evaluator = StructsToJsonEvaluator(options, inputSchema, timeZoneId)
+
+  override def replacement: Expression = Invoke(
+    Literal.create(evaluator, ObjectType(classOf[StructsToJsonEvaluator])),
+    "evaluate",
+    dataType,
+    Seq(child),
+    Seq(child.dataType)
+  )
 }
 
 /**
@@ -878,7 +819,9 @@ case class StructsToJson(
 case class SchemaOfJson(
     child: Expression,
     options: Map[String, String])
-  extends UnaryExpression with CodegenFallback with QueryErrorsBase {
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -919,26 +862,20 @@ case class SchemaOfJson(
     }
   }
 
-  override def eval(v: InternalRow): Any = {
-    val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
-      parser.nextToken()
-      // To match with schema inference from JSON datasource.
-      jsonInferSchema.inferField(parser) match {
-        case st: StructType =>
-          jsonInferSchema.canonicalizeType(st, jsonOptions).getOrElse(StructType(Nil))
-        case at: ArrayType if at.elementType.isInstanceOf[StructType] =>
-          jsonInferSchema
-            .canonicalizeType(at.elementType, jsonOptions)
-            .map(ArrayType(_, containsNull = at.containsNull))
-            .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
-        case other: DataType =>
-          jsonInferSchema.canonicalizeType(other, jsonOptions).getOrElse(
-            SQLConf.get.defaultStringType)
-      }
-    }
+  @transient private lazy val jsonFactoryObjectType = ObjectType(classOf[JsonFactory])
+  @transient private lazy val jsonOptionsObjectType = ObjectType(classOf[JSONOptions])
+  @transient private lazy val jsonInferSchemaObjectType = ObjectType(classOf[JsonInferSchema])
 
-    UTF8String.fromString(dt.sql)
-  }
+  override def replacement: Expression = StaticInvoke(
+    JsonExpressionEvalUtils.getClass,
+    dataType,
+    "schemaOfJson",
+    Seq(Literal(jsonFactory, jsonFactoryObjectType),
+      Literal(jsonOptions, jsonOptionsObjectType),
+      Literal(jsonInferSchema, jsonInferSchemaObjectType),
+      child),
+    Seq(jsonFactoryObjectType, jsonOptionsObjectType, jsonInferSchemaObjectType, child.dataType)
+  )
 
   override def prettyName: String = "schema_of_json"
 
@@ -973,7 +910,7 @@ case class LengthOfJsonArray(child: Expression)
   with ExpectsInputTypes
   with RuntimeReplaceable {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCaseAccentSensitivity)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCollation)
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
   override def prettyName: String = "json_array_length"
@@ -1018,7 +955,7 @@ case class JsonObjectKeys(child: Expression)
   with ExpectsInputTypes
   with RuntimeReplaceable {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCaseAccentSensitivity)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCollation)
   override def dataType: DataType = ArrayType(SQLConf.get.defaultStringType)
   override def nullable: Boolean = true
   override def prettyName: String = "json_object_keys"
