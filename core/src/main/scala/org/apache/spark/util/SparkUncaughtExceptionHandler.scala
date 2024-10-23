@@ -85,6 +85,7 @@ private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: 
           depth += 1
         }
 
+        // SPARK-30310: Don't System.exit() when exitOnUncaughtException is false
         if (exitOnUncaughtException) {
           System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
         }
