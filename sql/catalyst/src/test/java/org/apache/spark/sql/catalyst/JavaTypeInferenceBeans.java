@@ -83,7 +83,6 @@ public class JavaTypeInferenceBeans {
 
   static class PersonData {
     private String id;
-    private String firstName;
 
     public String getId() {
       return id;
@@ -91,76 +90,17 @@ public class JavaTypeInferenceBeans {
 
     public void setId(String id) {
       this.id = id;
-    }
-
-    public String getFirstName() {
-      return firstName;
-    }
-
-    public void setFirstName(String firstName) {
-      this.firstName = firstName;
-    }
-  }
-
-  static class PersonDataSerializable implements Serializable {
-    private String id;
-    private String firstName;
-
-    public String getId() {
-      return id;
-    }
-
-    public void setId(String id) {
-      this.id = id;
-    }
-
-    public String getFirstName() {
-      return firstName;
-    }
-
-    public void setFirstName(String firstName) {
-      this.firstName = firstName;
     }
   }
 
   static class Team<P> {
-    String name;
     P person;
-
-    public String getName() {
-      return name;
-    }
-
-    public void setName(String name) {
-      this.name = name;
-    }
 
     public P getPerson() {
       return person;
     }
 
     public void setPerson(P person) {
-      this.person = person;
-    }
-  }
-
-  static class TeamT<T extends Serializable> {
-    String name;
-    T person;
-
-    public String getName() {
-      return name;
-    }
-
-    public void setName(String name) {
-      this.name = name;
-    }
-
-    public T getPerson() {
-      return person;
-    }
-
-    public void setPerson(T person) {
       this.person = person;
     }
   }
@@ -183,6 +123,24 @@ public class JavaTypeInferenceBeans {
 
     public void setTeam(Team<T> team) {
       this.team = team;
+    }
+  }
+
+  static class CompanyWrapper extends Company<PersonData> {
+  }
+
+  static class PersonDataSerializable extends PersonData implements Serializable {
+  }
+
+  static class TeamT<T extends Serializable> {
+     T person;
+
+    public T getPerson() {
+      return person;
+    }
+
+    public void setPerson(T person) {
+      this.person = person;
     }
   }
 
@@ -209,7 +167,5 @@ public class JavaTypeInferenceBeans {
 
   static class CompanyWrapperT extends CompanyT<PersonDataSerializable> {
   }
-  static class CompanyWrapper extends Company<PersonData> {
-  }
-}
 
+}

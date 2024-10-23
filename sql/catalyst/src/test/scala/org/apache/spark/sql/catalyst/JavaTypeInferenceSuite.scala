@@ -286,9 +286,7 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
       JavaBeanEncoder(ClassTag(classOf[CompanyWrapper]), Seq(
         encoderField("name", StringEncoder),
         encoderField("team", JavaBeanEncoder(ClassTag(classOf[Team[PersonData]]), Seq(
-          encoderField("name", StringEncoder),
           encoderField("person", JavaBeanEncoder(ClassTag(classOf[PersonData]), Seq(
-            encoderField("firstName", StringEncoder),
             encoderField("id", StringEncoder)
           )))
         )))
@@ -302,9 +300,7 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
       JavaBeanEncoder(ClassTag(classOf[CompanyWrapperT]), Seq(
         encoderField("name", StringEncoder),
         encoderField("team", JavaBeanEncoder(ClassTag(classOf[TeamT[PersonDataSerializable]]), Seq(
-          encoderField("name", StringEncoder),
           encoderField("person", JavaBeanEncoder(ClassTag(classOf[PersonDataSerializable]), Seq(
-            encoderField("firstName", StringEncoder),
             encoderField("id", StringEncoder)
           )))
         )))
