@@ -69,8 +69,8 @@ private[ml] trait TargetEncoderBase extends Params with HasLabelCol
   @Since("4.0.0")
   val smoothing: DoubleParam = new DoubleParam(this, "smoothing",
     "Smoothing factor for encodings. Smoothing blends in-class estimates with overall estimates " +
-    "according to the relative size of the particular class on the whole dataset, reducing the " +
-    "risk of overfitting due to unreliable estimates",
+      "according to the relative size of the particular class on the whole dataset, reducing the " +
+      "risk of overfitting due to unreliable estimates",
     ParamValidators.gtEq(0.0))
 
   setDefault(smoothing -> 0.0)
@@ -78,16 +78,16 @@ private[ml] trait TargetEncoderBase extends Params with HasLabelCol
   final def getSmoothing: Double = $(smoothing)
 
   private[feature] lazy val inputFeatures = if (isSet(inputCol)) Array($(inputCol))
-                                            else if (isSet(inputCols)) $(inputCols)
-                                            else Array.empty[String]
+  else if (isSet(inputCols)) $(inputCols)
+  else Array.empty[String]
 
   private[feature] lazy val outputFeatures = if (isSet(outputCol)) Array($(outputCol))
-                          else if (isSet(outputCols)) $(outputCols)
-                          else inputFeatures.map{field: String => s"${field}_indexed"}
+  else if (isSet(outputCols)) $(outputCols)
+  else inputFeatures.map{field: String => s"${field}_indexed"}
 
   private[feature] def validateSchema(
-                                      schema: StructType,
-                                      fitting: Boolean): StructType = {
+                                       schema: StructType,
+                                       fitting: Boolean): StructType = {
 
     require(inputFeatures.length > 0,
       s"At least one input column must be specified.")
@@ -185,6 +185,7 @@ class TargetEncoder @Since("4.0.0") (@Since("4.0.0") override val uid: String)
   override def fit(dataset: Dataset[_]): TargetEncoderModel = {
     validateSchema(dataset.schema, fitting = true)
 
+    // stats: Array[Map[Some(category), (counter,stat)]]
     val stats = dataset
       .select((inputFeatures :+ $(labelCol)).map(col(_).cast(DoubleType)).toIndexedSeq: _*)
       .rdd.treeAggregate(
@@ -249,27 +250,9 @@ class TargetEncoder @Since("4.0.0") (@Since("4.0.0") override val uid: String)
           }
         }.toArray)
 
-    // encodings: Array[Map[Some(category), encoding]]
-    val encodings: Array[Map[Option[Double], Double]] =
-      stats.map {
-        stat =>
-          val (global_count, global_stat) = stat.get(TargetEncoder.UNSEEN_CATEGORY).get
-          stat.map {
-            case (cat, (class_count, class_stat)) => cat -> {
-              val weight = class_count / (class_count + $(smoothing)) // smoothing weight
-              $(targetType) match {
-                case TargetEncoder.TARGET_BINARY =>
-                  // calculate conditional probabilities and blend
-                  weight * (class_stat/ class_count) + (1 - weight) * (global_stat / global_count)
-                case TargetEncoder.TARGET_CONTINUOUS =>
-                  // blend means
-                  weight * class_stat + (1 - weight) * global_stat
-              }
-            }
-          }
-      }
 
-    val model = new TargetEncoderModel(uid, encodings).setParent(this)
+
+    val model = new TargetEncoderModel(uid, stats).setParent(this)
     copyValues(model)
   }
 
@@ -297,13 +280,13 @@ object TargetEncoder extends DefaultParamsReadable[TargetEncoder] {
 }
 
 /**
- * @param encodings  Original number of categories for each feature being encoded.
- *                       The array contains one value for each input column, in order.
+ * @param stats  Array of statistics for each input feature.
+ *               Array( Map( Some(category), (counter, stat) ) )
  */
 @Since("4.0.0")
 class TargetEncoderModel private[ml] (
-     @Since("4.0.0") override val uid: String,
-     @Since("4.0.0") val encodings: Array[Map[Option[Double], Double]])
+                     @Since("4.0.0") override val uid: String,
+                     @Since("4.0.0") val stats: Array[Map[Option[Double], (Double, Double)]])
   extends Model[TargetEncoderModel] with TargetEncoderBase with MLWritable {
 
   /** @group setParam */
@@ -326,22 +309,46 @@ class TargetEncoderModel private[ml] (
   @Since("4.0.0")
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
 
+  /** @group setParam */
+  @Since("4.0.0")
+  def setSmoothing(value: Double): this.type = set(smoothing, value)
+
   @Since("4.0.0")
   override def transformSchema(schema: StructType): StructType = {
-    if (outputFeatures.length == encodings.length) {
+    if (outputFeatures.length == stats.length) {
       outputFeatures.filter(_ != null)
         .foldLeft(validateSchema(schema, fitting = false)) {
           case (newSchema, outputField) =>
             newSchema.add(StructField(outputField, DoubleType, nullable = false))
         }
     } else throw new SparkException("The number of features does not match the number of " +
-                                    s"encodings in the model (${encodings.length}). " +
-                                    s"Found ${outputFeatures.length}  features)")
+      s"encodings in the model (${stats.length}). " +
+      s"Found ${outputFeatures.length} features)")
   }
 
   @Since("4.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    validateSchema(dataset.schema, fitting = false)
+    transformSchema(dataset.schema)
+
+    // encodings: Array[Map[Some(category), encoding]]
+    val encodings: Array[Map[Option[Double], Double]] =
+      stats.map {
+        stat =>
+          val (global_count, global_stat) = stat.get(TargetEncoder.UNSEEN_CATEGORY).get
+          stat.map {
+            case (cat, (class_count, class_stat)) => cat -> {
+              val weight = class_count / (class_count + $(smoothing)) // smoothing weight
+              $(targetType) match {
+                case TargetEncoder.TARGET_BINARY =>
+                  // calculate conditional probabilities and blend
+                  weight * (class_stat/ class_count) + (1 - weight) * (global_stat / global_count)
+                case TargetEncoder.TARGET_CONTINUOUS =>
+                  // blend means
+                  weight * class_stat + (1 - weight) * global_stat
+              }
+            }
+          }
+      }
 
     // builds a column-to-column function from a map of encodings
     val apply_encodings: Map[Option[Double], Double] => (Column => Column) =
@@ -380,24 +387,21 @@ class TargetEncoderModel private[ml] (
 
     dataset.withColumns(
       inputFeatures.zip(outputFeatures).zip(encodings)
-        .filter{
-          case ((featureIn, featureOut), _) => (featureIn != null) && (featureOut != null)
-        }.map {
+        .map {
           case ((featureIn, featureOut), mapping) =>
             featureOut ->
-                apply_encodings(mapping)(col(featureIn))
-                  .as(featureOut, NominalAttribute.defaultAttr
-                    .withName(featureOut)
-                    .withNumValues(mapping.values.toSet.size)
-                    .withValues(mapping.values.toSet.toArray.map(_.toString)).toMetadata())
+              apply_encodings(mapping)(col(featureIn))
+                .as(featureOut, NominalAttribute.defaultAttr
+                  .withName(featureOut)
+                  .withNumValues(mapping.values.toSet.size)
+                  .withValues(mapping.values.toSet.toArray.map(_.toString)).toMetadata())
         }.toMap)
 
-    }
-
+  }
 
   @Since("4.0.0")
   override def copy(extra: ParamMap): TargetEncoderModel = {
-    val copied = new TargetEncoderModel(uid, encodings)
+    val copied = new TargetEncoderModel(uid, stats)
     copyValues(copied, extra).setParent(parent)
   }
 
@@ -420,11 +424,11 @@ object TargetEncoderModel extends MLReadable[TargetEncoderModel] {
   private[TargetEncoderModel]
   class TargetEncoderModelWriter(instance: TargetEncoderModel) extends MLWriter {
 
-    private case class Data(encodings: Array[Map[Option[Double], Double]])
+    private case class Data(stats: Array[Map[Option[Double], (Double, Double)]])
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
-      val data = Data(instance.encodings)
+      val data = Data(instance.stats)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
     }
@@ -440,8 +444,8 @@ object TargetEncoderModel extends MLReadable[TargetEncoderModel] {
       val data = sparkSession.read.parquet(dataPath)
         .select("encodings")
         .head()
-      val encodings = data.getAs[Array[Map[Option[Double], Double]]](0)
-      val model = new TargetEncoderModel(metadata.uid, encodings)
+      val stats = data.getAs[Array[Map[Option[Double], (Double, Double)]]](0)
+      val model = new TargetEncoderModel(metadata.uid, stats)
       metadata.getAndSetParams(model)
       model
     }

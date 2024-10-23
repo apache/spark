@@ -36,16 +36,27 @@ public class JavaTargetEncoderSuite extends SharedSparkSession {
   @Test
   public void testTargetEncoderBinary() {
 
+    // checkstyle.off: LineLength
     List<Row> data = Arrays.asList(
-            RowFactory.create((short)0, 3, 5.0, 0.0, 1.0/3, 0.0, 1.0/3),
-            RowFactory.create((short)1, 4, 5.0, 1.0, 2.0/3, 1.0, 1.0/3),
-            RowFactory.create((short)2, 3, 5.0, 0.0, 1.0/3, 0.0, 1.0/3),
-            RowFactory.create((short)0, 4, 6.0, 1.0, 1.0/3, 1.0, 2.0/3),
-            RowFactory.create((short)1, 3, 6.0, 0.0, 2.0/3, 0.0, 2.0/3),
-            RowFactory.create((short)2, 4, 6.0, 1.0, 1.0/3, 1.0, 2.0/3),
-            RowFactory.create((short)0, 3, 7.0, 0.0, 1.0/3, 0.0, 0.0),
-            RowFactory.create((short)1, 4, 8.0, 1.0, 2.0/3, 1.0, 1.0),
-            RowFactory.create((short)2, 3, null, 0.0, 1.0/3, 0.0, 0.0));
+      RowFactory.create((short)0, 3, 5.0, 0.0, 1.0/3, 0.0, 1.0/3, (3.0/4)*(1.0/3)+(1-3.0/4)*(4.0/9),
+              (1-5.0/6)*(4.0/9), (3.0/4)*(1.0/3)+(1-3.0/4)*(4.0/9)),
+      RowFactory.create((short)1, 4, 5.0, 1.0, 2.0/3, 1.0, 1.0/3, (3.0/4)*(2.0/3)+(1-3.0/4)*(4.0/9),
+              (4.0/5)*1+(1-4.0/5)*(4.0/9), (3.0/4)*(1.0/3)+(1-3.0/4)*(4.0/9)),
+      RowFactory.create((short)2, 3, 5.0, 0.0, 1.0/3, 0.0, 1.0/3, (3.0/4)*(1.0/3)+(1-3.0/4)*(4.0/9),
+              (1-5.0/6)*(4.0/9), (3.0/4)*(1.0/3)+(1-3.0/4)*(4.0/9)),
+      RowFactory.create((short)0, 4, 6.0, 1.0, 1.0/3, 1.0, 2.0/3, (3.0/4)*(1.0/3)+(1-3.0/4)*(4.0/9),
+              (4.0/5)*1+(1-4.0/5)*(4.0/9), (3.0/4)*(2.0/3)+(1-3.0/4)*(4.0/9)),
+      RowFactory.create((short)1, 3, 6.0, 0.0, 2.0/3, 0.0, 2.0/3, (3.0/4)*(2.0/3)+(1-3.0/4)*(4.0/9),
+              (1-5.0/6)*(4.0/9), (3.0/4)*(2.0/3)+(1-3.0/4)*(4.0/9)),
+      RowFactory.create((short)2, 4, 6.0, 1.0, 1.0/3, 1.0, 2.0/3, (3.0/4)*(1.0/3)+(1-3.0/4)*(4.0/9),
+              (4.0/5)*1+(1-4.0/5)*(4.0/9), (3.0/4)*(2.0/3)+(1-3.0/4)*(4.0/9)),
+      RowFactory.create((short)0, 3, 7.0, 0.0, 1.0/3, 0.0, 0.0, (3.0/4)*(1.0/3)+(1-3.0/4)*(4.0/9),
+              (1-5.0/6)*(4.0/9), (1-1.0/2)*(4.0/9)),
+      RowFactory.create((short)1, 4, 8.0, 1.0, 2.0/3, 1.0, 1.0, (3.0/4)*(2.0/3)+(1-3.0/4)*(4.0/9),
+              (4.0/5)*1+(1-4.0/5)*(4.0/9), (1.0/2)+(1-1.0/2)*(4.0/9)),
+      RowFactory.create((short)2, 3, null, 0.0, 1.0/3, 0.0, 0.0, (3.0/4)*(1.0/3)+(1-3.0/4)*(4.0/9),
+              (1-5.0/6)*(4.0/9), (1-1.0/2)*(4.0/9)));
+    // checkstyle.off: LineLength
     StructType schema = createStructType(new StructField[]{
             createStructField("input1", ShortType, true),
             createStructField("input2", IntegerType, true),
@@ -53,8 +64,12 @@ public class JavaTargetEncoderSuite extends SharedSparkSession {
             createStructField("label", DoubleType, false),
             createStructField("expected1", DoubleType, false),
             createStructField("expected2", DoubleType, false),
-            createStructField("expected3", DoubleType, false)
+            createStructField("expected3", DoubleType, false),
+            createStructField("smoothing1", DoubleType, false),
+            createStructField("smoothing2", DoubleType, false),
+            createStructField("smoothing3", DoubleType, false)
     });
+
     Dataset<Row> dataset = spark.createDataFrame(data, schema);
 
     TargetEncoder encoder = new TargetEncoder()
@@ -62,11 +77,16 @@ public class JavaTargetEncoderSuite extends SharedSparkSession {
             .setOutputCols(new String[]{"output1", "output2", "output3"})
             .setTargetType("binary");
     TargetEncoderModel model = encoder.fit(dataset);
-    Dataset<Row> output = model.transform(dataset);
 
+    Dataset<Row> output = model.transform(dataset);
     Assertions.assertEquals(
             output.select("output1", "output2", "output3").collectAsList(),
             output.select("expected1", "expected2", "expected3").collectAsList());
+
+    Dataset<Row> output_smoothing = model.setSmoothing(1.0).transform(dataset);
+    Assertions.assertEquals(
+            output_smoothing.select("output1", "output2", "output3").collectAsList(),
+            output_smoothing.select("smoothing1", "smoothing2", "smoothing3").collectAsList());
 
   }
 
@@ -74,15 +94,16 @@ public class JavaTargetEncoderSuite extends SharedSparkSession {
   public void testTargetEncoderContinuous() {
 
     List<Row> data = Arrays.asList(
-            RowFactory.create((short)0, 3, 5.0, 10.0, 40.0, 50.0, 20.0),
-            RowFactory.create((short)1, 4, 5.0, 20.0, 50.0, 50.0, 20.0),
-            RowFactory.create((short)2, 3, 5.0, 30.0, 60.0, 50.0, 20.0),
-            RowFactory.create((short)0, 4, 6.0, 40.0, 40.0, 50.0, 50.0),
-            RowFactory.create((short)1, 3, 6.0, 50.0, 50.0, 50.0, 50.0),
-            RowFactory.create((short)2, 4, 6.0, 60.0, 60.0, 50.0, 50.0),
-            RowFactory.create((short)0, 3, 7.0, 70.0, 40.0, 50.0, 70.0),
-            RowFactory.create((short)1, 4, 8.0, 80.0, 50.0, 50.0, 80.0),
-            RowFactory.create((short)2, 3, null, 90.0, 60.0, 50.0, 90.0));
+            RowFactory.create((short)0, 3, 5.0, 10.0, 40.0, 50.0, 20.0, 42.5, 50.0, 27.5),
+            RowFactory.create((short)1, 4, 5.0, 20.0, 50.0, 50.0, 20.0, 50.0, 50.0, 27.5),
+            RowFactory.create((short)2, 3, 5.0, 30.0, 60.0, 50.0, 20.0, 57.5, 50.0, 27.5),
+            RowFactory.create((short)0, 4, 6.0, 40.0, 40.0, 50.0, 50.0, 42.5, 50.0, 50.0),
+            RowFactory.create((short)1, 3, 6.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0),
+            RowFactory.create((short)2, 4, 6.0, 60.0, 60.0, 50.0, 50.0, 57.5, 50.0, 50.0),
+            RowFactory.create((short)0, 3, 7.0, 70.0, 40.0, 50.0, 70.0, 42.5, 50.0, 60.0),
+            RowFactory.create((short)1, 4, 8.0, 80.0, 50.0, 50.0, 80.0, 50.0, 50.0, 65.0),
+            RowFactory.create((short)2, 3, null, 90.0, 60.0, 50.0, 90.0, 57.5, 50.0, 70.0));
+
     StructType schema = createStructType(new StructField[]{
             createStructField("input1", ShortType, true),
             createStructField("input2", IntegerType, true),
@@ -90,8 +111,12 @@ public class JavaTargetEncoderSuite extends SharedSparkSession {
             createStructField("label", DoubleType, false),
             createStructField("expected1", DoubleType, false),
             createStructField("expected2", DoubleType, false),
-            createStructField("expected3", DoubleType, false)
+            createStructField("expected3", DoubleType, false),
+            createStructField("smoothing1", DoubleType, false),
+            createStructField("smoothing2", DoubleType, false),
+            createStructField("smoothing3", DoubleType, false)
     });
+
     Dataset<Row> dataset = spark.createDataFrame(data, schema);
 
     TargetEncoder encoder = new TargetEncoder()
@@ -99,11 +124,16 @@ public class JavaTargetEncoderSuite extends SharedSparkSession {
             .setOutputCols(new String[]{"output1", "output2", "output3"})
             .setTargetType("continuous");
     TargetEncoderModel model = encoder.fit(dataset);
-    Dataset<Row> output = model.transform(dataset);
 
+    Dataset<Row> output = model.transform(dataset);
     Assertions.assertEquals(
             output.select("output1", "output2", "output3").collectAsList(),
             output.select("expected1", "expected2", "expected3").collectAsList());
+
+    Dataset<Row> output_smoothing = model.setSmoothing(1.0).transform(dataset);
+    Assertions.assertEquals(
+            output_smoothing.select("output1", "output2", "output3").collectAsList(),
+            output_smoothing.select("smoothing1", "smoothing2", "smoothing3").collectAsList());
 
   }
 

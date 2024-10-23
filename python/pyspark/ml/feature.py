@@ -5381,6 +5381,13 @@ class TargetEncoder(
         return self._set(**kwargs)
 
     @since("4.0.0")
+    def setLabelCol(self, value: str) -> "TargetEncoder":
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    @since("4.0.0")
     def setInputCols(self, value: List[str]) -> "TargetEncoder":
         """
         Sets the value of :py:attr:`inputCols`.
@@ -5478,13 +5485,6 @@ class TargetEncoderModel(
         return self._set(handleInvalid=value)
 
     @since("4.0.0")
-    def setTargetType(self, value: str) -> "TargetEncoderModel":
-        """
-        Sets the value of :py:attr:`targetType`.
-        """
-        return self._set(targetType=value)
-
-    @since("4.0.0")
     def setSmoothing(self, value: float) -> "TargetEncoderModel":
         """
         Sets the value of :py:attr:`smoothing`.
@@ -5493,12 +5493,12 @@ class TargetEncoderModel(
 
     @property
     @since("4.0.0")
-    def encodings(self) -> List[Dict[float, float]]:
+    def stats(self) -> List[Dict[float, float]]:
         """
         Fitted mappings for each feature to being encoded.
         The dictionary contains a dictionary for each input column.
         """
-        return self._call_java("encodings")
+        return self._call_java("stats")
 
 
 @inherit_doc

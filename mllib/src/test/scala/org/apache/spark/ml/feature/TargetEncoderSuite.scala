@@ -30,40 +30,48 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
-  @transient var data: Seq[Row] = _
+  @transient var data_binary: Seq[Row] = _
+  @transient var data_continuous: Seq[Row] = _
   @transient var schema: StructType = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
 
     // scalastyle:off
-    data = Seq(
-      Row(0.toShort, 3, 5.0, 0.toByte, 1.0/3, 0.0, 1.0/3, 10.0, 40.0, 50.0, 20.0, 42.5, 50.0, 27.5),
-      Row(1.toShort, 4, 5.0, 1.toByte, 2.0/3, 1.0, 1.0/3, 20.0, 50.0, 50.0, 20.0, 50.0, 50.0, 27.5),
-      Row(2.toShort, 3, 5.0, 0.toByte, 1.0/3, 0.0, 1.0/3, 30.0, 60.0, 50.0, 20.0, 57.5, 50.0, 27.5),
-      Row(0.toShort, 4, 6.0, 1.toByte, 1.0/3, 1.0, 2.0/3, 40.0, 40.0, 50.0, 50.0, 42.5, 50.0, 50.0),
-      Row(1.toShort, 3, 6.0, 0.toByte, 2.0/3, 0.0, 2.0/3, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0),
-      Row(2.toShort, 4, 6.0, 1.toByte, 1.0/3, 1.0, 2.0/3, 60.0, 60.0, 50.0, 50.0, 57.5, 50.0, 50.0),
-      Row(0.toShort, 3, 7.0, 0.toByte, 1.0/3, 0.0,   0.0, 70.0, 40.0, 50.0, 70.0, 42.5, 50.0, 60.0),
-      Row(1.toShort, 4, 8.0, 1.toByte, 2.0/3, 1.0,   1.0, 80.0, 50.0, 50.0, 80.0, 50.0, 50.0, 65.0),
-      Row(2.toShort, 3, 9.0, 0.toByte, 1.0/3, 0.0,   0.0, 90.0, 60.0, 50.0, 90.0, 57.5, 50.0, 70.0))
+    data_binary = Seq(
+      Row(0.toShort, 3, 5.0, 0.0, 1.0/3, 0.0, 1.0/3, (3.0/4)*(1.0/3)+(1-3.0/4)*(4.0/9),           (1-5.0/6)*(4.0/9), (3.0/4)*(1.0/3)+(1-3.0/4)*(4.0/9)),
+      Row(1.toShort, 4, 5.0, 1.0, 2.0/3, 1.0, 1.0/3, (3.0/4)*(2.0/3)+(1-3.0/4)*(4.0/9), (4.0/5)*1+(1-4.0/5)*(4.0/9), (3.0/4)*(1.0/3)+(1-3.0/4)*(4.0/9)),
+      Row(2.toShort, 3, 5.0, 0.0, 1.0/3, 0.0, 1.0/3, (3.0/4)*(1.0/3)+(1-3.0/4)*(4.0/9),           (1-5.0/6)*(4.0/9), (3.0/4)*(1.0/3)+(1-3.0/4)*(4.0/9)),
+      Row(0.toShort, 4, 6.0, 1.0, 1.0/3, 1.0, 2.0/3, (3.0/4)*(1.0/3)+(1-3.0/4)*(4.0/9), (4.0/5)*1+(1-4.0/5)*(4.0/9), (3.0/4)*(2.0/3)+(1-3.0/4)*(4.0/9)),
+      Row(1.toShort, 3, 6.0, 0.0, 2.0/3, 0.0, 2.0/3, (3.0/4)*(2.0/3)+(1-3.0/4)*(4.0/9),           (1-5.0/6)*(4.0/9), (3.0/4)*(2.0/3)+(1-3.0/4)*(4.0/9)),
+      Row(2.toShort, 4, 6.0, 1.0, 1.0/3, 1.0, 2.0/3, (3.0/4)*(1.0/3)+(1-3.0/4)*(4.0/9), (4.0/5)*1+(1-4.0/5)*(4.0/9), (3.0/4)*(2.0/3)+(1-3.0/4)*(4.0/9)),
+      Row(0.toShort, 3, 7.0, 0.0, 1.0/3, 0.0,   0.0, (3.0/4)*(1.0/3)+(1-3.0/4)*(4.0/9),           (1-5.0/6)*(4.0/9),                 (1-1.0/2)*(4.0/9)),
+      Row(1.toShort, 4, 8.0, 1.0, 2.0/3, 1.0,   1.0, (3.0/4)*(2.0/3)+(1-3.0/4)*(4.0/9), (4.0/5)*1+(1-4.0/5)*(4.0/9), (1.0/2)        +(1-1.0/2)*(4.0/9)),
+      Row(2.toShort, 3, 9.0, 0.0, 1.0/3, 0.0,   0.0, (3.0/4)*(1.0/3)+(1-3.0/4)*(4.0/9),           (1-5.0/6)*(4.0/9),                 (1-1.0/2)*(4.0/9)))
+
+    data_continuous = Seq(
+      Row(0.toShort, 3, 5.0, 10.0, 40.0, 50.0, 20.0, 42.5, 50.0, 27.5),
+      Row(1.toShort, 4, 5.0, 20.0, 50.0, 50.0, 20.0, 50.0, 50.0, 27.5),
+      Row(2.toShort, 3, 5.0, 30.0, 60.0, 50.0, 20.0, 57.5, 50.0, 27.5),
+      Row(0.toShort, 4, 6.0, 40.0, 40.0, 50.0, 50.0, 42.5, 50.0, 50.0),
+      Row(1.toShort, 3, 6.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0),
+      Row(2.toShort, 4, 6.0, 60.0, 60.0, 50.0, 50.0, 57.5, 50.0, 50.0),
+      Row(0.toShort, 3, 7.0, 70.0, 40.0, 50.0, 70.0, 42.5, 50.0, 60.0),
+      Row(1.toShort, 4, 8.0, 80.0, 50.0, 50.0, 80.0, 50.0, 50.0, 65.0),
+      Row(2.toShort, 3, 9.0, 90.0, 60.0, 50.0, 90.0, 57.5, 50.0, 70.0))
     // scalastyle:on
 
     schema = StructType(Array(
       StructField("input1", ShortType, nullable = true),
       StructField("input2", IntegerType, nullable = true),
       StructField("input3", DoubleType, nullable = true),
-      StructField("binaryLabel", ByteType),
-      StructField("binaryExpected1", DoubleType),
-      StructField("binaryExpected2", DoubleType),
-      StructField("binaryExpected3", DoubleType),
-      StructField("continuousLabel", DoubleType),
-      StructField("continuousExpected1", DoubleType),
-      StructField("continuousExpected2", DoubleType),
-      StructField("continuousExpected3", DoubleType),
-      StructField("smoothingExpected1", DoubleType),
-      StructField("smoothingExpected2", DoubleType),
-      StructField("smoothingExpected3", DoubleType)))
+      StructField("label", DoubleType),
+      StructField("expected1", DoubleType),
+      StructField("expected2", DoubleType),
+      StructField("expected3", DoubleType),
+      StructField("smoothing1", DoubleType),
+      StructField("smoothing2", DoubleType),
+      StructField("smoothing3", DoubleType)))
   }
 
   test("params") {
@@ -72,33 +80,34 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
 
   test("TargetEncoder - binary target") {
 
-    val df = spark.createDataFrame(sc.parallelize(data), schema)
+    val df = spark.createDataFrame(sc.parallelize(data_binary), schema)
 
     val encoder = new TargetEncoder()
-      .setLabelCol("binaryLabel")
+      .setLabelCol("label")
       .setTargetType(TargetEncoder.TARGET_BINARY)
       .setInputCols(Array("input1", "input2", "input3"))
       .setOutputCols(Array("output1", "output2", "output3"))
 
     val model = encoder.fit(df)
 
-    val expected_encodings = Array(
-        Map(Some(0.0) -> 1.0/3, Some(1.0) -> 2.0/3, Some(2.0) -> 1.0/3, Some(-1.0) -> 4.0/9),
-        Map(Some(3.0) -> 0.0, Some(4.0) -> 1.0, Some(-1.0) -> 4.0/9),
-        HashMap(Some(5.0) -> 1.0/3, Some(6.0) -> 2.0/3, Some(7.0) -> 0.0,
-          Some(8.0) -> 1.0, Some(9.0) -> 0.0, Some(-1.0) -> 4.0/9))
+    val expected_stats = Array(
+      Map(Some(0.0) -> (3.0, 1.0), Some(1.0) -> (3.0, 2.0), Some(2.0) -> (3.0, 1.0),
+        Some(-1.0) -> (9.0, 4.0)),
+      Map(Some(3.0) -> (5.0, 0.0), Some(4.0) -> (4.0, 4.0), Some(-1.0) -> (9.0, 4.0)),
+      HashMap(Some(5.0) -> (3.0, 1.0), Some(6.0) -> (3.0, 2.0), Some(7.0) -> (1.0, 0.0),
+        Some(8.0) -> (1.0, 1.0), Some(9.0) -> (1.0, 0.0), Some(-1.0) -> (9.0, 4.0)))
 
-    model.encodings.zip(expected_encodings).foreach{
-      case (actual, expected) => actual.equals(expected)
+    model.stats.zip(expected_stats).foreach{
+      case (actual, expected) => assert(actual.equals(expected))
     }
 
     testTransformer[(Double, Double, Double, Double, Double, Double)](
       df.select("input1", "input2", "input3",
-        "binaryExpected1", "binaryExpected2", "binaryExpected3"),
+        "expected1", "expected2", "expected3"),
       model,
-      "output1", "binaryExpected1",
-      "output2", "binaryExpected2",
-      "output3", "binaryExpected3") {
+      "output1", "expected1",
+      "output2", "expected2",
+      "output3", "expected3") {
       case Row(output1: Double, expected1: Double,
       output2: Double, expected2: Double,
       output3: Double, expected3: Double) =>
@@ -106,39 +115,58 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
         assert(output2 === expected2)
         assert(output3 === expected3)
     }
+
+    val model_smooth = model.setSmoothing(1.0)
+
+    testTransformer[(Double, Double, Double, Double, Double, Double)](
+      df.select("input1", "input2", "input3",
+        "smoothing1", "smoothing2", "smoothing3"),
+      model_smooth,
+      "output1", "smoothing1",
+      "output2", "smoothing2",
+      "output3", "smoothing3") {
+      case Row(output1: Double, expected1: Double,
+      output2: Double, expected2: Double,
+      output3: Double, expected3: Double) =>
+        assert(output1 === expected1)
+        assert(output2 === expected2)
+        assert(output3 === expected3)
+    }
+
 
   }
 
   test("TargetEncoder - continuous target") {
 
     val df = spark
-      .createDataFrame(sc.parallelize(data), schema)
+      .createDataFrame(sc.parallelize(data_continuous), schema)
 
     val encoder = new TargetEncoder()
-      .setLabelCol("continuousLabel")
+      .setLabelCol("label")
       .setTargetType(TargetEncoder.TARGET_CONTINUOUS)
       .setInputCols(Array("input1", "input2", "input3"))
       .setOutputCols(Array("output1", "output2", "output3"))
 
     val model = encoder.fit(df)
 
-    val expected_encodings = Array(
-      Map(Some(0.0) -> 40.0, Some(1.0) -> 50.0, Some(2.0) -> 60.0, Some(-1.0) -> 50.0),
-      Map(Some(3.0) -> 50.0, Some(4.0) -> 50.0, Some(-1.0) -> 50.0),
-      HashMap(Some(5.0) -> 20.0, Some(6.0) -> 50.0, Some(7.0) -> 70.0,
-        Some(8.0) -> 80.0, Some(9.0) -> 90.0, Some(-1.0) -> 50.0))
+    val expected_stats = Array(
+      Map(Some(0.0) -> (3.0, 40.0), Some(1.0) -> (3.0, 50.0), Some(2.0) -> (3.0, 60.0),
+        Some(-1.0) -> (9.0, 50.0)),
+      Map(Some(3.0) -> (5.0, 50.0), Some(4.0) -> (4.0, 50.0), Some(-1.0) -> (9.0, 50.0)),
+      HashMap(Some(5.0) -> (3.0, 20.0), Some(6.0) -> (3.0, 50.0), Some(7.0) -> (1.0, 70.0),
+        Some(8.0) -> (1.0, 80.0), Some(9.0) -> (1.0, 90.0), Some(-1.0) -> (9.0, 50.0)))
 
-    model.encodings.zip(expected_encodings).foreach{
-      case (actual, expected) => actual.equals(expected)
+    model.stats.zip(expected_stats).foreach{
+      case (actual, expected) => assert(actual.equals(expected))
     }
 
     testTransformer[(Double, Double, Double, Double, Double, Double)](
       df.select("input1", "input2", "input3",
-        "continuousExpected1", "continuousExpected2", "continuousExpected3"),
+        "expected1", "expected2", "expected3"),
       model,
-      "output1", "continuousExpected1",
-      "output2", "continuousExpected2",
-      "output3", "continuousExpected3") {
+      "output1", "expected1",
+      "output2", "expected2",
+      "output3", "expected3") {
       case Row(output1: Double, expected1: Double,
       output2: Double, expected2: Double,
       output3: Double, expected3: Double) =>
@@ -147,39 +175,15 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
         assert(output3 === expected3)
     }
 
-  }
-
-  test("TargetEncoder - smoothing") {
-
-    val df = spark
-      .createDataFrame(sc.parallelize(data), schema)
-
-    val encoder = new TargetEncoder()
-      .setLabelCol("continuousLabel")
-      .setTargetType(TargetEncoder.TARGET_CONTINUOUS)
-      .setInputCols(Array("input1", "input2", "input3"))
-      .setOutputCols(Array("output1", "output2", "output3"))
-      .setSmoothing(1)
-
-    val model = encoder.fit(df)
-
-    val expected_encodings = Array(
-      Map(Some(0.0) -> 42.5, Some(1.0) -> 50.0, Some(2.0) -> 57.5, Some(-1.0) -> 50.0),
-      Map(Some(3.0) -> 50.0, Some(4.0) -> 50.0, Some(-1.0) -> 50.0),
-      HashMap(Some(5.0) -> 27.5, Some(6.0) -> 50.0, Some(7.0) -> 60.0,
-        Some(8.0) -> 65.0, Some(9.0) -> 70.0, Some(-1.0) -> 50.0))
-
-    model.encodings.zip(expected_encodings).foreach{
-      case (actual, expected) => actual.equals(expected)
-    }
+    val model_smooth = model.setSmoothing(1.0)
 
     testTransformer[(Double, Double, Double, Double, Double, Double)](
       df.select("input1", "input2", "input3",
-        "smoothingExpected1", "smoothingExpected2", "smoothingExpected3"),
-      model,
-      "output1", "smoothingExpected1",
-      "output2", "smoothingExpected2",
-      "output3", "smoothingExpected3") {
+        "smoothing1", "smoothing2", "smoothing3"),
+      model_smooth,
+      "output1", "smoothing1",
+      "output2", "smoothing2",
+      "output3", "smoothing3") {
       case Row(output1: Double, expected1: Double,
       output2: Double, expected2: Double,
       output3: Double, expected3: Double) =>
@@ -193,10 +197,10 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
   test("TargetEncoder - unseen value - keep") {
 
     val df = spark
-      .createDataFrame(sc.parallelize(data), schema)
+      .createDataFrame(sc.parallelize(data_continuous), schema)
 
     val encoder = new TargetEncoder()
-      .setLabelCol("continuousLabel")
+      .setLabelCol("label")
       .setTargetType(TargetEncoder.TARGET_CONTINUOUS)
       .setHandleInvalid(TargetEncoder.KEEP_INVALID)
       .setInputCols(Array("input1", "input2", "input3"))
@@ -204,19 +208,18 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
 
     val model = encoder.fit(df)
 
-    val data_unseen = Row(0.toShort, 3, 10.0,
-      0.toByte, 0.0, 0.0, 0.0, 0.0, 40.0, 50.0, 50.0, 0.0, 0.0, 0.0)
+    val data_unseen = Row(0.toShort, 3, 10.0, 0.0, 40.0, 50.0, 50.0, 0.0, 0.0, 0.0)
 
     val df_unseen = spark
-      .createDataFrame(sc.parallelize(data :+ data_unseen), schema)
+      .createDataFrame(sc.parallelize(data_continuous :+ data_unseen), schema)
 
     testTransformer[(Double, Double, Double, Double, Double, Double)](
       df_unseen.select("input1", "input2", "input3",
-        "continuousExpected1", "continuousExpected2", "continuousExpected3"),
+        "expected1", "expected2", "expected3"),
       model,
-      "output1", "continuousExpected1",
-      "output2", "continuousExpected2",
-      "output3", "continuousExpected3") {
+      "output1", "expected1",
+      "output2", "expected2",
+      "output3", "expected3") {
       case Row(output1: Double, expected1: Double,
       output2: Double, expected2: Double,
       output3: Double, expected3: Double) =>
@@ -229,10 +232,10 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
   test("TargetEncoder - unseen value - error") {
 
     val df = spark
-      .createDataFrame(sc.parallelize(data), schema)
+      .createDataFrame(sc.parallelize(data_continuous), schema)
 
     val encoder = new TargetEncoder()
-      .setLabelCol("continuousLabel")
+      .setLabelCol("label")
       .setTargetType(TargetEncoder.TARGET_CONTINUOUS)
       .setHandleInvalid(TargetEncoder.ERROR_INVALID)
       .setInputCols(Array("input1", "input2", "input3"))
@@ -240,11 +243,10 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
 
     val model = encoder.fit(df)
 
-    val data_unseen = Row(0.toShort, 3, 10.0,
-      0.toByte, 0.0, 0.0, 0.0, 0.0, 4.0/9, 4.0/9, 4.0/9, 0.0, 0.0, 0.0)
+    val data_unseen = Row(0.toShort, 3, 10.0, 0.0, 4.0/9, 4.0/9, 4.0/9, 0.0, 0.0, 0.0)
 
     val df_unseen = spark
-      .createDataFrame(sc.parallelize(data :+ data_unseen), schema)
+      .createDataFrame(sc.parallelize(data_continuous :+ data_unseen), schema)
 
     val ex = intercept[SparkRuntimeException] {
       val out = model.transform(df_unseen)
@@ -259,17 +261,17 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
   test("TargetEncoder - missing feature") {
 
     val df = spark
-      .createDataFrame(sc.parallelize(data), schema)
+      .createDataFrame(sc.parallelize(data_binary), schema)
 
     val encoder = new TargetEncoder()
-      .setLabelCol("binaryLabel")
+      .setLabelCol("label")
       .setInputCols(Array("input1", "input2", "input3"))
       .setTargetType(TargetEncoder.TARGET_BINARY)
       .setOutputCols(Array("output1", "output2", "output3"))
 
     val ex = intercept[SparkException] {
       val model = encoder.fit(df.drop("input3"))
-      print(model.encodings)
+      print(model.stats)
     }
 
     assert(ex.isInstanceOf[SparkException])
@@ -281,22 +283,21 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
     val wrong_schema = new StructType(
       schema.map{
         field: StructField => if (field.name != "input3") field
-        else new StructField(field.name, StringType, field.nullable, field.metadata)
+        else StructField(field.name, StringType, field.nullable, field.metadata)
       }.toArray)
 
     val df = spark
-      .createDataFrame(sc.parallelize(data), wrong_schema)
-      .drop("continuousLabel")
+      .createDataFrame(sc.parallelize(data_binary), wrong_schema)
 
     val encoder = new TargetEncoder()
-      .setLabelCol("binaryLabel")
+      .setLabelCol("label")
       .setInputCols(Array("input1", "input2", "input3"))
       .setTargetType(TargetEncoder.TARGET_BINARY)
       .setOutputCols(Array("output1", "output2", "output3"))
 
     val ex = intercept[SparkException] {
       val model = encoder.fit(df)
-      print(model.encodings)
+      print(model.stats)
     }
 
     assert(ex.isInstanceOf[SparkException])
@@ -305,85 +306,83 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
 
   test("TargetEncoder - seen null category") {
 
-    val data_null = Row(2.toShort, 3, null,
-      0.toByte, 1.0/3, 0.0, 0.0, 90.0, 60.0, 50.0, 90.0, 57.5, 50.0, 70.0)
+    val data_null = Row(2.toShort, 3, null, 90.0, 60.0, 50.0, 90.0, 57.5, 50.0, 70.0)
 
     val df_null = spark
-      .createDataFrame(sc.parallelize(data.dropRight(1) :+ data_null), schema)
+      .createDataFrame(sc.parallelize(data_continuous.dropRight(1) :+ data_null), schema)
 
     val encoder = new TargetEncoder()
-      .setLabelCol("continuousLabel")
+      .setLabelCol("label")
       .setTargetType(TargetEncoder.TARGET_CONTINUOUS)
       .setInputCols(Array("input1", "input2", "input3"))
       .setOutputCols(Array("output1", "output2", "output3"))
 
     val model = encoder.fit(df_null)
 
-    val expected_encodings = Array(
-      Map(Some(0.0) -> 40.0, Some(1.0) -> 50.0, Some(2.0) -> 60.0, Some(-1.0) -> 50.0),
-      Map(Some(3.0) -> 50.0, Some(4.0) -> 50.0, Some(-1.0) -> 50.0),
-      HashMap(Some(5.0) -> 20.0, Some(6.0) -> 50.0, Some(7.0) -> 70.0,
-        Some(8.0) -> 80.0, None -> 90.0, Some(-1.0) -> 50.0))
+    val expected_stats = Array(
+      Map(Some(0.0) -> (3.0, 40.0), Some(1.0) -> (3.0, 50.0), Some(2.0) -> (3.0, 60.0),
+        Some(-1.0) -> (9.0, 50.0)),
+      Map(Some(3.0) -> (5.0, 50.0), Some(4.0) -> (4.0, 50.0), Some(-1.0) -> (9.0, 50.0)),
+      HashMap(Some(5.0) -> (3.0, 20.0), Some(6.0) -> (3.0, 50.0), Some(7.0) -> (1.0, 70.0),
+        Some(8.0) -> (1.0, 80.0), None -> (1.0, 90.0), Some(-1.0) -> (9.0, 50.0)))
 
-    model.encodings.zip(expected_encodings).foreach{
-      case (actual, expected) => actual.equals(expected)
+    model.stats.zip(expected_stats).foreach{
+      case (actual, expected) => assert(actual.equals(expected))
     }
 
     val output = model.transform(df_null)
 
     assert_true(
-      output("output1") === output("continuousExpected1") &&
-        output("output2") === output("continuousExpected2") &&
-        output("output3") === output("continuousExpected3"))
+      output("output1") === output("expected1") &&
+        output("output2") === output("expected2") &&
+        output("output3") === output("expected3"))
 
   }
 
   test("TargetEncoder - unseen null category") {
 
     val df = spark
-      .createDataFrame(sc.parallelize(data), schema)
+      .createDataFrame(sc.parallelize(data_continuous), schema)
 
     val encoder = new TargetEncoder()
-      .setLabelCol("continuousLabel")
+      .setLabelCol("label")
       .setTargetType(TargetEncoder.TARGET_CONTINUOUS)
       .setHandleInvalid(TargetEncoder.KEEP_INVALID)
       .setInputCols(Array("input1", "input2", "input3"))
       .setOutputCols(Array("output1", "output2", "output3"))
 
-    val data_null = Row(null, null, null,
-      0.toByte, 1.0/3, 0.0, 0.0, 90.0, 50.0, 50.0, 50.0, 57.5, 50.0, 70.0)
+    val data_null = Row(null, null, null, 90.0, 50.0, 50.0, 50.0, 57.5, 50.0, 70.0)
 
     val df_null = spark
-      .createDataFrame(sc.parallelize(data :+ data_null), schema)
+      .createDataFrame(sc.parallelize(data_continuous :+ data_null), schema)
 
     val model = encoder.fit(df)
 
     val output = model.transform(df_null)
 
     assert_true(
-      output("output1") === output("continuousExpected1") &&
-        output("output2") === output("continuousExpected2") &&
-        output("output3") === output("continuousExpected3"))
+      output("output1") === output("expected1") &&
+        output("output2") === output("expected2") &&
+        output("output3") === output("expected3"))
 
   }
 
   test("TargetEncoder - non-indexed categories") {
 
     val encoder = new TargetEncoder()
-      .setLabelCol("binaryLabel")
+      .setLabelCol("label")
       .setTargetType(TargetEncoder.TARGET_BINARY)
       .setInputCols(Array("input1", "input2", "input3"))
       .setOutputCols(Array("output1", "output2", "output3"))
 
-    val data_noindex = Row(
-      0.toShort, 3, 5.1, 0.toByte, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    val data_noindex = Row(0.toShort, 3, 5.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
     val df_noindex = spark
-      .createDataFrame(sc.parallelize(data :+ data_noindex), schema)
+      .createDataFrame(sc.parallelize(data_binary :+ data_noindex), schema)
 
     val ex = intercept[SparkException] {
       val model = encoder.fit(df_noindex)
-      print(model.encodings)
+      print(model.stats)
     }
 
     assert(ex.isInstanceOf[SparkException])
@@ -394,28 +393,28 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
 
   test("TargetEncoder - null label") {
 
-    val data_nolabel = Row(2.toShort, 3, 5.0,
-      null, 1.0/3, 0.0, 0.0, null, 60.0, 50.0, 90.0, 57.5, 50.0, 70.0)
+    val data_nolabel = Row(2.toShort, 3, 5.0, null, 60.0, 50.0, 90.0, 57.5, 50.0, 70.0)
 
     val df_nolabel = spark
-      .createDataFrame(sc.parallelize(data :+ data_nolabel), schema)
+      .createDataFrame(sc.parallelize(data_continuous :+ data_nolabel), schema)
 
     val encoder = new TargetEncoder()
-      .setLabelCol("continuousLabel")
+      .setLabelCol("label")
       .setTargetType(TargetEncoder.TARGET_CONTINUOUS)
       .setInputCols(Array("input1", "input2", "input3"))
       .setOutputCols(Array("output1", "output2", "output3"))
 
     val model = encoder.fit(df_nolabel)
 
-    val expected_encodings = Array(
-      Map(Some(0.0) -> 40.0, Some(1.0) -> 50.0, Some(2.0) -> 60.0, Some(-1.0) -> 50.0),
-      Map(Some(3.0) -> 50.0, Some(4.0) -> 50.0, Some(-1.0) -> 50.0),
-      HashMap(Some(5.0) -> 20.0, Some(6.0) -> 50.0, Some(7.0) -> 70.0,
-        Some(8.0) -> 80.0, Some(9.0) -> 90.0, Some(-1.0) -> 50.0))
+    val expected_stats = Array(
+      Map(Some(0.0) -> (3.0, 40.0), Some(1.0) -> (3.0, 50.0), Some(2.0) -> (3.0, 60.0),
+        Some(-1.0) -> (9.0, 50.0)),
+      Map(Some(3.0) -> (5.0, 50.0), Some(4.0) -> (4.0, 50.0), Some(-1.0) -> (9.0, 50.0)),
+      HashMap(Some(5.0) -> (3.0, 20.0), Some(6.0) -> (3.0, 50.0), Some(7.0) -> (1.0, 70.0),
+        Some(8.0) -> (1.0, 80.0), Some(9.0) -> (1.0, 90.0), Some(-1.0) -> (9.0, 50.0)))
 
-    model.encodings.zip(expected_encodings).foreach{
-      case (actual, expected) => actual.equals(expected)
+    model.stats.zip(expected_stats).foreach{
+      case (actual, expected) => assert(actual.equals(expected))
     }
 
   }
@@ -423,49 +422,88 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
   test("TargetEncoder - non-binary labels") {
 
     val encoder = new TargetEncoder()
-      .setLabelCol("binaryLabel")
+      .setLabelCol("label")
       .setTargetType(TargetEncoder.TARGET_BINARY)
       .setInputCols(Array("input1", "input2", "input3"))
       .setOutputCols(Array("output1", "output2", "output3"))
 
-    val data_non_binary = Row(
-      0.toShort, 3, 5.0, 2.toByte, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    val data_non_binary = Row(0.toShort, 3, 5.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
     val df_non_binary = spark
-      .createDataFrame(sc.parallelize(data :+ data_non_binary), schema)
+      .createDataFrame(sc.parallelize(data_binary :+ data_non_binary), schema)
 
     val ex = intercept[SparkException] {
       val model = encoder.fit(df_non_binary)
-      print(model.encodings.mkString)
+      print(model.stats)
     }
 
     assert(ex.isInstanceOf[SparkException])
     assert(ex.getMessage.contains(
-      "Values from column binaryLabel must be binary (0,1) but got 2.0"))
+      "Values from column label must be binary (0,1) but got 2.0"))
 
   }
 
   test("TargetEncoder - features renamed") {
 
     val df = spark
-      .createDataFrame(sc.parallelize(data), schema)
+      .createDataFrame(sc.parallelize(data_continuous), schema)
 
     val encoder = new TargetEncoder()
-      .setLabelCol("continuousLabel")
+      .setLabelCol("label")
       .setTargetType(TargetEncoder.TARGET_CONTINUOUS)
       .setInputCols(Array("input1", "input2", "input3"))
       .setOutputCols(Array("output1", "output2", "output3"))
 
     val model = encoder.fit(df)
-      .setInputCols(Array("input1", "renamed_input2", null))
-      .setOutputCols(Array(null, "renamed_output2", "renamed_output3"))
+      .setInputCols(Array("renamed_input1", "renamed_input2", "renamed_input3"))
+      .setOutputCols(Array("renamed_output1", "renamed_output2", "renamed_output3"))
 
     val df_renamed = df
-      .drop("input1", "input3")
-      .withColumnRenamed("input2", "renamed_input2")
+      .withColumnsRenamed((1 to 3).map{
+        f => s"input${f}" -> s"renamed_input${f}"}.toMap)
 
-    val output = model.transform(df_renamed)
-    assert(output.filter(col("renamed_output2") === col("continuousExpected2")).count() ==0)
+    testTransformer[(Double, Double, Double, Double, Double, Double)](
+      df_renamed
+        .select("renamed_input1", "renamed_input2", "renamed_input3",
+          "expected1", "expected2", "expected3"),
+      model,
+      "renamed_output1", "expected1",
+      "renamed_output2", "expected2",
+      "renamed_output3", "expected3") {
+      case Row(output1: Double, expected1: Double,
+      output2: Double, expected2: Double,
+      output3: Double, expected3: Double) =>
+        assert(output1 === expected1)
+        assert(output2 === expected2)
+        assert(output3 === expected3)
+    }
+
+  }
+
+  test("TargetEncoder - wrong number of features") {
+
+    val df = spark
+      .createDataFrame(sc.parallelize(data_binary), schema)
+
+    val encoder = new TargetEncoder()
+      .setLabelCol("label")
+      .setTargetType(TargetEncoder.TARGET_BINARY)
+      .setInputCols(Array("input1", "input2", "input3"))
+      .setOutputCols(Array("output1", "output2", "output3"))
+
+    val model = encoder.fit(df)
+
+    val ex = intercept[SparkException] {
+      val output = model
+        .setInputCols(Array("input1", "input2"))
+        .setOutputCols(Array("output1", "output2"))
+        .transform(df)
+      output.show()
+    }
+
+    assert(ex.isInstanceOf[SparkException])
+    assert(ex.getMessage.contains(
+      "does not match the number of encodings in the model (3). Found 2 features"))
 
   }
 

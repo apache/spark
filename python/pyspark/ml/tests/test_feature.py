@@ -383,6 +383,83 @@ class FeatureTests(SparkSessionTestCase):
             Row(input1=2, input2=3, input3=9.0, output1=1.0 / 3, output2=0.0, output3=0.0),
         ]
         self.assertEqual(actual, expected)
+        te = model.setSmoothing(1.0).transform(df)
+        actual = te.drop("label").collect()
+        expected = [
+            Row(
+                input1=0,
+                input2=3,
+                input3=5.0,
+                output1=(3 / 4) * (1 / 3) + (1 - 3 / 4) * (4 / 9),
+                output2=(1 - 5 / 6) * (4 / 9),
+                output3=(3 / 4) * (1 / 3) + (1 - 3 / 4) * (4 / 9),
+            ),
+            Row(
+                input1=1,
+                input2=4,
+                input3=5.0,
+                output1=(3 / 4) * (2 / 3) + (1 - 3 / 4) * (4 / 9),
+                output2=(4 / 5) * 1 + (1 - 4 / 5) * (4 / 9),
+                output3=(3 / 4) * (1 / 3) + (1 - 3 / 4) * (4 / 9),
+            ),
+            Row(
+                input1=2,
+                input2=3,
+                input3=5.0,
+                output1=(3 / 4) * (1 / 3) + (1 - 3 / 4) * (4 / 9),
+                output2=(1 - 5 / 6) * (4 / 9),
+                output3=(3 / 4) * (1 / 3) + (1 - 3 / 4) * (4 / 9),
+            ),
+            Row(
+                input1=0,
+                input2=4,
+                input3=6.0,
+                output1=(3 / 4) * (1 / 3) + (1 - 3 / 4) * (4 / 9),
+                output2=(4 / 5) * 1 + (1 - 4 / 5) * (4 / 9),
+                output3=(3 / 4) * (2 / 3) + (1 - 3 / 4) * (4 / 9),
+            ),
+            Row(
+                input1=1,
+                input2=3,
+                input3=6.0,
+                output1=(3 / 4) * (2 / 3) + (1 - 3 / 4) * (4 / 9),
+                output2=(1 - 5 / 6) * (4 / 9),
+                output3=(3 / 4) * (2 / 3) + (1 - 3 / 4) * (4 / 9),
+            ),
+            Row(
+                input1=2,
+                input2=4,
+                input3=6.0,
+                output1=(3 / 4) * (1 / 3) + (1 - 3 / 4) * (4 / 9),
+                output2=(4 / 5) * 1 + (1 - 4 / 5) * (4 / 9),
+                output3=(3 / 4) * (2 / 3) + (1 - 3 / 4) * (4 / 9),
+            ),
+            Row(
+                input1=0,
+                input2=3,
+                input3=7.0,
+                output1=(3 / 4) * (1 / 3) + (1 - 3 / 4) * (4 / 9),
+                output2=(1 - 5 / 6) * (4 / 9),
+                output3=(1 - 1 / 2) * (4 / 9),
+            ),
+            Row(
+                input1=1,
+                input2=4,
+                input3=8.0,
+                output1=(3 / 4) * (2 / 3) + (1 - 3 / 4) * (4 / 9),
+                output2=(4 / 5) * 1 + (1 - 4 / 5) * (4 / 9),
+                output3=(1 / 2) + (1 - 1 / 2) * (4 / 9),
+            ),
+            Row(
+                input1=2,
+                input2=3,
+                input3=9.0,
+                output1=(3 / 4) * (1 / 3) + (1 - 3 / 4) * (4 / 9),
+                output2=(1 - 5 / 6) * (4 / 9),
+                output3=(1 - 1 / 2) * (4 / 9),
+            ),
+        ]
+        self.assertEqual(actual, expected)
 
     def test_target_encoder_continuous(self):
         df = self.spark.createDataFrame(
@@ -418,6 +495,20 @@ class FeatureTests(SparkSessionTestCase):
             Row(input1=0, input2=3, input3=7.0, output1=40.0, output2=50.0, output3=70.0),
             Row(input1=1, input2=4, input3=8.0, output1=50.0, output2=50.0, output3=80.0),
             Row(input1=2, input2=3, input3=9.0, output1=60.0, output2=50.0, output3=90.0),
+        ]
+        self.assertEqual(actual, expected)
+        te = model.setSmoothing(1.0).transform(df)
+        actual = te.drop("label").collect()
+        expected = [
+            Row(input1=0, input2=3, input3=5.0, output1=42.5, output2=50.0, output3=27.5),
+            Row(input1=1, input2=4, input3=5.0, output1=50.0, output2=50.0, output3=27.5),
+            Row(input1=2, input2=3, input3=5.0, output1=57.5, output2=50.0, output3=27.5),
+            Row(input1=0, input2=4, input3=6.0, output1=42.5, output2=50.0, output3=50.0),
+            Row(input1=1, input2=3, input3=6.0, output1=50.0, output2=50.0, output3=50.0),
+            Row(input1=2, input2=4, input3=6.0, output1=57.5, output2=50.0, output3=50.0),
+            Row(input1=0, input2=3, input3=7.0, output1=42.5, output2=50.0, output3=60.0),
+            Row(input1=1, input2=4, input3=8.0, output1=50.0, output2=50.0, output3=65.0),
+            Row(input1=2, input2=3, input3=9.0, output1=57.5, output2=50.0, output3=70.0),
         ]
         self.assertEqual(actual, expected)
 
