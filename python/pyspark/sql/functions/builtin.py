@@ -8564,7 +8564,7 @@ def dayname(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def extract(field: Column, source: "ColumnOrName") -> Column:
     """
     Extracts a part of the date/timestamp or interval source.
 
@@ -8572,7 +8572,7 @@ def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    field : :class:`~pyspark.sql.Column` or str
+    field : :class:`~pyspark.sql.Column`
         selects which part of the source should be extracted.
     source : :class:`~pyspark.sql.Column` or str
         a date/timestamp or interval column from where `field` should be extracted.
@@ -8600,7 +8600,7 @@ def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def date_part(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def date_part(field: Column, source: "ColumnOrName") -> Column:
     """
     Extracts a part of the date/timestamp or interval source.
 
@@ -8637,7 +8637,7 @@ def date_part(field: "ColumnOrName", source: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def datepart(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def datepart(field: Column, source: "ColumnOrName") -> Column:
     """
     Extracts a part of the date/timestamp or interval source.
 
