@@ -230,25 +230,6 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     }
   }
 
-//  test("SPARK-49730: syntax error classification") {
-//    checkErrorMatchPVals(
-//      exception = intercept[AnalysisException] {
-//        val schema = StructType(
-//          Seq(StructField("id", IntegerType, true)))
-//
-//        spark.read
-//          .format("jdbc")
-//          .schema(schema)
-//          .option("url", jdbcUrl)
-//          .option("query", "SELECT * FRM range(10)")
-//          .load()
-//      },
-//      condition = "FAILED_JDBC.SYNTAX_ERROR",
-//      parameters = Map(
-//        "url" -> jdbcUrl,
-//        "query" -> "SELECT * FRM range(10)"))
-//  }
-
   test("SPARK-49730: get_schema error classification") {
     checkErrorMatchPVals(
       exception = intercept[AnalysisException] {
