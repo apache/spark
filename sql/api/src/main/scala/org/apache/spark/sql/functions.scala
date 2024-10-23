@@ -1901,7 +1901,8 @@ object functions {
    * @group string_funcs
    * @since 4.0.0
    */
-  def randstr(length: Column): Column = Column.fn("randstr", length)
+  def randstr(length: Column): Column =
+    randstr(length, lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns a string of the specified length whose characters are chosen uniformly at random from
@@ -3767,7 +3768,8 @@ object functions {
    * @group math_funcs
    * @since 4.0.0
    */
-  def uniform(min: Column, max: Column): Column = Column.fn("uniform", min, max)
+  def uniform(min: Column, max: Column): Column =
+    uniform(min, max, lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns a random value with independent and identically distributed (i.i.d.) values with the
@@ -3910,6 +3912,44 @@ object functions {
    */
   def encode(value: Column, charset: String): Column =
     Column.fn("encode", value, lit(charset))
+
+  /**
+   * Returns true if the input is a valid UTF-8 string, otherwise returns false.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def is_valid_utf8(str: Column): Column =
+    Column.fn("is_valid_utf8", str)
+
+  /**
+   * Returns a new string in which all invalid UTF-8 byte sequences, if any, are replaced by the
+   * Unicode replacement character (U+FFFD).
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def make_valid_utf8(str: Column): Column =
+    Column.fn("make_valid_utf8", str)
+
+  /**
+   * Returns the input value if it corresponds to a valid UTF-8 string, or emits a
+   * SparkIllegalArgumentException exception otherwise.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def validate_utf8(str: Column): Column =
+    Column.fn("validate_utf8", str)
+
+  /**
+   * Returns the input value if it corresponds to a valid UTF-8 string, or NULL otherwise.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def try_validate_utf8(str: Column): Column =
+    Column.fn("try_validate_utf8", str)
 
   /**
    * Formats numeric column x to a format like '#,###,###.##', rounded to d decimal places with

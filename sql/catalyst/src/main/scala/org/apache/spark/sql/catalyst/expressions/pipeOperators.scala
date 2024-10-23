@@ -45,3 +45,15 @@ case class PipeSelect(child: Expression)
     child
   }
 }
+
+object PipeOperators {
+  // These are definitions of query result clauses that can be used with the pipe operator.
+  val clusterByClause = "CLUSTER BY"
+  val distributeByClause = "DISTRIBUTE BY"
+  val limitClause = "LIMIT"
+  val offsetClause = "OFFSET"
+  val orderByClause = "ORDER BY"
+  val sortByClause = "SORT BY"
+  val sortByDistributeByClause = "SORT BY ... DISTRIBUTE BY ..."
+  val windowClause = "WINDOW"
+}

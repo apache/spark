@@ -316,7 +316,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       </td>
       <td>
         {
-          if (app.isFinished) {
+          if (app.isFinished || app.desc.appUiUrl.isBlank()) {
             app.desc.name
           } else {
             <a href={UIUtils.makeHref(parent.master.reverseProxy,

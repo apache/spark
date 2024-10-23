@@ -46,6 +46,24 @@ object ImplicitGroupingKeyTracker {
 }
 
 /**
+ * Utility object to perform metrics updates
+ */
+object TWSMetricsUtils {
+  def resetMetric(
+      metrics: Map[String, SQLMetric],
+      metricName: String): Unit = {
+    metrics.get(metricName).foreach(_.reset())
+  }
+
+  def incrementMetric(
+      metrics: Map[String, SQLMetric],
+      metricName: String,
+      countValue: Long = 1L): Unit = {
+    metrics.get(metricName).foreach(_.add(countValue))
+  }
+}
+
+/**
  * Enum used to track valid states for the StatefulProcessorHandle
  */
 object StatefulProcessorHandleState extends Enumeration {
@@ -117,16 +135,12 @@ class StatefulProcessorHandleImpl(
 
   private lazy val currQueryInfo: QueryInfo = buildQueryInfo()
 
-  private def incrementMetric(metricName: String): Unit = {
-    metrics.get(metricName).foreach(_.add(1))
-  }
-
   override def getValueState[T](
       stateName: String,
       valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state", CREATED)
-    incrementMetric("numValueStateVars")
-    val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
+    val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder, metrics)
+    TWSMetricsUtils.incrementMetric(metrics, "numValueStateVars")
     resultState
   }
 
@@ -139,9 +153,10 @@ class StatefulProcessorHandleImpl(
 
     assert(batchTimestampMs.isDefined)
     val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
-      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get)
-    incrementMetric("numValueStateWithTTLVars")
+      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get, metrics)
     ttlStates.add(valueStateWithTTL)
+    TWSMetricsUtils.incrementMetric(metrics, "numValueStateWithTTLVars")
+
     valueStateWithTTL
   }
 
@@ -155,8 +170,8 @@ class StatefulProcessorHandleImpl(
    */
   override def registerTimer(expiryTimestampMs: Long): Unit = {
     verifyTimerOperations("register_timer")
-    incrementMetric("numRegisteredTimers")
     timerState.registerTimer(expiryTimestampMs)
+    TWSMetricsUtils.incrementMetric(metrics, "numRegisteredTimers")
   }
 
   /**
@@ -165,8 +180,8 @@ class StatefulProcessorHandleImpl(
    */
   override def deleteTimer(expiryTimestampMs: Long): Unit = {
     verifyTimerOperations("delete_timer")
-    incrementMetric("numDeletedTimers")
     timerState.deleteTimer(expiryTimestampMs)
+    TWSMetricsUtils.incrementMetric(metrics, "numDeletedTimers")
   }
 
   /**
@@ -211,14 +226,14 @@ class StatefulProcessorHandleImpl(
   override def deleteIfExists(stateName: String): Unit = {
     verifyStateVarOperations("delete_if_exists", CREATED)
     if (store.removeColFamilyIfExists(stateName)) {
-      incrementMetric("numDeletedStateVars")
+      TWSMetricsUtils.incrementMetric(metrics, "numDeletedStateVars")
     }
   }
 
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
     verifyStateVarOperations("get_list_state", CREATED)
-    incrementMetric("numListStateVars")
-    val resultState = new ListStateImpl[T](store, stateName, keyEncoder, valEncoder)
+    val resultState = new ListStateImpl[T](store, stateName, keyEncoder, valEncoder, metrics)
+    TWSMetricsUtils.incrementMetric(metrics, "numListStateVars")
     resultState
   }
 
@@ -247,8 +262,8 @@ class StatefulProcessorHandleImpl(
 
     assert(batchTimestampMs.isDefined)
     val listStateWithTTL = new ListStateImplWithTTL[T](store, stateName,
-      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get)
-    incrementMetric("numListStateWithTTLVars")
+      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get, metrics)
+    TWSMetricsUtils.incrementMetric(metrics, "numListStateWithTTLVars")
     ttlStates.add(listStateWithTTL)
 
     listStateWithTTL
@@ -259,8 +274,9 @@ class StatefulProcessorHandleImpl(
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V]): MapState[K, V] = {
     verifyStateVarOperations("get_map_state", CREATED)
-    incrementMetric("numMapStateVars")
-    val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder, userKeyEnc, valEncoder)
+    val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder,
+      userKeyEnc, valEncoder, metrics)
+    TWSMetricsUtils.incrementMetric(metrics, "numMapStateVars")
     resultState
   }
 
@@ -274,8 +290,8 @@ class StatefulProcessorHandleImpl(
 
     assert(batchTimestampMs.isDefined)
     val mapStateWithTTL = new MapStateImplWithTTL[K, V](store, stateName, keyEncoder, userKeyEnc,
-      valEncoder, ttlConfig, batchTimestampMs.get)
-    incrementMetric("numMapStateWithTTLVars")
+      valEncoder, ttlConfig, batchTimestampMs.get, metrics)
+    TWSMetricsUtils.incrementMetric(metrics, "numMapStateWithTTLVars")
     ttlStates.add(mapStateWithTTL)
 
     mapStateWithTTL
