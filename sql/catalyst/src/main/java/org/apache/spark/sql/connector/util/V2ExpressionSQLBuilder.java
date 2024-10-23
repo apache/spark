@@ -220,7 +220,7 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String inputToCaseWhenSQL(Expression input) {
-    return "CASE WHEN " + inputToSQL(input) + " THEN 1 ELSE 0";
+    return "CASE WHEN " + inputToSQL(input) + " THEN 1 ELSE 0 END";
   }
 
   protected String visitBinaryComparison(String name, String l, String r) {

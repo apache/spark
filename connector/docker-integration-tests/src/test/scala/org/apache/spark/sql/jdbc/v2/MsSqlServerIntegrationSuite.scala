@@ -177,7 +177,6 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           |)
           |SELECT * FROM dummy_new limit 1""".stripMargin
     )
-    df.explain("formatted")
     df.collect()
   }
 
@@ -187,7 +186,6 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           |WHERE CASE WHEN name = '1' THEN name = 'barxxyz' ELSE NOT (name = 'barxxyz') END
           |""".stripMargin
     )
-    df.explain("formatted")
     df.collect()
   }
 
@@ -197,7 +195,6 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           |WHERE CASE WHEN (name = 'barxxyz') THEN (name = 'barx') ELSE (1=1) END
           |""".stripMargin
     )
-    df.explain("formatted")
     df.collect()
   }
 
@@ -209,7 +206,6 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           | ELSE (name = '1') END
           |""".stripMargin
     )
-    df.explain("formatted")
     df.collect()
   }
 }
