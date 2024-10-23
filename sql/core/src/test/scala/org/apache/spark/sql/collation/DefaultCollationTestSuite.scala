@@ -148,8 +148,7 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
 
       checkAnswer(sql(s"SELECT COLLATION(c1.col1) FROM $tableName"), Seq(Row("UTF8_BINARY")))
       checkAnswer(
-        // TODO: other PR is supposed to fix explicit collation here
-        sql(s"SELECT COLLATION(c2['a' collate UTF8_BINARY]) FROM $tableName"),
+        sql(s"SELECT COLLATION(c2['a']) FROM $tableName"),
         Seq(Row("UTF8_BINARY")))
       checkAnswer(sql(s"SELECT COLLATION(c3[0]) FROM $tableName"), Seq(Row("UTF8_BINARY")))
     }
