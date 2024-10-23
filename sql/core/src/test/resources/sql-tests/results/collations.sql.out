@@ -4705,7 +4705,7 @@ struct<btrim(collate(utf8_binary, utf8_binary_rtrim), collate(utf8_lcase, utf8_b
 
 
 
-
+ 
 bbAbAAbA
 d
 kitte
