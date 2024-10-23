@@ -93,7 +93,7 @@ trait AlterTableSetLocationSuiteBase extends command.AlterTableSetLocationSuiteB
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $t PARTITION (A='1', B='2') SET LOCATION '/path/to/part/ways3'")
           },
-          condition = "_LEGACY_ERROR_TEMP_1231",
+          condition = "INVALID_PARTITION_COLUMN_KEY",
           parameters = Map("key" -> "A", "tblName" -> "`spark_catalog`.`ns`.`tbl`")
         )
       }

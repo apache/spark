@@ -2629,7 +2629,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def invalidPartitionColumnKeyInTableError(key: String, tblName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1231",
+      errorClass = "INVALID_PARTITION_COLUMN_KEY",
       messageParameters = Map(
         "key" -> key,
         "tblName" -> toSQLId(tblName)))

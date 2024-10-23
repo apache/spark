@@ -53,7 +53,7 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
       catalog: String,
       namespace: String,
       table: String): (String, Map[String, String]) = {
-    ("_LEGACY_ERROR_TEMP_1231",
+    ("INVALID_PARTITION_COLUMN_KEY",
       Map("key" -> "id", "tblName" -> s"`$catalog`.`$namespace`.`$table`"))
   }
 

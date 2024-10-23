@@ -2935,6 +2935,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "INVALID_PARTITION_COLUMN_KEY" : {
+    "message" : [
+      "<key> is not a valid partition column in table <tblName>."
+    ],
+    "sqlState" : "42703"
+  },
   "INVALID_PARTITION_OPERATION" : {
     "message" : [
       "The partition command is invalid."
@@ -6488,11 +6494,6 @@
   "_LEGACY_ERROR_TEMP_1228" : {
     "message" : [
       "Decimal scale (<scale>) cannot be greater than precision (<precision>)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1231" : {
-    "message" : [
-      "<key> is not a valid partition column in table <tblName>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1232" : {
