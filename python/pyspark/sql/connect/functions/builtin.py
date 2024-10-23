@@ -3190,21 +3190,21 @@ def dayname(col: "ColumnOrName") -> Column:
 dayname.__doc__ = pysparkfuncs.dayname.__doc__
 
 
-def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def extract(field: Column, source: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("extract", field, source)
 
 
 extract.__doc__ = pysparkfuncs.extract.__doc__
 
 
-def date_part(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def date_part(field: Column, source: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("date_part", field, source)
 
 
 extract.__doc__ = pysparkfuncs.extract.__doc__
 
 
-def datepart(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def datepart(field: Column, source: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("datepart", field, source)
 
 
