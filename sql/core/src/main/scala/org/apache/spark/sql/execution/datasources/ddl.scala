@@ -79,7 +79,7 @@ case class CreateTempViewUsing(
     replace: Boolean,
     global: Boolean,
     provider: String,
-    options: Map[String, String]) extends LeafRunnableCommand with V1DDLCommand {
+    options: Map[String, String]) extends LeafRunnableCommand {
 
   if (tableIdent.database.isDefined) {
     throw QueryCompilationErrors.cannotSpecifyDatabaseForTempViewError(tableIdent)

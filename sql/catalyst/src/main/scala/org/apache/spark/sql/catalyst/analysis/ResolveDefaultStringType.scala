@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, ColumnDefinition, LogicalPlan, QualifiedColType, ReplaceColumns, V1DDLCommand, V2CreateTablePlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1DDLCommand, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.{DataType, DefaultStringType, StringType}
 import org.apache.spark.sql.util.SchemaUtils
@@ -31,11 +31,8 @@ import org.apache.spark.sql.util.SchemaUtils
 object ResolveDefaultStringType extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan resolveOperators {
-      case createTable: V2CreateTablePlan =>
-        transformPlan(createTable, StringType)
-
-      case v1Ddl: V1DDLCommand =>
-        transformPlan(v1Ddl, StringType)
+      case p if isCreateOrAlterPlan(p) =>
+        transformPlan(p, StringType)
 
       case addCols: AddColumns =>
         addCols.copy(columnsToAdd = replaceColumnTypes(addCols.columnsToAdd, StringType))
@@ -47,6 +44,11 @@ object ResolveDefaultStringType extends Rule[LogicalPlan] {
           if alter.dataType.isDefined && SchemaUtils.hasDefaultStringType(alter.dataType.get) =>
         alter.copy(dataType = Some(replaceDefaultStringType(alter.dataType.get, StringType)))
     }
+  }
+
+  private def isCreateOrAlterPlan(plan: LogicalPlan): Boolean = plan match {
+    case _: V2CreateTablePlan | _: CreateView | _: AlterViewAs | _: V1DDLCommand => true
+    case _ => false
   }
 
   private def transformPlan(plan: LogicalPlan, newType: StringType): LogicalPlan = {

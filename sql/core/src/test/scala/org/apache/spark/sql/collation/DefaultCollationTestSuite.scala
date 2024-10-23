@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.collation
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.connector.DatasourceV2SQLBase
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.StringType
@@ -26,8 +26,16 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
 
   val dataSource: String = "parquet"
 
-  def withSessionCollationAndTable(collation: String, tableName: String)(f: => Unit): Unit = {
-    withTable(tableName) {
+  def withSessionCollationAndTable(collation: String, tableNames: String*)(f: => Unit): Unit = {
+    withTable(tableNames: _*) {
+      withSessionCollation(collation) {
+        f
+      }
+    }
+  }
+
+  def withSessionCollationAndView(collation: String, viewNames: String*)(f: => Unit): Unit = {
+    withView(viewNames: _*) {
       withSessionCollation(collation) {
         f
       }
@@ -46,6 +54,13 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
       expectedCollation: String): Unit = {
     val colType = spark.table(table).schema(column).dataType
     assert(colType === StringType(expectedCollation))
+  }
+
+  def assertThrowsImplicitMismatch(f: => DataFrame): Unit = {
+    val exception = intercept[AnalysisException] {
+      f
+    }
+    assert(exception.getCondition === "COLLATION_MISMATCH.IMPLICIT")
   }
 
   // region DDL tests
@@ -180,6 +195,93 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
 
       sql(s"ALTER TABLE $tableName ADD COLUMN c3 STRING COLLATE UNICODE")
       assertTableColumnCollation(tableName, "c3", "UNICODE")
+    }
+  }
+
+  test("create/alter view created from a table") {
+    val tableName = "tbl_view"
+    val viewName = "view2"
+    val sessionCollation = "UTF8_LCASE"
+    withSessionCollationAndTable(sessionCollation, tableName) {
+      sql(s"CREATE TABLE $tableName (c1 STRING, c2 STRING COLLATE UNICODE_CI) USING $dataSource")
+      sql(s"INSERT INTO $tableName VALUES ('a', 'a'), ('A', 'A')")
+
+      withView(viewName) {
+        sql(s"CREATE VIEW $viewName AS SELECT * FROM $tableName")
+
+        assertTableColumnCollation(viewName, "c1", "UTF8_BINARY")
+        assertTableColumnCollation(viewName, "c2", "UNICODE_CI")
+        checkAnswer(
+          sql(s"SELECT DISTINCT COLLATION(c1), COLLATION('a') FROM $viewName"),
+          Row("UTF8_BINARY", sessionCollation)
+        )
+
+        // filter should use session collation
+        checkAnswer(
+          sql(s"SELECT COUNT(*) FROM $viewName WHERE 'a' = 'A'"),
+          Row(2)
+        )
+
+        // filter should use column collation
+        checkAnswer(
+          sql(s"SELECT COUNT(*) FROM $viewName WHERE c1 = 'A'"),
+          Row(1)
+        )
+
+        // literal with explicit collation wins
+        checkAnswer(
+          sql(s"SELECT COUNT(*) FROM $viewName WHERE c1 = 'A' collate UNICODE_CI"),
+          Row(2)
+        )
+
+        // two implicit collations -> errors out
+        assertThrowsImplicitMismatch(sql(s"SELECT c1 = substring('A', 0, 1) FROM $viewName"))
+
+        sql(s"ALTER VIEW $viewName AS SELECT c1 COLLATE UNICODE_CI AS c1, c2 FROM $tableName")
+        assertTableColumnCollation(viewName, "c1", "UNICODE_CI")
+        assertTableColumnCollation(viewName, "c2", "UNICODE_CI")
+        checkAnswer(
+          sql(s"SELECT DISTINCT COLLATION(c1), COLLATION('a') FROM $viewName"),
+          Row("UNICODE_CI", sessionCollation)
+        )
+
+        // after alter both rows should be returned
+        checkAnswer(
+          sql(s"SELECT COUNT(*) FROM $viewName WHERE c1 = 'A'"),
+          Row(2)
+        )
+      }
+    }
+  }
+
+  test("join view with table") {
+    val viewTableName = "view_table"
+    val joinTableName = "join_table"
+    val viewName = "view"
+    val sessionCollation = "sr"
+
+    withSessionCollationAndTable(sessionCollation, viewTableName, joinTableName) {
+      sql(s"CREATE TABLE $viewTableName (c1 STRING COLLATE UNICODE_CI) USING $dataSource")
+      sql(s"CREATE TABLE $joinTableName (c1 STRING COLLATE UTF8_LCASE) USING $dataSource")
+      sql(s"INSERT INTO $viewTableName VALUES ('a')")
+      sql(s"INSERT INTO $joinTableName VALUES ('A')")
+
+      withView(viewName) {
+        sql(s"CREATE VIEW $viewName AS SELECT * FROM $viewTableName")
+
+        assertThrowsImplicitMismatch(
+          sql(s"SELECT * FROM $viewName JOIN $joinTableName ON $viewName.c1 = $joinTableName.c1")
+        )
+
+        checkAnswer(
+          sql(s"""
+               |SELECT COLLATION($viewName.c1), COLLATION($joinTableName.c1)
+               |FROM $viewName JOIN $joinTableName
+               |ON $viewName.c1 = $joinTableName.c1 COLLATE UNICODE_CI
+               |""".stripMargin),
+          Row("UNICODE_CI", "UTF8_LCASE")
+        )
+      }
     }
   }
 
