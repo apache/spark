@@ -1204,10 +1204,17 @@ public final class CollationFactory {
     return Collation.CollationSpecICU.ICULocaleNames;
   }
 
+  /**
+   * Applies trimming policy depending up on trim collation type.
+   */
   public static UTF8String applyTrimmingPolicy(UTF8String input, int collationId) {
     return Collation.CollationSpec.applyTrimmingPolicy(input, collationId);
   }
 
+  /**
+   * Returns if leading/trailing spaces should be ignored in trim string expressions. This is needed
+   * because space trimming collation directly changes behaviour of trim functions.
+   */
   public static boolean ignoresSpacesInTrimFunctions(
           int collationId,
           boolean isLTrim,
