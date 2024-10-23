@@ -21,7 +21,6 @@ import scala.collection.immutable
 import scala.collection.immutable.TreeSet
 
 import org.apache.spark.SparkUnsupportedOperationException
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
