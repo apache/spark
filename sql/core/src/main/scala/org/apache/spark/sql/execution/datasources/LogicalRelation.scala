@@ -116,7 +116,7 @@ object LogicalRelation {
  * to have specific value to match).
  */
 object RelationAndCatalogTable {
-  def unapply(plan: LogicalPlan): Option[(LogicalRelation, BaseRelation, Option[CatalogTable])] = {
+  def unapply(plan: LogicalRelation): Option[(BaseRelation, Option[CatalogTable])] = {
     plan match {
       case l: LogicalRelation => Some(l, l.relation, l.catalogTable)
 
