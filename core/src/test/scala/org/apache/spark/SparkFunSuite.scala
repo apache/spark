@@ -352,7 +352,7 @@ abstract class SparkFunSuite
         exp => {
           val parm = parameters.getOrElse(exp._1,
             throw new IllegalArgumentException("Missing parameter" + exp._1))
-          if (!exp._2.matches(parm)) {
+          if (!exp._2.matches(parm) && exp._2 != parm) {
             throw new IllegalArgumentException("For parameter '" + exp._1 + "' value '" + exp._2 +
               "' does not match: " + parm)
           }
