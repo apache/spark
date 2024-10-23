@@ -400,6 +400,7 @@ class PySparkPlotAccessor:
         ... ]
         >>> columns = ["student", "math_score", "english_score"]
         >>> df = spark.createDataFrame(data, columns)
+        >>> df.plot.box()  # doctest: +SKIP
         >>> df.plot.box(column="math_score")  # doctest: +SKIP
         >>> df.plot.box(column=["math_score", "english_score"])  # doctest: +SKIP
         """
@@ -444,6 +445,7 @@ class PySparkPlotAccessor:
         >>> data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
         >>> columns = ["length", "width", "species"]
         >>> df = spark.createDataFrame(data, columns)
+        >>> df.plot.kde(bw_method=0.3)  # doctest: +SKIP
         >>> df.plot.kde(column=["length", "width"], bw_method=0.3)  # doctest: +SKIP
         >>> df.plot.kde(column="length", bw_method=0.3)  # doctest: +SKIP
         """
@@ -478,6 +480,7 @@ class PySparkPlotAccessor:
         >>> data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
         >>> columns = ["length", "width", "species"]
         >>> df = spark.createDataFrame(data, columns)
+        >>> df.plot.hist(bins=4)  # doctest: +SKIP
         >>> df.plot.hist(column=["length", "width"])  # doctest: +SKIP
         >>> df.plot.hist(column="length", bins=4)  # doctest: +SKIP
         """

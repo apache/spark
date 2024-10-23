@@ -175,10 +175,10 @@ def plot_histogram(data: "DataFrame", **kwargs: Any) -> "Figure":
 
     bins = kwargs.get("bins", 10)
     colnames = (kwargs.pop("column", None), data)
-    data = data.select(*colnames)
-    bins = PySparkHistogramPlotBase.get_bins(data, bins)
+    numeric_data = data.select(*colnames)  # type: ignore
+    bins = PySparkHistogramPlotBase.get_bins(numeric_data, bins)
     assert len(bins) > 2, "the number of buckets must be higher than 2."
-    output_series = PySparkHistogramPlotBase.compute_hist(data, bins)
+    output_series = PySparkHistogramPlotBase.compute_hist(numeric_data, bins)
     prev = float("%.9f" % bins[0])  # to make it prettier, truncate.
     text_bins = []
     for b in bins[1:]:
