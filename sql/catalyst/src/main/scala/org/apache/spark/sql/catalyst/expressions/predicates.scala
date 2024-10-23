@@ -661,9 +661,9 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
       if (st.supportsBinaryEquality) {
         hset
       } else if (st.supportsLowercaseEquality) {
-        new InSet.LCaseSet(hset)
+        new InSet.LowercaseSet(hset)
       } else {
-        new InSet.CollationSet(hset, st.collationId)
+        new InSet.CollationAwareSet(hset, st.collationId)
       }
     case t: AtomicType if !t.isInstanceOf[BinaryType] => hset
     case _: NullType => hset
@@ -778,7 +778,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 }
 
 object InSet {
-  class LCaseSet(inputSet: Set[Any]) extends immutable.Set[Any] with Serializable {
+  class LowercaseSet(inputSet: Set[Any]) extends immutable.Set[Any] with Serializable {
     private val strSet = inputSet.map { s =>
       if (s == null) null
       else CollationAwareUTF8String.lowerCaseCodePoints(s.asInstanceOf[UTF8String])
@@ -791,7 +791,7 @@ object InSet {
       strSet.contains(CollationAwareUTF8String.lowerCaseCodePoints(elem.asInstanceOf[UTF8String]))
     }
   }
-  class CollationSet(inputSet: Set[Any], collationId: Int)
+  class CollationAwareSet(inputSet: Set[Any], collationId: Int)
     extends immutable.Set[Any] with Serializable {
     override def incl(elem: Any): Set[Any] = inputSet.incl(elem)
     override def excl(elem: Any): Set[Any] = inputSet.excl(elem)
