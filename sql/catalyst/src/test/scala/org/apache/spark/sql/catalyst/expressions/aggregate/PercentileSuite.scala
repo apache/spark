@@ -410,7 +410,7 @@ class PercentileSuite extends SparkFunSuite {
           agg.update(buffer, InternalRow(1, -5))
           agg.eval(buffer)
         },
-      condition = "_LEGACY_ERROR_TEMP_2013",
+      condition = "NEGATIVE_VALUES_IN_FREQUENCY_EXPRESSION",
       parameters = Map("frequencyExpression" -> "CAST(boundreference() AS INT)"))
   }
 
