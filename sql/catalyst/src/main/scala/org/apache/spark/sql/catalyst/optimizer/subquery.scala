@@ -267,28 +267,33 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
         }
       }
     case a: Aggregate if exprsContainsAggregateInSubquery(a.aggregateExpressions) =>
-      // find expressions with an in-subquery whose values contain aggregates
-      val withInsubquery = a.aggregateExpressions.filter(exprContainsAggregateInSubquery(_))
+      // find expressions with an IN-subquery whose left-hand operand contains aggregates
+      val withInSubquery = a.aggregateExpressions.filter(exprContainsAggregateInSubquery(_))
 
-      // extract the aggregate expressions from withInsubquery
-      val inSubqueryMapping = withInsubquery.map { e =>
+      // extract the aggregate expressions from withInSubquery
+      val inSubqueryMapping = withInSubquery.map { e =>
         (e, extractAggregateExpressions(e))
       }
 
       val inSubqueryMap = inSubqueryMapping.toMap
+      // get all aggregate expressions found in left-hand operands of IN-subqueries
       val aggregateExprs = inSubqueryMapping.flatMap(_._2)
+      // create aliases for each above aggregate expression
       val aggregateExprAliases = aggregateExprs.map(a => Alias(a, toPrettySQL(a))())
+      // create a mapping from each aggregate expression to its alias
       val aggregateExprAliasMap = aggregateExprs.zip(aggregateExprAliases).toMap
+      // create attributes from those aliases of aggregate expressions
       val aggregateExprAttrs = aggregateExprAliases.map(_.toAttribute)
+      // create a mapping from aggregate expressions to attributes
       val aggregateExprAttrMap = aggregateExprs.zip(aggregateExprAttrs).toMap
 
-      // create Aggregate operator without the in-subqueries that contain aggregates,
-      // just the aggregates themselves and the other aggregate expressions.
+      // create Aggregate operator without the offending IN-subqueries, just
+      // the aggregates themselves and all the other aggregate expressions.
       val newAggregateExpressions = a.aggregateExpressions.flatMap { ae =>
-        // if this is expression contains an in-subquery with aggregates in values,
-        // replace with just the aggregates
+        // if this expression contains IN-subqueries with aggregates in the left-hand
+        // operand, replace with just the aggregates
         if (inSubqueryMap.contains(ae)) {
-          // replace the expression with the aliased aggregate exprs
+          // replace the expression with an aliased aggregate expression
           inSubqueryMap(ae).map(aggregateExprAliasMap(_))
         } else {
           Seq(ae)
@@ -296,11 +301,11 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       }
       val newAggregate = a.copy(aggregateExpressions = newAggregateExpressions)
 
-      // Create a projection with the in-subquery expressions that contain aggregates, replacing
+      // Create a projection with the IN-subquery expressions that contain aggregates, replacing
       // the aggregate expressions with attribute references to the output of the Aggregate
       // operator. Also include the other output of the Aggregate operator.
       val projList = a.aggregateExpressions.map { ae =>
-        // if this expression contains an in-subquery that uses an aggregate, we
+        // if this expression contains an IN-subquery that uses an aggregate, we
         // need to do something special
         if (inSubqueryMap.contains(ae)) {
           ae.transform {
