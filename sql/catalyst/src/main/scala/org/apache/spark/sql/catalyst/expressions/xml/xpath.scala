@@ -63,15 +63,14 @@ abstract class XPathExtract
   def path: Expression
 
   @transient private lazy val pathUTF8String = path.eval().asInstanceOf[UTF8String]
-  @transient private lazy val evaluator = XPathEvaluator(pathUTF8String)
-  @transient private lazy val dataTypeObjectType = ObjectType(dataType.getClass)
+  @transient private lazy val evaluator = XPathEvaluatorFactory.create(dataType, pathUTF8String)
 
   override def replacement: Expression = Invoke(
     Literal.create(evaluator, ObjectType(classOf[XPathEvaluator])),
     "evaluate",
     dataType,
-    Seq(xml, Literal(dataType, dataTypeObjectType)),
-    Seq(xml.dataType, dataTypeObjectType))
+    Seq(xml),
+    Seq(xml.dataType))
 }
 
 // scalastyle:off line.size.limit
