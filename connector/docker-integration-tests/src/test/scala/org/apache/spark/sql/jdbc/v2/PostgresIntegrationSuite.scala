@@ -27,6 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
+
 /**
  * To run this test suite for a specific version (e.g., postgres:17.0-alpine)
  * {{{
@@ -107,21 +108,25 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     connection.prepareStatement("CREATE TABLE array_timestamptz (col timestamptz[])")
       .executeUpdate()
 
-    connection.prepareStatement("INSERT INTO array_int VALUES (array[array[10]])").executeUpdate()
-    connection.prepareStatement("INSERT INTO array_bigint VALUES (array[array[10]])")
+    connection.prepareStatement("INSERT INTO array_int VALUES " +
+      "(array[array[10]]), (array[10])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_bigint VALUES (array[array[10]]), (array[10])")
       .executeUpdate()
-    connection.prepareStatement("INSERT INTO array_smallint VALUES (array[array[10]])")
+    connection.prepareStatement("INSERT INTO array_smallint VALUES (array[array[10]]), (array[10])")
       .executeUpdate()
-    connection.prepareStatement("INSERT INTO array_boolean VALUES (array[array[true]])")
+    connection.prepareStatement("INSERT INTO array_boolean VALUES " +
+        "(array[array[true]]), (array[true])")
       .executeUpdate()
-    connection.prepareStatement("INSERT INTO array_float VALUES (array[array[10.5]])")
+    connection.prepareStatement("INSERT INTO array_float VALUES " +
+      "(array[array[10.5]]), (array[10.5])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_double " +
+      "VALUES (array[array[10.1]]), (array[10.1])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_timestamp VALUES " +
+        "(array[array['2022-01-01 09:15'::timestamp]]), (array['2022-01-01 09:15'::timestamp])")
       .executeUpdate()
-    connection.prepareStatement("INSERT INTO array_double VALUES (array[array[10.1]])")
-      .executeUpdate()
-    connection.prepareStatement("INSERT INTO array_timestamp VALUES (" +
-      "array[array['2022-01-01 09:15'::timestamp]])").executeUpdate()
     connection.prepareStatement("INSERT INTO array_timestamptz VALUES " +
-      "(array[array['2022-01-01 09:15'::timestamptz]])").executeUpdate()
+        "(array[array['2022-01-01 09:15'::timestamptz]]), (array['2022-01-01 09:15'::timestamptz])")
+      .executeUpdate()
     connection.prepareStatement(
     "CREATE TABLE datetime (name VARCHAR(32), date1 DATE, time1 TIMESTAMP)")
     .executeUpdate()
