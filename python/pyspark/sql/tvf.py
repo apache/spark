@@ -14,14 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 
 from pyspark.errors import PySparkValueError
+from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.session import SparkSession
-
-if TYPE_CHECKING:
-    from pyspark.sql._typing import ColumnOrName
 
 __all__ = ["TableValuedFunction"]
 
@@ -87,7 +85,7 @@ class TableValuedFunction:
         """
         return self._sparkSession.range(start, end, step, numPartitions)
 
-    def explode(self, collection: "ColumnOrName") -> DataFrame:
+    def explode(self, collection: Column) -> DataFrame:
         """
         Returns a :class:`DataFrame` containing a new row for each element
         in the given array or map.
@@ -98,7 +96,7 @@ class TableValuedFunction:
 
         Parameters
         ----------
-        collection : :class:`~pyspark.sql.Column` or str
+        collection : :class:`~pyspark.sql.Column`
             Target column to work on.
 
         Returns
@@ -170,7 +168,7 @@ class TableValuedFunction:
         """
         return self._fn("explode", collection)
 
-    def explode_outer(self, collection: "ColumnOrName") -> DataFrame:
+    def explode_outer(self, collection: Column) -> DataFrame:
         """
         Returns a :class:`DataFrame` containing a new row for each element with position
         in the given array or map.
@@ -182,7 +180,7 @@ class TableValuedFunction:
 
         Parameters
         ----------
-        collection : :class:`~pyspark.sql.Column` or str
+        collection : :class:`~pyspark.sql.Column`
             target column to work on.
 
         Returns
@@ -224,7 +222,7 @@ class TableValuedFunction:
         """
         return self._fn("explode_outer", collection)
 
-    def inline(self, input: "ColumnOrName") -> DataFrame:
+    def inline(self, input: Column) -> DataFrame:
         """
         Explodes an array of structs into a table.
 
@@ -235,7 +233,7 @@ class TableValuedFunction:
 
         Parameters
         ----------
-        input : :class:`~pyspark.sql.Column` or str
+        input : :class:`~pyspark.sql.Column`
             Input column of values to explode.
 
         Returns
@@ -289,7 +287,7 @@ class TableValuedFunction:
         """
         return self._fn("inline", input)
 
-    def inline_outer(self, input: "ColumnOrName") -> DataFrame:
+    def inline_outer(self, input: Column) -> DataFrame:
         """
         Explodes an array of structs into a table.
         Unlike inline, if the array is null or empty then null is produced for each nested column.
@@ -298,7 +296,7 @@ class TableValuedFunction:
 
         Parameters
         ----------
-        input : :class:`~pyspark.sql.Column` or str
+        input : :class:`~pyspark.sql.Column`
             input column of values to explode.
 
         Returns
@@ -331,7 +329,7 @@ class TableValuedFunction:
         """
         return self._fn("inline_outer", input)
 
-    def json_tuple(self, input: "ColumnOrName", *fields: "ColumnOrName") -> DataFrame:
+    def json_tuple(self, input: Column, *fields: Column) -> DataFrame:
         """
         Creates a new row for a json column according to the given field names.
 
@@ -339,9 +337,9 @@ class TableValuedFunction:
 
         Parameters
         ----------
-        input : :class:`~pyspark.sql.Column` or str
+        input : :class:`~pyspark.sql.Column`
             string column in json format
-        fields : :class:`~pyspark.sql.Column` or str
+        fields : :class:`~pyspark.sql.Column`
             a field or fields to extract
 
         Returns
@@ -380,7 +378,7 @@ class TableValuedFunction:
             self._sparkSession,
         )
 
-    def posexplode(self, collection: "ColumnOrName") -> DataFrame:
+    def posexplode(self, collection: Column) -> DataFrame:
         """
         Returns a :class:`DataFrame` containing a new row for each element with position
         in the given array or map.
@@ -391,7 +389,7 @@ class TableValuedFunction:
 
         Parameters
         ----------
-        collection : :class:`~pyspark.sql.Column` or str
+        collection : :class:`~pyspark.sql.Column`
             target column to work on.
 
         Returns
@@ -422,7 +420,7 @@ class TableValuedFunction:
         """
         return self._fn("posexplode", collection)
 
-    def posexplode_outer(self, collection: "ColumnOrName") -> DataFrame:
+    def posexplode_outer(self, collection: Column) -> DataFrame:
         """
         Returns a :class:`DataFrame` containing a new row for each element with position
         in the given array or map.
@@ -434,7 +432,7 @@ class TableValuedFunction:
 
         Parameters
         ----------
-        collection : :class:`~pyspark.sql.Column` or str
+        collection : :class:`~pyspark.sql.Column`
             target column to work on.
 
         Returns
@@ -476,7 +474,7 @@ class TableValuedFunction:
         """
         return self._fn("posexplode_outer", collection)
 
-    def stack(self, n: "ColumnOrName", *fields: "ColumnOrName") -> DataFrame:
+    def stack(self, n: Column, *fields: Column) -> DataFrame:
         """
         Separates `col1`, ..., `colk` into `n` rows. Uses column names col0, col1, etc. by default
         unless specified otherwise.
@@ -485,9 +483,9 @@ class TableValuedFunction:
 
         Parameters
         ----------
-        n : :class:`~pyspark.sql.Column` or str
+        n : :class:`~pyspark.sql.Column`
             the number of rows to separate
-        fields : :class:`~pyspark.sql.Column` or str
+        fields : :class:`~pyspark.sql.Column`
             input elements to be separated
 
         Returns
@@ -561,7 +559,7 @@ class TableValuedFunction:
         """
         return self._fn("sql_keywords")
 
-    def variant_explode(self, input: "ColumnOrName") -> DataFrame:
+    def variant_explode(self, input: Column) -> DataFrame:
         """
         Separates a variant object/array into multiple rows containing its fields/elements.
 
@@ -575,7 +573,7 @@ class TableValuedFunction:
 
         Parameters
         ----------
-        input : :class:`~pyspark.sql.Column` or str
+        input : :class:`~pyspark.sql.Column`
             input column of values to explode.
 
         Returns
@@ -626,7 +624,7 @@ class TableValuedFunction:
         """
         return self._fn("variant_explode", input)
 
-    def variant_explode_outer(self, input: "ColumnOrName") -> DataFrame:
+    def variant_explode_outer(self, input: Column) -> DataFrame:
         """
         Separates a variant object/array into multiple rows containing its fields/elements.
 
@@ -640,7 +638,7 @@ class TableValuedFunction:
 
         Parameters
         ----------
-        input : :class:`~pyspark.sql.Column` or str
+        input : :class:`~pyspark.sql.Column`
             input column of values to explode.
 
         Returns
@@ -679,7 +677,7 @@ class TableValuedFunction:
         """
         return self._fn("variant_explode_outer", input)
 
-    def _fn(self, functionName: str, *args: "ColumnOrName") -> DataFrame:
+    def _fn(self, functionName: str, *args: Column) -> DataFrame:
         from pyspark.sql.classic.column import _to_java_column
 
         return DataFrame(
