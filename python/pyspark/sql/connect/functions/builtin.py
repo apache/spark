@@ -68,8 +68,6 @@ from pyspark.sql.types import (
     StructType,
     ArrayType,
     StringType,
-    ByteType,
-    ShortType,
 )
 from pyspark.sql.utils import enum_to_value as _enum_to_value
 
