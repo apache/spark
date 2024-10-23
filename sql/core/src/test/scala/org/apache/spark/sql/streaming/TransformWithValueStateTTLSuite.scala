@@ -99,8 +99,7 @@ class ValueStateTTLProcessor(ttlConfig: TTLConfig)
   override def handleInputRows(
       key: String,
       inputRows: Iterator[InputEvent],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[OutputEvent] = {
+      timerValues: TimerValues): Iterator[OutputEvent] = {
     var results = List[OutputEvent]()
 
     inputRows.foreach { row =>
@@ -138,8 +137,7 @@ class MultipleValueStatesTTLProcessor(
   override def handleInputRows(
       key: String,
       inputRows: Iterator[InputEvent],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[OutputEvent] = {
+      timerValues: TimerValues): Iterator[OutputEvent] = {
     var results = List[OutputEvent]()
 
     if (key == ttlKey) {
@@ -247,7 +245,19 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         // validate ttl value is removed in the value state column family
         AddData(inputStream, InputEvent(ttlKey, "get_ttl_value_from_state", -1)),
         AdvanceManualClock(1 * 1000),
-        CheckNewAnswer()
+        CheckNewAnswer(),
+        AddData(inputStream, InputEvent(ttlKey, "put", 3)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
+        },
+        AddData(inputStream, InputEvent(noTtlKey, "get", -1)),
+        AdvanceManualClock(60 * 1000),
+        CheckNewAnswer(OutputEvent(noTtlKey, 2, isTTLValue = false, -1)),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
+        }
       )
     }
   }

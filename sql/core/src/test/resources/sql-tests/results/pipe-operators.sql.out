@@ -215,6 +215,24 @@ struct<>
 
 
 -- !query
+create temporary view windowTestData as select * from values
+  (null, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), "a"),
+  (1, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), "a"),
+  (1, 2L, 2.5D, date("2017-08-02"), timestamp_seconds(1502000000), "a"),
+  (2, 2147483650L, 100.001D, date("2020-12-31"), timestamp_seconds(1609372800), "a"),
+  (1, null, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), "b"),
+  (2, 3L, 3.3D, date("2017-08-03"), timestamp_seconds(1503000000), "b"),
+  (3, 2147483650L, 100.001D, date("2020-12-31"), timestamp_seconds(1609372800), "b"),
+  (null, null, null, null, null, null),
+  (3, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), null)
+  AS testData(val, val_long, val_double, val_date, val_timestamp, cate)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 table t
 |> select 1 as x
 -- !query schema
@@ -1669,6 +1687,277 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 1,
     "stopIndex" : 29,
     "fragment" : "table t\n|> union all table st"
+  } ]
+}
+
+
+-- !query
+table t
+|> order by x
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+(select * from t)
+|> order by x
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+values (0, 'abc') tab(x, y)
+|> order by x
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+
+
+-- !query
+table t
+|> order by x
+|> limit 1
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+
+
+-- !query
+table t
+|> where x = 1
+|> select y
+|> limit 2 offset 1
+-- !query schema
+struct<y:string>
+-- !query output
+
+
+
+-- !query
+table t
+|> where x = 1
+|> select y
+|> offset 1
+-- !query schema
+struct<y:string>
+-- !query output
+
+
+
+-- !query
+table t
+|> limit all offset 0
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+|> distribute by x
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+|> cluster by x
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+|> sort by x distribute by x
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+|> order by x desc
+order by y
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+|> order by x desc order by x + y
+order by y
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "condition" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'order'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+table t
+|> select 1 + 2 as result
+|> order by x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`x`",
+    "proposal" : "`result`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 47,
+    "stopIndex" : 47,
+    "fragment" : "x"
+  } ]
+}
+
+
+-- !query
+table t
+|> select 1 + 2 as result
+|> distribute by x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`x`",
+    "proposal" : "`result`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 52,
+    "stopIndex" : 52,
+    "fragment" : "x"
+  } ]
+}
+
+
+-- !query
+table t
+|> order by x limit 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "condition" : "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "clause1" : "ORDER BY",
+    "clause2" : "LIMIT"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 29,
+    "fragment" : "order by x limit 1"
+  } ]
+}
+
+
+-- !query
+table t
+|> order by x sort by x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "condition" : "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
+  "sqlState" : "0A000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 31,
+    "fragment" : "order by x sort by x"
+  } ]
+}
+
+
+-- !query
+table windowTestData
+|> window w as (partition by cte order by val)
+|> select cate, sum(val) over w
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "condition" : "UNSUPPORTED_FEATURE.CLAUSE_WITH_PIPE_OPERATORS",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clauses" : "the WINDOW clause"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 67,
+    "fragment" : "window w as (partition by cte order by val)"
+  } ]
+}
+
+
+-- !query
+table windowTestData
+|> window w as (partition by cate order by val) limit 5
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "condition" : "UNSUPPORTED_FEATURE.CLAUSE_WITH_PIPE_OPERATORS",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clauses" : "the WINDOW clause"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 76,
+    "fragment" : "window w as (partition by cate order by val) limit 5"
   } ]
 }
 

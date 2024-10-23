@@ -38,22 +38,22 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     assert(UTF8_BINARY_COLLATION_ID == 0)
     val utf8Binary = fetchCollation(UTF8_BINARY_COLLATION_ID)
     assert(utf8Binary.collationName == "UTF8_BINARY")
-    assert(utf8Binary.supportsBinaryEquality)
+    assert(utf8Binary.isUtf8BinaryType)
 
     assert(UTF8_LCASE_COLLATION_ID == 1)
     val utf8Lcase = fetchCollation(UTF8_LCASE_COLLATION_ID)
     assert(utf8Lcase.collationName == "UTF8_LCASE")
-    assert(!utf8Lcase.supportsBinaryEquality)
+    assert(!utf8Lcase.isUtf8BinaryType)
 
     assert(UNICODE_COLLATION_ID == (1 << 29))
     val unicode = fetchCollation(UNICODE_COLLATION_ID)
     assert(unicode.collationName == "UNICODE")
-    assert(!unicode.supportsBinaryEquality)
+    assert(!unicode.isUtf8BinaryType)
 
     assert(UNICODE_CI_COLLATION_ID == ((1 << 29) | (1 << 17)))
     val unicodeCi = fetchCollation(UNICODE_CI_COLLATION_ID)
     assert(unicodeCi.collationName == "UNICODE_CI")
-    assert(!unicodeCi.supportsBinaryEquality)
+    assert(!unicodeCi.isUtf8BinaryType)
   }
 
   test("UTF8_BINARY and ICU root locale collation names") {
@@ -127,6 +127,11 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UTF8_BINARY", "aaa", "AAA", false),
       CollationTestCase("UTF8_BINARY", "aaa", "bbb", false),
       CollationTestCase("UTF8_BINARY", "å", "a\u030A", false),
+      CollationTestCase("UTF8_BINARY_RTRIM", "aaa", "aaa", true),
+      CollationTestCase("UTF8_BINARY_RTRIM", "aaa", "aaa  ", true),
+      CollationTestCase("UTF8_BINARY_RTRIM", "aaa  ", "aaa ", true),
+      CollationTestCase("UTF8_BINARY_RTRIM", "aaa", " aaa ", false),
+      CollationTestCase("UTF8_BINARY_RTRIM", "    ", "  ", true),
       CollationTestCase("UTF8_LCASE", "aaa", "aaa", true),
       CollationTestCase("UTF8_LCASE", "aaa", "AAA", true),
       CollationTestCase("UTF8_LCASE", "aaa", "AaA", true),
@@ -134,15 +139,30 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UTF8_LCASE", "aaa", "aa", false),
       CollationTestCase("UTF8_LCASE", "aaa", "bbb", false),
       CollationTestCase("UTF8_LCASE", "å", "a\u030A", false),
+      CollationTestCase("UTF8_LCASE_RTRIM", "aaa", "AaA", true),
+      CollationTestCase("UTF8_LCASE_RTRIM", "aaa", "AaA ", true),
+      CollationTestCase("UTF8_LCASE_RTRIM", "aaa ", "AaA ", true),
+      CollationTestCase("UTF8_LCASE_RTRIM", "aaa", " AaA ", false),
+      CollationTestCase("UTF8_LCASE_RTRIM", "    ", "  ", true),
       CollationTestCase("UNICODE", "aaa", "aaa", true),
       CollationTestCase("UNICODE", "aaa", "AAA", false),
       CollationTestCase("UNICODE", "aaa", "bbb", false),
       CollationTestCase("UNICODE", "å", "a\u030A", true),
+      CollationTestCase("UNICODE_RTRIM", "aaa", "aaa", true),
+      CollationTestCase("UNICODE_RTRIM", "aaa", "aaa  ", true),
+      CollationTestCase("UNICODE_RTRIM", "aaa  ", "aaa ", true),
+      CollationTestCase("UNICODE_RTRIM", "aaa", " aaa ", false),
+      CollationTestCase("UNICODE_RTRIM", "    ", "  ", true),
       CollationTestCase("UNICODE_CI", "aaa", "aaa", true),
       CollationTestCase("UNICODE_CI", "aaa", "AAA", true),
       CollationTestCase("UNICODE_CI", "aaa", "bbb", false),
       CollationTestCase("UNICODE_CI", "å", "a\u030A", true),
-      CollationTestCase("UNICODE_CI", "Å", "a\u030A", true)
+      CollationTestCase("UNICODE_CI", "Å", "a\u030A", true),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa", "AaA", true),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa", "AaA ", true),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "AaA ", true),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa", " AaA ", false),
+      CollationTestCase("UNICODE_RTRIM", "    ", "  ", true)
     )
 
     checks.foreach(testCase => {
@@ -162,19 +182,48 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UTF8_BINARY", "aaa", "AAA", 1),
       CollationTestCase("UTF8_BINARY", "aaa", "bbb", -1),
       CollationTestCase("UTF8_BINARY", "aaa", "BBB", 1),
+      CollationTestCase("UTF8_BINARY_RTRIM", "aaa  ", "aaa", 0),
+      CollationTestCase("UTF8_BINARY_RTRIM", "aaa  ", "aaa ", 0),
+      CollationTestCase("UTF8_BINARY_RTRIM", "aaa ", "bbb", -1),
+      CollationTestCase("UTF8_BINARY_RTRIM", "aaa ", "bbb ", -1),
+      CollationTestCase("UTF8_BINARY_RTRIM", "aaa", "BBB" , 1),
+      CollationTestCase("UTF8_BINARY_RTRIM", "aaa  ", "BBB " , 1),
+      CollationTestCase("UTF8_BINARY_RTRIM", "   ", " " , 0),
       CollationTestCase("UTF8_LCASE", "aaa", "aaa", 0),
       CollationTestCase("UTF8_LCASE", "aaa", "AAA", 0),
       CollationTestCase("UTF8_LCASE", "aaa", "AaA", 0),
       CollationTestCase("UTF8_LCASE", "aaa", "AaA", 0),
       CollationTestCase("UTF8_LCASE", "aaa", "aa", 1),
       CollationTestCase("UTF8_LCASE", "aaa", "bbb", -1),
+      CollationTestCase("UTF8_LCASE_RTRIM", "aaa ", "AAA", 0),
+      CollationTestCase("UTF8_LCASE_RTRIM", "aaa ", "AAA  ", 0),
+      CollationTestCase("UTF8_LCASE_RTRIM", "aaa", "bbb ", -1),
+      CollationTestCase("UTF8_LCASE_RTRIM", "aaa  ", "bbb ", -1),
+      CollationTestCase("UTF8_LCASE_RTRIM", "aaa ", "aa", 1),
+      CollationTestCase("UTF8_LCASE_RTRIM", "aaa ", "aa  ", 1),
+      CollationTestCase("UTF8_LCASE_RTRIM", " ", "  ", 0),
       CollationTestCase("UNICODE", "aaa", "aaa", 0),
       CollationTestCase("UNICODE", "aaa", "AAA", -1),
       CollationTestCase("UNICODE", "aaa", "bbb", -1),
       CollationTestCase("UNICODE", "aaa", "BBB", -1),
+      CollationTestCase("UNICODE_RTRIM", "aaa  ", "aaa", 0),
+      CollationTestCase("UNICODE_RTRIM", "aaa  ", "aaa ", 0),
+      CollationTestCase("UNICODE_RTRIM", "aaa ", "bbb", -1),
+      CollationTestCase("UNICODE_RTRIM", "aaa ", "bbb ", -1),
+      CollationTestCase("UNICODE_RTRIM", "aaa", "BBB" , -1),
+      CollationTestCase("UNICODE_RTRIM", "aaa  ", "BBB " , -1),
+      CollationTestCase("UNICODE_RTRIM", " ", "  ", 0),
       CollationTestCase("UNICODE_CI", "aaa", "aaa", 0),
       CollationTestCase("UNICODE_CI", "aaa", "AAA", 0),
-      CollationTestCase("UNICODE_CI", "aaa", "bbb", -1))
+      CollationTestCase("UNICODE_CI", "aaa", "bbb", -1),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "AAA", 0),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "AAA  ", 0),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa", "bbb ", -1),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa  ", "bbb ", -1),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "aa", 1),
+      CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "aa  ", 1),
+      CollationTestCase("UNICODE_CI_RTRIM", " ", "   ", 0)
+    )
 
     checks.foreach(testCase => {
       val collation = fetchCollation(testCase.collationName)

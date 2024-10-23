@@ -188,9 +188,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "condition" : "_LEGACY_ERROR_TEMP_0038",
+  "condition" : "DUPLICATED_CTE_NAMES",
+  "sqlState" : "42602",
   "messageParameters" : {
-    "duplicateNames" : "'t'"
+    "duplicateNames" : "`t`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -497,9 +498,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "condition" : "_LEGACY_ERROR_TEMP_0038",
+  "condition" : "DUPLICATED_CTE_NAMES",
+  "sqlState" : "42602",
   "messageParameters" : {
-    "duplicateNames" : "'cte1'"
+    "duplicateNames" : "`cte1`"
   },
   "queryContext" : [ {
     "objectType" : "",

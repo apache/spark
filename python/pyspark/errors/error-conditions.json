@@ -1103,6 +1103,11 @@
       "`<backend>` is not supported, it should be one of the values from <supported_backends>"
     ]
   },
+  "UNSUPPORTED_PLOT_BACKEND_PARAM": {
+    "message": [
+      "`<backend>` does not support `<param>` set to <value>, it should be one of the values from <supported_values>"
+    ]
+  },
   "UNSUPPORTED_SIGNATURE": {
     "message": [
       "Unsupported signature: <signature>."

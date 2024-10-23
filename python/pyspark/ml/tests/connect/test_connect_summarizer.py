@@ -24,16 +24,15 @@ from pyspark.testing.connectutils import should_test_connect, connect_requiremen
 if should_test_connect:
     from pyspark.ml.tests.connect.test_legacy_mode_summarizer import SummarizerTestsMixin
 
+    @unittest.skipIf(not should_test_connect, connect_requirement_message)
+    class SummarizerTestsOnConnect(SummarizerTestsMixin, unittest.TestCase):
+        def setUp(self) -> None:
+            self.spark = SparkSession.builder.remote(
+                os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
+            ).getOrCreate()
 
-@unittest.skipIf(not should_test_connect, connect_requirement_message)
-class SummarizerTestsOnConnect(SummarizerTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.remote(
-            os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
-        ).getOrCreate()
-
-    def tearDown(self) -> None:
-        self.spark.stop()
+        def tearDown(self) -> None:
+            self.spark.stop()
 
 
 if __name__ == "__main__":
