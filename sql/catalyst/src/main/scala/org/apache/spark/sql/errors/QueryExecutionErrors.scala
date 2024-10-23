@@ -385,10 +385,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def negativeValueUnexpectedError(
-      frequencyExpression : Expression): SparkIllegalArgumentException = {
+      frequencyExpression: Expression, negativeValue: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "NEGATIVE_VALUES_IN_FREQUENCY_EXPRESSION",
-      messageParameters = Map("frequencyExpression" -> frequencyExpression.sql))
+      messageParameters = Map(
+        "frequencyExpression" -> frequencyExpression.sql, "negativeValue" -> negativeValue))
   }
 
   def addNewFunctionMismatchedWithFunctionError(funcName: String): Throwable = {

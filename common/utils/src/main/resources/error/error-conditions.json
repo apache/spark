@@ -3523,7 +3523,7 @@
   },
   "NEGATIVE_VALUES_IN_FREQUENCY_EXPRESSION" : {
     "message" : [
-      "Negative values found in <frequencyExpression>"
+      "Found the negative value in <frequencyExpression>: <negativeValue>, but expected a positive integral value."
     ],
     "sqlState" : "22003"
   },

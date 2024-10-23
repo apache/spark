@@ -411,7 +411,8 @@ class PercentileSuite extends SparkFunSuite {
           agg.eval(buffer)
         },
       condition = "NEGATIVE_VALUES_IN_FREQUENCY_EXPRESSION",
-      parameters = Map("frequencyExpression" -> "CAST(boundreference() AS INT)"))
+      parameters = Map(
+        "frequencyExpression" -> "CAST(boundreference() AS INT)", "negativeValue" -> "-5"))
   }
 
   private def compareEquals(
