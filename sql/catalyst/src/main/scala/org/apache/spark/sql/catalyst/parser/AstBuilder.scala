@@ -1511,7 +1511,7 @@ class AstBuilder extends DataTypeAstBuilder
         ctx.groupingExpressions.asScala.map { n: NamedExpressionContext =>
           if (!allowNamedGroupingExpressions && (n.name != null || n.identifierList != null)) {
             // If we do not allow grouping expressions to have aliases in this context, we throw a
-            // syntax error here to specify the precise location of the error.
+            // syntax error here accordingly.
             val error: String = (if (n.name != null) n.name else n.identifierList).getText
             throw new ParseException(
               command = Some(SparkParserUtils.command(n)),
