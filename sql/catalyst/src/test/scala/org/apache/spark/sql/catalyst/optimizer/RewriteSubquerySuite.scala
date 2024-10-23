@@ -81,7 +81,7 @@ class RewriteSubquerySuite extends PlanTest {
     assert(tracker.rules(RewritePredicateSubquery.ruleName).numEffectiveInvocations == 0)
   }
 
-  test("stuffing") {
+  test("SPARK-50091: Don't put aggregate expression in join condition") {
     val relation1 = LocalRelation($"c1".int, $"c2".int, $"c3".int)
     val relation2 = LocalRelation($"col1".int, $"col2".int, $"col3".int)
     val query = relation2.select(sum($"col2").in(ListQuery(relation1.select($"c3"))))
