@@ -21,7 +21,7 @@ import java.sql.Timestamp
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.functions.{expr, lit, window}
+import org.apache.spark.sql.functions.{count, expr, lit, timestamp_seconds, window}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -522,6 +522,92 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
 
     withSQLConf(SQLConf.STREAMING_OPTIMIZE_ONE_ROW_PLAN_ENABLED.key -> "true") {
       doTest(numExpectedStatefulOperatorsForOneEmptySource = 1)
+    }
+  }
+
+  test("SPARK-49699: observe node is not pruned out from PruneFilters") {
+    val input1 = MemoryStream[Int]
+    val df = input1.toDF()
+      .withColumn("eventTime", timestamp_seconds($"value"))
+      .observe("observation", count(lit(1)).as("rows"))
+      // Enforce PruneFilters to come into play and prune subtree. We could do the same
+      // with the reproducer of SPARK-48267, but let's just be simpler.
+      .filter(expr("false"))
+
+    testStream(df)(
+      AddData(input1, 1, 2, 3),
+      CheckNewAnswer(),
+      Execute { qe =>
+        val observeRow = qe.lastExecution.observedMetrics.get("observation")
+        assert(observeRow.get.getAs[Long]("rows") == 3L)
+      }
+    )
+  }
+
+  test("SPARK-49699: watermark node is not pruned out from PruneFilters") {
+    // NOTE: The test actually passes without SPARK-49699, because of the trickiness of
+    // filter pushdown and PruneFilters. Unlike observe node, the `false` filter is pushed down
+    // below to watermark node, hence PruneFilters rule does not prune out watermark node even
+    // before SPARK-49699. Propagate empty relation does not also propagate emptiness into
+    // watermark node, so the node is retained. The test is added for preventing regression.
+
+    val input1 = MemoryStream[Int]
+    val df = input1.toDF()
+      .withColumn("eventTime", timestamp_seconds($"value"))
+      .withWatermark("eventTime", "0 second")
+      // Enforce PruneFilter to come into play and prune subtree. We could do the same
+      // with the reproducer of SPARK-48267, but let's just be simpler.
+      .filter(expr("false"))
+
+    testStream(df)(
+      AddData(input1, 1, 2, 3),
+      CheckNewAnswer(),
+      Execute { qe =>
+        // If the watermark node is pruned out, this would be null.
+        assert(qe.lastProgress.eventTime.get("watermark") != null)
+      }
+    )
+  }
+
+  test("SPARK-49699: stateful operator node is not pruned out from PruneFilters") {
+    val input1 = MemoryStream[Int]
+    val df = input1.toDF()
+      .groupBy("value")
+      .count()
+      // Enforce PruneFilter to come into play and prune subtree. We could do the same
+      // with the reproducer of SPARK-48267, but let's just be simpler.
+      .filter(expr("false"))
+
+    testStream(df, OutputMode.Complete())(
+      AddData(input1, 1, 2, 3),
+      CheckNewAnswer(),
+      Execute { qe =>
+        assert(qe.lastProgress.stateOperators.length == 1)
+      }
+    )
+  }
+
+  test("SPARK-50007: default metrics is provided even observe node is pruned out") {
+    // We disable SPARK-49699 to test the case observe node is pruned out.
+    withSQLConf(SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key -> "true") {
+      val input1 = MemoryStream[Int]
+      val df = input1.toDF()
+        .withColumn("eventTime", timestamp_seconds($"value"))
+        .observe("observation", count(lit(1)).as("rows"))
+        // Enforce PruneFilters to come into play and prune subtree. We could do the same
+        // with the reproducer of SPARK-48267, but let's just be simpler.
+        .filter(expr("false"))
+
+      testStream(df)(
+        AddData(input1, 1, 2, 3),
+        CheckNewAnswer(),
+        Execute { qe =>
+          val observeRow = qe.lastExecution.observedMetrics.get("observation")
+          // This should produce the default value of metrics. Before SPARK-50007, the test fails
+          // because `observeRow` is None. (Spark fails to find the metrics by name.)
+          assert(observeRow.get.getAs[Long]("rows") == 0L)
+        }
+      )
     }
   }
 }

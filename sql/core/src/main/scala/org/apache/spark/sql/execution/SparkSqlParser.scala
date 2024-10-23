@@ -27,7 +27,7 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, SchemaEvolution, SchemaTypeEvolution, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -66,6 +66,25 @@ class SparkSqlAstBuilder extends AstBuilder {
   private val configKeyDef = """([a-zA-Z_\d\\.:]+)$""".r
   private val configValueDef = """([^;]*);*""".r
   private val strLiteralDef = """(".*?[^\\]"|'.*?[^\\]'|[^ \n\r\t"']+)""".r
+
+  private def withCatalogIdentClause(
+      ctx: CatalogIdentifierReferenceContext,
+      builder: Seq[String] => LogicalPlan): LogicalPlan = {
+    val exprCtx = ctx.expression
+    if (exprCtx != null) {
+      // resolve later in analyzer
+      PlanWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, Nil,
+        (ident, _) => builder(ident))
+    } else if (ctx.errorCapturingIdentifier() != null) {
+      // resolve immediately
+      builder.apply(Seq(ctx.errorCapturingIdentifier().getText))
+    } else if (ctx.stringLit() != null) {
+      // resolve immediately
+      builder.apply(Seq(string(visitStringLit(ctx.stringLit()))))
+    } else {
+      throw SparkException.internalError("Invalid catalog name")
+    }
+  }
 
   /**
    * Create a [[SetCommand]] logical plan.
@@ -149,6 +168,10 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitSetCollation(ctx: SetCollationContext): LogicalPlan = withOrigin(ctx) {
+    val collationName = ctx.collationName.getText
+    if (!SQLConf.get.trimCollationEnabled && collationName.toUpperCase().contains("TRIM")) {
+      throw QueryCompilationErrors.trimCollationNotEnabledError()
+    }
     val key = SQLConf.DEFAULT_COLLATION.key
     SetCommand(Some(key -> Some(ctx.identifier.getText.toUpperCase(Locale.ROOT))))
   }
@@ -166,10 +189,29 @@ class SparkSqlAstBuilder extends AstBuilder {
     val key = SQLConf.SESSION_LOCAL_TIMEZONE.key
     if (ctx.interval != null) {
       val interval = parseIntervalLiteral(ctx.interval)
-      if (interval.months != 0 || interval.days != 0 ||
-        math.abs(interval.microseconds) > 18 * DateTimeConstants.MICROS_PER_HOUR ||
-        interval.microseconds % DateTimeConstants.MICROS_PER_SECOND != 0) {
-        throw QueryParsingErrors.intervalValueOutOfRangeError(ctx.interval())
+      if (interval.months != 0) {
+        throw QueryParsingErrors.intervalValueOutOfRangeError(
+          toSQLValue(interval.months),
+          ctx.interval()
+        )
+      }
+      else if (interval.days != 0) {
+        throw QueryParsingErrors.intervalValueOutOfRangeError(
+          toSQLValue(interval.days),
+          ctx.interval()
+        )
+      }
+      else if (math.abs(interval.microseconds) > 18 * DateTimeConstants.MICROS_PER_HOUR) {
+        throw QueryParsingErrors.intervalValueOutOfRangeError(
+          toSQLValue((math.abs(interval.microseconds) / DateTimeConstants.MICROS_PER_HOUR).toInt),
+          ctx.interval()
+        )
+      }
+      else if (interval.microseconds % DateTimeConstants.MICROS_PER_SECOND != 0) {
+        throw QueryParsingErrors.intervalValueOutOfRangeError(
+          toSQLValue((interval.microseconds / DateTimeConstants.MICROS_PER_SECOND).toInt),
+          ctx.interval()
+        )
       } else {
         val seconds = (interval.microseconds / DateTimeConstants.MICROS_PER_SECOND).toInt
         SetCommand(Some(key -> Some(ZoneOffset.ofTotalSeconds(seconds).toString)))
@@ -276,13 +318,13 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Create a [[SetCatalogCommand]] logical command.
    */
   override def visitSetCatalog(ctx: SetCatalogContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.errorCapturingIdentifier() != null) {
-      SetCatalogCommand(ctx.errorCapturingIdentifier().getText)
-    } else if (ctx.stringLit() != null) {
-      SetCatalogCommand(string(visitStringLit(ctx.stringLit())))
-    } else {
-      throw SparkException.internalError("Invalid catalog name")
-    }
+    withCatalogIdentClause(ctx.catalogIdentifierReference, identifiers => {
+      if (identifiers.size > 1) {
+        // can occur when user put multipart string in IDENTIFIER(...) clause
+        throw QueryParsingErrors.invalidNameForSetCatalog(identifiers, ctx)
+      }
+      SetCatalogCommand(identifiers.head)
+    })
   }
 
   /**

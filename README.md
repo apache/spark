@@ -7,7 +7,8 @@ rich set of higher-level tools including Spark SQL for SQL and DataFrames,
 pandas API on Spark for pandas workloads, MLlib for machine learning, GraphX for graph processing,
 and Structured Streaming for stream processing.
 
-<https://spark.apache.org/>
+- Official version: <https://spark.apache.org/>
+- Development version: <https://apache.github.io/spark/>
 
 [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_main.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_main.yml)
 [![PySpark Coverage](https://codecov.io/gh/apache/spark/branch/master/graph/badge.svg)](https://codecov.io/gh/apache/spark)

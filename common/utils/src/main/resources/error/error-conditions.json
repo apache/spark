@@ -1,4 +1,10 @@
 {
+  "ADD_DEFAULT_UNSUPPORTED" : {
+    "message" : [
+      "Failed to execute <statementType> command because DEFAULT values are not supported when adding new columns to previously existing target data source with table provider: \"<dataSource>\"."
+    ],
+    "sqlState" : "42623"
+  },
   "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION" : {
     "message" : [
       "Non-deterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
@@ -121,7 +127,7 @@
   },
   "BINARY_ARITHMETIC_OVERFLOW" : {
     "message" : [
-      "<value1> <symbol> <value2> caused overflow."
+      "<value1> <symbol> <value2> caused overflow. Use <functionName> to ignore overflow problem and return NULL."
     ],
     "sqlState" : "22003"
   },
@@ -370,6 +376,12 @@
     ],
     "sqlState" : "429BB"
   },
+  "CANNOT_REMOVE_RESERVED_PROPERTY" : {
+    "message" : [
+      "Cannot remove reserved property: <property>."
+    ],
+    "sqlState" : "42000"
+  },
   "CANNOT_RENAME_ACROSS_SCHEMA" : {
     "message" : [
       "Renaming a <type> across schemas is not allowed."
@@ -559,7 +571,7 @@
       },
       "IMPLICIT" : {
         "message" : [
-          "Error occurred due to the mismatch between multiple implicit non-default collations. Use COLLATE function to set the collation explicitly."
+          "Error occurred due to the mismatch between implicit collations: [<implicitTypes>]. Use COLLATE function to set the collation explicitly."
         ]
       }
     },
@@ -600,6 +612,12 @@
     ],
     "sqlState" : "42711"
   },
+  "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH" : {
+    "message" : [
+      "Some values in field <pos> are incompatible with the column array type. Expected type <type>."
+    ],
+    "sqlState" : "0A000"
+  },
   "COLUMN_NOT_DEFINED_IN_TABLE" : {
     "message" : [
       "<colType> column <colName> is not defined in table <tableName>, defined table columns are: <tableCols>."
@@ -611,6 +629,13 @@
       "The column <colName> cannot be found. Verify the spelling and correctness of the column name according to the SQL config <caseSensitiveConfig>."
     ],
     "sqlState" : "42703"
+  },
+  "COLUMN_ORDINAL_OUT_OF_BOUNDS" : {
+    "message" : [
+      "Column ordinal out of bounds. The number of columns in the table is <attributesLength>, but the column ordinal is <ordinal>.",
+      "Attributes are the following: <attributes>."
+    ],
+    "sqlState" : "22003"
   },
   "COMPARATOR_RETURNS_NULL" : {
     "message" : [
@@ -625,6 +650,11 @@
       "Cannot process input data types for the expression: <expression>."
     ],
     "subClass" : {
+      "BAD_INPUTS" : {
+        "message" : [
+          "The input data types to <functionName> must be valid, but found the input types <dataType>."
+        ]
+      },
       "MISMATCHED_TYPES" : {
         "message" : [
           "All input types must be the same except nullable, containsNull, valueContainsNull flags, but found the input types <inputTypes>."
@@ -650,6 +680,16 @@
       "Please make sure only one streaming job runs on a specific checkpoint location at a time."
     ],
     "sqlState" : "40000"
+  },
+  "CONFLICTING_DIRECTORY_STRUCTURES" : {
+    "message" : [
+      "Conflicting directory structures detected.",
+      "Suspicious paths:",
+      "<discoveredBasePaths>",
+      "If provided paths are partition directories, please set \"basePath\" in the options of the data source to specify the root directory of the table.",
+      "If there are multiple root directories, please load them separately and then union them."
+    ],
+    "sqlState" : "KD009"
   },
   "CONFLICTING_PARTITION_COLUMN_NAMES" : {
     "message" : [
@@ -1049,7 +1089,7 @@
     "message" : [
       "Encountered error when saving to external data source."
     ],
-    "sqlState" : "KD00F"
+    "sqlState" : "KD010"
   },
   "DATA_SOURCE_NOT_EXIST" : {
     "message" : [
@@ -1096,6 +1136,12 @@
     ],
     "sqlState" : "42608"
   },
+  "DEFAULT_UNSUPPORTED" : {
+    "message" : [
+      "Failed to execute <statementType> command because DEFAULT values are not supported for target data source with table provider: \"<dataSource>\"."
+    ],
+    "sqlState" : "42623"
+  },
   "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED" : {
     "message" : [
       "Distinct window functions are not supported: <windowExpr>."
@@ -1107,6 +1153,12 @@
       "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
     ],
     "sqlState" : "22012"
+  },
+  "DUPLICATED_CTE_NAMES" : {
+    "message" : [
+      "CTE definition can't have duplicate names: <duplicateNames>."
+    ],
+    "sqlState" : "42602"
   },
   "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT" : {
     "message" : [
@@ -1177,6 +1229,12 @@
       "Failed to parse an empty string for data type <dataType>."
     ],
     "sqlState" : "42604"
+  },
+  "EMPTY_SCHEMA_NOT_SUPPORTED_FOR_DATASOURCE" : {
+    "message" : [
+      "The <format> datasource does not support writing empty or nested empty schemas. Please make sure the data schema has at least one or more column(s)."
+    ],
+    "sqlState" : "0A000"
   },
   "ENCODER_NOT_FOUND" : {
     "message" : [
@@ -1443,6 +1501,12 @@
       "Failed to convert the row value <value> of the class <class> to the target SQL type <sqlType> in the JSON format."
     ],
     "sqlState" : "2203G"
+  },
+  "FAILED_TO_LOAD_ROUTINE" : {
+    "message" : [
+      "Failed to load routine <routineName>."
+    ],
+    "sqlState" : "38000"
   },
   "FAILED_TO_PARSE_TOO_COMPLEX" : {
     "message" : [
@@ -2014,6 +2078,12 @@
     ],
     "sqlState" : "22003"
   },
+  "INVALID_ATTRIBUTE_NAME_SYNTAX" : {
+    "message" : [
+      "Syntax error in the attribute name: <name>. Check that backticks appear in pairs, a quoted string is a complete name part and use a backtick only inside quoted name parts."
+    ],
+    "sqlState" : "42601"
+  },
   "INVALID_BITMAP_POSITION" : {
     "message" : [
       "The 0-indexed bitmap position <bitPosition> is out of bounds. The bitmap has <bitmapNumBits> bits (<bitmapNumBytes> bytes)."
@@ -2091,6 +2161,12 @@
       }
     },
     "sqlState" : "22022"
+  },
+  "INVALID_CORRUPT_RECORD_TYPE" : {
+    "message" : [
+      "The column <columnName> for corrupt records must have the nullable STRING type, but got <actualType>."
+    ],
+    "sqlState" : "42804"
   },
   "INVALID_CURSOR" : {
     "message" : [
@@ -2497,6 +2573,11 @@
           "Interval string does not match second-nano format of ss.nnnnnnnnn."
         ]
       },
+      "TIMEZONE_INTERVAL_OUT_OF_RANGE" : {
+        "message" : [
+          "The interval value must be in the range of [-18, +18] hours with second precision."
+        ]
+      },
       "UNKNOWN_PARSING_ERROR" : {
         "message" : [
           "Unknown error when parsing <word>."
@@ -2547,6 +2628,13 @@
       }
     },
     "sqlState" : "42K0K"
+  },
+  "INVALID_JAVA_IDENTIFIER_AS_FIELD_NAME" : {
+    "message" : [
+      "<fieldName> is not a valid identifier of Java and cannot be used as field name",
+      "<walkedTypePath>."
+    ],
+    "sqlState" : "46121"
   },
   "INVALID_JOIN_TYPE_FOR_JOINWITH" : {
     "message" : [
@@ -2889,6 +2977,12 @@
     ],
     "sqlState" : "42613"
   },
+  "INVALID_REGEXP_REPLACE" : {
+    "message" : [
+      "Could not perform regexp_replace for source = \"<source>\", pattern = \"<pattern>\", replacement = \"<replacement>\" and position = <position>."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_SAVE_MODE" : {
     "message" : [
       "The specified save mode <mode> is invalid. Valid save modes include \"append\", \"overwrite\", \"ignore\", \"error\", \"errorifexists\", and \"default\"."
@@ -3005,7 +3099,7 @@
       },
       "MULTI_PART_NAME" : {
         "message" : [
-          "<statement> with multiple part function name(<funcName>) is not allowed."
+          "<statement> with multiple part name(<name>) is not allowed."
         ]
       },
       "OPTION_IS_INVALID" : {
@@ -3041,6 +3135,11 @@
       "UNSUPPORTED_FUNC_NAME" : {
         "message" : [
           "Unsupported function name <funcName>."
+        ]
+      },
+      "UNSUPPORTED_SQL_STATEMENT" : {
+        "message" : [
+          "Unsupported SQL statement: <sqlText>."
         ]
       },
       "VARIABLE_TYPE_OR_DEFAULT_REQUIRED" : {
@@ -3082,6 +3181,12 @@
       "Cannot create the persistent object <objName> of the type <obj> because it references to the temporary object <tempObjName> of the type <tempObj>. Please make the temporary object <tempObjName> persistent, or make the persistent object <objName> temporary."
     ],
     "sqlState" : "42K0F"
+  },
+  "INVALID_TIMEZONE" : {
+    "message" : [
+      "The timezone: <timeZone> is invalid. The timezone must be either a region-based zone ID or a zone offset. Region IDs must have the form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in the format '(+|-)HH', '(+|-)HH:mm’ or '(+|-)HH:mm:ss', e.g '-08' , '+01:00' or '-13:33:33', and must be in the range from -18:00 to +18:00. 'Z' and 'UTC' are accepted as synonyms for '+00:00'."
+    ],
+    "sqlState" : "22009"
   },
   "INVALID_TIME_TRAVEL_SPEC" : {
     "message" : [
@@ -3131,7 +3236,7 @@
   },
   "INVALID_URL" : {
     "message" : [
-      "The url is invalid: <url>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "The url is invalid: <url>. Use `try_parse_url` to tolerate invalid URL and return NULL instead."
     ],
     "sqlState" : "22P02"
   },
@@ -3340,6 +3445,12 @@
     ],
     "sqlState" : "23K01"
   },
+  "MERGE_WITHOUT_WHEN" : {
+    "message" : [
+      "There must be at least one WHEN clause in a MERGE statement."
+    ],
+    "sqlState" : "42601"
+  },
   "MISSING_AGGREGATION" : {
     "message" : [
       "The non-aggregating expression <expression> is based on columns which are not participating in the GROUP BY clause.",
@@ -3372,11 +3483,23 @@
     ],
     "sqlState" : "42803"
   },
+  "MISSING_TIMEOUT_CONFIGURATION" : {
+    "message" : [
+      "The operation has timed out, but no timeout duration is configured. To set a processing time-based timeout, use 'GroupState.setTimeoutDuration()' in your 'mapGroupsWithState' or 'flatMapGroupsWithState' operation. For event-time-based timeout, use 'GroupState.setTimeoutTimestamp()' and define a watermark using 'Dataset.withWatermark()'."
+    ],
+    "sqlState" : "HY000"
+  },
   "MISSING_WINDOW_SPECIFICATION" : {
     "message" : [
       "Window specification is not defined in the WINDOW clause for <windowName>. For more information about WINDOW clauses, please refer to '<docroot>/sql-ref-syntax-qry-select-window.html'."
     ],
     "sqlState" : "42P20"
+  },
+  "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS" : {
+    "message" : [
+      "<clause1> and <clause2> cannot coexist in the same SQL pipe operator using '|>'. Please separate the multiple result clauses into separate pipe operators and then retry the query again."
+    ],
+    "sqlState" : "42000"
   },
   "MULTIPLE_TIME_TRAVEL_SPEC" : {
     "message" : [
@@ -3751,6 +3874,12 @@
     ],
     "sqlState" : "42617"
   },
+  "PARSE_MODE_UNSUPPORTED" : {
+    "message" : [
+      "The function <funcName> doesn't support the <mode> mode. Acceptable modes are PERMISSIVE and FAILFAST."
+    ],
+    "sqlState" : "42601"
+  },
   "PARSE_SYNTAX_ERROR" : {
     "message" : [
       "Syntax error at or near <error><hint>."
@@ -3771,6 +3900,18 @@
       "To tolerate the error on drop use ALTER TABLE … DROP IF EXISTS PARTITION."
     ],
     "sqlState" : "428FT"
+  },
+  "PARTITION_COLUMN_NOT_FOUND_IN_SCHEMA" : {
+    "message" : [
+      "Partition column <column> not found in schema <schema>. Please provide the existing column for partitioning."
+    ],
+    "sqlState" : "42000"
+  },
+  "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY" : {
+    "message" : [
+      "The expression <expression> must be inside 'partitionedBy'."
+    ],
+    "sqlState" : "42S23"
   },
   "PATH_ALREADY_EXISTS" : {
     "message" : [
@@ -3943,6 +4084,18 @@
       "Not found an id for the rule name \"<ruleName>\". Please modify RuleIdCollection.scala if you are adding a new rule."
     ],
     "sqlState" : "22023"
+  },
+  "SCALAR_FUNCTION_NOT_COMPATIBLE" : {
+    "message" : [
+      "ScalarFunction <scalarFunc> not overrides method 'produceResult(InternalRow)' with custom implementation."
+    ],
+    "sqlState" : "42K0O"
+  },
+  "SCALAR_FUNCTION_NOT_FULLY_IMPLEMENTED" : {
+    "message" : [
+      "ScalarFunction <scalarFunc> not implements or overrides method 'produceResult(InternalRow)'."
+    ],
+    "sqlState" : "42K0P"
   },
   "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION" : {
     "message" : [
@@ -4445,6 +4598,12 @@
     ],
     "sqlState" : "428EK"
   },
+  "TRAILING_COMMA_IN_SELECT" : {
+    "message" : [
+      "Trailing comma detected in SELECT clause. Remove the trailing comma before the FROM clause."
+    ],
+    "sqlState" : "42601"
+  },
   "TRANSPOSE_EXCEED_ROW_LIMIT" : {
     "message" : [
       "Number of rows exceeds the allowed limit of <maxValues> for TRANSPOSE. If this was intended, set <config> to at least the current row count."
@@ -4582,6 +4741,12 @@
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [
       "Unrecognized SQL type - name: <typeName>, id: <jdbcType>."
+    ],
+    "sqlState" : "42704"
+  },
+  "UNRECOGNIZED_STATISTIC" : {
+    "message" : [
+      "The statistic <stats> is not recognized. Valid statistics include `count`, `count_distinct`, `approx_count_distinct`, `mean`, `stddev`, `min`, `max`, and percentile values."
     ],
     "sqlState" : "42704"
   },
@@ -4868,9 +5033,9 @@
           "Catalog <catalogName> does not support <operation>."
         ]
       },
-      "COLLATION" : {
+      "CLAUSE_WITH_PIPE_OPERATORS" : {
         "message" : [
-          "Collation is not yet supported."
+          "The SQL pipe operator syntax using |> does not support <clauses>."
         ]
       },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
@@ -5098,6 +5263,16 @@
       "TRANSFORM_NON_HIVE" : {
         "message" : [
           "TRANSFORM with SERDE is only supported in hive mode."
+        ]
+      },
+      "TRIM_COLLATION" : {
+        "message" : [
+          "TRIM specifier in the collation."
+        ]
+      },
+      "UPDATE_COLUMN_NULLABILITY" : {
+        "message" : [
+          "Update column nullability for MySQL and MS SQL Server."
         ]
       }
     },
@@ -5527,11 +5702,6 @@
       "The number of inserted values cannot match the fields."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0008" : {
-    "message" : [
-      "There must be at least one WHEN clause in a MERGE statement."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0012" : {
     "message" : [
       "DISTRIBUTE BY is not supported."
@@ -5612,24 +5782,9 @@
       "It is not allowed to add catalog/namespace prefix <quoted> to the table name in CACHE TABLE AS SELECT."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0038" : {
-    "message" : [
-      "CTE definition can't have duplicate names: <duplicateNames>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0039" : {
-    "message" : [
-      "Unsupported SQL statement."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0043" : {
     "message" : [
       "Expected format is 'RESET' or 'RESET key'. If you want to include special characters in key, please use quotes, e.g., RESET `key`."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0044" : {
-    "message" : [
-      "The interval value must be in the range of [-18, +18] hours with second precision."
     ]
   },
   "_LEGACY_ERROR_TEMP_0045" : {
@@ -5824,11 +5979,6 @@
       "<hintName> Hint expects a partition number as a parameter."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1049" : {
-    "message" : [
-      "Syntax error in attribute name: <name>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1050" : {
     "message" : [
       "Can only star expand struct data types. Attribute: `<attributes>`."
@@ -5929,19 +6079,9 @@
       "Column statistics serialization is not supported for column <colName> of data type: <dataType>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1097" : {
-    "message" : [
-      "The field for corrupt records must be string type and nullable."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1098" : {
     "message" : [
       "DataType '<x>' is not supported by <className>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1099" : {
-    "message" : [
-      "<funcName>() doesn't support the <mode> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1103" : {
@@ -6049,11 +6189,6 @@
       "<className> is not a valid Spark SQL Data Source."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1136" : {
-    "message" : [
-      "Cannot save interval data type into external storage."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1137" : {
     "message" : [
       "Unable to resolve <name> given [<outputStr>]."
@@ -6077,11 +6212,6 @@
   "_LEGACY_ERROR_TEMP_1141" : {
     "message" : [
       "Multiple sources found for <provider> (<sourceNames>), please specify the fully qualified class name."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1142" : {
-    "message" : [
-      "Datasource does not support writing empty or nested empty schemas. Please make sure the data schema has at least one or more column(s)."
     ]
   },
   "_LEGACY_ERROR_TEMP_1143" : {
@@ -6423,16 +6553,6 @@
       "<action> is not allowed on <tableName> since its partition metadata is not stored in the Hive metastore. To import this information into the metastore, run `msck repair table <tableName>`."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1252" : {
-    "message" : [
-      "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1253" : {
-    "message" : [
-      "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1255" : {
     "message" : [
       "Cannot drop built-in function '<functionName>'."
@@ -6638,11 +6758,6 @@
       "The pivot column <pivotColumn> has more than <maxValues> distinct values, this could indicate an error. If this was intended, set <config> to at least the number of distinct values of the pivot column."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1325" : {
-    "message" : [
-      "Cannot modify the value of a static config: <key>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1327" : {
     "message" : [
       "Command execution is not supported in runner <runner>."
@@ -6671,21 +6786,6 @@
   "_LEGACY_ERROR_TEMP_1338" : {
     "message" : [
       "Sinks cannot request distribution and ordering in continuous execution mode."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1344" : {
-    "message" : [
-      "Invalid DEFAULT value for column <fieldName>: <defaultValue> fails to parse as a valid literal value."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1345" : {
-    "message" : [
-      "Failed to execute <statementType> command because DEFAULT values are not supported for target data source with table provider: \"<dataSource>\"."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1346" : {
-    "message" : [
-      "Failed to execute <statementType> command because DEFAULT values are not supported when adding new columns to previously existing target data source with table provider: \"<dataSource>\"."
     ]
   },
   "_LEGACY_ERROR_TEMP_2000" : {
@@ -6788,11 +6888,6 @@
       "<methodName> is not implemented."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2042" : {
-    "message" : [
-      "<message>. If necessary set <ansiConfig> to false to bypass this error."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2045" : {
     "message" : [
       "Unsupported table change: <message>"
@@ -6883,11 +6978,6 @@
   "_LEGACY_ERROR_TEMP_2068" : {
     "message" : [
       "Missing database location."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2069" : {
-    "message" : [
-      "Cannot remove reserved property: <property>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2070" : {
@@ -7007,7 +7097,7 @@
   },
   "_LEGACY_ERROR_TEMP_2097" : {
     "message" : [
-      "Could not execute broadcast in <timeout> secs. You can increase the timeout for broadcasts via <broadcastTimeout> or disable broadcast join by setting <autoBroadcastJoinThreshold> to -1."
+      "Could not execute broadcast in <timeout> secs. You can increase the timeout for broadcasts via <broadcastTimeout> or disable broadcast join by setting <autoBroadcastJoinThreshold> to -1 or remove the broadcast hint if it exists in your code."
     ]
   },
   "_LEGACY_ERROR_TEMP_2098" : {
@@ -7028,11 +7118,6 @@
   "_LEGACY_ERROR_TEMP_2103" : {
     "message" : [
       "Dictionary encoding should not be used because of dictionary overflow."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2104" : {
-    "message" : [
-      "End of the iterator."
     ]
   },
   "_LEGACY_ERROR_TEMP_2105" : {
@@ -7078,11 +7163,6 @@
   "_LEGACY_ERROR_TEMP_2113" : {
     "message" : [
       "Unable to parse <stats> as a percentile."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2114" : {
-    "message" : [
-      "<stats> is not a recognised statistic."
     ]
   },
   "_LEGACY_ERROR_TEMP_2115" : {
@@ -7145,12 +7225,6 @@
       "cannot have circular references in class, but got the circular reference of class <t>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2140" : {
-    "message" : [
-      "`<fieldName>` is not a valid identifier of Java and cannot be used as field name",
-      "<walkedTypePath>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2144" : {
     "message" : [
       "Unable to find constructor for <tpe>. This could happen if <tpe> is an interface, or a trait without companion object constructor."
@@ -7199,11 +7273,6 @@
   "_LEGACY_ERROR_TEMP_2164" : {
     "message" : [
       "Initial type <dataType> must be an <arrayType>, a <structType> or a <mapType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2165" : {
-    "message" : [
-      "Malformed records are detected in schema inference. Parse Mode: <failFastMode>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2166" : {
@@ -7639,11 +7708,6 @@
       "comment on table is not supported."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2271" : {
-    "message" : [
-      "UpdateColumnNullability is not supported."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2272" : {
     "message" : [
       "Rename column is only supported for MySQL version 8.0 and above."
@@ -7908,11 +7972,6 @@
       "<expr> is not currently supported"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3055" : {
-    "message" : [
-      "ScalarFunction <scalarFunc> neither implement magic method nor override 'produceResult'"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3056" : {
     "message" : [
       "Unexpected row-level read relations (allow multiple = <allowMultipleReads>): <other>"
@@ -8044,11 +8103,6 @@
   "_LEGACY_ERROR_TEMP_3084" : {
     "message" : [
       "No handler for UDF/UDAF/UDTF '<clazz>': <e>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3085" : {
-    "message" : [
-      "from_avro() doesn't support the <name> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
     ]
   },
   "_LEGACY_ERROR_TEMP_3086" : {
@@ -8271,11 +8325,6 @@
       "Partitions truncate is not supported"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3146" : {
-    "message" : [
-      "Cannot find a compatible ScalarFunction#produceResult"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3147" : {
     "message" : [
       "<description>: Batch scan are not supported"
@@ -8339,11 +8388,6 @@
   "_LEGACY_ERROR_TEMP_3167" : {
     "message" : [
       "continuous mode is not supported!"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3168" : {
-    "message" : [
-      "hasTimedOut is true however there's no timeout configured"
     ]
   },
   "_LEGACY_ERROR_TEMP_3169" : {
@@ -8566,11 +8610,6 @@
       "Cannot delete map key"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3227" : {
-    "message" : [
-      "Cannot find field: <fieldName>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3228" : {
     "message" : [
       "AFTER column not found: <afterCol>"
@@ -8659,6 +8698,21 @@
   "_LEGACY_ERROR_TEMP_3262" : {
     "message" : [
       "Doesn't support month or year interval: <interval>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3300" : {
+    "message" : [
+      "error while calling spill() on <consumerToSpill> : <message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3301" : {
+    "message" : [
+      "Not enough memory to grow pointer array"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3302" : {
+    "message" : [
+      "No enough memory for aggregation"
     ]
   },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {

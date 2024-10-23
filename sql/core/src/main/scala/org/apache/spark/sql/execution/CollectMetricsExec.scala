@@ -21,6 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -60,9 +61,13 @@ case class CollectMetricsExec(
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
+  override def resetMetrics(): Unit = {
+    accumulator.reset()
+    super.resetMetrics()
+  }
+
   override protected def doExecute(): RDD[InternalRow] = {
     val collector = accumulator
-    collector.reset()
     child.execute().mapPartitions { rows =>
       // Only publish the value of the accumulator when the task has completed. This is done by
       // updating a task local accumulator ('updater') which will be merged with the actual
@@ -94,13 +99,30 @@ object CollectMetricsExec extends AdaptiveSparkPlanHelper {
   /**
    * Recursively collect all collected metrics from a query tree.
    */
-  def collect(plan: SparkPlan): Map[String, Row] = {
-    val metrics = collectWithSubqueries(plan) {
+  def collect(physicalPlan: SparkPlan, analyzedOpt: Option[LogicalPlan]): Map[String, Row] = {
+    val collectorsInLogicalPlan = analyzedOpt.map {
+      _.collectWithSubqueries {
+        case c: CollectMetrics => c
+      }
+    }.getOrElse(Seq.empty[CollectMetrics])
+    val metrics = collectWithSubqueries(physicalPlan) {
       case collector: CollectMetricsExec =>
         Map(collector.name -> collector.collectedMetrics)
       case tableScan: InMemoryTableScanExec =>
-        CollectMetricsExec.collect(tableScan.relation.cachedPlan)
+        CollectMetricsExec.collect(
+          tableScan.relation.cachedPlan, tableScan.relation.cachedPlan.logicalLink)
     }
-    metrics.reduceOption(_ ++ _).getOrElse(Map.empty)
+    val metricsCollected = metrics.reduceOption(_ ++ _).getOrElse(Map.empty)
+    val initialMetricsForMissing = collectorsInLogicalPlan.flatMap { collector =>
+      if (!metricsCollected.contains(collector.name)) {
+        val exec = CollectMetricsExec(collector.name, collector.metrics,
+          EmptyRelationExec(LocalRelation(collector.child.output)))
+        val initialMetrics = exec.collectedMetrics
+        Some((collector.name -> initialMetrics))
+      } else {
+        None
+      }
+    }.toMap
+    metricsCollected ++ initialMetricsForMissing
   }
 }

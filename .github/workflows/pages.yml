@@ -26,7 +26,7 @@ on:
 
 concurrency:
   group: 'docs preview'
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   docs:
@@ -35,9 +35,12 @@ jobs:
     permissions:
       id-token: write
       pages: write
+    environment:
+      name: github-pages # https://github.com/actions/deploy-pages/issues/271
     env:
       SPARK_TESTING: 1 # Reduce some noise in the logs
       RELEASE_VERSION: 'In-Progress'
+    if: github.repository == 'apache/spark'
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v4
@@ -56,7 +59,12 @@ jobs:
           architecture: x64
           cache: 'pip'
       - name: Install Python dependencies
-        run: pip install --upgrade -r dev/requirements.txt
+        run: |
+         pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13' sphinx-copybutton nbsphinx numpydoc jinja2 markupsafe 'pyzmq<24.0.0' \
+            ipython ipython_genutils sphinx_plotly_directive 'numpy>=1.20.0' pyarrow 'pandas==2.2.3' 'plotly>=4.8' 'docutils<0.18.0' \
+            'flake8==3.9.0' 'mypy==1.8.0' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' 'black==23.9.1' \
+            'pandas-stubs==1.2.0.53' 'grpcio==1.62.0' 'grpcio-status==1.62.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0' \
+            'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' 'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' 'sphinxcontrib-serializinghtml==1.1.5'
       - name: Install Ruby for documentation generation
         uses: ruby/setup-ruby@v1
         with:

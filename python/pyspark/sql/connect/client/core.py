@@ -65,7 +65,7 @@ from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql.metrics import MetricValue, PlanMetrics, ExecutionInfo, ObservedMetrics
 from pyspark.sql.connect.client.artifact import ArtifactManager
-from pyspark.sql.connect.client.logging import logger
+from pyspark.sql.connect.logging import logger
 from pyspark.sql.connect.profiler import ConnectProfilerCollector
 from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
 from pyspark.sql.connect.client.retries import RetryPolicy, Retrying, DefaultPolicy

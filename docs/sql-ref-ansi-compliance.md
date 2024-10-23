@@ -379,6 +379,7 @@ When ANSI mode is on, it throws exceptions for invalid operations. You can use t
   - `try_avg`: identical to the function `avg`, except that it returns `NULL` result instead of throwing an exception on decimal/interval value overflow.
   - `try_element_at`: identical to the function `element_at`, except that it returns `NULL` result instead of throwing an exception on array's index out of bound.
   - `try_to_timestamp`: identical to the function `to_timestamp`, except that it returns `NULL` result instead of throwing an exception on string parsing error.
+  - `try_parse_url`: identical to the function `parse_url`, except that it returns `NULL` result instead of throwing an exception on url parsing error.
 
 ### SQL Keywords (optional, disabled by default)
 
@@ -426,6 +427,7 @@ Below is a list of all the keywords in Spark SQL.
 |BY|non-reserved|non-reserved|reserved|
 |BYTE|non-reserved|non-reserved|non-reserved|
 |CACHE|non-reserved|non-reserved|non-reserved|
+|CALL|reserved|non-reserved|reserved|
 |CALLED|non-reserved|non-reserved|non-reserved|
 |CASCADE|non-reserved|non-reserved|non-reserved|
 |CASE|reserved|non-reserved|reserved|
@@ -580,6 +582,7 @@ Below is a list of all the keywords in Spark SQL.
 |LOCKS|non-reserved|non-reserved|non-reserved|
 |LOGICAL|non-reserved|non-reserved|non-reserved|
 |LONG|non-reserved|non-reserved|non-reserved|
+|LOOP|non-reserved|non-reserved|non-reserved|
 |MACRO|non-reserved|non-reserved|non-reserved|
 |MAP|non-reserved|non-reserved|non-reserved|
 |MATCHED|non-reserved|non-reserved|non-reserved|

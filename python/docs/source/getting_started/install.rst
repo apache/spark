@@ -183,6 +183,7 @@ Package                    Supported version         Note
 Additional libraries that enhance functionality but are not included in the installation packages:
 
 - **memory-profiler**: Used for PySpark UDF memory profiling, ``spark.profile.show(...)`` and ``spark.sql.pyspark.udf.profiler``.
+- **plotly**: Used for PySpark plotting, ``DataFrame.plot``.
 
 Note that PySpark requires Java 17 or later with ``JAVA_HOME`` properly set and refer to |downloading|_.
 

@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, ListStateImplWithTTL, MapStateImplWithTTL, MemoryStream, ValueStateImpl, ValueStateImplWithTTL}
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, ListStateImplWithTTL, MapStateImplWithTTL, MemoryStream, TimerStateUtils, ValueStateImpl, ValueStateImplWithTTL}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -99,8 +99,7 @@ class ValueStateTTLProcessor(ttlConfig: TTLConfig)
   override def handleInputRows(
       key: String,
       inputRows: Iterator[InputEvent],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[OutputEvent] = {
+      timerValues: TimerValues): Iterator[OutputEvent] = {
     var results = List[OutputEvent]()
 
     inputRows.foreach { row =>
@@ -138,8 +137,7 @@ class MultipleValueStatesTTLProcessor(
   override def handleInputRows(
       key: String,
       inputRows: Iterator[InputEvent],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[OutputEvent] = {
+      timerValues: TimerValues): Iterator[OutputEvent] = {
     var results = List[OutputEvent]()
 
     if (key == ttlKey) {
@@ -247,7 +245,19 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         // validate ttl value is removed in the value state column family
         AddData(inputStream, InputEvent(ttlKey, "get_ttl_value_from_state", -1)),
         AdvanceManualClock(1 * 1000),
-        CheckNewAnswer()
+        CheckNewAnswer(),
+        AddData(inputStream, InputEvent(ttlKey, "put", 3)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
+        },
+        AddData(inputStream, InputEvent(noTtlKey, "get", -1)),
+        AdvanceManualClock(60 * 1000),
+        CheckNewAnswer(OutputEvent(noTtlKey, 2, isTTLValue = false, -1)),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
+        }
       )
     }
   }
@@ -265,7 +275,16 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
 
         val keySchema = new StructType().add("value", StringType)
+        val schemaForKeyRow: StructType = new StructType()
+          .add("key", new StructType(keySchema.fields))
+          .add("expiryTimestampMs", LongType, nullable = false)
+        val schemaForValueRow: StructType = StructType(Array(StructField("__dummy__", NullType)))
         val schema0 = StateStoreColFamilySchema(
+          TimerStateUtils.getTimerStateVarName(TimeMode.ProcessingTime().toString),
+          schemaForKeyRow,
+          schemaForValueRow,
+          Some(PrefixKeyScanStateEncoderSpec(schemaForKeyRow, 1)))
+        val schema1 = StateStoreColFamilySchema(
           "valueStateTTL",
           keySchema,
           new StructType().add("value",
@@ -275,14 +294,14 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None
         )
-        val schema1 = StateStoreColFamilySchema(
+        val schema2 = StateStoreColFamilySchema(
           "valueState",
           keySchema,
           new StructType().add("value", IntegerType, false),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None
         )
-        val schema2 = StateStoreColFamilySchema(
+        val schema3 = StateStoreColFamilySchema(
           "listState",
           keySchema,
           new StructType().add("value",
@@ -300,7 +319,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         val compositeKeySchema = new StructType()
           .add("key", new StructType().add("value", StringType))
           .add("userKey", userKeySchema)
-        val schema3 = StateStoreColFamilySchema(
+        val schema4 = StateStoreColFamilySchema(
           "mapState",
           compositeKeySchema,
           new StructType().add("value",
@@ -351,9 +370,9 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
               q.lastProgress.stateOperators.head.customMetrics
                 .get("numMapStateWithTTLVars").toInt)
 
-            assert(colFamilySeq.length == 4)
+            assert(colFamilySeq.length == 5)
             assert(colFamilySeq.map(_.toString).toSet == Set(
-              schema0, schema1, schema2, schema3
+              schema0, schema1, schema2, schema3, schema4
             ).map(_.toString))
           },
           StopStream

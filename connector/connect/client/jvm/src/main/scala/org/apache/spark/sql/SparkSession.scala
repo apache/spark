@@ -19,7 +19,7 @@ package org.apache.spark.sql
 import java.net.URI
 import java.nio.file.{Files, Paths}
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
@@ -29,14 +29,17 @@ import com.google.common.cache.{CacheBuilder, CacheLoader}
 import io.grpc.ClientInterceptor
 import org.apache.arrow.memory.RootAllocator
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.internal.Logging
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, BoxedLongEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
@@ -69,7 +72,7 @@ import org.apache.spark.util.ArrayImplicits._
 class SparkSession private[sql] (
     private[sql] val client: SparkConnectClient,
     private val planIdGenerator: AtomicLong)
-    extends api.SparkSession[Dataset]
+    extends api.SparkSession
     with Logging {
 
   private[this] val allocator = new RootAllocator()
@@ -84,9 +87,13 @@ class SparkSession private[sql] (
 
   private[sql] val observationRegistry = new ConcurrentHashMap[Long, Observation]()
 
-  private[sql] def hijackServerSideSessionIdForTesting(suffix: String) = {
+  private[sql] def hijackServerSideSessionIdForTesting(suffix: String): Unit = {
     client.hijackServerSideSessionIdForTesting(suffix)
   }
+
+  /** @inheritdoc */
+  override def sparkContext: SparkContext =
+    throw new UnsupportedOperationException("sparkContext is not supported in Spark Connect.")
 
   /** @inheritdoc */
   val conf: RuntimeConfig = new ConnectRuntimeConfig(client)
@@ -136,13 +143,37 @@ class SparkSession private[sql] (
 
   /** @inheritdoc */
   def createDataset[T: Encoder](data: Seq[T]): Dataset[T] = {
-    createDataset(encoderFor[T], data.iterator)
+    createDataset(agnosticEncoderFor[T], data.iterator)
   }
 
   /** @inheritdoc */
   def createDataset[T: Encoder](data: java.util.List[T]): Dataset[T] = {
     createDataset(data.asScala.toSeq)
   }
+
+  /** @inheritdoc */
+  override def createDataFrame[A <: Product: TypeTag](rdd: RDD[A]): DataFrame =
+    throwRddNotSupportedException()
+
+  /** @inheritdoc */
+  override def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame =
+    throwRddNotSupportedException()
+
+  /** @inheritdoc */
+  override def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame =
+    throwRddNotSupportedException()
+
+  /** @inheritdoc */
+  override def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame =
+    throwRddNotSupportedException()
+
+  /** @inheritdoc */
+  override def createDataFrame(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame =
+    throwRddNotSupportedException()
+
+  /** @inheritdoc */
+  override def createDataset[T: Encoder](data: RDD[T]): Dataset[T] =
+    throwRddNotSupportedException()
 
   /** @inheritdoc */
   @Experimental
@@ -209,17 +240,10 @@ class SparkSession private[sql] (
   /** @inheritdoc */
   def read: DataFrameReader = new DataFrameReader(this)
 
-  /**
-   * Returns a `DataStreamReader` that can be used to read streaming data in as a `DataFrame`.
-   * {{{
-   *   sparkSession.readStream.parquet("/path/to/directory/of/parquet/files")
-   *   sparkSession.readStream.schema(schema).json("/path/to/directory/of/json/files")
-   * }}}
-   *
-   * @since 3.5.0
-   */
+  /** @inheritdoc */
   def readStream: DataStreamReader = new DataStreamReader(this)
 
+  /** @inheritdoc */
   lazy val streams: StreamingQueryManager = new StreamingQueryManager(this)
 
   /** @inheritdoc */
@@ -252,19 +276,8 @@ class SparkSession private[sql] (
   lazy val udf: UDFRegistration = new UDFRegistration(this)
 
   // scalastyle:off
-  // Disable style checker so "implicits" object can start with lowercase i
-  /**
-   * (Scala-specific) Implicit methods available in Scala for converting common names and Symbols
-   * into [[Column]]s, and for converting common Scala objects into DataFrame`s.
-   *
-   * {{{
-   *   val sparkSession = SparkSession.builder.getOrCreate()
-   *   import sparkSession.implicits._
-   * }}}
-   *
-   * @since 3.4.0
-   */
-  object implicits extends SQLImplicits(this) with Serializable
+  /** @inheritdoc */
+  object implicits extends SQLImplicits(this)
   // scalastyle:on
 
   /** @inheritdoc */
@@ -512,6 +525,8 @@ class SparkSession private[sql] (
     }
   }
 
+  override private[sql] def isUsable: Boolean = client.isSessionValid
+
   implicit class RichColumn(c: Column) {
     def expr: proto.Expression = toExpr(c)
     def typedExpr[T](e: Encoder[T]): proto.Expression = toTypedExpr(c, e)
@@ -520,7 +535,9 @@ class SparkSession private[sql] (
 
 // The minimal builder needed to create a spark session.
 // TODO: implements all methods mentioned in the scaladoc of [[SparkSession]]
-object SparkSession extends Logging {
+object SparkSession extends api.BaseSparkSessionCompanion with Logging {
+  override private[sql] type Session = SparkSession
+
   private val MAX_CACHED_SESSIONS = 100
   private val planIdGenerator = new AtomicLong
   private var server: Option[Process] = None
@@ -535,29 +552,6 @@ object SparkSession extends Logging {
     .build(new CacheLoader[Configuration, SparkSession] {
       override def load(c: Configuration): SparkSession = create(c)
     })
-
-  /** The active SparkSession for the current thread. */
-  private val activeThreadSession = new InheritableThreadLocal[SparkSession]
-
-  /** Reference to the root SparkSession. */
-  private val defaultSession = new AtomicReference[SparkSession]
-
-  /**
-   * Set the (global) default [[SparkSession]], and (thread-local) active [[SparkSession]] when
-   * they are not set yet or the associated [[SparkConnectClient]] is unusable.
-   */
-  private def setDefaultAndActiveSession(session: SparkSession): Unit = {
-    val currentDefault = defaultSession.getAcquire
-    if (currentDefault == null || !currentDefault.client.isSessionValid) {
-      // Update `defaultSession` if it is null or the contained session is not valid. There is a
-      // chance that the following `compareAndSet` fails if a new default session has just been set,
-      // but that does not matter since that event has happened after this method was invoked.
-      defaultSession.compareAndSet(currentDefault, session)
-    }
-    if (getActiveSession.isEmpty) {
-      setActiveSession(session)
-    }
-  }
 
   /**
    * Create a new Spark Connect server to connect locally.
@@ -612,32 +606,21 @@ object SparkSession extends Logging {
   }
 
   /**
-   * Hook called when a session is closed.
-   */
-  private[sql] def onSessionClose(session: SparkSession): Unit = {
-    sessions.invalidate(session.client.configuration)
-    defaultSession.compareAndSet(session, null)
-    if (getActiveSession.contains(session)) {
-      clearActiveSession()
-    }
-  }
-
-  /**
    * Creates a [[SparkSession.Builder]] for constructing a [[SparkSession]].
    *
    * @since 3.4.0
    */
   def builder(): Builder = new Builder()
 
-  class Builder() extends Logging {
+  class Builder() extends api.SparkSessionBuilder {
     // Initialize the connection string of the Spark Connect client builder from SPARK_REMOTE
     // by default, if it exists. The connection string can be overridden using
     // the remote() function, as it takes precedence over the SPARK_REMOTE environment variable.
     private val builder = SparkConnectClient.builder().loadFromEnvironment()
     private var client: SparkConnectClient = _
-    private[this] val options = new scala.collection.mutable.HashMap[String, String]
 
-    def remote(connectionString: String): Builder = {
+    /** @inheritdoc */
+    def remote(connectionString: String): this.type = {
       builder.connectionString(connectionString)
       this
     }
@@ -649,93 +632,45 @@ object SparkSession extends Logging {
      *
      * @since 3.5.0
      */
-    def interceptor(interceptor: ClientInterceptor): Builder = {
+    def interceptor(interceptor: ClientInterceptor): this.type = {
       builder.interceptor(interceptor)
       this
     }
 
-    private[sql] def client(client: SparkConnectClient): Builder = {
+    private[sql] def client(client: SparkConnectClient): this.type = {
       this.client = client
       this
     }
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to the
-     * Spark Connect session. Only runtime options are supported.
-     *
-     * @since 3.5.0
-     */
-    def config(key: String, value: String): Builder = synchronized {
-      options += key -> value
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: String): this.type = super.config(key, value)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to the
-     * Spark Connect session. Only runtime options are supported.
-     *
-     * @since 3.5.0
-     */
-    def config(key: String, value: Long): Builder = synchronized {
-      options += key -> value.toString
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: Long): this.type = super.config(key, value)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to the
-     * Spark Connect session. Only runtime options are supported.
-     *
-     * @since 3.5.0
-     */
-    def config(key: String, value: Double): Builder = synchronized {
-      options += key -> value.toString
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: Double): this.type = super.config(key, value)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to the
-     * Spark Connect session. Only runtime options are supported.
-     *
-     * @since 3.5.0
-     */
-    def config(key: String, value: Boolean): Builder = synchronized {
-      options += key -> value.toString
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: Boolean): this.type = super.config(key, value)
 
-    /**
-     * Sets a config a map of options. Options set using this method are automatically propagated
-     * to the Spark Connect session. Only runtime options are supported.
-     *
-     * @since 3.5.0
-     */
-    def config(map: Map[String, Any]): Builder = synchronized {
-      map.foreach { kv: (String, Any) =>
-        {
-          options += kv._1 -> kv._2.toString
-        }
-      }
-      this
-    }
+    /** @inheritdoc */
+    override def config(map: Map[String, Any]): this.type = super.config(map)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to both
-     * `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 3.5.0
-     */
-    def config(map: java.util.Map[String, Any]): Builder = synchronized {
-      config(map.asScala.toMap)
-    }
+    /** @inheritdoc */
+    override def config(map: java.util.Map[String, Any]): this.type = super.config(map)
 
+    /** @inheritdoc */
     @deprecated("enableHiveSupport does not work in Spark Connect")
-    def enableHiveSupport(): Builder = this
+    override def enableHiveSupport(): this.type = this
 
+    /** @inheritdoc */
     @deprecated("master does not work in Spark Connect, please use remote instead")
-    def master(master: String): Builder = this
+    override def master(master: String): this.type = this
 
+    /** @inheritdoc */
     @deprecated("appName does not work in Spark Connect")
-    def appName(name: String): Builder = this
+    override def appName(name: String): this.type = this
 
     private def tryCreateSessionFromClient(): Option[SparkSession] = {
       if (client != null && client.isSessionValid) {
@@ -816,71 +751,12 @@ object SparkSession extends Logging {
     }
   }
 
-  /**
-   * Returns the default SparkSession. If the previously set default SparkSession becomes
-   * unusable, returns None.
-   *
-   * @since 3.5.0
-   */
-  def getDefaultSession: Option[SparkSession] =
-    Option(defaultSession.get()).filter(_.client.isSessionValid)
+  /** @inheritdoc */
+  override def getActiveSession: Option[SparkSession] = super.getActiveSession
 
-  /**
-   * Sets the default SparkSession.
-   *
-   * @since 3.5.0
-   */
-  def setDefaultSession(session: SparkSession): Unit = {
-    defaultSession.set(session)
-  }
+  /** @inheritdoc */
+  override def getDefaultSession: Option[SparkSession] = super.getDefaultSession
 
-  /**
-   * Clears the default SparkSession.
-   *
-   * @since 3.5.0
-   */
-  def clearDefaultSession(): Unit = {
-    defaultSession.set(null)
-  }
-
-  /**
-   * Returns the active SparkSession for the current thread. If the previously set active
-   * SparkSession becomes unusable, returns None.
-   *
-   * @since 3.5.0
-   */
-  def getActiveSession: Option[SparkSession] =
-    Option(activeThreadSession.get()).filter(_.client.isSessionValid)
-
-  /**
-   * Changes the SparkSession that will be returned in this thread and its children when
-   * SparkSession.getOrCreate() is called. This can be used to ensure that a given thread receives
-   * an isolated SparkSession.
-   *
-   * @since 3.5.0
-   */
-  def setActiveSession(session: SparkSession): Unit = {
-    activeThreadSession.set(session)
-  }
-
-  /**
-   * Clears the active SparkSession for current thread.
-   *
-   * @since 3.5.0
-   */
-  def clearActiveSession(): Unit = {
-    activeThreadSession.remove()
-  }
-
-  /**
-   * Returns the currently active SparkSession, otherwise the default one. If there is no default
-   * SparkSession, throws an exception.
-   *
-   * @since 3.5.0
-   */
-  def active: SparkSession = {
-    getActiveSession
-      .orElse(getDefaultSession)
-      .getOrElse(throw new IllegalStateException("No active or default Spark session found"))
-  }
+  /** @inheritdoc */
+  override def active: SparkSession = super.active
 }

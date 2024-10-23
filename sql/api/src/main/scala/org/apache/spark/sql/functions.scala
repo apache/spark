@@ -389,8 +389,17 @@ object functions {
   def count_min_sketch(e: Column, eps: Column, confidence: Column, seed: Column): Column =
     Column.fn("count_min_sketch", e, eps, confidence, seed)
 
-  private[spark] def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
-    Column.internalFn("collect_top_k", e, lit(num), lit(reverse))
+  /**
+   * Returns a count-min sketch of a column with the given esp, confidence and seed. The result is
+   * an array of bytes, which can be deserialized to a `CountMinSketch` before usage. Count-min
+   * sketch is a probabilistic data structure used for cardinality estimation using sub-linear
+   * space.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def count_min_sketch(e: Column, eps: Column, confidence: Column): Column =
+    count_min_sketch(e, eps, confidence, lit(SparkClassUtils.random.nextLong))
 
   /**
    * Aggregate function: returns the Pearson Correlation Coefficient for two columns.
@@ -1714,7 +1723,7 @@ object functions {
    * @group normal_funcs
    * @since 1.5.0
    */
-  def broadcast[DS[U] <: api.Dataset[U, DS]](df: DS[_]): df.type = {
+  def broadcast[DS[U] <: api.Dataset[U]](df: DS[_]): df.type = {
     df.hint("broadcast").asInstanceOf[df.type]
   }
 
@@ -1883,6 +1892,27 @@ object functions {
    * @since 1.4.0
    */
   def randn(): Column = randn(SparkClassUtils.random.nextLong)
+
+  /**
+   * Returns a string of the specified length whose characters are chosen uniformly at random from
+   * the following pool of characters: 0-9, a-z, A-Z. The string length must be a constant
+   * two-byte or four-byte integer (SMALLINT or INT, respectively).
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def randstr(length: Column): Column =
+    randstr(length, lit(SparkClassUtils.random.nextLong))
+
+  /**
+   * Returns a string of the specified length whose characters are chosen uniformly at random from
+   * the following pool of characters: 0-9, a-z, A-Z, with the chosen random seed. The string
+   * length must be a constant two-byte or four-byte integer (SMALLINT or INT, respectively).
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def randstr(length: Column, seed: Column): Column = Column.fn("randstr", length, seed)
 
   /**
    * Partition ID.
@@ -3729,6 +3759,32 @@ object functions {
   def stack(cols: Column*): Column = Column.fn("stack", cols: _*)
 
   /**
+   * Returns a random value with independent and identically distributed (i.i.d.) values with the
+   * specified range of numbers. The provided numbers specifying the minimum and maximum values of
+   * the range must be constant. If both of these numbers are integers, then the result will also
+   * be an integer. Otherwise if one or both of these are floating-point numbers, then the result
+   * will also be a floating-point number.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def uniform(min: Column, max: Column): Column =
+    uniform(min, max, lit(SparkClassUtils.random.nextLong))
+
+  /**
+   * Returns a random value with independent and identically distributed (i.i.d.) values with the
+   * specified range of numbers, with the chosen random seed. The provided numbers specifying the
+   * minimum and maximum values of the range must be constant. If both of these numbers are
+   * integers, then the result will also be an integer. Otherwise if one or both of these are
+   * floating-point numbers, then the result will also be a floating-point number.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def uniform(min: Column, max: Column, seed: Column): Column =
+    Column.fn("uniform", min, max, seed)
+
+  /**
    * Returns a random value with independent and identically distributed (i.i.d.) uniformly
    * distributed values in [0, 1).
    *
@@ -3856,6 +3912,44 @@ object functions {
    */
   def encode(value: Column, charset: String): Column =
     Column.fn("encode", value, lit(charset))
+
+  /**
+   * Returns true if the input is a valid UTF-8 string, otherwise returns false.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def is_valid_utf8(str: Column): Column =
+    Column.fn("is_valid_utf8", str)
+
+  /**
+   * Returns a new string in which all invalid UTF-8 byte sequences, if any, are replaced by the
+   * Unicode replacement character (U+FFFD).
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def make_valid_utf8(str: Column): Column =
+    Column.fn("make_valid_utf8", str)
+
+  /**
+   * Returns the input value if it corresponds to a valid UTF-8 string, or emits a
+   * SparkIllegalArgumentException exception otherwise.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def validate_utf8(str: Column): Column =
+    Column.fn("validate_utf8", str)
+
+  /**
+   * Returns the input value if it corresponds to a valid UTF-8 string, or NULL otherwise.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def try_validate_utf8(str: Column): Column =
+    Column.fn("try_validate_utf8", str)
 
   /**
    * Formats numeric column x to a format like '#,###,###.##', rounded to d decimal places with
@@ -4007,7 +4101,14 @@ object functions {
    * @group string_funcs
    * @since 2.3.0
    */
-  def ltrim(e: Column, trimString: String): Column = Column.fn("ltrim", lit(trimString), e)
+  def ltrim(e: Column, trimString: String): Column = ltrim(e, lit(trimString))
+
+  /**
+   * Trim the specified character string from left end for the specified string column.
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def ltrim(e: Column, trim: Column): Column = Column.fn("ltrim", trim, e)
 
   /**
    * Calculates the byte length for the specified string column.
@@ -4204,7 +4305,14 @@ object functions {
    * @group string_funcs
    * @since 2.3.0
    */
-  def rtrim(e: Column, trimString: String): Column = Column.fn("rtrim", lit(trimString), e)
+  def rtrim(e: Column, trimString: String): Column = rtrim(e, lit(trimString))
+
+  /**
+   * Trim the specified character string from right end for the specified string column.
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def rtrim(e: Column, trim: Column): Column = Column.fn("rtrim", trim, e)
 
   /**
    * Returns the soundex code for the specified expression.
@@ -4390,7 +4498,14 @@ object functions {
    * @group string_funcs
    * @since 2.3.0
    */
-  def trim(e: Column, trimString: String): Column = Column.fn("trim", lit(trimString), e)
+  def trim(e: Column, trimString: String): Column = trim(e, lit(trimString))
+
+  /**
+   * Trim the specified character from both ends for the specified string column.
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def trim(e: Column, trim: Column): Column = Column.fn("trim", trim, e)
 
   /**
    * Converts a string column to upper case.
@@ -4562,6 +4677,24 @@ object functions {
    * @since 3.5.0
    */
   def substr(str: Column, pos: Column): Column = Column.fn("substr", str, pos)
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group url_funcs
+   * @since 4.0.0
+   */
+  def try_parse_url(url: Column, partToExtract: Column, key: Column): Column =
+    Column.fn("try_parse_url", url, partToExtract, key)
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group url_funcs
+   * @since 4.0.0
+   */
+  def try_parse_url(url: Column, partToExtract: Column): Column =
+    Column.fn("try_parse_url", url, partToExtract)
 
   /**
    * Extracts a part from a URL.
@@ -7240,7 +7373,18 @@ object functions {
    * @group array_funcs
    * @since 2.4.0
    */
-  def shuffle(e: Column): Column = Column.fn("shuffle", e, lit(SparkClassUtils.random.nextLong))
+  def shuffle(e: Column): Column = shuffle(e, lit(SparkClassUtils.random.nextLong))
+
+  /**
+   * Returns a random permutation of the given array.
+   *
+   * @note
+   *   The function is non-deterministic.
+   *
+   * @group array_funcs
+   * @since 4.0.0
+   */
+  def shuffle(e: Column, seed: Column): Column = Column.fn("shuffle", e, seed)
 
   /**
    * Returns a reversed string or an array with reverse order of elements.

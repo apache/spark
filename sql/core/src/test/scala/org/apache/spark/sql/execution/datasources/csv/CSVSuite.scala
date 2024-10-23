@@ -85,6 +85,7 @@ abstract class CSVSuite
   private val badAfterGoodFile = "test-data/bad_after_good.csv"
   private val malformedRowFile = "test-data/malformedRow.csv"
   private val charFile = "test-data/char.csv"
+  private val moreColumnsFile = "test-data/more-columns.csv"
 
   /** Verifies data and schema. */
   private def verifyCars(
@@ -391,7 +392,7 @@ abstract class CSVSuite
         condition = "FAILED_READ_FILE.NO_HINT",
         parameters = Map("path" -> s".*$carsFile.*"))
       val e2 = e1.getCause.asInstanceOf[SparkException]
-      assert(e2.getErrorClass == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
+      assert(e2.getCondition == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
       checkError(
         exception = e2.getCause.asInstanceOf[SparkRuntimeException],
         condition = "MALFORMED_CSV_RECORD",
@@ -1509,8 +1510,9 @@ abstract class CSVSuite
             .csv(testFile(valueMalformedFile))
             .collect()
         },
-        condition = "_LEGACY_ERROR_TEMP_1097",
-        parameters = Map.empty
+        condition = "INVALID_CORRUPT_RECORD_TYPE",
+        parameters = Map(
+          "columnName" -> toSQLId(columnNameOfCorruptRecord), "actualType" -> "\"INT\"")
       )
     }
   }
@@ -3438,6 +3440,39 @@ abstract class CSVSuite
         sql("SELECT * FROM charVarcharTable"),
         expected)
     }
+  }
+
+  test("SPARK-49444: CSV parsing failure with more than max columns") {
+    val schema = new StructType()
+      .add("intColumn", IntegerType, nullable = true)
+      .add("decimalColumn", DecimalType(10, 2), nullable = true)
+
+    val fileReadException = intercept[SparkException] {
+      spark
+        .read
+        .schema(schema)
+        .option("header", "false")
+        .option("maxColumns", "2")
+        .csv(testFile(moreColumnsFile))
+        .collect()
+    }
+
+    checkErrorMatchPVals(
+      exception = fileReadException,
+      condition = "FAILED_READ_FILE.NO_HINT",
+      parameters = Map("path" -> s".*$moreColumnsFile"))
+
+    val malformedCSVException = fileReadException.getCause.asInstanceOf[SparkRuntimeException]
+
+    checkError(
+      exception = malformedCSVException,
+      condition = "MALFORMED_CSV_RECORD",
+      parameters = Map("badRecord" -> "1,3.14,string,5,7"),
+      sqlState = "KD000")
+
+    assert(malformedCSVException.getCause.isInstanceOf[TextParsingException])
+    val textParsingException = malformedCSVException.getCause.asInstanceOf[TextParsingException]
+    assert(textParsingException.getCause.isInstanceOf[ArrayIndexOutOfBoundsException])
   }
 }
 

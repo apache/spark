@@ -1,2 +1,2 @@
-Project [schema_of_csv(1|abc, (sep,|)) AS schema_of_csv(1|abc)#0]
+Project [invoke(SchemaOfCsvEvaluator(Map(sep -> |)).evaluate(1|abc)) AS schema_of_csv(1|abc)#0]
 +- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]
