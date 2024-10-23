@@ -19,15 +19,19 @@ package org.apache.spark.deploy.k8s.submit
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+
 import scala.collection.JavaConverters._
+
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.api.model.apiextensions.v1.{CustomResourceDefinition, CustomResourceDefinitionBuilder}
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
 import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.Mockito.{verify, when}
+import org.mockito.MockitoSugar.withObjectSpied
 import org.scalatest.BeforeAndAfter
 import org.scalatestplus.mockito.MockitoSugar._
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{Config, _}
 import org.apache.spark.deploy.k8s.Config.WAIT_FOR_APP_COMPLETION
@@ -35,7 +39,6 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.deploy.k8s.submit.Client.submissionId
 import org.apache.spark.util.Utils
-import org.mockito.MockitoSugar.withObjectSpied
 
 class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -334,7 +337,8 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
         resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX))
 
       assert(kconf.sparkConf.getOption("spark.home").isDefined)
-      when(driverBuilder.buildFromFeatures(kconf, kubernetesClient)).thenReturn(BUILT_KUBERNETES_SPEC)
+      when(driverBuilder.buildFromFeatures(kconf, kubernetesClient))
+        .thenReturn(BUILT_KUBERNETES_SPEC)
 
       val submissionClient = new Client(
         kconf,
