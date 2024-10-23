@@ -2755,34 +2755,6 @@ class SubquerySuite extends QueryTest
     }
   }
 
-  test("stuffing") {
-    withTable("v1", "v2") {
-      sql("""create or replace temp view v1 (c1, c2, c3) as values
-            |(1, 2, 2), (1, 5, 3), (2, 0, 4), (3, 7, 7), (3, 8, 8)""".stripMargin)
-      sql("""create or replace temp view v2 (col1, col2, col3) as values
-            |(1, 2, 2), (1, 3, 3), (2, 2, 4), (3, 7, 7), (3, 1, 1)""".stripMargin)
-
-      val df1 = sql("select col1, sum(col2) in (select c3 from v1) from v2 group by col1")
-      checkAnswer(df1,
-        Row(1, false) :: Row(2, true) :: Row(3, true) :: Nil)
-
-      val df2 = sql("""select
-                      | col1,
-                      | sum(col2) in (select c3 from v1) and sum(col3) in (select c2 from v1) as x
-                      |from v2 group by col1
-                      |order by col1""".stripMargin)
-      checkAnswer(df2,
-        Row(1, false) :: Row(2, false) :: Row(3, true) :: Nil)
-
-      val df3 = sql("""select col1, (sum(col2), sum(col3)) in (select c3, c2 from v1) as x
-                      |from v2
-                      |group by col1
-                      |order by col1;""".stripMargin)
-      checkAnswer(df3,
-        Row(1, false) :: Row(2, false) :: Row(3, true) :: Nil)
-    }
-  }
-
   test("SPARK-45580: Handle case where a nested subquery becomes an existence join") {
     withTempView("t1", "t2", "t3") {
       Seq((1), (2), (3), (7)).toDF("a").persist().createOrReplaceTempView("t1")
@@ -2826,6 +2798,34 @@ class SubquerySuite extends QueryTest
           |)""".stripMargin
       val df3 = sql(query3)
       checkAnswer(df3, Row(7))
+    }
+  }
+
+  test("stuffing") {
+    withTable("v1", "v2") {
+      sql("""CREATE OR REPLACE TEMP VIEW v1 (c1, c2, c3) AS VALUES
+            |(1, 2, 2), (1, 5, 3), (2, 0, 4), (3, 7, 7), (3, 8, 8)""".stripMargin)
+      sql("""CREATE OR REPLACE TEMP VIEW v2 (col1, col2, col3) AS VALUES
+            |(1, 2, 2), (1, 3, 3), (2, 2, 4), (3, 7, 7), (3, 1, 1)""".stripMargin)
+
+      val df1 = sql("SELECT col1, SUM(col2) IN (SELECT c3 FROM v1) FROM v2 GROUP BY col1")
+      checkAnswer(df1,
+        Row(1, false) :: Row(2, true) :: Row(3, true) :: Nil)
+
+      val df2 = sql("""SELECT
+                      |  col1,
+                      |  SUM(col2) IN (SELECT c3 FROM v1) and SUM(col3) IN (SELECT c2 FROM v1) AS x
+                      |FROM v2 GROUP BY col1
+                      |ORDER BY col1""".stripMargin)
+      checkAnswer(df2,
+        Row(1, false) :: Row(2, false) :: Row(3, true) :: Nil)
+
+      val df3 = sql("""SELECT col1, (SUM(col2), SUM(col3)) IN (SELECT c3, c2 FROM v1) AS x
+                      |FROM v2
+                      |GROUP BY col1
+                      |ORDER BY col1""".stripMargin)
+      checkAnswer(df3,
+        Row(1, false) :: Row(2, false) :: Row(3, true) :: Nil)
     }
   }
 }
