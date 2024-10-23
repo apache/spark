@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.immutable
 import scala.collection.immutable.TreeSet
 
+import org.apache.spark.SparkUnsupportedOperationException
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -783,9 +785,9 @@ object InSet {
       if (s == null) null
       else CollationAwareUTF8String.lowerCaseCodePoints(s.asInstanceOf[UTF8String])
     }
-    override def incl(elem: Any): Set[Any] = inputSet.incl(elem)
-    override def excl(elem: Any): Set[Any] = inputSet.excl(elem)
-    override def iterator: Iterator[Any] = inputSet.iterator
+    override def incl(elem: Any): Set[Any] = throw SparkUnsupportedOperationException()
+    override def excl(elem: Any): Set[Any] = throw SparkUnsupportedOperationException()
+    override def iterator: Iterator[Any] = throw SparkUnsupportedOperationException()
     override def contains(elem: Any): Boolean = {
       assert(elem != null, "InSet guarantees non-null input")
       strSet.contains(CollationAwareUTF8String.lowerCaseCodePoints(elem.asInstanceOf[UTF8String]))
@@ -793,9 +795,9 @@ object InSet {
   }
   class CollationAwareSet(inputSet: Set[Any], collationId: Int)
     extends immutable.Set[Any] with Serializable {
-    override def incl(elem: Any): Set[Any] = inputSet.incl(elem)
-    override def excl(elem: Any): Set[Any] = inputSet.excl(elem)
-    override def iterator: Iterator[Any] = inputSet.iterator
+    override def incl(elem: Any): Set[Any] = throw SparkUnsupportedOperationException()
+    override def excl(elem: Any): Set[Any] = throw SparkUnsupportedOperationException()
+    override def iterator: Iterator[Any] = throw SparkUnsupportedOperationException()
     override def contains(elem: Any): Boolean = {
       assert(elem != null, "InSet guarantees non-null input")
       val collation = CollationFactory.fetchCollation(collationId)
