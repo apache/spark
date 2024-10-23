@@ -1,2 +1,2 @@
-Project [xpath(s#0, a/b/text()) AS xpath(s, a/b/text())#0]
+Project [invoke(XPathEvaluator(a/b/text()).evaluate(s#0, ArrayType(StringType,true))) AS xpath(s, a/b/text())#0]
 +- LocalRelation <empty>, [d#0, t#0, s#0, x#0L, wt#0]

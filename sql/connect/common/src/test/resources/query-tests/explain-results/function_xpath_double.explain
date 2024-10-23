@@ -1,2 +1,2 @@
-Project [xpath_double(s#0, a/b) AS xpath_double(s, a/b)#0]
+Project [invoke(XPathEvaluator(a/b).evaluate(s#0, DoubleType)) AS xpath_double(s, a/b)#0]
 +- LocalRelation <empty>, [d#0, t#0, s#0, x#0L, wt#0]
