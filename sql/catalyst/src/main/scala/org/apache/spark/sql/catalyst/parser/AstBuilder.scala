@@ -40,10 +40,10 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AnyValue, First, Las
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils, SparkParserUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -1512,13 +1512,16 @@ class AstBuilder extends DataTypeAstBuilder
           if (!allowNamedGroupingExpressions && (n.name != null || n.identifierList != null)) {
             // If we do not allow grouping expressions to have aliases in this context, we throw a
             // syntax error here to specify the precise location of the error.
-            val error = (if (n.name != null) n.name else n.identifierList).getText
+            val error: String = (if (n.name != null) n.name else n.identifierList).getText
             throw new ParseException(
+              command = Some(SparkParserUtils.command(n)),
+              start = Origin(),
+              stop = Origin(),
               errorClass = "PARSE_SYNTAX_ERROR",
               messageParameters = Map(
                 "error" -> s"'$error'",
                 "hint" -> s": extra input '$error'"),
-              n)
+              queryContext = Array.empty)
           }
           visitNamedExpression(n)
         }.toSeq

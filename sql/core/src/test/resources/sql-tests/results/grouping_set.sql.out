@@ -140,14 +140,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "messageParameters" : {
     "error" : "'ROLLUP'",
     "hint" : ": extra input 'ROLLUP'"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 40,
-    "stopIndex" : 59,
-    "fragment" : "GROUP BY WITH ROLLUP"
-  } ]
+  }
 }
 
 
@@ -163,14 +156,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "messageParameters" : {
     "error" : "'CUBE'",
     "hint" : ": extra input 'CUBE'"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 40,
-    "stopIndex" : 57,
-    "fragment" : "GROUP BY WITH CUBE"
-  } ]
+  }
 }
 
 

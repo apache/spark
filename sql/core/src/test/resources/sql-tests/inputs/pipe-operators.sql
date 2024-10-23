@@ -677,6 +677,24 @@ table windowTestData
 -- Aggregation operators: positive tests.
 -----------------------------------------
 
+-- Basic aggregation with a GROUP BY clause. The resulting table contains all the attributes from
+-- the grouping keys followed by all the attributes from the aggregate functions, in order.
+table other
+|> aggregate sum(b) as result group by a;
+
+-- Basic aggregation with a GROUP BY clause, followed by a SELECT of just the aggregate function.
+-- This restricts the output attributes to just the aggregate function.
+table other
+|> aggregate sum(b) as result group by a
+|> select result;
+
+-- Basic aggregation with a GROUP BY clause, followed by a SELECT of just the grouping expression.
+-- This restricts the output attributes to just the grouping expression. Note that we must use an
+-- alias for the grouping expression to refer to it in the SELECT clause.
+table other
+|> aggregate sum(b) group by a + 1 as gkey
+|> select gkey;
+
 -- Basic aggregation on a constant table.
 select 1 as x, 2 as y
 |> aggregate group by x, y;
@@ -684,10 +702,6 @@ select 1 as x, 2 as y
 -- Basic aggregation with group by ordinals.
 select 3 as x, 4 as y
 |> aggregate group by 1, 2;
-
--- Basic aggregation with a GROUP BY clause.
-table other
-|> aggregate sum(b) as result group by a;
 
 -- Basic table aggregation.
 table t

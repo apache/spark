@@ -1963,6 +1963,38 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+table other
+|> aggregate sum(b) as result group by a
+-- !query schema
+struct<a:int,result:bigint>
+-- !query output
+1	3
+2	4
+
+
+-- !query
+table other
+|> aggregate sum(b) as result group by a
+|> select result
+-- !query schema
+struct<result:bigint>
+-- !query output
+3
+4
+
+
+-- !query
+table other
+|> aggregate sum(b) group by a + 1 as gkey
+|> select gkey
+-- !query schema
+struct<gkey:int>
+-- !query output
+2
+3
+
+
+-- !query
 select 1 as x, 2 as y
 |> aggregate group by x, y
 -- !query schema
@@ -1978,16 +2010,6 @@ select 3 as x, 4 as y
 struct<1:int,2:int>
 -- !query output
 1	2
-
-
--- !query
-table other
-|> aggregate sum(b) as result group by a
--- !query schema
-struct<a:int,result:bigint>
--- !query output
-1	3
-2	4
 
 
 -- !query

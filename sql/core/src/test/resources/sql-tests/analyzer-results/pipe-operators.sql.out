@@ -2318,6 +2318,37 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+table other
+|> aggregate sum(b) as result group by a
+-- !query analysis
+Aggregate [a#x], [a#x, sum(b#x) AS result#xL]
++- SubqueryAlias spark_catalog.default.other
+   +- Relation spark_catalog.default.other[a#x,b#x] json
+
+
+-- !query
+table other
+|> aggregate sum(b) as result group by a
+|> select result
+-- !query analysis
+Project [result#xL]
++- Aggregate [a#x], [a#x, sum(b#x) AS result#xL]
+   +- SubqueryAlias spark_catalog.default.other
+      +- Relation spark_catalog.default.other[a#x,b#x] json
+
+
+-- !query
+table other
+|> aggregate sum(b) group by a + 1 as gkey
+|> select gkey
+-- !query analysis
+Project [gkey#x]
++- Aggregate [(a#x + 1)], [(a#x + 1) AS gkey#x, sum(b#x) AS sum(b)#xL]
+   +- SubqueryAlias spark_catalog.default.other
+      +- Relation spark_catalog.default.other[a#x,b#x] json
+
+
+-- !query
 select 1 as x, 2 as y
 |> aggregate group by x, y
 -- !query analysis
@@ -2333,15 +2364,6 @@ select 3 as x, 4 as y
 Aggregate [1, 2], [1 AS 1#x, 2 AS 2#x]
 +- Project [3 AS x#x, 4 AS y#x]
    +- OneRowRelation
-
-
--- !query
-table other
-|> aggregate sum(b) as result group by a
--- !query analysis
-Aggregate [a#x], [a#x, sum(b#x) AS result#xL]
-+- SubqueryAlias spark_catalog.default.other
-   +- Relation spark_catalog.default.other[a#x,b#x] json
 
 
 -- !query
