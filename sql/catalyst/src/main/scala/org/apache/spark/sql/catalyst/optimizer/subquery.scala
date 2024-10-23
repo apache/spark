@@ -116,18 +116,18 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-  def aggregateExprsNestedInSubquery(exprs: Seq[Expression]): Boolean = {
+  def exprsContainsAggregateInSubquery(exprs: Seq[Expression]): Boolean = {
     exprs.exists { expr =>
-      aggregateExprContainsNestedInSubquery(expr)
+      exprContainsAggregateInSubquery(expr)
     }
   }
 
-  def aggregateExprContainsNestedInSubquery(expr: Expression): Boolean = {
+  def exprContainsAggregateInSubquery(expr: Expression): Boolean = {
     expr.exists {
       case InSubquery(values, _) =>
         values.exists { v =>
           v.exists {
-            case a: AggregateExpression => true
+            case _: AggregateExpression => true
             case _ => false
           }
         }
@@ -266,9 +266,9 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
             condition = Some(newCondition)))
         }
       }
-    case a: Aggregate if aggregateExprsNestedInSubquery(a.aggregateExpressions) =>
+    case a: Aggregate if exprsContainsAggregateInSubquery(a.aggregateExpressions) =>
       // find expressions with an in-subquery whose values contain aggregates
-      val withInsubquery = a.aggregateExpressions.filter(aggregateExprContainsNestedInSubquery(_))
+      val withInsubquery = a.aggregateExpressions.filter(exprContainsAggregateInSubquery(_))
 
       // extract the aggregate expressions from withInsubquery
       val inSubqueryMapping = withInsubquery.map { e =>
