@@ -8608,7 +8608,7 @@ def date_part(field: Column, source: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    field : :class:`~pyspark.sql.Column` or str
+    field : :class:`~pyspark.sql.Column`
         selects which part of the source should be extracted, and supported string values
         are as same as the fields of the equivalent function `extract`.
     source : :class:`~pyspark.sql.Column` or str
@@ -8645,7 +8645,7 @@ def datepart(field: Column, source: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    field : :class:`~pyspark.sql.Column` or str
+    field : :class:`~pyspark.sql.Column`
         selects which part of the source should be extracted, and supported string values
         are as same as the fields of the equivalent function `extract`.
     source : :class:`~pyspark.sql.Column` or str
