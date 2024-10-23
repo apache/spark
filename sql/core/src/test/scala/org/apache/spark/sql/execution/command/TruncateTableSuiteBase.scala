@@ -21,6 +21,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -103,10 +104,15 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       }
 
       // throw exception if the column in partition spec is not a partition column.
-      val errMsg = intercept[AnalysisException] {
-        sql(s"TRUNCATE TABLE $t PARTITION (unknown = 1)")
-      }.getMessage
-      assert(errMsg.contains("unknown is not a valid partition column"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"TRUNCATE TABLE $t PARTITION (unknown = 1)")
+        },
+        condition = "PARTITIONS_NOT_FOUND",
+        parameters = Map(
+          "partitionList" -> "`unknown`",
+          "tableName" -> s"`$SESSION_CATALOG_NAME`.`ns`.`partTable`")
+      )
     }
   }
 
@@ -145,10 +151,15 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"INSERT INTO $t PARTITION (id=0) SELECT 'abc'")
       sql(s"INSERT INTO $t PARTITION (id=1) SELECT 'def'")
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        val errMsg = intercept[AnalysisException] {
-          sql(s"TRUNCATE TABLE $t PARTITION (ID=1)")
-        }.getMessage
-        assert(errMsg.contains("ID is not a valid partition column"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"TRUNCATE TABLE $t PARTITION (ID=1)")
+          },
+          condition = "PARTITIONS_NOT_FOUND",
+          parameters = Map(
+            "partitionList" -> "`ID`",
+            "tableName" -> s"`$SESSION_CATALOG_NAME`.`ns`.`tbl`")
+        )
       }
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         sql(s"TRUNCATE TABLE $t PARTITION (ID=1)")

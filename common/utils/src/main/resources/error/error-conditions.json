@@ -6515,11 +6515,6 @@
       "Decimal scale (<scale>) cannot be greater than precision (<precision>)."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1231" : {
-    "message" : [
-      "<key> is not a valid partition column in table <tblName>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1232" : {
     "message" : [
       "Partition spec is invalid. The spec (<specKeys>) must match the partition spec (<partitionColumnNames>) defined in table '<tableName>'."
