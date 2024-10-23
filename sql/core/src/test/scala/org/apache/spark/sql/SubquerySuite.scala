@@ -2801,7 +2801,7 @@ class SubquerySuite extends QueryTest
     }
   }
 
-  test("stuffing") {
+  test("SPARK-50091: Handle aggregates in left-hand operand of IN-subquery") {
     withTable("v1", "v2") {
       sql("""CREATE OR REPLACE TEMP VIEW v1 (c1, c2, c3) AS VALUES
             |(1, 2, 2), (1, 5, 3), (2, 0, 4), (3, 7, 7), (3, 8, 8)""".stripMargin)
