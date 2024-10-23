@@ -225,7 +225,10 @@ def lit(col: Any) -> Column:
         if _has_numpy and isinstance(col, np.generic):
             dt = _from_numpy_type(col.dtype)
             if dt is not None:
-                return _invoke_function("lit", _enum_to_value(col)).astype(dt).alias(str(col))
+                if isinstance(col, np.number):
+                    return _invoke_function("lit", col).astype(dt).alias(str(col))
+                else:
+                    return _invoke_function("lit", col)
         return _invoke_function("lit", _enum_to_value(col))
 
 
