@@ -413,6 +413,34 @@ class DataFramePlotPlotlyTestsMixin:
         self._check_fig_data(fig["data"][1], **expected_fig_data)
         self.assertEqual(list(fig["data"][0]["x"]), list(fig["data"][1]["x"]))
 
+    def test_hist_plot(self):
+        fig = self.sdf2.plot.hist(column="length", bins=4)
+        expected_fig_data = {
+            "name": "length",
+            "x": [5.1625000000000005, 5.6875, 6.2125, 6.7375],
+            "y": [2, 1, 1, 1],
+            "text": ("[4.9, 5.425)", "[5.425, 5.95)", "[5.95, 6.475)", "[6.475, 7.0]"),
+            "type": "bar",
+        }
+        self._check_fig_data(fig["data"][0], **expected_fig_data)
+        fig = self.sdf2.plot.hist(column=["length", "width"], bins=4)
+        expected_fig_data = {
+            "name": "length",
+            "x": [3.5, 4.5, 5.5, 6.5],
+            "y": [0, 1, 2, 2],
+            "text": ("[3.0, 4.0)", "[4.0, 5.0)", "[5.0, 6.0)", "[6.0, 7.0]"),
+            "type": "bar",
+        }
+        self._check_fig_data(fig["data"][0], **expected_fig_data)
+        expected_fig_data = {
+            "name": "width",
+            "x": [3.5, 4.5, 5.5, 6.5],
+            "y": [5, 0, 0, 0],
+            "text": ("[3.0, 4.0)", "[4.0, 5.0)", "[5.0, 6.0)", "[6.0, 7.0]"),
+            "type": "bar",
+        }
+        self._check_fig_data(fig["data"][1], **expected_fig_data)
+
 
 class DataFramePlotPlotlyTests(DataFramePlotPlotlyTestsMixin, ReusedSQLTestCase):
     pass

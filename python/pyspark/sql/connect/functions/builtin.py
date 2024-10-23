@@ -68,6 +68,8 @@ from pyspark.sql.types import (
     StructType,
     ArrayType,
     StringType,
+    ByteType,
+    ShortType,
 )
 from pyspark.sql.utils import enum_to_value as _enum_to_value
 
@@ -267,7 +269,8 @@ def lit(col: Any) -> Column:
             )
         return array(*[lit(c) for c in col])
     elif isinstance(col, np.ndarray) and col.ndim == 1:
-        if _from_numpy_type(col.dtype) is None:
+        dt = _from_numpy_type(col.dtype)
+        if dt is None:
             raise PySparkTypeError(
                 errorClass="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
                 messageParameters={"dtype": col.dtype.name},
@@ -276,10 +279,10 @@ def lit(col: Any) -> Column:
         # NumpyArrayConverter for Py4J can not support ndarray with int8 values.
         # Actually this is not a problem for Connect, but here still convert it
         # to int16 for compatibility.
-        if col.dtype == np.int8:
-            col = col.astype(np.int16)
+        if dt == ByteType():
+            dt = ShortType()
 
-        return array(*[lit(c) for c in col])
+        return array(*[lit(c) for c in col]).cast(ArrayType(dt))
     else:
         return ConnectColumn(LiteralExpression._from_value(col))
 
@@ -2816,6 +2819,18 @@ def parse_url(
 parse_url.__doc__ = pysparkfuncs.parse_url.__doc__
 
 
+def try_parse_url(
+    url: "ColumnOrName", partToExtract: "ColumnOrName", key: Optional["ColumnOrName"] = None
+) -> Column:
+    if key is not None:
+        return _invoke_function_over_columns("try_parse_url", url, partToExtract, key)
+    else:
+        return _invoke_function_over_columns("try_parse_url", url, partToExtract)
+
+
+try_parse_url.__doc__ = pysparkfuncs.try_parse_url.__doc__
+
+
 def printf(format: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     return _invoke_function("printf", _to_col(format), *[_to_col(c) for c in cols])
 
@@ -3175,21 +3190,21 @@ def dayname(col: "ColumnOrName") -> Column:
 dayname.__doc__ = pysparkfuncs.dayname.__doc__
 
 
-def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def extract(field: Column, source: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("extract", field, source)
 
 
 extract.__doc__ = pysparkfuncs.extract.__doc__
 
 
-def date_part(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def date_part(field: Column, source: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("date_part", field, source)
 
 
 extract.__doc__ = pysparkfuncs.extract.__doc__
 
 
-def datepart(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def datepart(field: Column, source: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("datepart", field, source)
 
 
