@@ -687,7 +687,7 @@ class DataFrame:
         if withReplacement is None:
             withReplacement = False
 
-        seed = int(seed) if seed is not None else None
+        seed = int(seed) if seed is not None else random.randint(0, sys.maxsize)
 
         return DataFrame.withPlan(
             plan.Sample(
@@ -2150,7 +2150,7 @@ def _test() -> None:
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")
-        .remote("local[4]")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
         .getOrCreate()
     )
 

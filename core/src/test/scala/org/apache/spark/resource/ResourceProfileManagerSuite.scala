@@ -126,18 +126,34 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val defaultProf = rpmanager.defaultResourceProfile
     assert(rpmanager.isSupported(defaultProf))
 
-    // task resource profile.
+    // Standalone: supports task resource profile.
     val gpuTaskReq = new TaskResourceRequests().resource("gpu", 1)
     val taskProf = new TaskResourceProfile(gpuTaskReq.requests)
     assert(rpmanager.isSupported(taskProf))
 
+    // Local: doesn't support task resource profile.
     conf.setMaster("local")
     rpmanager = new ResourceProfileManager(conf, listenerBus)
     val error = intercept[SparkException] {
       rpmanager.isSupported(taskProf)
     }.getMessage
-    assert(error === "TaskResourceProfiles are only supported for Standalone " +
-      "cluster for now when dynamic allocation is disabled.")
+    assert(error === "TaskResourceProfiles are only supported for Standalone, " +
+      "Yarn and Kubernetes cluster for now when dynamic allocation is disabled.")
+
+    // Local cluster: supports task resource profile.
+    conf.setMaster("local-cluster[1, 1, 1024]")
+    rpmanager = new ResourceProfileManager(conf, listenerBus)
+    assert(rpmanager.isSupported(taskProf))
+
+    // Yarn: supports task resource profile.
+    conf.setMaster("yarn")
+    rpmanager = new ResourceProfileManager(conf, listenerBus)
+    assert(rpmanager.isSupported(taskProf))
+
+    // K8s: supports task resource profile.
+    conf.setMaster("k8s://foo")
+    rpmanager = new ResourceProfileManager(conf, listenerBus)
+    assert(rpmanager.isSupported(taskProf))
   }
 
   test("isSupported task resource profiles with dynamic allocation enabled") {

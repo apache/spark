@@ -29,7 +29,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.spark.CleanerListener
 import org.apache.spark.executor.DataReadMethod._
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -1623,23 +1624,44 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
 
-      withTempView("t1", "t2", "t3") {
-        withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
-          sql("CACHE TABLE t1 as SELECT /*+ REPARTITION */ * FROM values(1) as t(c)")
-          assert(spark.table("t1").rdd.partitions.length == 2)
+      var finalPlan = ""
+      val listener = new SparkListener {
+        override def onOtherEvent(event: SparkListenerEvent): Unit = {
+          event match {
+            case SparkListenerSQLAdaptiveExecutionUpdate(_, physicalPlanDesc, sparkPlanInfo) =>
+              if (sparkPlanInfo.simpleString.startsWith(
+                  "AdaptiveSparkPlan isFinalPlan=true")) {
+                finalPlan = physicalPlanDesc
+              }
+            case _ => // ignore other events
+          }
         }
+      }
 
-        withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
-          assert(spark.table("t1").rdd.partitions.length == 2)
-          sql("CACHE TABLE t2 as SELECT /*+ REPARTITION */ * FROM values(2) as t(c)")
-          assert(spark.table("t2").rdd.partitions.length == 1)
-        }
+      withTempView("t0", "t1", "t2") {
+        try {
+          spark.range(10).write.saveAsTable("t0")
+          spark.sparkContext.listenerBus.waitUntilEmpty()
+          spark.sparkContext.addSparkListener(listener)
 
-        withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
-          assert(spark.table("t1").rdd.partitions.length == 2)
-          assert(spark.table("t2").rdd.partitions.length == 1)
-          sql("CACHE TABLE t3 as SELECT /*+ REPARTITION */ * FROM values(3) as t(c)")
-          assert(spark.table("t3").rdd.partitions.length == 2)
+          withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
+            sql("CACHE TABLE t1 as SELECT /*+ REPARTITION */ * FROM (" +
+              "SELECT distinct (id+1) FROM t0)")
+            assert(spark.table("t1").rdd.partitions.length == 2)
+            spark.sparkContext.listenerBus.waitUntilEmpty()
+            assert(finalPlan.nonEmpty && !finalPlan.contains("coalesced"))
+          }
+
+          finalPlan = "" // reset finalPlan
+          withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
+            sql("CACHE TABLE t2 as SELECT /*+ REPARTITION */ * FROM (" +
+              "SELECT distinct (id-1) FROM t0)")
+            assert(spark.table("t2").rdd.partitions.length == 2)
+            spark.sparkContext.listenerBus.waitUntilEmpty()
+            assert(finalPlan.nonEmpty && finalPlan.contains("coalesced"))
+          }
+        } finally {
+          spark.sparkContext.removeSparkListener(listener)
         }
       }
     }
@@ -1687,5 +1709,24 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         checkAnswer(sql("SELECT * FROM cached_t"), Row(2) :: Row(3) :: Nil)
       }
     }
+  }
+
+  test("SPARK-47633: Cache hit for lateral join with join condition") {
+    withTempView("t", "q1") {
+      sql("create or replace temp view t(c1, c2) as values (0, 1), (1, 2)")
+      val query = """select *
+                    |from t
+                    |join lateral (
+                    |  select c1 as a, c2 as b
+                    |  from t)
+                    |on c1 = a;
+                    |""".stripMargin
+      sql(s"cache table q1 as $query")
+      val df = sql(query)
+      checkAnswer(df,
+        Row(0, 1, 0, 1) :: Row(1, 2, 1, 2) :: Nil)
+      assert(getNumInMemoryRelations(df) == 1)
+    }
+
   }
 }

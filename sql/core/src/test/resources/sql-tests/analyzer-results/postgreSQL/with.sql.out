@@ -12,10 +12,10 @@ WithCTE
 +- Project [x#x, y#x, x#x, y#x]
    +- Join Inner
       :- SubqueryAlias q1
-      :  +- CTERelationRef xxxx, true, [x#x, y#x]
+      :  +- CTERelationRef xxxx, true, [x#x, y#x], false
       +- SubqueryAlias q2
          +- SubqueryAlias q1
-            +- CTERelationRef xxxx, true, [x#x, y#x]
+            +- CTERelationRef xxxx, true, [x#x, y#x], false
 
 
 -- !query
@@ -194,7 +194,7 @@ WithCTE
    +- SubqueryAlias q
       +- Project [foo#x]
          +- SubqueryAlias cte
-            +- CTERelationRef xxxx, true, [foo#x]
+            +- CTERelationRef xxxx, true, [foo#x], false
 
 
 -- !query
@@ -222,13 +222,13 @@ WithCTE
 :                 +- Union false, false
 :                    :- Project [2#x]
 :                    :  +- SubqueryAlias innermost
-:                    :     +- CTERelationRef xxxx, true, [2#x]
+:                    :     +- CTERelationRef xxxx, true, [2#x], false
 :                    +- Project [3 AS 3#x]
 :                       +- OneRowRelation
 +- Sort [x#x ASC NULLS FIRST], true
    +- Project [x#x]
       +- SubqueryAlias outermost
-         +- CTERelationRef xxxx, true, [x#x]
+         +- CTERelationRef xxxx, true, [x#x], false
 
 
 -- !query
@@ -418,7 +418,7 @@ WithCTE
 :        +- OneRowRelation
 +- Project [x#x]
    +- SubqueryAlias ordinality
-      +- CTERelationRef xxxx, true, [x#x]
+      +- CTERelationRef xxxx, true, [x#x], false
 
 
 -- !query

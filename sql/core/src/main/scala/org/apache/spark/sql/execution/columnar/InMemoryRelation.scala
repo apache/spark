@@ -279,9 +279,11 @@ case class CachedRDDBuilder(
         cachedPlan.conf)
     }
     val cached = cb.mapPartitionsInternal { it =>
-      TaskContext.get().addTaskCompletionListener[Unit](_ => {
-        materializedPartitions.add(1L)
-      })
+      TaskContext.get().addTaskCompletionListener[Unit] { context =>
+        if (!context.isFailed() && !context.isInterrupted()) {
+          materializedPartitions.add(1L)
+        }
+      }
       new Iterator[CachedBatch] {
         override def hasNext: Boolean = it.hasNext
         override def next(): CachedBatch = {
@@ -390,20 +392,10 @@ case class InMemoryRelation(
 
   @volatile var statsOfPlanToCache: Statistics = null
 
-
-  override lazy val innerChildren: Seq[SparkPlan] = {
-    // The cachedPlan needs to be cloned here because it does not get cloned when SparkPlan.clone is
-    // called. This is a problem because when the explain output is generated for
-    // a plan it traverses the innerChildren and modifies their TreeNode.tags. If the plan is not
-    // cloned, there is a thread safety issue in the case that two plans with a shared cache
-    // operator have explain called at the same time. The cachedPlan cannot be cloned because
-    // it contains stateful information so we only clone it for the purpose of generating the
-    // explain output.
-    Seq(cachedPlan.clone())
-  }
+  override def innerChildren: Seq[SparkPlan] = Seq(cachedPlan)
 
   override def doCanonicalize(): logical.LogicalPlan =
-    copy(output = output.map(QueryPlan.normalizeExpressions(_, cachedPlan.output)),
+    copy(output = output.map(QueryPlan.normalizeExpressions(_, output)),
       cacheBuilder,
       outputOrdering)
 

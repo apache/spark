@@ -330,6 +330,28 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       .add("price", FloatType)
       .add("time", TimestampType)
 
+  test("SPARK-49179: Fix v2 multi bucketed inner joins throw AssertionError") {
+    val cols = new StructType()
+      .add("id", LongType)
+      .add("name", StringType)
+    val buckets = Array(bucket(8, "id"))
+
+    withTable("t1", "t2", "t3") {
+      Seq("t1", "t2", "t3").foreach { t =>
+        createTable(t, cols, buckets)
+        sql(s"INSERT INTO testcat.ns.$t VALUES (1, 'aa'), (2, 'bb'), (3, 'cc')")
+      }
+      val df = sql(
+        """
+          |SELECT t1.id, t2.id, t3.name FROM testcat.ns.t1
+          |JOIN testcat.ns.t2 ON t1.id = t2.id
+          |JOIN testcat.ns.t3 ON t1.id = t3.id
+          |""".stripMargin)
+      checkAnswer(df, Seq(Row(1, 1, "aa"), Row(2, 2, "bb"), Row(3, 3, "cc")))
+      assert(collectShuffles(df.queryExecution.executedPlan).isEmpty)
+    }
+  }
+
   test("partitioned join: join with two partition keys and matching & sorted partitions") {
     val items_partitions = Array(bucket(8, "id"), days("arrive_time"))
     createTable(items, items_schema, items_partitions)
@@ -1091,6 +1113,48 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
               Row(3, "cc", 15.5, 3, 19.5)
             )
           )
+        }
+      }
+    }
+  }
+
+  test("SPARK-45652: SPJ should handle empty partition after dynamic filtering") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
+      val items_partitions = Array(identity("id"))
+      createTable(items, items_schema, items_partitions)
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+          s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+          s"(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
+          s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+          s"(2, 'bb', 10.5, cast('2020-01-01' as timestamp)), " +
+          s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+      val purchases_partitions = Array(identity("item_id"))
+      createTable(purchases, purchases_schema, purchases_partitions)
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+          s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+          s"(1, 44.0, cast('2020-01-15' as timestamp)), " +
+          s"(1, 45.0, cast('2020-01-15' as timestamp)), " +
+          s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
+          s"(3, 19.5, cast('2020-02-01' as timestamp))")
+
+      Seq(true, false).foreach { pushDownValues =>
+        Seq(true, false).foreach { partiallyClustered => {
+          withSQLConf(
+            SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
+                partiallyClustered.toString,
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString) {
+            // The dynamic filtering effectively filtered out all the partitions
+            val df = sql(s"SELECT p.price from testcat.ns.$items i, testcat.ns.$purchases p " +
+                "WHERE i.id = p.item_id AND i.price > 50.0")
+            checkAnswer(df, Seq.empty)
+          }
+        }
         }
       }
     }

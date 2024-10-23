@@ -181,7 +181,7 @@ object SQLConf {
 
   // Make sure SqlApiConf is always in sync with SQLConf. SqlApiConf will always try to
   // load SqlConf to make sure both classes are in sync from the get go.
-  SqlApiConf.setConfGetter(() => SQLConf.get)
+  SqlApiConfHelper.setConfGetter(() => SQLConf.get)
 
   /**
    * Returns the active config object within the current scope. If there is an active SparkSession,
@@ -657,6 +657,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS =
+    buildConf("spark.sql.adaptive.applyFinalStageShuffleOptimizations")
+      .internal()
+      .doc("Configures whether adaptive query execution (if enabled) should apply shuffle " +
+        "coalescing and local shuffle read optimization for the final query stage.")
+      .version("3.4.2")
+      .booleanConf
+      .createWithDefault(true)
+
   val ADAPTIVE_EXECUTION_LOG_LEVEL = buildConf("spark.sql.adaptive.logLevel")
     .internal()
     .doc("Configures the log level for adaptive execution logging of plan changes. The value " +
@@ -885,7 +894,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val CASE_SENSITIVE = buildConf(SqlApiConf.CASE_SENSITIVE_KEY)
+  val CASE_SENSITIVE = buildConf(SqlApiConfHelper.CASE_SENSITIVE_KEY)
     .internal()
     .doc("Whether the query analyzer should be case sensitive or not. " +
       "Default to case insensitive. It is highly discouraged to turn on case sensitive mode.")
@@ -995,12 +1004,22 @@ object SQLConf {
       "`parquet.compression` is specified in the table-specific options/properties, the " +
       "precedence would be `compression`, `parquet.compression`, " +
       "`spark.sql.parquet.compression.codec`. Acceptable values include: none, uncompressed, " +
-      "snappy, gzip, lzo, brotli, lz4, lz4raw, zstd.")
+      "snappy, gzip, lzo, brotli, lz4, lz4raw, lz4_raw, zstd.")
     .version("1.1.1")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(
-      Set("none", "uncompressed", "snappy", "gzip", "lzo", "brotli", "lz4", "lz4raw", "zstd"))
+      Set(
+        "none",
+        "uncompressed",
+        "snappy",
+        "gzip",
+        "lzo",
+        "brotli",
+        "lz4",
+        "lz4raw",
+        "lz4_raw",
+        "zstd"))
     .createWithDefault("snappy")
 
   val PARQUET_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.filterPushdown")
@@ -1519,7 +1538,7 @@ object SQLConf {
       .doc("Whether to forcibly enable some optimization rules that can change the output " +
         "partitioning of a cached query when executing it for caching. If it is set to true, " +
         "queries may need an extra shuffle to read the cached data. This configuration is " +
-        "disabled by default. Currently, the optimization rules enabled by this configuration " +
+        "enabled by default. The optimization rules enabled by this configuration " +
         s"are ${ADAPTIVE_EXECUTION_ENABLED.key} and ${AUTO_BUCKETED_SCAN_ENABLED.key}.")
       .version("3.2.0")
       .booleanConf
@@ -2101,7 +2120,9 @@ object SQLConf {
   buildConf("spark.sql.streaming.stateStore.skipNullsForStreamStreamJoins.enabled")
     .internal()
     .doc("When true, this config will skip null values in hash based stream-stream joins. " +
-      "The number of skipped null values will be shown as custom metric of stream join operator.")
+      "The number of skipped null values will be shown as custom metric of stream join operator. " +
+      "If the streaming query was started with Spark 3.5 or above, please exercise caution " +
+      "before enabling this config since it may hide potential data loss/corruption issues.")
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
@@ -2122,6 +2143,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+
+  val STREAMING_OPTIMIZE_ONE_ROW_PLAN_ENABLED =
+    buildConf("spark.sql.streaming.optimizeOneRowPlan.enabled")
+      .internal()
+      .doc("When true, enable OptimizeOneRowPlan rule for the case where the child is a " +
+        "streaming Dataset. This is a fallback flag to revert the 'incorrect' behavior, hence " +
+        "this configuration must not be used without understanding in depth. Use this only to " +
+        "quickly recover failure in existing query!")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
@@ -2657,7 +2689,7 @@ object SQLConf {
     Try { DateTimeUtils.getZoneId(zone) }.isSuccess
   }
 
-  val SESSION_LOCAL_TIMEZONE = buildConf(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
+  val SESSION_LOCAL_TIMEZONE = buildConf(SqlApiConfHelper.SESSION_LOCAL_TIMEZONE_KEY)
     .doc("The ID of session local timezone in the format of either region-based zone IDs or " +
       "zone offsets. Region IDs must have the form 'area/city', such as 'America/Los_Angeles'. " +
       "Zone offsets must be in the format '(+|-)HH', '(+|-)HH:mm' or '(+|-)HH:mm:ss', e.g '-08', " +
@@ -2859,7 +2891,9 @@ object SQLConf {
   val ARROW_EXECUTION_MAX_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.maxRecordsPerBatch")
       .doc("When using Apache Arrow, limit the maximum number of records that can be written " +
-        "to a single ArrowRecordBatch in memory. If set to zero or negative there is no limit.")
+        "to a single ArrowRecordBatch in memory. This configuration is not effective for the " +
+        "grouping API such as DataFrame(.cogroup).groupby.applyInPandas because each group " +
+        "becomes each ArrowRecordBatch. If set to zero or negative there is no limit.")
       .version("2.3.0")
       .intConf
       .createWithDefault(10000)
@@ -3161,7 +3195,7 @@ object SQLConf {
       .checkValues(StoreAssignmentPolicy.values.map(_.toString))
       .createWithDefault(StoreAssignmentPolicy.ANSI.toString)
 
-  val ANSI_ENABLED = buildConf(SqlApiConf.ANSI_ENABLED_KEY)
+  val ANSI_ENABLED = buildConf(SqlApiConfHelper.ANSI_ENABLED_KEY)
     .doc("When true, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. " +
       "For example, Spark will throw an exception at runtime instead of returning null results " +
       "when the inputs to a SQL operator/function are invalid." +
@@ -3194,6 +3228,14 @@ object SQLConf {
     .version("3.4.0")
     .booleanConf
     .createWithDefault(false)
+
+  val CHUNK_BASE64_STRING_ENABLED = buildConf("spark.sql.chunkBase64String.enabled")
+    .doc("Whether to truncate string generated by the `Base64` function. When true, base64" +
+      " strings generated by the base64 function are chunked into lines of at most 76" +
+      " characters. When false, the base64 strings are not chunked.")
+    .version("3.5.2")
+    .booleanConf
+    .createWithDefault(true)
 
   val ENABLE_DEFAULT_COLUMNS =
     buildConf("spark.sql.defaultColumn.enabled")
@@ -3377,6 +3419,15 @@ object SQLConf {
       .version("2.4.0")
       .intConf
       .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
+
+  val PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN =
+    buildConf("spark.databricks.sql.optimizer.pruneFiltersCanPruneStreamingSubplan")
+      .internal()
+      .doc("Allow PruneFilters to remove streaming subplans when we encounter a false filter. " +
+        "This flag is to restore prior buggy behavior for broken pipelines.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -3760,7 +3811,7 @@ object SQLConf {
     .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
     .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
-  val LEGACY_TIME_PARSER_POLICY = buildConf(SqlApiConf.LEGACY_TIME_PARSER_POLICY_KEY)
+  val LEGACY_TIME_PARSER_POLICY = buildConf(SqlApiConfHelper.LEGACY_TIME_PARSER_POLICY_KEY)
     .internal()
     .doc("When LEGACY, java.text.SimpleDateFormat is used for formatting and parsing " +
       "dates/timestamps in a locale-sensitive manner, which is the approach before Spark 3.0. " +
@@ -4141,6 +4192,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val LEGACY_NO_CHAR_PADDING_IN_PREDICATE = buildConf("spark.sql.legacy.noCharPaddingInPredicate")
+    .internal()
+    .doc("When true, Spark will not apply char type padding for CHAR type columns in string " +
+      s"comparison predicates, when '${READ_SIDE_CHAR_PADDING.key}' is false.")
+    .version("3.5.2")
+    .booleanConf
+    .createWithDefault(false)
+
   val CLI_PRINT_HEADER =
     buildConf("spark.sql.cli.print.header")
      .doc("When set to true, spark-sql CLI prints the names of the columns in query output.")
@@ -4251,6 +4310,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA =
+    buildConf("spark.sql.legacy.avro.allowIncompatibleSchema")
+      .internal()
+      .doc("When set to false, if types in Avro are encoded in the same format, but " +
+        "the type in the Avro schema explicitly says that the data types are different, " +
+        "reject reading the data type in the format to avoid returning incorrect results. " +
+        "When set to true, it restores the legacy behavior of allow reading the data in the" +
+        " format, which may return incorrect results.")
+      .version("3.5.1")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME =
     buildConf("spark.sql.legacy.v1IdentifierNoCatalog")
       .internal()
@@ -4313,13 +4384,22 @@ object SQLConf {
       .createWithDefault(false)
 
   val LOCAL_RELATION_CACHE_THRESHOLD =
-    buildConf(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY)
+    buildConf(SqlApiConfHelper.LOCAL_RELATION_CACHE_THRESHOLD_KEY)
       .doc("The threshold for the size in bytes of local relations to be cached at " +
         "the driver side after serialization.")
       .version("3.5.0")
       .intConf
       .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
       .createWithDefault(64 * 1024 * 1024)
+
+  val EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES =
+    buildConf("spark.sql.optimizer.excludeSubqueryRefsFromRemoveRedundantAliases.enabled")
+      .internal()
+      .doc("When true, exclude the references from the subquery expressions (in, exists, etc.) " +
+        s"while removing redundant aliases.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val LEGACY_PERCENTILE_DISC_CALCULATION = buildConf("spark.sql.legacy.percentileDiscCalculation")
     .internal()
@@ -5047,6 +5127,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   override def doubleQuotedIdentifiers: Boolean = ansiEnabled && getConf(DOUBLE_QUOTED_IDENTIFIERS)
 
   def ansiRelationPrecedence: Boolean = ansiEnabled && getConf(ANSI_RELATION_PRECEDENCE)
+
+  def chunkBase64StringEnabled: Boolean = getConf(CHUNK_BASE64_STRING_ENABLED)
 
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
     case "TIMESTAMP_LTZ" =>

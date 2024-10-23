@@ -325,7 +325,10 @@ public class TransportClient implements Closeable {
 
   @Override
   public void close() {
-    // close is a local operation and should finish with milliseconds; timeout just to be safe
+    // Mark the connection as timed out, so we do not return a connection that's being closed
+    // from the TransportClientFactory if closing takes some time (e.g. with SSL)
+    this.timedOut = true;
+    // close should not take this long; use a timeout just to be safe
     channel.close().awaitUninterruptibly(10, TimeUnit.SECONDS);
   }
 

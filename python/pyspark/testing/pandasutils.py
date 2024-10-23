@@ -365,6 +365,9 @@ def assertPandasOnSparkEqual(
 
     .. versionadded:: 3.5.0
 
+    .. deprecated:: 3.5.1
+        `assertPandasOnSparkEqual` will be removed in Spark 4.0.0.
+
     Parameters
     ----------
     actual: pandas-on-Spark DataFrame, Series, or Index
@@ -417,6 +420,10 @@ def assertPandasOnSparkEqual(
     >>> s2 = ps.Index([212.3, 100.0001])
     >>> assertPandasOnSparkEqual(s1, s2, almost=True)  # pass, ps.Index obj are almost equal
     """
+    warnings.warn(
+        "`assertPandasOnSparkEqual` will be removed in Spark 4.0.0. ",
+        FutureWarning,
+    )
     if actual is None and expected is None:
         return True
     elif actual is None or expected is None:

@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanLike
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
@@ -87,6 +87,13 @@ abstract class QueryStageExec extends LeafExecNode {
 
   private[adaptive] def resultOption: AtomicReference[Option[Any]] = _resultOption
   final def isMaterialized: Boolean = resultOption.get().isDefined
+
+  @transient
+  @volatile
+  protected var _error = new AtomicReference[Option[Throwable]](None)
+
+  def error: AtomicReference[Option[Throwable]] = _error
+  final def hasFailed: Boolean = _error.get().isDefined
 
   override def output: Seq[Attribute] = plan.output
   override def outputPartitioning: Partitioning = plan.outputPartitioning
@@ -195,6 +202,7 @@ case class ShuffleQueryStageExec(
       ReusedExchangeExec(newOutput, shuffle),
       _canonicalized)
     reuse._resultOption = this._resultOption
+    reuse._error = this._error
     reuse
   }
 
@@ -247,6 +255,7 @@ case class BroadcastQueryStageExec(
       ReusedExchangeExec(newOutput, broadcast),
       _canonicalized)
     reuse._resultOption = this._resultOption
+    reuse._error = this._error
     reuse
   }
 
@@ -261,7 +270,7 @@ case class BroadcastQueryStageExec(
 }
 
 /**
- * A table cache query stage whose child is a [[InMemoryTableScanExec]].
+ * A table cache query stage whose child is a [[InMemoryTableScanLike]].
  *
  * @param id the query stage id.
  * @param plan the underlying plan.
@@ -271,7 +280,7 @@ case class TableCacheQueryStageExec(
     override val plan: SparkPlan) extends QueryStageExec {
 
   @transient val inMemoryTableScan = plan match {
-    case i: InMemoryTableScanExec => i
+    case i: InMemoryTableScanLike => i
     case _ =>
       throw new IllegalStateException(s"wrong plan for table cache stage:\n ${plan.treeString}")
   }
@@ -294,5 +303,5 @@ case class TableCacheQueryStageExec(
 
   override protected def doMaterialize(): Future[Any] = future
 
-  override def getRuntimeStatistics: Statistics = inMemoryTableScan.relation.computeStats()
+  override def getRuntimeStatistics: Statistics = inMemoryTableScan.runtimeStatistics
 }

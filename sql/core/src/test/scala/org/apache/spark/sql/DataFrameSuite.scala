@@ -35,7 +35,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, Uuid}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, CreateMap, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery, Uuid}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Statistics}
@@ -366,20 +366,6 @@ class DataFrameSuite extends QueryTest
     checkAnswer(
       df.select(explode($"a").as("a"), $"*"),
       Row("a", Seq("a"), 1) :: Nil)
-  }
-
-  test("more than one generator in SELECT clause") {
-    val df = Seq((Array("a"), 1)).toDF("a", "b")
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        df.select(explode($"a").as("a"), explode($"a").as("b"))
-      },
-      errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
-      parameters = Map(
-        "clause" -> "SELECT",
-        "num" -> "2",
-        "generators" -> "\"explode(a)\", \"explode(a)\""))
   }
 
   test("sort after generate with join=true") {
@@ -2258,6 +2244,20 @@ class DataFrameSuite extends QueryTest
     assert(newConstraints === newExpectedConstraints)
   }
 
+  test("SPARK-46794: exclude subqueries from LogicalRDD constraints") {
+    withTempDir { checkpointDir =>
+      val subquery =
+        new Column(ScalarSubquery(spark.range(10).selectExpr("max(id)").logicalPlan))
+      val df = spark.range(1000).filter($"id" === subquery)
+      assert(df.logicalPlan.constraints.exists(_.exists(_.isInstanceOf[ScalarSubquery])))
+
+      spark.sparkContext.setCheckpointDir(checkpointDir.getAbsolutePath)
+      val checkpointedDf = df.checkpoint()
+      assert(!checkpointedDf.logicalPlan.constraints
+        .exists(_.exists(_.isInstanceOf[ScalarSubquery])))
+    }
+  }
+
   test("SPARK-10656: completely support special chars") {
     val df = Seq(1 -> "a").toDF("i_$.a", "d^'a.")
     checkAnswer(df.select(df("*")), Row(1, "a"))
@@ -3635,6 +3635,15 @@ class DataFrameSuite extends QueryTest
       assert(row.getInt(0) == row.getInt(1))
       assert(row.getInt(0).toString == row.getString(2))
       assert(row.getInt(0).toString == row.getString(3))
+    }
+
+    val v3 = Column(CreateMap(Seq(Literal("key"), Literal("value"))))
+    val v4 = to_csv(struct(v3.as("a"))) // to_csv is CodegenFallback
+    df.select(v3, v3, v4, v4).collect().foreach { row =>
+      assert(row.getMap(0).toString() == row.getMap(1).toString())
+      val expectedString = s"keys: [key], values: [${row.getMap(0).get("key").get}]"
+      assert(row.getString(2) == s"""\"$expectedString\"""")
+      assert(row.getString(3) == s"""\"$expectedString\"""")
     }
   }
 

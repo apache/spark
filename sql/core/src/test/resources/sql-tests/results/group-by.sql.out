@@ -1121,3 +1121,25 @@ struct<d:int>
 -- !query output
 0
 2
+
+
+-- !query
+SELECT col1, count(*) AS cnt
+FROM VALUES
+  (0.0),
+  (-0.0),
+  (double('NaN')),
+  (double('NaN')),
+  (double('Infinity')),
+  (double('Infinity')),
+  (-double('Infinity')),
+  (-double('Infinity'))
+GROUP BY col1
+ORDER BY col1
+-- !query schema
+struct<col1:double,cnt:bigint>
+-- !query output
+-Infinity	2
+0.0	2
+Infinity	2
+NaN	2

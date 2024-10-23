@@ -205,9 +205,9 @@ struct<coalesce(NULL, 1):int>
 
 
 -- !query
-SELECT IDENTIFIER('abs')(-1)
+SELECT IDENTIFIER('abs')(c1) FROM VALUES(-1) AS T(c1)
 -- !query schema
-struct<abs(-1):int>
+struct<abs(c1):int>
 -- !query output
 1
 
@@ -771,7 +771,30 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE TABLE IDENTIFIER(1)(c1 INT)
+SELECT `IDENTIFIER`('abs')(c1) FROM VALUES(-1) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`IDENTIFIER`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "`IDENTIFIER`('abs')"
+  } ]
+}
+
+
+-- !query
+CREATE TABLE IDENTIFIER(1)(c1 INT) USING csv
 -- !query schema
 struct<>
 -- !query output
@@ -795,7 +818,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE TABLE IDENTIFIER('a.b.c')(c1 INT)
+CREATE TABLE IDENTIFIER('a.b.c')(c1 INT) USING csv
 -- !query schema
 struct<>
 -- !query output
@@ -985,6 +1008,62 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "fragment" : "CREATE TEMPORARY VIEW IDENTIFIER('default.v')(c1) AS VALUES(1)"
   } ]
 }
+
+
+-- !query
+create temporary view identifier('v1') as (select my_col from (values (1), (2), (1) as (my_col)) group by 1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+cache table identifier('t1') as (select my_col from (values (1), (2), (1) as (my_col)) group by 1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table identifier('t2') using csv as (select my_col from (values (1), (2), (1) as (my_col)) group by 1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into identifier('t2') select my_col from (values (3) as (my_col)) group by 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop view v1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table t2
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query

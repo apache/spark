@@ -433,7 +433,7 @@ Streaming core
 artifact `spark-streaming-xyz_{{site.SCALA_BINARY_VERSION}}` to the dependencies. For example,
 some of the common ones are as follows.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Source</th><th>Artifact</th></tr></thead>
 <tr><td> Kafka </td><td> spark-streaming-kafka-0-10_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> Kinesis<br/></td><td>spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}} [Amazon Software License] </td></tr>
@@ -820,7 +820,7 @@ Similar to that of RDDs, transformations allow the data from the input DStream t
 DStreams support many of the transformations available on normal Spark RDD's.
 Some of the common ones are as follows.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th style="width:25%">Transformation</th><th>Meaning</th></tr></thead>
 <tr>
   <td> <b>map</b>(<i>func</i>) </td>
@@ -1109,7 +1109,7 @@ JavaPairDStream<String, Integer> windowedWordCounts = pairs.reduceByKeyAndWindow
 Some of the common window operations are as follows. All of these operations take the
 said two parameters - <i>windowLength</i> and <i>slideInterval</i>.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th style="width:25%">Transformation</th><th>Meaning</th></tr></thead>
 <tr>
   <td> <b>window</b>(<i>windowLength</i>, <i>slideInterval</i>) </td>
@@ -1280,7 +1280,7 @@ Since the output operations actually allow the transformed data to be consumed b
 they trigger the actual execution of all the DStream transformations (similar to actions for RDDs).
 Currently, the following output operations are defined:
 
-<table class="table table-striped">
+<table>
 <thead><tr><th style="width:30%">Output Operation</th><th>Meaning</th></tr></thead>
 <tr>
   <td> <b>print</b>()</td>
@@ -2485,7 +2485,7 @@ enabled](#deploying-applications) and reliable receivers, there is zero data los
 
 The following table summarizes the semantics under failures:
 
-<table class="table table-striped">
+<table>
   <thead>
   <tr>
     <th style="width:30%">Deployment Scenario</th>

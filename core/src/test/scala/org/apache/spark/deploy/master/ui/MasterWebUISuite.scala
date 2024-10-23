@@ -30,12 +30,14 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.DeployMessages.{DecommissionWorkersOnHosts, KillDriverResponse, RequestKillDriver}
 import org.apache.spark.deploy.DeployTestUtils._
 import org.apache.spark.deploy.master._
+import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
 import org.apache.spark.util.Utils
 
 class MasterWebUISuite extends SparkFunSuite {
+  import MasterWebUISuite._
 
-  val conf = new SparkConf()
+  val conf = new SparkConf().set(DECOMMISSION_ENABLED, true)
   val securityMgr = new SecurityManager(conf)
   val rpcEnv = mock(classOf[RpcEnv])
   val master = mock(classOf[Master])
@@ -112,12 +114,14 @@ class MasterWebUISuite extends SparkFunSuite {
   private def convPostDataToString(data: Map[String, String]): String = {
     convPostDataToString(data.toSeq)
   }
+}
 
+object MasterWebUISuite {
   /**
    * Send an HTTP request to the given URL using the method and the body specified.
    * Return the connection object.
    */
-  private def sendHttpRequest(
+  private[ui] def sendHttpRequest(
       url: String,
       method: String,
       body: String = ""): HttpURLConnection = {

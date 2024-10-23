@@ -125,6 +125,12 @@ private[spark] class DiskBlockObjectWriter(
    */
   private var numRecordsCommitted = 0L
 
+  // For testing only.
+  private[storage] def getSerializerWrappedStream: OutputStream = bs
+
+  // For testing only.
+  private[storage] def getSerializationStream: SerializationStream = objOut
+
   /**
    * Set the checksum that the checksumOutputStream should use
    */
@@ -173,19 +179,35 @@ private[spark] class DiskBlockObjectWriter(
    * Should call after committing or reverting partial writes.
    */
   private def closeResources(): Unit = {
-    if (initialized) {
-      Utils.tryWithSafeFinally {
-        mcs.manualClose()
-      } {
-        channel = null
-        mcs = null
-        bs = null
-        fos = null
-        ts = null
-        objOut = null
-        initialized = false
-        streamOpen = false
-        hasBeenClosed = true
+    try {
+      if (streamOpen) {
+        Utils.tryWithSafeFinally {
+          if (null != objOut) objOut.close()
+          bs = null
+        } {
+          objOut = null
+          if (null != bs) bs.close()
+          bs = null
+        }
+      }
+    } catch {
+      case e: IOException =>
+        logInfo("Exception occurred while closing the output stream: " + e.getMessage)
+    } finally {
+      if (initialized) {
+        Utils.tryWithSafeFinally {
+          mcs.manualClose()
+        } {
+          channel = null
+          mcs = null
+          bs = null
+          fos = null
+          ts = null
+          objOut = null
+          initialized = false
+          streamOpen = false
+          hasBeenClosed = true
+        }
       }
     }
   }

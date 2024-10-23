@@ -22,7 +22,7 @@
     <parent>
         <groupId>org.apache.spark</groupId>
         <artifactId>spark-parent_2.12</artifactId>
-        <version>3.5.0</version>
+        <version>3.5.4-SNAPSHOT</version>
         <relativePath>../../../pom.xml</relativePath>
     </parent>
 
@@ -46,18 +46,6 @@
         <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-            <version>${connect.guava.version}</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.google.guava</groupId>
-            <artifactId>failureaccess</artifactId>
-            <version>${guava.failureaccess.version}</version>
-            <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>io.grpc</groupId>
@@ -149,6 +137,27 @@
                                 <source>src/test/gen-java</source>
                             </sources>
                         </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <configuration>
+                    <shadedArtifactAttached>false</shadedArtifactAttached>
+                    <artifactSet>
+                        <includes>
+                            <include>org.spark-project.spark:unused</include>
+                            <include>org.apache.tomcat:annotations-api</include>
+                        </includes>
+                    </artifactSet>
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
                     </execution>
                 </executions>
             </plugin>

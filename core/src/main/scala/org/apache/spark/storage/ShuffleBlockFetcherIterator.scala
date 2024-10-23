@@ -1142,6 +1142,12 @@ final class ShuffleBlockFetcherIterator(
           s"diagnosis is skipped due to lack of shuffle checksum support for push-based shuffle."
         logWarning(diagnosisResponse)
         diagnosisResponse
+      case shuffleBlockBatch: ShuffleBlockBatchId =>
+          val diagnosisResponse = s"BlockBatch $shuffleBlockBatch is corrupted " +
+          s"but corruption diagnosis is skipped due to lack of shuffle checksum support for " +
+          s"ShuffleBlockBatchId"
+        logWarning(diagnosisResponse)
+        diagnosisResponse
       case unexpected: BlockId =>
         throw SparkException.internalError(
           s"Unexpected type of BlockId, $unexpected", category = "STORAGE")
@@ -1354,7 +1360,8 @@ private class BufferReleasingInputStream(
     }
   }
 
-  override def available(): Int = delegate.available()
+  override def available(): Int =
+    tryOrFetchFailedException(delegate.available())
 
   override def mark(readlimit: Int): Unit = delegate.mark(readlimit)
 
@@ -1369,12 +1376,13 @@ private class BufferReleasingInputStream(
   override def read(b: Array[Byte], off: Int, len: Int): Int =
     tryOrFetchFailedException(delegate.read(b, off, len))
 
-  override def reset(): Unit = delegate.reset()
+  override def reset(): Unit = tryOrFetchFailedException(delegate.reset())
 
   /**
    * Execute a block of code that returns a value, close this stream quietly and re-throwing
    * IOException as FetchFailedException when detectCorruption is true. This method is only
-   * used by the `read` and `skip` methods inside `BufferReleasingInputStream` currently.
+   * used by the `available`, `read` and `skip` methods inside `BufferReleasingInputStream`
+   * currently.
    */
   private def tryOrFetchFailedException[T](block: => T): T = {
     try {

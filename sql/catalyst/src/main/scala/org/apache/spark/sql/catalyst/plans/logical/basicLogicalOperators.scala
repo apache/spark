@@ -235,6 +235,20 @@ object Project {
   }
 }
 
+case class DataFrameDropColumns(dropList: Seq[Expression], child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = Nil
+
+  override def maxRows: Option[Long] = child.maxRows
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(DF_DROP_COLUMNS)
+
+  override lazy val resolved: Boolean = false
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): DataFrameDropColumns =
+    copy(child = newChild)
+}
+
 /**
  * Applies a [[Generator]] to a stream of input rows, combining the
  * output of each into a new stream of rows.  This operation is similar to a `flatMap` in functional
@@ -839,6 +853,7 @@ case class CTERelationRef(
     cteId: Long,
     _resolved: Boolean,
     override val output: Seq[Attribute],
+    override val isStreaming: Boolean,
     statsOpt: Option[Statistics] = None) extends LeafNode with MultiInstanceRelation {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
@@ -1048,10 +1063,12 @@ case class Range(
     if (numElements == 0) {
       Statistics(sizeInBytes = 0, rowCount = Some(0))
     } else {
-      val (minVal, maxVal) = if (step > 0) {
-        (start, start + (numElements - 1) * step)
+      val (minVal, maxVal) = if (!numElements.isValidLong) {
+        (None, None)
+      } else if (step > 0) {
+        (Some(start), Some(start + (numElements.toLong - 1) * step))
       } else {
-        (start + (numElements - 1) * step, start)
+        (Some(start + (numElements.toLong - 1) * step), Some(start))
       }
 
       val histogram = if (conf.histogramEnabled) {
@@ -1062,8 +1079,8 @@ case class Range(
 
       val colStat = ColumnStat(
         distinctCount = Some(numElements),
-        max = Some(maxVal),
-        min = Some(minVal),
+        max = maxVal,
+        min = minVal,
         nullCount = Some(0),
         avgLen = Some(LongType.defaultSize),
         maxLen = Some(LongType.defaultSize),
@@ -1941,6 +1958,16 @@ case class DeduplicateWithinWatermark(keys: Seq[Attribute], child: LogicalPlan) 
 trait SupportsSubquery extends LogicalPlan
 
 /**
+ * Trait that logical plans can extend to check whether it can allow non-deterministic
+ * expressions and pass the CheckAnalysis rule.
+ */
+trait SupportsNonDeterministicExpression extends LogicalPlan {
+
+  /** Returns whether it allows non-deterministic expressions. */
+  def allowNonDeterministicExpression: Boolean
+}
+
+/**
  * Collect arbitrary (named) metrics from a dataset. As soon as the query reaches a completion
  * point (batch query completes or streaming query epoch completes) an event is emitted on the
  * driver which can be observed by attaching a listener to the spark session. The metrics are named
@@ -1952,7 +1979,8 @@ trait SupportsSubquery extends LogicalPlan
 case class CollectMetrics(
     name: String,
     metrics: Seq[NamedExpression],
-    child: LogicalPlan)
+    child: LogicalPlan,
+    dataframeId: Long)
   extends UnaryNode {
 
   override lazy val resolved: Boolean = {
@@ -1998,6 +2026,8 @@ case class LateralJoin(
     right: LateralSubquery,
     joinType: JoinType,
     condition: Option[Expression]) extends UnaryNode {
+
+  override lazy val allAttributes: AttributeSeq = left.output ++ right.plan.output
 
   require(Seq(Inner, LeftOuter, Cross).contains(joinType),
     s"Unsupported lateral join type $joinType")

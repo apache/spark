@@ -46,13 +46,14 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * A reserved property to specify the location of the table. The files of the table
-   * should be under this location.
+   * should be under this location. The location is a Hadoop Path string.
    */
   String PROP_LOCATION = "location";
 
   /**
    * A reserved property to indicate that the table location is managed, not user-specified.
-   * If this property is "true", SHOW CREATE TABLE will not generate the LOCATION clause.
+   * If this property is "true", it means it's a managed table even if it has a location. As an
+   * example, SHOW CREATE TABLE will not generate the LOCATION clause.
    */
   String PROP_IS_MANAGED_LOCATION = "is_managed_location";
 
@@ -108,6 +109,26 @@ public interface TableCatalog extends CatalogPlugin {
    * @throws NoSuchTableException If the table doesn't exist or is a view
    */
   Table loadTable(Identifier ident) throws NoSuchTableException;
+
+  /**
+   * Load table metadata by {@link Identifier identifier} from the catalog. Spark will write data
+   * into this table later.
+   * <p>
+   * If the catalog supports views and contains a view for the identifier and not a table, this
+   * must throw {@link NoSuchTableException}.
+   *
+   * @param ident a table identifier
+   * @param writePrivileges
+   * @return the table's metadata
+   * @throws NoSuchTableException If the table doesn't exist or is a view
+   *
+   * @since 3.5.3
+   */
+  default Table loadTable(
+      Identifier ident,
+      Set<TableWritePrivilege> writePrivileges) throws NoSuchTableException {
+    return loadTable(ident);
+  }
 
   /**
    * Load table metadata of a specific version by {@link Identifier identifier} from the catalog.
@@ -187,7 +208,9 @@ public interface TableCatalog extends CatalogPlugin {
    * @param columns the columns of the new table.
    * @param partitions transforms to use for partitioning data in the table
    * @param properties a string map of table properties
-   * @return metadata for the new table
+   * @return metadata for the new table. This can be null if getting the metadata for the new table
+   *         is expensive. Spark will call {@link #loadTable(Identifier)} if needed (e.g. CTAS).
+   *
    * @throws TableAlreadyExistsException If a table or view already exists for the identifier
    * @throws UnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
@@ -221,7 +244,9 @@ public interface TableCatalog extends CatalogPlugin {
    *
    * @param ident a table identifier
    * @param changes changes to apply to the table
-   * @return updated metadata for the table
+   * @return updated metadata for the table. This can be null if getting the metadata for the
+   *         updated table is expensive. Spark always discard the returned table here.
+   *
    * @throws NoSuchTableException If the table doesn't exist or is a view
    * @throws IllegalArgumentException If any change is rejected by the implementation.
    */

@@ -277,6 +277,15 @@ class CSVOptions(
   val unescapedQuoteHandling: UnescapedQuoteHandling = UnescapedQuoteHandling.valueOf(parameters
     .getOrElse(UNESCAPED_QUOTE_HANDLING, "STOP_AT_DELIMITER").toUpperCase(Locale.ROOT))
 
+  /**
+   * The column pruning feature can be enabled either via the CSV option `columnPruning` or
+   * in non-multiline mode via initialization of CSV options by the SQL config:
+   * `spark.sql.csv.parser.columnPruning.enabled`.
+   * The feature is disabled in the `multiLine` mode because of the issue:
+   * https://github.com/uniVocity/univocity-parsers/issues/529
+   */
+  val isColumnPruningEnabled: Boolean = getBool(COLUMN_PRUNING, !multiLine && columnPruning)
+
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
     val format = writerSettings.getFormat
@@ -376,4 +385,5 @@ object CSVOptions extends DataSourceOptions {
   val SEP = "sep"
   val DELIMITER = "delimiter"
   newOption(SEP, DELIMITER)
+  val COLUMN_PRUNING = newOption("columnPruning")
 }

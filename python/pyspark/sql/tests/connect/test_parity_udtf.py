@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
+import unittest
 from pyspark.testing.connectutils import should_test_connect
 
 if should_test_connect:
@@ -56,6 +58,78 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
             SparkConnectGrpcException, "Invalid Python user-defined table function return type."
         ):
             TestUDTF(lit(1)).collect()
+
+    @unittest.skipIf(
+        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
+    )
+    def test_udtf_init_with_additional_args(self):
+        super(UDTFParityTests, self).test_udtf_init_with_additional_args()
+
+    @unittest.skipIf(
+        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
+    )
+    def test_udtf_with_wrong_num_input(self):
+        super(UDTFParityTests, self).test_udtf_with_wrong_num_input()
+
+    @unittest.skipIf(
+        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
+    )
+    def test_array_output_type_casting(self):
+        super(UDTFParityTests, self).test_array_output_type_casting()
+
+    @unittest.skipIf(
+        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
+    )
+    def test_map_output_type_casting(self):
+        super(UDTFParityTests, self).test_map_output_type_casting()
+
+    @unittest.skipIf(
+        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
+    )
+    def test_numeric_output_type_casting(self):
+        super(UDTFParityTests, self).test_numeric_output_type_casting()
+
+    @unittest.skipIf(
+        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
+    )
+    def test_numeric_output_type_casting(self):
+        super(UDTFParityTests, self).test_numeric_output_type_casting()
+
+    @unittest.skipIf(
+        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
+    )
+    def test_numeric_string_output_type_casting(self):
+        super(UDTFParityTests, self).test_numeric_string_output_type_casting()
+
+    @unittest.skipIf(
+        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
+    )
+    def test_string_output_type_casting(self):
+        super(UDTFParityTests, self).test_string_output_type_casting()
+
+    @unittest.skipIf(
+        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
+    )
+    def test_string_output_type_casting(self):
+        super(UDTFParityTests, self).test_string_output_type_casting()
+
+    @unittest.skipIf(
+        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
+    )
+    def test_struct_output_type_casting_dict(self):
+        super(UDTFParityTests, self).test_struct_output_type_casting_dict()
+
+    @unittest.skipIf(
+        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
+    )
+    def test_udtf_init_with_additional_args(self):
+        super(UDTFParityTests, self).test_udtf_init_with_additional_args()
+
+    @unittest.skipIf(
+        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
+    )
+    def test_udtf_with_wrong_num_input(self):
+        super(UDTFParityTests, self).test_udtf_with_wrong_num_input()
 
 
 class ArrowUDTFParityTests(UDTFArrowTestsMixin, UDTFParityTests):

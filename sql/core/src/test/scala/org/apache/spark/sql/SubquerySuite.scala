@@ -2212,6 +2212,24 @@ class SubquerySuite extends QueryTest
     }
   }
 
+  test("SPARK-49819: Do not collapse projects with exist subqueries") {
+    withTempView("v") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("v")
+      checkAnswer(
+        sql("""
+              |SELECT m, CASE WHEN EXISTS (SELECT SUM(c2) FROM v WHERE c1 = m) THEN 1 ELSE 0 END
+              |FROM (SELECT MIN(c2) AS m FROM v)
+              |""".stripMargin),
+        Row(1, 1) :: Nil)
+      checkAnswer(
+        sql("""
+              |SELECT c, CASE WHEN EXISTS (SELECT SUM(c2) FROM v WHERE c1 = c) THEN 1 ELSE 0 END
+              |FROM (SELECT c1 AS c FROM v GROUP BY c1)
+              |""".stripMargin),
+        Row(0, 1) :: Row(1, 1) :: Nil)
+    }
+  }
+
   test("SPARK-37199: deterministic in QueryPlan considers subquery") {
     val deterministicQueryPlan = sql("select (select 1 as b) as b")
       .queryExecution.executedPlan
@@ -2710,6 +2728,76 @@ class SubquerySuite extends QueryTest
           |and a in (select c from t where d in (1.0, 2.0))
           |where b > 1.0""".stripMargin),
         expected)
+    }
+  }
+
+  test("SPARK-45584: subquery execution should not fail with ORDER BY and LIMIT") {
+    withTable("t1") {
+      sql(
+        """
+          |CREATE TABLE t1 USING PARQUET
+          |AS SELECT * FROM VALUES
+          |(1, "a"),
+          |(2, "a"),
+          |(3, "a") t(id, value)
+          |""".stripMargin)
+      val df = sql(
+        """
+          |WITH t2 AS (
+          |  SELECT * FROM t1 ORDER BY id
+          |)
+          |SELECT *, (SELECT COUNT(*) FROM t2) FROM t2 LIMIT 10
+          |""".stripMargin)
+      // This should not fail with IllegalArgumentException.
+      checkAnswer(
+        df,
+        Row(1, "a", 3) :: Row(2, "a", 3) :: Row(3, "a", 3) :: Nil)
+    }
+  }
+
+  test("SPARK-45580: Handle case where a nested subquery becomes an existence join") {
+    withTempView("t1", "t2", "t3") {
+      Seq((1), (2), (3), (7)).toDF("a").persist().createOrReplaceTempView("t1")
+      Seq((1), (2), (3)).toDF("c1").persist().createOrReplaceTempView("t2")
+      Seq((3), (9)).toDF("col1").persist().createOrReplaceTempView("t3")
+
+      val query1 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE EXISTS (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR a IN (SELECT col1 FROM t3)
+          |)""".stripMargin
+      val df1 = sql(query1)
+      checkAnswer(df1, Row(1) :: Row(2) :: Row(3) :: Nil)
+
+      val query2 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE a IN (
+          |  SELECT c1
+          |  FROM t2
+          |  where a IN (SELECT col1 FROM t3)
+          |)""".stripMargin
+      val df2 = sql(query2)
+      checkAnswer(df2, Row(3))
+
+      val query3 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE NOT EXISTS (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR a IN (SELECT col1 FROM t3)
+          |)""".stripMargin
+      val df3 = sql(query3)
+      checkAnswer(df3, Row(7))
     }
   }
 }

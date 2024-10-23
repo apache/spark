@@ -145,3 +145,4 @@ empty.proto
 .*\.proto.bin
 LimitedInputStream.java
 TimSort.java
+.*\.har

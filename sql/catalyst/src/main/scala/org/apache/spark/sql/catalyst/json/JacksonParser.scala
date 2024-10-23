@@ -180,7 +180,18 @@ class JacksonParser(
         //
         val st = at.elementType.asInstanceOf[StructType]
         val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
-        Some(InternalRow(new GenericArrayData(convertObject(parser, st, fieldConverters).toArray)))
+
+        val res = try {
+          convertObject(parser, st, fieldConverters)
+        } catch {
+          case err: PartialResultException =>
+            throw PartialArrayDataResultException(
+              new GenericArrayData(Seq(err.partialResult)),
+              err.cause
+            )
+        }
+
+        Some(InternalRow(new GenericArrayData(res.toArray)))
     }
   }
 
@@ -497,9 +508,9 @@ class JacksonParser(
       try {
         values += fieldConverter.apply(parser)
       } catch {
-        case PartialResultException(row, cause) if enablePartialResults =>
-          badRecordException = badRecordException.orElse(Some(cause))
-          values += row
+        case err: PartialValueException if enablePartialResults =>
+          badRecordException = badRecordException.orElse(Some(err.cause))
+          values += err.partialResult
         case NonFatal(e) if enablePartialResults =>
           badRecordException = badRecordException.orElse(Some(e))
           parser.skipChildren()
@@ -534,9 +545,9 @@ class JacksonParser(
         if (isRoot && v == null) throw QueryExecutionErrors.rootConverterReturnNullError()
         values += v
       } catch {
-        case PartialResultException(row, cause) if enablePartialResults =>
-          badRecordException = badRecordException.orElse(Some(cause))
-          values += row
+        case err: PartialValueException if enablePartialResults =>
+          badRecordException = badRecordException.orElse(Some(err.cause))
+          values += err.partialResult
       }
     }
 

@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import unittest
 from pyspark.sql.tests.pandas.test_pandas_udf_scalar import ScalarPandasUDFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
@@ -31,6 +32,9 @@ class PandasUDFScalarParityTests(ScalarPandasUDFTestsMixin, ReusedConnectTestCas
     def test_vectorized_udf_struct_with_empty_partition(self):
         super().test_vectorized_udf_struct_with_empty_partition()
 
+    @unittest.skipIf(
+        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
+    )
     def test_vectorized_udf_exception(self):
         self.check_vectorized_udf_exception()
 

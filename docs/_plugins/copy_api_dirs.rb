@@ -136,6 +136,7 @@ if not (ENV['SKIP_API'] == '1')
     mkdir_p "api/python"
 
     puts "cp -r ../python/docs/build/html/. api/python"
+    rm_r("../python/docs/build/html/_sources")
     cp_r("../python/docs/build/html/.", "api/python")
   end
 

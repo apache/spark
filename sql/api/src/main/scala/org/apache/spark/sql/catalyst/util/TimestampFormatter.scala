@@ -167,8 +167,9 @@ class Iso8601TimestampFormatter(
 
   override def parseOptional(s: String): Option[Long] = {
     try {
-      val parsed = formatter.parseUnresolved(s, new ParsePosition(0))
-      if (parsed != null) {
+      val parsePosition = new ParsePosition(0)
+      val parsed = formatter.parseUnresolved(s, parsePosition)
+      if (parsed != null && s.length == parsePosition.getIndex) {
         Some(extractMicros(parsed))
       } else {
         None
@@ -196,8 +197,9 @@ class Iso8601TimestampFormatter(
 
   override def parseWithoutTimeZoneOptional(s: String, allowTimeZone: Boolean): Option[Long] = {
     try {
-      val parsed = formatter.parseUnresolved(s, new ParsePosition(0))
-      if (parsed != null) {
+      val parsePosition = new ParsePosition(0)
+      val parsed = formatter.parseUnresolved(s, parsePosition)
+      if (parsed != null && s.length == parsePosition.getIndex) {
         Some(extractMicrosNTZ(s, parsed, allowTimeZone))
       } else {
         None
@@ -412,10 +414,14 @@ class LegacyFastTimestampFormatter(
 
   override def parseOptional(s: String): Option[Long] = {
     cal.clear() // Clear the calendar because it can be re-used many times
-    if (fastDateFormat.parse(s, new ParsePosition(0), cal)) {
-      Some(extractMicros(cal))
-    } else {
-      None
+    try {
+      if (fastDateFormat.parse(s, new ParsePosition(0), cal)) {
+        Some(extractMicros(cal))
+      } else {
+        None
+      }
+    } catch {
+      case NonFatal(_) => None
     }
   }
 
@@ -423,11 +429,11 @@ class LegacyFastTimestampFormatter(
     val micros = cal.getMicros()
     cal.set(Calendar.MILLISECOND, 0)
     val julianMicros = Math.addExact(millisToMicros(cal.getTimeInMillis), micros)
-    rebaseJulianToGregorianMicros(julianMicros)
+    rebaseJulianToGregorianMicros(TimeZone.getTimeZone(zoneId), julianMicros)
   }
 
   override def format(timestamp: Long): String = {
-    val julianMicros = rebaseGregorianToJulianMicros(timestamp)
+    val julianMicros = rebaseGregorianToJulianMicros(TimeZone.getTimeZone(zoneId), timestamp)
     cal.setTimeInMillis(Math.floorDiv(julianMicros, MICROS_PER_SECOND) * MILLIS_PER_SECOND)
     cal.setMicros(Math.floorMod(julianMicros, MICROS_PER_SECOND))
     fastDateFormat.format(cal)
@@ -437,7 +443,7 @@ class LegacyFastTimestampFormatter(
     if (ts.getNanos == 0) {
       fastDateFormat.format(ts)
     } else {
-      format(fromJavaTimestamp(ts))
+      format(fromJavaTimestamp(zoneId.getId, ts))
     }
   }
 
@@ -461,7 +467,7 @@ class LegacySimpleTimestampFormatter(
   }
 
   override def parse(s: String): Long = {
-    fromJavaTimestamp(new Timestamp(sdf.parse(s).getTime))
+    fromJavaTimestamp(zoneId.getId, new Timestamp(sdf.parse(s).getTime))
   }
 
   override def parseOptional(s: String): Option[Long] = {
@@ -469,12 +475,12 @@ class LegacySimpleTimestampFormatter(
     if (date == null) {
       None
     } else {
-      Some(fromJavaTimestamp(new Timestamp(date.getTime)))
+      Some(fromJavaTimestamp(zoneId.getId, new Timestamp(date.getTime)))
     }
   }
 
   override def format(us: Long): String = {
-    sdf.format(toJavaTimestamp(us))
+    sdf.format(toJavaTimestamp(zoneId.getId, us))
   }
 
   override def format(ts: Timestamp): String = {

@@ -136,7 +136,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
             args(posToIndex(pos))
         }
 
-      case _ => plan
+      case other => other
     }
   }
 }

@@ -1310,10 +1310,10 @@ WithCTE
 :           :                 +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
 :           :                    +- LocalRelation [col1#x, col2#x]
 :           +- SubqueryAlias cte1
-:              +- CTERelationRef xxxx, true, [c1#x]
+:              +- CTERelationRef xxxx, true, [c1#x], false
 +- Project [c1#x, c2#x]
    +- SubqueryAlias cte2
-      +- CTERelationRef xxxx, true, [c1#x, c2#x]
+      +- CTERelationRef xxxx, true, [c1#x, c2#x], false
 
 
 -- !query

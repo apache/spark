@@ -29,9 +29,12 @@ import org.apache.spark.sql.execution.SparkPlan
  *                              query stage
  * @param queryStageOptimizerRules applied to a new query stage before its execution. It makes sure
  *                                 all children query stages are materialized
+ * @param queryPostPlannerStrategyRules applied between `plannerStrategy` and `queryStagePrepRules`,
+ *                                      so it can get the whole plan before injecting exchanges.
  */
 class AdaptiveRulesHolder(
     val queryStagePrepRules: Seq[Rule[SparkPlan]],
     val runtimeOptimizerRules: Seq[Rule[LogicalPlan]],
-    val queryStageOptimizerRules: Seq[Rule[SparkPlan]]) {
+    val queryStageOptimizerRules: Seq[Rule[SparkPlan]],
+    val queryPostPlannerStrategyRules: Seq[Rule[SparkPlan]]) {
 }

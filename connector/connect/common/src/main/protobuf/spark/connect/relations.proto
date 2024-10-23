@@ -400,11 +400,11 @@ message LocalRelation {
 
 // A local relation that has been cached already.
 message CachedLocalRelation {
-  // (Required) An identifier of the user which created the local relation
-  string userId = 1;
-
-  // (Required) An identifier of the Spark SQL session in which the user created the local relation.
-  string sessionId = 2;
+  // `userId` and `sessionId` fields are deleted since the server must always use the active
+  // session/user rather than arbitrary values provided by the client. It is never valid to access
+  // a local relation from a different session/user.
+  reserved 1, 2;
+  reserved "userId", "sessionId";
 
   // (Required) A sha-256 hash of the serialized local relation in proto, see LocalRelation.
   string hash = 3;

@@ -23,6 +23,7 @@ import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import org.apache.spark.deploy.DeployMessages.{DecommissionWorkersOnHosts, MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.internal.config.UI.MASTER_UI_DECOMMISSION_ALLOW_MODE
 import org.apache.spark.internal.config.UI.UI_KILL_ENABLED
 import org.apache.spark.ui.{SparkUI, WebUI}
@@ -40,6 +41,7 @@ class MasterWebUI(
 
   val masterEndpointRef = master.self
   val killEnabled = master.conf.get(UI_KILL_ENABLED)
+  val decommissionDisabled = !master.conf.get(DECOMMISSION_ENABLED)
   val decommissionAllowMode = master.conf.get(MASTER_UI_DECOMMISSION_ALLOW_MODE)
 
   initialize()
@@ -58,7 +60,7 @@ class MasterWebUI(
       override def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
         val hostnames: Seq[String] = Option(req.getParameterValues("host"))
           .getOrElse(Array[String]()).toSeq
-        if (!isDecommissioningRequestAllowed(req)) {
+        if (decommissionDisabled || !isDecommissioningRequestAllowed(req)) {
           resp.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
         } else {
           val removedWorkers = masterEndpointRef.askSync[Integer](

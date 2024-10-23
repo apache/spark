@@ -1606,13 +1606,27 @@ def _infer_type(
         if len(obj) > 0:
             if infer_array_from_first_element:
                 return ArrayType(
-                    _infer_type(obj[0], infer_dict_as_struct, prefer_timestamp_ntz), True
+                    _infer_type(
+                        obj[0],
+                        infer_dict_as_struct,
+                        infer_array_from_first_element,
+                        prefer_timestamp_ntz,
+                    ),
+                    True,
                 )
             else:
                 return ArrayType(
                     reduce(
                         _merge_type,
-                        (_infer_type(v, infer_dict_as_struct, prefer_timestamp_ntz) for v in obj),
+                        (
+                            _infer_type(
+                                v,
+                                infer_dict_as_struct,
+                                infer_array_from_first_element,
+                                prefer_timestamp_ntz,
+                            )
+                            for v in obj
+                        ),
                     ),
                     True,
                 )

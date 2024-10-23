@@ -76,57 +76,59 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("INSERT into partitioned tables") {
-    sql("create table t(c1 int, c2 int, c3 int, c4 int) using parquet partitioned by (c3, c4)")
+    withTable("t") {
+      sql("create table t(c1 int, c2 int, c3 int, c4 int) using parquet partitioned by (c3, c4)")
 
-    // INSERT without static partitions
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("insert into t values (1, 2, 3)")
-      },
-      errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
-      parameters = Map(
-        "tableName" -> "`spark_catalog`.`default`.`t`",
-        "tableColumns" -> "`c1`, `c2`, `c3`, `c4`",
-        "dataColumns" -> "`col1`, `col2`, `col3`"))
+      // INSERT without static partitions
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("insert into t values (1, 2, 3)")
+        },
+        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "tableColumns" -> "`c1`, `c2`, `c3`, `c4`",
+          "dataColumns" -> "`col1`, `col2`, `col3`"))
 
-    // INSERT without static partitions but with column list
-    sql("truncate table t")
-    sql("insert into t (c2, c1, c4) values (1, 2, 3)")
-    checkAnswer(spark.table("t"), Row(2, 1, null, 3))
+      // INSERT without static partitions but with column list
+      sql("truncate table t")
+      sql("insert into t (c2, c1, c4) values (1, 2, 3)")
+      checkAnswer(spark.table("t"), Row(2, 1, null, 3))
 
-    // INSERT with static partitions
-    sql("truncate table t")
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("insert into t partition(c3=3, c4=4) values (1)")
-      },
-      errorClass = "INSERT_PARTITION_COLUMN_ARITY_MISMATCH",
-      parameters = Map(
-        "tableName" -> "`spark_catalog`.`default`.`t`",
-        "tableColumns" -> "`c1`, `c2`, `c3`, `c4`",
-        "dataColumns" -> "`col1`",
-        "staticPartCols" -> "`c3`, `c4`"))
+      // INSERT with static partitions
+      sql("truncate table t")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("insert into t partition(c3=3, c4=4) values (1)")
+        },
+        errorClass = "INSERT_PARTITION_COLUMN_ARITY_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "tableColumns" -> "`c1`, `c2`, `c3`, `c4`",
+          "dataColumns" -> "`col1`",
+          "staticPartCols" -> "`c3`, `c4`"))
 
-    // INSERT with static partitions and with column list
-    sql("truncate table t")
-    sql("insert into t partition(c3=3, c4=4) (c2) values (1)")
-    checkAnswer(spark.table("t"), Row(null, 1, 3, 4))
+      // INSERT with static partitions and with column list
+      sql("truncate table t")
+      sql("insert into t partition(c3=3, c4=4) (c2) values (1)")
+      checkAnswer(spark.table("t"), Row(null, 1, 3, 4))
 
-    // INSERT with partial static partitions
-    sql("truncate table t")
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("insert into t partition(c3=3, c4) values (1, 2)")
-      },
-      errorClass = "INSERT_PARTITION_COLUMN_ARITY_MISMATCH",
-      parameters = Map(
-        "tableName" -> "`spark_catalog`.`default`.`t`",
-        "tableColumns" -> "`c1`, `c2`, `c3`, `c4`",
-        "dataColumns" -> "`col1`, `col2`",
-        "staticPartCols" -> "`c3`"))
+      // INSERT with partial static partitions
+      sql("truncate table t")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("insert into t partition(c3=3, c4) values (1, 2)")
+        },
+        errorClass = "INSERT_PARTITION_COLUMN_ARITY_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "tableColumns" -> "`c1`, `c2`, `c3`, `c4`",
+          "dataColumns" -> "`col1`, `col2`",
+          "staticPartCols" -> "`c3`"))
 
-    // INSERT with partial static partitions and with column list is not allowed
-    intercept[AnalysisException](sql("insert into t partition(c3=3, c4) (c1) values (1, 4)"))
+      // INSERT with partial static partitions and with column list is not allowed
+      intercept[AnalysisException](sql("insert into t partition(c3=3, c4) (c1) values (1, 4)"))
+    }
   }
 
   test("SPARK-43085: Column DEFAULT assignment for target tables with multi-part names") {
@@ -211,6 +213,27 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
             "defaultValue" -> "true",
             "actualType" -> "\"BOOLEAN\""))
       }
+    }
+  }
+
+  test("SPARK-49054: Create table with current_user() default") {
+    val tableName = "test_current_user"
+    val user = spark.sparkContext.sparkUser
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(i int, s string default current_user()) USING parquet")
+      sql(s"INSERT INTO $tableName (i) VALUES ((0))")
+      checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row(0, user)))
+    }
+  }
+
+  test("SPARK-49054: Alter table with current_user() default") {
+    val tableName = "test_current_user"
+    val user = spark.sparkContext.sparkUser
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(i int, s string) USING parquet")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN s SET DEFAULT current_user()")
+      sql(s"INSERT INTO $tableName (i) VALUES ((0))")
+      checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row(0, user)))
     }
   }
 }

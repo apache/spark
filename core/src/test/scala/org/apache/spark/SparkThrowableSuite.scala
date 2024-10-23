@@ -253,8 +253,7 @@ class SparkThrowableSuite extends SparkFunSuite {
          |
          |Also see [SQLSTATE Codes](sql-error-conditions-sqlstates.html).
          |
-         |$sqlErrorParentDocContent
-         |""".stripMargin
+         |$sqlErrorParentDocContent""".stripMargin
 
     errors.filter(_._2.subClass.isDefined).foreach(error => {
       val name = error._1
@@ -316,7 +315,7 @@ class SparkThrowableSuite extends SparkFunSuite {
         }
         FileUtils.writeStringToFile(
           parentDocPath.toFile,
-          sqlErrorParentDoc + lineSeparator,
+          sqlErrorParentDoc,
           StandardCharsets.UTF_8)
       }
     } else {
@@ -417,6 +416,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     } catch {
       case e: SparkThrowable =>
         assert(e.getErrorClass == null)
+        assert(!e.isInternalError)
         assert(e.getSqlState == null)
       case _: Throwable =>
         // Should not end up here
@@ -433,6 +433,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     } catch {
       case e: SparkThrowable =>
         assert(e.getErrorClass == "CANNOT_PARSE_DECIMAL")
+        assert(!e.isInternalError)
         assert(e.getSqlState == "22018")
       case _: Throwable =>
         // Should not end up here

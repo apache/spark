@@ -25,7 +25,7 @@ import org.apache.spark.sql.{catalyst, AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.{ApplyFunctionExpression, Cast, Literal}
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.physical
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, RangePartitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{CoalescedBoundary, CoalescedHashPartitioning, HashPartitioning, RangePartitioning, UnknownPartitioning}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
@@ -264,11 +264,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       )
     )
     val writePartitioningExprs = Seq(attr("data"), attr("id"))
-    val writePartitioning = if (!coalesce) {
-      clusteredWritePartitioning(writePartitioningExprs, targetNumPartitions)
-    } else {
-      clusteredWritePartitioning(writePartitioningExprs, Some(1))
-    }
+    val writePartitioning = clusteredWritePartitioning(
+      writePartitioningExprs, targetNumPartitions, coalesce)
 
     checkWriteRequirements(
       tableDistribution,
@@ -377,11 +374,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       )
     )
     val writePartitioningExprs = Seq(attr("data"))
-    val writePartitioning = if (!coalesce) {
-      clusteredWritePartitioning(writePartitioningExprs, targetNumPartitions)
-    } else {
-      clusteredWritePartitioning(writePartitioningExprs, Some(1))
-    }
+    val writePartitioning = clusteredWritePartitioning(
+      writePartitioningExprs, targetNumPartitions, coalesce)
 
     checkWriteRequirements(
       tableDistribution,
@@ -875,11 +869,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       )
     )
     val writePartitioningExprs = Seq(attr("data"))
-    val writePartitioning = if (!coalesce) {
-      clusteredWritePartitioning(writePartitioningExprs, targetNumPartitions)
-    } else {
-      clusteredWritePartitioning(writePartitioningExprs, Some(1))
-    }
+    val writePartitioning = clusteredWritePartitioning(
+      writePartitioningExprs, targetNumPartitions, coalesce)
 
     checkWriteRequirements(
       tableDistribution,
@@ -963,11 +954,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       )
     )
     val writePartitioningExprs = Seq(attr("data"))
-    val writePartitioning = if (!coalesce) {
-      clusteredWritePartitioning(writePartitioningExprs, targetNumPartitions)
-    } else {
-      clusteredWritePartitioning(writePartitioningExprs, Some(1))
-    }
+    val writePartitioning = clusteredWritePartitioning(
+      writePartitioningExprs, targetNumPartitions, coalesce)
 
     checkWriteRequirements(
       tableDistribution,
@@ -1154,11 +1142,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     )
 
     val writePartitioningExprs = Seq(truncateExpr)
-    val writePartitioning = if (!coalesce) {
-      clusteredWritePartitioning(writePartitioningExprs, targetNumPartitions)
-    } else {
-      clusteredWritePartitioning(writePartitioningExprs, Some(1))
-    }
+    val writePartitioning = clusteredWritePartitioning(
+      writePartitioningExprs, targetNumPartitions, coalesce)
 
     checkWriteRequirements(
       tableDistribution,
@@ -1422,6 +1407,9 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       case p: physical.HashPartitioning =>
         val resolvedExprs = p.expressions.map(resolveAttrs(_, plan))
         p.copy(expressions = resolvedExprs)
+      case c: physical.CoalescedHashPartitioning =>
+        val resolvedExprs = c.from.expressions.map(resolveAttrs(_, plan))
+        c.copy(from = c.from.copy(expressions = resolvedExprs))
       case _: UnknownPartitioning =>
         // don't check partitioning if no particular one is expected
         actualPartitioning
@@ -1480,9 +1468,16 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
 
   private def clusteredWritePartitioning(
       writePartitioningExprs: Seq[catalyst.expressions.Expression],
-      targetNumPartitions: Option[Int]): physical.Partitioning = {
-    HashPartitioning(writePartitioningExprs,
-      targetNumPartitions.getOrElse(conf.numShufflePartitions))
+      targetNumPartitions: Option[Int],
+      coalesce: Boolean): physical.Partitioning = {
+    val partitioning = HashPartitioning(writePartitioningExprs,
+        targetNumPartitions.getOrElse(conf.numShufflePartitions))
+    if (coalesce)  {
+      CoalescedHashPartitioning(
+        partitioning, Seq(CoalescedBoundary(0, partitioning.numPartitions)))
+    } else {
+      partitioning
+    }
   }
 
   private def partitionSizes(dataSkew: Boolean, coalesce: Boolean): Seq[Option[Long]] = {

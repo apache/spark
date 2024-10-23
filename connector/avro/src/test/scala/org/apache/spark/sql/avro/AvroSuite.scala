@@ -32,6 +32,7 @@ import org.apache.avro.file.{DataFileReader, DataFileWriter}
 import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.commons.io.FileUtils
+import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkUpgradeException}
 import org.apache.spark.TestUtils.assertExceptionMsg
@@ -369,7 +370,7 @@ abstract class AvroSuite
           "",
           Seq())
       }
-      assert(e.getMessage.contains("Cannot generate stable indentifier"))
+      assert(e.getMessage.contains("Cannot generate stable identifier"))
     }
     {
       val e = intercept[Exception] {
@@ -380,7 +381,7 @@ abstract class AvroSuite
           "",
           Seq())
       }
-      assert(e.getMessage.contains("Cannot generate stable indentifier"))
+      assert(e.getMessage.contains("Cannot generate stable identifier"))
     }
     // Two array types or two map types are not allowed in union.
     {
@@ -430,6 +431,33 @@ abstract class AvroSuite
         )
       }
       assert(e.getMessage.contains("Schemas may not be named after primitives"))
+    }
+  }
+
+  test("SPARK-47904: Test that field name case is preserved") {
+    checkUnionStableId(
+      List(
+        Schema.createEnum("myENUM", "", null, List[String]("E1", "e2").asJava),
+        Schema.createRecord("myRecord", "", null, false,
+          List[Schema.Field](new Schema.Field("f", Schema.createFixed("myField", "", null, 6)))
+            .asJava),
+        Schema.createRecord("myRecord2", "", null, false,
+          List[Schema.Field](new Schema.Field("F", Schema.create(Type.FLOAT)))
+            .asJava)),
+      "struct<member_myENUM: string, member_myRecord: struct<f: binary>, " +
+                    "member_myRecord2: struct<F: float>>",
+      Seq())
+
+    {
+      val e = intercept[Exception] {
+        checkUnionStableId(
+          List(
+            Schema.createRecord("myRecord", "", null, false, List[Schema.Field]().asJava),
+            Schema.createRecord("myrecord", "", null, false, List[Schema.Field]().asJava)),
+          "",
+          Seq())
+      }
+      assert(e.getMessage.contains("Cannot generate stable identifier"))
     }
   }
 
@@ -811,6 +839,163 @@ abstract class AvroSuite
       sql("SELECT 3.14 a").write.format("avro").save(path.toString)
       val data = spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString).collect()
       assert(data.map(_ (0)).contains(new java.math.BigDecimal("3.140")))
+    }
+  }
+
+  test("SPARK-43380: Fix Avro data type conversion" +
+    " of decimal type to avoid producing incorrect results") {
+    withTempPath { path =>
+      val confKey = SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key
+      sql("SELECT 13.1234567890 a").write.format("avro").save(path.toString)
+      // With the flag disabled, we will throw an exception if there is a mismatch
+      withSQLConf(confKey -> "false") {
+        val e = intercept[SparkException] {
+          spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString).collect()
+        }
+        ExceptionUtils.getRootCause(e) match {
+          case ex: AnalysisException =>
+            checkError(
+              exception = ex,
+              errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
+              parameters = Map("avroPath" -> "field 'a'",
+                "sqlPath" -> "field 'a'",
+                "avroType" -> "decimal\\(12,10\\)",
+                "sqlType" -> "\"DECIMAL\\(4,3\\)\""),
+              matchPVals = true
+            )
+          case other =>
+            fail(s"Received unexpected exception", other)
+        }
+      }
+      // The following used to work, so it should still work with the flag enabled
+      checkAnswer(
+        spark.read.schema("a DECIMAL(5, 3)").format("avro").load(path.toString),
+        Row(new java.math.BigDecimal("13.123"))
+      )
+      withSQLConf(confKey -> "true") {
+        // With the flag enabled, we return a null silently, which isn't great
+        checkAnswer(
+          spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString),
+          Row(null)
+        )
+        checkAnswer(
+          spark.read.schema("a DECIMAL(5, 3)").format("avro").load(path.toString),
+          Row(new java.math.BigDecimal("13.123"))
+        )
+      }
+    }
+  }
+
+  test("SPARK-43380: Fix Avro data type conversion" +
+    " of DayTimeIntervalType to avoid producing incorrect results") {
+    withTempPath { path =>
+      val confKey = SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key
+      val schema = StructType(Array(StructField("a", DayTimeIntervalType(), false)))
+      val data = Seq(Row(java.time.Duration.ofDays(1).plusSeconds(1)))
+
+      val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+      df.write.format("avro").save(path.getCanonicalPath)
+
+      withSQLConf(confKey -> "false") {
+        Seq("DATE", "TIMESTAMP", "TIMESTAMP_NTZ").foreach { sqlType =>
+          val e = intercept[SparkException] {
+            spark.read.schema(s"a $sqlType").format("avro").load(path.toString).collect()
+          }
+
+          ExceptionUtils.getRootCause(e) match {
+            case ex: AnalysisException =>
+              checkError(
+                exception = ex,
+                errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
+                parameters = Map("avroPath" -> "field 'a'",
+                  "sqlPath" -> "field 'a'",
+                  "avroType" -> "interval day to second",
+                  "sqlType" -> s""""$sqlType""""),
+                matchPVals = true
+              )
+            case other =>
+              fail(s"Received unexpected exception", other)
+          }
+        }
+      }
+
+      withSQLConf(confKey -> "true") {
+        // Allow conversion and do not need to check result
+        spark.read.schema("a Date").format("avro").load(path.toString)
+        spark.read.schema("a timestamp").format("avro").load(path.toString)
+        spark.read.schema("a timestamp_ntz").format("avro").load(path.toString)
+      }
+    }
+  }
+
+  test("SPARK-43380: Fix Avro data type conversion" +
+    " of YearMonthIntervalType to avoid producing incorrect results") {
+    withTempPath { path =>
+      val confKey = SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key
+      val schema = StructType(Array(StructField("a", YearMonthIntervalType(), false)))
+      val data = Seq(Row(java.time.Period.of(1, 1, 0)))
+
+      val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+      df.write.format("avro").save(path.getCanonicalPath)
+
+      withSQLConf(confKey -> "false") {
+        Seq("DATE", "TIMESTAMP", "TIMESTAMP_NTZ").foreach { sqlType =>
+          val e = intercept[SparkException] {
+            spark.read.schema(s"a $sqlType").format("avro").load(path.toString).collect()
+          }
+
+          ExceptionUtils.getRootCause(e) match {
+            case ex: AnalysisException =>
+              checkError(
+                exception = ex,
+                errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
+                parameters = Map("avroPath" -> "field 'a'",
+                  "sqlPath" -> "field 'a'",
+                  "avroType" -> "interval year to month",
+                  "sqlType" -> s""""$sqlType""""),
+                matchPVals = true
+              )
+            case other =>
+              fail(s"Received unexpected exception", other)
+          }
+        }
+      }
+
+      withSQLConf(confKey -> "true") {
+        // Allow conversion and do not need to check result
+        spark.read.schema("a Date").format("avro").load(path.toString)
+        spark.read.schema("a timestamp").format("avro").load(path.toString)
+        spark.read.schema("a timestamp_ntz").format("avro").load(path.toString)
+      }
+    }
+  }
+
+  Seq(
+    "time-millis",
+    "time-micros",
+    "timestamp-micros",
+    "timestamp-millis",
+    "local-timestamp-millis",
+    "local-timestamp-micros"
+  ).foreach { timeLogicalType =>
+    test(s"converting $timeLogicalType type to long in avro") {
+      withTempPath { path =>
+        val df = Seq(100L)
+          .toDF("dt")
+        val avroSchema =
+          s"""
+             |{
+             |  "type" : "record",
+             |  "name" : "test_schema",
+             |  "fields" : [
+             |    {"name": "dt", "type": {"type": "long", "logicalType": "$timeLogicalType"}}
+             |  ]
+             |}""".stripMargin
+        df.write.format("avro").option("avroSchema", avroSchema).save(path.getCanonicalPath)
+        checkAnswer(
+          spark.read.schema(s"dt long").format("avro").load(path.toString),
+          Row(100L))
+      }
     }
   }
 
@@ -1979,7 +2164,7 @@ abstract class AvroSuite
 
   private def checkSchemaWithRecursiveLoop(avroSchema: String): Unit = {
     val message = intercept[IncompatibleSchemaException] {
-      SchemaConverters.toSqlType(new Schema.Parser().parse(avroSchema))
+      SchemaConverters.toSqlType(new Schema.Parser().parse(avroSchema), false)
     }.getMessage
 
     assert(message.contains("Found recursive reference in Avro schema"))

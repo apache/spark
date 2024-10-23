@@ -73,8 +73,14 @@ object ExpressionEncoder {
    * Given a set of N encoders, constructs a new encoder that produce objects as items in an
    * N-tuple.  Note that these encoders should be unresolved so that information about
    * name/positional binding is preserved.
+   * When `useNullSafeDeserializer` is true, the deserialization result for a child will be null if
+   * the input is null. It is false by default as most deserializers handle null input properly and
+   * don't require an extra null check. Some of them are null-tolerant, such as the deserializer for
+   * `Option[T]`, and we must not set it to true in this case.
    */
-  def tuple(encoders: Seq[ExpressionEncoder[_]]): ExpressionEncoder[_] = {
+  def tuple(
+      encoders: Seq[ExpressionEncoder[_]],
+      useNullSafeDeserializer: Boolean = false): ExpressionEncoder[_] = {
     if (encoders.length > 22) {
       throw QueryExecutionErrors.elementsOfTupleExceedLimitError()
     }
@@ -119,7 +125,7 @@ object ExpressionEncoder {
         case GetColumnByOrdinal(0, _) => input
       }
 
-      if (enc.objSerializer.nullable) {
+      if (useNullSafeDeserializer && enc.objSerializer.nullable) {
         nullSafe(input, childDeserializer)
       } else {
         childDeserializer

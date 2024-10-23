@@ -73,11 +73,16 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
   /** The index of the last response produced by execution. */
   private var lastProducedIndex: Long = 0 // first response will have index 1
 
+  // For testing
+  private[connect] var releasedUntilIndex: Long = 0
+
   /**
    * Highest response index that was consumed. Keeps track of it to decide which responses needs
    * to be cached, and to assert that all responses are consumed.
+   *
+   * Visible for testing.
    */
-  private var highestConsumedIndex: Long = 0
+  private[connect] var highestConsumedIndex: Long = 0
 
   /**
    * Consumer that waits for available responses. There can be only one at a time, @see
@@ -284,6 +289,7 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
       responses.remove(i)
       i -= 1
     }
+    releasedUntilIndex = index
   }
 
   /**

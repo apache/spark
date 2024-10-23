@@ -27,7 +27,7 @@ license: |
 ## Apache Maven
 
 The Maven-based build is the build of reference for Apache Spark.
-Building Spark using Maven requires Maven 3.8.8 and Java 8/11/17.
+Building Spark using Maven requires Maven 3.9.6 and Java 8/11/17.
 Spark requires Scala 2.12/2.13; support for Scala 2.11 was removed in Spark 3.0.0.
 
 ### Setting up Maven's Memory Usage
@@ -286,7 +286,7 @@ If use an individual repository or a repository on GitHub Enterprise, export bel
 
 ### Related environment variables
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Variable Name</th><th>Default</th><th>Meaning</th></tr></thead>
 <tr>
   <td><code>SPARK_PROJECT_URL</code></td>

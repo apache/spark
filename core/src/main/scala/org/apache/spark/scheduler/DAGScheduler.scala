@@ -174,6 +174,9 @@ private[spark] class DAGScheduler(
    * locations where that RDD partition is cached.
    *
    * All accesses to this map should be guarded by synchronizing on it (see SPARK-4454).
+   * If you need to access any RDD while synchronizing on the cache locations,
+   * first synchronize on the RDD, and then synchronize on this map to avoid deadlocks. The RDD
+   * could try to access the cache locations after synchronizing on the RDD.
    */
   private val cacheLocs = new HashMap[Int, IndexedSeq[Seq[TaskLocation]]]
 
@@ -420,22 +423,24 @@ private[spark] class DAGScheduler(
   }
 
   private[scheduler]
-  def getCacheLocs(rdd: RDD[_]): IndexedSeq[Seq[TaskLocation]] = cacheLocs.synchronized {
-    // Note: this doesn't use `getOrElse()` because this method is called O(num tasks) times
-    if (!cacheLocs.contains(rdd.id)) {
-      // Note: if the storage level is NONE, we don't need to get locations from block manager.
-      val locs: IndexedSeq[Seq[TaskLocation]] = if (rdd.getStorageLevel == StorageLevel.NONE) {
-        IndexedSeq.fill(rdd.partitions.length)(Nil)
-      } else {
-        val blockIds =
-          rdd.partitions.indices.map(index => RDDBlockId(rdd.id, index)).toArray[BlockId]
-        blockManagerMaster.getLocations(blockIds).map { bms =>
-          bms.map(bm => TaskLocation(bm.host, bm.executorId))
+  def getCacheLocs(rdd: RDD[_]): IndexedSeq[Seq[TaskLocation]] = rdd.stateLock.synchronized {
+    cacheLocs.synchronized {
+      // Note: this doesn't use `getOrElse()` because this method is called O(num tasks) times
+      if (!cacheLocs.contains(rdd.id)) {
+        // Note: if the storage level is NONE, we don't need to get locations from block manager.
+        val locs: IndexedSeq[Seq[TaskLocation]] = if (rdd.getStorageLevel == StorageLevel.NONE) {
+          IndexedSeq.fill(rdd.partitions.length)(Nil)
+        } else {
+          val blockIds =
+            rdd.partitions.indices.map(index => RDDBlockId(rdd.id, index)).toArray[BlockId]
+          blockManagerMaster.getLocations(blockIds).map { bms =>
+            bms.map(bm => TaskLocation(bm.host, bm.executorId))
+          }
         }
+        cacheLocs(rdd.id) = locs
       }
-      cacheLocs(rdd.id) = locs
+      cacheLocs(rdd.id)
     }
-    cacheLocs(rdd.id)
   }
 
   private def clearCacheLocs(): Unit = cacheLocs.synchronized {
@@ -1847,9 +1852,9 @@ private[spark] class DAGScheduler(
       case Success =>
         // An earlier attempt of a stage (which is zombie) may still have running tasks. If these
         // tasks complete, they still count and we can mark the corresponding partitions as
-        // finished. Here we notify the task scheduler to skip running tasks for the same partition,
-        // to save resource.
-        if (task.stageAttemptId < stage.latestInfo.attemptNumber()) {
+        // finished if the stage is determinate. Here we notify the task scheduler to skip running
+        // tasks for the same partition to save resource.
+        if (!stage.isIndeterminate && task.stageAttemptId < stage.latestInfo.attemptNumber()) {
           taskScheduler.notifyPartitionCompletion(stageId, task.partitionId)
         }
 
@@ -1903,19 +1908,26 @@ private[spark] class DAGScheduler(
 
           case smt: ShuffleMapTask =>
             val shuffleStage = stage.asInstanceOf[ShuffleMapStage]
-            shuffleStage.pendingPartitions -= task.partitionId
-            val status = event.result.asInstanceOf[MapStatus]
-            val execId = status.location.executorId
-            logDebug("ShuffleMapTask finished on " + execId)
-            if (executorFailureEpoch.contains(execId) &&
+            // Ignore task completion for old attempt of indeterminate stage
+            val ignoreIndeterminate = stage.isIndeterminate &&
+              task.stageAttemptId < stage.latestInfo.attemptNumber()
+            if (!ignoreIndeterminate) {
+              shuffleStage.pendingPartitions -= task.partitionId
+              val status = event.result.asInstanceOf[MapStatus]
+              val execId = status.location.executorId
+              logDebug("ShuffleMapTask finished on " + execId)
+              if (executorFailureEpoch.contains(execId) &&
                 smt.epoch <= executorFailureEpoch(execId)) {
-              logInfo(s"Ignoring possibly bogus $smt completion from executor $execId")
+                logInfo(s"Ignoring possibly bogus $smt completion from executor $execId")
+              } else {
+                // The epoch of the task is acceptable (i.e., the task was launched after the most
+                // recent failure we're aware of for the executor), so mark the task's output as
+                // available.
+                mapOutputTracker.registerMapOutput(
+                  shuffleStage.shuffleDep.shuffleId, smt.partitionId, status)
+              }
             } else {
-              // The epoch of the task is acceptable (i.e., the task was launched after the most
-              // recent failure we're aware of for the executor), so mark the task's output as
-              // available.
-              mapOutputTracker.registerMapOutput(
-                shuffleStage.shuffleDep.shuffleId, smt.partitionId, status)
+              logInfo(s"Ignoring $smt completion from an older attempt of indeterminate stage")
             }
 
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingPartitions.isEmpty) {

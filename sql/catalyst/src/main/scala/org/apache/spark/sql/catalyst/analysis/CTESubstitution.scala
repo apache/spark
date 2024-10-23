@@ -263,7 +263,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
             d.child
           } else {
             // Add a `SubqueryAlias` for hint-resolving rules to match relation names.
-            SubqueryAlias(table, CTERelationRef(d.id, d.resolved, d.output))
+            SubqueryAlias(table, CTERelationRef(d.id, d.resolved, d.output, d.isStreaming))
           }
         }.getOrElse(u)
 

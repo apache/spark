@@ -36,6 +36,7 @@ if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame as CDF
 
 
+@unittest.skipIf("SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Requires JVM access")
 class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, SQLTestUtils):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""

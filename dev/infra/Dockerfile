@@ -65,10 +65,10 @@ RUN Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='ht
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
 
 RUN pypy3 -m pip install numpy 'pandas<=2.0.3' scipy coverage matplotlib
-RUN python3.9 -m pip install numpy pyarrow 'pandas<=2.0.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
+RUN python3.9 -m pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas<=2.0.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
 
 # Add Python deps for Spark Connect.
-RUN python3.9 -m pip install grpcio protobuf googleapis-common-protos grpcio-status
+RUN python3.9 -m pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4'
 
 # Add torch as a testing dependency for TorchDistributor
-RUN python3.9 -m pip install torch torchvision torcheval
+RUN python3.9 -m pip install 'torch==2.0.1' 'torchvision==0.15.2' torcheval

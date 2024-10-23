@@ -692,3 +692,10 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "-x'2379ACFe'"
   } ]
 }
+
+
+-- !query
+select -0, -0.0
+-- !query analysis
+Project [0 AS 0#x, 0.0 AS 0.0#x]
++- OneRowRelation

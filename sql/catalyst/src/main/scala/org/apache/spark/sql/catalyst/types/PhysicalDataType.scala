@@ -239,8 +239,7 @@ case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContains
 
 class PhysicalNullType() extends PhysicalDataType with PhysicalPrimitiveType {
   override private[sql] def ordering =
-    throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(
-      "PhysicalNullType")
+    implicitly[Ordering[Unit]].asInstanceOf[Ordering[Any]]
   override private[sql] type InternalType = Any
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }

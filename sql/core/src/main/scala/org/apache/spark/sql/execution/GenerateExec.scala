@@ -78,6 +78,10 @@ case class GenerateExec(
     // boundGenerator.terminate() should be triggered after all of the rows in the partition
     val numOutputRows = longMetric("numOutputRows")
     child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
+      boundGenerator.foreach {
+        case n: Nondeterministic => n.initialize(index)
+        case _ =>
+      }
       val generatorNullRow = new GenericInternalRow(generator.elementSchema.length)
       val rows = if (requiredChildOutput.nonEmpty) {
 

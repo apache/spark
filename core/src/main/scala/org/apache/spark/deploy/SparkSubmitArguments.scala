@@ -567,7 +567,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --kill SUBMISSION_ID        If given, kills the driver specified.
         |  --status SUBMISSION_ID      If given, requests the status of the driver specified.
         |
-        | Spark standalone, Mesos and Kubernetes only:
+        | Spark standalone and Mesos only:
         |  --total-executor-cores NUM  Total cores for all executors.
         |
         | Spark standalone, YARN and Kubernetes only:

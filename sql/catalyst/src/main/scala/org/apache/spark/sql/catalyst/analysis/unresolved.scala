@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Unary
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
+import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, Metadata, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -55,9 +56,19 @@ trait UnresolvedUnaryNode extends UnaryNode with UnresolvedNode
  */
 case class PlanWithUnresolvedIdentifier(
     identifierExpr: Expression,
-    planBuilder: Seq[String] => LogicalPlan)
-  extends UnresolvedLeafNode {
+    children: Seq[LogicalPlan],
+    planBuilder: (Seq[String], Seq[LogicalPlan]) => LogicalPlan)
+  extends UnresolvedNode {
+
+  def this(identifierExpr: Expression, planBuilder: Seq[String] => LogicalPlan) = {
+    this(identifierExpr, Nil, (ident, _) => planBuilder(ident))
+  }
+
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan =
+    copy(identifierExpr, newChildren, planBuilder)
 }
 
 /**
@@ -96,20 +107,45 @@ case class UnresolvedRelation(
 
   override def name: String = tableName
 
+  def requireWritePrivileges(privileges: Seq[TableWritePrivilege]): UnresolvedRelation = {
+    if (privileges.nonEmpty) {
+      val newOptions = new java.util.HashMap[String, String]
+      newOptions.putAll(options)
+      newOptions.put(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES, privileges.mkString(","))
+      copy(options = new CaseInsensitiveStringMap(newOptions))
+    } else {
+      this
+    }
+  }
+
+  def clearWritePrivileges: UnresolvedRelation = {
+    if (options.containsKey(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)) {
+      val newOptions = new java.util.HashMap[String, String]
+      newOptions.putAll(options)
+      newOptions.remove(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
+      copy(options = new CaseInsensitiveStringMap(newOptions))
+    } else {
+      this
+    }
+  }
+
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_RELATION)
 }
 
 object UnresolvedRelation {
+  // An internal option of `UnresolvedRelation` to specify the required write privileges when
+  // writing data to this relation.
+  val REQUIRED_WRITE_PRIVILEGES = "__required_write_privileges__"
+
   def apply(
       tableIdentifier: TableIdentifier,
       extraOptions: CaseInsensitiveStringMap,
       isStreaming: Boolean): UnresolvedRelation = {
-    UnresolvedRelation(
-      tableIdentifier.database.toSeq :+ tableIdentifier.table, extraOptions, isStreaming)
+    UnresolvedRelation(tableIdentifier.nameParts, extraOptions, isStreaming)
   }
 
   def apply(tableIdentifier: TableIdentifier): UnresolvedRelation =
-    UnresolvedRelation(tableIdentifier.database.toSeq :+ tableIdentifier.table)
+    UnresolvedRelation(tableIdentifier.nameParts)
 }
 
 /**
@@ -125,6 +161,21 @@ case class UnresolvedInlineTable(
   extends UnresolvedLeafNode {
 
   lazy val expressionsResolved: Boolean = rows.forall(_.forall(_.resolved))
+}
+
+/**
+ * An resolved inline table that holds all the expressions that were checked for
+ * the right shape and common data types.
+ * This is a preparation step for [[org.apache.spark.sql.catalyst.optimizer.EvalInlineTables]] which
+ * will produce a [[org.apache.spark.sql.catalyst.plans.logical.LocalRelation]]
+ * for this inline table.
+ *
+ * @param output list of column attributes
+ * @param rows expressions for the data rows
+ */
+case class ResolvedInlineTable(rows: Seq[Seq[Expression]], output: Seq[Attribute])
+  extends LeafNode {
+  final override val nodePatterns: Seq[TreePattern] = Seq(INLINE_TABLE_EVAL)
 }
 
 /**

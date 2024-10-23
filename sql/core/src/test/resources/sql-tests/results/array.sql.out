@@ -541,6 +541,14 @@ struct<array_insert(array(2, 3, NULL, 4), -5, 1):array<int>>
 
 
 -- !query
+select array_insert(array(1), 2, cast(2 as tinyint))
+-- !query schema
+struct<array_insert(array(1), 2, CAST(2 AS TINYINT)):array<int>>
+-- !query output
+[1,2]
+
+
+-- !query
 set spark.sql.legacy.negativeIndexInArrayInsert=true
 -- !query schema
 struct<key:string,value:string>
@@ -780,3 +788,19 @@ select array_prepend(array(CAST(NULL AS String)), CAST(NULL AS String))
 struct<array_prepend(array(CAST(NULL AS STRING)), CAST(NULL AS STRING)):array<string>>
 -- !query output
 [null,null]
+
+
+-- !query
+select array_union(array(0.0, -0.0, DOUBLE("NaN")), array(0.0, -0.0, DOUBLE("NaN")))
+-- !query schema
+struct<array_union(array(0.0, 0.0, NaN), array(0.0, 0.0, NaN)):array<double>>
+-- !query output
+[0.0,NaN]
+
+
+-- !query
+select array_distinct(array(0.0, -0.0, -0.0, DOUBLE("NaN"), DOUBLE("NaN")))
+-- !query schema
+struct<array_distinct(array(0.0, 0.0, 0.0, NaN, NaN)):array<double>>
+-- !query output
+[0.0,NaN]

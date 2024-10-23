@@ -774,8 +774,7 @@ class Dataset[T] private[sql](
     val parsedDelay = IntervalUtils.fromIntervalString(delayThreshold)
     require(!IntervalUtils.isNegative(parsedDelay),
       s"delay threshold ($delayThreshold) should not be negative.")
-    EliminateEventTimeWatermark(
-      EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan))
+    EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan)
   }
 
   /**
@@ -1230,7 +1229,9 @@ class Dataset[T] private[sql](
         JoinHint.NONE)).analyzed.asInstanceOf[Join]
 
     implicit val tuple2Encoder: Encoder[(T, U)] =
-      ExpressionEncoder.tuple(this.exprEnc, other.exprEnc)
+      ExpressionEncoder
+        .tuple(Seq(this.exprEnc, other.exprEnc), useNullSafeDeserializer = true)
+        .asInstanceOf[Encoder[(T, U)]]
 
     withTypedPlan(JoinWith.typedJoinWith(
       joined,
@@ -2189,7 +2190,7 @@ class Dataset[T] private[sql](
   */
   @varargs
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = withTypedPlan {
-    CollectMetrics(name, (expr +: exprs).map(_.named), logicalPlan)
+    CollectMetrics(name, (expr +: exprs).map(_.named), logicalPlan, id)
   }
 
   /**
@@ -3013,19 +3014,8 @@ class Dataset[T] private[sql](
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def drop(col: Column, cols: Column*): DataFrame = {
-    val allColumns = col +: cols
-    val expressions = (for (col <- allColumns) yield col match {
-      case Column(u: UnresolvedAttribute) =>
-        queryExecution.analyzed.resolveQuoted(
-          u.name, sparkSession.sessionState.analyzer.resolver).getOrElse(u)
-      case Column(expr: Expression) => expr
-    })
-    val attrs = this.logicalPlan.output
-    val colsAfterDrop = attrs.filter { attr =>
-      expressions.forall(expression => !attr.semanticEquals(expression))
-    }.map(attr => Column(attr))
-    select(colsAfterDrop : _*)
+  def drop(col: Column, cols: Column*): DataFrame = withPlan {
+    DataFrameDropColumns((col +: cols).map(_.expr), logicalPlan)
   }
 
   /**
@@ -4046,13 +4036,12 @@ class Dataset[T] private[sql](
     new DataStreamWriter[T](this)
   }
 
-
   /**
    * Returns the content of the Dataset as a Dataset of JSON strings.
    * @since 2.0.0
    */
   def toJSON: Dataset[String] = {
-    val rowSchema = this.schema
+    val rowSchema = exprEnc.schema
     val sessionLocalTimeZone = sparkSession.sessionState.conf.sessionLocalTimeZone
     mapPartitions { iter =>
       val writer = new CharArrayWriter()

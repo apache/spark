@@ -64,12 +64,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       messageParameters = messageParameters)
   }
 
-  protected def containsMultipleGenerators(exprs: Seq[Expression]): Boolean = {
-    exprs.flatMap(_.collect {
-      case e: Generator => e
-    }).length > 1
-  }
-
   protected def hasMapType(dt: DataType): Boolean = {
     dt.existsRecursively(_.isInstanceOf[MapType])
   }
@@ -147,17 +141,56 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       errorClass, missingCol, orderedCandidates, a.origin)
   }
 
+  private def checkUnreferencedCTERelations(
+      cteMap: mutable.Map[Long, (CTERelationDef, Int, mutable.Map[Long, Int])],
+      visited: mutable.Map[Long, Boolean],
+      danglingCTERelations: mutable.ArrayBuffer[CTERelationDef],
+      cteId: Long): Unit = {
+    if (visited(cteId)) {
+      return
+    }
+    val (cteDef, _, refMap) = cteMap(cteId)
+    refMap.foreach { case (id, _) =>
+      checkUnreferencedCTERelations(cteMap, visited, danglingCTERelations, id)
+    }
+    danglingCTERelations.append(cteDef)
+    visited(cteId) = true
+  }
+
+  /**
+   * Checks whether the operator allows non-deterministic expressions.
+   */
+  private def operatorAllowsNonDeterministicExpressions(plan: LogicalPlan): Boolean = {
+    plan match {
+      case p: SupportsNonDeterministicExpression =>
+        p.allowNonDeterministicExpression
+      case _ => false
+    }
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
     val inlineCTE = InlineCTE(alwaysInline = true)
     val cteMap = mutable.HashMap.empty[Long, (CTERelationDef, Int, mutable.Map[Long, Int])]
     inlineCTE.buildCTEMap(plan, cteMap)
-    cteMap.values.foreach { case (relation, refCount, _) =>
-      // If a CTE relation is never used, it will disappear after inline. Here we explicitly check
-      // analysis for it, to make sure the entire query plan is valid.
-      if (refCount == 0) checkAnalysis0(relation.child)
+    val danglingCTERelations = mutable.ArrayBuffer.empty[CTERelationDef]
+    val visited: mutable.Map[Long, Boolean] = mutable.Map.empty.withDefaultValue(false)
+    // If a CTE relation is never used, it will disappear after inline. Here we explicitly collect
+    // these dangling CTE relations, and put them back in the main query, to make sure the entire
+    // query plan is valid.
+    cteMap.foreach { case (cteId, (_, refCount, _)) =>
+      // If a CTE relation ref count is 0, the other CTE relations that reference it should also be
+      // collected. This code will also guarantee the leaf relations that do not reference
+      // any others are collected first.
+      if (refCount == 0) {
+        checkUnreferencedCTERelations(cteMap, visited, danglingCTERelations, cteId)
+      }
     }
     // Inline all CTEs in the plan to help check query plan structures in subqueries.
-    checkAnalysis0(inlineCTE(plan))
+    var inlinedPlan: LogicalPlan = inlineCTE(plan)
+    if (danglingCTERelations.nonEmpty) {
+      inlinedPlan = WithCTE(inlinedPlan, danglingCTERelations.toSeq)
+    }
+    checkAnalysis0(inlinedPlan)
     plan.setAnalyzed()
   }
 
@@ -365,6 +398,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         })
 
         operator match {
+          case RelationTimeTravel(u: UnresolvedRelation, _, _) =>
+            u.tableNotFound(u.multipartIdentifier)
+
           case etw: EventTimeWatermark =>
             etw.eventTime.dataType match {
               case s: StructType
@@ -377,6 +413,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                     "eventName" -> toSQLId(etw.eventTime.name),
                     "eventType" -> toSQLType(etw.eventTime.dataType)))
             }
+
           case f: Filter if f.condition.dataType != BooleanType =>
             f.failAnalysis(
               errorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
@@ -484,7 +521,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             groupingExprs.foreach(checkValidGroupingExprs)
             aggregateExprs.foreach(checkValidAggregateExpression)
 
-          case CollectMetrics(name, metrics, _) =>
+          case CollectMetrics(name, metrics, _, _) =>
             if (name == null || name.isEmpty) {
               operator.failAnalysis(
                 errorClass = "INVALID_OBSERVED_METRICS.MISSING_NAME",
@@ -683,10 +720,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 ))
             }
 
-          case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
-            val generators = exprs.filter(expr => expr.exists(_.isInstanceOf[Generator]))
-            throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "SELECT")
-
           case p @ Project(projectList, _) =>
             projectList.foreach(_.transformDownWithPruning(
               _.containsPattern(UNRESOLVED_WINDOW_EXPRESSION)) {
@@ -749,6 +782,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 "dataType" -> toSQLType(mapCol.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
+            !operatorAllowsNonDeterministicExpressions(o) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
             !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] &&
             !o.isInstanceOf[Expand] &&
@@ -1075,17 +1109,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
    * are allowed (e.g. self-joins).
    */
   private def checkCollectedMetrics(plan: LogicalPlan): Unit = {
-    val metricsMap = mutable.Map.empty[String, LogicalPlan]
+    val metricsMap = mutable.Map.empty[String, CollectMetrics]
     def check(plan: LogicalPlan): Unit = plan.foreach { node =>
       node match {
-        case metrics @ CollectMetrics(name, _, _) =>
-          val simplifiedMetrics = simplifyPlanForCollectedMetrics(metrics.canonicalized)
+        case metrics @ CollectMetrics(name, _, _, dataframeId) =>
           metricsMap.get(name) match {
             case Some(other) =>
-              val simplifiedOther = simplifyPlanForCollectedMetrics(other.canonicalized)
               // Exact duplicates are allowed. They can be the result
               // of a CTE that is used multiple times or a self join.
-              if (simplifiedMetrics != simplifiedOther) {
+              if (dataframeId != other.dataframeId) {
                 failAnalysis(
                   errorClass = "DUPLICATED_METRICS_NAME",
                   messageParameters = Map("metricName" -> name))
@@ -1102,30 +1134,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       })
     }
     check(plan)
-  }
-
-  /**
-   * This method is only used for checking collected metrics. This method tries to
-   * remove extra project which only re-assign expr ids from the plan so that we can identify exact
-   * duplicates metric definition.
-   */
-  private def simplifyPlanForCollectedMetrics(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveOperators {
-      case p: Project if p.projectList.size == p.child.output.size =>
-        val assignExprIdOnly = p.projectList.zipWithIndex.forall {
-          case (Alias(attr: AttributeReference, _), index) =>
-            // The input plan of this method is already canonicalized. The attribute id becomes the
-            // ordinal of this attribute in the child outputs. So an alias-only Project means the
-            // the id of the aliased attribute is the same as its index in the project list.
-            attr.exprId.id == index
-          case _ => false
-        }
-        if (assignExprIdOnly) {
-          p.child
-        } else {
-          p
-        }
-    }
   }
 
   /**

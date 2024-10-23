@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.5.0</version>
+    <version>3.5.4-SNAPSHOT</version>
     <relativePath>../../../../pom.xml</relativePath>
   </parent>
 
@@ -50,16 +50,42 @@
       <artifactId>spark-sketch_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <!--
+      We need to define protobuf here because we need to change the scope of both from
+      provided to compile. If we don't do this we can't shade these libraries.
+    -->
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+      <scope>compile</scope>
+    </dependency>
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
       <version>${connect.guava.version}</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>failureaccess</artifactId>
+      <version>${guava.failureaccess.version}</version>
+      <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>com.lihaoyi</groupId>
       <artifactId>ammonite_${scala.version}</artifactId>
       <version>${ammonite.version}</version>
       <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-lang3</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
@@ -85,59 +111,78 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
+          <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
           <artifactSet>
             <includes>
+              <include>com.google.guava:*</include>
               <include>com.google.android:*</include>
               <include>com.google.api.grpc:*</include>
               <include>com.google.code.findbugs:*</include>
               <include>com.google.code.gson:*</include>
               <include>com.google.errorprone:*</include>
-              <include>com.google.guava:*</include>
               <include>com.google.j2objc:*</include>
               <include>com.google.protobuf:*</include>
+              <include>com.google.flatbuffers:*</include>
               <include>io.grpc:*</include>
               <include>io.netty:*</include>
               <include>io.perfmark:*</include>
+              <include>org.apache.arrow:*</include>
               <include>org.codehaus.mojo:*</include>
               <include>org.checkerframework:*</include>
               <include>org.apache.spark:spark-connect-common_${scala.binary.version}</include>
+              <include>org.apache.spark:spark-sql-api_${scala.binary.version}</include>
             </includes>
           </artifactSet>
           <relocations>
             <relocation>
+              <pattern>com.google.common</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.guava</shadedPattern>
+              <includes>
+                <include>com.google.common.**</include>
+              </includes>
+            </relocation>
+            <relocation>
               <pattern>io.grpc</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.client.io.grpc</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.io.grpc</shadedPattern>
               <includes>
                 <include>io.grpc.**</include>
               </includes>
             </relocation>
             <relocation>
               <pattern>com.google</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.client.com.google</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.com.google</shadedPattern>
+              <excludes>
+                <!-- Guava is relocated to ${spark.shade.packageName}.connect.guava -->
+                <exclude>com.google.common.**</exclude>
+              </excludes>
             </relocation>
             <relocation>
               <pattern>io.netty</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.client.io.netty</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.io.netty</shadedPattern>
             </relocation>
             <relocation>
               <pattern>org.checkerframework</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.client.org.checkerframework</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.org.checkerframework</shadedPattern>
             </relocation>
             <relocation>
               <pattern>javax.annotation</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.client.javax.annotation</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.javax.annotation</shadedPattern>
             </relocation>
             <relocation>
               <pattern>io.perfmark</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.client.io.perfmark</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.io.perfmark</shadedPattern>
             </relocation>
             <relocation>
               <pattern>org.codehaus</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.client.org.codehaus</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.org.codehaus</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>org.apache.arrow</pattern>
+              <shadedPattern>${spark.shade.packageName}.org.apache.arrow</shadedPattern>
             </relocation>
             <relocation>
               <pattern>android.annotation</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.client.android.annotation</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.android.annotation</shadedPattern>
             </relocation>
           </relocations>
           <!--SPARK-42228: Add `ServicesResourceTransformer` to relocation class names in META-INF/services for grpc-->

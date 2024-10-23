@@ -56,10 +56,9 @@ private[v1] class SqlResource extends BaseAppResource {
       planDescription: Boolean): ExecutionData = {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
-      val graph = sqlStore.planGraph(execId)
       sqlStore
         .execution(execId)
-        .map(prepareExecutionData(_, graph, details, planDescription))
+        .map(prepareExecutionData(_, sqlStore.planGraph(execId), details, planDescription))
         .getOrElse(throw new NotFoundException("unknown query execution id: " + execId))
     }
   }

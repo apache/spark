@@ -18,12 +18,14 @@
 import datetime
 import os
 import threading
+import calendar
 import time
 import unittest
 import warnings
 from distutils.version import LooseVersion
 from typing import cast
 from collections import namedtuple
+import sys
 
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import Row, SparkSession
@@ -1090,6 +1092,34 @@ class ArrowTestsMixin:
 
         self.assertEqual(df.first(), expected)
 
+    @unittest.skipIf(sys.version_info < (3, 9), "zoneinfo is available from Python 3.9+")
+    def test_toPandas_timestmap_tzinfo(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_toPandas_timestmap_tzinfo(arrow_enabled)
+
+    def check_toPandas_timestmap_tzinfo(self, arrow_enabled):
+        # SPARK-47202: Test timestamp with tzinfo in toPandas and createDataFrame
+        from zoneinfo import ZoneInfo
+
+        ts_tzinfo = datetime.datetime(2023, 1, 1, 0, 0, 0, tzinfo=ZoneInfo("America/Los_Angeles"))
+        data = pd.DataFrame({"a": [ts_tzinfo]})
+        df = self.spark.createDataFrame(data)
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.pyspark.enabled": arrow_enabled,
+            }
+        ):
+            pdf = df.toPandas()
+
+        expected = pd.DataFrame(
+            # Spark unsets tzinfo and converts them to localtimes.
+            {"a": [datetime.datetime.fromtimestamp(calendar.timegm(ts_tzinfo.utctimetuple()))]}
+        )
+
+        assert_frame_equal(pdf, expected)
+
     def test_toPandas_nested_timestamp(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
@@ -1237,6 +1267,16 @@ class ArrowTestsMixin:
 
             df = self.spark.createDataFrame([MyInheritedTuple(1, 2, MyInheritedTuple(1, 2, 3))])
             self.assertEqual(df.first(), Row(a=1, b=2, c=Row(a=1, b=2, c=3)))
+
+    def test_negative_and_zero_batch_size(self):
+        # SPARK-47068: Negative and zero value should work as unlimited batch size.
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 0}):
+            pdf = pd.DataFrame({"a": [123]})
+            assert_frame_equal(pdf, self.spark.createDataFrame(pdf).toPandas())
+
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": -1}):
+            pdf = pd.DataFrame({"a": [123]})
+            assert_frame_equal(pdf, self.spark.createDataFrame(pdf).toPandas())
 
 
 @unittest.skipIf(

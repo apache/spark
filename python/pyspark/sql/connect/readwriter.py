@@ -830,6 +830,7 @@ class DataFrameWriterV2(OptionUtils):
 
 def _test() -> None:
     import sys
+    import os
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.connect.readwriter
@@ -838,7 +839,7 @@ def _test() -> None:
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.readwriter tests")
-        .remote("local[4]")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
         .getOrCreate()
     )
 

@@ -771,34 +771,35 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val literal = Literal(1).as("lit")
 
     // Ok
-    assert(CollectMetrics("event", literal :: sum :: random_sum :: Nil, testRelation).resolved)
+    assert(CollectMetrics("event", literal :: sum :: random_sum :: Nil, testRelation, 0).resolved)
 
     // Bad name
-    assert(!CollectMetrics("", sum :: Nil, testRelation).resolved)
+    assert(!CollectMetrics("", sum :: Nil, testRelation, 0).resolved)
     assertAnalysisErrorClass(
-      CollectMetrics("", sum :: Nil, testRelation),
+      CollectMetrics("", sum :: Nil, testRelation, 0),
       expectedErrorClass = "INVALID_OBSERVED_METRICS.MISSING_NAME",
       expectedMessageParameters = Map(
-        "operator" -> "'CollectMetrics , [sum(a#x) AS sum#xL]\n+- LocalRelation <empty>, [a#x]\n")
+        "operator" ->
+          "'CollectMetrics , [sum(a#x) AS sum#xL], 0\n+- LocalRelation <empty>, [a#x]\n")
     )
 
     // No columns
-    assert(!CollectMetrics("evt", Nil, testRelation).resolved)
+    assert(!CollectMetrics("evt", Nil, testRelation, 0).resolved)
 
     def checkAnalysisError(exprs: Seq[NamedExpression], errors: String*): Unit = {
-      assertAnalysisError(CollectMetrics("event", exprs, testRelation), errors)
+      assertAnalysisError(CollectMetrics("event", exprs, testRelation, 0), errors)
     }
 
     // Unwrapped attribute
     assertAnalysisErrorClass(
-      CollectMetrics("event", a :: Nil, testRelation),
+      CollectMetrics("event", a :: Nil, testRelation, 0),
       expectedErrorClass = "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_ATTRIBUTE",
       expectedMessageParameters = Map("expr" -> "\"a\"")
     )
 
     // Unwrapped non-deterministic expression
     assertAnalysisErrorClass(
-      CollectMetrics("event", Rand(10).as("rnd") :: Nil, testRelation),
+      CollectMetrics("event", Rand(10).as("rnd") :: Nil, testRelation, 0),
       expectedErrorClass = "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC",
       expectedMessageParameters = Map("expr" -> "\"rand(10) AS rnd\"")
     )
@@ -808,7 +809,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       CollectMetrics(
         "event",
         Sum(a).toAggregateExpression(isDistinct = true).as("sum") :: Nil,
-        testRelation),
+        testRelation, 0),
       expectedErrorClass =
         "INVALID_OBSERVED_METRICS.AGGREGATE_EXPRESSION_WITH_DISTINCT_UNSUPPORTED",
       expectedMessageParameters = Map("expr" -> "\"sum(DISTINCT a) AS sum\"")
@@ -819,7 +820,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       CollectMetrics(
         "event",
         Sum(Sum(a).toAggregateExpression()).toAggregateExpression().as("sum") :: Nil,
-        testRelation),
+        testRelation, 0),
       expectedErrorClass = "INVALID_OBSERVED_METRICS.NESTED_AGGREGATES_UNSUPPORTED",
       expectedMessageParameters = Map("expr" -> "\"sum(sum(a)) AS sum\"")
     )
@@ -830,7 +831,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       WindowSpecDefinition(Nil, a.asc :: Nil,
         SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
     assertAnalysisErrorClass(
-      CollectMetrics("event", windowExpr.as("rn") :: Nil, testRelation),
+      CollectMetrics("event", windowExpr.as("rn") :: Nil, testRelation, 0),
       expectedErrorClass = "INVALID_OBSERVED_METRICS.WINDOW_EXPRESSIONS_UNSUPPORTED",
       expectedMessageParameters = Map(
         "expr" ->
@@ -848,14 +849,14 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     // Same result - duplicate names are allowed
     assertAnalysisSuccess(Union(
-      CollectMetrics("evt1", count :: Nil, testRelation) ::
-      CollectMetrics("evt1", count :: Nil, testRelation) :: Nil))
+      CollectMetrics("evt1", count :: Nil, testRelation, 0) ::
+      CollectMetrics("evt1", count :: Nil, testRelation, 0) :: Nil))
 
     // Same children, structurally different metrics - fail
     assertAnalysisErrorClass(
       Union(
-        CollectMetrics("evt1", count :: Nil, testRelation) ::
-          CollectMetrics("evt1", sum :: Nil, testRelation) :: Nil),
+        CollectMetrics("evt1", count :: Nil, testRelation, 0) ::
+          CollectMetrics("evt1", sum :: Nil, testRelation, 1) :: Nil),
       expectedErrorClass = "DUPLICATED_METRICS_NAME",
       expectedMessageParameters = Map("metricName" -> "evt1")
     )
@@ -865,17 +866,17 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val tblB = LocalRelation(b)
     assertAnalysisErrorClass(
       Union(
-        CollectMetrics("evt1", count :: Nil, testRelation) ::
-          CollectMetrics("evt1", count :: Nil, tblB) :: Nil),
+        CollectMetrics("evt1", count :: Nil, testRelation, 0) ::
+          CollectMetrics("evt1", count :: Nil, tblB, 1) :: Nil),
       expectedErrorClass = "DUPLICATED_METRICS_NAME",
       expectedMessageParameters = Map("metricName" -> "evt1")
     )
 
     // Subquery different tree - fail
-    val subquery = Aggregate(Nil, sum :: Nil, CollectMetrics("evt1", count :: Nil, testRelation))
+    val subquery = Aggregate(Nil, sum :: Nil, CollectMetrics("evt1", count :: Nil, testRelation, 0))
     val query = Project(
       b :: ScalarSubquery(subquery, Nil).as("sum") :: Nil,
-      CollectMetrics("evt1", count :: Nil, tblB))
+      CollectMetrics("evt1", count :: Nil, tblB, 1))
     assertAnalysisErrorClass(
       query,
       expectedErrorClass = "DUPLICATED_METRICS_NAME",
@@ -887,7 +888,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       case a: AggregateExpression => a.copy(filter = Some(true))
     }.asInstanceOf[NamedExpression]
     assertAnalysisErrorClass(
-      CollectMetrics("evt1", sumWithFilter :: Nil, testRelation),
+      CollectMetrics("evt1", sumWithFilter :: Nil, testRelation, 0),
       expectedErrorClass =
         "INVALID_OBSERVED_METRICS.AGGREGATE_EXPRESSION_WITH_FILTER_UNSUPPORTED",
       expectedMessageParameters = Map("expr" -> "\"sum(a) FILTER (WHERE true) AS sum\"")
@@ -1516,7 +1517,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("SPARK-43030: deduplicate relations in CTE relation definitions") {
     val join = testRelation.as("left").join(testRelation.as("right"))
     val cteDef = CTERelationDef(join)
-    val cteRef = CTERelationRef(cteDef.id, false, Nil)
+    val cteRef = CTERelationRef(cteDef.id, false, Nil, false)
 
     withClue("flat CTE") {
       val plan = WithCTE(cteRef.select($"left.a"), Seq(cteDef)).analyze
@@ -1529,7 +1530,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     withClue("nested CTE") {
       val cteDef2 = CTERelationDef(WithCTE(cteRef.join(testRelation), Seq(cteDef)))
-      val cteRef2 = CTERelationRef(cteDef2.id, false, Nil)
+      val cteRef2 = CTERelationRef(cteDef2.id, false, Nil, false)
       val plan = WithCTE(cteRef2, Seq(cteDef2)).analyze
       val relations = plan.collect {
         case r: LocalRelation => r
@@ -1541,7 +1542,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-43030: deduplicate CTE relation references") {
     val cteDef = CTERelationDef(testRelation.select($"a"))
-    val cteRef = CTERelationRef(cteDef.id, false, Nil)
+    val cteRef = CTERelationRef(cteDef.id, false, Nil, false)
 
     withClue("single reference") {
       val plan = WithCTE(cteRef.where($"a" > 1), Seq(cteDef)).analyze
@@ -1564,7 +1565,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     withClue("CTE relation has duplicated attributes") {
       val cteDef = CTERelationDef(testRelation.select($"a", $"a"))
-      val cteRef = CTERelationRef(cteDef.id, false, Nil)
+      val cteRef = CTERelationRef(cteDef.id, false, Nil, false)
       val plan = WithCTE(cteRef.join(cteRef.select($"a")), Seq(cteDef)).analyze
       val refs = plan.collect {
         case r: CTERelationRef => r
@@ -1576,14 +1577,14 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     withClue("CTE relation has duplicate aliases") {
       val alias = Alias($"a", "x")()
       val cteDef = CTERelationDef(testRelation.select(alias, alias).where($"x" === 1))
-      val cteRef = CTERelationRef(cteDef.id, false, Nil)
+      val cteRef = CTERelationRef(cteDef.id, false, Nil, false)
       // Should not fail with the assertion failure: Found duplicate rewrite attributes.
       WithCTE(cteRef.join(cteRef), Seq(cteDef)).analyze
     }
 
     withClue("references in both CTE relation definition and main query") {
       val cteDef2 = CTERelationDef(cteRef.where($"a" > 2))
-      val cteRef2 = CTERelationRef(cteDef2.id, false, Nil)
+      val cteRef2 = CTERelationRef(cteDef2.id, false, Nil, false)
       val plan = WithCTE(cteRef.union(cteRef2), Seq(cteDef, cteDef2)).analyze
       val refs = plan.collect {
         case r: CTERelationRef => r
@@ -1661,10 +1662,69 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       checkAnalysis(testRelation.select(ident2), testRelation.select($"a").analyze)
     }
     withClue("IDENTIFIER as table") {
-      val ident = PlanWithUnresolvedIdentifier(name, _ => testRelation)
+      val ident = new PlanWithUnresolvedIdentifier(name, _ => testRelation)
       checkAnalysis(ident.select($"a"), testRelation.select($"a").analyze)
-      val ident2 = PlanWithUnresolvedIdentifier(replaceable, _ => testRelation)
+      val ident2 = new PlanWithUnresolvedIdentifier(replaceable, _ => testRelation)
       checkAnalysis(ident2.select($"a"), testRelation.select($"a").analyze)
     }
+  }
+
+  test("SPARK-46064 Basic functionality of elimination for watermark node in batch query") {
+    val dfWithEventTimeWatermark = EventTimeWatermark($"ts",
+      IntervalUtils.fromIntervalString("10 seconds"), batchRelationWithTs)
+
+    val analyzed = getAnalyzer.executeAndCheck(dfWithEventTimeWatermark, new QueryPlanningTracker)
+
+    // EventTimeWatermark node is eliminated via EliminateEventTimeWatermark.
+    assert(!analyzed.exists(_.isInstanceOf[EventTimeWatermark]))
+  }
+
+  test("SPARK-46064 EliminateEventTimeWatermark properly handles the case where the child of " +
+    "EventTimeWatermark changes the isStreaming flag during resolution") {
+    // UnresolvedRelation which is batch initially and will be resolved as streaming
+    val dfWithTempView = UnresolvedRelation(TableIdentifier("streamingTable"))
+    val dfWithEventTimeWatermark = EventTimeWatermark($"ts",
+      IntervalUtils.fromIntervalString("10 seconds"), dfWithTempView)
+
+    val analyzed = getAnalyzer.executeAndCheck(dfWithEventTimeWatermark, new QueryPlanningTracker)
+
+    // EventTimeWatermark node is NOT eliminated.
+    assert(analyzed.exists(_.isInstanceOf[EventTimeWatermark]))
+  }
+
+  test("SPARK-46062: isStreaming flag is synced from CTE definition to CTE reference") {
+    val cteDef = CTERelationDef(streamingRelation.select($"a", $"ts"))
+    // Intentionally marking the flag _resolved to false, so that analyzer has a chance to sync
+    // the flag isStreaming on syncing the flag _resolved.
+    val cteRef = CTERelationRef(cteDef.id, _resolved = false, Nil, isStreaming = false)
+    val plan = WithCTE(cteRef, Seq(cteDef)).analyze
+
+    val refs = plan.collect {
+      case r: CTERelationRef => r
+    }
+    assert(refs.length == 1)
+    assert(refs.head.resolved)
+    assert(refs.head.isStreaming)
+  }
+
+  test("SPARK-47927: ScalaUDF output nullability") {
+    val udf = ScalaUDF(
+      function = (i: Int) => i + 1,
+      dataType = IntegerType,
+      children = $"a" :: Nil,
+      nullable = false,
+      inputEncoders = Seq(Some(ExpressionEncoder[Int]().resolveAndBind())))
+    val plan = testRelation.select(udf.as("u")).select($"u").analyze
+    assert(plan.output.head.nullable)
+  }
+
+  test("SPARK-49782: ResolveDataFrameDropColumns rule resolves complex UnresolvedAttribute") {
+    val function = UnresolvedFunction("trim", Seq(UnresolvedAttribute("i")), isDistinct = false)
+    val addColumnF = Project(Seq(UnresolvedAttribute("i"), Alias(function, "f")()), testRelation5)
+    // Drop column "f" via ResolveDataFrameDropColumns rule.
+    val inputPlan = DataFrameDropColumns(Seq(UnresolvedAttribute("f")), addColumnF)
+    // The expected Project (root node) should only have column "i".
+    val expectedPlan = Project(Seq(UnresolvedAttribute("i")), addColumnF).analyze
+    checkAnalysis(inputPlan, expectedPlan)
   }
 }

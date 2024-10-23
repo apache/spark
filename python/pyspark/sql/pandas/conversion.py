@@ -613,6 +613,7 @@ class SparkConversionMixin:
 
         # Slice the DataFrame to be batched
         step = self._jconf.arrowMaxRecordsPerBatch()
+        step = step if step > 0 else len(pdf)
         pdf_slices = (pdf.iloc[start : start + step] for start in range(0, len(pdf), step))
 
         # Create list of Arrow (columns, arrow_type, spark_type) for serializer dump_stream

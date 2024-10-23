@@ -91,7 +91,7 @@ object BuildCommons {
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
   val protoVersion = "3.23.4"
   // GRPC version used for Spark Connect.
-  val gprcVersion = "1.56.0"
+  val grpcVersion = "1.56.0"
 }
 
 object SparkBuild extends PomBuild {
@@ -160,16 +160,21 @@ object SparkBuild extends PomBuild {
     val replacements = Map(
       """customId="println" level="error"""" -> """customId="println" level="warn""""
     )
-    var contents = Source.fromFile(in).getLines.mkString("\n")
-    for ((k, v) <- replacements) {
-      require(contents.contains(k), s"Could not rewrite '$k' in original scalastyle config.")
-      contents = contents.replace(k, v)
+    val source = Source.fromFile(in)
+    try {
+      var contents = source.getLines.mkString("\n")
+      for ((k, v) <- replacements) {
+        require(contents.contains(k), s"Could not rewrite '$k' in original scalastyle config.")
+        contents = contents.replace(k, v)
+      }
+      new PrintWriter(out) {
+        write(contents)
+        close()
+      }
+      out
+    } finally {
+      source.close()
     }
-    new PrintWriter(out) {
-      write(contents)
-      close()
-    }
-    out
   }
 
   // Return a cached scalastyle task for a given configuration (usually Compile or Test)
@@ -464,8 +469,7 @@ object SparkBuild extends PomBuild {
   /* Protobuf settings */
   enable(SparkProtobuf.settings)(protobuf)
 
-  // SPARK-14738 - Remove docker tests from main Spark build
-  // enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
+  enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
 
   if (!profiles.contains("volcano")) {
     enable(Volcano.settings)(kubernetes)
@@ -567,7 +571,6 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.catalyst.expressions.MathExpressionsSuite",
     "org.apache.spark.sql.hive.HiveExternalCatalogSuite",
     "org.apache.spark.sql.hive.StatisticsSuite",
-    "org.apache.spark.sql.hive.client.VersionsSuite",
     "org.apache.spark.sql.hive.client.HiveClientVersions",
     "org.apache.spark.sql.hive.HiveExternalCatalogVersionsSuite",
     "org.apache.spark.ml.classification.LogisticRegressionSuite",
@@ -580,6 +583,7 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.hive.thriftserver.ui.ThriftServerPageSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2ListenerSuite",
     "org.apache.spark.sql.kafka010.KafkaDelegationTokenSuite",
+    "org.apache.spark.sql.streaming.RocksDBStateStoreStreamingAggregationSuite",
     "org.apache.spark.shuffle.KubernetesLocalDiskShuffleDataIOSuite",
     "org.apache.spark.sql.hive.HiveScalaReflectionSuite"
   )
@@ -693,7 +697,7 @@ object SparkConnectCommon {
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
       Seq(
-        "io.grpc" % "protoc-gen-grpc-java" % BuildCommons.gprcVersion asProtocPlugin(),
+        "io.grpc" % "protoc-gen-grpc-java" % BuildCommons.grpcVersion asProtocPlugin(),
         "com.google.guava" % "guava" % guavaVersion,
         "com.google.guava" % "failureaccess" % guavaFailureaccessVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
@@ -1401,7 +1405,7 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/io")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/kvstore")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalyst")))
-      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/connect")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/connect/")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))
@@ -1529,7 +1533,11 @@ object CopyDependencies {
           if (destJar.isFile()) {
             destJar.delete()
           }
-          if (jar.getName.contains("spark-connect") &&
+
+          if (jar.getName.contains("spark-connect-common") &&
+            !SbtPomKeys.profiles.value.contains("noshade-connect")) {
+            // Don't copy the spark connect common JAR as it is shaded in the spark connect.
+          } else if (jar.getName.contains("spark-connect") &&
             !SbtPomKeys.profiles.value.contains("noshade-connect")) {
             Files.copy(fid.toPath, destJar.toPath)
           } else if (jar.getName.contains("connect-client-jvm") &&
@@ -1591,7 +1599,6 @@ object TestSettings {
     (Test / javaOptions) += "-Dspark.ui.enabled=false",
     (Test / javaOptions) += "-Dspark.ui.showConsoleProgress=false",
     (Test / javaOptions) += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
-    (Test / javaOptions) += "-Dspark.hadoop.hadoop.security.key.provider.path=test:///",
     (Test / javaOptions) += "-Dhive.conf.validation=false",
     (Test / javaOptions) += "-Dsun.io.serialization.extendedDebugInfo=false",
     (Test / javaOptions) += "-Dderby.system.durability=test",
@@ -1619,6 +1626,7 @@ object TestSettings {
         "--add-opens=java.base/java.util=ALL-UNNAMED",
         "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
         "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED",
         "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
         "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
         "--add-opens=java.base/sun.security.action=ALL-UNNAMED",

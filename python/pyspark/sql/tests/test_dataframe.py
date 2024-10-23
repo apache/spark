@@ -106,6 +106,43 @@ class DataFrameTestsMixin:
         self.assertEqual(df.drop(col("name"), col("age")).columns, ["active"])
         self.assertEqual(df.drop(col("name"), col("age"), col("random")).columns, ["active"])
 
+    def test_drop_join(self):
+        left_df = self.spark.createDataFrame(
+            [(1, "a"), (2, "b"), (3, "c")],
+            ["join_key", "value1"],
+        )
+        right_df = self.spark.createDataFrame(
+            [(1, "aa"), (2, "bb"), (4, "dd")],
+            ["join_key", "value2"],
+        )
+        joined_df = left_df.join(
+            right_df,
+            on=left_df["join_key"] == right_df["join_key"],
+            how="left",
+        )
+
+        dropped_1 = joined_df.drop(left_df["join_key"])
+        self.assertEqual(dropped_1.columns, ["value1", "join_key", "value2"])
+        self.assertEqual(
+            dropped_1.sort("value1").collect(),
+            [
+                Row(value1="a", join_key=1, value2="aa"),
+                Row(value1="b", join_key=2, value2="bb"),
+                Row(value1="c", join_key=None, value2=None),
+            ],
+        )
+
+        dropped_2 = joined_df.drop(right_df["join_key"])
+        self.assertEqual(dropped_2.columns, ["join_key", "value1", "value2"])
+        self.assertEqual(
+            dropped_2.sort("value1").collect(),
+            [
+                Row(join_key=1, value1="a", value2="aa"),
+                Row(join_key=2, value1="b", value2="bb"),
+                Row(join_key=3, value1="c", value2=None),
+            ],
+        )
+
     def test_with_columns_renamed(self):
         df = self.spark.createDataFrame([("Alice", 50), ("Alice", 60)], ["name", "age"])
 
@@ -1008,6 +1045,11 @@ class DataFrameTestsMixin:
             IllegalArgumentException, lambda: self.spark.range(1).sample(-1.0).count()
         )
 
+    def test_sample_with_random_seed(self):
+        df = self.spark.range(10000).sample(0.1)
+        cnts = [df.count() for i in range(10)]
+        self.assertEqual(1, len(set(cnts)))
+
     def test_toDF_with_string(self):
         df = self.spark.createDataFrame([("John", 30), ("Alice", 25), ("Bob", 28)])
         data = [("John", 30), ("Alice", 25), ("Bob", 28)]
@@ -1508,6 +1550,9 @@ class DataFrameTestsMixin:
         df = self.spark.createDataFrame(pd.DataFrame({"a": [timedelta(microseconds=123)]}))
         self.assertEqual(df.toPandas().a.iloc[0], timedelta(microseconds=123))
 
+    @unittest.skipIf(
+        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Newline difference from the server"
+    )
     def test_repr_behaviors(self):
         import re
 

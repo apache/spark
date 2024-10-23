@@ -24,6 +24,7 @@ import scala.util.Random
 import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -1068,6 +1069,39 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
+  test("SPARK-45599: Neither 0.0 nor -0.0 should be dropped when computing percentile") {
+    // To reproduce the bug described in SPARK-45599, we need exactly these rows in roughly
+    // this order in a DataFrame with exactly 1 partition.
+    // scalastyle:off line.size.limit
+    // See: https://issues.apache.org/jira/browse/SPARK-45599?focusedCommentId=17806954&page=com.atlassian.jira.plugin.system.issuetabpanels%3Acomment-tabpanel#comment-17806954
+    // scalastyle:on line.size.limit
+    val spark45599Repro: DataFrame = Seq(
+        0.0,
+        2.0,
+        153.0,
+        168.0,
+        3252411229536261.0,
+        7.205759403792794e+16,
+        1.7976931348623157e+308,
+        0.25,
+        Double.NaN,
+        Double.NaN,
+        -0.0,
+        -128.0,
+        Double.NaN,
+        Double.NaN
+      ).toDF("val").coalesce(1)
+
+    checkAnswer(
+      spark45599Repro.agg(
+        percentile(col("val"), lit(0.1))
+      ),
+      // With the buggy implementation of OpenHashSet, this returns `0.050000000000000044`
+      // instead of `-0.0`.
+      List(Row(-0.0))
+    )
+  }
+
   test("any_value") {
     checkAnswer(
       courseSales.groupBy("course").agg(
@@ -2101,6 +2135,152 @@ class DataFrameAggregateSuite extends QueryTest
         select(hll_sketch_estimate(hll_union_agg(col("sketch"), lit(true)))),
       Seq(Row(1))
     )
+  }
+
+  test("SPARK-46779: Group by subquery with a cached relation") {
+    withTempView("data") {
+      sql(
+        """create or replace temp view data(c1, c2) as values
+          |(1, 2),
+          |(1, 3),
+          |(3, 7)""".stripMargin)
+      sql("cache table data")
+      val df = sql(
+        """select c1, (select count(*) from data d1 where d1.c1 = d2.c1), count(c2)
+          |from data d2 group by all""".stripMargin)
+      checkAnswer(df, Row(1, 2, 2) :: Row(3, 1, 1) :: Nil)
+    }
+  }
+
+  test("aggregating with various distinct expressions") {
+    abstract class AggregateTestCaseBase(
+        val query: String,
+        val resultSeq: Seq[Seq[Row]],
+        val hasExpandNodeInPlan: Boolean)
+    case class AggregateTestCase(
+        override val query: String,
+        override val resultSeq: Seq[Seq[Row]],
+        override val hasExpandNodeInPlan: Boolean)
+      extends AggregateTestCaseBase(query, resultSeq, hasExpandNodeInPlan)
+    case class AggregateTestCaseDefault(
+        override val query: String)
+      extends AggregateTestCaseBase(
+        query,
+        Seq(Seq(Row(0)), Seq(Row(1)), Seq(Row(1))),
+        hasExpandNodeInPlan = true)
+
+    val t = "t"
+    val testCases: Seq[AggregateTestCaseBase] = Seq(
+      AggregateTestCaseDefault(
+        s"""SELECT COUNT(DISTINCT "col") FROM $t"""
+      ),
+      AggregateTestCaseDefault(
+        s"SELECT COUNT(DISTINCT 1) FROM $t"
+      ),
+      AggregateTestCaseDefault(
+        s"SELECT COUNT(DISTINCT 1 + 2) FROM $t"
+      ),
+      AggregateTestCaseDefault(
+        s"SELECT COUNT(DISTINCT 1, 2, 1 + 2) FROM $t"
+      ),
+      AggregateTestCase(
+        s"SELECT COUNT(1), COUNT(DISTINCT 1) FROM $t",
+        Seq(Seq(Row(0, 0)), Seq(Row(1, 1)), Seq(Row(2, 1))),
+        hasExpandNodeInPlan = true
+      ),
+      AggregateTestCaseDefault(
+        s"""SELECT COUNT(DISTINCT 1, "col") FROM $t"""
+      ),
+      AggregateTestCaseDefault(
+        s"""SELECT COUNT(DISTINCT current_date()) FROM $t"""
+      ),
+      AggregateTestCaseDefault(
+        s"""SELECT COUNT(DISTINCT array(1, 2)[1]) FROM $t"""
+      ),
+      AggregateTestCaseDefault(
+        s"""SELECT COUNT(DISTINCT map(1, 2)[1]) FROM $t"""
+      ),
+      AggregateTestCaseDefault(
+        s"""SELECT COUNT(DISTINCT struct(1, 2).col1) FROM $t"""
+      ),
+      AggregateTestCase(
+        s"SELECT COUNT(DISTINCT 1) FROM $t GROUP BY col",
+        Seq(Seq(), Seq(Row(1)), Seq(Row(1), Row(1))),
+        hasExpandNodeInPlan = false
+      ),
+      AggregateTestCaseDefault(
+        s"SELECT COUNT(DISTINCT 1) FROM $t WHERE 1 = 1"
+      ),
+      AggregateTestCase(
+        s"SELECT COUNT(DISTINCT 1) FROM $t WHERE 1 = 0",
+        Seq(Seq(Row(0)), Seq(Row(0)), Seq(Row(0))),
+        hasExpandNodeInPlan = false
+      ),
+      AggregateTestCase(
+        s"SELECT SUM(DISTINCT 1) FROM (SELECT COUNT(DISTINCT 1) FROM $t)",
+        Seq(Seq(Row(1)), Seq(Row(1)), Seq(Row(1))),
+        hasExpandNodeInPlan = false
+      ),
+      AggregateTestCase(
+        s"SELECT SUM(DISTINCT 1) FROM (SELECT COUNT(1) FROM $t)",
+        Seq(Seq(Row(1)), Seq(Row(1)), Seq(Row(1))),
+        hasExpandNodeInPlan = false
+      ),
+      AggregateTestCase(
+        s"SELECT SUM(1) FROM (SELECT COUNT(DISTINCT 1) FROM $t)",
+        Seq(Seq(Row(1)), Seq(Row(1)), Seq(Row(1))),
+        hasExpandNodeInPlan = false
+      ),
+      AggregateTestCaseDefault(
+        s"SELECT SUM(x) FROM (SELECT COUNT(DISTINCT 1) AS x FROM $t)"),
+      AggregateTestCase(
+        s"""SELECT COUNT(DISTINCT 1), COUNT(DISTINCT "col") FROM $t""",
+        Seq(Seq(Row(0, 0)), Seq(Row(1, 1)), Seq(Row(1, 1))),
+        hasExpandNodeInPlan = true
+      ),
+      AggregateTestCase(
+        s"""SELECT COUNT(DISTINCT 1), COUNT(DISTINCT col) FROM $t""",
+        Seq(Seq(Row(0, 0)), Seq(Row(1, 1)), Seq(Row(1, 2))),
+        hasExpandNodeInPlan = true
+      )
+    )
+    withTable(t) {
+      sql(s"create table $t(col int) using parquet")
+      Seq(0, 1, 2).foreach(columnValue => {
+        if (columnValue != 0) {
+          sql(s"insert into $t(col) values($columnValue)")
+        }
+        testCases.foreach(testCase => {
+          val query = sql(testCase.query)
+          checkAnswer(query, testCase.resultSeq(columnValue))
+          val hasExpandNodeInPlan = query.queryExecution.optimizedPlan.collectFirst {
+            case _: Expand => true
+          }.nonEmpty
+          assert(hasExpandNodeInPlan == testCase.hasExpandNodeInPlan)
+        })
+      })
+    }
+  }
+
+  test("SPARK-49261: Literals in grouping expressions shouldn't result in unresolved aggregation") {
+    val data = Seq((1, 1.001d, 2), (2, 3.001d, 4), (2, 3.001, 4)).toDF("a", "b", "c")
+    withTempView("v1") {
+      data.createOrReplaceTempView("v1")
+      val df =
+        sql("""SELECT
+              |  ROUND(SUM(b), 6) AS sum1,
+              |  COUNT(DISTINCT a) AS count1,
+              |  COUNT(DISTINCT c) AS count2
+              |FROM (
+              |  SELECT
+              |    6 AS gb,
+              |    *
+              |  FROM v1
+              |)
+              |GROUP BY a, gb
+              |""".stripMargin)
+      checkAnswer(df, Row(1.001d, 1, 1) :: Row(6.002d, 1, 1) :: Nil)
+    }
   }
 }
 

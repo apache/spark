@@ -353,7 +353,7 @@ case class PandasStddev(
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(n === ddof, divideByZeroEvalResult, sqrt(m2 / (n - ddof))))
+      If(n === ddof.toDouble, divideByZeroEvalResult, sqrt(m2 / (n - ddof.toDouble))))
   }
 
   override def prettyName: String = "pandas_stddev"
@@ -375,7 +375,7 @@ case class PandasVariance(
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(n === ddof, divideByZeroEvalResult, m2 / (n - ddof)))
+      If(n === ddof.toDouble, divideByZeroEvalResult, m2 / (n - ddof.toDouble)))
   }
 
   override def prettyName: String = "pandas_variance"
@@ -405,8 +405,8 @@ case class PandasSkewness(child: Expression)
     val _m2 = If(abs(m2) < 1e-14, Literal(0.0), m2)
     val _m3 = If(abs(m3) < 1e-14, Literal(0.0), m3)
 
-    If(n < 3, Literal.create(null, DoubleType),
-      If(_m2 === 0.0, Literal(0.0), sqrt(n - 1) * (n / (n - 2)) * _m3 / sqrt(_m2 * _m2 * _m2)))
+    If(n < 3.0, Literal.create(null, DoubleType),
+      If(_m2 === 0.0, Literal(0.0), sqrt(n - 1.0) * (n / (n - 2.0)) * _m3 / sqrt(_m2 * _m2 * _m2)))
   }
 
   override protected def withNewChildInternal(newChild: Expression): PandasSkewness =
@@ -423,9 +423,9 @@ case class PandasKurtosis(child: Expression)
   override protected def momentOrder = 4
 
   override val evaluateExpression: Expression = {
-    val adj = ((n - 1) / (n - 2)) * ((n - 1) / (n - 3)) * 3
-    val numerator = n * (n + 1) * (n - 1) * m4
-    val denominator = (n - 2) * (n - 3) * m2 * m2
+    val adj = ((n - 1.0) / (n - 2.0)) * ((n - 1.0) / (n - 3.0)) * 3.0
+    val numerator = n * (n + 1.0) * (n - 1.0) * m4
+    val denominator = (n - 2.0) * (n - 3.0) * m2 * m2
 
     // floating point error
     //
@@ -436,7 +436,7 @@ case class PandasKurtosis(child: Expression)
     val _numerator = If(abs(numerator) < 1e-14, Literal(0.0), numerator)
     val _denominator = If(abs(denominator) < 1e-14, Literal(0.0), denominator)
 
-    If(n < 4, Literal.create(null, DoubleType),
+    If(n < 4.0, Literal.create(null, DoubleType),
       If(_denominator === 0.0, Literal(0.0), _numerator / _denominator - adj))
   }
 

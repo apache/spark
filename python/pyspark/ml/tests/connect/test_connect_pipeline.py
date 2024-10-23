@@ -15,16 +15,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import os
 import unittest
+
 from pyspark.sql import SparkSession
 from pyspark.ml.tests.connect.test_legacy_mode_pipeline import PipelineTestsMixin
 
 
+@unittest.skipIf("SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Requires JVM access")
 class PipelineTestsOnConnect(PipelineTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = (
-            SparkSession.builder.remote("local[2]")
+            SparkSession.builder.remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]"))
             .config("spark.connect.copyFromLocalToFs.allowDestLocal", "true")
             .getOrCreate()
         )

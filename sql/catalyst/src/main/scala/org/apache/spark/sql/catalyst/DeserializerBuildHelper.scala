@@ -390,7 +390,9 @@ object DeserializerBuildHelper {
         CreateExternalRow(convertedFields, enc.schema))
 
     case JavaBeanEncoder(tag, fields) =>
-      val setters = fields.map { f =>
+      val setters = fields
+        .filter(_.writeMethod.isDefined)
+        .map { f =>
         val newTypePath = walkedTypePath.recordField(
           f.enc.clsTag.runtimeClass.getName,
           f.name)

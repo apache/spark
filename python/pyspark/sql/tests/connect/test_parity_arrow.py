@@ -16,6 +16,7 @@
 #
 
 import unittest
+import sys
 from distutils.version import LooseVersion
 
 import pandas as pd
@@ -135,6 +136,10 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
 
     def test_toPandas_nested_timestamp(self):
         self.check_toPandas_nested_timestamp(True)
+
+    @unittest.skipIf(sys.version_info < (3, 9), "zoneinfo is available from Python 3.9+")
+    def test_toPandas_timestmap_tzinfo(self):
+        self.check_toPandas_timestmap_tzinfo(True)
 
     def test_createDataFrame_udt(self):
         self.check_createDataFrame_udt(True)

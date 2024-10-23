@@ -120,6 +120,7 @@ public class JavaUtils {
   private static void deleteRecursivelyUsingJavaIO(
       File file,
       FilenameFilter filter) throws IOException {
+    if (!file.exists()) return;
     BasicFileAttributes fileAttributes =
       Files.readAttributes(file.toPath(), BasicFileAttributes.class);
     if (fileAttributes.isDirectory() && !isSymlink(file)) {

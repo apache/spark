@@ -19,20 +19,44 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
 import java.nio.charset.Charset
+import java.util.concurrent.Executors
 
+import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
 import scala.language.implicitConversions
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.streaming.CreateAtomicTestManager
+import org.apache.spark.sql.execution.streaming.{CreateAtomicTestManager, FileSystemBasedCheckpointFileManager}
+import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.{ThreadUtils, Utils}
+
+class NoOverwriteFileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration)
+  extends FileSystemBasedCheckpointFileManager(path, hadoopConf) {
+
+  override def createAtomic(path: Path,
+                            overwriteIfPossible: Boolean): CancellableFSDataOutputStream = {
+    new RenameBasedFSDataOutputStream(this, path, overwriteIfPossible)
+  }
+
+  override def renameTempFile(srcPath: Path, dstPath: Path,
+                              overwriteIfPossible: Boolean): Unit = {
+    if (!fs.exists(dstPath)) {
+      // only write if a file does not exist at this location
+      super.renameTempFile(srcPath, dstPath, overwriteIfPossible)
+    }
+  }
+}
 
 trait RocksDBStateStoreChangelogCheckpointingTestUtil {
   val rocksdbChangelogCheckpointingConfKey: String = RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX +
@@ -214,6 +238,35 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  testWithChangelogCheckpointingEnabled("SPARK-45419: Do not reuse SST files" +
+    " in different RocksDB instances") {
+    val remoteDir = Utils.createTempDir().toString
+    val conf = dbConf.copy(minDeltasForSnapshot = 0, compactOnCommit = false)
+    new File(remoteDir).delete()  // to make sure that the directory gets created
+    withDB(remoteDir, conf = conf) { db =>
+      for (version <- 0 to 2) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+      // upload snapshot 3.zip
+      db.doMaintenance()
+      // Roll back to version 1 and start to process data.
+      for (version <- 1 to 3) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+      // Upload snapshot 4.zip, should not reuse the SST files in 3.zip
+      db.doMaintenance()
+    }
+
+    withDB(remoteDir, conf = conf) { db =>
+      // Open the db to verify that the state in 4.zip is no corrupted.
+      db.load(4)
+    }
+  }
+
   // A rocksdb instance with changelog checkpointing enabled should be able to load
   // an existing checkpoint without changelog.
   testWithChangelogCheckpointingEnabled(
@@ -253,6 +306,14 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       for (version <- 1 to 60) {
         db.load(version, readOnly = true)
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
+      }
+
+      // recommit 60 to ensure that acquireLock is released for maintenance
+      for (version <- 60 to 60) {
+        db.load(version - 1)
+        db.put(version.toString, version.toString)
+        db.remove((version - 1).toString)
+        db.commit()
       }
       // Check that snapshots and changelogs get purged correctly.
       db.doMaintenance()
@@ -416,6 +477,41 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       db.put("11", "11")
       db.rollback()
       assert(db.load(10, readOnly = true).iterator().map(toStr).toSet === version10Data)
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("RocksDBFileManager: " +
+    "background snapshot upload doesn't acquire RocksDB instance lock") {
+    // Create a custom ExecutionContext
+    implicit val ec: ExecutionContext = ExecutionContext
+      .fromExecutor(Executors.newSingleThreadExecutor())
+
+    val remoteDir = Utils.createTempDir().toString
+    val conf = dbConf.copy(lockAcquireTimeoutMs = 10000, minDeltasForSnapshot = 0)
+    new File(remoteDir).delete() // to make sure that the directory gets created
+
+    withDB(remoteDir, conf = conf) { db =>
+      db.load(0)
+      db.put("0", "0")
+      db.commit()
+
+      // Acquire lock
+      db.load(1)
+      db.put("1", "1")
+
+      // Run doMaintenance in another thread
+      val maintenanceFuture = Future {
+        db.doMaintenance()
+      }
+
+      val timeout = 5.seconds
+
+      // Ensure that maintenance task runs without being blocked by task thread
+      ThreadUtils.awaitResult(maintenanceFuture, timeout)
+      assert(snapshotVersionsPresent(remoteDir) == Seq(1))
+
+      // Release lock
+      db.commit()
     }
   }
 
@@ -637,19 +733,19 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       // Save SAME version again with different checkpoint files and load back again to verify
       // whether files were overwritten.
       val cpFiles1_ = Seq(
-        "sst-file1.sst" -> 10, // same SST file as before, but same version, so should get copied
+        "sst-file1.sst" -> 10, // same SST file as before, this should get reused
         "sst-file2.sst" -> 25, // new SST file with same name as before, but different length
         "sst-file3.sst" -> 30, // new SST file
         "other-file1" -> 100, // same non-SST file as before, should not get copied
         "other-file2" -> 210, // new non-SST file with same name as before, but different length
         "other-file3" -> 300, // new non-SST file
-        "archive/00001.log" -> 1000, // same log file as before and version, so should get copied
+        "archive/00001.log" -> 1000, // same log file as before, this should get reused
         "archive/00002.log" -> 2500, // new log file with same name as before, but different length
         "archive/00003.log" -> 3000 // new log file
       )
       saveCheckpointFiles(fileManager, cpFiles1_, version = 1, numKeys = 1001)
-      assert(numRemoteSSTFiles === 5, "shouldn't copy same files again") // 2 old + 3 new SST files
-      assert(numRemoteLogFiles === 5, "shouldn't copy same files again") // 2 old + 3 new log files
+      assert(numRemoteSSTFiles === 4, "shouldn't copy same files again") // 2 old + 2 new SST files
+      assert(numRemoteLogFiles === 4, "shouldn't copy same files again") // 2 old + 2 new log files
       loadAndVerifyCheckpointFiles(fileManager, verificationDir, version = 1, cpFiles1_, 1001)
 
       // Save another version and verify
@@ -659,8 +755,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         "archive/00004.log" -> 4000
       )
       saveCheckpointFiles(fileManager, cpFiles2, version = 2, numKeys = 1501)
-      assert(numRemoteSSTFiles === 6) // 1 new file over earlier 5 files
-      assert(numRemoteLogFiles === 6) // 1 new file over earlier 5 files
+      assert(numRemoteSSTFiles === 5) // 1 new file over earlier 4 files
+      assert(numRemoteLogFiles === 5) // 1 new file over earlier 4 files
       loadAndVerifyCheckpointFiles(fileManager, verificationDir, version = 2, cpFiles2, 1501)
 
       // Loading an older version should work
@@ -1123,6 +1219,437 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  test("time travel - validate successful RocksDB load") {
+    val remoteDir = Utils.createTempDir().toString
+    val conf = dbConf.copy(minDeltasForSnapshot = 1, compactOnCommit = false)
+    new File(remoteDir).delete() // to make sure that the directory gets created
+    withDB(remoteDir, conf = conf) { db =>
+      for (version <- 0 to 1) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+      // upload snapshot 2.zip
+      db.doMaintenance()
+      for (version <- Seq(2)) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+      // upload snapshot 3.zip
+      db.doMaintenance()
+      // simulate db in another executor that override the zip file
+      withDB(remoteDir, conf = conf) { db1 =>
+        for (version <- 0 to 1) {
+          db1.load(version)
+          db1.put(version.toString, version.toString)
+          db1.commit()
+        }
+        db1.doMaintenance()
+      }
+      db.load(2)
+      for (version <- Seq(2)) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+      // upload snapshot 3.zip
+      db.doMaintenance()
+      // rollback to version 2
+      db.load(2)
+    }
+  }
+
+  test("time travel 2 - validate successful RocksDB load") {
+    Seq(1, 2).map(minDeltasForSnapshot => {
+      val remoteDir = Utils.createTempDir().toString
+      val conf = dbConf.copy(minDeltasForSnapshot = minDeltasForSnapshot,
+        compactOnCommit = false)
+      new File(remoteDir).delete() // to make sure that the directory gets created
+      withDB(remoteDir, conf = conf) { db =>
+        for (version <- 0 to 1) {
+          db.load(version)
+          db.put(version.toString, version.toString)
+          db.commit()
+        }
+        // upload snapshot 2.zip
+        db.doMaintenance()
+        for (version <- 2 to 3) {
+          db.load(version)
+          db.put(version.toString, version.toString)
+          db.commit()
+        }
+        db.load(0)
+        // simulate db in another executor that override the zip file
+        withDB(remoteDir, conf = conf) { db1 =>
+          for (version <- 0 to 1) {
+            db1.load(version)
+            db1.put(version.toString, version.toString)
+            db1.commit()
+          }
+          db1.doMaintenance()
+        }
+        for (version <- 2 to 3) {
+          db.load(version)
+          db.put(version.toString, version.toString)
+          db.commit()
+        }
+        // upload snapshot 4.zip
+        db.doMaintenance()
+      }
+      withDB(remoteDir, version = 4, conf = conf) { db =>
+      }
+    })
+  }
+
+  test("time travel 3 - validate successful RocksDB load") {
+    val remoteDir = Utils.createTempDir().toString
+    val conf = dbConf.copy(minDeltasForSnapshot = 0, compactOnCommit = false)
+    new File(remoteDir).delete() // to make sure that the directory gets created
+    withDB(remoteDir, conf = conf) { db =>
+      for (version <- 0 to 2) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+      // upload snapshot 2.zip
+      db.doMaintenance()
+      for (version <- 1 to 3) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+      // upload snapshot 4.zip
+      db.doMaintenance()
+    }
+
+    withDB(remoteDir, version = 4, conf = conf) { db =>
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("time travel 4 -" +
+    " validate successful RocksDB load when metadata file is overwritten") {
+    val remoteDir = Utils.createTempDir().toString
+    val conf = dbConf.copy(minDeltasForSnapshot = 2, compactOnCommit = false)
+    new File(remoteDir).delete() // to make sure that the directory gets created
+    withDB(remoteDir, conf = conf) { db =>
+      for (version <- 0 to 1) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+
+      // load previous version, and recreate the snapshot
+      db.load(1)
+      db.put("3", "3")
+
+      // upload any latest snapshots so far
+      db.doMaintenance()
+      db.commit()
+      // upload newly created snapshot 2.zip
+      db.doMaintenance()
+    }
+
+    // reload version 2 - should succeed
+    withDB(remoteDir, version = 2, conf = conf) { db =>
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("time travel 5 -" +
+    "validate successful RocksDB load when metadata file is not overwritten") {
+    // Ensure commit doesn't modify the latestSnapshot that doMaintenance will upload
+    val fmClass = "org.apache.spark.sql.execution.streaming.state." +
+      "NoOverwriteFileSystemBasedCheckpointFileManager"
+    withTempDir { dir =>
+      val conf = dbConf.copy(minDeltasForSnapshot = 0) // create snapshot every commit
+      val hadoopConf = new Configuration()
+      hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fmClass)
+
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir, conf = conf, hadoopConf = hadoopConf) { db =>
+        db.load(0)
+        db.put("a", "1")
+        db.commit()
+
+        // load previous version, and recreate the snapshot
+        db.load(0)
+        db.put("a", "1")
+
+        // upload version 1 snapshot created above
+        db.doMaintenance()
+        assert(snapshotVersionsPresent(remoteDir) == Seq(1))
+
+        db.commit() // create snapshot again
+
+        // load version 1 - should succeed
+        withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf) { db =>
+        }
+
+        // upload recently created snapshot
+        db.doMaintenance()
+        assert(snapshotVersionsPresent(remoteDir) == Seq(1))
+
+        // load version 1 again - should succeed
+        withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf) { db =>
+        }
+      }
+    }
+  }
+
+  test("validate Rocks DB SST files do not have a VersionIdMismatch" +
+    " when metadata file is not overwritten - scenario 1") {
+    val fmClass = "org.apache.spark.sql.execution.streaming.state." +
+      "NoOverwriteFileSystemBasedCheckpointFileManager"
+    withTempDir { dir =>
+      val dbConf = RocksDBConf(StateStoreConf(new SQLConf()))
+      val hadoopConf = new Configuration()
+      hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fmClass)
+
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir, conf = dbConf, hadoopConf = hadoopConf) { db1 =>
+        withDB(remoteDir, conf = dbConf, hadoopConf = hadoopConf) { db2 =>
+          // commit version 1 via db1
+          db1.load(0)
+          db1.put("a", "1")
+          db1.put("b", "1")
+
+          db1.commit()
+
+          // commit version 1 via db2
+          db2.load(0)
+          db2.put("a", "1")
+          db2.put("b", "1")
+
+          db2.commit()
+
+          // commit version 2 via db2
+          db2.load(1)
+          db2.put("a", "2")
+          db2.put("b", "2")
+
+          db2.commit()
+
+          // reload version 1, this should succeed
+          db2.load(1)
+          db1.load(1)
+
+          // reload version 2, this should succeed
+          db2.load(2)
+          db1.load(2)
+        }
+      }
+    }
+  }
+
+  test("validate Rocks DB SST files do not have a VersionIdMismatch" +
+    " when metadata file is overwritten - scenario 1") {
+    withTempDir { dir =>
+      val dbConf = RocksDBConf(StateStoreConf(new SQLConf()))
+      val hadoopConf = new Configuration()
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir, conf = dbConf, hadoopConf = hadoopConf) { db1 =>
+        withDB(remoteDir, conf = dbConf, hadoopConf = hadoopConf) { db2 =>
+          // commit version 1 via db1
+          db1.load(0)
+          db1.put("a", "1")
+          db1.put("b", "1")
+
+          db1.commit()
+
+          // commit version 1 via db2
+          db2.load(0)
+          db2.put("a", "1")
+          db2.put("b", "1")
+
+          db2.commit()
+
+          // commit version 2 via db2
+          db2.load(1)
+          db2.put("a", "2")
+          db2.put("b", "2")
+
+          db2.commit()
+
+          // reload version 1, this should succeed
+          db2.load(1)
+          db1.load(1)
+
+          // reload version 2, this should succeed
+          db2.load(2)
+          db1.load(2)
+        }
+      }
+    }
+  }
+
+  test("validate Rocks DB SST files do not have a VersionIdMismatch" +
+    " when metadata file is not overwritten - scenario 2") {
+    val fmClass = "org.apache.spark.sql.execution.streaming.state." +
+      "NoOverwriteFileSystemBasedCheckpointFileManager"
+    withTempDir { dir =>
+      val dbConf = RocksDBConf(StateStoreConf(new SQLConf()))
+      val hadoopConf = new Configuration()
+      hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fmClass)
+
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir, conf = dbConf, hadoopConf = hadoopConf) { db1 =>
+        withDB(remoteDir, conf = dbConf, hadoopConf = hadoopConf) { db2 =>
+          // commit version 1 via db2
+          db2.load(0)
+          db2.put("a", "1")
+          db2.put("b", "1")
+
+          db2.commit()
+
+          // commit version 1 via db1
+          db1.load(0)
+          db1.put("a", "1")
+          db1.put("b", "1")
+
+          db1.commit()
+
+          // commit version 2 via db2
+          db2.load(1)
+          db2.put("a", "2")
+          db2.put("b", "2")
+
+          db2.commit()
+
+          // reload version 1, this should succeed
+          db2.load(1)
+          db1.load(1)
+
+          // reload version 2, this should succeed
+          db2.load(2)
+          db1.load(2)
+        }
+      }
+    }
+  }
+
+  test("validate Rocks DB SST files do not have a VersionIdMismatch" +
+    " when metadata file is overwritten - scenario 2") {
+    withTempDir { dir =>
+      val dbConf = RocksDBConf(StateStoreConf(new SQLConf()))
+      val hadoopConf = new Configuration()
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir, conf = dbConf, hadoopConf = hadoopConf) { db1 =>
+        withDB(remoteDir, conf = dbConf, hadoopConf = hadoopConf) { db2 =>
+          // commit version 1 via db2
+          db2.load(0)
+          db2.put("a", "1")
+          db2.put("b", "1")
+
+          db2.commit()
+
+          // commit version 1 via db1
+          db1.load(0)
+          db1.put("a", "1")
+          db1.put("b", "1")
+
+          db1.commit()
+
+          // commit version 2 via db2
+          db2.load(1)
+          db2.put("a", "2")
+          db2.put("b", "2")
+
+          db2.commit()
+
+          // reload version 1, this should succeed
+          db2.load(1)
+          db1.load(1)
+
+          // reload version 2, this should succeed
+          db2.load(2)
+          db1.load(2)
+        }
+      }
+    }
+  }
+
+  test("ensure local files deleted on filesystem" +
+    " are cleaned from dfs file mapping") {
+    def getSSTFiles(dir: File): Set[File] = {
+      val sstFiles = new mutable.HashSet[File]()
+      dir.listFiles().foreach { f =>
+        if (f.isDirectory) {
+          sstFiles ++= getSSTFiles(f)
+        } else {
+          if (f.getName.endsWith(".sst")) {
+            sstFiles.add(f)
+          }
+        }
+      }
+      sstFiles.toSet
+    }
+
+    def filterAndDeleteSSTFiles(dir: File, filesToKeep: Set[File]): Unit = {
+      dir.listFiles().foreach { f =>
+        if (f.isDirectory) {
+          filterAndDeleteSSTFiles(f, filesToKeep)
+        } else {
+          if (!filesToKeep.contains(f) && f.getName.endsWith(".sst")) {
+            logInfo(s"deleting ${f.getAbsolutePath} from local directory")
+            f.delete()
+          }
+        }
+      }
+    }
+
+    withTempDir { dir =>
+      withTempDir { localDir =>
+        val sqlConf = new SQLConf()
+        val dbConf = RocksDBConf(StateStoreConf(sqlConf))
+        logInfo(s"config set to ${dbConf.compactOnCommit}")
+        val hadoopConf = new Configuration()
+        val remoteDir = dir.getCanonicalPath
+        withDB(remoteDir = remoteDir,
+          conf = dbConf,
+          hadoopConf = hadoopConf,
+          localDir = localDir) { db =>
+          db.load(0)
+          db.put("a", "1")
+          db.put("b", "1")
+          db.commit()
+          db.doMaintenance()
+
+          // find all SST files written in version 1
+          val sstFiles = getSSTFiles(localDir)
+
+          // make more commits, this would generate more SST files and write
+          // them to remoteDir
+          for (version <- 1 to 10) {
+            db.load(version)
+            db.put("c", "1")
+            db.put("d", "1")
+            db.commit()
+            db.doMaintenance()
+          }
+
+          // clean the SST files committed after version 1 from local
+          // filesystem. This is similar to what a process like compaction
+          // where multiple L0 SST files can be merged into a single L1 file
+          filterAndDeleteSSTFiles(localDir, sstFiles)
+
+          // reload 2, and overwrite commit for version 3, this should not
+          // reuse any locally deleted files as they should be removed from the mapping
+          db.load(2)
+          db.put("e", "1")
+          db.put("f", "1")
+          db.commit()
+          db.doMaintenance()
+
+          // clean local state
+          db.load(0)
+
+          // reload version 3, should be successful
+          db.load(3)
+        }
+      }
+    }
+  }
+
   private def sqlConf = SQLConf.get.clone()
 
   private def dbConf = RocksDBConf(StateStoreConf(sqlConf))
@@ -1131,12 +1658,16 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       remoteDir: String,
       version: Int = 0,
       conf: RocksDBConf = dbConf,
-      hadoopConf: Configuration = new Configuration())(
+      hadoopConf: Configuration = new Configuration(),
+      localDir: File = Utils.createTempDir())(
       func: RocksDB => T): T = {
     var db: RocksDB = null
     try {
       db = new RocksDB(
-        remoteDir, conf = conf, hadoopConf = hadoopConf,
+        remoteDir,
+        conf = conf,
+        localRootDir = localDir,
+        hadoopConf = hadoopConf,
         loggingId = s"[Thread-${Thread.currentThread.getId}]")
       db.load(version)
       func(db)
@@ -1161,7 +1692,11 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       numKeys: Int): Unit = {
     val checkpointDir = Utils.createTempDir().getAbsolutePath // local dir to create checkpoints
     generateFiles(checkpointDir, fileToLengths)
-    fileManager.saveCheckpointToDfs(checkpointDir, version, numKeys)
+    fileManager.saveCheckpointToDfs(
+      checkpointDir,
+      version,
+      numKeys,
+      fileManager.captureFileMapReference())
   }
 
   def loadAndVerifyCheckpointFiles(

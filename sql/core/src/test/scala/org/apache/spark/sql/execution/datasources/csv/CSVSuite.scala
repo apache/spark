@@ -80,6 +80,7 @@ abstract class CSVSuite
   private val valueMalformedFile = "test-data/value-malformed.csv"
   private val badAfterGoodFile = "test-data/bad_after_good.csv"
   private val malformedRowFile = "test-data/malformedRow.csv"
+  private val charFile = "test-data/char.csv"
 
   /** Verifies data and schema. */
   private def verifyCars(
@@ -1105,10 +1106,12 @@ abstract class CSVSuite
 
   test("SPARK-37326: Timestamp type inference for a column with TIMESTAMP_NTZ values") {
     withTempPath { path =>
-      val exp = spark.sql("""
-        select timestamp_ntz'2020-12-12 12:12:12' as col0 union all
-        select timestamp_ntz'2020-12-12 12:12:12' as col0
-        """)
+      val exp = spark.sql(
+        """
+          |select *
+          |from values (timestamp_ntz'2020-12-12 12:12:12'), (timestamp_ntz'2020-12-12 12:12:12')
+          |as t(col0)
+          |""".stripMargin)
 
       exp.write.format("csv").option("header", "true").save(path.getAbsolutePath)
 
@@ -1126,6 +1129,15 @@ abstract class CSVSuite
 
           if (timestampType == SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
             checkAnswer(res, exp)
+          } else if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+            // When legacy parser is enabled, we can't parse the NTZ string to LTZ, and eventually
+            // infer string type.
+            val expected = spark.read
+              .format("csv")
+              .option("inferSchema", "false")
+              .option("header", "true")
+              .load(path.getAbsolutePath)
+            checkAnswer(res, expected)
           } else {
             checkAnswer(
               res,
@@ -2068,6 +2080,7 @@ abstract class CSVSuite
             .option("header", true)
             .option("enforceSchema", false)
             .option("multiLine", multiLine)
+            .option("columnPruning", true)
             .load(dir)
             .select("columnA"),
             Row("a"))
@@ -2078,6 +2091,7 @@ abstract class CSVSuite
             .option("header", true)
             .option("enforceSchema", false)
             .option("multiLine", multiLine)
+            .option("columnPruning", true)
             .load(dir)
             .count() === 1L)
         }
@@ -2862,13 +2876,12 @@ abstract class CSVSuite
 
   test("SPARK-40474: Infer schema for columns with a mix of dates and timestamp") {
     withTempPath { path =>
-      Seq(
-        "1765-03-28",
+      val input = Seq(
         "1423-11-12T23:41:00",
+        "1765-03-28",
         "2016-01-28T20:00:00"
-      ).toDF()
-        .repartition(1)
-        .write.text(path.getAbsolutePath)
+      ).toDF().repartition(1)
+      input.write.text(path.getAbsolutePath)
 
       if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
         val options = Map(
@@ -2879,12 +2892,7 @@ abstract class CSVSuite
           .format("csv")
           .options(options)
           .load(path.getAbsolutePath)
-        val expected = Seq(
-          Row(Timestamp.valueOf("1765-03-28 00:00:00.0")),
-          Row(Timestamp.valueOf("1423-11-12 23:41:00.0")),
-          Row(Timestamp.valueOf("2016-01-28 20:00:00.0"))
-        )
-        checkAnswer(df, expected)
+        checkAnswer(df, input)
       } else {
         // When timestampFormat is specified, infer and parse the column as strings
         val options1 = Map(
@@ -2895,12 +2903,7 @@ abstract class CSVSuite
           .format("csv")
           .options(options1)
           .load(path.getAbsolutePath)
-        val expected1 = Seq(
-          Row("1765-03-28"),
-          Row("1423-11-12T23:41:00"),
-          Row("2016-01-28T20:00:00")
-        )
-        checkAnswer(df1, expected1)
+        checkAnswer(df1, input)
 
         // When timestampFormat is not specified, infer and parse the column as
         // timestamp type if possible
@@ -3151,7 +3154,7 @@ abstract class CSVSuite
   }
 
   test("SPARK-40667: validate CSV Options") {
-    assert(CSVOptions.getAllOptions.size == 38)
+    assert(CSVOptions.getAllOptions.size == 39)
     // Please add validation on any new CSV options here
     assert(CSVOptions.isValidOption("header"))
     assert(CSVOptions.isValidOption("inferSchema"))
@@ -3191,6 +3194,7 @@ abstract class CSVSuite
     assert(CSVOptions.isValidOption("codec"))
     assert(CSVOptions.isValidOption("sep"))
     assert(CSVOptions.isValidOption("delimiter"))
+    assert(CSVOptions.isValidOption("columnPruning"))
     // Please add validation on any new parquet options with alternative here
     assert(CSVOptions.getAlternativeOption("sep").contains("delimiter"))
     assert(CSVOptions.getAlternativeOption("delimiter").contains("sep"))
@@ -3199,6 +3203,52 @@ abstract class CSVSuite
     assert(CSVOptions.getAlternativeOption("compression").contains("codec"))
     assert(CSVOptions.getAlternativeOption("codec").contains("compression"))
     assert(CSVOptions.getAlternativeOption("preferDate").isEmpty)
+  }
+
+  test("SPARK-46862: column pruning in the multi-line mode") {
+    val data =
+      """"jobID","Name","City","Active"
+        |"1","DE","","Yes"
+        |"5",",","",","
+        |"3","SA","","No"
+        |"10","abcd""efgh"" \ndef","",""
+        |"8","SE","","No"""".stripMargin
+
+    withTempPath { path =>
+      Files.write(path.toPath, data.getBytes(StandardCharsets.UTF_8))
+      Seq(true, false).foreach { enforceSchema =>
+        val df = spark.read
+          .option("multiLine", true)
+          .option("header", true)
+          .option("escape", "\"")
+          .option("enforceSchema", enforceSchema)
+          .csv(path.getCanonicalPath)
+        assert(df.count() === 5)
+      }
+    }
+  }
+
+  test("SPARK-48241: CSV parsing failure with char/varchar type columns") {
+    withTable("charVarcharTable") {
+      spark.sql(
+        s"""
+           |CREATE TABLE charVarcharTable(
+           |  color char(4),
+           |  name varchar(10))
+           |USING csv
+           |OPTIONS (
+           |  header "true",
+           |  path "${testFile(charFile)}"
+           |)
+       """.stripMargin)
+      val expected = Seq(
+        Row("pink", "Bob"),
+        Row("blue", "Mike"),
+        Row("grey", "Tom"))
+      checkAnswer(
+        sql("SELECT * FROM charVarcharTable"),
+        expected)
+    }
   }
 }
 

@@ -28,6 +28,15 @@
     ],
     "sqlState" : "42702"
   },
+  "AMBIGUOUS_COLUMN_REFERENCE" : {
+    "message" : [
+      "Column <name> is ambiguous. It's because you joined several DataFrame together, and some of these DataFrames are the same.",
+      "This column points to one of the DataFrame but Spark is unable to figure out which one.",
+      "Please alias the DataFrames with different names via `DataFrame.alias` before joining them,",
+      "and specify the column using qualified name, e.g. `df.alias(\"a\").join(df.alias(\"b\"), col(\"a.id\") > col(\"b.id\"))`."
+    ],
+    "sqlState" : "42702"
+  },
   "AMBIGUOUS_LATERAL_COLUMN_ALIAS" : {
     "message" : [
       "Lateral column alias <name> is ambiguous and has <n> matches."
@@ -68,6 +77,11 @@
         ]
       }
     }
+  },
+  "AVRO_INCOMPATIBLE_READ_TYPE" : {
+    "message" : [
+      "Cannot convert Avro <avroPath> to SQL <sqlPath> because the original encoded data type is <avroType>, however you're trying to read the field as <sqlType>, which would lead to an incorrect answer. To allow reading this field, enable the SQL configuration: \"spark.sql.legacy.avro.allowIncompatibleSchema\"."
+    ]
   },
   "BATCH_METADATA_NOT_FOUND" : {
     "message" : [
@@ -1276,6 +1290,11 @@
       "DATA_TYPE" : {
         "message" : [
           "which requires <expectedType> type, but the statement provided a value of incompatible <actualType> type."
+        ]
+      },
+      "NOT_CONSTANT" : {
+        "message" : [
+          "which is not a constant expression whose equivalent value is known at query planning time."
         ]
       },
       "SUBQUERY_EXPRESSION" : {
@@ -3042,7 +3061,7 @@
     "subClass" : {
       "MULTI_GENERATOR" : {
         "message" : [
-          "only one generator allowed per <clause> clause but found <num>: <generators>."
+          "only one generator allowed per SELECT clause but found <num>: <generators>."
         ]
       },
       "NESTED_IN_EXPRESSIONS" : {

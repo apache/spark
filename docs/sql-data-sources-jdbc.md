@@ -51,7 +51,7 @@ For connection properties, users can specify the JDBC connection properties in t
 <code>user</code> and <code>password</code> are normally provided as connection properties for
 logging into the data sources.
 
-<table class="table table-striped">
+<table>
   <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr></thead>
   <tr>
     <td><code>url</code></td>
@@ -368,8 +368,9 @@ logging into the data sources.
     <td><code>preferTimestampNTZ</code></td>
     <td>false</td>
     <td>
-      When the option is set to <code>true</code>, all timestamps are inferred as TIMESTAMP WITHOUT TIME ZONE.
-      Otherwise, timestamps are read as TIMESTAMP with local time zone.
+      When the option is set to <code>true</code>, TIMESTAMP WITHOUT TIME ZONE type is inferred as Spark's TimestampNTZ type.
+      Otherwise, it is interpreted as Spark's Timestamp type(equivalent to TIMESTAMP WITH LOCAL TIME ZONE).
+      This setting specifically affects only the inference of TIMESTAMP WITHOUT TIME ZONE data type. Both TIMESTAMP WITH LOCAL TIME ZONE and TIMESTAMP WITH TIME ZONE data types are consistently interpreted as Spark's Timestamp type regardless of this setting.
     </td>
     <td>read</td>
   </tr>

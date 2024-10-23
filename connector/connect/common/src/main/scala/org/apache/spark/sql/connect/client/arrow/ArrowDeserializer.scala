@@ -332,15 +332,17 @@ object ArrowDeserializers {
         val constructor =
           methodLookup.findConstructor(tag.runtimeClass, MethodType.methodType(classOf[Unit]))
         val lookup = createFieldLookup(vectors)
-        val setters = fields.map { field =>
-          val vector = lookup(field.name)
-          val deserializer = deserializerFor(field.enc, vector, timeZoneId)
-          val setter = methodLookup.findVirtual(
-            tag.runtimeClass,
-            field.writeMethod.get,
-            MethodType.methodType(classOf[Unit], field.enc.clsTag.runtimeClass))
-          (bean: Any, i: Int) => setter.invoke(bean, deserializer.get(i))
-        }
+        val setters = fields
+          .filter(_.writeMethod.isDefined)
+          .map { field =>
+            val vector = lookup(field.name)
+            val deserializer = deserializerFor(field.enc, vector, timeZoneId)
+            val setter = methodLookup.findVirtual(
+              tag.runtimeClass,
+              field.writeMethod.get,
+              MethodType.methodType(classOf[Unit], field.enc.clsTag.runtimeClass))
+            (bean: Any, i: Int) => setter.invoke(bean, deserializer.get(i))
+          }
         new StructFieldSerializer[Any](struct) {
           def value(i: Int): Any = {
             val instance = constructor.invoke()

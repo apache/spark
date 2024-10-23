@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.net.URI
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 import org.scalatest.PrivateMethodTester
@@ -214,4 +216,6 @@ class MockFileSystem extends RawLocalFileSystem {
   override def globStatus(pathPattern: Path): Array[FileStatus] = {
     mockGlobResults.getOrElse(pathPattern, Array())
   }
+
+  override def getUri: URI = URI.create("mockFs://mockFs/")
 }

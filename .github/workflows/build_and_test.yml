@@ -79,25 +79,34 @@ jobs:
       id: set-outputs
       run: |
         if [ -z "${{ inputs.jobs }}" ]; then
-          pyspark=true; sparkr=true; tpcds=true; docker=true;
           pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
           pyspark=`./dev/is-changed.py -m $pyspark_modules`
-          sparkr=`./dev/is-changed.py -m sparkr`
-          tpcds=`./dev/is-changed.py -m sql`
-          docker=`./dev/is-changed.py -m docker-integration-tests`
-          # 'build', 'scala-213', and 'java-11-17' are always true for now.
-          # It does not save significant time and most of PRs trigger the build.
+          if [[ "${{ github.repository }}" != 'apache/spark' ]]; then
+            pandas=$pyspark
+            kubernetes=`./dev/is-changed.py -m kubernetes`
+            sparkr=`./dev/is-changed.py -m sparkr`
+            tpcds=`./dev/is-changed.py -m sql`
+            docker=`./dev/is-changed.py -m docker-integration-tests`
+          else
+            pandas=false
+            kubernetes=false
+            sparkr=false
+            tpcds=false
+            docker=false
+          fi
+          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,network-common,network-shuffle,repl,launcher,examples,sketch,graphx,catalyst,hive-thriftserver,streaming,sql-kafka-0-10,streaming-kafka-0-10,mllib-local,mllib,yarn,mesos,kubernetes,hadoop-cloud,spark-ganglia-lgpl,sql,hive"`
           precondition="
             {
-              \"build\": \"true\",
+              \"build\": \"$build\",
               \"pyspark\": \"$pyspark\",
+              \"pyspark-pandas\": \"$pandas\",
               \"sparkr\": \"$sparkr\",
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
-              \"scala-213\": \"true\",
-              \"java-11-17\": \"true\",
+              \"scala-213\": \"$build\",
+              \"java-11-17\": \"$build\",
               \"lint\" : \"true\",
-              \"k8s-integration-tests\" : \"true\",
+              \"k8s-integration-tests\" : \"$kubernetes\",
               \"breaking-changes-buf\" : \"true\",
             }"
           echo $precondition # For debugging
@@ -204,6 +213,8 @@ jobs:
       HIVE_PROFILE: ${{ matrix.hive }}
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
+      SKIP_UNIDOC: true
+      SKIP_MIMA: true
       SKIP_PACKAGING: true
     steps:
     - name: Checkout Spark repository
@@ -256,7 +267,7 @@ jobs:
     - name: Install Python packages (Python 3.8)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
       run: |
-        python3.8 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'grpcio==1.56.0' 'protobuf==3.20.3'
+        python3.8 -m pip install 'numpy>=1.20.0' 'pyarrow==12.0.1' pandas scipy unittest-xml-reporting 'grpcio==1.56.0' 'protobuf==3.20.3'
         python3.8 -m pip list
     # Run the tests.
     - name: Run tests
@@ -360,6 +371,14 @@ jobs:
             pyspark-pandas-connect
           - >-
             pyspark-pandas-slow-connect
+        exclude:
+          # Always run if pyspark-pandas == 'true', even infra-image is skip (such as non-master job)
+          # In practice, the build will run in individual PR, but not against the individual commit
+          # in Apache Spark repository.
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-slow' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-slow-connect' }}
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: ${{ inputs.hadoop }}
@@ -407,6 +426,8 @@ jobs:
         key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           pyspark-coursier-
+    - name: Free up disk space
+      run: ./dev/free_disk_space_container
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v3
       with:
@@ -504,6 +525,8 @@ jobs:
         key: sparkr-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           sparkr-coursier-
+    - name: Free up disk space
+      run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v3
       with:
@@ -612,6 +635,8 @@ jobs:
         key: docs-maven-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
           docs-maven-
+    - name: Free up disk space
+      run: ./dev/free_disk_space_container
     - name: Install Java 8
       uses: actions/setup-java@v3
       with:
@@ -621,6 +646,8 @@ jobs:
       run: ./dev/check-license
     - name: Dependencies test
       run: ./dev/test-dependencies.sh
+    - name: MIMA test
+      run: ./dev/mima
     - name: Scala linter
       run: ./dev/lint-scala
     - name: Java linter
@@ -672,16 +699,16 @@ jobs:
         #   See also https://issues.apache.org/jira/browse/SPARK-35375.
         # Pin the MarkupSafe to 2.0.1 to resolve the CI error.
         #   See also https://issues.apache.org/jira/browse/SPARK-38279.
-        python3.9 -m pip install 'sphinx<3.1.0' mkdocs pydata_sphinx_theme nbsphinx numpydoc 'jinja2<3.0.0' 'markupsafe==2.0.1' 'pyzmq<24.0.0'
+        python3.9 -m pip install 'sphinx<3.1.0' mkdocs pydata_sphinx_theme 'sphinx-copybutton==0.5.2' 'nbsphinx==0.9.3' numpydoc 'jinja2<3.0.0' 'markupsafe==2.0.1' 'pyzmq<24.0.0' 'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' 'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' 'sphinxcontrib-serializinghtml==1.1.5' 'nest-asyncio==1.5.8' 'rpds-py==0.16.2' 'alabaster==0.7.13'
         python3.9 -m pip install ipython_genutils # See SPARK-38517
-        python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8'
+        python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' 'pyarrow==12.0.1' pandas 'plotly>=4.8'
         python3.9 -m pip install 'docutils<0.18.0' # See SPARK-39421
         apt-get update -y
         apt-get install -y ruby ruby-dev
         Rscript -e "install.packages(c('devtools', 'testthat', 'knitr', 'rmarkdown', 'markdown', 'e1071', 'roxygen2', 'ggplot2', 'mvtnorm', 'statmod'), repos='https://cloud.r-project.org/')"
         Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
         Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
-        gem install bundler
+        gem install bundler -v 2.4.22
         cd docs
         bundle install
     - name: R linter
@@ -1010,9 +1037,7 @@ jobs:
       - name: start minikube
         run: |
           # See more in "Installation" https://minikube.sigs.k8s.io/docs/start/
-          # curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-          # TODO(SPARK-44495): Resume to use the latest minikube for k8s-integration-tests.
-          curl -LO https://storage.googleapis.com/minikube/releases/v1.30.1/minikube-linux-amd64
+          curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
           sudo install minikube-linux-amd64 /usr/local/bin/minikube
           # Github Action limit cpu:2, memory: 6947MB, limit to 2U6G for better resource statistic
           minikube start --cpus 2 --memory 6144
@@ -1030,7 +1055,7 @@ jobs:
           kubectl create clusterrolebinding serviceaccounts-cluster-admin --clusterrole=cluster-admin --group=system:serviceaccounts || true
           kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml || true
           eval $(minikube docker-env)
-          build/sbt -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.driverRequestCores=0.5 -Dspark.kubernetes.test.executorRequestCores=0.2 -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
+          build/sbt -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
       - name: Upload Spark on K8S integration tests log files
         if: failure()
         uses: actions/upload-artifact@v3

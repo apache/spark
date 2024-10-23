@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.mutable
+import scala.collection.{mutable, GenTraversableOnce}
 import scala.collection.mutable.ArrayBuffer
 
 object ExpressionSet {
@@ -108,9 +108,28 @@ class ExpressionSet protected(
     newSet
   }
 
+  /**
+   * SPARK-47897: In Scala 2.12, the `SetLike.++` method iteratively calls `+` method.
+   * `ExpressionSet.+` is expensive, so we override `++`.
+   */
+  override def ++(elems: GenTraversableOnce[Expression]): ExpressionSet = {
+    val newSet = clone()
+    elems.foreach(newSet.add)
+    newSet
+  }
+
   override def -(elem: Expression): ExpressionSet = {
     val newSet = clone()
     newSet.remove(elem)
+    newSet
+  }
+
+  /**
+   * SPARK-47897: We need to override `--` like `++`.
+   */
+  override def --(elems: GenTraversableOnce[Expression]): ExpressionSet = {
+    val newSet = clone()
+    elems.foreach(newSet.remove)
     newSet
   }
 

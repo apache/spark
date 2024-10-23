@@ -113,7 +113,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       planToCache: LogicalPlan,
       tableName: Option[String],
       storageLevel: StorageLevel): Unit = {
-    if (lookupCachedData(planToCache).nonEmpty) {
+    if (storageLevel == StorageLevel.NONE) {
+      // Do nothing for StorageLevel.NONE since it will not actually cache any data.
+    } else if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
@@ -400,8 +402,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     if (session.conf.get(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
       // Bucketed scan only has one time overhead but can have multi-times benefits in cache,
       // so we always do bucketed scan in a cached plan.
-      SparkSession.getOrCloneSessionWithConfigsOff(
-        session, SQLConf.AUTO_BUCKETED_SCAN_ENABLED :: Nil)
+      SparkSession.getOrCloneSessionWithConfigsOff(session,
+        SQLConf.ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS ::
+          SQLConf.AUTO_BUCKETED_SCAN_ENABLED :: Nil)
     } else {
       SparkSession.getOrCloneSessionWithConfigsOff(session, forceDisableConfigs)
     }

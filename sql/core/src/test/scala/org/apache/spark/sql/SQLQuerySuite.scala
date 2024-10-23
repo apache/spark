@@ -31,7 +31,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.spark.{AccumulatorSuite, SPARK_DOC_ROOT, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{GenericRow, Hex}
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRow, Hex}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
@@ -1427,6 +1427,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withTempView("t") {
       Seq((1, 2), (1, 2)).toDF("a", "b").createOrReplaceTempView("t")
       checkAnswer(sql("SELECT * FROM t ORDER BY NULL"), Seq(Row(1, 2), Row(1, 2)))
+    }
+  }
+
+  test("SPARK-49200: Fix null type non-codegen ordering exception") {
+    withSQLConf(
+        SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString,
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.EliminateSorts") {
+      checkAnswer(
+        sql("SELECT * FROM range(3) ORDER BY array(null)"),
+        Seq(Row(0), Row(1), Row(2)))
     }
   }
 
@@ -4699,6 +4710,19 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     val df5 = df4.join(df2, col("df4.id") === col("df2.customer_id"), "inner")
     val df6 = df3.join(df2, col("df3.zaak_id") === col("df2.customer_id"), "outer")
     df5.crossJoin(df6)
+  }
+
+  test("SPARK-49743: OptimizeCsvJsonExpr does not change schema when pruning struct") {
+    val df = sql("""
+        | SELECT
+        |    from_json('[{"a": '||id||', "b": '|| (2*id) ||'}]', 'array<struct<a: INT, b: INT>>').a,
+        |    from_json('[{"a": '||id||', "b": '|| (2*id) ||'}]', 'array<struct<a: INT, b: INT>>').A
+        | FROM
+        |    range(3) as t
+        |""".stripMargin)
+    val expectedAnswer = Seq(
+      Row(Array(0), Array(0)), Row(Array(1), Array(1)), Row(Array(2), Array(2)))
+    checkAnswer(df, expectedAnswer)
   }
 }
 

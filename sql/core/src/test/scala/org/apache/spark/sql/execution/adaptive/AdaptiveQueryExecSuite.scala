@@ -26,12 +26,13 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
+import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{CollectLimitExec, ColumnarToRowExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SparkPlanInfo, UnionExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
-import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.columnar.{InMemoryTableScanExec, InMemoryTableScanLike}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
@@ -60,7 +61,8 @@ class AdaptiveQueryExecSuite
 
   setupTestData()
 
-  private def runAdaptiveAndVerifyResult(query: String): (SparkPlan, SparkPlan) = {
+  private def runAdaptiveAndVerifyResult(query: String,
+      skipCheckAnswer: Boolean = false): (SparkPlan, SparkPlan) = {
     var finalPlanCnt = 0
     var hasMetricsEvent = false
     val listener = new SparkListener {
@@ -84,8 +86,10 @@ class AdaptiveQueryExecSuite
     assert(planBefore.toString.startsWith("AdaptiveSparkPlan isFinalPlan=false"))
     val result = dfAdaptive.collect()
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      val df = sql(query)
-      checkAnswer(df, result)
+      if (!skipCheckAnswer) {
+        val df = sql(query)
+        checkAnswer(df, result)
+      }
     }
     val planAfter = dfAdaptive.queryExecution.executedPlan
     assert(planAfter.toString.startsWith("AdaptiveSparkPlan isFinalPlan=true"))
@@ -154,6 +158,12 @@ class AdaptiveQueryExecSuite
   private def findTopLevelLimit(plan: SparkPlan): Seq[CollectLimitExec] = {
     collect(plan) {
       case l: CollectLimitExec => l
+    }
+  }
+
+  private def findTopLevelUnion(plan: SparkPlan): Seq[UnionExec] = {
+    collect(plan) {
+      case l: UnionExec => l
     }
   }
 
@@ -2405,6 +2415,28 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-48037: Fix SortShuffleWriter lacks shuffle write related metrics " +
+    "resulting in potentially inaccurate data") {
+    withTable("t3") {
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.SHUFFLE_PARTITIONS.key -> (SortShuffleManager
+          .MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE + 1).toString) {
+        sql("CREATE TABLE t3 USING PARQUET AS SELECT id FROM range(2)")
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+          """
+            |SELECT id, count(*)
+            |FROM t3
+            |GROUP BY id
+            |LIMIT 1
+            |""".stripMargin, skipCheckAnswer = true)
+        // The shuffle stage produces two rows and the limit operator should not been optimized out.
+        assert(findTopLevelLimit(plan).size == 1)
+        assert(findTopLevelLimit(adaptivePlan).size == 1)
+      }
+    }
+  }
+
   test("SPARK-37063: OptimizeSkewInRebalancePartitions support optimize non-root node") {
     withTempView("v") {
       withSQLConf(
@@ -2675,6 +2707,67 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-48155: AQEPropagateEmptyRelation check remained child for join") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      // Before SPARK-48155, since the AQE will call ValidateSparkPlan,
+      // all AQE optimize rule won't work and return the origin plan.
+      // After SPARK-48155, Spark avoid invalid propagate of empty relation.
+      // Then the UNION first child empty relation can be propagate correctly
+      // and the JOIN won't be propagated since will generated a invalid plan.
+      val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT /*+ BROADCAST(t3) */ t3.b, count(t3.a) FROM testData2 t1
+          |INNER JOIN (
+          |  SELECT * FROM testData2
+          |  WHERE b = 0
+          |  UNION ALL
+          |  SELECT * FROM testData2
+          |  WHErE b != 0
+          |) t2
+          |ON t1.b = t2.b AND t1.a = 0
+          |RIGHT OUTER JOIN testData2 t3
+          |ON t1.a > t3.a
+          |GROUP BY t3.b
+        """.stripMargin
+      )
+      assert(findTopLevelBroadcastNestedLoopJoin(adaptivePlan).size == 1)
+      assert(findTopLevelUnion(adaptivePlan).size == 0)
+    }
+
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "100") {
+      withTempView("t1", "t2", "t3", "t4") {
+        Seq(1).toDF().createOrReplaceTempView("t1")
+        spark.range(100).createOrReplaceTempView("t2")
+        spark.range(2).createOrReplaceTempView("t3")
+        spark.range(2).createOrReplaceTempView("t4")
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+          """
+            |SELECT tt2.value
+            |FROM (
+            |  SELECT value
+            |  FROM t1
+            |  WHERE NOT EXISTS (
+            |      SELECT 1
+            |      FROM (
+            |        SELECT t2.id
+            |        FROM t2
+            |          JOIN t3 ON t2.id = t3.id
+            |        AND t2.id > 100
+            |      ) tt
+            |      WHERE t1.value = tt.id
+            |    )
+            |    AND t1.value = 1
+            |) tt2
+            |  LEFT JOIN t4 ON tt2.value = t4.id
+            |""".stripMargin
+        )
+        assert(findTopLevelBroadcastNestedLoopJoin(adaptivePlan).size == 1)
+      }
+    }
+  }
+
   test("SPARK-39915: Dataset.repartition(N) may not create N partitions") {
     withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "6") {
       // partitioning:  HashPartitioning
@@ -2758,7 +2851,7 @@ class AdaptiveQueryExecSuite
           case s: SortExec => s
         }.size == (if (firstAccess) 2 else 0))
         assert(collect(initialExecutedPlan) {
-          case i: InMemoryTableScanExec => i
+          case i: InMemoryTableScanLike => i
         }.head.isMaterialized != firstAccess)
 
         df.collect()
@@ -2770,7 +2863,7 @@ class AdaptiveQueryExecSuite
           case s: SortExec => s
         }.isEmpty)
         assert(collect(initialExecutedPlan) {
-          case i: InMemoryTableScanExec => i
+          case i: InMemoryTableScanLike => i
         }.head.isMaterialized)
       }
 
@@ -2850,6 +2943,27 @@ class AdaptiveQueryExecSuite
     val aggDf2 = emptyDf.agg(sum("id").as("id")).withColumn("name", lit("df2"))
     val unionDF = aggDf1.union(aggDf2)
     checkAnswer(unionDF.select("id").distinct, Seq(Row(null)))
+  }
+
+  test("SPARK-49979: AQE hang forever when collecting twice on a failed AQE plan") {
+    val func: Long => Boolean = (i : Long) => {
+      throw new Exception("SPARK-49979")
+    }
+    withUserDefinedFunction("func" -> true) {
+      spark.udf.register("func", func)
+      val df1 = spark.range(1024).select($"id".as("key1"))
+      val df2 = spark.range(2048).select($"id".as("key2"))
+        .withColumn("group_key", $"key2" % 1024)
+      val df = df1.filter(expr("func(key1)")).hint("MERGE").join(df2, $"key1" === $"key2")
+        .groupBy($"group_key").agg("key1" -> "count")
+      intercept[Throwable] {
+        df.collect()
+      }
+      // second collect should not hang forever
+      intercept[Throwable] {
+        df.collect()
+      }
+    }
   }
 }
 

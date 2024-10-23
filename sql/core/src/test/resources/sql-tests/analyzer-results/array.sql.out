@@ -532,6 +532,13 @@ Project [array_insert(array(2, 3, cast(null as int), 4), -5, 1, false) AS array_
 
 
 -- !query
+select array_insert(array(1), 2, cast(2 as tinyint))
+-- !query analysis
+Project [array_insert(array(1), 2, cast(cast(2 as tinyint) as int), false) AS array_insert(array(1), 2, CAST(2 AS TINYINT))#x]
++- OneRowRelation
+
+
+-- !query
 set spark.sql.legacy.negativeIndexInArrayInsert=true
 -- !query analysis
 SetCommand (spark.sql.legacy.negativeIndexInArrayInsert,Some(true))
@@ -739,4 +746,18 @@ Project [array_prepend(cast(array() as array<string>), cast(null as string)) AS 
 select array_prepend(array(CAST(NULL AS String)), CAST(NULL AS String))
 -- !query analysis
 Project [array_prepend(array(cast(null as string)), cast(null as string)) AS array_prepend(array(CAST(NULL AS STRING)), CAST(NULL AS STRING))#x]
++- OneRowRelation
+
+
+-- !query
+select array_union(array(0.0, -0.0, DOUBLE("NaN")), array(0.0, -0.0, DOUBLE("NaN")))
+-- !query analysis
+Project [array_union(array(cast(0.0 as double), cast(0.0 as double), cast(NaN as double)), array(cast(0.0 as double), cast(0.0 as double), cast(NaN as double))) AS array_union(array(0.0, 0.0, NaN), array(0.0, 0.0, NaN))#x]
++- OneRowRelation
+
+
+-- !query
+select array_distinct(array(0.0, -0.0, -0.0, DOUBLE("NaN"), DOUBLE("NaN")))
+-- !query analysis
+Project [array_distinct(array(cast(0.0 as double), cast(0.0 as double), cast(0.0 as double), cast(NaN as double), cast(NaN as double))) AS array_distinct(array(0.0, 0.0, 0.0, NaN, NaN))#x]
 +- OneRowRelation

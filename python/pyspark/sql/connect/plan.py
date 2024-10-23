@@ -398,9 +398,6 @@ class CachedLocalRelation(LogicalPlan):
         plan = self._create_proto_relation()
         clr = plan.cached_local_relation
 
-        if session._user_id:
-            clr.userId = session._user_id
-        clr.sessionId = session._session_id
         clr.hash = self._hash
 
         return plan
@@ -1199,6 +1196,7 @@ class CollectMetrics(LogicalPlan):
         assert self._child is not None
 
         plan = proto.Relation()
+        plan.common.plan_id = self._child._plan_id
         plan.collect_metrics.input.CopyFrom(self._child.plan(session))
         plan.collect_metrics.name = self._name
         plan.collect_metrics.metrics.extend([self.col_to_expr(x, session) for x in self._exprs])
@@ -1657,16 +1655,16 @@ class WriteOperationV2(LogicalPlan):
                 plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_CREATE
             elif wm == "overwrite":
                 plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_OVERWRITE
-            elif wm == "overwrite_partition":
+                if self.overwrite_condition is not None:
+                    plan.write_operation_v2.overwrite_condition.CopyFrom(
+                        self.col_to_expr(self.overwrite_condition, session)
+                    )
+            elif wm == "overwrite_partitions":
                 plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_OVERWRITE_PARTITIONS
             elif wm == "append":
                 plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_APPEND
             elif wm == "replace":
                 plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_REPLACE
-                if self.overwrite_condition is not None:
-                    plan.write_operation_v2.overwrite_condition.CopyFrom(
-                        self.col_to_expr(self.overwrite_condition, session)
-                    )
             elif wm == "create_or_replace":
                 plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE
             else:
@@ -2125,7 +2123,9 @@ class CoGroupMap(LogicalPlan):
         self._input_grouping_cols = input_grouping_cols
         self._other_grouping_cols = other_grouping_cols
         self._other = cast(LogicalPlan, other)
-        self._func = function._build_common_inline_user_defined_function(*cols)
+        # The function takes entire DataFrame as inputs, no need to do
+        # column binding (no input columns).
+        self._func = function._build_common_inline_user_defined_function()
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None

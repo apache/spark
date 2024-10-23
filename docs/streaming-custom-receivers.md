@@ -243,7 +243,7 @@ interval in the [Spark Streaming Programming Guide](streaming-programming-guide.
 
 The following table summarizes the characteristics of both types of receivers
 
-<table class="table table-striped">
+<table>
 <thead>
 <tr>
   <th>Receiver Type</th>

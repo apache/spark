@@ -1,6 +1,8 @@
 -- Numeric + Numeric
 SELECT try_add(1, 1);
 SELECT try_add(2147483647, 1);
+SELECT try_add(2147483647, decimal(1));
+SELECT try_add(2147483647, "1");
 SELECT try_add(-2147483648, -1);
 SELECT try_add(9223372036854775807L, 1);
 SELECT try_add(-9223372036854775808L, -1);
@@ -38,6 +40,8 @@ SELECT try_divide(0, 0);
 SELECT try_divide(1, (2147483647 + 1));
 SELECT try_divide(1L, (9223372036854775807L + 1L));
 SELECT try_divide(1, 1.0 / 0.0);
+SELECT try_divide(1, decimal(0));
+SELECT try_divide(1, "0");
 
 -- Interval / Numeric
 SELECT try_divide(interval 2 year, 2);
@@ -50,6 +54,8 @@ SELECT try_divide(interval 106751991 day, 0.5);
 -- Numeric - Numeric
 SELECT try_subtract(1, 1);
 SELECT try_subtract(2147483647, -1);
+SELECT try_subtract(2147483647, decimal(-1));
+SELECT try_subtract(2147483647, "-1");
 SELECT try_subtract(-2147483648, 1);
 SELECT try_subtract(9223372036854775807L, -1);
 SELECT try_subtract(-9223372036854775808L, 1);
@@ -66,6 +72,8 @@ SELECT try_subtract(interval 106751991 day, interval -3 day);
 -- Numeric * Numeric
 SELECT try_multiply(2, 3);
 SELECT try_multiply(2147483647, -2);
+SELECT try_multiply(2147483647, decimal(-2));
+SELECT try_multiply(2147483647, "-2");
 SELECT try_multiply(-2147483648, 2);
 SELECT try_multiply(9223372036854775807L, 2);
 SELECT try_multiply(-9223372036854775808L, -2);

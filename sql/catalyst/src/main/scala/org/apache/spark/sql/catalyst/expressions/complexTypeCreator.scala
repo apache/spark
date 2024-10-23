@@ -242,6 +242,8 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
 
   private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
 
+  override def stateful: Boolean = true
+
   override def eval(input: InternalRow): Any = {
     var i = 0
     while (i < keys.length) {
@@ -317,6 +319,8 @@ case class MapFromArrays(left: Expression, right: Expression)
       valueContainsNull = right.dataType.asInstanceOf[ArrayType].containsNull)
   }
 
+  override def stateful: Boolean = true
+
   private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
 
   override def nullSafeEval(keyArray: Any, valueArray: Any): Any = {
@@ -372,6 +376,7 @@ object CreateStruct {
       // alias name inside CreateNamedStruct.
       case (u: UnresolvedAttribute, _) => Seq(Literal(u.nameParts.last), u)
       case (u @ UnresolvedExtractValue(_, e: Literal), _) if e.dataType == StringType => Seq(e, u)
+      case (a: Alias, _) => Seq(Literal(a.name), a)
       case (e: NamedExpression, _) if e.resolved => Seq(Literal(e.name), e)
       case (e: NamedExpression, _) => Seq(NamePlaceholder, e)
       case (e, index) => Seq(Literal(s"col${index + 1}"), e)
@@ -561,6 +566,8 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   def this(child: Expression) = {
     this(child, Literal(","), Literal(":"))
   }
+
+  override def stateful: Boolean = true
 
   override def first: Expression = text
   override def second: Expression = pairDelim

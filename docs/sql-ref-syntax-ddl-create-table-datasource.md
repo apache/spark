@@ -104,7 +104,9 @@ In general CREATE TABLE is creating a "pointer", and you need to make sure it po
 existing. An exception is file source such as parquet, json. If you don't specify the LOCATION,
 Spark will create a default table location for you.
 
-For CREATE TABLE AS SELECT, Spark will overwrite the underlying data source with the data of the
+For CREATE TABLE AS SELECT with LOCATION, Spark throws analysis exceptions if the given location
+exists as a non-empty directory. If `spark.sql.legacy.allowNonEmptyLocationInCTAS` is set to true,
+Spark overwrites the underlying data source with the data of the
 input query, to make sure the table gets created contains exactly the same data as the input query.
 
 ### Examples

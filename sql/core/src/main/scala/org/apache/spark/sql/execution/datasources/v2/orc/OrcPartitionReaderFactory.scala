@@ -26,6 +26,7 @@ import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce.OrcInputFormat
 
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
@@ -57,7 +58,8 @@ case class OrcPartitionReaderFactory(
     partitionSchema: StructType,
     filters: Array[Filter],
     aggregation: Option[Aggregation],
-    options: OrcOptions) extends FilePartitionReaderFactory {
+    options: OrcOptions,
+    memoryMode: MemoryMode) extends FilePartitionReaderFactory {
   private val resultSchema = StructType(readDataSchema.fields ++ partitionSchema.fields)
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val capacity = sqlConf.orcVectorizedReaderBatchSize
@@ -146,7 +148,7 @@ case class OrcPartitionReaderFactory(
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
-      val batchReader = new OrcColumnarBatchReader(capacity)
+      val batchReader = new OrcColumnarBatchReader(capacity, memoryMode)
       batchReader.initialize(fileSplit, taskAttemptContext)
       val requestedPartitionColIds =
         Array.fill(readDataSchema.length)(-1) ++ Range(0, partitionSchema.length)

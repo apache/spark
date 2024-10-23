@@ -15,12 +15,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 import unittest
+import os
+
 from pyspark.sql import SparkSession
 from pyspark.ml.tests.connect.test_legacy_mode_classification import ClassificationTestsMixin
 
-have_torch = True
+have_torch = "SPARK_SKIP_CONNECT_COMPAT_TESTS" not in os.environ
 try:
     import torch  # noqa: F401
 except ImportError:
@@ -31,7 +32,7 @@ except ImportError:
 class ClassificationTestsOnConnect(ClassificationTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = (
-            SparkSession.builder.remote("local[2]")
+            SparkSession.builder.remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]"))
             .config("spark.connect.copyFromLocalToFs.allowDestLocal", "true")
             .getOrCreate()
         )

@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.5.0</version>
+    <version>3.5.4-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -46,22 +46,6 @@
   </repositories>
 
   <dependencies>
-    <dependency>
-      <groupId>com.spotify</groupId>
-      <artifactId>docker-client</artifactId>
-      <scope>test</scope>
-      <classifier>shaded</classifier>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.httpcomponents</groupId>
-      <artifactId>httpclient</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.httpcomponents</groupId>
-      <artifactId>httpcore</artifactId>
-      <scope>test</scope>
-    </dependency>
     <!-- Necessary in order to avoid errors in log messages: -->
     <dependency>
       <groupId>com.google.guava</groupId>
@@ -112,14 +96,6 @@
       <artifactId>hadoop-minikdc</artifactId>
       <scope>test</scope>
     </dependency>
-    <!-- Although SPARK-28737 upgraded Jersey to 2.29 for JDK11, 'com.spotify.docker-client' still
-      uses this repackaged 'jersey-guava'. We add this back for JDK8/JDK11 testing. -->
-    <dependency>
-      <groupId>org.glassfish.jersey.bundles.repackaged</groupId>
-      <artifactId>jersey-guava</artifactId>
-      <version>2.25.1</version>
-      <scope>test</scope>
-    </dependency>
     <dependency>
       <groupId>org.mariadb.jdbc</groupId>
       <artifactId>mariadb-java-client</artifactId>
@@ -165,6 +141,16 @@
     <dependency>
       <groupId>com.mysql</groupId>
       <artifactId>mysql-connector-j</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.github.docker-java</groupId>
+      <artifactId>docker-java</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.github.docker-java</groupId>
+      <artifactId>docker-java-transport-zerodep</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

@@ -269,6 +269,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val fields = new Array[StructField](ncols)
     var i = 0
     while (i < ncols) {
+      val metadata = new MetadataBuilder()
       val columnName = rsmd.getColumnLabel(i + 1)
       val dataType = rsmd.getColumnType(i + 1)
       val typeName = rsmd.getColumnTypeName(i + 1)
@@ -289,8 +290,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
       } else {
         rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
       }
-      val metadata = new MetadataBuilder()
-      metadata.putLong("scale", fieldScale)
 
       dataType match {
         case java.sql.Types.TIME =>
@@ -302,7 +301,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
           metadata.putBoolean("rowid", true)
         case _ =>
       }
-
+      metadata.putBoolean("isSigned", isSigned)
+      metadata.putLong("scale", fieldScale)
       val columnType =
         dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
           getCatalystType(dataType, typeName, fieldSize, fieldScale, isSigned, isTimestampNTZ))
@@ -430,14 +430,16 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case LongType if metadata.contains("binarylong") =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        val bytes = rs.getBytes(pos + 1)
-        var ans = 0L
-        var j = 0
-        while (j < bytes.length) {
-          ans = 256 * ans + (255 & bytes(j))
-          j = j + 1
-        }
-        row.setLong(pos, ans)
+        val l = nullSafeConvert[Array[Byte]](rs.getBytes(pos + 1), bytes => {
+          var ans = 0L
+          var j = 0
+          while (j < bytes.length) {
+            ans = 256 * ans + (255 & bytes(j))
+            j = j + 1
+          }
+          ans
+        })
+        row.update(pos, l)
 
     case LongType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
@@ -898,7 +900,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case Some(n) if n < df.rdd.getNumPartitions => df.coalesce(n)
       case _ => df
     }
-    repartitionedDF.rdd.foreachPartition { iterator => savePartition(
+    repartitionedDF.foreachPartition { iterator: Iterator[Row] => savePartition(
       table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel, options)
     }
   }

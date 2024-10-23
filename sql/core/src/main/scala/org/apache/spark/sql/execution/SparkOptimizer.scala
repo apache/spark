@@ -89,7 +89,8 @@ class SparkOptimizer(
       InferWindowGroupLimit,
       LimitPushDown,
       LimitPushDownThroughWindow,
-      EliminateLimits) :+
+      EliminateLimits,
+      ConstantFolding) :+
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*) :+
     Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition)
 

@@ -1216,4 +1216,18 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("Inline table with current time expression") {
+    withView("v1") {
+      sql("CREATE VIEW v1 (t1, t2) AS SELECT * FROM VALUES (now(), now())")
+      val r1 = sql("select t1, t2 from v1").collect()(0)
+      val ts1 = (r1.getTimestamp(0), r1.getTimestamp(1))
+      assert(ts1._1 == ts1._2)
+      Thread.sleep(1)
+      val r2 = sql("select t1, t2 from v1").collect()(0)
+      val ts2 = (r2.getTimestamp(0), r2.getTimestamp(1))
+      assert(ts2._1 == ts2._2)
+      assert(ts1._1.getTime < ts2._1.getTime)
+    }
+  }
 }

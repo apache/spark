@@ -109,7 +109,7 @@ Data source options of JSON can be set via:
   * `schema_of_json`
 * `OPTIONS` clause at [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
 
-<table class="table table-striped">
+<table>
   <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr></thead>
   <tr>
     <!-- TODO(SPARK-35433): Add timeZone to Data Source Option for CSV, too. -->

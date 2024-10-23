@@ -49,13 +49,21 @@ object SchemaConverters {
   /**
    * Converts an Avro schema to a corresponding Spark SQL schema.
    *
+   * @since 4.0.0
+   */
+  def toSqlType(avroSchema: Schema, useStableIdForUnionType: Boolean): SchemaType = {
+    toSqlTypeHelper(avroSchema, Set.empty, useStableIdForUnionType)
+  }
+  /**
+   * Converts an Avro schema to a corresponding Spark SQL schema.
+   *
    * @since 2.4.0
    */
   def toSqlType(avroSchema: Schema): SchemaType = {
-    toSqlTypeHelper(avroSchema, Set.empty, AvroOptions(Map()))
+    toSqlType(avroSchema, false)
   }
   def toSqlType(avroSchema: Schema, options: Map[String, String]): SchemaType = {
-    toSqlTypeHelper(avroSchema, Set.empty, AvroOptions(options))
+    toSqlTypeHelper(avroSchema, Set.empty, AvroOptions(options).useStableIdForUnionType)
   }
 
   // The property specifies Catalyst type of the given field
@@ -64,7 +72,7 @@ object SchemaConverters {
   private def toSqlTypeHelper(
       avroSchema: Schema,
       existingRecordNames: Set[String],
-      avroOptions: AvroOptions): SchemaType = {
+      useStableIdForUnionType: Boolean): SchemaType = {
     avroSchema.getType match {
       case INT => avroSchema.getLogicalType match {
         case _: Date => SchemaType(DateType, nullable = false)
@@ -117,7 +125,7 @@ object SchemaConverters {
         }
         val newRecordNames = existingRecordNames + avroSchema.getFullName
         val fields = avroSchema.getFields.asScala.map { f =>
-          val schemaType = toSqlTypeHelper(f.schema(), newRecordNames, avroOptions)
+          val schemaType = toSqlTypeHelper(f.schema(), newRecordNames, useStableIdForUnionType)
           StructField(f.name, schemaType.dataType, schemaType.nullable)
         }
 
@@ -127,13 +135,14 @@ object SchemaConverters {
         val schemaType = toSqlTypeHelper(
           avroSchema.getElementType,
           existingRecordNames,
-          avroOptions)
+          useStableIdForUnionType)
         SchemaType(
           ArrayType(schemaType.dataType, containsNull = schemaType.nullable),
           nullable = false)
 
       case MAP =>
-        val schemaType = toSqlTypeHelper(avroSchema.getValueType, existingRecordNames, avroOptions)
+        val schemaType = toSqlTypeHelper(avroSchema.getValueType,
+          existingRecordNames, useStableIdForUnionType)
         SchemaType(
           MapType(StringType, schemaType.dataType, valueContainsNull = schemaType.nullable),
           nullable = false)
@@ -143,17 +152,18 @@ object SchemaConverters {
           // In case of a union with null, eliminate it and make a recursive call
           val remainingUnionTypes = AvroUtils.nonNullUnionBranches(avroSchema)
           if (remainingUnionTypes.size == 1) {
-            toSqlTypeHelper(remainingUnionTypes.head, existingRecordNames, avroOptions)
+            toSqlTypeHelper(remainingUnionTypes.head, existingRecordNames, useStableIdForUnionType)
               .copy(nullable = true)
           } else {
             toSqlTypeHelper(
               Schema.createUnion(remainingUnionTypes.asJava),
               existingRecordNames,
-              avroOptions).copy(nullable = true)
+              useStableIdForUnionType).copy(nullable = true)
           }
         } else avroSchema.getTypes.asScala.map(_.getType).toSeq match {
           case Seq(t1) =>
-            toSqlTypeHelper(avroSchema.getTypes.get(0), existingRecordNames, avroOptions)
+            toSqlTypeHelper(avroSchema.getTypes.get(0),
+              existingRecordNames, useStableIdForUnionType)
           case Seq(t1, t2) if Set(t1, t2) == Set(INT, LONG) =>
             SchemaType(LongType, nullable = false)
           case Seq(t1, t2) if Set(t1, t2) == Set(FLOAT, DOUBLE) =>
@@ -167,20 +177,20 @@ object SchemaConverters {
             val fieldNameSet : mutable.Set[String] = mutable.Set()
             val fields = avroSchema.getTypes.asScala.zipWithIndex.map {
               case (s, i) =>
-                val schemaType = toSqlTypeHelper(s, existingRecordNames, avroOptions)
+                val schemaType = toSqlTypeHelper(s, existingRecordNames, useStableIdForUnionType)
 
-                val fieldName = if (avroOptions.useStableIdForUnionType) {
+                val fieldName = if (useStableIdForUnionType) {
                   // Avro's field name may be case sensitive, so field names for two named type
                   // could be "a" and "A" and we need to distinguish them. In this case, we throw
                   // an exception.
-                  val temp_name = s"member_${s.getName.toLowerCase(Locale.ROOT)}"
-                  if (fieldNameSet.contains(temp_name)) {
+                  // Stable id prefix can be empty so the name of the field can be just the type.
+                  val tempFieldName = s"member_${s.getName}"
+                  if (!fieldNameSet.add(tempFieldName.toLowerCase(Locale.ROOT))) {
                     throw new IncompatibleSchemaException(
-                      "Cannot generate stable indentifier for Avro union type due to name " +
+                      "Cannot generate stable identifier for Avro union type due to name " +
                       s"conflict of type name ${s.getName}")
                   }
-                  fieldNameSet.add(temp_name)
-                  temp_name
+                  tempFieldName
                 } else {
                   s"member$i"
                 }

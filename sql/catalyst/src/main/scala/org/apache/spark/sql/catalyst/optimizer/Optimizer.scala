@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.SubqueryExpression.hasCorrelatedSubquery
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{RepartitionOperation, _}
@@ -287,7 +288,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ComputeCurrentTime,
       ReplaceCurrentLike(catalogManager),
       SpecialDatetimeValues,
-      RewriteAsOfJoin)
+      RewriteAsOfJoin,
+      EvalInlineTables
+    )
 
     override def apply(plan: LogicalPlan): LogicalPlan = {
       rules.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
@@ -574,10 +577,20 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         }
 
       case _ =>
+        val subQueryAttributes = if (conf.getConf(SQLConf
+          .EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES)) {
+          // Collect the references for all the subquery expressions in the plan.
+          AttributeSet.fromAttributeSets(plan.expressions.collect {
+            case e: SubqueryExpression => e.references
+          })
+        } else {
+          AttributeSet.empty
+        }
+
         // Remove redundant aliases in the subtree(s).
         val currentNextAttrPairs = mutable.Buffer.empty[(Attribute, Attribute)]
         val newNode = plan.mapChildren { child =>
-          val newChild = removeRedundantAliases(child, excluded)
+          val newChild = removeRedundantAliases(child, excluded ++ subQueryAttributes)
           currentNextAttrPairs ++= createAttributeMapping(child, newChild)
           newChild
         }
@@ -1152,11 +1165,8 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
    * in aggregate if they are also part of the grouping expressions. Otherwise the plan
    * after subquery rewrite will not be valid.
    */
-  private def canCollapseAggregate(p: Project, a: Aggregate): Boolean = {
-    p.projectList.forall(_.collect {
-      case s: ScalarSubquery if s.outerAttrs.nonEmpty => s
-    }.isEmpty)
-  }
+  private def canCollapseAggregate(p: Project, a: Aggregate): Boolean =
+    !p.projectList.exists(hasCorrelatedSubquery)
 
   def buildCleanedProjectList(
       upper: Seq[NamedExpression],
@@ -1649,16 +1659,19 @@ object EliminateSorts extends Rule[LogicalPlan] {
  * 3) by eliminating the always-true conditions given the constraints on the child's output.
  */
 object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
+  private def shouldApply(child: LogicalPlan): Boolean =
+    SQLConf.get.getConf(SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN) || !child.isStreaming
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(FILTER), ruleId) {
     // If the filter condition always evaluate to true, remove the filter.
     case Filter(Literal(true, BooleanType), child) => child
     // If the filter condition always evaluate to null or false,
     // replace the input with an empty relation.
-    case Filter(Literal(null, _), child) =>
-      LocalRelation(child.output, data = Seq.empty, isStreaming = plan.isStreaming)
-    case Filter(Literal(false, BooleanType), child) =>
-      LocalRelation(child.output, data = Seq.empty, isStreaming = plan.isStreaming)
+    case Filter(Literal(null, _), child) if shouldApply(child) =>
+      LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
+    case Filter(Literal(false, BooleanType), child) if shouldApply(child) =>
+      LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
     // If any deterministic condition is guaranteed to be true given the constraints on the child's
     // output, remove the condition
     case f @ Filter(fc, p: LogicalPlan) =>
@@ -2183,11 +2196,15 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
     case d @ Deduplicate(keys, child) if !child.isStreaming =>
       val keyExprIds = keys.map(_.exprId)
+      val generatedAliasesMap = new mutable.HashMap[Attribute, Alias]();
       val aggCols = child.output.map { attr =>
         if (keyExprIds.contains(attr.exprId)) {
           attr
         } else {
-          Alias(new First(attr).toAggregateExpression(), attr.name)()
+          // Keep track of the generated aliases to avoid generating multiple aliases
+          // for the same attribute (in case the attribute is duplicated)
+          generatedAliasesMap.getOrElseUpdate(attr,
+            Alias(new First(attr).toAggregateExpression(), attr.name)())
         }
       }
       // SPARK-22951: Physical aggregate operators distinguishes global aggregation and grouping

@@ -43,7 +43,10 @@ private[client] object GrpcExceptionConverter extends JsonUtils {
   }
 
   def convertIterator[T](iter: CloseableIterator[T]): CloseableIterator[T] = {
-    new CloseableIterator[T] {
+    new WrappedCloseableIterator[T] {
+
+      override def innerIterator: Iterator[T] = iter
+
       override def hasNext: Boolean = {
         convert {
           iter.hasNext

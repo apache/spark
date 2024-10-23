@@ -1190,7 +1190,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("watermark pushdown: no pushdown on watermark attribute #1") {
     val interval = new CalendarInterval(2, 2, 2000L)
-    val relation = LocalRelation(attrA, $"b".timestamp, attrC)
+    val relation = LocalRelation(Seq(attrA, $"b".timestamp, attrC), Nil, isStreaming = true)
 
     // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
@@ -1205,7 +1205,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("watermark pushdown: no pushdown for nondeterministic filter") {
     val interval = new CalendarInterval(2, 2, 2000L)
-    val relation = LocalRelation(attrA, attrB, $"c".timestamp)
+    val relation = LocalRelation(Seq(attrA, attrB, $"c".timestamp), Nil, isStreaming = true)
 
     // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
@@ -1221,7 +1221,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("watermark pushdown: full pushdown") {
     val interval = new CalendarInterval(2, 2, 2000L)
-    val relation = LocalRelation(attrA, attrB, $"c".timestamp)
+    val relation = LocalRelation(Seq(attrA, attrB, $"c".timestamp), Nil, isStreaming = true)
 
     // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
@@ -1236,7 +1236,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("watermark pushdown: no pushdown on watermark attribute #2") {
     val interval = new CalendarInterval(2, 2, 2000L)
-    val relation = LocalRelation($"a".timestamp, attrB, attrC)
+    val relation = LocalRelation(Seq($"a".timestamp, attrB, attrC), Nil, isStreaming = true)
 
     val originalQuery = EventTimeWatermark($"a", interval, relation)
       .where($"a" === new java.sql.Timestamp(0) && $"b" === 10)

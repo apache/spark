@@ -33,6 +33,7 @@ import org.apache.spark.errors.SparkCoreErrors
  * A class to test Pickle serialization on the Scala side, that will be deserialized
  * in Python
  */
+@deprecated("This class will be move to `test`.", "3.5.2")
 case class TestWritable(var str: String, var int: Int, var double: Double) extends Writable {
   def this() = this("", 0, 0.0)
 
@@ -104,6 +105,7 @@ private[python] class WritableToDoubleArrayConverter extends Converter[Any, Arra
  * This object contains method to generate SequenceFile test data and write it to a
  * given directory (probably a temp directory)
  */
+@deprecated("This class will be move to `test`.", "3.5.2")
 object WriteInputFormatTestDataGenerator {
 
   def main(args: Array[String]): Unit = {

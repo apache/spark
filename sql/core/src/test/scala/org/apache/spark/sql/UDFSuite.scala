@@ -1067,4 +1067,22 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       .lookupFunctionInfo(FunctionIdentifier("dummyUDF"))
     assert(expressionInfo.getClassName.contains("org.apache.spark.sql.UDFRegistration$$Lambda"))
   }
+
+  test("SPARK-47927: Correctly pass null values derived from join to UDF") {
+    val f = udf[Tuple1[Option[Int]], Tuple1[Option[Int]]](identity)
+    val ds1 = Seq(1).toDS()
+    val ds2 = Seq[Int]().toDS()
+
+    checkAnswer(
+      ds1.join(ds2, ds1("value") === ds2("value"), "left_outer")
+        .select(f(struct(ds2("value").as("_1")))),
+      Row(Row(null)))
+  }
+
+  test("SPARK-47927: ScalaUDF null handling") {
+    val f = udf[Int, Int](_ + 1)
+    val df = Seq(Some(1), None).toDF("c")
+      .select(f($"c").as("f"), f($"f"))
+    checkAnswer(df, Seq(Row(2, 3), Row(null, null)))
+  }
 }

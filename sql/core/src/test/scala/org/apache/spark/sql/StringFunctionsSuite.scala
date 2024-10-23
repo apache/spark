@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkRuntimeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.execution.FormattedMode
 import org.apache.spark.sql.functions._
@@ -1173,6 +1173,11 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(try_to_number(col("a"), lit("$99.99"))), Seq(Row(78.12)))
   }
 
+  test("SPARK-47646: try_to_number should return NULL for malformed input") {
+    val df = spark.createDataset(spark.sparkContext.parallelize(Seq("11")))
+    checkAnswer(df.select(try_to_number($"value", lit("$99.99"))), Seq(Row(null)))
+  }
+
   test("SPARK-44905: stateful lastRegex causes NullPointerException on eval for regexp_replace") {
     val df = sql("select regexp_replace('', '[a\\\\d]{0, 2}', 'x')")
     intercept[SparkRuntimeException](df.queryExecution.optimizedPlan)
@@ -1185,5 +1190,14 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         "value" -> "'[a\\\\d]{0, 2}'"
       )
     )
+  }
+
+  test("SPARK-48806: url_decode exception") {
+    val e = intercept[SparkIllegalArgumentException] {
+      sql("select url_decode('https%3A%2F%2spark.apache.org')").collect()
+    }
+    assert(e.getCause.isInstanceOf[IllegalArgumentException] &&
+      e.getCause.getMessage
+        .startsWith("URLDecoder: Illegal hex characters in escape (%) pattern - "))
   }
 }

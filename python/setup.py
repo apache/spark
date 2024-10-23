@@ -249,6 +249,7 @@ try:
             "pyspark.sql.connect.avro",
             "pyspark.sql.connect.client",
             "pyspark.sql.connect.proto",
+            "pyspark.sql.connect.protobuf",
             "pyspark.sql.connect.streaming",
             "pyspark.sql.pandas",
             "pyspark.sql.protobuf",
@@ -306,17 +307,17 @@ try:
         # if you're updating the versions or dependencies.
         install_requires=["py4j==0.10.9.7"],
         extras_require={
-            "ml": ["numpy>=1.15"],
-            "mllib": ["numpy>=1.15"],
+            "ml": ["numpy>=1.15,<2"],
+            "mllib": ["numpy>=1.15,<2"],
             "sql": [
                 "pandas>=%s" % _minimum_pandas_version,
                 "pyarrow>=%s" % _minimum_pyarrow_version,
-                "numpy>=1.15",
+                "numpy>=1.15,<2",
             ],
             "pandas_on_spark": [
                 "pandas>=%s" % _minimum_pandas_version,
                 "pyarrow>=%s" % _minimum_pyarrow_version,
-                "numpy>=1.15",
+                "numpy>=1.15,<2",
             ],
             "connect": [
                 "pandas>=%s" % _minimum_pandas_version,
@@ -324,7 +325,7 @@ try:
                 "grpcio>=%s" % _minimum_grpc_version,
                 "grpcio-status>=%s" % _minimum_grpc_version,
                 "googleapis-common-protos>=%s" % _minimum_googleapis_common_protos_version,
-                "numpy>=1.15",
+                "numpy>=1.15,<2",
             ],
         },
         python_requires=">=3.8",

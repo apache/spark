@@ -160,21 +160,27 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  test("SPARK-36182: writing and reading TimestampNTZType column") {
-    withTable("ts") {
-      sql("create table ts (c1 timestamp_ntz) using parquet")
-      sql("insert into ts values (timestamp_ntz'2016-01-01 10:11:12.123456')")
-      sql("insert into ts values (null)")
-      sql("insert into ts values (timestamp_ntz'1965-01-01 10:11:12.123456')")
-      val expectedSchema = new StructType().add(StructField("c1", TimestampNTZType))
-      assert(spark.table("ts").schema == expectedSchema)
-      val expected = Seq(
-        ("2016-01-01 10:11:12.123456"),
-        (null),
-        ("1965-01-01 10:11:12.123456"))
-        .toDS().select($"value".cast("timestamp_ntz"))
-      withAllParquetReaders {
-        checkAnswer(sql("select * from ts"), expected)
+  test("SPARK-36182, SPARK-47368: writing and reading TimestampNTZType column") {
+    Seq("true", "false").foreach { inferNTZ =>
+      // The SQL Conf PARQUET_INFER_TIMESTAMP_NTZ_ENABLED should not affect the file written
+      // by Spark.
+      withSQLConf(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key -> inferNTZ) {
+        withTable("ts") {
+          sql("create table ts (c1 timestamp_ntz) using parquet")
+          sql("insert into ts values (timestamp_ntz'2016-01-01 10:11:12.123456')")
+          sql("insert into ts values (null)")
+          sql("insert into ts values (timestamp_ntz'1965-01-01 10:11:12.123456')")
+          val expectedSchema = new StructType().add(StructField("c1", TimestampNTZType))
+          assert(spark.table("ts").schema == expectedSchema)
+          val expected = Seq(
+            ("2016-01-01 10:11:12.123456"),
+            (null),
+            ("1965-01-01 10:11:12.123456"))
+            .toDS().select($"value".cast("timestamp_ntz"))
+          withAllParquetReaders {
+            checkAnswer(sql("select * from ts"), expected)
+          }
+        }
       }
     }
   }
@@ -250,6 +256,18 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         withAllParquetReaders {
           val df2 = spark.read.parquet(file.getCanonicalPath)
           checkAnswer(df2, df.collect().toSeq)
+        }
+      }
+    }
+  }
+
+  test("SPARK-46466: write and read TimestampNTZ with legacy rebase mode") {
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> "LEGACY") {
+      withTable("ts") {
+        sql("create table ts (c1 timestamp_ntz) using parquet")
+        sql("insert into ts values (timestamp_ntz'0900-01-01 01:10:10')")
+        withAllParquetReaders {
+          checkAnswer(spark.table("ts"), sql("select timestamp_ntz'0900-01-01 01:10:10'"))
         }
       }
     }
@@ -1091,6 +1109,26 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         val res = spark.read.option("mergeSchema", "true").parquet(path.toString)
         assert(res.schema("col").dataType == DecimalType(17, 2))
         checkAnswer(res, data1 ++ data2)
+      }
+    }
+  }
+
+  test("row group skipping doesn't overflow when reading into larger type") {
+    withTempPath { path =>
+      Seq(0).toDF("a").write.parquet(path.toString)
+      // The vectorized and non-vectorized readers will produce different exceptions, we don't need
+      // to test both as this covers row group skipping.
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        // Reading integer 'a' as a long isn't supported. Check that an exception is raised instead
+        // of incorrectly skipping the single row group and producing incorrect results.
+        val exception = intercept[SparkException] {
+          spark.read
+            .schema("a LONG")
+            .parquet(path.toString)
+            .where(s"a < ${Long.MaxValue}")
+            .collect()
+        }
+        assert(exception.getCause.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
       }
     }
   }

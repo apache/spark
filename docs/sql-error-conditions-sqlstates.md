@@ -33,7 +33,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 
 ## Class `0A`: feature not supported
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>0A000</td>
@@ -48,7 +48,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `21`: cardinality violation
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>21000</td>
@@ -63,7 +63,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `22`: data exception
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>22003</td>
@@ -168,7 +168,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `23`: integrity constraint violation
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>23505</td>
@@ -183,7 +183,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `2B`: dependent privilege descriptors still exist
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>2BP01</td>
@@ -198,7 +198,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `38`: external routine exception
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>38000</td>
@@ -213,7 +213,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `39`: external routine invocation exception
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>39000</td>
@@ -228,7 +228,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `42`: syntax error or access rule violation
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>42000</td>
@@ -648,7 +648,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `46`: java ddl 1
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>46110</td>
@@ -672,7 +672,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `53`: insufficient resources
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>53200</td>
@@ -687,7 +687,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `54`: program limit exceeded
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>54000</td>
@@ -702,7 +702,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `HY`: CLI-specific condition
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>HY008</td>
@@ -717,7 +717,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </table>
 ## Class `XX`: internal error
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
 <tr>
   <td>XX000</td>

@@ -140,16 +140,19 @@ class StatusTrackerSuite extends SparkFunSuite with Matchers with LocalSparkCont
     }
 
     sc.removeJobTag("tag1")
+
     // takeAsync() across multiple partitions
     val thirdJobFuture = sc.parallelize(1 to 1000, 2).takeAsync(999)
-    val thirdJobId = eventually(timeout(10.seconds)) {
-      thirdJobFuture.jobIds.head
+    val thirdJobIds = eventually(timeout(10.seconds)) {
+      // Wait for the two jobs triggered by takeAsync
+      thirdJobFuture.jobIds.size should be(2)
+      thirdJobFuture.jobIds
     }
     eventually(timeout(10.seconds)) {
       sc.statusTracker.getJobIdsForTag("tag1").toSet should be (
         Set(firstJobId, secondJobId))
       sc.statusTracker.getJobIdsForTag("tag2").toSet should be (
-        Set(secondJobId, thirdJobId))
+        Set(secondJobId) ++ thirdJobIds)
     }
   }
 }

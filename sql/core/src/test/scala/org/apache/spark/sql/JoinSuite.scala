@@ -25,6 +25,7 @@ import scala.collection.mutable.ListBuffer
 import org.mockito.Mockito._
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
+import org.apache.spark.internal.config.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
@@ -32,11 +33,11 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, HintInfo, Join, JoinHint, NO_BROADCAST_AND_REPLICATION}
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.python.BatchEvalPythonExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.SlowSQLTest
 
@@ -1728,5 +1729,61 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     val expected = Seq(Row(1, "a", "a", "a"))
 
     checkAnswer(joined, expected)
+  }
+
+  test("SPARK-45882: BroadcastHashJoinExec propagate partitioning should respect " +
+    "CoalescedHashPartitioning") {
+    val cached = spark.sql(
+      """
+        |select /*+ broadcast(testData) */ key, value, a
+        |from testData join (
+        | select a from testData2 group by a
+        |)tmp on key = a
+        |""".stripMargin).cache()
+    try {
+      val df = cached.groupBy("key").count()
+      val expected = Seq(Row(1, 1), Row(2, 1), Row(3, 1))
+      assert(find(df.queryExecution.executedPlan) {
+        case _: ShuffleExchangeLike => true
+        case _ => false
+      }.size == 1, df.queryExecution)
+      checkAnswer(df, expected)
+      assert(find(df.queryExecution.executedPlan) {
+        case _: ShuffleExchangeLike => true
+        case _ => false
+      }.isEmpty, df.queryExecution)
+    } finally {
+      cached.unpersist()
+    }
+  }
+}
+
+class ThreadLeakInSortMergeJoinSuite
+  extends QueryTest
+    with SharedSparkSession
+    with AdaptiveSparkPlanHelper {
+
+  setupTestData()
+  override protected def createSparkSession: TestSparkSession = {
+    SparkSession.cleanupAnyExistingSession()
+    new TestSparkSession(
+      sparkConf.set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, 20))
+  }
+
+  test("SPARK-47146: thread leak when doing SortMergeJoin (with spill)") {
+
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1") {
+
+      assertSpilled(sparkContext, "inner join") {
+        sql("SELECT * FROM testData JOIN testData2 ON key = a").collect()
+      }
+
+      val readAheadThread = Thread.getAllStackTraces.keySet().asScala
+        .find {
+          _.getName.startsWith("read-ahead")
+        }
+      assert(readAheadThread.isEmpty)
+    }
   }
 }

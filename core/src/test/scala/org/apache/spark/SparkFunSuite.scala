@@ -303,6 +303,30 @@ abstract class SparkFunSuite
   }
 
   /**
+   * Sets all configurations specified in `pairs` in SparkEnv SparkConf, calls `f`, and then
+   * restores all configurations.
+   */
+  protected def withSparkEnvConfs(pairs: (String, String)*)(f: => Unit): Unit = {
+    val conf = SparkEnv.get.conf
+    val (keys, values) = pairs.unzip
+    val currentValues = keys.map { key =>
+      if (conf.getOption(key).isDefined) {
+        Some(conf.get(key))
+      } else {
+        None
+      }
+    }
+    pairs.foreach { kv => conf.set(kv._1, kv._2) }
+    try f
+    finally {
+      keys.zip(currentValues).foreach {
+        case (key, Some(value)) => conf.set(key, value)
+        case (key, None) => conf.remove(key)
+      }
+    }
+  }
+
+  /**
    * Checks an exception with an error class against expected results.
    * @param exception     The exception to check
    * @param errorClass    The expected error class identifying the error

@@ -770,3 +770,11 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "-x'2379ACFe'"
   } ]
 }
+
+
+-- !query
+select -0, -0.0
+-- !query schema
+struct<0:int,0.0:decimal(1,1)>
+-- !query output
+0	0.0

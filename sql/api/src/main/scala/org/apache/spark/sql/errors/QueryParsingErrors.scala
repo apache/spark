@@ -283,7 +283,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def nestedTypeMissingElementTypeError(
       dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
-    dataType match {
+    dataType.toUpperCase(Locale.ROOT) match {
       case "ARRAY" =>
         new ParseException(
           errorClass = "INCOMPLETE_TYPE_DEFINITION.ARRAY",

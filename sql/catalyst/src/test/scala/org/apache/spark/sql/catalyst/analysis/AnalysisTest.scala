@@ -84,6 +84,8 @@ trait AnalysisTest extends PlanTest {
     createTempView(catalog, "TaBlE3", TestRelations.testRelation3, overrideIfExists = true)
     createGlobalTempView(catalog, "TaBlE4", TestRelations.testRelation4, overrideIfExists = true)
     createGlobalTempView(catalog, "TaBlE5", TestRelations.testRelation5, overrideIfExists = true)
+    createTempView(catalog, "streamingTable", TestRelations.streamingRelation,
+      overrideIfExists = true)
     new Analyzer(catalog) {
       override val extendedResolutionRules = extendedAnalysisRules
     }

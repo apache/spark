@@ -114,6 +114,9 @@ private[connect] class ExecuteHolder(
       : mutable.ArrayBuffer[ExecuteGrpcResponseSender[proto.ExecutePlanResponse]] =
     new mutable.ArrayBuffer[ExecuteGrpcResponseSender[proto.ExecutePlanResponse]]()
 
+  /** For testing. Whether the async completion callback is called. */
+  @volatile private[connect] var completionCallbackCalled: Boolean = false
+
   /**
    * Start the execution. The execution is started in a background thread in ExecuteThreadRunner.
    * Responses are produced and cached in ExecuteResponseObserver. A GRPC thread consumes the
@@ -123,13 +126,6 @@ private[connect] class ExecuteHolder(
    */
   def start(): Unit = {
     runner.start()
-  }
-
-  /**
-   * Wait for the execution thread to finish and join it.
-   */
-  def join(): Unit = {
-    runner.join()
   }
 
   /**
@@ -183,6 +179,16 @@ private[connect] class ExecuteHolder(
     }
   }
 
+  // For testing.
+  private[connect] def setGrpcResponseSendersDeadline(deadlineMs: Long) = synchronized {
+    grpcResponseSenders.foreach(_.setDeadline(deadlineMs))
+  }
+
+  // For testing
+  private[connect] def interruptGrpcResponseSenders() = synchronized {
+    grpcResponseSenders.foreach(_.interrupt())
+  }
+
   /**
    * For a short period in ExecutePlan after creation and until runGrpcResponseSender is called,
    * there is no attached response sender, but yet we start with lastAttachedRpcTime = None, so we
@@ -224,8 +230,15 @@ private[connect] class ExecuteHolder(
     if (closedTime.isEmpty) {
       // interrupt execution, if still running.
       runner.interrupt()
-      // wait for execution to finish, to make sure no more results get pushed to responseObserver
-      runner.join()
+      // Do not wait for the execution to finish, clean up resources immediately.
+      runner.processOnCompletion { _ =>
+        completionCallbackCalled = true
+        // The execution may not immediately get interrupted, clean up any remaining resources when
+        // it does.
+        responseObserver.removeAll()
+        // post closed to UI
+        eventsManager.postClosed()
+      }
       // interrupt any attached grpcResponseSenders
       grpcResponseSenders.foreach(_.interrupt())
       // if there were still any grpcResponseSenders, register detach time
@@ -235,8 +248,6 @@ private[connect] class ExecuteHolder(
       }
       // remove all cached responses from observer
       responseObserver.removeAll()
-      // post closed to UI
-      eventsManager.postClosed()
       closedTime = Some(System.currentTimeMillis())
     }
   }
@@ -274,7 +285,7 @@ private[connect] class ExecuteHolder(
 object ExecuteJobTag {
   private val prefix = "SparkConnect_OperationTag"
 
-  def apply(sessionId: String, userId: String, operationId: String): String = {
+  def apply(userId: String, sessionId: String, operationId: String): String = {
     s"${prefix}_" +
       s"User_${userId}_" +
       s"Session_${sessionId}_" +

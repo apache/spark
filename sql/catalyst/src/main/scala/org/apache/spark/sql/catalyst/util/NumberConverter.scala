@@ -24,6 +24,13 @@ import org.apache.spark.unsafe.types.UTF8String
 object NumberConverter {
 
   /**
+   * The output string has a max length of one char per bit in the 64-bit `Long` intermediate
+   * representation plus one char for the '-' sign.  This happens in practice when converting
+   * `Long.MinValue` with `toBase` equal to -2.
+   */
+  private final val MAX_OUTPUT_LENGTH = java.lang.Long.SIZE + 1
+
+  /**
    * Decode v into value[].
    *
    * @param v is treated as an unsigned 64-bit integer
@@ -148,7 +155,7 @@ object NumberConverter {
     var (negative, first) = if (n(0) == '-') (true, 1) else (false, 0)
 
     // Copy the digits in the right side of the array
-    val temp = new Array[Byte](Math.max(n.length, 64))
+    val temp = new Array[Byte](Math.max(n.length, MAX_OUTPUT_LENGTH))
     var v: Long = -1
 
     System.arraycopy(n, first, temp, temp.length - n.length + first, n.length - first)

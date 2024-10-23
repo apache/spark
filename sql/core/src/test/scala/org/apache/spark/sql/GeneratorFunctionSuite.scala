@@ -432,7 +432,6 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
         },
         errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
         parameters = Map(
-          "clause" -> "aggregate",
           "num" -> "2",
           "generators" -> ("\"explode(array(min(c2), max(c2)))\", " +
             "\"posexplode(array(min(c2), max(c2)))\"")))
@@ -535,6 +534,39 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
         |""".stripMargin)
     checkAnswer(df,
       Row(1, 1) :: Row(1, 2) :: Row(2, 2) :: Row(2, 3) :: Row(3, null) :: Nil)
+  }
+
+  test("SPARK-45171: Handle evaluated nondeterministic expression") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      val df = sql("select explode(array(rand(0)))")
+      checkAnswer(df, Row(0.7604953758285915d))
+    }
+  }
+
+  test("SPARK-47241: two generator functions in SELECT") {
+    def testTwoGenerators(needImplicitCast: Boolean): Unit = {
+      val df = sql(
+        s"""
+          |SELECT
+          |explode(array('a', 'b')) as c1,
+          |explode(array(0L, ${if (needImplicitCast) "0L + 1" else "1L"})) as c2
+          |""".stripMargin)
+      checkAnswer(df, Seq(Row("a", 0L), Row("a", 1L), Row("b", 0L), Row("b", 1L)))
+    }
+    testTwoGenerators(needImplicitCast = true)
+    testTwoGenerators(needImplicitCast = false)
+  }
+
+  test("SPARK-47241: generator function after wildcard in SELECT") {
+    val df = sql(
+      s"""
+         |SELECT *, explode(array('a', 'b')) as c1
+         |FROM
+         |(
+         |  SELECT id FROM range(1) GROUP BY 1
+         |)
+         |""".stripMargin)
+    checkAnswer(df, Seq(Row(0, "a"), Row(0, "b")))
   }
 }
 

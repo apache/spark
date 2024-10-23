@@ -1410,4 +1410,6 @@ case class MultiCommutativeOp(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     this.copy(operands = newChildren)(originalRoot)
+
+  override protected final def otherCopyArgs: Seq[AnyRef] = originalRoot :: Nil
 }

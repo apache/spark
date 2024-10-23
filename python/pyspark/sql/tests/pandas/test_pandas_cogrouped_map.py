@@ -166,7 +166,7 @@ class CogroupedApplyInPandasTestsMixin:
             fn=lambda lft, rgt: lft.size + rgt.size,
             error_class=PythonException,
             error_message_regex="Return type of the user-defined function "
-            "should be pandas.DataFrame, but is int64.",
+            "should be pandas.DataFrame, but is int",
         )
 
     def test_apply_in_pandas_returning_column_names(self):
@@ -444,6 +444,41 @@ class CogroupedApplyInPandasTestsMixin:
 
         actual = df.orderBy("id", "day").take(days)
         self.assertEqual(actual, [Row(0, day, vals, vals) for day in range(days)])
+
+    def test_with_local_data(self):
+        df1 = self.spark.createDataFrame(
+            [(1, 1.0, "a"), (2, 2.0, "b"), (1, 3.0, "c"), (2, 4.0, "d")], ("id", "v1", "v2")
+        )
+        df2 = self.spark.createDataFrame([(1, "x"), (2, "y"), (1, "z")], ("id", "v3"))
+
+        def summarize(left, right):
+            return pd.DataFrame(
+                {
+                    "left_rows": [len(left)],
+                    "left_columns": [len(left.columns)],
+                    "right_rows": [len(right)],
+                    "right_columns": [len(right.columns)],
+                }
+            )
+
+        df = (
+            df1.groupby("id")
+            .cogroup(df2.groupby("id"))
+            .applyInPandas(
+                summarize,
+                schema="left_rows long, left_columns long, right_rows long, right_columns long",
+            )
+        )
+
+        self.assertEqual(
+            df._show_string(),
+            "+---------+------------+----------+-------------+\n"
+            "|left_rows|left_columns|right_rows|right_columns|\n"
+            "+---------+------------+----------+-------------+\n"
+            "|        2|           3|         2|            2|\n"
+            "|        2|           3|         1|            2|\n"
+            "+---------+------------+----------+-------------+\n",
+        )
 
     @staticmethod
     def _test_with_key(left, right, isLeft):

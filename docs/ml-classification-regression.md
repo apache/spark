@@ -703,7 +703,7 @@ others.
 
 ###  Available families
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr>
       <th>Family</th>
@@ -1224,7 +1224,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 ### Input Columns
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -1251,7 +1251,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 ### Output Columns
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -1326,7 +1326,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 #### Input Columns
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -1353,7 +1353,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 #### Output Columns (Predictions)
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -1407,7 +1407,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 #### Input Columns
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -1436,7 +1436,7 @@ Note that `GBTClassifier` currently only supports binary labels.
 
 #### Output Columns (Predictions)
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>

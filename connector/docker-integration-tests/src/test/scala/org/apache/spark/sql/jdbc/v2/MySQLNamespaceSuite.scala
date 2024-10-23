@@ -45,8 +45,8 @@ class MySQLNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespac
     override val jdbcPort: Int = 3306
 
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:mysql://$ip:$port/" +
-        s"mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true&useSSL=false"
+      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true" +
+        "&useSSL=false&disableMariaDbDriver"
   }
 
   val map = new CaseInsensitiveStringMap(

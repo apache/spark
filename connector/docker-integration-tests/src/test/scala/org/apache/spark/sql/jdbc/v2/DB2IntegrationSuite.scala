@@ -80,16 +80,24 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
     connection.prepareStatement(
       "CREATE TABLE employee (dept INTEGER, name VARCHAR(10), salary DECIMAL(20, 2), bonus DOUBLE)")
       .executeUpdate()
+    connection.prepareStatement(
+      s"""CREATE TABLE pattern_testing_table (
+         |pattern_testing_col VARCHAR(50)
+         |)
+                   """.stripMargin
+    ).executeUpdate()
   }
 
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
+    var expectedSchema = new StructType()
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE DOUBLE")
     t = spark.table(tbl)
-    expectedSchema = new StructType().add("ID", DoubleType, true, defaultMetadata)
+    expectedSchema = new StructType()
+      .add("ID", DoubleType, true, defaultMetadata(DoubleType))
     assert(t.schema === expectedSchema)
     // Update column type from DOUBLE to STRING
     val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE VARCHAR(10)"
@@ -112,7 +120,8 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
     sql(s"CREATE TABLE $tbl (ID INT)" +
       s" TBLPROPERTIES('CCSID'='UNICODE')")
     val t = spark.table(tbl)
-    val expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
+    val expectedSchema = new StructType()
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
     assert(t.schema === expectedSchema)
   }
 

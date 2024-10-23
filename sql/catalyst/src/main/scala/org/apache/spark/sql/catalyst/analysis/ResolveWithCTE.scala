@@ -51,7 +51,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
 
       case ref: CTERelationRef if !ref.resolved =>
         cteDefMap.get(ref.cteId).map { cteDef =>
-          CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output)
+          CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
         }.getOrElse {
           ref
         }

@@ -386,7 +386,7 @@ Data source options of Parquet can be set via:
   * `DataStreamWriter`
 * `OPTIONS` clause at [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
 
-<table class="table table-striped">
+<table>
   <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr></thead>
   <tr>
     <td><code>datetimeRebaseMode</code></td>
@@ -434,7 +434,7 @@ Other generic options can be found in <a href="https://spark.apache.org/docs/lat
 Configuration of Parquet can be done using the `setConf` method on `SparkSession` or by running
 `SET key=value` commands using SQL.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.sql.parquet.binaryAsString</code></td>
@@ -616,14 +616,15 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
   <td>3.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.sql.parquet.timestampNTZ.enabled</code></td>
+  <td><code>spark.sql.parquet.inferTimestampNTZ.enabled</code></td>
   <td>true</td>
   <td>
-    Enables <code>TIMESTAMP_NTZ</code> support for Parquet reads and writes.
-    When enabled, <code>TIMESTAMP_NTZ</code> values are written as Parquet timestamp
-    columns with annotation isAdjustedToUTC = false and are inferred in a similar way.
-    When disabled, such values are read as <code>TIMESTAMP_LTZ</code> and have to be
-    converted to <code>TIMESTAMP_LTZ</code> for writes.
+    When enabled, Parquet timestamp columns with annotation <code>isAdjustedToUTC = false</code>
+    are inferred as TIMESTAMP_NTZ type during schema inference. Otherwise, all the Parquet
+    timestamp columns are inferred as TIMESTAMP_LTZ types. Note that Spark writes the
+    output schema into Parquet's footer metadata on file writing and leverages it on file
+    reading. Thus this configuration only affects the schema inference on Parquet files
+    which are not written by Spark.
   </td>
   <td>3.4.0</td>
 </tr>

@@ -19,8 +19,6 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
 import java.nio.charset.StandardCharsets
-import java.sql.Timestamp
-import java.util.Date
 import java.util.concurrent.CountDownLatch
 
 import scala.collection.JavaConverters._
@@ -145,11 +143,8 @@ class CliSuite extends SparkFunSuite {
     val lock = new Object
 
     def captureOutput(source: String)(line: String): Unit = lock.synchronized {
-      // This test suite sometimes gets extremely slow out of unknown reason on Jenkins.  Here we
-      // add a timestamp to provide more diagnosis information.
-      val newLine = s"${new Timestamp(new Date().getTime)} - $source> $line"
-      log.info(newLine)
-      buffer += newLine
+      logInfo(s"$source> $line")
+      buffer += line
 
       if (line.startsWith("Spark master: ") && line.contains("Application Id: ")) {
         foundMasterAndApplicationIdMessage.trySuccess(())
@@ -198,7 +193,7 @@ class CliSuite extends SparkFunSuite {
       ThreadUtils.awaitResult(foundAllExpectedAnswers.future, timeoutForQuery)
       log.info("Found all expected output.")
     } catch { case cause: Throwable =>
-      val message =
+      val message = lock.synchronized {
         s"""
            |=======================
            |CliSuite failure output
@@ -212,6 +207,7 @@ class CliSuite extends SparkFunSuite {
            |End CliSuite failure output
            |===========================
          """.stripMargin
+      }
       logError(message, cause)
       fail(message, cause)
     } finally {
@@ -388,7 +384,7 @@ class CliSuite extends SparkFunSuite {
     )
   }
 
-  test("SPARK-11188 Analysis error reporting") {
+  testRetry("SPARK-11188 Analysis error reporting") {
     runCliWithin(timeout = 2.minute,
       errorResponses = Seq("AnalysisException"))(
       "select * from nonexistent_table;" -> "nonexistent_table"
@@ -556,7 +552,7 @@ class CliSuite extends SparkFunSuite {
     )
   }
 
-  test("SparkException with root cause will be printStacktrace") {
+  testRetry("SparkException with root cause will be printStacktrace") {
     // If it is not in silent mode, will print the stacktrace
     runCliWithin(
       1.minute,
@@ -580,8 +576,8 @@ class CliSuite extends SparkFunSuite {
     runCliWithin(1.minute)("SELECT MAKE_DATE(-44, 3, 15);" -> "-0044-03-15")
   }
 
-  test("SPARK-33100: Ignore a semicolon inside a bracketed comment in spark-sql") {
-    runCliWithin(4.minute)(
+  testRetry("SPARK-33100: Ignore a semicolon inside a bracketed comment in spark-sql") {
+    runCliWithin(1.minute)(
       "/* SELECT 'test';*/ SELECT 'test';" -> "test",
       ";;/* SELECT 'test';*/ SELECT 'test';" -> "test",
       "/* SELECT 'test';*/;; SELECT 'test';" -> "test",
@@ -628,8 +624,8 @@ class CliSuite extends SparkFunSuite {
     )
   }
 
-  test("SPARK-37555: spark-sql should pass last unclosed comment to backend") {
-    runCliWithin(5.minute)(
+  testRetry("SPARK-37555: spark-sql should pass last unclosed comment to backend") {
+    runCliWithin(1.minute)(
       // Only unclosed comment.
       "/* SELECT /*+ HINT() 4; */;".stripMargin -> "Syntax error at or near ';'",
       // Unclosed nested bracketed comment.
@@ -642,7 +638,7 @@ class CliSuite extends SparkFunSuite {
     )
   }
 
-  test("SPARK-37694: delete [jar|file|archive] shall use spark sql processor") {
+  testRetry("SPARK-37694: delete [jar|file|archive] shall use spark sql processor") {
     runCliWithin(2.minute, errorResponses = Seq("ParseException"))(
       "delete jar dummy.jar;" -> "Syntax error at or near 'jar': missing 'FROM'.(line 1, pos 7)")
   }
@@ -683,7 +679,7 @@ class CliSuite extends SparkFunSuite {
     SparkSQLEnv.stop()
   }
 
-  test("SPARK-39068: support in-memory catalog and running concurrently") {
+  testRetry("SPARK-39068: support in-memory catalog and running concurrently") {
     val extraConf = Seq("-c", s"${StaticSQLConf.CATALOG_IMPLEMENTATION.key}=in-memory")
     val cd = new CountDownLatch(2)
     def t: Thread = new Thread {
@@ -703,7 +699,7 @@ class CliSuite extends SparkFunSuite {
   }
 
   // scalastyle:off line.size.limit
-  test("formats of error messages") {
+  testRetry("formats of error messages") {
     def check(format: ErrorMessageFormat.Value, errorMessage: String, silent: Boolean): Unit = {
       val expected = errorMessage.split(System.lineSeparator()).map("" -> _)
       runCliWithin(
@@ -815,7 +811,6 @@ class CliSuite extends SparkFunSuite {
       s"spark.sql.catalog.$catalogName.url=jdbc:derby:memory:$catalogName;create=true"
     val catalogDriver =
       s"spark.sql.catalog.$catalogName.driver=org.apache.derby.jdbc.AutoloadedDriver"
-    val database = s"-database $catalogName.SYS"
     val catalogConfigs =
       Seq(catalogImpl, catalogDriver, catalogUrl, "spark.sql.catalogImplementation=in-memory")
         .flatMap(Seq("--conf", _))

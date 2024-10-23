@@ -40,7 +40,7 @@ called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
 
 ### Input Columns
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -61,7 +61,7 @@ called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
 
 ### Output Columns
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -204,7 +204,7 @@ model.
 
 ### Input Columns
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -225,7 +225,7 @@ model.
 
 ### Output Columns
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, TableSpec, UnaryNode}
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils, WriteDeltaProjections}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSERT_OPERATION, UPDATE_OPERATION}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, Write, WriterCommitMessage}
@@ -81,9 +81,10 @@ case class CreateTableAsSelectExec(
       }
       throw QueryCompilationErrors.tableAlreadyExistsError(ident)
     }
-    val table = catalog.createTable(
+    val table = Option(catalog.createTable(
       ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
       partitioning.toArray, properties.asJava)
+    ).getOrElse(catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
     writeToTable(catalog, table, writeOptions, ident, query)
   }
 }
@@ -115,9 +116,10 @@ case class AtomicCreateTableAsSelectExec(
       }
       throw QueryCompilationErrors.tableAlreadyExistsError(ident)
     }
-    val stagedTable = catalog.stageCreate(
+    val stagedTable = Option(catalog.stageCreate(
       ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
       partitioning.toArray, properties.asJava)
+    ).getOrElse(catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
     writeToTable(catalog, stagedTable, writeOptions, ident, query)
   }
 }
@@ -161,9 +163,10 @@ case class ReplaceTableAsSelectExec(
     } else if (!orCreate) {
       throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
     }
-    val table = catalog.createTable(
+    val table = Option(catalog.createTable(
       ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
       partitioning.toArray, properties.asJava)
+    ).getOrElse(catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
     writeToTable(catalog, table, writeOptions, ident, query)
   }
 }
@@ -213,7 +216,9 @@ case class AtomicReplaceTableAsSelectExec(
     } else {
       throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
     }
-    writeToTable(catalog, staged, writeOptions, ident, query)
+    val table = Option(staged).getOrElse(
+      catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
+    writeToTable(catalog, table, writeOptions, ident, query)
   }
 }
 

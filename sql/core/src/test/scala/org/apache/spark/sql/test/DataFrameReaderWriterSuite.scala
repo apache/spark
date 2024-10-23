@@ -1363,4 +1363,12 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       }
     }
   }
+
+  test("SPARK-39910: read files from Hadoop archives") {
+    val fileSchema = new StructType().add("str", StringType)
+    val harPath = testFile("test-data/test-archive.har")
+      .replaceFirst("file:/", "har:/")
+
+    testRead(spark.read.schema(fileSchema).csv(s"$harPath/test.csv"), data, fileSchema)
+  }
 }

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import os
 import unittest
 import datetime
 from typing import cast
@@ -262,6 +262,9 @@ class PandasUDFTestsMixin:
             .collect,
         )
 
+    @unittest.skipIf(
+        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
+    )
     def test_pandas_udf_detect_unsafe_type_conversion(self):
         import pandas as pd
         import numpy as np
@@ -285,6 +288,9 @@ class PandasUDFTestsMixin:
         with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
             df.select(["A"]).withColumn("udf", udf("A")).collect()
 
+    @unittest.skipIf(
+        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
+    )
     def test_pandas_udf_arrow_overflow(self):
         import pandas as pd
 

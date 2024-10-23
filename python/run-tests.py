@@ -60,15 +60,17 @@ LOG_FILE = os.path.join(SPARK_HOME, "python/unit-tests.log")
 FAILURE_REPORTING_LOCK = Lock()
 LOGGER = logging.getLogger()
 
-# Find out where the assembly jars are located.
-# TODO: revisit for Scala 2.13
-for scala in ["2.12", "2.13"]:
-    build_dir = os.path.join(SPARK_HOME, "assembly", "target", "scala-" + scala)
-    if os.path.isdir(build_dir):
-        SPARK_DIST_CLASSPATH = os.path.join(build_dir, "jars", "*")
-        break
-else:
-    raise RuntimeError("Cannot find assembly build directory, please build Spark first.")
+SPARK_DIST_CLASSPATH = ""
+if "SPARK_SKIP_CONNECT_COMPAT_TESTS" not in os.environ:
+    # Find out where the assembly jars are located.
+    # TODO: revisit for Scala 2.13
+    for scala in ["2.12", "2.13"]:
+        build_dir = os.path.join(SPARK_HOME, "assembly", "target", "scala-" + scala)
+        if os.path.isdir(build_dir):
+            SPARK_DIST_CLASSPATH = os.path.join(build_dir, "jars", "*")
+            break
+    else:
+        raise RuntimeError("Cannot find assembly build directory, please build Spark first.")
 
 
 def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_output):
@@ -97,6 +99,11 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
         # Preserve legacy nested timezone behavior for pyarrow>=2, remove after SPARK-32285
         'PYARROW_IGNORE_TIMEZONE': '1',
     })
+
+    if "SPARK_CONNECT_TESTING_REMOTE" in os.environ:
+        env.update({"SPARK_CONNECT_TESTING_REMOTE": os.environ["SPARK_CONNECT_TESTING_REMOTE"]})
+    if "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ:
+        env.update({"SPARK_SKIP_JVM_REQUIRED_TESTS": os.environ["SPARK_SKIP_CONNECT_COMPAT_TESTS"]})
 
     # Create a unique temp directory under 'target/' for each run. The TMPDIR variable is
     # recognized by the tempfile module to override the default system temp directory.
@@ -147,8 +154,8 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
         # this code is invoked from a thread other than the main thread.
         os._exit(1)
     duration = time.time() - start_time
-    # Exit on the first failure.
-    if retcode != 0:
+    # Exit on the first failure but exclude the code 5 for no test ran, see SPARK-46801.
+    if retcode != 0 and retcode != 5:
         try:
             with FAILURE_REPORTING_LOCK:
                 with open(LOG_FILE, 'ab') as log_file:

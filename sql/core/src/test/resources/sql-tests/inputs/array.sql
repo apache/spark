@@ -141,6 +141,7 @@ select array_insert(array(1, 2, 3, NULL), cast(NULL as INT), 4);
 select array_insert(array(1, 2, 3, NULL), 4, cast(NULL as INT));
 select array_insert(array(2, 3, NULL, 4), 5, 5);
 select array_insert(array(2, 3, NULL, 4), -5, 1);
+select array_insert(array(1), 2, cast(2 as tinyint));
 
 set spark.sql.legacy.negativeIndexInArrayInsert=true;
 select array_insert(array(1, 3, 4), -2, 2);
@@ -176,3 +177,7 @@ select array_prepend(CAST(null AS ARRAY<String>), CAST(null as String));
 select array_prepend(array(), 1);
 select array_prepend(CAST(array() AS ARRAY<String>), CAST(NULL AS String));
 select array_prepend(array(CAST(NULL AS String)), CAST(NULL AS String));
+
+-- SPARK-45599: Confirm 0.0, -0.0, and NaN are handled appropriately.
+select array_union(array(0.0, -0.0, DOUBLE("NaN")), array(0.0, -0.0, DOUBLE("NaN")));
+select array_distinct(array(0.0, -0.0, -0.0, DOUBLE("NaN"), DOUBLE("NaN")));

@@ -486,7 +486,7 @@ class CatalogTestsMixin:
                 self.assertEqual(spark.table("my_tab").count(), 0)
 
 
-class CatalogTests(ReusedSQLTestCase):
+class CatalogTests(CatalogTestsMixin, ReusedSQLTestCase):
     pass
 
 

@@ -910,6 +910,7 @@ SparkSession.__doc__ = PySparkSession.__doc__
 
 
 def _test() -> None:
+    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
@@ -917,7 +918,9 @@ def _test() -> None:
 
     globs = pyspark.sql.connect.session.__dict__.copy()
     globs["spark"] = (
-        PySparkSession.builder.appName("sql.connect.session tests").remote("local[4]").getOrCreate()
+        PySparkSession.builder.appName("sql.connect.session tests")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
+        .getOrCreate()
     )
 
     # Uses PySpark session to test builder.

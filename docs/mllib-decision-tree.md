@@ -51,7 +51,7 @@ The *node impurity* is a measure of the homogeneity of the labels at the node. T
 implementation provides two impurity measures for classification (Gini impurity and entropy) and one
 impurity measure for regression (variance).
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr><th>Impurity</th><th>Task</th><th>Formula</th><th>Description</th></tr>
   </thead>

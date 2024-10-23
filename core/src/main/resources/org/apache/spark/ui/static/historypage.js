@@ -192,7 +192,12 @@ $(document).ready(function() {
           },
           {name: startedColumnName, data: 'startTime' },
           {name: completedColumnName, data: 'endTime' },
-          {name: durationColumnName, type: "title-numeric", data: 'duration' },
+          {
+            name: durationColumnName,
+            type: "title-numeric",
+            data: 'duration',
+            render:  (id, type, row) => `<span title="${row.durationMillisec}">${row.duration}</span>`
+          },
           {name: 'user', data: 'sparkUser' },
           {name: 'lastUpdated', data: 'lastUpdated' },
           {

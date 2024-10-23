@@ -722,7 +722,7 @@ object DataSource extends Logging {
     val qualifiedPaths = pathStrings.map { pathString =>
       val path = new Path(pathString)
       val fs = path.getFileSystem(hadoopConf)
-      path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+      fs.makeQualified(path)
     }
 
     // Split the paths into glob and non glob paths, because we don't need to do an existence check

@@ -233,7 +233,7 @@ Data source options of Avro can be set via:
  * the `.option` method on `DataFrameReader` or `DataFrameWriter`.
  * the `options` parameter in function `from_avro`.
 
-<table class="table table-striped">
+<table>
   <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th><th><b>Since Version</b></th></tr></thead>
   <tr>
     <td><code>avroSchema</code></td>
@@ -331,7 +331,7 @@ Data source options of Avro can be set via:
 
 ## Configuration
 Configuration of Avro can be done using the `setConf` method on SparkSession or by running `SET key=value` commands using SQL.
-<table class="table table-striped">
+<table>
   <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Since Version</b></th></tr></thead>
   <tr>
     <td>spark.sql.legacy.replaceDatabricksSparkAvro.enabled</td>
@@ -348,7 +348,7 @@ Configuration of Avro can be done using the `setConf` method on SparkSession or 
     <td>snappy</td>
     <td>
       Compression codec used in writing of AVRO files. Supported codecs: uncompressed, deflate,
-      snappy, bzip2 and xz. Default codec is snappy.
+      snappy, bzip2, xz and zstandard. Default codec is snappy.
     </td>
     <td>2.4.0</td>
   </tr>
@@ -418,7 +418,7 @@ Submission Guide for more details.
 
 ## Supported types for Avro -> Spark SQL conversion
 Currently Spark supports reading all [primitive types](https://avro.apache.org/docs/1.11.2/specification/#primitive-types) and [complex types](https://avro.apache.org/docs/1.11.2/specification/#complex-types) under records of Avro.
-<table class="table table-striped">
+<table>
   <thead><tr><th><b>Avro type</b></th><th><b>Spark SQL type</b></th></tr></thead>
   <tr>
     <td>boolean</td>
@@ -483,7 +483,7 @@ All other union types are considered complex. They will be mapped to StructType 
 
 It also supports reading the following Avro [logical types](https://avro.apache.org/docs/1.11.2/specification/#logical-types):
 
-<table class="table table-striped">
+<table>
   <thead><tr><th><b>Avro logical type</b></th><th><b>Avro type</b></th><th><b>Spark SQL type</b></th></tr></thead>
   <tr>
     <td>date</td>
@@ -516,7 +516,7 @@ At the moment, it ignores docs, aliases and other properties present in the Avro
 ## Supported types for Spark SQL -> Avro conversion
 Spark supports writing of all Spark SQL types into Avro. For most types, the mapping from Spark types to Avro types is straightforward (e.g. IntegerType gets converted to int); however, there are a few special cases which are listed below:
 
-<table class="table table-striped">
+<table>
 <thead><tr><th><b>Spark SQL type</b></th><th><b>Avro type</b></th><th><b>Avro logical type</b></th></tr></thead>
   <tr>
     <td>ByteType</td>
@@ -552,7 +552,7 @@ Spark supports writing of all Spark SQL types into Avro. For most types, the map
 
 You can also specify the whole output Avro schema with the option `avroSchema`, so that Spark SQL types can be converted into other Avro types. The following conversions are not applied by default and require user specified Avro schema:
 
-<table class="table table-striped">
+<table>
   <thead><tr><th><b>Spark SQL type</b></th><th><b>Avro type</b></th><th><b>Avro logical type</b></th></tr></thead>
   <tr>
     <td>BinaryType</td>

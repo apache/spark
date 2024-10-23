@@ -381,7 +381,8 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
               val subqueryCTE = header.plan.asInstanceOf[CTERelationDef]
               GetStructField(
                 ScalarSubquery(
-                  CTERelationRef(subqueryCTE.id, _resolved = true, subqueryCTE.output),
+                  CTERelationRef(subqueryCTE.id, _resolved = true, subqueryCTE.output,
+                    subqueryCTE.isStreaming),
                   exprId = ssr.exprId),
                 ssr.headerIndex)
             } else {

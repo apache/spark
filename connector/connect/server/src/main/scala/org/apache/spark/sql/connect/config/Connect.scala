@@ -133,7 +133,7 @@ object Connect {
           "With any value greater than 0, the last sent response will always be buffered.")
       .version("3.5.0")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefaultString("1m")
+      .createWithDefaultString("10m")
 
   val CONNECT_EXTENSIONS_RELATION_CLASSES =
     buildStaticConf("spark.connect.extensions.relation.classes")

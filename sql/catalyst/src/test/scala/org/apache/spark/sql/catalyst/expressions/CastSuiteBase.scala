@@ -22,8 +22,6 @@ import java.time.{Duration, LocalDate, LocalDateTime, Period}
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
 
-import scala.collection.parallel.immutable.ParVector
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -42,6 +40,7 @@ import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND
 import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ThreadUtils
 
 /**
  * Common test suite for [[Cast]] with ansi mode on and off. It only includes test cases that work
@@ -126,7 +125,11 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast string to timestamp") {
-    new ParVector(ALL_TIMEZONES.toVector).foreach { zid =>
+    ThreadUtils.parmap(
+      ALL_TIMEZONES,
+      prefix = "CastSuiteBase-cast-string-to-timestamp",
+      maxThreads = Runtime.getRuntime.availableProcessors
+    ) { zid =>
       def checkCastStringToTimestamp(str: String, expected: Timestamp): Unit = {
         checkEvaluation(cast(Literal(str), TimestampType, Option(zid.getId)), expected)
       }
@@ -1171,7 +1174,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     Seq("INTERVAL '1-1' YEAR", "INTERVAL '1-1' MONTH").foreach { interval =>
       val dataType = YearMonthIntervalType()
       val expectedMsg = s"Interval string does not match year-month format of " +
-        s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+        s"${IntervalUtils.supportedFormat(("year-month", dataType.startField, dataType.endField))
           .map(format => s"`$format`").mkString(", ")} " +
         s"when cast to ${dataType.typeName}: $interval"
       checkExceptionInExpression[IllegalArgumentException](
@@ -1191,7 +1194,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       ("INTERVAL '1' MONTH", YearMonthIntervalType(YEAR, MONTH)))
       .foreach { case (interval, dataType) =>
         val expectedMsg = s"Interval string does not match year-month format of " +
-          s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+          s"${IntervalUtils.supportedFormat(("year-month", dataType.startField, dataType.endField))
             .map(format => s"`$format`").mkString(", ")} " +
           s"when cast to ${dataType.typeName}: $interval"
         checkExceptionInExpression[IllegalArgumentException](
@@ -1311,7 +1314,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       ("1.23", DayTimeIntervalType(MINUTE)))
       .foreach { case (interval, dataType) =>
         val expectedMsg = s"Interval string does not match day-time format of " +
-          s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+          s"${IntervalUtils.supportedFormat(("day-time", dataType.startField, dataType.endField))
             .map(format => s"`$format`").mkString(", ")} " +
           s"when cast to ${dataType.typeName}: $interval, " +
           s"set ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} to true " +
@@ -1335,7 +1338,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       ("INTERVAL '92233720368541.775807' SECOND", DayTimeIntervalType(SECOND)))
       .foreach { case (interval, dataType) =>
         val expectedMsg = "Interval string does not match day-time format of " +
-          s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+          s"${IntervalUtils.supportedFormat(("day-time", dataType.startField, dataType.endField))
             .map(format => s"`$format`").mkString(", ")} " +
           s"when cast to ${dataType.typeName}: $interval, " +
           s"set ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} to true " +

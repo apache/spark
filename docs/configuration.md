@@ -135,7 +135,7 @@ of the most common options to set are:
 
 ### Application Properties
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.app.name</code></td>
@@ -394,7 +394,7 @@ of the most common options to set are:
 </tr>
 <tr>
   <td><code>spark.submit.deployMode</code></td>
-  <td>(none)</td>
+  <td>client</td>
   <td>
     The deploy mode of Spark driver program, either "client" or "cluster",
     Which means to launch driver program locally ("client")
@@ -514,13 +514,34 @@ of the most common options to set are:
   </td>
   <td>3.2.0</td>
 </tr>
+<tr>
+  <td><code>spark.executor.maxNumFailures</code></td>
+  <td>numExecutors * 2, with minimum of 3</td>
+  <td>
+    The maximum number of executor failures before failing the application.
+    This configuration only takes effect on YARN, or Kubernetes when 
+    `spark.kubernetes.allocation.pods.allocator` is set to 'direct'.
+  </td>
+  <td>3.5.0</td>
+</tr>
+<tr>
+  <td><code>spark.executor.failuresValidityInterval</code></td>
+  <td>(none)</td>
+  <td>
+    Interval after which executor failures will be considered independent and
+    not accumulate towards the attempt count.
+    This configuration only takes effect on YARN, or Kubernetes when 
+    `spark.kubernetes.allocation.pods.allocator` is set to 'direct'.
+  </td>
+  <td>3.5.0</td>
+</tr>
 </table>
 
 Apart from these, the following properties are also available, and may be useful in some situations:
 
 ### Runtime Environment
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.driver.extraClassPath</code></td>
@@ -658,7 +679,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.executor.logs.rolling.maxRetainedFiles</code></td>
-  <td>(none)</td>
+  <td>-1</td>
   <td>
     Sets the number of latest rolling log files that are going to be retained by the system.
     Older log files will be deleted. Disabled by default.
@@ -676,7 +697,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.executor.logs.rolling.maxSize</code></td>
-  <td>(none)</td>
+  <td>1024 * 1024</td>
   <td>
     Set the max size of the file in bytes by which the executor logs will be rolled over.
     Rolling is disabled by default. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
@@ -907,7 +928,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Shuffle Behavior
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.reducer.maxSizeInFlight</code></td>
@@ -1282,7 +1303,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Spark UI
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.eventLog.logBlockUpdates.enabled</code></td>
@@ -1551,7 +1572,7 @@ Apart from these, the following properties are also available, and may be useful
     which will be also effective when accessing the application on history server. The new log urls must be
     permanent, otherwise you might have dead link for executor log urls.
     <p/>
-    For now, only YARN mode supports this configuration
+    For now, only YARN and K8s cluster manager supports this configuration
   </td>
   <td>3.0.0</td>
 </tr>
@@ -1674,7 +1695,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Compression and Serialization
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.broadcast.compress</code></td>
@@ -1751,6 +1772,14 @@ Apart from these, the following properties are also available, and may be useful
     configuration only applies to `spark.io.compression.codec`.
   </td>
   <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.io.compression.zstd.bufferPool.enabled</code></td>
+  <td>true</td>
+  <td>
+    If true, enable buffer pool of ZSTD JNI library.
+  </td>
+  <td>3.2.0</td>
 </tr>
 <tr>
   <td><code>spark.kryo.classesToRegister</code></td>
@@ -1872,7 +1901,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Memory Management
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.memory.fraction</code></td>
@@ -1997,7 +2026,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Execution Behavior
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.broadcast.blockSize</code></td>
@@ -2247,7 +2276,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Executor Metrics
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.eventLog.logStageExecutorMetrics</code></td>
@@ -2315,7 +2344,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Networking
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.rpc.message.maxSize</code></td>
@@ -2478,7 +2507,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Scheduling
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.cores.max</code></td>
@@ -2962,7 +2991,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Barrier Execution Mode
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.barrier.sync.timeout</code></td>
@@ -3009,7 +3038,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Dynamic Allocation
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.dynamicAllocation.enabled</code></td>
@@ -3151,7 +3180,7 @@ finer granularity starting from driver and executor. Take RPC module as example 
 like shuffle, just replace "rpc" with "shuffle" in the property names except
 <code>spark.{driver|executor}.rpc.netty.dispatcher.numThreads</code>, which is only for RPC module.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.{driver|executor}.rpc.io.serverThreads</code></td>
@@ -3187,7 +3216,7 @@ the driver or executor, or, in the absence of that value, the number of cores av
 #### Server Configuration
 
 Server configurations are set in Spark Connect server, for example, when you start the Spark Connect server with `./sbin/start-connect-server.sh`.
-They are typically set via the config file and command-lineoptions with `--conf/-c`.
+They are typically set via the config file and command-line options with `--conf/-c`.
 
 <table class="table">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
@@ -3294,7 +3323,7 @@ External users can query the static sql config values via `SparkSession.conf` or
 
 ### Spark Streaming
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.streaming.backpressure.enabled</code></td>
@@ -3426,7 +3455,7 @@ External users can query the static sql config values via `SparkSession.conf` or
 
 ### SparkR
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.r.numRBackendThreads</code></td>
@@ -3482,7 +3511,7 @@ External users can query the static sql config values via `SparkSession.conf` or
 
 ### GraphX
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.graphx.pregel.checkpointInterval</code></td>
@@ -3497,7 +3526,7 @@ External users can query the static sql config values via `SparkSession.conf` or
 
 ### Deploy
 
-<table class="table table-striped">
+<table>
   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>spark.deploy.recoveryMode</code></td>
@@ -3547,7 +3576,7 @@ copy `conf/spark-env.sh.template` to create it. Make sure you make the copy exec
 The following variables can be set in `spark-env.sh`:
 
 
-<table class="table table-striped">
+<table>
   <thead><tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr></thead>
   <tr>
     <td><code>JAVA_HOME</code></td>
@@ -3670,7 +3699,7 @@ See your cluster manager specific page for requirements and details on each of -
 # Stage Level Scheduling Overview
 
 The stage level scheduling feature allows users to specify task and executor resource requirements at the stage level. This allows for different stages to run with executors that have different resources. A prime example of this is one ETL stage runs with executors with just CPUs, the next stage is an ML stage that needs GPUs. Stage level scheduling allows for user to request different executors that have GPUs when the ML stage runs rather then having to acquire executors with GPUs at the start of the application and them be idle while the ETL stage is being run.
-This is only available for the RDD API in Scala, Java, and Python.  It is available on YARN, Kubernetes and Standalone when dynamic allocation is enabled. When dynamic allocation is disabled, it allows users to specify different task resource requirements at stage level, and this is supported on Standalone cluster right now. See the [YARN](running-on-yarn.html#stage-level-scheduling-overview) page or [Kubernetes](running-on-kubernetes.html#stage-level-scheduling-overview) page or [Standalone](spark-standalone.html#stage-level-scheduling-overview) page for more implementation details.
+This is only available for the RDD API in Scala, Java, and Python.  It is available on YARN, Kubernetes and Standalone when dynamic allocation is enabled. When dynamic allocation is disabled, it allows users to specify different task resource requirements at stage level, and this is supported on YARN, Kubernetes and Standalone cluster right now. See the [YARN](running-on-yarn.html#stage-level-scheduling-overview) page or [Kubernetes](running-on-kubernetes.html#stage-level-scheduling-overview) page or [Standalone](spark-standalone.html#stage-level-scheduling-overview) page for more implementation details.
 
 See the `RDD.withResources` and `ResourceProfileBuilder` API's for using this feature. When dynamic allocation is disabled, tasks with different task resource requirements will share executors with `DEFAULT_RESOURCE_PROFILE`. While when dynamic allocation is enabled, the current implementation acquires new executors for each `ResourceProfile`  created and currently has to be an exact match. Spark does not try to fit tasks into an executor that require a different ResourceProfile than the executor was created with. Executors that are not in use will idle timeout with the dynamic allocation logic. The default configuration for this feature is to only allow one ResourceProfile per stage. If the user associates more then 1 ResourceProfile to an RDD, Spark will throw an exception by default. See config `spark.scheduler.resource.profileMergeConflicts` to control that behavior. The current merge strategy Spark implements when `spark.scheduler.resource.profileMergeConflicts` is enabled is a simple max of each resource within the conflicting ResourceProfiles. Spark will create a new ResourceProfile with the max of each of the resources.
 
@@ -3684,7 +3713,7 @@ Push-based shuffle helps improve the reliability and performance of spark shuffl
 
 ### External Shuffle service(server) side configuration options
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.shuffle.push.server.mergedShuffleFileManagerImpl</code></td>
@@ -3718,7 +3747,7 @@ Push-based shuffle helps improve the reliability and performance of spark shuffl
 
 ### Client side configuration options
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.shuffle.push.enabled</code></td>

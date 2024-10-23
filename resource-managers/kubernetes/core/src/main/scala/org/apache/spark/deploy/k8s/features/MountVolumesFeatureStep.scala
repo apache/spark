@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_USE_LEGACY_PVC_ACCESS_MODE
 import org.apache.spark.deploy.k8s.Constants.{ENV_EXECUTOR_ID, SPARK_APP_ID_LABEL}
 
 private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
@@ -29,6 +30,11 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
   import MountVolumesFeatureStep._
 
   val additionalResources = ArrayBuffer.empty[HasMetadata]
+  val accessMode = if (conf.get(KUBERNETES_USE_LEGACY_PVC_ACCESS_MODE)) {
+    "ReadWriteOnce"
+  } else {
+    PVC_ACCESS_MODE
+  }
 
   override def configurePod(pod: SparkPod): SparkPod = {
     val (volumeMounts, volumes) = constructVolumes(conf.volumes).unzip
@@ -89,7 +95,7 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
                 .endMetadata()
               .withNewSpec()
                 .withStorageClassName(storageClass.get)
-                .withAccessModes(PVC_ACCESS_MODE)
+                .withAccessModes(accessMode)
                 .withResources(new ResourceRequirementsBuilder()
                   .withRequests(Map("storage" -> new Quantity(size.get)).asJava).build())
                 .endSpec()
@@ -126,5 +132,5 @@ private[spark] object MountVolumesFeatureStep {
   val PVC_ON_DEMAND = "OnDemand"
   val PVC = "PersistentVolumeClaim"
   val PVC_POSTFIX = "-pvc"
-  val PVC_ACCESS_MODE = "ReadWriteOnce"
+  val PVC_ACCESS_MODE = "ReadWriteOncePod"
 }

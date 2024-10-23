@@ -327,12 +327,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         logger.debug("Using slow merge");
         mergeSpillsWithFileStream(spills, mapWriter, compressionCodec);
       }
-      // When closing an UnsafeShuffleExternalSorter that has already spilled once but also has
-      // in-memory records, we write out the in-memory records to a file but do not count that
-      // final write as bytes spilled (instead, it's accounted as shuffle write). The merge needs
-      // to be counted as shuffle write, but this will lead to double-counting of the final
-      // SpillInfo's bytes.
-      writeMetrics.decBytesWritten(spills[spills.length - 1].file.length());
       partitionLengths = mapWriter.commitAllPartitions(sorter.getChecksums()).getPartitionLengths();
     } catch (Exception e) {
       try {

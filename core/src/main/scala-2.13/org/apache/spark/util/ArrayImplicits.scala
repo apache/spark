@@ -15,27 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst;
+package org.apache.spark.util
 
-class JavaBeanWithGenerics<T,A> {
-    private A attribute;
+import scala.collection.immutable
 
-    private T value;
+/**
+ * Implicit methods related to Scala Array.
+ */
+private[spark] object ArrayImplicits {
 
-    public A getAttribute() {
-        return attribute;
-    }
+  implicit class SparkArrayOps[T](xs: Array[T]) {
 
-    public void setAttribute(A attribute) {
-        this.attribute = attribute;
-    }
-
-    public T getValue() {
-        return value;
-    }
-
-    public void setValue(T value) {
-        this.value = value;
-    }
+    /**
+     * Wraps an Array[T] as an immutable.ArraySeq[T] without copying.
+     */
+    def toImmutableArraySeq: immutable.ArraySeq[T] =
+      immutable.ArraySeq.unsafeWrapArray(xs)
+  }
 }
-

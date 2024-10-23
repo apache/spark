@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, SparkEnv}
@@ -202,7 +204,15 @@ private[sql] class RocksDBStateStoreProvider
   }
 
   override def doMaintenance(): Unit = {
-    rocksDB.doMaintenance()
+    try {
+      rocksDB.doMaintenance()
+    } catch {
+      // SPARK-46547 - Swallow non-fatal exception in maintenance task to avoid deadlock between
+      // maintenance thread and streaming aggregation operator
+      case NonFatal(ex) =>
+        logWarning(s"Ignoring error while performing maintenance operations with exception=",
+          ex)
+    }
   }
 
   override def close(): Unit = {

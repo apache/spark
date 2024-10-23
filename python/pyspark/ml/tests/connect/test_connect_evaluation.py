@@ -14,12 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import os
 import unittest
+
 from pyspark.sql import SparkSession
 from pyspark.ml.tests.connect.test_legacy_mode_evaluation import EvaluationTestsMixin
 
-have_torcheval = True
+have_torcheval = "SPARK_SKIP_CONNECT_COMPAT_TESTS" not in os.environ
 try:
     import torcheval  # noqa: F401
 except ImportError:
@@ -29,7 +30,9 @@ except ImportError:
 @unittest.skipIf(not have_torcheval, "torcheval is required")
 class EvaluationTestsOnConnect(EvaluationTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
-        self.spark = SparkSession.builder.remote("local[2]").getOrCreate()
+        self.spark = SparkSession.builder.remote(
+            os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
+        ).getOrCreate()
 
     def tearDown(self) -> None:
         self.spark.stop()

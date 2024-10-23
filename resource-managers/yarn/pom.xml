@@ -20,7 +20,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.5.0</version>
+    <version>3.5.4-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -54,12 +54,12 @@
         <!-- Used by MiniYARNCluster -->
         <dependency>
           <groupId>org.bouncycastle</groupId>
-          <artifactId>bcprov-jdk15on</artifactId>
+          <artifactId>bcprov-jdk18on</artifactId>
           <scope>test</scope>
         </dependency>
         <dependency>
           <groupId>org.bouncycastle</groupId>
-          <artifactId>bcpkix-jdk15on</artifactId>
+          <artifactId>bcpkix-jdk18on</artifactId>
           <scope>test</scope>
         </dependency>
       </dependencies>

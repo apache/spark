@@ -164,7 +164,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       case proto.Relation.RelTypeCase.CACHED_REMOTE_RELATION =>
         transformCachedRemoteRelation(rel.getCachedRemoteRelation)
       case proto.Relation.RelTypeCase.COLLECT_METRICS =>
-        transformCollectMetrics(rel.getCollectMetrics)
+        transformCollectMetrics(rel.getCollectMetrics, rel.getCommon.getPlanId)
       case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
@@ -674,8 +674,6 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         transformTypedCoGroupMap(rel, commonUdf)
 
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
-        val pythonUdf = transformPythonUDF(commonUdf)
-
         val inputCols =
           rel.getInputGroupingExpressionsList.asScala.toSeq.map(expr =>
             Column(transformExpression(expr)))
@@ -689,6 +687,10 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         val other = Dataset
           .ofRows(session, transformRelation(rel.getOther))
           .groupBy(otherCols: _*)
+
+        val pythonUdf = createUserDefinedPythonFunction(commonUdf)
+          .builder(input.df.logicalPlan.output ++ other.df.logicalPlan.output)
+          .asInstanceOf[PythonUDF]
 
         input.flatMapCoGroupsInPandas(other, pythonUdf).logicalPlan
 
@@ -970,7 +972,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
 
   private def transformCachedLocalRelation(rel: proto.CachedLocalRelation): LogicalPlan = {
     val blockManager = session.sparkContext.env.blockManager
-    val blockId = CacheId(rel.getUserId, rel.getSessionId, rel.getHash)
+    val blockId = CacheId(sessionHolder.userId, sessionHolder.sessionId, rel.getHash)
     val bytes = blockManager.getLocalBytes(blockId)
     bytes
       .map { blockData =>
@@ -1054,12 +1056,12 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       numPartitionsOpt)
   }
 
-  private def transformCollectMetrics(rel: proto.CollectMetrics): LogicalPlan = {
+  private def transformCollectMetrics(rel: proto.CollectMetrics, planId: Long): LogicalPlan = {
     val metrics = rel.getMetricsList.asScala.toSeq.map { expr =>
       Column(transformExpression(expr))
     }
 
-    CollectMetrics(rel.getName, metrics.map(_.named), transformRelation(rel.getInput))
+    CollectMetrics(rel.getName, metrics.map(_.named), transformRelation(rel.getInput), planId)
   }
 
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
@@ -1587,17 +1589,23 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
 
   private def transformPythonFuncExpression(
       fun: proto.CommonInlineUserDefinedFunction): Expression = {
-    val udf = fun.getPythonUdf
-    UserDefinedPythonFunction(
-      name = fun.getFunctionName,
-      func = transformPythonFunction(udf),
-      dataType = transformDataType(udf.getOutputType),
-      pythonEvalType = udf.getEvalType,
-      udfDeterministic = fun.getDeterministic)
+    createUserDefinedPythonFunction(fun)
       .builder(fun.getArgumentsList.asScala.map(transformExpression).toSeq) match {
       case udaf: PythonUDAF => udaf.toAggregateExpression()
       case other => other
     }
+  }
+
+  private def createUserDefinedPythonFunction(
+      fun: proto.CommonInlineUserDefinedFunction): UserDefinedPythonFunction = {
+    val udf = fun.getPythonUdf
+    val function = transformPythonFunction(udf)
+    UserDefinedPythonFunction(
+      name = fun.getFunctionName,
+      func = function,
+      dataType = transformDataType(udf.getOutputType),
+      pythonEvalType = udf.getEvalType,
+      udfDeterministic = fun.getDeterministic)
   }
 
   private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
@@ -2584,15 +2592,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
   }
 
   private def handleRegisterPythonUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
-    val udf = fun.getPythonUdf
-    val function = transformPythonFunction(udf)
-    val udpf = UserDefinedPythonFunction(
-      name = fun.getFunctionName,
-      func = function,
-      dataType = transformDataType(udf.getOutputType),
-      pythonEvalType = udf.getEvalType,
-      udfDeterministic = fun.getDeterministic)
-
+    val udpf = createUserDefinedPythonFunction(fun)
     session.udf.registerPython(fun.getFunctionName, udpf)
   }
 

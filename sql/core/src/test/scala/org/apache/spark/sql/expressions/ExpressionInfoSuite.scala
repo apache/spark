@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.expressions
 
-import scala.collection.parallel.immutable.ParVector
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
@@ -26,7 +24,7 @@ import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.SlowSQLTest
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 @SlowSQLTest
 class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
@@ -197,8 +195,11 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       // The encrypt expression includes a random initialization vector to its encrypted result
       classOf[AesEncrypt].getName)
 
-    val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
-    parFuncs.foreach { funcId =>
+    ThreadUtils.parmap(
+      spark.sessionState.functionRegistry.listFunction(),
+      prefix = "ExpressionInfoSuite-check-outputs-of-expression-examples",
+      maxThreads = Runtime.getRuntime.availableProcessors
+    ) { funcId =>
       // Examples can change settings. We clone the session to prevent tests clashing.
       val clonedSpark = spark.cloneSession()
       // Coalescing partitions can change result order, so disable it.

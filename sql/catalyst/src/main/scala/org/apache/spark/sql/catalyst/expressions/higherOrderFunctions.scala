@@ -918,6 +918,8 @@ case class TransformKeys(
 
   override def dataType: MapType = MapType(function.dataType, valueType, valueContainsNull)
 
+  override def stateful: Boolean = true
+
   override def checkInputDataTypes(): TypeCheckResult = {
     TypeUtils.checkForMapKeyType(function.dataType)
   }

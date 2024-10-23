@@ -41,6 +41,7 @@ import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, Da
 import org.apache.spark.sql.execution.datasources.v2.json.JsonScanBuilder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SQLTestData.{DecimalData, TestData}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.StructType.fromDDL
 import org.apache.spark.sql.types.TestUDT.{MyDenseVector, MyDenseVectorUDT}
@@ -3653,6 +3654,78 @@ abstract class JsonSuite
     assert(JSONOptions.getAlternativeOption("encoding").contains("charset"))
     assert(JSONOptions.getAlternativeOption("charset").contains("encoding"))
     assert(JSONOptions.getAlternativeOption("dateFormat").isEmpty)
+  }
+
+  test("SPARK-47704: Handle partial parsing of array<map>") {
+    withTempPath { path =>
+      Seq("""{"a":[{"key":{"b":0}}]}""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      for (enablePartialResults <- Seq(true, false)) {
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> s"$enablePartialResults") {
+          val df = spark.read
+            .schema("a array<map<string, struct<b boolean>>>")
+            .json(path.getAbsolutePath)
+
+          if (enablePartialResults) {
+            checkAnswer(df, Seq(Row(Array(Map("key" -> Row(null))))))
+          } else {
+            checkAnswer(df, Seq(Row(null)))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-47704: Handle partial parsing of map<string, array>") {
+    withTempPath { path =>
+      Seq("""{"a":{"key":[{"b":0}]}}""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      for (enablePartialResults <- Seq(true, false)) {
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> s"$enablePartialResults") {
+          val df = spark.read
+            .schema("a map<string, array<struct<b boolean>>>")
+            .json(path.getAbsolutePath)
+
+          if (enablePartialResults) {
+            checkAnswer(df, Seq(Row(Map("key" -> Seq(Row(null))))))
+          } else {
+            checkAnswer(df, Seq(Row(null)))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-48965: Dataset#toJSON should use correct schema #1: decimals") {
+    val numString = "123.456"
+    val bd = BigDecimal(numString)
+    val ds1 = sql(s"select ${numString}bd as a, ${numString}bd as b").as[DecimalData]
+    checkDataset(
+      ds1,
+      DecimalData(bd, bd)
+    )
+    val ds2 = ds1.toJSON
+    checkDataset(
+      ds2,
+      "{\"a\":123.456000000000000000,\"b\":123.456000000000000000}"
+    )
+  }
+
+  test("SPARK-48965: Dataset#toJSON should use correct schema #2: misaligned columns") {
+    val ds1 = sql("select 'Hey there' as value, 90000001 as key").as[TestData]
+    checkDataset(
+      ds1,
+      TestData(90000001, "Hey there")
+    )
+    val ds2 = ds1.toJSON
+    checkDataset(
+      ds2,
+      "{\"key\":90000001,\"value\":\"Hey there\"}"
+    )
   }
 }
 

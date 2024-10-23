@@ -7973,7 +7973,7 @@ def to_unix_timestamp(
 
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
-    >>> df.select(to_unix_timestamp(df.e).alias('r')).collect()
+    >>> df.select(to_unix_timestamp(df.e).alias('r')).collect()  # doctest: +SKIP
     [Row(r=None)]
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
@@ -8084,7 +8084,7 @@ def current_database() -> Column:
 
     Examples
     --------
-    >>> spark.range(1).select(current_database()).show()
+    >>> spark.range(1).select(current_database()).show()  # doctest: +SKIP
     +------------------+
     |current_database()|
     +------------------+
@@ -8103,7 +8103,7 @@ def current_schema() -> Column:
     Examples
     --------
     >>> import pyspark.sql.functions as sf
-    >>> spark.range(1).select(sf.current_schema()).show()
+    >>> spark.range(1).select(sf.current_schema()).show()  # doctest: +SKIP
     +------------------+
     |current_database()|
     +------------------+

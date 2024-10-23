@@ -118,6 +118,13 @@ case class TestFunctionWithTypeCheckFailure(
 
 case class UnresolvedTestPlan() extends UnresolvedLeafNode
 
+case class SupportsNonDeterministicExpressionTestOperator(
+    actions: Seq[Expression],
+    allowNonDeterministicExpression: Boolean)
+  extends LeafNode with SupportsNonDeterministicExpression {
+  override def output: Seq[Attribute] = Seq()
+}
+
 class AnalysisErrorSuite extends AnalysisTest {
   import TestRelations._
 
@@ -344,10 +351,39 @@ class AnalysisErrorSuite extends AnalysisTest {
       "inputType" -> "\"BOOLEAN\"",
       "requiredType" -> "\"INT\""))
 
-  errorTest(
-    "too many generators",
-    listRelation.select(Explode($"list").as("a"), Explode($"list").as("b")),
-    "only one generator" :: "explode" :: Nil)
+  errorClassTest(
+    "the buckets of ntile window function is not foldable",
+    testRelation2.select(
+      WindowExpression(
+        NTile(Literal(99.9f)),
+        WindowSpecDefinition(
+          UnresolvedAttribute("a") :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          UnspecifiedFrame)).as("window")),
+    errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+    messageParameters = Map(
+      "sqlExpr" -> "\"ntile(99.9)\"",
+      "paramIndex" -> "1",
+      "inputSql" -> "\"99.9\"",
+      "inputType" -> "\"FLOAT\"",
+      "requiredType" -> "\"INT\""))
+
+
+  errorClassTest(
+    "the buckets of ntile window function is not int literal",
+    testRelation2.select(
+      WindowExpression(
+        NTile(AttributeReference("b", IntegerType)()),
+        WindowSpecDefinition(
+          UnresolvedAttribute("a") :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          UnspecifiedFrame)).as("window")),
+    errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+    messageParameters = Map(
+      "sqlExpr" -> "\"ntile(b)\"",
+      "inputName" -> "buckets",
+      "inputExpr" -> "\"b\"",
+      "inputType" -> "\"INT\""))
 
   errorClassTest(
     "unresolved attributes",
@@ -755,17 +791,10 @@ class AnalysisErrorSuite extends AnalysisTest {
     Map("limit" -> "1000000000", "offset" -> "2000000000"))
 
   errorTest(
-    "more than one generators in SELECT",
-    listRelation.select(Explode($"list"), Explode($"list")),
-    "The generator is not supported: only one generator allowed per select clause but found 2: " +
-      """"explode(list)", "explode(list)"""" :: Nil
-  )
-
-  errorTest(
     "more than one generators for aggregates in SELECT",
     testRelation.select(Explode(CreateArray(min($"a") :: Nil)),
       Explode(CreateArray(max($"a") :: Nil))),
-    "The generator is not supported: only one generator allowed per select clause but found 2: " +
+    "The generator is not supported: only one generator allowed per SELECT clause but found 2: " +
       """"explode(array(min(a)))", "explode(array(max(a)))"""" :: Nil
   )
 
@@ -1304,5 +1333,21 @@ class AnalysisErrorSuite extends AnalysisTest {
           "prettyName" -> "expression `least`")
       )
     }
+  }
+
+  test("SPARK-48871: SupportsNonDeterministicExpression allows non-deterministic expressions") {
+    val nonDeterministicExpressions = Seq(new Rand())
+    val tolerantPlan =
+      SupportsNonDeterministicExpressionTestOperator(
+        nonDeterministicExpressions, allowNonDeterministicExpression = true)
+    assertAnalysisSuccess(tolerantPlan)
+
+    val intolerantPlan =
+      SupportsNonDeterministicExpressionTestOperator(
+        nonDeterministicExpressions, allowNonDeterministicExpression = false)
+    assertAnalysisError(
+      intolerantPlan,
+      "INVALID_NON_DETERMINISTIC_EXPRESSIONS" :: Nil
+    )
   }
 }

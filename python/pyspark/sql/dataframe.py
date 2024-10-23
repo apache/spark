@@ -529,6 +529,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
+        >>> import time
         >>> import tempfile
         >>> df = spark.readStream.format("rate").load()
         >>> type(df.writeStream)
@@ -536,9 +537,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         >>> with tempfile.TemporaryDirectory() as d:
         ...     # Create a table with Rate source.
-        ...     df.writeStream.toTable(
+        ...     query = df.writeStream.toTable(
         ...         "my_table", checkpointLocation=d)
-        <...streaming.query.StreamingQuery object at 0x...>
+        ...     time.sleep(3)
+        ...     query.stop()
         """
         return DataStreamWriter(self)
 
@@ -942,7 +944,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         age  | 16
         name | Bob
         """
+        print(self._show_string(n, truncate, vertical))
 
+    def _show_string(
+        self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False
+    ) -> str:
         if not isinstance(n, int) or isinstance(n, bool):
             raise PySparkTypeError(
                 error_class="NOT_INT",
@@ -956,7 +962,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             )
 
         if isinstance(truncate, bool) and truncate:
-            print(self._jdf.showString(n, 20, vertical))
+            return self._jdf.showString(n, 20, vertical)
         else:
             try:
                 int_truncate = int(truncate)
@@ -969,7 +975,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                     },
                 )
 
-            print(self._jdf.showString(n, int_truncate, vertical))
+            return self._jdf.showString(n, int_truncate, vertical)
 
     def __repr__(self) -> str:
         if not self._support_repr_html and self.sparkSession._jconf.isReplEagerEvalEnabled():
@@ -1485,7 +1491,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         self.rdd.foreachPartition(f)  # type: ignore[arg-type]
 
     def cache(self) -> "DataFrame":
-        """Persists the :class:`DataFrame` with the default storage level (`MEMORY_AND_DISK`).
+        """Persists the :class:`DataFrame` with the default storage level (`MEMORY_AND_DISK_DESER`).
 
         .. versionadded:: 1.3.0
 
@@ -1494,7 +1500,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Notes
         -----
-        The default storage level has changed to `MEMORY_AND_DISK` to match Scala in 2.0.
+        The default storage level has changed to `MEMORY_AND_DISK_DESER` to match Scala in 3.0.
 
         Returns
         -------
@@ -1507,7 +1513,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df.cache()
         DataFrame[id: bigint]
 
-        >>> df.explain()
+        >>> df.explain()  # doctest: +SKIP
         == Physical Plan ==
         AdaptiveSparkPlan isFinalPlan=false
         +- InMemoryTableScan ...
@@ -1550,7 +1556,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df.persist()
         DataFrame[id: bigint]
 
-        >>> df.explain()
+        >>> df.explain()  # doctest: +SKIP
         == Physical Plan ==
         AdaptiveSparkPlan isFinalPlan=false
         +- InMemoryTableScan ...
@@ -3881,8 +3887,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df2 = spark.createDataFrame([(3, "Charlie"), (4, "Dave")], ["id", "name"])
         >>> df1 = df1.withColumn("age", lit(30))
         >>> df2 = df2.withColumn("age", lit(40))
-        >>> df3 = df1.union(df2)
-        >>> df3.show()
+        >>> df3 = df1.union(df2)  # doctest: +SKIP
+        >>> df3.show()  # doctest: +SKIP
         +-----+-------+---+
         | name|     id|age|
         +-----+-------+---+

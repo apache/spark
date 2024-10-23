@@ -15,10 +15,11 @@
 # limitations under the License.
 #
 
+import os
 import numpy as np
 import unittest
 
-have_torch = True
+have_torch = "SPARK_SKIP_CONNECT_COMPAT_TESTS" not in os.environ
 try:
     import torch  # noqa: F401
 except ImportError:

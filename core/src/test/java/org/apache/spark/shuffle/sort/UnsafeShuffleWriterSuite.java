@@ -69,6 +69,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
   File tempDir;
   long[] partitionSizesInMergedFile;
   final LinkedList<File> spillFilesCreated = new LinkedList<>();
+  long totalSpilledDiskBytes = 0;
   SparkConf conf;
   final Serializer serializer =
     new KryoSerializer(new SparkConf().set("spark.kryo.unsafe", "false"));
@@ -96,6 +97,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     mergedOutputFile = File.createTempFile("mergedoutput", "", tempDir);
     partitionSizesInMergedFile = null;
     spillFilesCreated.clear();
+    totalSpilledDiskBytes = 0;
     conf = new SparkConf()
       .set(package$.MODULE$.BUFFER_PAGESIZE().key(), "1m")
       .set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)
@@ -160,7 +162,11 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
 
     when(diskBlockManager.createTempShuffleBlock()).thenAnswer(invocationOnMock -> {
       TempShuffleBlockId blockId = new TempShuffleBlockId(UUID.randomUUID());
-      File file = File.createTempFile("spillFile", ".spill", tempDir);
+      File file = spy(File.createTempFile("spillFile", ".spill", tempDir));
+      when(file.delete()).thenAnswer(inv -> {
+        totalSpilledDiskBytes += file.length();
+        return inv.callRealMethod();
+      });
       spillFilesCreated.add(file);
       return Tuple2$.MODULE$.apply(blockId, file);
     });
@@ -284,6 +290,9 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     final Option<MapStatus> mapStatus = writer.stop(true);
     assertTrue(mapStatus.isDefined());
     assertTrue(mergedOutputFile.exists());
+    // Even if there is no spill, the sorter still writes its data to a spill file at the end,
+    // which will become the final shuffle file.
+    assertEquals(1, spillFilesCreated.size());
 
     long sumOfPartitionSizes = 0;
     for (long size: partitionSizesInMergedFile) {
@@ -305,7 +314,8 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
 
   @Test
   public void writeChecksumFileWithoutSpill() throws Exception {
-    IndexShuffleBlockResolver blockResolver = new IndexShuffleBlockResolver(conf, blockManager);
+    IndexShuffleBlockResolver blockResolver =
+      new IndexShuffleBlockResolver(conf, blockManager, Collections.emptyMap());
     ShuffleChecksumBlockId checksumBlockId =
       new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
     String checksumAlgorithm = conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM());
@@ -335,7 +345,8 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
 
   @Test
   public void writeChecksumFileWithSpill() throws Exception {
-    IndexShuffleBlockResolver blockResolver = new IndexShuffleBlockResolver(conf, blockManager);
+    IndexShuffleBlockResolver blockResolver =
+      new IndexShuffleBlockResolver(conf, blockManager, Collections.emptyMap());
     ShuffleChecksumBlockId checksumBlockId =
       new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
     String checksumAlgorithm = conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM());
@@ -425,9 +436,8 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     assertSpillFilesWereCleanedUp();
     ShuffleWriteMetrics shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics();
     assertEquals(dataToWrite.size(), shuffleWriteMetrics.recordsWritten());
-    assertTrue(taskMetrics.diskBytesSpilled() > 0L);
-    assertTrue(taskMetrics.diskBytesSpilled() < mergedOutputFile.length());
     assertTrue(taskMetrics.memoryBytesSpilled() > 0L);
+    assertEquals(totalSpilledDiskBytes, taskMetrics.diskBytesSpilled());
     assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.bytesWritten());
   }
 
@@ -517,9 +527,8 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     assertSpillFilesWereCleanedUp();
     ShuffleWriteMetrics shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics();
     assertEquals(dataToWrite.size(), shuffleWriteMetrics.recordsWritten());
-    assertTrue(taskMetrics.diskBytesSpilled() > 0L);
-    assertTrue(taskMetrics.diskBytesSpilled() < mergedOutputFile.length());
     assertTrue(taskMetrics.memoryBytesSpilled()> 0L);
+    assertEquals(totalSpilledDiskBytes, taskMetrics.diskBytesSpilled());
     assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.bytesWritten());
   }
 
@@ -550,9 +559,8 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     assertSpillFilesWereCleanedUp();
     ShuffleWriteMetrics shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics();
     assertEquals(dataToWrite.size(), shuffleWriteMetrics.recordsWritten());
-    assertTrue(taskMetrics.diskBytesSpilled() > 0L);
-    assertTrue(taskMetrics.diskBytesSpilled() < mergedOutputFile.length());
     assertTrue(taskMetrics.memoryBytesSpilled()> 0L);
+    assertEquals(totalSpilledDiskBytes, taskMetrics.diskBytesSpilled());
     assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.bytesWritten());
   }
 

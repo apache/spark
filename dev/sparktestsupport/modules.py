@@ -168,6 +168,15 @@ launcher = Module(
     ],
 )
 
+sketch = Module(
+    name="sketch",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/sketch/",
+    ],
+    sbt_test_goals=["sketch/test"],
+)
+
 core = Module(
     name="core",
     dependencies=[kvstore, network_common, network_shuffle, unsafe, launcher],
@@ -181,7 +190,7 @@ core = Module(
 
 catalyst = Module(
     name="catalyst",
-    dependencies=[tags, core],
+    dependencies=[tags, sketch, core],
     source_file_regexes=[
         "sql/catalyst/",
     ],
@@ -293,15 +302,6 @@ connect = Module(
         "connect/test",
         "connect-client-jvm/test",
     ],
-)
-
-sketch = Module(
-    name="sketch",
-    dependencies=[tags],
-    source_file_regexes=[
-        "common/sketch/",
-    ],
-    sbt_test_goals=["sketch/test"],
 )
 
 graphx = Module(

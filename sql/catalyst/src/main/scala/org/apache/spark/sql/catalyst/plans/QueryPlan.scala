@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import java.util.IdentityHashMap
+
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
@@ -429,7 +431,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   override def verboseString(maxFields: Int): String = simpleString(maxFields)
 
   override def simpleStringWithNodeId(): String = {
-    val operatorId = getTagValue(QueryPlan.OP_ID_TAG).map(id => s"$id").getOrElse("unknown")
+    val operatorId = Option(QueryPlan.localIdMap.get().get(this)).map(id => s"$id")
+      .getOrElse("unknown")
     s"$nodeName ($operatorId)".trim
   }
 
@@ -449,7 +452,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   protected def formattedNodeName: String = {
-    val opId = getTagValue(QueryPlan.OP_ID_TAG).map(id => s"$id").getOrElse("unknown")
+    val opId = Option(QueryPlan.localIdMap.get().get(this)).map(id => s"$id")
+      .getOrElse("unknown")
     val codegenId =
       getTagValue(QueryPlan.CODEGEN_ID_TAG).map(id => s" [codegen id : $id]").getOrElse("")
     s"($opId) $nodeName$codegenId"
@@ -626,8 +630,16 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 }
 
 object QueryPlan extends PredicateHelper {
-  val OP_ID_TAG = TreeNodeTag[Int]("operatorId")
   val CODEGEN_ID_TAG = new TreeNodeTag[Int]("wholeStageCodegenId")
+
+  /**
+   * A thread local map to store the mapping between the query plan and the query plan id.
+   * The scope of this thread local is within ExplainUtils.processPlan. The reason we define it here
+   * is because [[ QueryPlan ]] also needs this, and it doesn't have access to `execution` package
+   * from `catalyst`.
+   */
+  val localIdMap: ThreadLocal[java.util.Map[QueryPlan[_], Int]] = ThreadLocal.withInitial(() =>
+    new IdentityHashMap[QueryPlan[_], Int]())
 
   /**
    * Normalize the exprIds in the given expression, by updating the exprId in `AttributeReference`

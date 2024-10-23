@@ -430,6 +430,14 @@ The same logs can also be accessed through the
 [Kubernetes dashboard](https://kubernetes.io/docs/tasks/access-application-cluster/web-ui-dashboard/) if installed on
 the cluster.
 
+When there exists a log collection system, you can expose it at Spark Driver `Executors` tab UI. For example,
+
+```
+spark.executorEnv.SPARK_EXECUTOR_ATTRIBUTE_APP_ID='$(SPARK_APPLICATION_ID)'
+spark.executorEnv.SPARK_EXECUTOR_ATTRIBUTE_EXECUTOR_ID='$(SPARK_EXECUTOR_ID)'
+spark.ui.custom.executor.log.url='https://log-server/log?appId={{APP_ID}}&execId={{EXECUTOR_ID}}'
+```
+
 ### Accessing Driver UI
 
 The UI associated with any application can be accessed locally using
@@ -579,7 +587,7 @@ See the [configuration page](configuration.html) for information on Spark config
 
 #### Spark Properties
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.kubernetes.context</code></td>
@@ -1645,7 +1653,7 @@ See the below table for the full list of pod specifications that will be overwri
 
 ### Pod Metadata
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Pod metadata key</th><th>Modified value</th><th>Description</th></tr></thead>
 <tr>
   <td>name</td>
@@ -1681,7 +1689,7 @@ See the below table for the full list of pod specifications that will be overwri
 
 ### Pod Spec
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Pod spec key</th><th>Modified value</th><th>Description</th></tr></thead>
 <tr>
   <td>imagePullSecrets</td>
@@ -1734,7 +1742,7 @@ See the below table for the full list of pod specifications that will be overwri
 
 The following affect the driver and executor containers. All other containers in the pod spec will be unaffected.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Container spec key</th><th>Modified value</th><th>Description</th></tr></thead>
 <tr>
   <td>env</td>
@@ -1936,5 +1944,7 @@ With the above configuration, the job will be scheduled by YuniKorn scheduler in
 
 ### Stage Level Scheduling Overview
 
-Stage level scheduling is supported on Kubernetes when dynamic allocation is enabled. This also requires <code>spark.dynamicAllocation.shuffleTracking.enabled</code> to be enabled since Kubernetes doesn't support an external shuffle service at this time. The order in which containers for different profiles is requested from Kubernetes is not guaranteed. Note that since dynamic allocation on Kubernetes requires the shuffle tracking feature, this means that executors from previous stages that used a different ResourceProfile may not idle timeout due to having shuffle data on them. This could result in using more cluster resources and in the worst case if there are no remaining resources on the Kubernetes cluster then Spark could potentially hang. You may consider looking at config <code>spark.dynamicAllocation.shuffleTracking.timeout</code> to set a timeout, but that could result in data having to be recomputed if the shuffle data is really needed.
+Stage level scheduling is supported on Kubernetes:
+- When dynamic allocation is disabled: It allows users to specify different task resource requirements at the stage level and will use the same executors requested at startup.
+- When dynamic allocation is enabled: It allows users to specify task and executor resource requirements at the stage level and will request the extra executors. This also requires <code>spark.dynamicAllocation.shuffleTracking.enabled</code> to be enabled since Kubernetes doesn't support an external shuffle service at this time. The order in which containers for different profiles is requested from Kubernetes is not guaranteed. Note that since dynamic allocation on Kubernetes requires the shuffle tracking feature, this means that executors from previous stages that used a different ResourceProfile may not idle timeout due to having shuffle data on them. This could result in using more cluster resources and in the worst case if there are no remaining resources on the Kubernetes cluster then Spark could potentially hang. You may consider looking at config <code>spark.dynamicAllocation.shuffleTracking.timeout</code> to set a timeout, but that could result in data having to be recomputed if the shuffle data is really needed.
 Note, there is a difference in the way pod template resources are handled between the base default profile and custom ResourceProfiles. Any resources specified in the pod template file will only be used with the base default profile. If you create custom ResourceProfiles be sure to include all necessary resources there since the resources from the template file will not be propagated to custom ResourceProfiles.

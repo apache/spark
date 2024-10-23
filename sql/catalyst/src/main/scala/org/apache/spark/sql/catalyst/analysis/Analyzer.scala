@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Random, Success, Try}
 
 import org.apache.spark.sql.AnalysisException
@@ -78,7 +79,7 @@ object SimpleAnalyzer extends Analyzer(
   override def resolver: Resolver = caseSensitiveResolution
 }
 
-object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog {
+object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with SupportsNamespaces {
   private def fail() = throw new UnsupportedOperationException
   override def listTables(namespace: Array[String]): Array[Identifier] = fail()
   override def loadTable(ident: Identifier): Table = {
@@ -92,10 +93,23 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog {
   override def alterTable(ident: Identifier, changes: TableChange*): Table = fail()
   override def dropTable(ident: Identifier): Boolean = fail()
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = fail()
-  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = fail()
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
   override def name(): String = CatalogManager.SESSION_CATALOG_NAME
   override def listFunctions(namespace: Array[String]): Array[Identifier] = fail()
   override def loadFunction(ident: Identifier): UnboundFunction = fail()
+  override def listNamespaces(): Array[Array[String]] = fail()
+  override def listNamespaces(namespace: Array[String]): Array[Array[String]] = fail()
+  override def loadNamespaceMetadata(namespace: Array[String]): util.Map[String, String] = {
+    if (namespace.length == 1) {
+      mutable.HashMap[String, String]().asJava
+    } else {
+      throw new NoSuchNamespaceException(namespace)
+    }
+  }
+  override def createNamespace(
+    namespace: Array[String], metadata: util.Map[String, String]): Unit = fail()
+  override def alterNamespace(namespace: Array[String], changes: NamespaceChange*): Unit = fail()
+  override def dropNamespace(namespace: Array[String], cascade: Boolean): Boolean = fail()
 }
 
 /**
@@ -255,7 +269,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     TypeCoercion.typeCoercionRules
   }
 
-  override def batches: Seq[Batch] = Seq(
+  private def earlyBatches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
       // This rule optimizes `UpdateFields` expression chains so looks more like optimization rule.
       // However, when manipulating deeply nested schema, `UpdateFields` expression tree could be
@@ -275,7 +289,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
     Batch("Keep Legacy Outputs", Once,
-      KeepLegacyOutputs),
+      KeepLegacyOutputs)
+  )
+
+  override def batches: Seq[Batch] = earlyBatches ++ Seq(
     Batch("Resolution", fixedPoint,
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
@@ -307,6 +324,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
       ResolveOutputRelation ::
+      new ResolveDataFrameDropColumns(catalogManager) ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
@@ -318,12 +336,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveTimeZone ::
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
-      ResolveIdentifierClause ::
+      new ResolveIdentifierClause(earlyBatches) ::
       ResolveUnion ::
       ResolveRowLevelCommandAssignments ::
-      RewriteDeleteFromTable ::
-      RewriteUpdateTable ::
-      RewriteMergeIntoTable ::
       typeCoercionRules ++
       Seq(
         ResolveWithCTE,
@@ -337,17 +352,32 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       new ResolveHints.RemoveAllHints),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
-    Batch("UDF", Once,
+    Batch("ScalaUDF Null Handling", fixedPoint,
+      // `HandleNullInputsForUDF` may wrap the `ScalaUDF` with `If` expression to return null for
+      // null inputs, so the result can be null even if `ScalaUDF#nullable` is false. We need to
+      // run `UpdateAttributeNullability` to update nullability of the UDF output attribute in
+      // downstream operators. After updating attribute nullability, `ScalaUDF`s in downstream
+      // operators may need null handling as well, so we should run these two rules repeatedly.
       HandleNullInputsForUDF,
-      ResolveEncodersInUDF),
-    Batch("UpdateNullability", Once,
       UpdateAttributeNullability),
+    Batch("UDF", Once,
+      ResolveEncodersInUDF),
+    // The rewrite rules might move resolved query plan into subquery. Once the resolved plan
+    // contains ScalaUDF, their encoders won't be resolved if `ResolveEncodersInUDF` is not
+    // applied before the rewrite rules. So we need to apply `ResolveEncodersInUDF` before the
+    // rewrite rules.
+    Batch("DML rewrite", fixedPoint,
+      RewriteDeleteFromTable,
+      RewriteUpdateTable,
+      RewriteMergeIntoTable),
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
       CleanupAliases),
     Batch("HandleSpecialCommand", Once,
-      HandleSpecialCommand)
+      HandleSpecialCommand),
+    Batch("Remove watermark for batch query", Once,
+      EliminateEventTimeWatermark)
   )
 
   /**
@@ -1216,7 +1246,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         options: CaseInsensitiveStringMap,
         isStreaming: Boolean): Option[LogicalPlan] = {
       table.map {
-        case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) =>
+        // To utilize this code path to execute V1 commands, e.g. INSERT,
+        // either it must be session catalog, or tracksPartitionsInCatalog
+        // must be false so it does not require use catalog to manage partitions.
+        // Obviously we cannot execute V1Table by V1 code path if the table
+        // is not from session catalog and the table still requires its catalog
+        // to manage partitions.
+        case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog)
+          || !v1Table.catalogTable.tracksPartitionsInCatalog =>
           if (isStreaming) {
             if (v1Table.v1Table.tableType == CatalogTableType.VIEW) {
               throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
@@ -1259,16 +1296,33 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         expandIdentifier(u.multipartIdentifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
             val key = ((catalog.name +: ident.namespace :+ ident.name).toSeq, timeTravelSpec)
-            AnalysisContext.get.relationCache.get(key).map(_.transform {
-              case multi: MultiInstanceRelation =>
-                val newRelation = multi.newInstance()
-                newRelation.copyTagsFrom(multi)
-                newRelation
-            }).orElse {
-              val table = CatalogV2Util.loadTable(catalog, ident, timeTravelSpec)
-              val loaded = createRelation(catalog, ident, table, u.options, u.isStreaming)
+            AnalysisContext.get.relationCache.get(key).map { cache =>
+              val cachedRelation = cache.transform {
+                case multi: MultiInstanceRelation =>
+                  val newRelation = multi.newInstance()
+                  newRelation.copyTagsFrom(multi)
+                  newRelation
+              }
+              u.getTagValue(LogicalPlan.PLAN_ID_TAG).map { planId =>
+                val cachedConnectRelation = cachedRelation.clone()
+                cachedConnectRelation.setTagValue(LogicalPlan.PLAN_ID_TAG, planId)
+                cachedConnectRelation
+              }.getOrElse(cachedRelation)
+            }.orElse {
+              val writePrivilegesString =
+                Option(u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES))
+              val table = CatalogV2Util.loadTable(
+                catalog, ident, timeTravelSpec, writePrivilegesString)
+              val loaded = createRelation(
+                catalog, ident, table, u.clearWritePrivileges.options, u.isStreaming)
               loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
-              loaded
+              u.getTagValue(LogicalPlan.PLAN_ID_TAG).map { planId =>
+                loaded.map { loadedRelation =>
+                  val loadedConnectRelation = loadedRelation.clone()
+                  loadedConnectRelation.setTagValue(LogicalPlan.PLAN_ID_TAG, planId)
+                  loadedConnectRelation
+                }
+              }.getOrElse(loaded)
             }
           case _ => None
         }
@@ -1969,7 +2023,19 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               throw QueryCompilationErrors.groupByPositionRefersToAggregateFunctionError(
                 index, ordinalExpr)
             } else {
-              ordinalExpr
+              trimAliases(ordinalExpr) match {
+                // HACK ALERT: If the ordinal expression is also an integer literal, don't use it
+                //             but still keep the ordinal literal. The reason is we may repeatedly
+                //             analyze the plan. Using a different integer literal may lead to
+                //             a repeat GROUP BY ordinal resolution which is wrong. GROUP BY
+                //             constant is meaningless so whatever value does not matter here.
+                // TODO: (SPARK-45932) GROUP BY ordinal should pull out grouping expressions to
+                //       a Project, then the resolved ordinal expression is always
+                //       `AttributeReference`.
+                case Literal(_: Int, IntegerType) =>
+                  Literal(index)
+                case _ => ordinalExpr
+              }
             }
           } else {
             throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size)
@@ -2727,15 +2793,25 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       }
     }
 
+    // We must wait until all expressions except for generator functions are resolved before
+    // rewriting generator functions in Project/Aggregate. This is necessary to make this rule
+    // stable for different execution orders of analyzer rules. See also SPARK-47241.
+    private def canRewriteGenerator(namedExprs: Seq[NamedExpression]): Boolean = {
+      namedExprs.forall { ne =>
+        ne.resolved || {
+          trimNonTopLevelAliases(ne) match {
+            case AliasedGenerator(_, _, _) => true
+            case _ => false
+          }
+        }
+      }
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(GENERATOR), ruleId) {
       case Project(projectList, _) if projectList.exists(hasNestedGenerator) =>
         val nestedGenerator = projectList.find(hasNestedGenerator).get
         throw QueryCompilationErrors.nestedGeneratorError(trimAlias(nestedGenerator))
-
-      case Project(projectList, _) if projectList.count(hasGenerator) > 1 =>
-        val generators = projectList.filter(hasGenerator).map(trimAlias)
-        throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "SELECT")
 
       case Aggregate(_, aggList, _) if aggList.exists(hasNestedGenerator) =>
         val nestedGenerator = aggList.find(hasNestedGenerator).get
@@ -2743,12 +2819,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       case Aggregate(_, aggList, _) if aggList.count(hasGenerator) > 1 =>
         val generators = aggList.filter(hasGenerator).map(trimAlias)
-        throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "aggregate")
+        throw QueryCompilationErrors.moreThanOneGeneratorError(generators)
 
-      case agg @ Aggregate(groupList, aggList, child) if aggList.forall {
-          case AliasedGenerator(_, _, _) => true
-          case other => other.resolved
-        } && aggList.exists(hasGenerator) =>
+      case Aggregate(groupList, aggList, child) if canRewriteGenerator(aggList) &&
+          aggList.exists(hasGenerator) =>
         // If generator in the aggregate list was visited, set the boolean flag true.
         var generatorVisited = false
 
@@ -2793,16 +2867,16 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // first for replacing `Project` with `Aggregate`.
         p
 
-      case p @ Project(projectList, child) =>
+      case p @ Project(projectList, child) if canRewriteGenerator(projectList) &&
+          projectList.exists(hasGenerator) =>
         val (resolvedGenerator, newProjectList) = projectList
           .map(trimNonTopLevelAliases)
           .foldLeft((None: Option[Generate], Nil: Seq[NamedExpression])) { (res, e) =>
             e match {
-              case AliasedGenerator(generator, names, outer) if generator.childrenResolved =>
-                // It's a sanity check, this should not happen as the previous case will throw
-                // exception earlier.
-                assert(res._1.isEmpty, "More than one generator found in SELECT.")
-
+              // If there are more than one generator, we only rewrite the first one and wait for
+              // the next analyzer iteration to rewrite the next one.
+              case AliasedGenerator(generator, names, outer) if res._1.isEmpty &&
+                  generator.childrenResolved =>
                 val g = Generate(
                   generator,
                   unrequiredChildIndex = Nil,
@@ -2810,7 +2884,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   qualifier = None,
                   generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
                   child)
-
                 (Some(g), res._2 ++ g.nullableOutput)
               case other =>
                 (res._1, res._2 :+ other)
@@ -2829,6 +2902,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case g: Generate => g
 
       case u: UnresolvedTableValuedFunction => u
+
+      case p: Project => p
+
+      case a: Aggregate => a
 
       case p if p.expressions.exists(hasGenerator) =>
         throw QueryCompilationErrors.generatorOutsideSelectError(p)
@@ -3796,9 +3873,9 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
       Window(cleanedWindowExprs, partitionSpec.map(trimAliases),
         orderSpec.map(trimAliases(_).asInstanceOf[SortOrder]), child)
 
-    case CollectMetrics(name, metrics, child) =>
+    case CollectMetrics(name, metrics, child, dataframeId) =>
       val cleanedMetrics = metrics.map(trimNonTopLevelAliases)
-      CollectMetrics(name, cleanedMetrics, child)
+      CollectMetrics(name, cleanedMetrics, child, dataframeId)
 
     case Unpivot(ids, values, aliases, variableColumnName, valueColumnNames, child) =>
       val cleanedIds = ids.map(_.map(trimNonTopLevelAliases))
@@ -3831,7 +3908,7 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
 object EliminateEventTimeWatermark extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(EVENT_TIME_WATERMARK)) {
-    case EventTimeWatermark(_, _, child) if !child.isStreaming => child
+    case EventTimeWatermark(_, _, child) if child.resolved && !child.isStreaming => child
   }
 }
 

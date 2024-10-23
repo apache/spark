@@ -29,15 +29,17 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIden
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Limit, LocalRelation, LogicalPlan, Statistics, UnresolvedHint}
-import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, AQEShuffleReadExec, QueryStageExec, ShuffleQueryStageExec}
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.datasources.{FileFormat, WriteFilesExec, WriteFilesSpec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
@@ -513,6 +515,31 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
         val df = session.range(1).repartition()
         df.collect()
         assert(df.rdd.partitions.length == 3)
+      }
+    }
+  }
+
+  test("SPARK-46170: Support inject adaptive query post planner strategy rules in " +
+    "SparkSessionExtensions") {
+    val extensions = create { extensions =>
+      extensions.injectQueryPostPlannerStrategyRule(_ => MyQueryPostPlannerStrategyRule)
+    }
+    withSession(extensions) { session =>
+      assert(session.sessionState.adaptiveRulesHolder.queryPostPlannerStrategyRules
+        .contains(MyQueryPostPlannerStrategyRule))
+      import session.implicits._
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
+          SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false") {
+        val input = Seq(10, 20, 10).toDF("c1")
+        val df = input.groupBy("c1").count()
+        df.collect()
+        assert(df.rdd.partitions.length == 1)
+        assert(collectFirst(df.queryExecution.executedPlan) {
+          case s: ShuffleExchangeExec if s.outputPartitioning == SinglePartition => true
+        }.isDefined)
+        assert(collectFirst(df.queryExecution.executedPlan) {
+          case _: SortExec => true
+        }.isDefined)
       }
     }
   }
@@ -1187,6 +1214,17 @@ object RequireAtLeaseTwoPartitions extends Rule[SparkPlan] {
       }
     } else {
       plan
+    }
+  }
+}
+
+object MyQueryPostPlannerStrategyRule extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = {
+    plan.transformUp {
+      case h: HashAggregateExec if h.aggregateExpressions.map(_.mode).contains(Partial) =>
+        ShuffleExchangeExec(SinglePartition, h)
+      case h: HashAggregateExec if h.aggregateExpressions.map(_.mode).contains(Final) =>
+        SortExec(h.groupingExpressions.map(k => SortOrder.apply(k, Ascending)), false, h)
     }
   }
 }

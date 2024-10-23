@@ -41,11 +41,6 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.SQLUserDefinedType"),
     // [SPARK-43165][SQL] Move canWrite to DataTypeUtils
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.DataType.canWrite"),
-    // [SPARK-43195][CORE] Remove unnecessary serializable wrapper in HadoopFSUtils
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.HadoopFSUtils$SerializableBlockLocation"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.HadoopFSUtils$SerializableBlockLocation$"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.HadoopFSUtils$SerializableFileStatus"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.HadoopFSUtils$SerializableFileStatus$"),
     // [SPARK-43792][SQL][PYTHON][CONNECT] Add optional pattern for Catalog.listCatalogs
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.listCatalogs"),
     // [SPARK-43881][SQL][PYTHON][CONNECT] Add optional pattern for Catalog.listDatabases
@@ -72,7 +67,9 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.MapGroupsWithStateFunction"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SaveMode"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupState")
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupState"),
+    // [SPARK-46480][CORE][SQL] Fix NPE when table cache task attempt
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.isFailed")
   )
 
   // Default exclude rules

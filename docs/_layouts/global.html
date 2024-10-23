@@ -32,6 +32,25 @@
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsearch.js@2/dist/cdn/docsearch.min.css" />
         <link rel="stylesheet" href="css/docsearch.css">
 
+        {% production %}
+        <!-- Matomo -->
+        <script>
+            var _paq = window._paq = window._paq || [];
+            /* tracker methods like "setCustomDimension" should be called before "trackPageView" */
+            _paq.push(["disableCookies"]);
+            _paq.push(['trackPageView']);
+            _paq.push(['enableLinkTracking']);
+            (function() {
+              var u="https://analytics.apache.org/";
+              _paq.push(['setTrackerUrl', u+'matomo.php']);
+              _paq.push(['setSiteId', '40']);
+              var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+              g.async=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s);
+            })();
+        </script>
+        <!-- End Matomo Code -->
+        {% endproduction %}
+
     </head>
     <body class="global">
         <!--[if lt IE 7]>
@@ -119,25 +138,21 @@
 
         {% if page.url == "/" %}
             <section class="hero-banner position-relative">
-            <div class="bg">
-            </div>
             <div class="container position-relative">
                 <div class="row">
                   <h1 style="max-width: 680px;">Apache Spark - A Unified engine for large-scale data analytics</h1>
                 </div>
-                <div class="row mt-5">
-                  <div class="col-12 col-lg-6 no-gutters">
-                    Apache Spark is a unified analytics engine for large-scale data processing.
-                    It provides high-level APIs in Java, Scala, Python and R,
-                    and an optimized engine that supports general execution graphs.
-                    It also supports a rich set of higher-level tools including
-                    <a href="sql-programming-guide.html">Spark SQL</a> for SQL and structured data processing,
-                    <a href="api/python/getting_started/quickstart_ps.html">pandas API on Spark</a> for pandas workloads,
-                    <a href="ml-guide.html">MLlib</a> for machine learning,
-                    <a href="graphx-programming-guide.html">GraphX</a> for graph processing,
-                     and <a href="structured-streaming-programming-guide.html">Structured Streaming</a>
-                     for incremental computation and stream processing.
-                  </div>
+                <div class="content mr-3">
+                  Apache Spark is a unified analytics engine for large-scale data processing.
+                  It provides high-level APIs in Java, Scala, Python and R,
+                  and an optimized engine that supports general execution graphs.
+                  It also supports a rich set of higher-level tools including
+                  <a href="sql-programming-guide.html">Spark SQL</a> for SQL and structured data processing,
+                  <a href="api/python/getting_started/quickstart_ps.html">pandas API on Spark</a> for pandas workloads,
+                  <a href="ml-guide.html">MLlib</a> for machine learning,
+                  <a href="graphx-programming-guide.html">GraphX</a> for graph processing,
+                   and <a href="structured-streaming-programming-guide.html">Structured Streaming</a>
+                   for incremental computation and stream processing.
                 </div>
             </div>
           </section>

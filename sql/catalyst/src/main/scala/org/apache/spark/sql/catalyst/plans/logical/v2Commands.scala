@@ -62,10 +62,11 @@ trait V2WriteCommand extends UnaryCommand with KeepAnalyzedQuery {
     table.skipSchemaResolution || (query.output.size == table.output.size &&
       query.output.zip(table.output).forall {
         case (inAttr, outAttr) =>
+          val inType = CharVarcharUtils.getRawType(inAttr.metadata).getOrElse(inAttr.dataType)
           val outType = CharVarcharUtils.getRawType(outAttr.metadata).getOrElse(outAttr.dataType)
           // names and types must match, nullability must be compatible
           inAttr.name == outAttr.name &&
-            DataType.equalsIgnoreCompatibleNullability(inAttr.dataType, outType) &&
+            DataType.equalsIgnoreCompatibleNullability(inType, outType) &&
             (outAttr.nullable || !inAttr.nullable)
       })
   }
@@ -755,6 +756,21 @@ case class MergeIntoTable(
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): MergeIntoTable =
     copy(targetTable = newLeft, sourceTable = newRight)
+}
+
+object MergeIntoTable {
+  def getWritePrivileges(
+      matchedActions: Seq[MergeAction],
+      notMatchedActions: Seq[MergeAction],
+      notMatchedBySourceActions: Seq[MergeAction]): Seq[TableWritePrivilege] = {
+    val privileges = scala.collection.mutable.HashSet.empty[TableWritePrivilege]
+    (matchedActions.iterator ++ notMatchedActions ++ notMatchedBySourceActions).foreach {
+      case _: DeleteAction => privileges.add(TableWritePrivilege.DELETE)
+      case _: UpdateAction | _: UpdateStarAction => privileges.add(TableWritePrivilege.UPDATE)
+      case _: InsertAction | _: InsertStarAction => privileges.add(TableWritePrivilege.INSERT)
+    }
+    privileges.toSeq
+  }
 }
 
 sealed abstract class MergeAction extends Expression with Unevaluable {

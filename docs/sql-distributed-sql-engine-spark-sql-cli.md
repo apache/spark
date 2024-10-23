@@ -62,7 +62,7 @@ For example: `/path/to/spark-sql-cli.sql` equals to `file:///path/to/spark-sql-c
 
 ## Supported comment types
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Comment</th><th>Example</th></tr></thead>
 <tr>
   <td>simple comment</td>
@@ -115,7 +115,7 @@ Use `;` (semicolon) to terminate commands. Notice:
    ```
    However, if ';' is the end of the line, it terminates the SQL statement. The example above will be terminated into  `/* This is a comment contains ` and `*/ SELECT 1`, Spark will submit these two commands separated and throw parser error (`unclosed bracketed comment` and `Syntax error at or near '*/'`).
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Command</th><th>Description</th></tr></thead>
 <tr>
   <td><code>quit</code> or <code>exit</code></td>

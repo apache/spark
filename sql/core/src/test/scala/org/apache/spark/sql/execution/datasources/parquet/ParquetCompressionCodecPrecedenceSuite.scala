@@ -29,9 +29,23 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSparkSession {
   test("Test `spark.sql.parquet.compression.codec` config") {
-    Seq("NONE", "UNCOMPRESSED", "SNAPPY", "GZIP", "LZO", "LZ4", "BROTLI", "ZSTD").foreach { c =>
+    Seq(
+      "NONE",
+      "UNCOMPRESSED",
+      "SNAPPY",
+      "GZIP",
+      "LZO",
+      "LZ4",
+      "BROTLI",
+      "ZSTD",
+      "LZ4RAW",
+      "LZ4_RAW").foreach { c =>
       withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> c) {
-        val expected = if (c == "NONE") "UNCOMPRESSED" else c
+        val expected = c match {
+          case "NONE" => "UNCOMPRESSED"
+          case "LZ4RAW" => "LZ4_RAW"
+          case other => other
+        }
         val option = new ParquetOptions(Map.empty[String, String], spark.sessionState.conf)
         assert(option.compressionCodecClassName == expected)
       }
@@ -97,7 +111,10 @@ class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSpar
         createTableWithCompression(tempTableName, isPartitioned, compressionCodec, tmpDir)
         val partitionPath = if (isPartitioned) "p=2" else ""
         val path = s"${tmpDir.getPath.stripSuffix("/")}/$tempTableName/$partitionPath"
-        val realCompressionCodecs = getTableCompressionCodec(path)
+        val realCompressionCodecs = getTableCompressionCodec(path).map {
+          case "LZ4_RAW" if compressionCodec == "LZ4RAW" => "LZ4RAW"
+          case other => other
+        }
         assert(realCompressionCodecs.forall(_ == compressionCodec))
       }
     }
@@ -105,7 +122,7 @@ class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSpar
 
   test("Create parquet table with compression") {
     Seq(true, false).foreach { isPartitioned =>
-      val codecs = Seq("UNCOMPRESSED", "SNAPPY", "GZIP", "ZSTD", "LZ4")
+      val codecs = Seq("UNCOMPRESSED", "SNAPPY", "GZIP", "ZSTD", "LZ4", "LZ4RAW", "LZ4_RAW")
       codecs.foreach { compressionCodec =>
         checkCompressionCodec(compressionCodec, isPartitioned)
       }

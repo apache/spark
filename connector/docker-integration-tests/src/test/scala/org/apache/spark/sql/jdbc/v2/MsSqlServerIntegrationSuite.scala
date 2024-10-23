@@ -24,7 +24,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.jdbc.DatabaseOnDocker
+import org.apache.spark.sql.jdbc.MsSQLServerDatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
@@ -60,19 +60,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
     "scan with aggregate push-down: REGR_SXY without DISTINCT")
 
   override val catalogName: String = "mssql"
-  override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("MSSQLSERVER_DOCKER_IMAGE_NAME",
-      "mcr.microsoft.com/mssql/server:2019-CU13-ubuntu-20.04")
-    override val env = Map(
-      "SA_PASSWORD" -> "Sapass123",
-      "ACCEPT_EULA" -> "Y"
-    )
-    override val usesIpc = false
-    override val jdbcPort: Int = 1433
-
-    override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:sqlserver://$ip:$port;user=sa;password=Sapass123;"
-  }
+  override val db = new MsSQLServerDatabaseOnDocker
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.mssql", classOf[JDBCTableCatalog].getName)
@@ -86,6 +74,12 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
     connection.prepareStatement(
       "CREATE TABLE employee (dept INT, name VARCHAR(32), salary NUMERIC(20, 2), bonus FLOAT)")
       .executeUpdate()
+    connection.prepareStatement(
+      s"""CREATE TABLE pattern_testing_table (
+         |pattern_testing_col VARCHAR(50)
+         |)
+                   """.stripMargin
+    ).executeUpdate()
   }
 
   override def notSupportsTableComment: Boolean = true
@@ -93,11 +87,13 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
+    var expectedSchema = new StructType()
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
-    expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
+    expectedSchema = new StructType()
+      .add("ID", StringType, true, defaultMetadata())
     assert(t.schema === expectedSchema)
     // Update column type from STRING to INTEGER
     val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"
@@ -124,5 +120,21 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
         sql(s"ALTER TABLE $tbl ALTER COLUMN ID DROP NOT NULL")
       },
       errorClass = "_LEGACY_ERROR_TEMP_2271")
+  }
+
+  test("SPARK-47440: SQLServer does not support boolean expression in binary comparison") {
+    val df1 = sql("SELECT name FROM " +
+      s"$catalogName.employee WHERE ((name LIKE 'am%') = (name LIKE '%y'))")
+    assert(df1.collect().length == 4)
+
+    val df2 = sql("SELECT name FROM " +
+      s"$catalogName.employee " +
+      "WHERE ((name NOT LIKE 'am%') = (name NOT LIKE '%y'))")
+    assert(df2.collect().length == 4)
+
+    val df3 = sql("SELECT name FROM " +
+      s"$catalogName.employee " +
+      "WHERE (dept > 1 AND ((name LIKE 'am%') = (name LIKE '%y')))")
+    assert(df3.collect().length == 3)
   }
 }

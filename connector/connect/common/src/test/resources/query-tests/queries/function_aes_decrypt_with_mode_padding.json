@@ -13,7 +13,7 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "aes_encrypt",
+        "functionName": "aes_decrypt",
         "arguments": [{
           "unresolvedAttribute": {
             "unparsedIdentifier": "g"

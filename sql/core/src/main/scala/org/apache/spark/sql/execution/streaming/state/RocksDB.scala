@@ -19,9 +19,11 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.File
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
+import scala.collection.mutable.ListBuffer
 import scala.ref.WeakReference
 import scala.util.Try
 
@@ -56,7 +58,11 @@ class RocksDB(
     hadoopConf: Configuration = new Configuration,
     loggingId: String = "") extends Logging {
 
-  case class RocksDBSnapshot(checkpointDir: File, version: Long, numKeys: Long) {
+  case class RocksDBSnapshot(
+      checkpointDir: File,
+      version: Long,
+      numKeys: Long,
+      capturedFileMappings: RocksDBFileMappings) {
     def close(): Unit = {
       silentDeleteRecursively(checkpointDir, s"Free up local checkpoint of snapshot $version")
     }
@@ -64,6 +70,7 @@ class RocksDB(
 
   @volatile private var latestSnapshot: Option[RocksDBSnapshot] = None
   @volatile private var lastSnapshotVersion = 0L
+  private val oldSnapshots = new ListBuffer[RocksDBSnapshot]
 
   RocksDBLoader.loadLibrary()
 
@@ -147,22 +154,30 @@ class RocksDB(
     try {
       if (loadedVersion != version) {
         closeDB()
+        // deep copy is needed to avoid race condition
+        // between maintenance and task threads
+        fileManager.copyFileMapping()
         val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
         val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
         loadedVersion = latestSnapshotVersion
 
+        // reset last snapshot version
+        if (lastSnapshotVersion > latestSnapshotVersion) {
+          // discard any newer snapshots
+          lastSnapshotVersion = 0L
+        }
         openDB()
 
         numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
-          // we don't track the total number of rows - discard the number being track
-          -1L
-        } else if (metadata.numKeys < 0) {
-          // we track the total number of rows, but the snapshot doesn't have tracking number
-          // need to count keys now
-          countKeys()
-        } else {
-          metadata.numKeys
-        }
+            // we don't track the total number of rows - discard the number being track
+            -1L
+          } else if (metadata.numKeys < 0) {
+            // we track the total number of rows, but the snapshot doesn't have tracking number
+            // need to count keys now
+            countKeys()
+          } else {
+            metadata.numKeys
+          }
         if (loadedVersion != version) replayChangelog(version)
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.
@@ -191,6 +206,7 @@ class RocksDB(
    */
   private def replayChangelog(endVersion: Long): Unit = {
     for (v <- loadedVersion + 1 to endVersion) {
+      logInfo(s"replaying changelog from version $loadedVersion -> $endVersion")
       var changelogReader: StateStoreChangelogReader = null
       try {
         changelogReader = fileManager.getChangelogReader(v)
@@ -356,14 +372,19 @@ class RocksDB(
           // background operations.
           val cp = Checkpoint.create(db)
           cp.createCheckpoint(checkpointDir.toString)
+          // if changelog checkpointing is disabled, the snapshot is uploaded synchronously
+          // inside the uploadSnapshot() called below.
+          // If changelog checkpointing is enabled, snapshot will be uploaded asynchronously
+          // during state store maintenance.
           synchronized {
-            // if changelog checkpointing is disabled, the snapshot is uploaded synchronously
-            // inside the uploadSnapshot() called below.
-            // If changelog checkpointing is enabled, snapshot will be uploaded asynchronously
-            // during state store maintenance.
-            latestSnapshot.foreach(_.close())
+            if (latestSnapshot.isDefined) {
+              oldSnapshots += latestSnapshot.get
+            }
             latestSnapshot = Some(
-              RocksDBSnapshot(checkpointDir, newVersion, numKeysOnWritingVersion))
+              RocksDBSnapshot(checkpointDir,
+                newVersion,
+                numKeysOnWritingVersion,
+                fileManager.captureFileMapReference()))
             lastSnapshotVersion = newVersion
           }
         }
@@ -415,22 +436,34 @@ class RocksDB(
   }
 
   private def uploadSnapshot(): Unit = {
+    var oldSnapshotsImmutable: List[RocksDBSnapshot] = Nil
     val localCheckpoint = synchronized {
       val checkpoint = latestSnapshot
       latestSnapshot = None
+
+      // Convert mutable list buffer to immutable to prevent
+      // race condition with commit where old snapshot is added
+      oldSnapshotsImmutable = oldSnapshots.toList
+      oldSnapshots.clear()
+
       checkpoint
     }
     localCheckpoint match {
-      case Some(RocksDBSnapshot(localDir, version, numKeys)) =>
+      case Some(RocksDBSnapshot(localDir, version, numKeys, capturedFileMappings)) =>
         try {
           val uploadTime = timeTakenMs {
-            fileManager.saveCheckpointToDfs(localDir, version, numKeys)
+            fileManager.saveCheckpointToDfs(localDir, version, numKeys, capturedFileMappings)
             fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
           }
           logInfo(s"$loggingId: Upload snapshot of version $version," +
             s" time taken: $uploadTime ms")
         } finally {
           localCheckpoint.foreach(_.close())
+
+          // Clean up old latestSnapshots
+          for (snapshot <- oldSnapshotsImmutable) {
+            snapshot.close()
+          }
         }
       case _ =>
     }
@@ -546,8 +579,11 @@ class RocksDB(
 
   private def acquire(): Unit = acquireLock.synchronized {
     val newAcquiredThreadInfo = AcquiredThreadInfo()
-    val waitStartTime = System.currentTimeMillis
-    def timeWaitedMs = System.currentTimeMillis - waitStartTime
+    val waitStartTime = System.nanoTime()
+    def timeWaitedMs = {
+      val elapsedNanos = System.nanoTime() - waitStartTime
+      TimeUnit.MILLISECONDS.convert(elapsedNanos, TimeUnit.NANOSECONDS)
+    }
     def isAcquiredByDifferentThread = acquiredThreadInfo != null &&
       acquiredThreadInfo.threadRef.get.isDefined &&
       newAcquiredThreadInfo.threadRef.get.get.getId != acquiredThreadInfo.threadRef.get.get.getId

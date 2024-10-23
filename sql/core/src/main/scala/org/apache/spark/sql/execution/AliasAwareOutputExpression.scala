@@ -30,7 +30,7 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
   with AliasAwareOutputExpression {
   final override def outputPartitioning: Partitioning = {
     val partitionings: Seq[Partitioning] = if (hasAlias) {
-      flattenPartitioning(child.outputPartitioning).flatMap {
+      flattenPartitioning(child.outputPartitioning).iterator.flatMap {
         case e: Expression =>
           // We need unique partitionings but if the input partitioning is
           // `HashPartitioning(Seq(id + id))` and we have `id -> a` and `id -> b` aliases then after
@@ -44,7 +44,7 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
             .take(aliasCandidateLimit)
             .asInstanceOf[Stream[Partitioning]]
         case o => Seq(o)
-      }
+      }.take(aliasCandidateLimit).toSeq
     } else {
       // Filter valid partitiongs (only reference output attributes of the current plan node)
       val outputSet = AttributeSet(outputExpressions.map(_.toAttribute))

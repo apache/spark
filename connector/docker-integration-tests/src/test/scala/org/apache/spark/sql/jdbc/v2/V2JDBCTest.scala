@@ -49,18 +49,21 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   def notSupportsTableComment: Boolean = false
 
-  val defaultMetadata = new MetadataBuilder().putLong("scale", 0).build()
+  def defaultMetadata(dataType: DataType = StringType): Metadata = new MetadataBuilder()
+    .putLong("scale", 0)
+    .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
+    .build()
 
   def testUpdateColumnNullability(tbl: String): Unit = {
     sql(s"CREATE TABLE $catalogName.alt_table (ID STRING NOT NULL)")
     var t = spark.table(s"$catalogName.alt_table")
     // nullable is true in the expectedSchema because Spark always sets nullable to true
     // regardless of the JDBC metadata https://github.com/apache/spark/pull/18445
-    var expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
+    var expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata())
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN ID DROP NOT NULL")
     t = spark.table(s"$catalogName.alt_table")
-    expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
+    expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata())
     assert(t.schema === expectedSchema)
     // Update nullability of not existing column
     val msg = intercept[AnalysisException] {
@@ -72,8 +75,9 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   def testRenameColumn(tbl: String): Unit = {
     sql(s"ALTER TABLE $tbl RENAME COLUMN ID TO RENAMED")
     val t = spark.table(s"$tbl")
-    val expectedSchema = new StructType().add("RENAMED", StringType, true, defaultMetadata)
-      .add("ID1", StringType, true, defaultMetadata).add("ID2", StringType, true, defaultMetadata)
+    val expectedSchema = new StructType().add("RENAMED", StringType, true, defaultMetadata())
+      .add("ID1", StringType, true, defaultMetadata())
+      .add("ID2", StringType, true, defaultMetadata())
     assert(t.schema === expectedSchema)
   }
 
@@ -83,16 +87,19 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     withTable(s"$catalogName.alt_table") {
       sql(s"CREATE TABLE $catalogName.alt_table (ID STRING)")
       var t = spark.table(s"$catalogName.alt_table")
-      var expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
+      var expectedSchema = new StructType()
+        .add("ID", StringType, true, defaultMetadata())
       assert(t.schema === expectedSchema)
       sql(s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C1 STRING, C2 STRING)")
       t = spark.table(s"$catalogName.alt_table")
-      expectedSchema = expectedSchema.add("C1", StringType, true, defaultMetadata)
-        .add("C2", StringType, true, defaultMetadata)
+      expectedSchema = expectedSchema
+        .add("C1", StringType, true, defaultMetadata())
+        .add("C2", StringType, true, defaultMetadata())
       assert(t.schema === expectedSchema)
       sql(s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C3 STRING)")
       t = spark.table(s"$catalogName.alt_table")
-      expectedSchema = expectedSchema.add("C3", StringType, true, defaultMetadata)
+      expectedSchema = expectedSchema
+        .add("C3", StringType, true, defaultMetadata())
       assert(t.schema === expectedSchema)
       // Add already existing column
       checkError(
@@ -125,7 +132,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       sql(s"ALTER TABLE $catalogName.alt_table DROP COLUMN C1")
       sql(s"ALTER TABLE $catalogName.alt_table DROP COLUMN c3")
       val t = spark.table(s"$catalogName.alt_table")
-      val expectedSchema = new StructType().add("C2", StringType, true, defaultMetadata)
+      val expectedSchema = new StructType()
+        .add("C2", StringType, true, defaultMetadata())
       assert(t.schema === expectedSchema)
       // Drop not existing column
       val msg = intercept[AnalysisException] {
@@ -348,6 +356,235 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       case s: DataSourceV2ScanRelation => s
     }.get
     assert(scan.schema.names.sameElements(Seq(col)))
+  }
+
+  test("SPARK-48172: Test CONTAINS") {
+    val df1 = spark.sql(
+      s"""
+         |SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+         |WHERE contains(pattern_testing_col, 'quote\\'')""".stripMargin)
+    df1.explain("formatted")
+    val rows1 = df1.collect()
+    assert(rows1.length === 1)
+    assert(rows1(0).getString(0) === "special_character_quote'_present")
+
+    val df2 = spark.sql(
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+         |WHERE contains(pattern_testing_col, 'percent%')""".stripMargin)
+    val rows2 = df2.collect()
+    assert(rows2.length === 1)
+    assert(rows2(0).getString(0) === "special_character_percent%_present")
+
+    val df3 = spark.
+      sql(
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+           |WHERE contains(pattern_testing_col, 'underscore_')""".stripMargin)
+    val rows3 = df3.collect()
+    assert(rows3.length === 1)
+    assert(rows3(0).getString(0) === "special_character_underscore_present")
+
+    val df4 = spark.
+      sql(
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+           |WHERE contains(pattern_testing_col, 'character')
+           |ORDER BY pattern_testing_col""".stripMargin)
+    val rows4 = df4.collect()
+    assert(rows4.length === 6)
+    assert(rows4(0).getString(0) === "special_character_percent%_present")
+    assert(rows4(1).getString(0) === "special_character_percent_not_present")
+    assert(rows4(2).getString(0) === "special_character_quote'_present")
+    assert(rows4(3).getString(0) === "special_character_quote_not_present")
+    assert(rows4(4).getString(0) === "special_character_underscore_present")
+    assert(rows4(5).getString(0) === "special_character_underscorenot_present")
+  }
+
+  test("SPARK-48172: Test ENDSWITH") {
+    val df1 = spark.sql(
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+         |WHERE endswith(pattern_testing_col, 'quote\\'_present')""".stripMargin)
+    val rows1 = df1.collect()
+    assert(rows1.length === 1)
+    assert(rows1(0).getString(0) === "special_character_quote'_present")
+
+    val df2 = spark.sql(
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+         |WHERE endswith(pattern_testing_col, 'percent%_present')""".stripMargin)
+    val rows2 = df2.collect()
+    assert(rows2.length === 1)
+    assert(rows2(0).getString(0) === "special_character_percent%_present")
+
+    val df3 = spark.
+      sql(
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+           |WHERE endswith(pattern_testing_col, 'underscore_present')""".stripMargin)
+    val rows3 = df3.collect()
+    assert(rows3.length === 1)
+    assert(rows3(0).getString(0) === "special_character_underscore_present")
+
+    val df4 = spark.
+      sql(
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+           |WHERE endswith(pattern_testing_col, 'present')
+           |ORDER BY pattern_testing_col""".stripMargin)
+    val rows4 = df4.collect()
+    assert(rows4.length === 6)
+    assert(rows4(0).getString(0) === "special_character_percent%_present")
+    assert(rows4(1).getString(0) === "special_character_percent_not_present")
+    assert(rows4(2).getString(0) === "special_character_quote'_present")
+    assert(rows4(3).getString(0) === "special_character_quote_not_present")
+    assert(rows4(4).getString(0) === "special_character_underscore_present")
+    assert(rows4(5).getString(0) === "special_character_underscorenot_present")
+  }
+
+  test("SPARK-48172: Test STARTSWITH") {
+    val df1 = spark.sql(
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+         |WHERE startswith(pattern_testing_col, 'special_character_quote\\'')""".stripMargin)
+    val rows1 = df1.collect()
+    assert(rows1.length === 1)
+    assert(rows1(0).getString(0) === "special_character_quote'_present")
+
+    val df2 = spark.sql(
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+         |WHERE startswith(pattern_testing_col, 'special_character_percent%')""".stripMargin)
+    val rows2 = df2.collect()
+    assert(rows2.length === 1)
+    assert(rows2(0).getString(0) === "special_character_percent%_present")
+
+    val df3 = spark.
+      sql(
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+           |WHERE startswith(pattern_testing_col, 'special_character_underscore_')""".stripMargin)
+    val rows3 = df3.collect()
+    assert(rows3.length === 1)
+    assert(rows3(0).getString(0) === "special_character_underscore_present")
+
+    val df4 = spark.
+      sql(
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+           |WHERE startswith(pattern_testing_col, 'special_character')
+           |ORDER BY pattern_testing_col""".stripMargin)
+    val rows4 = df4.collect()
+    assert(rows4.length === 6)
+    assert(rows4(0).getString(0) === "special_character_percent%_present")
+    assert(rows4(1).getString(0) === "special_character_percent_not_present")
+    assert(rows4(2).getString(0) === "special_character_quote'_present")
+    assert(rows4(3).getString(0) === "special_character_quote_not_present")
+    assert(rows4(4).getString(0) === "special_character_underscore_present")
+    assert(rows4(5).getString(0) === "special_character_underscorenot_present")
+  }
+
+  test("SPARK-48172: Test LIKE") {
+    // this one should map to contains
+    val df1 = spark.sql(
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+         |WHERE pattern_testing_col LIKE '%quote\\'%'""".stripMargin)
+    val rows1 = df1.collect()
+    assert(rows1.length === 1)
+    assert(rows1(0).getString(0) === "special_character_quote'_present")
+
+    val df2 = spark.sql(
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+         |WHERE pattern_testing_col LIKE '%percent\\%%'""".stripMargin)
+    val rows2 = df2.collect()
+    assert(rows2.length === 1)
+    assert(rows2(0).getString(0) === "special_character_percent%_present")
+
+    val df3 = spark.
+      sql(
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+           |WHERE pattern_testing_col LIKE '%underscore\\_%'""".stripMargin)
+    val rows3 = df3.collect()
+    assert(rows3.length === 1)
+    assert(rows3(0).getString(0) === "special_character_underscore_present")
+
+    val df4 = spark.
+      sql(
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+           |WHERE pattern_testing_col LIKE '%character%'
+           |ORDER BY pattern_testing_col""".stripMargin)
+    val rows4 = df4.collect()
+    assert(rows4.length === 6)
+    assert(rows4(0).getString(0) === "special_character_percent%_present")
+    assert(rows4(1).getString(0) === "special_character_percent_not_present")
+    assert(rows4(2).getString(0) === "special_character_quote'_present")
+    assert(rows4(3).getString(0) === "special_character_quote_not_present")
+    assert(rows4(4).getString(0) === "special_character_underscore_present")
+    assert(rows4(5).getString(0) === "special_character_underscorenot_present")
+
+    // map to startsWith
+    // this one should map to contains
+    val df5 = spark.sql(
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+         |WHERE pattern_testing_col LIKE 'special_character_quote\\'%'""".stripMargin)
+    val rows5 = df5.collect()
+    assert(rows5.length === 1)
+    assert(rows5(0).getString(0) === "special_character_quote'_present")
+
+    val df6 = spark.sql(
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+         |WHERE pattern_testing_col LIKE 'special_character_percent\\%%'""".stripMargin)
+    val rows6 = df6.collect()
+    assert(rows6.length === 1)
+    assert(rows6(0).getString(0) === "special_character_percent%_present")
+
+    val df7 = spark.
+      sql(
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+           |WHERE pattern_testing_col LIKE 'special_character_underscore\\_%'""".stripMargin)
+    val rows7 = df7.collect()
+    assert(rows7.length === 1)
+    assert(rows7(0).getString(0) === "special_character_underscore_present")
+
+    val df8 = spark.
+      sql(
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+           |WHERE pattern_testing_col LIKE 'special_character%'
+           |ORDER BY pattern_testing_col""".stripMargin)
+    val rows8 = df8.collect()
+    assert(rows8.length === 6)
+    assert(rows8(0).getString(0) === "special_character_percent%_present")
+    assert(rows8(1).getString(0) === "special_character_percent_not_present")
+    assert(rows8(2).getString(0) === "special_character_quote'_present")
+    assert(rows8(3).getString(0) === "special_character_quote_not_present")
+    assert(rows8(4).getString(0) === "special_character_underscore_present")
+    assert(rows8(5).getString(0) === "special_character_underscorenot_present")
+    // map to endsWith
+    // this one should map to contains
+    val df9 = spark.sql(
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+         |WHERE pattern_testing_col LIKE '%quote\\'_present'""".stripMargin)
+    val rows9 = df9.collect()
+    assert(rows9.length === 1)
+    assert(rows9(0).getString(0) === "special_character_quote'_present")
+
+    val df10 = spark.sql(
+      s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+         |WHERE pattern_testing_col LIKE '%percent\\%_present'""".stripMargin)
+    val rows10 = df10.collect()
+    assert(rows10.length === 1)
+    assert(rows10(0).getString(0) === "special_character_percent%_present")
+
+    val df11 = spark.
+      sql(
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+           |WHERE pattern_testing_col LIKE '%underscore\\_present'""".stripMargin)
+    val rows11 = df11.collect()
+    assert(rows11.length === 1)
+    assert(rows11(0).getString(0) === "special_character_underscore_present")
+
+    val df12 = spark.
+      sql(
+        s"""SELECT * FROM $catalogAndNamespace.${caseConvert("pattern_testing_table")}
+           |WHERE pattern_testing_col LIKE '%present' ORDER BY pattern_testing_col""".stripMargin)
+    val rows12 = df12.collect()
+    assert(rows12.length === 6)
+    assert(rows12(0).getString(0) === "special_character_percent%_present")
+    assert(rows12(1).getString(0) === "special_character_percent_not_present")
+    assert(rows12(2).getString(0) === "special_character_quote'_present")
+    assert(rows12(3).getString(0) === "special_character_quote_not_present")
+    assert(rows12(4).getString(0) === "special_character_underscore_present")
+    assert(rows12(5).getString(0) === "special_character_underscorenot_present")
   }
 
   test("SPARK-37038: Test TABLESAMPLE") {

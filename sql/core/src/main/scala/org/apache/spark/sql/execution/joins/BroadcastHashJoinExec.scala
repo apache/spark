@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, HashPartitioning, Partitioning, PartitioningCollection, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, HashPartitioningLike, Partitioning, PartitioningCollection, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
@@ -73,7 +73,7 @@ case class BroadcastHashJoinExec(
     joinType match {
       case _: InnerLike if conf.broadcastHashJoinOutputPartitioningExpandLimit > 0 =>
         streamedPlan.outputPartitioning match {
-          case h: HashPartitioning => expandOutputPartitioning(h)
+          case h: HashPartitioningLike => expandOutputPartitioning(h)
           case c: PartitioningCollection => expandOutputPartitioning(c)
           case other => other
         }
@@ -99,7 +99,7 @@ case class BroadcastHashJoinExec(
   private def expandOutputPartitioning(
       partitioning: PartitioningCollection): PartitioningCollection = {
     PartitioningCollection(partitioning.partitionings.flatMap {
-      case h: HashPartitioning => expandOutputPartitioning(h).partitionings
+      case h: HashPartitioningLike => expandOutputPartitioning(h).partitionings
       case c: PartitioningCollection => Seq(expandOutputPartitioning(c))
       case other => Seq(other)
     })
@@ -111,11 +111,12 @@ case class BroadcastHashJoinExec(
   // the expanded partitioning will have the following expressions:
   // Seq("a", "b", "c"), Seq("a", "b", "y"), Seq("a", "x", "c"), Seq("a", "x", "y").
   // The expanded expressions are returned as PartitioningCollection.
-  private def expandOutputPartitioning(partitioning: HashPartitioning): PartitioningCollection = {
+  private def expandOutputPartitioning(
+      partitioning: HashPartitioningLike): PartitioningCollection = {
     PartitioningCollection(partitioning.multiTransformDown {
       case e: Expression if streamedKeyToBuildKeyMapping.contains(e.canonicalized) =>
         e +: streamedKeyToBuildKeyMapping(e.canonicalized)
-    }.asInstanceOf[Stream[HashPartitioning]]
+    }.asInstanceOf[Stream[HashPartitioningLike]]
       .take(conf.broadcastHashJoinOutputPartitioningExpandLimit))
   }
 

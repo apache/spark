@@ -19,11 +19,19 @@ import tempfile
 import unittest
 import os
 import sys
+import warnings
 from io import StringIO
+from typing import Iterator
 
 from pyspark import SparkConf
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import udf
+from pyspark.sql.functions import udf, pandas_udf
+from pyspark.testing.sqlutils import (
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 from pyspark.profiler import UDFBasicProfiler
 
 
@@ -100,6 +108,49 @@ class UDFProfilerTests(unittest.TestCase):
 
         df = self.spark.range(10)
         df.select(add1("id"), add2("id"), add1("id")).collect()
+
+    # Unsupported
+    def exec_pandas_udf_iter_to_iter(self):
+        import pandas as pd
+
+        @pandas_udf("int")
+        def iter_to_iter(batch_ser: Iterator[pd.Series]) -> Iterator[pd.Series]:
+            for ser in batch_ser:
+                yield ser + 1
+
+        self.spark.range(10).select(iter_to_iter("id")).collect()
+
+    # Unsupported
+    def exec_map(self):
+        import pandas as pd
+
+        def map(pdfs: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
+            for pdf in pdfs:
+                yield pdf[pdf.id == 1]
+
+        df = self.spark.createDataFrame([(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0)], ("id", "v"))
+        df.mapInPandas(map, schema=df.schema).collect()
+
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)  # type: ignore
+    def test_unsupported(self):
+        with warnings.catch_warnings(record=True) as warns:
+            warnings.simplefilter("always")
+            self.exec_pandas_udf_iter_to_iter()
+            user_warns = [warn.message for warn in warns if isinstance(warn.message, UserWarning)]
+            self.assertTrue(len(user_warns) > 0)
+            self.assertTrue(
+                "Profiling UDFs with iterators input/output is not supported" in str(user_warns[0])
+            )
+
+        with warnings.catch_warnings(record=True) as warns:
+            warnings.simplefilter("always")
+            self.exec_map()
+            user_warns = [warn.message for warn in warns if isinstance(warn.message, UserWarning)]
+            self.assertTrue(len(user_warns) > 0)
+            self.assertTrue(
+                "Profiling UDFs with iterators input/output is not supported" in str(user_warns[0])
+            )
 
 
 if __name__ == "__main__":

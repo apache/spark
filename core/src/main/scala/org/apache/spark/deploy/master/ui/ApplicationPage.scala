@@ -21,6 +21,8 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
+import org.apache.commons.lang3.StringUtils
+
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.ExecutorState
 import org.apache.spark.deploy.StandaloneResourceUtils.{formatResourceRequirements, formatResourcesAddresses}
@@ -93,10 +95,14 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
             <li><strong>State:</strong> {app.state}</li>
             {
               if (!app.isFinished) {
-                <li><strong>
-                    <a href={UIUtils.makeHref(parent.master.reverseProxy,
-                      app.id, app.desc.appUiUrl)}>Application Detail UI</a>
-                </strong></li>
+                if (StringUtils.isBlank(app.desc.appUiUrl)) {
+                  <li><strong>Application UI:</strong> Disabled</li>
+                } else {
+                  <li><strong>
+                      <a href={UIUtils.makeHref(parent.master.reverseProxy,
+                        app.id, app.desc.appUiUrl)}>Application Detail UI</a>
+                  </strong></li>
+                }
               }
             }
           </ul>

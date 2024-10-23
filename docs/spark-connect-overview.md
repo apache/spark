@@ -279,11 +279,11 @@ The connection may also be programmatically created using _SparkSession#builder_
 
 <div data-lang="python"  markdown="1">
 
-First, install PySpark with `pip install pyspark==3.5.0` or if building a packaged PySpark application/library,
+First, install PySpark with `pip install pyspark[connect]==3.5.0` or if building a packaged PySpark application/library,
 add it your setup.py file as:
 {% highlight python %}
 install_requires=[
-'pyspark==3.5.0'
+'pyspark[connect]==3.5.0'
 ]
 {% endhighlight %}
 

@@ -110,7 +110,7 @@ class MapInPandasTestsMixin:
             df = (
                 self.spark.range(10, numPartitions=3)
                 .select(col("id").cast("string").alias("str"))
-                .withColumn("bin", encode(col("str"), "utf8"))
+                .withColumn("bin", encode(col("str"), "utf-8"))
             )
             actual = df.mapInPandas(func, "str string, bin binary").collect()
             expected = df.collect()
@@ -151,14 +151,14 @@ class MapInPandasTestsMixin:
         with self.assertRaisesRegex(
             PythonException,
             "Return type of the user-defined function should be iterator of pandas.DataFrame, "
-            "but is int.",
+            "but is int",
         ):
             (self.spark.range(10, numPartitions=3).mapInPandas(no_iter, "a int").count())
 
         with self.assertRaisesRegex(
             PythonException,
             "Return type of the user-defined function should be iterator of pandas.DataFrame, "
-            "but is iterator of int.",
+            "but is iterator of int",
         ):
             (self.spark.range(10, numPartitions=3).mapInPandas(bad_iter_elem, "a int").count())
 

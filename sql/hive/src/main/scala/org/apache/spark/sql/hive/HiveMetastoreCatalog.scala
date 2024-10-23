@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
 import org.apache.spark.sql.internal.SQLConf
@@ -66,6 +67,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {
     val key = QualifiedTableName(
       // scalastyle:off caselocale
+      table.catalog.getOrElse(CatalogManager.SESSION_CATALOG_NAME).toLowerCase,
       table.database.getOrElse(sessionState.catalog.getCurrentDatabase).toLowerCase,
       table.table.toLowerCase)
       // scalastyle:on caselocale
@@ -191,8 +193,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       fileType: String,
       isWrite: Boolean): LogicalRelation = {
     val metastoreSchema = relation.tableMeta.schema
-    val tableIdentifier =
-      QualifiedTableName(relation.tableMeta.database, relation.tableMeta.identifier.table)
+    val tableIdentifier = QualifiedTableName(relation.tableMeta.identifier.catalog.get,
+      relation.tableMeta.database, relation.tableMeta.identifier.table)
 
     val lazyPruningEnabled = sparkSession.sqlContext.conf.manageFilesourcePartitions
     val tablePath = new Path(relation.tableMeta.location)

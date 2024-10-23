@@ -140,4 +140,8 @@ for HADOOP_HIVE_PROFILE in "${HADOOP_HIVE_PROFILES[@]}"; do
   fi
 done
 
+if [[ -d "$FWDIR/dev/pr-deps" ]]; then
+  rm -rf "$FWDIR/dev/pr-deps"
+fi
+
 exit 0

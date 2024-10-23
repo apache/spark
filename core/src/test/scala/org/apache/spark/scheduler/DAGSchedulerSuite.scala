@@ -48,7 +48,7 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, BlockManagerMaster}
-import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, Clock, LongAccumulator, SystemClock, Utils}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, Clock, LongAccumulator, SystemClock, ThreadUtils, Utils}
 
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
   extends DAGSchedulerEventProcessLoop(dagScheduler) {
@@ -592,6 +592,42 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     completeShuffleMapStageSuccessfully(2, 0, 1)
     completeAndCheckAnswer(taskSets(3), Seq((Success, 42)), Map(0 -> 42))
     assertDataStructuresEmpty()
+  }
+
+  // Note that this test is NOT perfectly reproducible when there is a deadlock as it uses
+  // Thread.sleep, but it should never fail / flake when there is no deadlock.
+  // If this test starts to flake, this shows that there is a deadlock!
+  test("No Deadlock between getCacheLocs and CoalescedRDD") {
+    val rdd = sc.parallelize(1 to 10, numSlices = 10)
+    val coalescedRDD = rdd.coalesce(2)
+    val executionContext = ThreadUtils.newDaemonFixedThreadPool(
+      nThreads = 2, "test-getCacheLocs")
+    // Used to only make progress on getCacheLocs after we acquired the lock to the RDD.
+    val rddLock = new java.util.concurrent.Semaphore(0)
+    val partitionsFuture = executionContext.submit(new Runnable {
+      override def run(): Unit = {
+        coalescedRDD.stateLock.synchronized {
+          rddLock.release(1)
+          // Try to access the partitions of the coalescedRDD. This will cause a call to
+          // getCacheLocs internally.
+          Thread.sleep(5000)
+          coalescedRDD.partitions
+        }
+      }
+    })
+    val getCacheLocsFuture = executionContext.submit(new Runnable {
+      override def run(): Unit = {
+        rddLock.acquire()
+        // Access the cache locations.
+        // If the partition location cache is locked before the stateLock is locked,
+        // we'll run into a deadlock.
+        sc.dagScheduler.getCacheLocs(coalescedRDD)
+      }
+    })
+    // If any of the futures throw a TimeOutException, this shows that there is a deadlock between
+    // getCacheLocs and accessing partitions of an RDD.
+    getCacheLocsFuture.get(120, TimeUnit.SECONDS)
+    partitionsFuture.get(120, TimeUnit.SECONDS)
   }
 
   test("All shuffle files on the storage endpoint should be cleaned up when it is lost") {
@@ -3041,6 +3077,27 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     (shuffleId1, shuffleId2)
   }
 
+  private def constructTwoIndeterminateStage(): (Int, Int) = {
+    val shuffleMapRdd1 = new MyRDD(sc, 2, Nil, indeterminate = true)
+
+    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(2))
+    val shuffleId1 = shuffleDep1.shuffleId
+    val shuffleMapRdd2 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker,
+      indeterminate = true)
+
+    val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, new HashPartitioner(2))
+    val shuffleId2 = shuffleDep2.shuffleId
+    val finalRdd = new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
+
+    submit(finalRdd, Array(0, 1))
+
+    // Finish the first shuffle map stage.
+    completeShuffleMapStageSuccessfully(0, 0, 2)
+    assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
+
+    (shuffleId1, shuffleId2)
+  }
+
   test("SPARK-25341: abort stage while using old fetch protocol") {
     conf.set(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL.key, "true")
     // Construct the scenario of indeterminate stage fetch failed.
@@ -3094,6 +3151,92 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     complete(taskSets(6), Seq((Success, 11), (Success, 12)))
 
     // Job successful ended.
+    assert(results === Map(0 -> 11, 1 -> 12))
+    results.clear()
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-45182: Ignore task completion from old stage after retrying indeterminate stages") {
+    val (shuffleId1, shuffleId2) = constructTwoIndeterminateStage()
+
+    // shuffleMapStage0 -> shuffleId1 -> shuffleMapStage1 -> shuffleId2 -> resultStage
+    val shuffleMapStage1 = scheduler.stageIdToStage(1).asInstanceOf[ShuffleMapStage]
+    val resultStage = scheduler.stageIdToStage(2).asInstanceOf[ResultStage]
+
+    // Shuffle map stage 0 is done
+    assert(mapOutputTracker.findMissingPartitions(shuffleId1) == Some(Seq.empty))
+    // Shuffle map stage 1 is still waiting for its 2 tasks to complete
+    assert(mapOutputTracker.findMissingPartitions(shuffleId2) == Some(Seq(0, 1)))
+    // The result stage is still waiting for its 2 tasks to complete
+    assert(resultStage.findMissingPartitions() == Seq(0, 1))
+
+    scheduler.resubmitFailedStages()
+
+    // The first task of the shuffle map stage 1 fails with fetch failure
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0L, 0, 0, "ignored"),
+      null))
+
+    // Both the stages should have been resubmitted
+    val newFailedStages = scheduler.failedStages.toSeq
+    assert(newFailedStages.map(_.id) == Seq(0, 1))
+
+    scheduler.resubmitFailedStages()
+
+    // Since shuffleId1 is indeterminate, all tasks of shuffle map stage 0 should be ran
+    assert(taskSets(2).stageId == 0)
+    assert(taskSets(2).stageAttemptId == 1)
+    assert(taskSets(2).tasks.length == 2)
+
+    // Complete the re-attempt of shuffle map stage 0
+    completeShuffleMapStageSuccessfully(0, 1, 2)
+    assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
+
+    // Since shuffleId2 is indeterminate, all tasks of shuffle map stage 1 should be ran
+    assert(taskSets(3).stageId == 1)
+    assert(taskSets(3).stageAttemptId == 1)
+    assert(taskSets(3).tasks.length == 2)
+
+    // The first task of the shuffle map stage 1 from 2nd attempt succeeds
+    runEvent(makeCompletionEvent(
+      taskSets(3).tasks(0),
+      Success,
+      makeMapStatus("hostB",
+        2)))
+
+    // The second task of the shuffle map stage 1 from 1st attempt succeeds
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1),
+      Success,
+      makeMapStatus("hostC",
+        2)))
+
+    // Above task completion should not mark the partition 1 complete from 2nd attempt
+    assert(!tasksMarkedAsCompleted.contains(taskSets(3).tasks(1)))
+
+    // This task completion should get ignored and partition 1 should be missing
+    // for shuffle map stage 1
+    assert(mapOutputTracker.findMissingPartitions(shuffleId2) == Some(Seq(1)))
+
+    // The second task of the shuffle map stage 1 from 2nd attempt succeeds
+    runEvent(makeCompletionEvent(
+      taskSets(3).tasks(1),
+      Success,
+      makeMapStatus("hostD",
+        2)))
+
+    // The shuffle map stage 1 should be done
+    assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
+
+    // The shuffle map outputs for shuffleId1 should be from latest attempt of shuffle map stage 1
+    assert(mapOutputTracker.getMapLocation(shuffleMapStage1.shuffleDep, 0, 2)
+      === Seq("hostB", "hostD"))
+
+    // Complete result stage
+    complete(taskSets(4), Seq((Success, 11), (Success, 12)))
+
+    // Job successfully ended
     assert(results === Map(0 -> 11, 1 -> 12))
     results.clear()
     assertDataStructuresEmpty()

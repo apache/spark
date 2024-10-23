@@ -14,13 +14,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
+import unittest
 
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.sql.tests.test_utils import UtilsTestsMixin
 
 
 class ConnectUtilsTests(ReusedConnectTestCase, UtilsTestsMixin):
-    pass
+    @unittest.skipIf(
+        "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Failed with different Client <> Server"
+    )
+    def test_assert_approx_equal_decimaltype_custom_rtol_pass(self):
+        super(ConnectUtilsTests, self).test_assert_approx_equal_decimaltype_custom_rtol_pass()
 
 
 if __name__ == "__main__":

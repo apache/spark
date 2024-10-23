@@ -143,7 +143,7 @@ To use a custom metrics.properties for the application master and executors, upd
 
 #### Spark Properties
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.yarn.am.memory</code></td>
@@ -290,14 +290,6 @@ To use a custom metrics.properties for the application master and executors, upd
     <code>spark.yarn.scheduler.heartbeat.interval-ms</code> is reached.
   </td>
   <td>1.4.0</td>
-</tr>
-<tr>
-  <td><code>spark.yarn.max.executor.failures</code></td>
-  <td>numExecutors * 2, with minimum of 3</td>
-  <td>
-    The maximum number of executor failures before failing the application.
-  </td>
-  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.historyServer.address</code></td>
@@ -500,15 +492,6 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>3.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.executor.failuresValidityInterval</code></td>
-  <td>(none)</td>
-  <td>
-  Defines the validity interval for executor failure tracking.
-  Executor failures which are older than the validity interval will be ignored.
-  </td>
-  <td>2.0.0</td>
-</tr>
-<tr>
   <td><code>spark.yarn.submit.waitAppCompletion</code></td>
   <td><code>true</code></td>
   <td>
@@ -696,7 +679,7 @@ To use a custom metrics.properties for the application master and executors, upd
 
 #### Available patterns for SHS custom executor log URL
 
-<table class="table table-striped">
+<table>
     <thead><tr><th>Pattern</th><th>Meaning</th></tr></thead>
     <tr>
       <td>&#123;&#123;HTTP_SCHEME&#125;&#125;</td>
@@ -759,7 +742,11 @@ YARN does not tell Spark the addresses of the resources allocated to each contai
 
 # Stage Level Scheduling Overview
 
-Stage level scheduling is supported on YARN when dynamic allocation is enabled. One thing to note that is YARN specific is that each ResourceProfile requires a different container priority on YARN. The mapping is simply the ResourceProfile id becomes the priority, on YARN lower numbers are higher priority. This means that profiles created earlier will have a higher priority in YARN. Normally this won't matter as Spark finishes one stage before starting another one, the only case this might have an affect is in a job server type scenario, so its something to keep in mind.
+Stage level scheduling is supported on YARN:
+- When dynamic allocation is disabled: It allows users to specify different task resource requirements at the stage level and will use the same executors requested at startup.
+- When dynamic allocation is enabled: It allows users to specify task and executor resource requirements at the stage level and will request the extra executors.
+
+One thing to note that is YARN specific is that each ResourceProfile requires a different container priority on YARN. The mapping is simply the ResourceProfile id becomes the priority, on YARN lower numbers are higher priority. This means that profiles created earlier will have a higher priority in YARN. Normally this won't matter as Spark finishes one stage before starting another one, the only case this might have an affect is in a job server type scenario, so its something to keep in mind.
 Note there is a difference in the way custom resources are handled between the base default profile and custom ResourceProfiles. To allow for the user to request YARN containers with extra resources without Spark scheduling on them, the user can specify resources via the <code>spark.yarn.executor.resource.</code> config. Those configs are only used in the base default profile though and do not get propagated into any other custom ResourceProfiles. This is because there would be no way to remove them if you wanted a stage to not have them. This results in your default profile getting custom resources defined in <code>spark.yarn.executor.resource.</code> plus spark defined resources of GPU or FPGA. Spark converts GPU and FPGA resources into the YARN built in types <code>yarn.io/gpu</code>) and <code>yarn.io/fpga</code>, but does not know the mapping of any other resources. Any other Spark custom resources are not propagated to YARN for the default profile. So if you want Spark to schedule based off a custom resource and have it requested from YARN, you must specify it in both YARN (<code>spark.yarn.{driver/executor}.resource.</code>) and Spark (<code>spark.{driver/executor}.resource.</code>) configs. Leave the Spark config off if you only want YARN containers with the extra resources but Spark not to schedule using them. Now for custom ResourceProfiles, it doesn't currently have a way to only specify YARN resources without Spark scheduling off of them. This means for custom ResourceProfiles we propagate all the resources defined in the ResourceProfile to YARN. We still convert GPU and FPGA to the YARN build in types as well. This requires that the name of any custom resources you specify match what they are defined as in YARN.
 
 # Important notes
@@ -779,7 +766,7 @@ staging directory of the Spark application.
 
 ## YARN-specific Kerberos Configuration
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.kerberos.keytab</code></td>
@@ -878,8 +865,8 @@ to avoid garbage collection issues during shuffle.
 
 The following extra configuration options are available when the shuffle service is running on YARN:
 
-<table class="table table-striped">
-<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr></thead>
+<table>
+<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.yarn.shuffle.stopOnFailure</code></td>
   <td><code>false</code></td>
@@ -888,6 +875,7 @@ The following extra configuration options are available when the shuffle service
     initialization. This prevents application failures caused by running containers on
     NodeManagers where the Spark Shuffle Service is not running.
   </td>
+  <td>2.1.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.shuffle.service.metrics.namespace</code></td>
@@ -896,6 +884,7 @@ The following extra configuration options are available when the shuffle service
     The namespace to use when emitting shuffle service metrics into Hadoop metrics2 system of the
     NodeManager.
   </td>
+  <td>3.2.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.shuffle.service.logs.namespace</code></td>
@@ -907,6 +896,7 @@ The following extra configuration options are available when the shuffle service
     may expect the logger name to look like a class name, it's generally recommended to provide a value which
     would be a valid Java package or class name and not include spaces.
   </td>
+  <td>3.3.0</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.service.db.backend</code></td>

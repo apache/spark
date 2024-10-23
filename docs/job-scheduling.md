@@ -57,7 +57,7 @@ Resource allocation can be configured as follows, based on the cluster type:
   on the cluster (`spark.executor.instances` as configuration property), while `--executor-memory`
   (`spark.executor.memory` configuration property) and `--executor-cores` (`spark.executor.cores` configuration
   property) control the resources per executor. For more information, see the
-  [YARN Spark Properties](running-on-yarn.html).
+  [YARN Spark Properties](running-on-yarn.html#spark-properties).
 
 A second option available on Mesos is _dynamic sharing_ of CPU cores. In this mode, each Spark application
 still has a fixed and independent memory allocation (set by `spark.executor.memory`), but when the

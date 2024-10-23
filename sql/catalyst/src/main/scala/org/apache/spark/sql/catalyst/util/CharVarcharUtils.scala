@@ -28,7 +28,8 @@ import org.apache.spark.sql.types._
 
 object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
-  private val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
+  // visible for testing
+  private[sql] val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
 
   /**
    * Replaces CharType/VarcharType with StringType recursively in the given struct type. If a
@@ -237,14 +238,14 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
    * attributes. When comparing two char type columns/fields, we need to pad the shorter one to
    * the longer length.
    */
-  def addPaddingInStringComparison(attrs: Seq[Attribute]): Seq[Expression] = {
+  def addPaddingInStringComparison(attrs: Seq[Attribute], alwaysPad: Boolean): Seq[Expression] = {
     val rawTypes = attrs.map(attr => getRawType(attr.metadata))
     if (rawTypes.exists(_.isEmpty)) {
       attrs
     } else {
       val typeWithTargetCharLength = rawTypes.map(_.get).reduce(typeWithWiderCharLength)
       attrs.zip(rawTypes.map(_.get)).map { case (attr, rawType) =>
-        padCharToTargetLength(attr, rawType, typeWithTargetCharLength).getOrElse(attr)
+        padCharToTargetLength(attr, rawType, typeWithTargetCharLength, alwaysPad).getOrElse(attr)
       }
     }
   }
@@ -267,9 +268,10 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   private def padCharToTargetLength(
       expr: Expression,
       rawType: DataType,
-      typeWithTargetCharLength: DataType): Option[Expression] = {
+      typeWithTargetCharLength: DataType,
+      alwaysPad: Boolean): Option[Expression] = {
     (rawType, typeWithTargetCharLength) match {
-      case (CharType(len), CharType(target)) if target > len =>
+      case (CharType(len), CharType(target)) if alwaysPad || target > len =>
         Some(StringRPad(expr, Literal(target)))
 
       case (StructType(fields), StructType(targets)) =>
@@ -280,7 +282,8 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
         while (i < fields.length) {
           val field = fields(i)
           val fieldExpr = GetStructField(expr, i, Some(field.name))
-          val padded = padCharToTargetLength(fieldExpr, field.dataType, targets(i).dataType)
+          val padded = padCharToTargetLength(
+            fieldExpr, field.dataType, targets(i).dataType, alwaysPad)
           needPadding = padded.isDefined
           createStructExprs += Literal(field.name)
           createStructExprs += padded.getOrElse(fieldExpr)
@@ -290,7 +293,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
       case (ArrayType(et, containsNull), ArrayType(target, _)) =>
         val param = NamedLambdaVariable("x", replaceCharVarcharWithString(et), containsNull)
-        padCharToTargetLength(param, et, target).map { padded =>
+        padCharToTargetLength(param, et, target, alwaysPad).map { padded =>
           val func = LambdaFunction(padded, Seq(param))
           ArrayTransform(expr, func)
         }

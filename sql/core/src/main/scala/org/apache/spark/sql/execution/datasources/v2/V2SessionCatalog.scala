@@ -121,7 +121,9 @@ class V2SessionCatalog(catalog: SessionCatalog)
     val storage = DataSource.buildStorageFormatFromOptions(toOptions(tableProperties.toMap))
         .copy(locationUri = location.map(CatalogUtils.stringToURI))
     val isExternal = properties.containsKey(TableCatalog.PROP_EXTERNAL)
-    val tableType = if (isExternal || location.isDefined) {
+    val isManagedLocation = Option(properties.get(TableCatalog.PROP_IS_MANAGED_LOCATION))
+      .exists(_.equalsIgnoreCase("true"))
+    val tableType = if (isExternal || (location.isDefined && !isManagedLocation)) {
       CatalogTableType.EXTERNAL
     } else {
       CatalogTableType.MANAGED
@@ -146,7 +148,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
         throw QueryCompilationErrors.tableAlreadyExistsError(ident)
     }
 
-    loadTable(ident)
+    null // Return null to save the `loadTable` call for CREATE TABLE without AS SELECT.
   }
 
   private def toOptions(properties: Map[String, String]): Map[String, String] = {
@@ -187,7 +189,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
         throw QueryCompilationErrors.noSuchTableError(ident)
     }
 
-    loadTable(ident)
+    null // Return null to save the `loadTable` call for ALTER TABLE.
   }
 
   override def purgeTable(ident: Identifier): Boolean = {
@@ -231,8 +233,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
       throw QueryCompilationErrors.tableAlreadyExistsError(newIdent)
     }
 
-    // Load table to make sure the table exists
-    loadTable(oldIdent)
     catalog.renameTable(oldIdent.asTableIdentifier, newIdent.asTableIdentifier)
   }
 

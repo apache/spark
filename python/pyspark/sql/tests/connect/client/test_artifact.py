@@ -146,6 +146,7 @@ class ArtifactTestsMixin:
         )
 
 
+@unittest.skipIf("SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Requires JVM access")
 class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
     @classmethod
     def root(cls):
@@ -389,6 +390,7 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
         self.assertEqual(self.artifact_manager.is_cached_artifact(expected_hash), True)
 
 
+@unittest.skipIf("SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Requires local-cluster")
 class LocalClusterArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
     @classmethod
     def conf(cls):
@@ -403,7 +405,7 @@ class LocalClusterArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
 
     @classmethod
     def master(cls):
-        return "local-cluster[2,2,512]"
+        return os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local-cluster[2,2,512]")
 
 
 if __name__ == "__main__":

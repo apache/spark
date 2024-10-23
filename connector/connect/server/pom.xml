@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.5.0</version>
+    <version>3.5.4-SNAPSHOT</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
 
@@ -168,6 +168,7 @@
       <groupId>com.google.guava</groupId>
       <artifactId>failureaccess</artifactId>
       <version>${guava.failureaccess.version}</version>
+      <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>com.google.protobuf</groupId>

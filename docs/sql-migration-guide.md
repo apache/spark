@@ -22,6 +22,14 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 3.5.1 to 3.5.2
+
+- Since 3.5.2, MySQL JDBC datasource will read TINYINT UNSIGNED as ShortType, while in 3.5.1, it was wrongly read as ByteType.
+
+## Upgrading from Spark SQL 3.5.0 to 3.5.1
+
+- Since Spark 3.5.1, MySQL JDBC datasource will read TINYINT(n > 1) and TINYINT UNSIGNED as ByteType, while in Spark 3.5.0 and below, they were read as IntegerType. To restore the previous behavior, you can cast the column to the old type.
+
 ## Upgrading from Spark SQL 3.4 to 3.5
 
 - Since Spark 3.5, the JDBC options related to DS V2 pushdown are `true` by default. These options include: `pushDownAggregate`, `pushDownLimit`, `pushDownOffset` and `pushDownTableSample`. To restore the legacy behavior, please set them to `false`. e.g. set `spark.sql.catalog.your_catalog_name.pushDownAggregate` to `false`.
@@ -30,6 +38,7 @@ license: |
 - Since Spark 3.5, the `plan` field is moved from `AnalysisException` to `EnhancedAnalysisException`.
 - Since Spark 3.5, `spark.sql.optimizer.canChangeCachedPlanOutputPartitioning` is enabled by default. To restore the previous behavior, set `spark.sql.optimizer.canChangeCachedPlanOutputPartitioning` to `false`.
 - Since Spark 3.5, the `array_insert` function is 1-based for negative indexes. It inserts new element at the end of input arrays for the index -1. To restore the previous behavior, set `spark.sql.legacy.negativeIndexInArrayInsert` to `true`.
+- Since Spark 3.5, the Avro will throw `AnalysisException` when reading Interval types as Date or Timestamp types, or reading Decimal types with lower precision. To restore the legacy behavior, set `spark.sql.legacy.avro.allowIncompatibleSchema` to `true`
 
 ## Upgrading from Spark SQL 3.3 to 3.4
 
@@ -48,6 +57,8 @@ license: |
   - Since Spark 3.4, vectorized readers are enabled by default for the nested data types (array, map and struct). To restore the legacy behavior, set `spark.sql.orc.enableNestedColumnVectorizedReader` and `spark.sql.parquet.enableNestedColumnVectorizedReader` to `false`.
   - Since Spark 3.4, `BinaryType` is not supported in CSV datasource. In Spark 3.3 or earlier, users can write binary columns in CSV datasource, but the output content in CSV files is `Object.toString()` which is meaningless; meanwhile, if users read CSV tables with binary columns, Spark will throw an `Unsupported type: binary` exception.
   - Since Spark 3.4, bloom filter joins are enabled by default. To restore the legacy behavior, set `spark.sql.optimizer.runtime.bloomFilter.enabled` to `false`.
+  - Since Spark 3.4, when schema inference on external Parquet files, INT64 timestamps with annotation `isAdjustedToUTC=false` will be inferred as TimestampNTZ type instead of Timestamp type. To restore the legacy behavior, set `spark.sql.parquet.inferTimestampNTZ.enabled` to `false`.
+  - Since Spark 3.4, the behavior for `CREATE TABLE AS SELECT ...` is changed from OVERWRITE to APPEND when `spark.sql.legacy.allowNonEmptyLocationInCTAS` is set to `true`. Users are recommended to avoid CTAS with a non-empty table location.
 
 ## Upgrading from Spark SQL 3.2 to 3.3
 
@@ -96,6 +107,8 @@ license: |
   - Since Spark 3.3, the precision of the return type of round-like functions has been fixed. This may cause Spark throw `AnalysisException` of the `CANNOT_UP_CAST_DATATYPE` error class when using views created by prior versions. In such cases, you need to recreate the views using ALTER VIEW AS or CREATE OR REPLACE VIEW AS with newer Spark versions.
 
   - Since Spark 3.3, the `unbase64` function throws error for a malformed `str` input. Use `try_to_binary(<str>, 'base64')` to tolerate malformed input and return NULL instead. In Spark 3.2 and earlier, the `unbase64` function returns a best-efforts result for a malformed `str` input.
+
+  - Since Spark 3.3, when reading Parquet files that were not produced by Spark, Parquet timestamp columns with annotation `isAdjustedToUTC = false` are inferred as TIMESTAMP_NTZ type during schema inference. In Spark 3.2 and earlier, these columns are inferred as TIMESTAMP type. To restore the behavior before Spark 3.3, you can set `spark.sql.parquet.inferTimestampNTZ.enabled` to `false`.
 
   - Since Spark 3.3.1 and 3.2.3, for `SELECT ... GROUP BY a GROUPING SETS (b)`-style SQL statements, `grouping__id` returns different values from Apache Spark 3.2.0, 3.2.1, 3.2.2, and 3.3.0. It computes based on user-given group-by expressions plus grouping set columns. To restore the behavior before 3.3.1 and 3.2.3, you can set `spark.sql.legacy.groupingIdWithAppendedUserGroupBy`. For details, see [SPARK-40218](https://issues.apache.org/jira/browse/SPARK-40218) and [SPARK-40562](https://issues.apache.org/jira/browse/SPARK-40562).
 
@@ -249,6 +262,8 @@ license: |
   - In Spark 2.4 and below, `Dataset.groupByKey` results to a grouped dataset with key attribute is wrongly named as "value", if the key is non-struct type, for example, int, string, array, etc. This is counterintuitive and makes the schema of aggregation queries unexpected. For example, the schema of `ds.groupByKey(...).count()` is `(value, count)`. Since Spark 3.0, we name the grouping attribute to "key". The old behavior is preserved under a newly added configuration `spark.sql.legacy.dataset.nameNonStructGroupingKeyAsValue` with a default value of `false`.
 
   - In Spark 3.0, the column metadata will always be propagated in the API `Column.name` and `Column.as`. In Spark version 2.4 and earlier, the metadata of `NamedExpression` is set as the `explicitMetadata` for the new column at the time the API is called, it won't change even if the underlying `NamedExpression` changes metadata. To restore the behavior before Spark 3.0, you can use the API `as(alias: String, metadata: Metadata)` with explicit metadata.
+
+  - When turning a Dataset to another Dataset, Spark will up cast the fields in the original Dataset to the type of corresponding fields in the target DataSet. In version 2.4 and earlier, this up cast is not very strict, e.g. `Seq("str").toDS.as[Int]` fails, but `Seq("str").toDS.as[Boolean]` works and throw NPE during execution. In Spark 3.0, the up cast is stricter and turning String into something else is not allowed, i.e. `Seq("str").toDS.as[Boolean]` will fail during analysis. To restore the behavior before Spark 3.0, set `spark.sql.legacy.doLooseUpcast` to `true`.
 
 ### DDL Statements
 
@@ -463,12 +478,10 @@ license: |
     need to specify a value with units like "30s" now, to avoid being interpreted as milliseconds; otherwise,
     the extremely short interval that results will likely cause applications to fail.
 
-  - When turning a Dataset to another Dataset, Spark will up cast the fields in the original Dataset to the type of corresponding fields in the target DataSet. In version 2.4 and earlier, this up cast is not very strict, e.g. `Seq("str").toDS.as[Int]` fails, but `Seq("str").toDS.as[Boolean]` works and throw NPE during execution. In Spark 3.0, the up cast is stricter and turning String into something else is not allowed, i.e. `Seq("str").toDS.as[Boolean]` will fail during analysis. To restore the behavior before 2.4.1, set `spark.sql.legacy.looseUpcast` to `true`.
-
 ## Upgrading from Spark SQL 2.3 to 2.4
 
   - In Spark version 2.3 and earlier, the second parameter to array_contains function is implicitly promoted to the element type of first array type parameter. This type promotion can be lossy and may cause `array_contains` function to return wrong result. This problem has been addressed in 2.4 by employing a safer type promotion mechanism. This can cause some change in behavior and are illustrated in the table below.
-    <table class="table table-striped">
+    <table>
         <thead>
           <tr>
             <th>
@@ -582,7 +595,7 @@ license: |
   - Since Spark 2.3, the Join/Filter's deterministic predicates that are after the first non-deterministic predicates are also pushed down/through the child operators, if possible. In prior Spark versions, these filters are not eligible for predicate pushdown.
 
   - Partition column inference previously found incorrect common type for different inferred types, for example, previously it ended up with double type as the common type for double type and date type. Now it finds the correct common type for such conflicts. The conflict resolution follows the table below:
-    <table class="table table-striped">
+    <table>
     <thead>
       <tr>
         <th>

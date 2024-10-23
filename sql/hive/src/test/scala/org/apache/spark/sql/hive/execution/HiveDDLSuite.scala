@@ -56,6 +56,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     try {
       // drop all databases, tables and functions after each test
       spark.sessionState.catalog.reset()
+      spark.sessionState.catalogManager.reset()
     } finally {
       super.afterEach()
     }

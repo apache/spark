@@ -7,7 +7,7 @@ body {
   font-style: normal;
   font-weight: 400;
   overflow-wrap: anywhere;
-  overflow-x: hidden;
+  overflow-x: auto;
   padding-top: 80px;
 }
 
@@ -95,31 +95,13 @@ section {
   border-color: transparent;
 }
 
-.hero-banner .bg {
-  background: url(/img/spark-hero-thin-light.jpg) no-repeat;
-  transform: translate(36%, 0%);
-  height: 475px;
-  top: 0;
-  position: absolute;
-  right: 0;
-  width: 100%;
-  opacity: 50%;
-}
-
-.hero-banner h1 {
+.hero-banner .container .row h1 {
   color: #0B9ACE;
   font-style: normal;
   font-weight: normal;
   font-size: 48px;
   line-height: 63px;
   letter-spacing: -0.045em;
-}
-
-.hero-banner h2 {
-  font-style: normal;
-  font-weight: bold;
-  font-size: 32px;
-  line-height: 42px;
 }
 
 .what-is-spark {
@@ -822,18 +804,29 @@ ul {
   margin-bottom: 10px;
 }
 
-.global h2, .global .h2 {
+.global h1, .global .h1 {
   font-size: 30px;
 }
 
-.global h3 {
+#content h1.title {
+  font-size: 40px;
+}
+
+.global h2 {
   font-size: 24px !important;
+}
+
+.global h3 {
+  font-size: 20px !important;
 }
 
 .global h4 {
   font-size: 18px !important;
 }
 
+.global h5 {
+  font-size: 16px !important;
+}
 
 .global h1:first-letter, .global h2:first-letter, .global h3:first-letter, .global h4:first-letter, .global h5:first-letter, .global h6:first-letter, .global .h1:first-letter, .global .h2:first-letter, .global .h3:first-letter, .global .h4:first-letter, .global .h5:first-letter, .global .h6:first-letter {
   text-transform: uppercase;
@@ -1110,5 +1103,18 @@ img {
 table {
   width: 100%;
   overflow-wrap: normal;
+  border-collapse: collapse; /* Ensures that the borders collapse into a single border */
 }
 
+table th, table td {
+  border: 1px solid #cccccc; /* Adds a border to each table header and data cell */
+  padding: 6px 13px; /* Optional: Adds padding inside each cell for better readability */
+}
+
+table tr {
+  background-color: white; /* Sets a default background color for all rows */
+}
+
+table tr:nth-child(2n) {
+  background-color: #F1F4F5; /* Sets a different background color for even rows */
+}

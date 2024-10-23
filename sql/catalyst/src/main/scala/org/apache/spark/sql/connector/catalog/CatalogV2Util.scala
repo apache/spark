@@ -331,9 +331,10 @@ private[sql] object CatalogV2Util {
   def loadTable(
       catalog: CatalogPlugin,
       ident: Identifier,
-      timeTravelSpec: Option[TimeTravelSpec] = None): Option[Table] =
+      timeTravelSpec: Option[TimeTravelSpec] = None,
+      writePrivilegesString: Option[String] = None): Option[Table] =
     try {
-      Option(getTable(catalog, ident, timeTravelSpec))
+      Option(getTable(catalog, ident, timeTravelSpec, writePrivilegesString))
     } catch {
       case _: NoSuchTableException => None
       case _: NoSuchDatabaseException => None
@@ -343,8 +344,10 @@ private[sql] object CatalogV2Util {
   def getTable(
       catalog: CatalogPlugin,
       ident: Identifier,
-      timeTravelSpec: Option[TimeTravelSpec] = None): Table = {
+      timeTravelSpec: Option[TimeTravelSpec] = None,
+      writePrivilegesString: Option[String] = None): Table = {
     if (timeTravelSpec.nonEmpty) {
+      assert(writePrivilegesString.isEmpty, "Should not write to a table with time travel")
       timeTravelSpec.get match {
         case v: AsOfVersion =>
           catalog.asTableCatalog.loadTable(ident, v.version)
@@ -352,7 +355,13 @@ private[sql] object CatalogV2Util {
           catalog.asTableCatalog.loadTable(ident, ts.timestamp)
       }
     } else {
-      catalog.asTableCatalog.loadTable(ident)
+      if (writePrivilegesString.isDefined) {
+        val writePrivileges = writePrivilegesString.get.split(",").map(_.trim)
+          .map(TableWritePrivilege.valueOf).toSet.asJava
+        catalog.asTableCatalog.loadTable(ident, writePrivileges)
+      } else {
+        catalog.asTableCatalog.loadTable(ident)
+      }
     }
   }
 
@@ -512,10 +521,15 @@ private[sql] object CatalogV2Util {
     }
 
     if (isDefaultColumn) {
-      val e = analyze(f, EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+      val e = analyze(
+        f,
+        statementType = "Column analysis",
+        metadataKey = EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+
       assert(e.resolved && e.foldable,
         "The existence default value must be a simple SQL string that is resolved and foldable, " +
           "but got: " + f.getExistenceDefaultValue().get)
+
       val defaultValue = new ColumnDefaultValue(
         f.getCurrentDefaultValue().get, LiteralValue(e.eval(), f.dataType))
       val cleanedMetadata = metadataWithKeysRemoved(

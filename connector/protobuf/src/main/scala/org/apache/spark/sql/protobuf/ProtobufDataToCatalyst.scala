@@ -22,12 +22,12 @@ import scala.util.control.NonFatal
 import com.google.protobuf.DynamicMessage
 import com.google.protobuf.TypeRegistry
 
-import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, SpecificInternalRow, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.protobuf.utils.{ProtobufOptions, ProtobufUtils, SchemaConverters}
-import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, StructType}
+import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType}
 
 private[sql] case class ProtobufDataToCatalyst(
     child: Expression,
@@ -39,16 +39,8 @@ private[sql] case class ProtobufDataToCatalyst(
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
 
-  override lazy val dataType: DataType = {
-    val dt = SchemaConverters.toSqlType(messageDescriptor, protobufOptions).dataType
-    parseMode match {
-      // With PermissiveMode, the output Catalyst row might contain columns of null values for
-      // corrupt records, even if some of the columns are not nullable in the user-provided schema.
-      // Therefore we force the schema to be all nullable here.
-      case PermissiveMode => dt.asNullable
-      case _ => dt
-    }
-  }
+  override lazy val dataType: DataType =
+    SchemaConverters.toSqlType(messageDescriptor, protobufOptions).dataType
 
   override def nullable: Boolean = true
 
@@ -87,22 +79,9 @@ private[sql] case class ProtobufDataToCatalyst(
     mode
   }
 
-  @transient private lazy val nullResultRow: Any = dataType match {
-    case st: StructType =>
-      val resultRow = new SpecificInternalRow(st.map(_.dataType))
-      for (i <- 0 until st.length) {
-        resultRow.setNullAt(i)
-      }
-      resultRow
-
-    case _ =>
-      null
-  }
-
   private def handleException(e: Throwable): Any = {
     parseMode match {
-      case PermissiveMode =>
-        nullResultRow
+      case PermissiveMode => null
       case FailFastMode =>
         throw QueryExecutionErrors.malformedProtobufMessageDetectedInMessageParsingError(e)
       case _ =>

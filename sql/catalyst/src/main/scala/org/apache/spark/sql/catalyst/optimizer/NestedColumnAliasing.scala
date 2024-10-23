@@ -217,6 +217,11 @@ object NestedColumnAliasing {
     case _ => false
   }
 
+  private def canAlias(ev: Expression): Boolean = {
+    // we can not alias the attr from lambda variable whose expr id is not available
+    !ev.exists(_.isInstanceOf[NamedLambdaVariable]) && ev.references.size == 1
+  }
+
   /**
    * Returns two types of expressions:
    * - Root references that are individually accessed
@@ -225,11 +230,11 @@ object NestedColumnAliasing {
    */
   private def collectRootReferenceAndExtractValue(e: Expression): Seq[Expression] = e match {
     case _: AttributeReference => Seq(e)
-    case GetStructField(_: ExtractValue | _: AttributeReference, _, _) => Seq(e)
+    case GetStructField(_: ExtractValue | _: AttributeReference, _, _) if canAlias(e) => Seq(e)
     case GetArrayStructFields(_: MapValues |
                               _: MapKeys |
                               _: ExtractValue |
-                              _: AttributeReference, _, _, _, _) => Seq(e)
+                              _: AttributeReference, _, _, _, _) if canAlias(e) => Seq(e)
     case es if es.children.nonEmpty => es.children.flatMap(collectRootReferenceAndExtractValue)
     case _ => Seq.empty
   }
@@ -248,13 +253,8 @@ object NestedColumnAliasing {
     val otherRootReferences = new mutable.ArrayBuffer[AttributeReference]()
     exprList.foreach { e =>
       extractor(e).foreach {
-        // we can not alias the attr from lambda variable whose expr id is not available
-        case ev: ExtractValue if !ev.exists(_.isInstanceOf[NamedLambdaVariable]) =>
-          if (ev.references.size == 1) {
-            nestedFieldReferences.append(ev)
-          }
+        case ev: ExtractValue => nestedFieldReferences.append(ev)
         case ar: AttributeReference => otherRootReferences.append(ar)
-        case _ => // ignore
       }
     }
     val exclusiveAttrSet = AttributeSet(exclusiveAttrs ++ otherRootReferences)

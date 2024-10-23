@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.internal.SQLConf
@@ -47,6 +48,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
     try {
       // drop all databases, tables and functions after each test
       spark.sessionState.catalog.reset()
+      spark.sessionState.catalogManager.reset()
     } finally {
       Utils.deleteRecursively(new File(spark.sessionState.conf.warehousePath))
       super.afterEach()
@@ -218,7 +220,8 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
   test("SPARK-25403 refresh the table after inserting data") {
     withTable("t") {
       val catalog = spark.sessionState.catalog
-      val table = QualifiedTableName(catalog.getCurrentDatabase, "t")
+      val table = QualifiedTableName(
+        CatalogManager.SESSION_CATALOG_NAME, catalog.getCurrentDatabase, "t")
       sql("CREATE TABLE t (a INT) USING parquet")
       sql("INSERT INTO TABLE t VALUES (1)")
       assert(catalog.getCachedTable(table) === null, "Table relation should be invalidated.")
@@ -231,7 +234,8 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
     withTable("t") {
       withTempDir { dir =>
         val catalog = spark.sessionState.catalog
-        val table = QualifiedTableName(catalog.getCurrentDatabase, "t")
+        val table = QualifiedTableName(
+          CatalogManager.SESSION_CATALOG_NAME, catalog.getCurrentDatabase, "t")
         val p1 = s"${dir.getCanonicalPath}/p1"
         val p2 = s"${dir.getCanonicalPath}/p2"
         sql(s"CREATE TABLE t (a INT) USING parquet LOCATION '$p1'")
@@ -1120,7 +1124,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('andrew' = 'or14', 'kor' = 'bel')")
     assert(getProps == Map("andrew" -> "or14", "kor" -> "bel"))
     // set table properties without explicitly specifying database
-    catalog.setCurrentDatabase("dbx")
+    spark.sessionState.catalogManager.setCurrentNamespace(Array("dbx"))
     sql("ALTER TABLE tab1 SET TBLPROPERTIES ('kor' = 'belle', 'kar' = 'bol')")
     assert(getProps == Map("andrew" -> "or14", "kor" -> "belle", "kar" -> "bol"))
     // table to alter does not exist
@@ -1154,7 +1158,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     sql("ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('j')")
     assert(getProps == Map("p" -> "an", "c" -> "lan", "x" -> "y"))
     // unset table properties without explicitly specifying database
-    catalog.setCurrentDatabase("dbx")
+    spark.sessionState.catalogManager.setCurrentNamespace(Array("dbx"))
     sql("ALTER TABLE tab1 UNSET TBLPROPERTIES ('p')")
     assert(getProps == Map("c" -> "lan", "x" -> "y"))
     // table to alter does not exist

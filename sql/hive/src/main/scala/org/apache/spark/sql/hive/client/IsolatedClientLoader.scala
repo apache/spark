@@ -139,6 +139,10 @@ private[hive] object IsolatedClientLoader extends Logging {
         SparkSubmitUtils.buildIvySettings(
           Some(remoteRepos),
           ivyPath),
+        Some(SparkSubmitUtils.buildIvySettings(
+          Some(remoteRepos),
+          ivyPath,
+          useLocalM2AsCache = false)),
         transitive = true,
         exclusions = version.exclusions)
     }

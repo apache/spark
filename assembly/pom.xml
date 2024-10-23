@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.5.0</version>
+    <version>3.5.4-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -159,6 +159,12 @@
           <groupId>org.apache.spark</groupId>
           <artifactId>spark-connect_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
+          <exclusions>
+            <exclusion>
+              <groupId>org.apache.spark</groupId>
+              <artifactId>spark-connect-common_${scala.binary.version}</artifactId>
+            </exclusion>
+          </exclusions>
         </dependency>
         <dependency>
           <groupId>org.apache.spark</groupId>

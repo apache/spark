@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 from pyspark.sql.tests.streaming.test_streaming import StreamingTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 

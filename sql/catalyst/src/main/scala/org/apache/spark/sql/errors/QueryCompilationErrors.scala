@@ -248,11 +248,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("expression" -> toSQLExpr(trimmedNestedGenerator)))
   }
 
-  def moreThanOneGeneratorError(generators: Seq[Expression], clause: String): Throwable = {
+  def moreThanOneGeneratorError(generators: Seq[Expression]): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
       messageParameters = Map(
-        "clause" -> clause,
         "num" -> generators.size.toString,
         "generators" -> generators.map(toSQLExpr).mkString(", ")))
   }
@@ -3407,6 +3406,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "defaultValue" -> defaultValue))
   }
 
+  def defaultValueNotConstantError(
+      statement: String,
+      colName: String,
+      defaultValue: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
+      messageParameters = Map(
+        "statement" -> toSQLStmt(statement),
+        "colName" -> toSQLId(colName),
+        "defaultValue" -> defaultValue
+      ))
+  }
+
   def nullableColumnOrFieldError(name: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "NULLABLE_COLUMN_OR_FIELD",
@@ -3669,6 +3681,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def cannotRenameTableAcrossSchemaError(): Throwable = {
     new SparkUnsupportedOperationException(
       errorClass = "CANNOT_RENAME_ACROSS_SCHEMA", messageParameters = Map("type" -> "table")
+    )
+  }
+
+  def avroIncompatibleReadError(
+      avroPath: String,
+      sqlPath: String,
+      avroType: String,
+      sqlType: String): Throwable = {
+    new AnalysisException(
+      errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
+      messageParameters = Map(
+        "avroPath" -> avroPath,
+        "sqlPath" -> sqlPath,
+        "avroType" -> avroType,
+        "sqlType" -> toSQLType(sqlType)
+      )
     )
   }
 

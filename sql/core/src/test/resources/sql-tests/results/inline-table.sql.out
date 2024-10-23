@@ -266,3 +266,19 @@ select * from values (10 + try_divide(5, 0))
 struct<col1:double>
 -- !query output
 NULL
+
+
+-- !query
+select count(distinct ct) from values now(), now(), now() as data(ct)
+-- !query schema
+struct<count(DISTINCT ct):bigint>
+-- !query output
+1
+
+
+-- !query
+select count(distinct ct) from values current_timestamp(), current_timestamp() as data(ct)
+-- !query schema
+struct<count(DISTINCT ct):bigint>
+-- !query output
+1
