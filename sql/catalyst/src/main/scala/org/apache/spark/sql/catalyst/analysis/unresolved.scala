@@ -500,27 +500,37 @@ abstract class UnresolvedStarBase(target: Option[Seq[String]]) extends Star with
   override def expand(
       input: LogicalPlan,
       resolver: Resolver): Seq[NamedExpression] = {
-    expandStar(input.output, input.metadataOutput, input.resolve, input.outputSet, resolver)
+    expandStar(input.output, input.metadataOutput, input.resolve, input.inputSet.toSeq, resolver)
   }
 
+  /**
+   * Method used to expand a star. It uses output and metadata output attributes of the child
+   * for the expansion and it supports both recursive and non-recursive data types.
+   *
+   * @param childOperatorOutput the output attributes of the child operator
+   * @param childOperatorMetadataOutput the metadata output attributes of the child operator
+   * @param resolve a function to resolve the given name parts to an attribute
+   * @param suggestedAttributes a list of attributes that are suggested for expansion
+   * @param resolver the resolver used to match the name parts
+   */
   def expandStar(
-      output: Seq[Attribute],
-      metadataOutput: Seq[Attribute],
+      childOperatorOutput: Seq[Attribute],
+      childOperatorMetadataOutput: Seq[Attribute],
       resolve: (Seq[String], Resolver) => Option[NamedExpression],
-      inputSet: AttributeSet,
+      suggestedAttributes: Seq[Attribute],
       resolver: Resolver): Seq[NamedExpression] = {
     // If there is no table specified, use all non-hidden input attributes.
-    if (target.isEmpty) return output
+    if (target.isEmpty) return childOperatorOutput
 
     // If there is a table specified, use hidden input attributes as well
-    val hiddenOutput = metadataOutput.filter(_.qualifiedAccessOnly)
+    val hiddenOutput = childOperatorMetadataOutput.filter(_.qualifiedAccessOnly)
       // Remove the qualified-access-only restriction immediately. The expanded attributes will be
       // put in a logical plan node and becomes normal attributes. They can still keep the special
       // attribute metadata to indicate that they are from metadata columns, but they should not
       // keep any restrictions that may break column resolution for normal attributes.
       // See SPARK-42084 for more details.
       .map(_.markAsAllowAnyAccess())
-    val expandedAttributes = (hiddenOutput ++ output).filter(
+    val expandedAttributes = (hiddenOutput ++ childOperatorOutput).filter(
       matchedQualifier(_, target.get, resolver))
 
     if (expandedAttributes.nonEmpty) return expandedAttributes
@@ -541,7 +551,7 @@ abstract class UnresolvedStarBase(target: Option[Seq[String]]) extends Star with
           throw QueryCompilationErrors.starExpandDataTypeNotSupportedError(target.get)
       }
     } else {
-      val from = inputSet.map(_.name).map(toSQLId).mkString(", ")
+      val from = suggestedAttributes.map(_.name).map(toSQLId).mkString(", ")
       val targetString = target.get.mkString(".")
       throw QueryCompilationErrors.cannotResolveStarExpandGivenInputColumnsError(
         targetString, from)
