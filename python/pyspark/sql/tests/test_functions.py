@@ -1253,7 +1253,7 @@ class FunctionsTestsMixin:
         import numpy as np
 
         arr_dtype_to_spark_dtypes = [
-            ("int8", [("b", "array<smallint>")]),
+            ("int8", [("b", "array<tinyint>")]),
             ("int16", [("b", "array<smallint>")]),
             ("int32", [("b", "array<int>")]),
             ("int64", [("b", "array<bigint>")]),
@@ -1310,7 +1310,7 @@ class FunctionsTestsMixin:
         import numpy as np
 
         arr_dtype_to_spark_dtypes = [
-            ("int8", [("b", "array<smallint>")]),
+            ("int8", [("b", "array<tinyint>")]),
             ("int16", [("b", "array<smallint>")]),
             ("int32", [("b", "array<int>")]),
             ("int64", [("b", "array<bigint>")]),
