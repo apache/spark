@@ -663,9 +663,10 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
       if (st.supportsBinaryEquality) {
         hset
       } else if (st.supportsLowercaseEquality) {
-        new InSet.LowercaseSet(hset)
+        new InSet.LowercaseSet(hset.asInstanceOf[Set[UTF8String]]).asInstanceOf[Set[Any]]
       } else {
-        new InSet.CollationAwareSet(hset, st.collationId)
+        new InSet.CollationAwareSet(
+          hset.asInstanceOf[Set[UTF8String]], st.collationId).asInstanceOf[Set[Any]]
       }
     case t: AtomicType if !t.isInstanceOf[BinaryType] => hset
     case _: NullType => hset
@@ -780,29 +781,33 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 }
 
 object InSet {
-  class LowercaseSet(inputSet: Set[Any]) extends immutable.Set[Any] with Serializable {
+  class LowercaseSet(inputSet: Set[UTF8String])
+    extends immutable.Set[UTF8String] with Serializable {
     private val strSet = inputSet.map { s =>
       if (s == null) null
-      else CollationAwareUTF8String.lowerCaseCodePoints(s.asInstanceOf[UTF8String])
+      else CollationAwareUTF8String.lowerCaseCodePoints(s)
     }
-    override def incl(elem: Any): Set[Any] = throw SparkUnsupportedOperationException()
-    override def excl(elem: Any): Set[Any] = throw SparkUnsupportedOperationException()
-    override def iterator: Iterator[Any] = throw SparkUnsupportedOperationException()
-    override def contains(elem: Any): Boolean = {
+    override def incl(elem: UTF8String): LowercaseSet =
+      throw SparkUnsupportedOperationException()
+    override def excl(elem: UTF8String): LowercaseSet = throw SparkUnsupportedOperationException()
+    override def iterator: Iterator[UTF8String] = throw SparkUnsupportedOperationException()
+    override def contains(elem: UTF8String): Boolean = {
       assert(elem != null, "InSet guarantees non-null input")
-      strSet.contains(CollationAwareUTF8String.lowerCaseCodePoints(elem.asInstanceOf[UTF8String]))
+      strSet.contains(CollationAwareUTF8String.lowerCaseCodePoints(elem))
     }
   }
-  class CollationAwareSet(inputSet: Set[Any], collationId: Int)
-    extends immutable.Set[Any] with Serializable {
-    override def incl(elem: Any): Set[Any] = throw SparkUnsupportedOperationException()
-    override def excl(elem: Any): Set[Any] = throw SparkUnsupportedOperationException()
-    override def iterator: Iterator[Any] = throw SparkUnsupportedOperationException()
-    override def contains(elem: Any): Boolean = {
+  class CollationAwareSet(inputSet: Set[UTF8String], collationId: Int)
+    extends immutable.Set[UTF8String] with Serializable {
+    override def incl(elem: UTF8String): CollationAwareSet =
+      throw SparkUnsupportedOperationException()
+    override def excl(elem: UTF8String): CollationAwareSet =
+      throw SparkUnsupportedOperationException()
+    override def iterator: Iterator[UTF8String] = throw SparkUnsupportedOperationException()
+    override def contains(elem: UTF8String): Boolean = {
       assert(elem != null, "InSet guarantees non-null input")
       val collation = CollationFactory.fetchCollation(collationId)
       inputSet.exists { p =>
-        collation.equalsFunction(p.asInstanceOf[UTF8String], elem.asInstanceOf[UTF8String])
+        collation.equalsFunction(p, elem)
       }
     }
   }
