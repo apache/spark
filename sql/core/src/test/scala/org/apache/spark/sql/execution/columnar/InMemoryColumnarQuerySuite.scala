@@ -571,7 +571,7 @@ class InMemoryColumnarQuerySuite extends QueryTest
     val qe = spark.range(1).queryExecution
     val plan = qe.executedPlan
     val serializer = new TestCachedBatchSerializer(true, 1)
-    val cachedRDDBuilder = CachedRDDBuilder(serializer, MEMORY_ONLY, plan, None, qe.normalized)
+    val cachedRDDBuilder = CachedRDDBuilder(serializer, MEMORY_ONLY, plan, None, qe.logical)
 
     @volatile var isCachedColumnBuffersLoaded = false
     @volatile var stopped = false
