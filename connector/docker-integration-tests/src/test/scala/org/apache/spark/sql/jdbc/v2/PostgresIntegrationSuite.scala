@@ -123,4 +123,12 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       )
     }
   }
+
+  test("SPARK-49695: Postgres fix xor push-down") {
+    val df = spark.sql("select id, name from employee where id ^ 6 = 0")
+    val rows = df.collect()
+    assert(rows.length == 1)
+    assert(rows(0).getInt(1) === 6)
+    assert(rows(0).getString(2) === "jen")
+  }
 }
