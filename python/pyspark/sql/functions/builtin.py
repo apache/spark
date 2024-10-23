@@ -225,7 +225,10 @@ def lit(col: Any) -> Column:
         if _has_numpy and isinstance(col, np.generic):
             dt = _from_numpy_type(col.dtype)
             if dt is not None:
-                return _invoke_function("lit", _enum_to_value(col)).astype(dt).alias(str(col))
+                if isinstance(col, np.number):
+                    return _invoke_function("lit", col).astype(dt).alias(str(col))
+                else:
+                    return _invoke_function("lit", col)
         return _invoke_function("lit", _enum_to_value(col))
 
 
@@ -7980,8 +7983,8 @@ def current_date() -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(current_date()).show() # doctest: +SKIP
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.current_date()).show() # doctest: +SKIP
     +--------------+
     |current_date()|
     +--------------+
@@ -8005,8 +8008,9 @@ def current_timezone() -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
-    >>> spark.range(1).select(current_timezone()).show()
+    >>> spark.range(1).select(sf.current_timezone()).show()
     +-------------------+
     | current_timezone()|
     +-------------------+
@@ -8035,8 +8039,8 @@ def current_timestamp() -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(current_timestamp()).show(truncate=False) # doctest: +SKIP
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.current_timestamp()).show(truncate=False) # doctest: +SKIP
     +-----------------------+
     |current_timestamp()    |
     +-----------------------+
@@ -8061,8 +8065,7 @@ def now() -> Column:
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.range(1)
-    >>> df.select(sf.now()).show(truncate=False) # doctest: +SKIP
+    >>> spark.range(1).select(sf.now()).show(truncate=False) # doctest: +SKIP
     +--------------------------+
     |now()                     |
     +--------------------------+
@@ -8091,8 +8094,8 @@ def localtimestamp() -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(localtimestamp()).show(truncate=False) # doctest: +SKIP
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.localtimestamp()).show(truncate=False) # doctest: +SKIP
     +-----------------------+
     |localtimestamp()       |
     +-----------------------+
@@ -8157,7 +8160,7 @@ def year(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target date/timestamp column to work on.
 
     Returns
@@ -8167,9 +8170,59 @@ def year(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
-    >>> df.select(year('dt').alias('year')).collect()
-    [Row(year=2015)]
+    Example 1: Extract the year from a string column representing dates
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('2015-04-08',), ('2024-10-31',)], ['dt'])
+    >>> df.select("*", sf.typeof('dt'), sf.year('dt')).show()
+    +----------+----------+--------+
+    |        dt|typeof(dt)|year(dt)|
+    +----------+----------+--------+
+    |2015-04-08|    string|    2015|
+    |2024-10-31|    string|    2024|
+    +----------+----------+--------+
+
+    Example 2: Extract the year from a string column representing timestamp
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',), ('2024-10-31 10:09:16',)], ['ts'])
+    >>> df.select("*", sf.typeof('ts'), sf.year('ts')).show()
+    +-------------------+----------+--------+
+    |                 ts|typeof(ts)|year(ts)|
+    +-------------------+----------+--------+
+    |2015-04-08 13:08:15|    string|    2015|
+    |2024-10-31 10:09:16|    string|    2024|
+    +-------------------+----------+--------+
+
+    Example 3: Extract the year from a date column
+
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     (datetime.date(2015, 4, 8),),
+    ...     (datetime.date(2024, 10, 31),)], ['dt'])
+    >>> df.select("*", sf.typeof('dt'), sf.year('dt')).show()
+    +----------+----------+--------+
+    |        dt|typeof(dt)|year(dt)|
+    +----------+----------+--------+
+    |2015-04-08|      date|    2015|
+    |2024-10-31|      date|    2024|
+    +----------+----------+--------+
+
+    Example 4: Extract the year from a timestamp column
+
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     (datetime.datetime(2015, 4, 8, 13, 8, 15),),
+    ...     (datetime.datetime(2024, 10, 31, 10, 9, 16),)], ['ts'])
+    >>> df.select("*", sf.typeof('ts'), sf.year('ts')).show()
+    +-------------------+----------+--------+
+    |                 ts|typeof(ts)|year(ts)|
+    +-------------------+----------+--------+
+    |2015-04-08 13:08:15| timestamp|    2015|
+    |2024-10-31 10:09:16| timestamp|    2024|
+    +-------------------+----------+--------+
     """
     return _invoke_function_over_columns("year", col)
 
@@ -8186,7 +8239,7 @@ def quarter(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target date/timestamp column to work on.
 
     Returns
@@ -8196,9 +8249,59 @@ def quarter(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
-    >>> df.select(quarter('dt').alias('quarter')).collect()
-    [Row(quarter=2)]
+    Example 1: Extract the quarter from a string column representing dates
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('2015-04-08',), ('2024-10-31',)], ['dt'])
+    >>> df.select("*", sf.typeof('dt'), sf.quarter('dt')).show()
+    +----------+----------+-----------+
+    |        dt|typeof(dt)|quarter(dt)|
+    +----------+----------+-----------+
+    |2015-04-08|    string|          2|
+    |2024-10-31|    string|          4|
+    +----------+----------+-----------+
+
+    Example 2: Extract the quarter from a string column representing timestamp
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',), ('2024-10-31 10:09:16',)], ['ts'])
+    >>> df.select("*", sf.typeof('ts'), sf.quarter('ts')).show()
+    +-------------------+----------+-----------+
+    |                 ts|typeof(ts)|quarter(ts)|
+    +-------------------+----------+-----------+
+    |2015-04-08 13:08:15|    string|          2|
+    |2024-10-31 10:09:16|    string|          4|
+    +-------------------+----------+-----------+
+
+    Example 3: Extract the quarter from a date column
+
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     (datetime.date(2015, 4, 8),),
+    ...     (datetime.date(2024, 10, 31),)], ['dt'])
+    >>> df.select("*", sf.typeof('dt'), sf.quarter('dt')).show()
+    +----------+----------+-----------+
+    |        dt|typeof(dt)|quarter(dt)|
+    +----------+----------+-----------+
+    |2015-04-08|      date|          2|
+    |2024-10-31|      date|          4|
+    +----------+----------+-----------+
+
+    Example 4: Extract the quarter from a timestamp column
+
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     (datetime.datetime(2015, 4, 8, 13, 8, 15),),
+    ...     (datetime.datetime(2024, 10, 31, 10, 9, 16),)], ['ts'])
+    >>> df.select("*", sf.typeof('ts'), sf.quarter('ts')).show()
+    +-------------------+----------+-----------+
+    |                 ts|typeof(ts)|quarter(ts)|
+    +-------------------+----------+-----------+
+    |2015-04-08 13:08:15| timestamp|          2|
+    |2024-10-31 10:09:16| timestamp|          4|
+    +-------------------+----------+-----------+
     """
     return _invoke_function_over_columns("quarter", col)
 
@@ -8215,7 +8318,7 @@ def month(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target date/timestamp column to work on.
 
     Returns
@@ -8225,9 +8328,59 @@ def month(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
-    >>> df.select(month('dt').alias('month')).collect()
-    [Row(month=4)]
+    Example 1: Extract the month from a string column representing dates
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('2015-04-08',), ('2024-10-31',)], ['dt'])
+    >>> df.select("*", sf.typeof('dt'), sf.month('dt')).show()
+    +----------+----------+---------+
+    |        dt|typeof(dt)|month(dt)|
+    +----------+----------+---------+
+    |2015-04-08|    string|        4|
+    |2024-10-31|    string|       10|
+    +----------+----------+---------+
+
+    Example 2: Extract the month from a string column representing timestamp
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',), ('2024-10-31 10:09:16',)], ['ts'])
+    >>> df.select("*", sf.typeof('ts'), sf.month('ts')).show()
+    +-------------------+----------+---------+
+    |                 ts|typeof(ts)|month(ts)|
+    +-------------------+----------+---------+
+    |2015-04-08 13:08:15|    string|        4|
+    |2024-10-31 10:09:16|    string|       10|
+    +-------------------+----------+---------+
+
+    Example 3: Extract the month from a date column
+
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     (datetime.date(2015, 4, 8),),
+    ...     (datetime.date(2024, 10, 31),)], ['dt'])
+    >>> df.select("*", sf.typeof('dt'), sf.month('dt')).show()
+    +----------+----------+---------+
+    |        dt|typeof(dt)|month(dt)|
+    +----------+----------+---------+
+    |2015-04-08|      date|        4|
+    |2024-10-31|      date|       10|
+    +----------+----------+---------+
+
+    Example 3: Extract the month from a timestamp column
+
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     (datetime.datetime(2015, 4, 8, 13, 8, 15),),
+    ...     (datetime.datetime(2024, 10, 31, 10, 9, 16),)], ['ts'])
+    >>> df.select("*", sf.typeof('ts'), sf.month('ts')).show()
+    +-------------------+----------+---------+
+    |                 ts|typeof(ts)|month(ts)|
+    +-------------------+----------+---------+
+    |2015-04-08 13:08:15| timestamp|        4|
+    |2024-10-31 10:09:16| timestamp|       10|
+    +-------------------+----------+---------+
     """
     return _invoke_function_over_columns("month", col)
 
@@ -8300,7 +8453,7 @@ def day(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target date/timestamp column to work on.
 
     Returns
@@ -8310,9 +8463,59 @@ def day(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
-    >>> df.select(day('dt').alias('day')).collect()
-    [Row(day=8)]
+    Example 1: Extract the day of the month from a string column representing dates
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('2015-04-08',), ('2024-10-31',)], ['dt'])
+    >>> df.select("*", sf.typeof('dt'), sf.day('dt')).show()
+    +----------+----------+-------+
+    |        dt|typeof(dt)|day(dt)|
+    +----------+----------+-------+
+    |2015-04-08|    string|      8|
+    |2024-10-31|    string|     31|
+    +----------+----------+-------+
+
+    Example 2: Extract the day of the month from a string column representing timestamp
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',), ('2024-10-31 10:09:16',)], ['ts'])
+    >>> df.select("*", sf.typeof('ts'), sf.day('ts')).show()
+    +-------------------+----------+-------+
+    |                 ts|typeof(ts)|day(ts)|
+    +-------------------+----------+-------+
+    |2015-04-08 13:08:15|    string|      8|
+    |2024-10-31 10:09:16|    string|     31|
+    +-------------------+----------+-------+
+
+    Example 3: Extract the day of the month from a date column
+
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     (datetime.date(2015, 4, 8),),
+    ...     (datetime.date(2024, 10, 31),)], ['dt'])
+    >>> df.select("*", sf.typeof('dt'), sf.day('dt')).show()
+    +----------+----------+-------+
+    |        dt|typeof(dt)|day(dt)|
+    +----------+----------+-------+
+    |2015-04-08|      date|      8|
+    |2024-10-31|      date|     31|
+    +----------+----------+-------+
+
+    Example 4: Extract the day of the month from a timestamp column
+
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     (datetime.datetime(2015, 4, 8, 13, 8, 15),),
+    ...     (datetime.datetime(2024, 10, 31, 10, 9, 16),)], ['ts'])
+    >>> df.select("*", sf.typeof('ts'), sf.day('ts')).show()
+    +-------------------+----------+-------+
+    |                 ts|typeof(ts)|day(ts)|
+    +-------------------+----------+-------+
+    |2015-04-08 13:08:15| timestamp|      8|
+    |2024-10-31 10:09:16| timestamp|     31|
+    +-------------------+----------+-------+
     """
     return _invoke_function_over_columns("day", col)
 
@@ -8358,7 +8561,7 @@ def hour(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target date/timestamp column to work on.
 
     Returns
@@ -8368,10 +8571,32 @@ def hour(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Extract the hours from a string column representing timestamp
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',), ('2024-10-31 10:09:16',)], ['ts'])
+    >>> df.select("*", sf.typeof('ts'), sf.hour('ts')).show()
+    +-------------------+----------+--------+
+    |                 ts|typeof(ts)|hour(ts)|
+    +-------------------+----------+--------+
+    |2015-04-08 13:08:15|    string|      13|
+    |2024-10-31 10:09:16|    string|      10|
+    +-------------------+----------+--------+
+
+    Example 2: Extract the hours from a timestamp column
+
     >>> import datetime
-    >>> df = spark.createDataFrame([(datetime.datetime(2015, 4, 8, 13, 8, 15),)], ['ts'])
-    >>> df.select(hour('ts').alias('hour')).collect()
-    [Row(hour=13)]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     (datetime.datetime(2015, 4, 8, 13, 8, 15),),
+    ...     (datetime.datetime(2024, 10, 31, 10, 9, 16),)], ['ts'])
+    >>> df.select("*", sf.typeof('ts'), sf.hour('ts')).show()
+    +-------------------+----------+--------+
+    |                 ts|typeof(ts)|hour(ts)|
+    +-------------------+----------+--------+
+    |2015-04-08 13:08:15| timestamp|      13|
+    |2024-10-31 10:09:16| timestamp|      10|
+    +-------------------+----------+--------+
     """
     return _invoke_function_over_columns("hour", col)
 
@@ -8388,7 +8613,7 @@ def minute(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target date/timestamp column to work on.
 
     Returns
@@ -8398,10 +8623,32 @@ def minute(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Extract the minutes from a string column representing timestamp
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',), ('2024-10-31 10:09:16',)], ['ts'])
+    >>> df.select("*", sf.typeof('ts'), sf.minute('ts')).show()
+    +-------------------+----------+----------+
+    |                 ts|typeof(ts)|minute(ts)|
+    +-------------------+----------+----------+
+    |2015-04-08 13:08:15|    string|         8|
+    |2024-10-31 10:09:16|    string|         9|
+    +-------------------+----------+----------+
+
+    Example 2: Extract the minutes from a timestamp column
+
     >>> import datetime
-    >>> df = spark.createDataFrame([(datetime.datetime(2015, 4, 8, 13, 8, 15),)], ['ts'])
-    >>> df.select(minute('ts').alias('minute')).collect()
-    [Row(minute=8)]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     (datetime.datetime(2015, 4, 8, 13, 8, 15),),
+    ...     (datetime.datetime(2024, 10, 31, 10, 9, 16),)], ['ts'])
+    >>> df.select("*", sf.typeof('ts'), sf.minute('ts')).show()
+    +-------------------+----------+----------+
+    |                 ts|typeof(ts)|minute(ts)|
+    +-------------------+----------+----------+
+    |2015-04-08 13:08:15| timestamp|         8|
+    |2024-10-31 10:09:16| timestamp|         9|
+    +-------------------+----------+----------+
     """
     return _invoke_function_over_columns("minute", col)
 
@@ -8418,7 +8665,7 @@ def second(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target date/timestamp column to work on.
 
     Returns
@@ -8428,10 +8675,32 @@ def second(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Extract the seconds from a string column representing timestamp
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',), ('2024-10-31 10:09:16',)], ['ts'])
+    >>> df.select("*", sf.typeof('ts'), sf.second('ts')).show()
+    +-------------------+----------+----------+
+    |                 ts|typeof(ts)|second(ts)|
+    +-------------------+----------+----------+
+    |2015-04-08 13:08:15|    string|        15|
+    |2024-10-31 10:09:16|    string|        16|
+    +-------------------+----------+----------+
+
+    Example 2: Extract the seconds from a timestamp column
+
     >>> import datetime
-    >>> df = spark.createDataFrame([(datetime.datetime(2015, 4, 8, 13, 8, 15),)], ['ts'])
-    >>> df.select(second('ts').alias('second')).collect()
-    [Row(second=15)]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     (datetime.datetime(2015, 4, 8, 13, 8, 15),),
+    ...     (datetime.datetime(2024, 10, 31, 10, 9, 16),)], ['ts'])
+    >>> df.select("*", sf.typeof('ts'), sf.second('ts')).show()
+    +-------------------+----------+----------+
+    |                 ts|typeof(ts)|second(ts)|
+    +-------------------+----------+----------+
+    |2015-04-08 13:08:15| timestamp|        15|
+    |2024-10-31 10:09:16| timestamp|        16|
+    +-------------------+----------+----------+
     """
     return _invoke_function_over_columns("second", col)
 
@@ -8561,7 +8830,7 @@ def dayname(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def extract(field: Column, source: "ColumnOrName") -> Column:
     """
     Extracts a part of the date/timestamp or interval source.
 
@@ -8569,7 +8838,7 @@ def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    field : :class:`~pyspark.sql.Column` or str
+    field : :class:`~pyspark.sql.Column`
         selects which part of the source should be extracted.
     source : :class:`~pyspark.sql.Column` or str
         a date/timestamp or interval column from where `field` should be extracted.
@@ -8597,7 +8866,7 @@ def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def date_part(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def date_part(field: Column, source: "ColumnOrName") -> Column:
     """
     Extracts a part of the date/timestamp or interval source.
 
@@ -8605,7 +8874,7 @@ def date_part(field: "ColumnOrName", source: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    field : :class:`~pyspark.sql.Column` or str
+    field : :class:`~pyspark.sql.Column`
         selects which part of the source should be extracted, and supported string values
         are as same as the fields of the equivalent function `extract`.
     source : :class:`~pyspark.sql.Column` or str
@@ -8634,7 +8903,7 @@ def date_part(field: "ColumnOrName", source: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def datepart(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def datepart(field: Column, source: "ColumnOrName") -> Column:
     """
     Extracts a part of the date/timestamp or interval source.
 
@@ -8642,7 +8911,7 @@ def datepart(field: "ColumnOrName", source: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    field : :class:`~pyspark.sql.Column` or str
+    field : :class:`~pyspark.sql.Column`
         selects which part of the source should be extracted, and supported string values
         are as same as the fields of the equivalent function `extract`.
     source : :class:`~pyspark.sql.Column` or str
@@ -13088,6 +13357,122 @@ def substr(
         return _invoke_function_over_columns("substr", str, pos, len)
     else:
         return _invoke_function_over_columns("substr", str, pos)
+
+
+@_try_remote_functions
+def try_parse_url(
+    url: "ColumnOrName", partToExtract: "ColumnOrName", key: Optional["ColumnOrName"] = None
+) -> Column:
+    """
+    This is a special version of `parse_url` that performs the same operation, but returns a
+    NULL value instead of raising an error if the parsing cannot be performed.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    url : :class:`~pyspark.sql.Column` or str
+        A column of strings, each representing a URL.
+    partToExtract : :class:`~pyspark.sql.Column` or str
+        A column of strings, each representing the part to extract from the URL.
+    key : :class:`~pyspark.sql.Column` or str, optional
+        A column of strings, each representing the key of a query parameter in the URL.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column of strings, each representing the value of the extracted part from the URL.
+
+    Examples
+    --------
+    Example 1: Extracting the query part from a URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("https://spark.apache.org/path?query=1", "QUERY")],
+    ...   ["url", "part"]
+    ... )
+    >>> df.select(sf.try_parse_url(df.url, df.part)).show()
+    +------------------------+
+    |try_parse_url(url, part)|
+    +------------------------+
+    |                 query=1|
+    +------------------------+
+
+    Example 2: Extracting the value of a specific query parameter from a URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("https://spark.apache.org/path?query=1", "QUERY", "query")],
+    ...   ["url", "part", "key"]
+    ... )
+    >>> df.select(sf.try_parse_url(df.url, df.part, df.key)).show()
+    +-----------------------------+
+    |try_parse_url(url, part, key)|
+    +-----------------------------+
+    |                            1|
+    +-----------------------------+
+
+    Example 3: Extracting the protocol part from a URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("https://spark.apache.org/path?query=1", "PROTOCOL")],
+    ...   ["url", "part"]
+    ... )
+    >>> df.select(sf.try_parse_url(df.url, df.part)).show()
+    +------------------------+
+    |try_parse_url(url, part)|
+    +------------------------+
+    |                   https|
+    +------------------------+
+
+    Example 4: Extracting the host part from a URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("https://spark.apache.org/path?query=1", "HOST")],
+    ...   ["url", "part"]
+    ... )
+    >>> df.select(sf.try_parse_url(df.url, df.part)).show()
+    +------------------------+
+    |try_parse_url(url, part)|
+    +------------------------+
+    |        spark.apache.org|
+    +------------------------+
+
+    Example 5: Extracting the path part from a URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("https://spark.apache.org/path?query=1", "PATH")],
+    ...   ["url", "part"]
+    ... )
+    >>> df.select(sf.try_parse_url(df.url, df.part)).show()
+    +------------------------+
+    |try_parse_url(url, part)|
+    +------------------------+
+    |                   /path|
+    +------------------------+
+
+    Example 6: Invalid URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("inva lid://spark.apache.org/path?query=1", "QUERY", "query")],
+    ...   ["url", "part", "key"]
+    ... )
+    >>> df.select(sf.try_parse_url(df.url, df.part, df.key)).show()
+    +-----------------------------+
+    |try_parse_url(url, part, key)|
+    +-----------------------------+
+    |                         NULL|
+    +-----------------------------+
+    """
+    if key is not None:
+        return _invoke_function_over_columns("try_parse_url", url, partToExtract, key)
+    else:
+        return _invoke_function_over_columns("try_parse_url", url, partToExtract)
 
 
 @_try_remote_functions

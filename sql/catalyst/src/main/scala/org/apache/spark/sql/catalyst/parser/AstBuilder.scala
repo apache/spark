@@ -450,7 +450,7 @@ class AstBuilder extends DataTypeAstBuilder
     val duplicates = ctes.groupBy(_._1).filter(_._2.size > 1).keys
     if (duplicates.nonEmpty) {
       throw QueryParsingErrors.duplicateCteDefinitionNamesError(
-        duplicates.mkString("'", "', '", "'"), ctx)
+        duplicates.map(toSQLId).mkString(", "), ctx)
     }
     UnresolvedWith(plan, ctes.toSeq)
   }

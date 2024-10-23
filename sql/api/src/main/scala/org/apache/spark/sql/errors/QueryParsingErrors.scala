@@ -471,7 +471,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def duplicateCteDefinitionNamesError(duplicateNames: String, ctx: CtesContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0038",
+      errorClass = "DUPLICATED_CTE_NAMES",
       messageParameters = Map("duplicateNames" -> duplicateNames),
       ctx)
   }
@@ -481,8 +481,8 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       command = Option(sqlText),
       start = position,
       stop = position,
-      errorClass = "_LEGACY_ERROR_TEMP_0039",
-      messageParameters = Map.empty)
+      errorClass = "INVALID_SQL_SYNTAX.UNSUPPORTED_SQL_STATEMENT",
+      messageParameters = Map("sqlText" -> sqlText))
   }
 
   def invalidIdentifierError(ident: String, ctx: ParserRuleContext): Throwable = {

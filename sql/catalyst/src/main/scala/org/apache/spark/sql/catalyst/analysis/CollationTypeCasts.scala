@@ -104,6 +104,14 @@ object CollationTypeCasts extends TypeCoercionRule {
       val Seq(newLeft, newRight) = collateToSingleType(Seq(left, right))
       levenshtein.withNewChildren(Seq(newLeft, newRight) ++ threshold)
 
+    case getMap @ GetMapValue(child, key) if getMap.keyType != key.dataType =>
+      key match {
+        case Literal(_, _: StringType) =>
+          GetMapValue(child, Cast(key, getMap.keyType))
+        case _ =>
+          getMap
+      }
+
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
       _: Coalesce | _: ArrayContains | _: ArrayExcept | _: ConcatWs | _: Mask | _: StringReplace |

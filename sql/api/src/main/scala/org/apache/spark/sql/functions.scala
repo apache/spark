@@ -4682,6 +4682,24 @@ object functions {
    * Extracts a part from a URL.
    *
    * @group url_funcs
+   * @since 4.0.0
+   */
+  def try_parse_url(url: Column, partToExtract: Column, key: Column): Column =
+    Column.fn("try_parse_url", url, partToExtract, key)
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group url_funcs
+   * @since 4.0.0
+   */
+  def try_parse_url(url: Column, partToExtract: Column): Column =
+    Column.fn("try_parse_url", url, partToExtract)
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group url_funcs
    * @since 3.5.0
    */
   def parse_url(url: Column, partToExtract: Column, key: Column): Column =
