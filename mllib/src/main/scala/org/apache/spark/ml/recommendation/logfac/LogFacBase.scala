@@ -106,7 +106,6 @@ private[ml] abstract class LogFacBase[T](
       emb.map(itemData => (itemData.t, itemData.id, itemData.cn, itemData.f))
         .toDF("t", "id", "cn", "f")
         .write.mode(SaveMode.Overwrite).parquet(path)
-      emb.unpersist()
     }
 
     cacheAndCount(sqlc.read.parquet(path)
