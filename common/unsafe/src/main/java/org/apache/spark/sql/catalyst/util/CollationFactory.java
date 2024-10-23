@@ -358,6 +358,19 @@ public final class CollationFactory {
         return applyTrimmingPolicy(s, getSpaceTrimming(collationId));
       }
 
+      protected static boolean ignoresSpacesInTrimFunctions(
+              int collationId,
+              boolean isLTrim,
+              boolean isRTrim) {
+        if (isRTrim && getSpaceTrimming(collationId) == SpaceTrimming.RTRIM) {
+          return true;
+        }
+
+        // In case of adding new trimming collations in the future (LTRIM and TRIM) here logic
+        // should be added.
+        return false;
+      }
+
       /**
        * Utility function to trim spaces when collation uses space trimming.
        */
@@ -1193,6 +1206,13 @@ public final class CollationFactory {
 
   public static UTF8String applyTrimmingPolicy(UTF8String input, int collationId) {
     return Collation.CollationSpec.applyTrimmingPolicy(input, collationId);
+  }
+
+  public static boolean ignoresSpacesInTrimFunctions(
+          int collationId,
+          boolean isLTrim,
+          boolean isRTrim) {
+    return Collation.CollationSpec.ignoresSpacesInTrimFunctions(collationId, isLTrim, isRTrim);
   }
 
   public static UTF8String getCollationKey(UTF8String input, int collationId) {

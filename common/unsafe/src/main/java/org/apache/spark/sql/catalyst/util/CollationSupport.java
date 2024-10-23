@@ -366,6 +366,7 @@ public final class CollationSupport {
     public static UTF8String exec(final UTF8String src, final UTF8String search,
         final UTF8String replace, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      // Space trimming does not affect the output of this expression.
       if (collation.isUtf8BinaryType) {
         return execBinary(src, search, replace);
       } else if (collation.isUtf8LcaseType) {
@@ -509,39 +510,15 @@ public final class CollationSupport {
         final UTF8String trimString,
         final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
-
-      // In case of the space trimming collation source string should be first trimmed so that
-      // leading and/or trailing spaces are ignored. After that if the trimString doesn't contain
-      // spaces those should not be removed (by the definition of the trim function) and should be
-      // returned as it was in original source string.
-      if (!collation.supportsSpaceTrimming) {
-        return applyTrimingFunction(srcString, trimString, collationId);
-      } else {
-        UTF8String collationTrimmedSrcString =
-                CollationFactory.applyTrimmingPolicy(srcString, collationId);
-        UTF8String functionTrimmedSrcString = applyTrimingFunction(
-                collationTrimmedSrcString, trimString, collationId);
-
-        if (trimString.contains(UTF8String.SPACE_UTF8)) {
-          return  functionTrimmedSrcString;
-        } else {
-          UTF8String trailingSpaces = srcString.substring(
-                  collationTrimmedSrcString.numBytes(),
-                  srcString.numBytes());
-          return UTF8String.concat(functionTrimmedSrcString, trailingSpaces);
-        }
-      }
-    }
-
-    public static UTF8String applyTrimingFunction(
-            final UTF8String srcString,
-            final UTF8String trimString,
-            final int collationId) {
-      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
-      if (collation.isUtf8BinaryType) {
+      if(collation.isUtf8BinaryType && !collation.supportsSpaceTrimming){
         return execBinary(srcString, trimString);
+      }
+
+      if (collation.isUtf8BinaryType) {
+        // special handling needed for utf8_binary_rtrim collation.
+        return execBinaryTrim(srcString, trimString, collationId);
       } else if (collation.isUtf8LcaseType) {
-        return execLowercase(srcString, trimString);
+        return execLowercase(srcString, trimString, collationId);
       } else {
         return execICU(srcString, trimString, collationId);
       }
@@ -571,14 +548,21 @@ public final class CollationSupport {
     }
     public static UTF8String execLowercase(
         final UTF8String srcString,
-        final UTF8String trimString) {
-      return CollationAwareUTF8String.lowercaseTrim(srcString, trimString);
+        final UTF8String trimString,
+        final int collationId) {
+      return CollationAwareUTF8String.lowercaseTrim(srcString, trimString, collationId);
     }
     public static UTF8String execICU(
         final UTF8String srcString,
         final UTF8String trimString,
         final int collationId) {
       return CollationAwareUTF8String.trim(srcString, trimString, collationId);
+    }
+    public static UTF8String execBinaryTrim(
+            final UTF8String srcString,
+            final UTF8String trimString,
+            final int collationId) {
+      return CollationAwareUTF8String.binaryTrim(srcString, trimString, collationId);
     }
   }
 
@@ -591,6 +575,8 @@ public final class CollationSupport {
       UTF8String trimString,
       final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      // Space trimming does not affect the output of this expression as currently only supported
+      // space trimming is RTRIM.
       if (collation.isUtf8BinaryType) {
         return execBinary(srcString, trimString);
       } else if (collation.isUtf8LcaseType) {
@@ -643,34 +629,15 @@ public final class CollationSupport {
             final UTF8String trimString,
             final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
-
-      if (!collation.supportsSpaceTrimming) {
-        return applyTrimingFunction(srcString, trimString, collationId);
-      } else {
-        UTF8String collationTrimmedSrcString =
-                CollationFactory.applyTrimmingPolicy(srcString, collationId);
-        UTF8String functionTrimmedSrcString = applyTrimingFunction(
-                collationTrimmedSrcString, trimString, collationId);
-
-        if (trimString.contains(UTF8String.SPACE_UTF8)) {
-          return  functionTrimmedSrcString;
-        } else {
-          UTF8String trailingSpaces = srcString.substring(
-                  collationTrimmedSrcString.numBytes(),
-                  srcString.numBytes());
-          return UTF8String.concat(functionTrimmedSrcString, trailingSpaces);
-        }
-      }
-    }
-    public static UTF8String applyTrimingFunction(
-            final UTF8String srcString,
-            final UTF8String trimString,
-            final int collationId) {
-      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
-      if (collation.isUtf8BinaryType) {
+      if(collation.isUtf8BinaryType && !collation.supportsSpaceTrimming){
         return execBinary(srcString, trimString);
+      }
+
+      if (collation.isUtf8BinaryType) {
+        // special handling needed for utf8_binary_rtrim collation.
+        return execBinaryTrim(srcString, trimString, collationId);
       } else if (collation.isUtf8LcaseType) {
-        return execLowercase(srcString, trimString);
+        return execLowercase(srcString, trimString, collationId);
       } else {
         return execICU(srcString, trimString, collationId);
       }
@@ -699,14 +666,21 @@ public final class CollationSupport {
     }
     public static UTF8String execLowercase(
         final UTF8String srcString,
-        final UTF8String trimString) {
-      return CollationAwareUTF8String.lowercaseTrimRight(srcString, trimString);
+        final UTF8String trimString,
+        final int collationId) {
+      return CollationAwareUTF8String.lowercaseTrimRight(srcString, trimString, collationId);
     }
     public static UTF8String execICU(
         final UTF8String srcString,
         final UTF8String trimString,
         final int collationId) {
       return CollationAwareUTF8String.trimRight(srcString, trimString, collationId);
+    }
+    public static UTF8String execBinaryTrim(
+        final UTF8String srcString,
+        final UTF8String trimString,
+        final int collationId) {
+        return CollationAwareUTF8String.binaryTrimRight(srcString, trimString, collationId);
     }
   }
 
