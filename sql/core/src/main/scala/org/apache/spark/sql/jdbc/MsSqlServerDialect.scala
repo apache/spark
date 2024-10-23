@@ -115,21 +115,16 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       // MsSqlServer does not support boolean comparison using standard comparison operators
       // We shouldn't propagate these queries to MsSqlServer
       expr match {
-        case e: Predicate if (e.name() match {
-              case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" => true
-              case _ => false
-            }) =>
-          val Array(l, r) = e.children().map {
-            case p: Predicate
-              if p.name() != "ALWAYS_TRUE" && p.name() != "ALWAYS_FALSE" =>
-              s"CASE WHEN ${inputToSQL(p)} THEN 1 ELSE 0 END"
-            case o => inputToSQL(o)
-          }
-          visitBinaryComparison(e.name(), l, r)
-        // If a CASE WHEN is a predicate, appending the "= 1"
-        // because it cannot return a boolean
-        case e: Predicate if e.name() == "CASE_WHEN" =>
-          visitCaseWhen(expressionsToStringArray(e.children())) + " = 1 "
+        case e: Predicate => e.name() match {
+          case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
+            val Array(l, r) = e.children().map {
+              case p: Predicate => s"CASE WHEN ${inputToSQL(p)} THEN 1 ELSE 0 END"
+              case o => inputToSQL(o)
+            }
+            visitBinaryComparison(e.name(), l, r)
+          case "CASE_WHEN" => visitCaseWhen(expressionsToStringArray(e.children())) + " = 1"
+          case _ => super.build(expr)
+        }
         case _ => super.build(expr)
       }
     }
@@ -285,10 +280,4 @@ private object MsSqlServerDialect {
   // https://github.com/microsoft/mssql-jdbc/blob/v9.4.1/src/main/java/microsoft/sql/Types.java
   final val GEOMETRY = -157
   final val GEOGRAPHY = -158
-
-  def wrapPredicateWithIIF(expr: String): String = {
-    if (expr != "0" && expr != "1") {
-      s"""IIF($expr, 1, 0)"""
-    } else expr
-  }
 }
