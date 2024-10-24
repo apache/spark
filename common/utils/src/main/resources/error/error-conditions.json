@@ -5013,6 +5013,12 @@
           "<functionName> with AES-<mode> does not support initialization vectors (IVs)."
         ]
       },
+      "ALTER_TABLE_SERDE_FOR_DATASOURCE_TABLE" : {
+        "message" : [
+          "ALTER TABLE SET SERDE is not supported for table <tableName> created with the datasource API. Consider using an external Hive table or updating the table properties with compatible options for your table format."
+
+        ]
+      },
       "ANALYZE_UNCACHED_TEMP_VIEW" : {
         "message" : [
           "The ANALYZE TABLE FOR COLUMNS command can operate on temporary views that have been cached already. Consider to cache the view <viewName>."
@@ -6536,11 +6542,6 @@
   "_LEGACY_ERROR_TEMP_1247" : {
     "message" : [
       "Operation not allowed: ALTER TABLE SET [SERDE | SERDEPROPERTIES] for a specific partition is not supported for tables created with the datasource API."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1248" : {
-    "message" : [
-      "Operation not allowed: ALTER TABLE SET SERDE is not supported for tables created with the datasource API."
     ]
   },
   "_LEGACY_ERROR_TEMP_1250" : {
