@@ -2389,6 +2389,35 @@ class SubquerySuite extends QueryTest
     }
   }
 
+  test("Merge non-correlated scalar subqueries with different filters") {
+    withSQLConf(SQLConf.PLAN_MERGE_FILTER_PROPAGATION_ENABLED.key -> "true") {
+      Seq(false, true).foreach { enableAQE =>
+        withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+          val df = sql(
+            """
+              |SELECT
+              |  (SELECT max(key) AS key FROM testData WHERE value < '50'),
+              |  (SELECT sum(key) AS key FROM testData WHERE value = '50'),
+              |  (SELECT count(distinct key) AS key FROM testData WHERE value > '50')
+            """.stripMargin)
+
+          checkAnswer(df, Row(100, 50, 53) :: Nil)
+
+          val plan = df.queryExecution.executedPlan
+          val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+          val reusedSubqueryIds = collectWithSubqueries(plan) {
+            case rs: ReusedSubqueryExec => rs.child.id
+          }
+
+          assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+          assert(reusedSubqueryIds.size == 2,
+            "Missing or unexpected reused ReusedSubqueryExec in the plan")
+        }
+      }
+    }
+  }
+
   test("SPARK-39355: Single column uses quoted to construct UnresolvedAttribute") {
     checkAnswer(
       sql("""
