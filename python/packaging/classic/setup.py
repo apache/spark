@@ -154,7 +154,7 @@ _minimum_pandas_version = "2.0.0"
 _minimum_numpy_version = "1.21"
 _minimum_pyarrow_version = "10.0.0"
 _minimum_grpc_version = "1.62.0"
-_minimum_googleapis_common_protos_version = "1.56.4"
+_minimum_googleapis_common_protos_version = "1.65.0"
 
 
 class InstallCommand(install):
