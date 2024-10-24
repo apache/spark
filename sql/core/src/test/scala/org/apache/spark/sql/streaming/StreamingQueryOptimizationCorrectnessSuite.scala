@@ -586,28 +586,4 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
       }
     )
   }
-
-  test("SPARK-50007: default metrics is provided even observe node is pruned out") {
-    // We disable SPARK-49699 to test the case observe node is pruned out.
-    withSQLConf(SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key -> "true") {
-      val input1 = MemoryStream[Int]
-      val df = input1.toDF()
-        .withColumn("eventTime", timestamp_seconds($"value"))
-        .observe("observation", count(lit(1)).as("rows"))
-        // Enforce PruneFilters to come into play and prune subtree. We could do the same
-        // with the reproducer of SPARK-48267, but let's just be simpler.
-        .filter(expr("false"))
-
-      testStream(df)(
-        AddData(input1, 1, 2, 3),
-        CheckNewAnswer(),
-        Execute { qe =>
-          val observeRow = qe.lastExecution.observedMetrics.get("observation")
-          // This should produce the default value of metrics. Before SPARK-50007, the test fails
-          // because `observeRow` is None. (Spark fails to find the metrics by name.)
-          assert(observeRow.get.getAs[Long]("rows") == 0L)
-        }
-      )
-    }
-  }
 }

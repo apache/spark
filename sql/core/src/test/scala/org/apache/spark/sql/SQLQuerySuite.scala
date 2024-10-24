@@ -4941,20 +4941,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Row(Array(0), Array(0)), Row(Array(1), Array(1)), Row(Array(2), Array(2)))
     checkAnswer(df, expectedAnswer)
   }
-
-  test("SPARK-50007: default metrics is provided even observe node is pruned out") {
-    val namedObservation = Observation("observation")
-    spark.range(10)
-      .observe(namedObservation, count(lit(1)).as("rows"))
-      // Enforce PruneFilters to come into play and prune subtree. We could do the same
-      // with the reproducer of SPARK-48267, but let's just be simpler.
-      .filter(expr("false"))
-      .collect()
-
-    // This should produce the default value of metrics. Before SPARK-50007, the test fails
-    // because `namedObservation.getOrEmpty` is an empty Map.
-    assert(namedObservation.getOrEmpty.get("rows") === Some(0L))
-  }
 }
 
 case class Foo(bar: Option[String])
