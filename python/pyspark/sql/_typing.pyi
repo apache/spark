@@ -26,7 +26,7 @@ from typing import (
     TypeVar,
     Union,
 )
-from typing_extensions import Literal, Protocol
+from typing_extensions import Concatenate, Literal, ParamSpec, Protocol
 
 import datetime
 import decimal
@@ -36,6 +36,10 @@ from pyspark._typing import PrimitiveType
 from pyspark.profiler import CodeMapDict
 import pyspark.sql.types
 from pyspark.sql.column import Column
+
+__all__ = ["Concatenate"]
+
+P = ParamSpec("P")
 
 ColumnOrName = Union[Column, str]
 ColumnOrNameOrOrdinal = Union[Column, str, int]
