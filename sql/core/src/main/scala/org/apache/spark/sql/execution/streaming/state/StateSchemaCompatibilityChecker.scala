@@ -43,8 +43,8 @@ case class AvroSerde(
   keySerializer: AvroSerializer,
   valueSerializer: AvroSerializer,
   valueDeserializer: AvroDeserializer,
-  userKeySerializer: Option[AvroSerializer] = None,
-  userKeyDeserializer: Option[AvroDeserializer] = None
+  compositeKeySerializer: Option[AvroSerializer] = None,
+  compositeKeyDeserializer: Option[AvroDeserializer] = None
 ) extends Serializable
 
 // Used to represent the schema of a column family in the state store

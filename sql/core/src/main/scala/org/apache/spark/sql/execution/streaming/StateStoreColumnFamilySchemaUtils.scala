@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.core.avro.{AvroDeserializer, AvroOptions, AvroSerializer, SchemaConverters}
@@ -30,9 +31,12 @@ object StateStoreColumnFamilySchemaUtils {
     new StateStoreColumnFamilySchemaUtils(initializeAvroSerde)
 }
 
-class StateStoreColumnFamilySchemaUtils(initializeAvroSerde: Boolean) {
+class StateStoreColumnFamilySchemaUtils(initializeAvroSerde: Boolean) extends Logging {
 
-  private def getAvroSerde(keySchema: StructType, valSchema: StructType): Option[AvroSerde] = {
+  private def getAvroSerde(
+      keySchema: StructType,
+      valSchema: StructType,
+      compositeKeySchema: Option[StructType] = None): Option[AvroSerde] = {
     if (initializeAvroSerde) {
       val avroType = SchemaConverters.toAvroType(valSchema)
       val avroOptions = AvroOptions(Map.empty)
@@ -42,7 +46,17 @@ class StateStoreColumnFamilySchemaUtils(initializeAvroSerde: Boolean) {
       val de = new AvroDeserializer(avroType, valSchema,
         avroOptions.datetimeRebaseModeInRead, avroOptions.useStableIdForUnionType,
         avroOptions.stableIdPrefixForUnionType, avroOptions.recursiveFieldMaxDepth)
-      Some(AvroSerde(keySer, ser, de))
+      val ckSerDe = compositeKeySchema match {
+        case Some(schema) =>
+          val ckAvroType = SchemaConverters.toAvroType(schema)
+          val ckSer = new AvroSerializer(schema, ckAvroType, nullable = false)
+          val ckDe = new AvroDeserializer(ckAvroType, schema,
+            avroOptions.datetimeRebaseModeInRead, avroOptions.useStableIdForUnionType,
+            avroOptions.stableIdPrefixForUnionType, avroOptions.recursiveFieldMaxDepth)
+          (Some(ckSer), Some(ckDe))
+        case None => (None, None)
+      }
+      Some(AvroSerde(keySer, ser, de, ckSerDe._1, ckSerDe._2))
     } else {
       None
     }
@@ -84,13 +98,17 @@ class StateStoreColumnFamilySchemaUtils(initializeAvroSerde: Boolean) {
       hasTtl: Boolean): StateStoreColFamilySchema = {
     val compositeKeySchema = getCompositeKeySchema(keyEncoder.schema, userKeyEnc.schema)
     val valSchema = getValueSchemaWithTTL(valEncoder.schema, hasTtl)
+    // Create the proper wrapping structure for the key schema
+    val wrappedKeySchema = new StructType()
+      .add("key", keyEncoder.schema)
+
     StateStoreColFamilySchema(
       stateName,
       compositeKeySchema,
       getValueSchemaWithTTL(valEncoder.schema, hasTtl),
       Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
       Some(userKeyEnc.schema),
-      avroSerde = getAvroSerde(compositeKeySchema, valSchema))
+      avroSerde = getAvroSerde(wrappedKeySchema, valSchema, Some(compositeKeySchema)))
   }
 
   def getTimerStateSchema(

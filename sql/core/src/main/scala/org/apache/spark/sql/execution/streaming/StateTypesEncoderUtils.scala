@@ -22,6 +22,7 @@ import java.io.ByteArrayOutputStream
 import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter}
 import org.apache.avro.io.{DecoderFactory, EncoderFactory}
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
@@ -361,14 +362,9 @@ class CompositeKeyAvroRowEncoder[K, V](
       stateName: String,
       hasTtl: Boolean,
       avroSerde: Option[AvroSerde])
-  extends AvroTypesEncoder[V](keyEncoder, valEncoder, stateName, hasTtl, avroSerde) {
+  extends AvroTypesEncoder[V](keyEncoder, valEncoder, stateName, hasTtl, avroSerde) with Logging {
 
-  assert(avroSerde.get.userKeySerializer.isDefined &&
-    avroSerde.get.userKeyDeserializer.isDefined)
   import TransformWithStateKeyValueRowSchemaUtils._
-
-  // ByteArrayOutputStream for reuse during serialization
-  private val out = new ByteArrayOutputStream()
 
   /** Encoders */
   private val userKeyExpressionEnc = encoderFor(userKeyEnc)
@@ -397,38 +393,17 @@ class CompositeKeyAvroRowEncoder[K, V](
       throw StateStoreErrors.implicitKeyNotFound(stateName)
     }
 
-    val groupingKey = keyOption.get
-    val groupingKeyRow = groupingKeySerializer.apply(groupingKey).copy()
+    // First convert the key to an InternalRow using the encoder
+    val valueRow = groupingKeySerializer.apply(keyOption.get)
+    // Then wrap it in another InternalRow with field name "key"
+    val keyRow = InternalRow(valueRow)
+    // Now serialize to Avro
+    val avroData = avroSerde.get.keySerializer.serialize(keyRow)
 
-    // Create InternalRow with "key" column
-    val keyInternalRow = InternalRow(groupingKeyRow)
-
-    // Serialize to Avro
-    val avroData = avroSerde.get.keySerializer.serialize(keyInternalRow)
-
-    // Write to bytes
     out.reset()
     val encoder = EncoderFactory.get().directBinaryEncoder(out, null)
     val writer = new GenericDatumWriter[Any](groupingKeyAvroType)
-    writer.write(avroData, encoder)
-    encoder.flush()
-    out.toByteArray
-  }
 
-  def encodeUserKey(userKey: K): Array[Byte] = {
-    // Convert user key to InternalRow
-    val userKeyRow = userKeySerializer.apply(userKey).copy()
-
-    // Create InternalRow with "userKey" column
-    val keyInternalRow = InternalRow(userKeyRow)
-
-    // Serialize to Avro
-    val avroData = avroSerde.get.keySerializer.serialize(keyInternalRow)
-
-    // Write to bytes
-    out.reset()
-    val encoder = EncoderFactory.get().directBinaryEncoder(out, null)
-    val writer = new GenericDatumWriter[Any](userKeyAvroType)
     writer.write(avroData, encoder)
     encoder.flush()
     out.toByteArray
@@ -439,45 +414,30 @@ class CompositeKeyAvroRowEncoder[K, V](
     if (keyOption.isEmpty) {
       throw StateStoreErrors.implicitKeyNotFound(stateName)
     }
-
     val groupingKey = keyOption.get
-    val keyRow = groupingKeySerializer.apply(groupingKey).copy()
-    val userKeyRow = userKeySerializer.apply(userKey).copy()
 
-    // Create composite key InternalRow
-    val compositeKeyRow = InternalRow(keyRow, userKeyRow)
+    val keyRow = groupingKeySerializer.apply(groupingKey)
+    val userKeyRow = userKeySerializer.apply(userKey)
 
-    // Serialize to Avro
-    val avroData = avroSerde.get.keySerializer.serialize(compositeKeyRow)
-
-    // Write to bytes
+    // InternalRow(InternalRow) -> GenericDataRecord
+    val avroData = avroSerde.get.compositeKeySerializer.get.
+      serialize(InternalRow(keyRow, userKeyRow))
     out.reset()
     val encoder = EncoderFactory.get().directBinaryEncoder(out, null)
     val writer = new GenericDatumWriter[Any](compositeKeyAvroType)
+
     writer.write(avroData, encoder)
     encoder.flush()
     out.toByteArray
   }
 
-  def decodeCompositeKey(compositeKeyBytes: Array[Byte]): K = {
-    // Create Avro reader with composite key schema
+  def decodeCompositeKey(row: Array[Byte]): K = {
     val reader = new GenericDatumReader[Any](compositeKeyAvroType)
-    val decoder = DecoderFactory.get().binaryDecoder(
-      compositeKeyBytes, 0, compositeKeyBytes.length, null)
-
-    // Read Avro bytes into GenericData
-    val genericData = reader.read(null, decoder)
-
-    // Convert GenericData to InternalRow
-    val compositeKeyRow = avroSerde.get.userKeyDeserializer.get
-      .deserialize(genericData).orNull.asInstanceOf[InternalRow]
-
-    // Extract user key portion from composite row
-    // The user key is the second field (index 1) in the composite key row
-    val userKeyInternalRow = compositeKeyRow.getStruct(1, userKeyEnc.schema.length)
-
-    // Convert InternalRow to the user's key type using the deserializer
-    userKeyRowToObjDeserializer.apply(userKeyInternalRow)
+    val decoder = DecoderFactory.get().binaryDecoder(row, 0, row.length, null)
+    val genericData = reader.read(null, decoder) // bytes -> GenericDataRecord
+    val internalRow = avroSerde.get.compositeKeyDeserializer.get.deserialize(
+      genericData).orNull.asInstanceOf[InternalRow] // GenericDataRecord -> InternalRow
+    userKeyRowToObjDeserializer.apply(internalRow.getStruct(1, userKeyEnc.schema.length))
   }
 }
 
