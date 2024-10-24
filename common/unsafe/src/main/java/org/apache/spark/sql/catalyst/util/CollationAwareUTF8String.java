@@ -1092,9 +1092,9 @@ public class CollationAwareUTF8String {
    * @return the trimmed string (for UTF8_LCASE collation)
    */
   public static UTF8String binaryTrim(
-          final UTF8String srcString,
-          final UTF8String trimString,
-          final int collationId) {
+      final UTF8String srcString,
+      final UTF8String trimString,
+      final int collationId) {
     return binaryTrimRight(srcString.trimLeft(trimString), trimString, collationId);
   }
 
@@ -1290,7 +1290,7 @@ public class CollationAwareUTF8String {
     // anyway. However, if it is not the case they should be ignored and then appended after
     // trimming other characters.
     int lastNonSpaceByteIdx = srcString.numBytes(), lastNonSpaceCharacterIdx = srcString.numChars();
-    if (!trimChars.contains(0x20) &&
+    if (!trimChars.contains(SpecialCodePointConstants.ASCII_SPACE) &&
       CollationFactory.ignoresSpacesInTrimFunctions(
         collationId, /*isLTrim=*/ false, /*isRTrim=*/true)) {
       while (lastNonSpaceByteIdx > 0 &&
@@ -1306,7 +1306,7 @@ public class CollationAwareUTF8String {
         srcString.numChars() - (srcString.numBytes() - lastNonSpaceByteIdx);
     }
     Iterator<Integer> srcIter = srcString.reverseCodePointIterator();
-    for(int i = lastNonSpaceCharacterIdx; i < srcString.numChars(); i++) {
+    for (int i = lastNonSpaceCharacterIdx; i < srcString.numChars(); i++) {
       srcIter.next();
     }
 
@@ -1370,7 +1370,7 @@ public class CollationAwareUTF8String {
     // anyway. However, if it is not the case they should be ignored and then appended after
     // trimming other characters.
     int lastNonSpaceByteIdx = srcString.numBytes(), lastNonSpaceCharacterIdx = srcString.numChars();
-    if  (!trimChars.contains(0x20) &&
+    if (!trimChars.contains(SpecialCodePointConstants.ASCII_SPACE) &&
       CollationFactory.ignoresSpacesInTrimFunctions(
         collationId, /*isLTrim=*/ false, /*isRTrim=*/true)) {
       while (lastNonSpaceByteIdx > 0 &&
@@ -1386,7 +1386,7 @@ public class CollationAwareUTF8String {
         srcString.numChars() - (srcString.numBytes() - lastNonSpaceByteIdx);
     }
     Iterator<Integer> srcIter = srcString.reverseCodePointIterator();
-    for(int i = lastNonSpaceCharacterIdx; i < srcString.numChars(); i++) {
+    for (int i = lastNonSpaceCharacterIdx; i < srcString.numChars(); i++) {
       srcIter.next();
     }
 
@@ -1473,7 +1473,7 @@ public class CollationAwareUTF8String {
     // If trimString contains spaces this behaviour is not important as they would get trimmed
     // anyway. However, if it is not the case they should be ignored and then appended after
     // trimming other characters.
-    if (!trimChars.containsKey(0x20) &&
+    if (!trimChars.containsKey(SpecialCodePointConstants.ASCII_SPACE) &&
       CollationFactory.ignoresSpacesInTrimFunctions(
         collationId, /*isLTrim=*/ false, /*isRTrim=*/true)) {
       while (lastNonSpacePosition > 0 && src.charAt(lastNonSpacePosition - 1) == ' ') {
@@ -1516,14 +1516,15 @@ public class CollationAwareUTF8String {
 
     // Return the substring from the start of the string until that position and append
     // trailing spaces if they were ignored
-    int trailingLength = src.length() - lastNonSpacePosition;
-    StringBuilder sb =
-      new StringBuilder(charIndex + (Math.max(trailingLength, 0)));
-    sb.append(src, 0, charIndex);
-    if (lastNonSpacePosition != src.length()) {
-      sb.append(src, lastNonSpacePosition, src.length());
+    if (charIndex == src.length()) {
+      return UTF8String.fromString(src);
     }
-    return UTF8String.fromString(sb.toString());
+    if (lastNonSpacePosition == srcString.numChars()) {
+      return srcString.substring(0, charIndex);
+    }
+    return UTF8String.concat(
+      srcString.substring(0, charIndex),
+      srcString.substring(lastNonSpacePosition, srcString.numChars()));
   }
 
   public static UTF8String[] splitSQL(final UTF8String input, final UTF8String delim,

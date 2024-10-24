@@ -358,6 +358,10 @@ public final class CollationFactory {
         return applyTrimmingPolicy(s, getSpaceTrimming(collationId));
       }
 
+      /**
+       * Returns if leading/trailing spaces should be ignored in trim string expressions. This is needed
+       * because space trimming collation directly changes behaviour of trim functions.
+       */
       protected static boolean ignoresSpacesInTrimFunctions(
           int collationId,
           boolean isLTrim,
