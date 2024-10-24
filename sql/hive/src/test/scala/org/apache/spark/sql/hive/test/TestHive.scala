@@ -251,6 +251,7 @@ private[hive] class TestHiveSparkSession(
       Some(sessionState),
       loadTestTables)
     result.sessionState // force copy of SessionState
+    result.sessionState.artifactManager // force copy of ArtifactManager and its resources
     result
   }
 

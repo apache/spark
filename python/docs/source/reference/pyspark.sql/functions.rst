@@ -177,6 +177,7 @@ String Functions
     format_string
     initcap
     instr
+    is_valid_utf8
     lcase
     left
     length
@@ -185,6 +186,7 @@ String Functions
     lower
     lpad
     ltrim
+    make_valid_utf8
     mask
     octet_length
     overlay
@@ -218,9 +220,11 @@ String Functions
     trim
     try_to_binary
     try_to_number
+    try_validate_utf8
     ucase
     unbase64
     upper
+    validate_utf8
 
 
 Bitwise Functions
@@ -583,6 +587,7 @@ URL Functions
     :toctree: api/
 
     parse_url
+    try_parse_url
     url_decode
     url_encode
     try_url_decode

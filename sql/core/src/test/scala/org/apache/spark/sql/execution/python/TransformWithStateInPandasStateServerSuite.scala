@@ -33,8 +33,8 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.execution.streaming.{StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state.StateMessage
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, Exists, Get, HandleState, IsFirstBatch, ListStateCall, ListStateGet, ListStatePut, SetHandleState, StateCallCommand, StatefulProcessorCall, UtilsCallCommand, ValueStateCall, ValueStateUpdate}
-import org.apache.spark.sql.streaming.{ListState, TTLConfig, ValueState}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, ContainsKey, Exists, Get, GetValue, HandleState, IsFirstBatch, Keys, ListStateCall, ListStateGet, ListStatePut, MapStateCall, RemoveKey, SetHandleState, StateCallCommand, StatefulProcessorCall, UpdateValue, Values, ValueStateCall, ValueStateUpdate}
+import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with BeforeAndAfterEach {
@@ -54,21 +54,24 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
   var outputStream: DataOutputStream = _
   var valueState: ValueState[Row] = _
   var listState: ListState[Row] = _
+  var mapState: MapState[Row, Row] = _
   var stateServer: TransformWithStateInPandasStateServer = _
   var stateDeserializer: ExpressionEncoder.Deserializer[Row] = _
   var stateSerializer: ExpressionEncoder.Serializer[Row] = _
+  var initialStateSchema: StructType = StructType(Seq())
+  var initialStateDataIterator: Iterator[(InternalRow, Iterator[InternalRow])] = _
   var transformWithStateInPandasDeserializer: TransformWithStateInPandasDeserializer = _
   var arrowStreamWriter: BaseStreamingArrowWriter = _
   var valueStateMap: mutable.HashMap[String, ValueStateInfo] = mutable.HashMap()
   var listStateMap: mutable.HashMap[String, ListStateInfo] = mutable.HashMap()
-  var initialStateSchema: StructType = StructType(Seq())
-  var initialStateDataIterator: Iterator[(InternalRow, Iterator[InternalRow])] = _
+  var mapStateMap: mutable.HashMap[String, MapStateInfo] = mutable.HashMap()
 
   override def beforeEach(): Unit = {
     statefulProcessorHandle = mock(classOf[StatefulProcessorHandleImpl])
     outputStream = mock(classOf[DataOutputStream])
     valueState = mock(classOf[ValueState[Row]])
     listState = mock(classOf[ListState[Row]])
+    mapState = mock(classOf[MapState[Row, Row]])
     stateDeserializer = ExpressionEncoder(stateSchema).resolveAndBind().createDeserializer()
     stateSerializer = ExpressionEncoder(stateSchema).resolveAndBind().createSerializer()
     valueStateMap = mutable.HashMap[String, ValueStateInfo](stateName ->
@@ -77,19 +80,25 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
       ListStateInfo(listState, stateSchema, stateDeserializer, stateSerializer))
     initialStateDataIterator = mock(classOf[Iterator[(InternalRow, Iterator[InternalRow])]])
     // Iterator map for list state. Please note that `handleImplicitGroupingKeyRequest` would
+    mapStateMap = mutable.HashMap[String, MapStateInfo](stateName ->
+      MapStateInfo(mapState, stateSchema, stateSchema, stateDeserializer,
+        stateSerializer, stateDeserializer, stateSerializer))
+
+    // Iterator map for list/map state. Please note that `handleImplicitGroupingKeyRequest` would
     // reset the iterator map to empty so be careful to call it if you want to access the iterator
     // map later.
-    val listStateIteratorMap = mutable.HashMap[String, Iterator[Row]](iteratorId ->
-      Iterator(new GenericRowWithSchema(Array(1), stateSchema)))
+    val testRow = getIntegerRow(1)
+    val iteratorMap = mutable.HashMap[String, Iterator[Row]](iteratorId -> Iterator(testRow))
+    val keyValueIteratorMap = mutable.HashMap[String, Iterator[(Row, Row)]](iteratorId ->
+      Iterator((testRow, testRow)))
     transformWithStateInPandasDeserializer = mock(classOf[TransformWithStateInPandasDeserializer])
     arrowStreamWriter = mock(classOf[BaseStreamingArrowWriter])
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
-      statefulProcessorHandle, groupingKeySchema, "", false, false, 2,
+      statefulProcessorHandle, groupingKeySchema, "", false, false, 2, hasInitialState = true,
       outputStream, valueStateMap, transformWithStateInPandasDeserializer, arrowStreamWriter,
-      listStateMap, listStateIteratorMap,
-      hasInitialState = true)
+      listStateMap, iteratorMap, mapStateMap, keyValueIteratorMap)
     when(transformWithStateInPandasDeserializer.readArrowBatches(any))
-      .thenReturn(Seq(new GenericRowWithSchema(Array(1), stateSchema)))
+      .thenReturn(Seq(getIntegerRow(1)))
   }
 
   test("set handle state") {
@@ -146,6 +155,31 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     }
   }
 
+  Seq(true, false).foreach { useTTL =>
+    test(s"get map state, useTTL=$useTTL") {
+      val stateCallCommandBuilder = StateCallCommand.newBuilder()
+        .setStateName("newName")
+        .setSchema("StructType(List(StructField(value,IntegerType,true)))")
+        .setMapStateValueSchema("StructType(List(StructField(value,IntegerType,true)))")
+      if (useTTL) {
+        stateCallCommandBuilder.setTtl(StateMessage.TTLConfig.newBuilder().setDurationMs(1000))
+      }
+      val message = StatefulProcessorCall
+        .newBuilder()
+        .setGetMapState(stateCallCommandBuilder.build())
+        .build()
+      stateServer.handleStatefulProcessorCall(message)
+      if (useTTL) {
+        verify(statefulProcessorHandle)
+          .getMapState[Row, Row](any[String], any[Encoder[Row]], any[Encoder[Row]], any[TTLConfig])
+      } else {
+        verify(statefulProcessorHandle).getMapState[Row, Row](any[String], any[Encoder[Row]],
+          any[Encoder[Row]])
+      }
+      verify(outputStream).writeInt(0)
+    }
+  }
+
   test("value state exists") {
     val message = ValueStateCall.newBuilder().setStateName(stateName)
       .setExists(Exists.newBuilder().build()).build()
@@ -157,7 +191,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     val message = ValueStateCall.newBuilder().setStateName(stateName)
       .setGet(Get.newBuilder().build()).build()
     val schema = new StructType().add("value", "int")
-    when(valueState.getOption()).thenReturn(Some(new GenericRowWithSchema(Array(1), schema)))
+    when(valueState.getOption()).thenReturn(Some(getIntegerRow(1)))
     stateServer.handleValueStateRequest(message)
     verify(valueState).getOption()
     verify(outputStream).writeInt(argThat((x: Int) => x > 0))
@@ -219,10 +253,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     val message = ListStateCall.newBuilder().setStateName(stateName)
       .setListStateGet(ListStateGet.newBuilder().setIteratorId(iteratorId).build()).build()
     val iteratorMap = mutable.HashMap[String, Iterator[Row]](iteratorId ->
-      Iterator(new GenericRowWithSchema(Array(1), stateSchema),
-        new GenericRowWithSchema(Array(2), stateSchema),
-        new GenericRowWithSchema(Array(3), stateSchema),
-        new GenericRowWithSchema(Array(4), stateSchema)))
+      Iterator(getIntegerRow(1), getIntegerRow(2), getIntegerRow(3), getIntegerRow(4)))
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
       statefulProcessorHandle, groupingKeySchema, "", false, false,
       maxRecordsPerBatch, outputStream, valueStateMap,
@@ -250,9 +281,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
       statefulProcessorHandle, groupingKeySchema, "", false, false,
       maxRecordsPerBatch, outputStream, valueStateMap,
       transformWithStateInPandasDeserializer, arrowStreamWriter, listStateMap, iteratorMap)
-    when(listState.get()).thenReturn(Iterator(new GenericRowWithSchema(Array(1), stateSchema),
-      new GenericRowWithSchema(Array(2), stateSchema),
-      new GenericRowWithSchema(Array(3), stateSchema)))
+    when(listState.get()).thenReturn(Iterator(getIntegerRow(1), getIntegerRow(2), getIntegerRow(3)))
     stateServer.handleListStateRequest(message)
     verify(listState).get()
     // Verify that only maxRecordsPerBatch (2) rows are written to the output stream while still
@@ -290,5 +319,160 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
       IsFirstBatch.newBuilder().build()).build()
     stateServer.handleStatefulProcessorUtilRequest(message)
     verify(outputStream).writeInt(0)
+  }
+
+  test("map state exists") {
+    val message = MapStateCall.newBuilder().setStateName(stateName)
+      .setExists(Exists.newBuilder().build()).build()
+    stateServer.handleMapStateRequest(message)
+    verify(mapState).exists()
+  }
+
+  test("map state get") {
+    val byteString: ByteString = ByteString.copyFrom(byteArray)
+    val message = MapStateCall.newBuilder().setStateName(stateName)
+      .setGetValue(GetValue.newBuilder().setUserKey(byteString).build()).build()
+    val schema = new StructType().add("value", "int")
+    when(mapState.getValue(any[Row])).thenReturn(getIntegerRow(1))
+    stateServer.handleMapStateRequest(message)
+    verify(mapState).getValue(any[Row])
+    verify(outputStream).writeInt(argThat((x: Int) => x > 0))
+  }
+
+  test("map state contains key") {
+    val byteString: ByteString = ByteString.copyFrom(byteArray)
+    val message = MapStateCall.newBuilder().setStateName(stateName)
+      .setContainsKey(ContainsKey.newBuilder().setUserKey(byteString).build()).build()
+    stateServer.handleMapStateRequest(message)
+    verify(mapState).containsKey(any[Row])
+  }
+
+  test("map state update value") {
+    val byteString: ByteString = ByteString.copyFrom(byteArray)
+    val message = MapStateCall.newBuilder().setStateName(stateName)
+      .setUpdateValue(UpdateValue.newBuilder().setUserKey(byteString).setValue(byteString).build())
+      .build()
+    stateServer.handleMapStateRequest(message)
+    verify(mapState).updateValue(any[Row], any[Row])
+  }
+
+  test("map state iterator - iterator in map") {
+    val message = MapStateCall.newBuilder().setStateName(stateName)
+      .setIterator(StateMessage.Iterator.newBuilder().setIteratorId(iteratorId).build()).build()
+    stateServer.handleMapStateRequest(message)
+    verify(mapState, times(0)).iterator()
+    verify(arrowStreamWriter).writeRow(any)
+    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+  }
+
+  test("map state iterator - iterator in map with multiple batches") {
+    val maxRecordsPerBatch = 2
+    val message = MapStateCall.newBuilder().setStateName(stateName)
+      .setIterator(StateMessage.Iterator.newBuilder().setIteratorId(iteratorId).build()).build()
+    val keyValueIteratorMap = mutable.HashMap[String, Iterator[(Row, Row)]](iteratorId ->
+      Iterator((getIntegerRow(1), getIntegerRow(1)), (getIntegerRow(2), getIntegerRow(2)),
+        (getIntegerRow(3), getIntegerRow(3)), (getIntegerRow(4), getIntegerRow(4))))
+    stateServer = new TransformWithStateInPandasStateServer(serverSocket,
+      statefulProcessorHandle, groupingKeySchema, "", false, false,
+      maxRecordsPerBatch, outputStream, valueStateMap, transformWithStateInPandasDeserializer,
+      arrowStreamWriter, listStateMap, null, mapStateMap, keyValueIteratorMap)
+    // First call should send 2 records.
+    stateServer.handleMapStateRequest(message)
+    verify(mapState, times(0)).iterator()
+    verify(arrowStreamWriter, times(maxRecordsPerBatch)).writeRow(any)
+    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    // Second call should send the remaining 2 records.
+    stateServer.handleMapStateRequest(message)
+    verify(mapState, times(0)).iterator()
+    // Since Mockito's verify counts the total number of calls, the expected number of writeRow call
+    // should be 2 * maxRecordsPerBatch.
+    verify(arrowStreamWriter, times(2 * maxRecordsPerBatch)).writeRow(any)
+    verify(arrowStreamWriter, times(2)).finalizeCurrentArrowBatch()
+  }
+
+  test("map state iterator - iterator not in map") {
+    val maxRecordsPerBatch = 2
+    val message = MapStateCall.newBuilder().setStateName(stateName)
+      .setIterator(StateMessage.Iterator.newBuilder().setIteratorId(iteratorId).build()).build()
+    val keyValueIteratorMap: mutable.HashMap[String, Iterator[(Row, Row)]] = mutable.HashMap()
+    stateServer = new TransformWithStateInPandasStateServer(serverSocket,
+      statefulProcessorHandle, groupingKeySchema, "", false, false,
+      maxRecordsPerBatch, outputStream, valueStateMap, transformWithStateInPandasDeserializer,
+      arrowStreamWriter, listStateMap, null, mapStateMap, keyValueIteratorMap)
+    when(mapState.iterator()).thenReturn(Iterator((getIntegerRow(1), getIntegerRow(1)),
+      (getIntegerRow(2), getIntegerRow(2)), (getIntegerRow(3), getIntegerRow(3))))
+    stateServer.handleMapStateRequest(message)
+    verify(mapState).iterator()
+    // Verify that only maxRecordsPerBatch (2) rows are written to the output stream while still
+    // having 1 row left in the iterator.
+    verify(arrowStreamWriter, times(maxRecordsPerBatch)).writeRow(any)
+    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+  }
+
+  test("map state keys - iterator in map") {
+    val message = MapStateCall.newBuilder().setStateName(stateName)
+      .setKeys(Keys.newBuilder().setIteratorId(iteratorId).build()).build()
+    stateServer.handleMapStateRequest(message)
+    verify(mapState, times(0)).keys()
+    verify(arrowStreamWriter).writeRow(any)
+    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+  }
+
+  test("map state keys - iterator not in map") {
+    val maxRecordsPerBatch = 2
+    val message = MapStateCall.newBuilder().setStateName(stateName)
+      .setKeys(Keys.newBuilder().setIteratorId(iteratorId).build()).build()
+    val iteratorMap: mutable.HashMap[String, Iterator[Row]] = mutable.HashMap()
+    stateServer = new TransformWithStateInPandasStateServer(serverSocket,
+      statefulProcessorHandle, groupingKeySchema, "", false, false,
+      maxRecordsPerBatch, outputStream, valueStateMap, transformWithStateInPandasDeserializer,
+      arrowStreamWriter, listStateMap, iteratorMap, mapStateMap)
+    when(mapState.keys()).thenReturn(Iterator(getIntegerRow(1), getIntegerRow(2), getIntegerRow(3)))
+    stateServer.handleMapStateRequest(message)
+    verify(mapState).keys()
+    // Verify that only maxRecordsPerBatch (2) rows are written to the output stream while still
+    // having 1 row left in the iterator.
+    verify(arrowStreamWriter, times(maxRecordsPerBatch)).writeRow(any)
+    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+  }
+
+  test("map state values - iterator in map") {
+    val message = MapStateCall.newBuilder().setStateName(stateName)
+      .setValues(Values.newBuilder().setIteratorId(iteratorId).build()).build()
+    stateServer.handleMapStateRequest(message)
+    verify(mapState, times(0)).values()
+    verify(arrowStreamWriter).writeRow(any)
+    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+  }
+
+  test("map state values - iterator not in map") {
+    val maxRecordsPerBatch = 2
+    val message = MapStateCall.newBuilder().setStateName(stateName)
+      .setValues(Values.newBuilder().setIteratorId(iteratorId).build()).build()
+    val iteratorMap: mutable.HashMap[String, Iterator[Row]] = mutable.HashMap()
+    stateServer = new TransformWithStateInPandasStateServer(serverSocket,
+      statefulProcessorHandle, groupingKeySchema, "", false, false,
+      maxRecordsPerBatch, outputStream, valueStateMap, transformWithStateInPandasDeserializer,
+      arrowStreamWriter, listStateMap, iteratorMap, mapStateMap)
+    when(mapState.values()).thenReturn(Iterator(getIntegerRow(1), getIntegerRow(2),
+      getIntegerRow(3)))
+    stateServer.handleMapStateRequest(message)
+    verify(mapState).values()
+    // Verify that only maxRecordsPerBatch (2) rows are written to the output stream while still
+    // having 1 row left in the iterator.
+    verify(arrowStreamWriter, times(maxRecordsPerBatch)).writeRow(any)
+    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+  }
+
+  test("remove key") {
+    val byteString: ByteString = ByteString.copyFrom(byteArray)
+    val message = MapStateCall.newBuilder().setStateName(stateName)
+      .setRemoveKey(RemoveKey.newBuilder().setUserKey(byteString).build()).build()
+    stateServer.handleMapStateRequest(message)
+    verify(mapState).removeKey(any[Row])
+  }
+
+  private def getIntegerRow(value: Int): Row = {
+    new GenericRowWithSchema(Array(value), stateSchema)
   }
 }

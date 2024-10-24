@@ -2134,8 +2134,10 @@ class DataFrame(ParentDataFrame):
         assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
         return checkpointed
 
-    def localCheckpoint(self, eager: bool = True) -> ParentDataFrame:
-        cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager)
+    def localCheckpoint(
+        self, eager: bool = True, storageLevel: Optional[StorageLevel] = None
+    ) -> ParentDataFrame:
+        cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager, storage_level=storageLevel)
         _, properties, self._execution_info = self._session.client.execute_command(
             cmd.command(self._session.client)
         )

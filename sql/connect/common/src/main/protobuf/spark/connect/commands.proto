@@ -507,6 +507,9 @@ message CheckpointCommand {
 
   // (Required) Whether to checkpoint this dataframe immediately.
   bool eager = 3;
+
+  // (Optional) For local checkpoint, the storage level to use.
+  optional StorageLevel storage_level = 4;
 }
 
 message MergeIntoTableCommand {

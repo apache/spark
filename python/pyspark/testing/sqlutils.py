@@ -55,6 +55,13 @@ except ImportError as e:
     plotly_requirement_message = str(e)
 have_plotly = plotly_requirement_message is None
 
+numpy_requirement_message = None
+try:
+    import numpy
+except ImportError as e:
+    numpy_requirement_message = str(e)
+have_numpy = numpy_requirement_message is None
+
 from pyspark.sql import SparkSession
 from pyspark.sql.types import ArrayType, DoubleType, UserDefinedType, Row
 from pyspark.testing.utils import ReusedPySparkTestCase, PySparkErrorTestUtils
@@ -63,6 +70,7 @@ from pyspark.testing.utils import ReusedPySparkTestCase, PySparkErrorTestUtils
 have_pandas = pandas_requirement_message is None
 have_pyarrow = pyarrow_requirement_message is None
 test_compiled = test_not_compiled_message is None
+have_numpy = numpy_requirement_message is None
 
 
 class UTCOffsetTimezone(datetime.tzinfo):
