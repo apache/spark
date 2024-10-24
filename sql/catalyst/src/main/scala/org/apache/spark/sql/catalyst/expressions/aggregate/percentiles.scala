@@ -134,7 +134,7 @@ abstract class PercentileBase
         buffer.changeValue(key, frqLong, _ + frqLong)
       } else if (frqLong < 0) {
         throw QueryExecutionErrors.negativeValueUnexpectedError(
-          frequencyExpression, frqLong.toString)
+          frequencyExpression, frqLong)
       }
     }
     buffer
