@@ -94,11 +94,13 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
             visitBinaryComparison(e.name(), l, r)
           case "CASE_WHEN" =>
             // Since MsSqlServer cannot handle boolean expressions inside
-            // a CASE WHEN, it is necessary to convert those to an IIF
-            // expression that will return 1 or 0 depending on the result.
+            // a CASE WHEN, it is necessary to convert those to another
+            // CASE WHEN expression that will return 1 or 0 depending on
+            // the result. Exceptions are TRUE and FALSE, which already
+            // get translated to 1 and 0.
             // Example:
-            // In:  ... CASE WHEN a = b THEN c = d ...
-            // Out: ... CASE WHEN a = b THEN IIF(c = d, 1, 0) ...
+            // In:  ... CASE WHEN a = b THEN c = d ... END
+            // Out: ... CASE WHEN a = b THEN CASE WHEN c = d THEN 1 ELSE 0 END ... END = 1
 
             // grouped turns Array[Expression] to Array[Array[Expression]]
             // with a len of max 2 (final one will have only one)
