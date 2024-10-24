@@ -3261,21 +3261,22 @@ class CollationSQLExpressionsSuite
   }
 
   test("SPARK-50060: set operators with conflicting collations") {
-    val setOperators = Seq[(String, Int)](
-      ("UNION", 64),
-      ("INTERSECT", 68),
-      ("EXCEPT", 65))
+    val setOperators = Seq[(String, Int, Int)](
+      ("UNION", 64, 45),
+      ("INTERSECT", 68, 49),
+      ("EXCEPT", 65, 46))
 
     for {
       ansiEnabled <- Seq(true, false)
-      (operator, stop) <- setOperators
+      (operator, stopExplicit, stopDefault) <- setOperators
     } {
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString,
-        SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-        val query = s"SELECT 'a' COLLATE UTF8_LCASE $operator SELECT 'A' COLLATE UNICODE_CI"
+        SqlApiConf.DEFAULT_COLLATION -> "UNICODE_CI") {
+        val explicitConflictQuery =
+          s"SELECT 'a' COLLATE UTF8_LCASE $operator SELECT 'A' COLLATE UNICODE_CI"
         checkError(
           exception = intercept[AnalysisException] {
-            sql(query)
+            sql(explicitConflictQuery)
           },
           condition = "INCOMPATIBLE_COLUMN_TYPE",
           parameters = Map(
@@ -3286,9 +3287,28 @@ class CollationSQLExpressionsSuite
             "operator" -> operator,
             "hint" -> ""),
           context = ExpectedContext(
-            fragment = query,
+            fragment = explicitConflictQuery,
             start = 0,
-            stop = stop))
+            stop = stopExplicit))
+
+        val defaultConflictQuery =
+          s"SELECT 'a' COLLATE UTF8_LCASE $operator SELECT 'A'"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(defaultConflictQuery)
+          },
+          condition = "INCOMPATIBLE_COLUMN_TYPE",
+          parameters = Map(
+            "columnOrdinalNumber" -> "first",
+            "tableOrdinalNumber" -> "second",
+            "dataType1" -> "\"STRING COLLATE UNICODE_CI\"",
+            "dataType2" -> "\"STRING COLLATE UTF8_LCASE\"",
+            "operator" -> operator,
+            "hint" -> ""),
+          context = ExpectedContext(
+            fragment = defaultConflictQuery,
+            start = 0,
+            stop = stopDefault))
       }
     }
   }
