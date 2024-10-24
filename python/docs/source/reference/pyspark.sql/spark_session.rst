@@ -59,6 +59,7 @@ See also :class:`SparkSession`.
     SparkSession.stop
     SparkSession.streams
     SparkSession.table
+    SparkSession.tvf
     SparkSession.udf
     SparkSession.udtf
     SparkSession.version
