@@ -21,6 +21,8 @@ import org.json4s.JsonAST.{JString, JValue}
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.types.CollationStrength.Default
+
 
 /**
  * The data type representing `String` values. Please use the singleton `DataTypes.StringType`.
@@ -30,7 +32,8 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
  *   The id of collation for this StringType.
  */
 @Stable
-class StringType private (val collationId: Int) extends AtomicType with Serializable {
+class StringType private (val collationId: Int, val strength: CollationStrength)
+  extends AtomicType with Serializable {
 
   /**
    * Support for Binary Equality implies that strings are considered equal only if they are byte
@@ -101,11 +104,23 @@ class StringType private (val collationId: Int) extends AtomicType with Serializ
  * @since 1.3.0
  */
 @Stable
-case object StringType extends StringType(0) {
-  private[spark] def apply(collationId: Int): StringType = new StringType(collationId)
+case object StringType extends StringType(0, CollationStrength.Default) {
+  private[spark] def apply(collationId: Int, strength: CollationStrength = Default): StringType =
+    new StringType(collationId, strength)
 
   def apply(collation: String): StringType = {
     val collationId = CollationFactory.collationNameToId(collation)
-    new StringType(collationId)
+    new StringType(collationId, CollationStrength.Default)
   }
+
+  private[spark] def unapply(stringType: StringType): Option[(Int, CollationStrength)] = {
+    Some((stringType.collationId, stringType.strength))
+  }
+}
+
+private[spark] sealed trait CollationStrength
+private[spark] object CollationStrength {
+  case object Explicit extends CollationStrength
+  case object Implicit extends CollationStrength
+  case object Default extends CollationStrength
 }

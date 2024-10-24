@@ -33,6 +33,17 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
     assert(exception.getCondition === errorClass)
   }
 
+  test("asdfffff") {
+    // TODO: add tests for variable/subq etc
+    sql(s"DECLARE a = 'a'")
+    sql(s"DECLARE b = 'a' collate unicode")
+
+//    sql(s"SELECT a = 'a'")
+    sql(s"SELECT a = CAST('5' as STRING)")
+    sql(s"SELECT a = (SELECT b COLLATE UNICODE)")
+    sql(s"SELECT a = b")
+  }
+
   test("access collated map via literal") {
     val tableName = "map_with_lit"
 
