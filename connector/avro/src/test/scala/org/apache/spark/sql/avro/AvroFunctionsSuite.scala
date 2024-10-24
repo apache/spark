@@ -106,6 +106,17 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
        functions.from_avro(
           $"avro", avroTypeStruct, Map("mode" -> "PERMISSIVE").asJava)),
       expected)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        avroStructDF.select(
+          functions.from_avro(
+            $"avro", avroTypeStruct, Map("mode" -> "DROPMALFORMED").asJava)).collect()
+      },
+      condition = "PARSE_MODE_UNSUPPORTED",
+      parameters = Map(
+        "funcName" -> "`from_avro`",
+        "mode" -> "DROPMALFORMED"))
   }
 
   test("roundtrip in to_avro and from_avro - array with null") {

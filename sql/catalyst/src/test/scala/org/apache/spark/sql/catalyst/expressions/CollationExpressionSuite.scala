@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CollationFactory, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -218,6 +218,49 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       case (collation, normalized) =>
         checkEvaluation(Collation(Literal.create("abc", StringType(collation))),
           normalized)
+    }
+  }
+
+  test("InSet") {
+    Seq(
+      ("1", "UTF8_BINARY", Set("1", "2", "3")) -> true,
+      ("aaa", "UTF8_BINARY", Set("b", "c", "Aaa")) -> false,
+      ("a", "UTF8_LCASE", Set("a")) -> true,
+      ("a", "UTF8_LCASE", Set("A", "b")) -> true,
+      ("Belgrade", "UTF8_LCASE", Set()) -> false,
+      ("aBc", "UTF8_LCASE", Set("b", "aa", "xyz")) -> false,
+      ("aBc", "UTF8_LCASE", Set("b", "AbC", null)) -> true,
+      (null, "UTF8_LCASE", Set("b", "AbC", null)) -> null,
+      (" aa", "UTF8_BINARY_RTRIM", Set(" aa")) -> true,
+      (" aa ", "UTF8_BINARY_RTRIM", Set(" aa")) -> true,
+      ("a  ", "UTF8_BINARY_RTRIM", Set()) -> false,
+      ("a  ", "UTF8_BINARY_RTRIM", Set("a", "b", null)) -> true,
+      (null, "UTF8_BINARY_RTRIM", Set("1", "2")) -> null
+    ).foreach { case ((elem, collation, inputSet), result) =>
+      checkEvaluation(
+        InSet(
+          Literal.create(
+            elem,
+            StringType(collation)),
+          inputSet.map(UTF8String.fromString).asInstanceOf[Set[Any]]),
+        result)
+      def arr(s: String): GenericArrayData = new GenericArrayData(Array(UTF8String.fromString(s)))
+      checkEvaluation(
+        InSet(
+          Literal.create(
+            if (elem == null) null else arr(elem),
+            ArrayType(StringType(collation))),
+          inputSet.map(arr).asInstanceOf[Set[Any]]),
+        result)
+      checkEvaluation(
+        InSet(
+          Literal.create(
+            if (elem == null) null
+            else new ArrayBasedMapData(arr(elem), arr("aBc")),
+            MapType(StringType(collation), StringType("UTF8_BINARY"))),
+          inputSet
+            .map(s => new ArrayBasedMapData(arr(s), arr("aBc"))).asInstanceOf[Set[Any]]),
+        result)
     }
   }
 }

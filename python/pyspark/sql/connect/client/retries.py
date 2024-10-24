@@ -21,7 +21,7 @@ import time
 import typing
 from typing import Optional, Callable, Generator, List, Type
 from types import TracebackType
-from pyspark.sql.connect.client.logging import logger
+from pyspark.sql.connect.logging import logger
 from pyspark.errors import PySparkRuntimeError, RetriesExceeded
 
 """

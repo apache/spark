@@ -70,7 +70,16 @@ case class EnsureRequirements(
       case (child, distribution) =>
         val numPartitions = distribution.requiredNumPartitions
           .getOrElse(conf.numShufflePartitions)
-        ShuffleExchangeExec(distribution.createPartitioning(numPartitions), child, shuffleOrigin)
+        distribution match {
+          case _: StatefulOpClusteredDistribution =>
+            ShuffleExchangeExec(
+              distribution.createPartitioning(numPartitions), child,
+              REQUIRED_BY_STATEFUL_OPERATOR)
+
+          case _ =>
+            ShuffleExchangeExec(
+              distribution.createPartitioning(numPartitions), child, shuffleOrigin)
+        }
     }
 
     // Get the indexes of children which have specified distribution requirements and need to be

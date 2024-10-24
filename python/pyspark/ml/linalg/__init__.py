@@ -706,12 +706,12 @@ class SparseVector(Vector):
 
         elif isinstance(other, SparseVector):
             # Find out common indices.
-            self_cmind = np.in1d(self.indices, other.indices, assume_unique=True)
+            self_cmind = np.isin(self.indices, other.indices, assume_unique=True)
             self_values = self.values[self_cmind]
             if self_values.size == 0:
                 return np.float64(0.0)
             else:
-                other_cmind = np.in1d(other.indices, self.indices, assume_unique=True)
+                other_cmind = np.isin(other.indices, self.indices, assume_unique=True)
                 return np.dot(self_values, other.values[other_cmind])
 
         else:

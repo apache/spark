@@ -98,7 +98,17 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
         benchmark.addCase("With bloom filter") { _ =>
           df.write.mode("overwrite")
             .option(ParquetOutputFormat.BLOOM_FILTER_ENABLED + "#value", true)
+            .option(ParquetOutputFormat.ADAPTIVE_BLOOM_FILTER_ENABLED + "#value", false)
             .parquet(path + "/withBF")
+        }
+        Seq(3, 5, 9, 15).foreach { candidates =>
+          benchmark.addCase(s"With adaptive bloom filter & $candidates candidates ") { _ =>
+            df.write.mode("overwrite")
+              .option(ParquetOutputFormat.BLOOM_FILTER_ENABLED + "#value", true)
+              .option(ParquetOutputFormat.ADAPTIVE_BLOOM_FILTER_ENABLED + "#value", true)
+              .option(ParquetOutputFormat.BLOOM_FILTER_CANDIDATES_NUMBER + "#value", candidates)
+              .parquet(s"$path/withBF$candidates")
+          }
         }
         benchmark.run()
       }

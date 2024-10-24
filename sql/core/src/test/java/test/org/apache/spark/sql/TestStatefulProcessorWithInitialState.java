@@ -53,30 +53,27 @@ public class TestStatefulProcessorWithInitialState
   public scala.collection.Iterator<String> handleInputRows(
       Integer key,
       scala.collection.Iterator<String> rows,
-      TimerValues timerValues,
-      ExpiredTimerInfo expiredTimerInfo) {
+      TimerValues timerValues) {
 
     java.util.List<String> result = new ArrayList<>();
-    if (!expiredTimerInfo.isValid()) {
-      String existingValue = "";
-      if (testState.exists()) {
-        existingValue = testState.get();
-      }
-
-      StringBuilder sb = new StringBuilder(key.toString());
-      if (!existingValue.isEmpty()) {
-        sb.append(existingValue);
-      }
-
-      while (rows.hasNext()) {
-        sb.append(rows.next());
-      }
-
-      testState.clear();
-      assertFalse(testState.exists());
-
-      result.add(sb.toString());
+    String existingValue = "";
+    if (testState.exists()) {
+      existingValue = testState.get();
     }
+
+    StringBuilder sb = new StringBuilder(key.toString());
+    if (!existingValue.isEmpty()) {
+      sb.append(existingValue);
+    }
+
+    while (rows.hasNext()) {
+      sb.append(rows.next());
+    }
+
+    testState.clear();
+    assertFalse(testState.exists());
+
+    result.add(sb.toString());
     return CollectionConverters.asScala(result).iterator();
   }
 }

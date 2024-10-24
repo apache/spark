@@ -43,7 +43,7 @@ import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -840,7 +840,7 @@ class DataSourceV2SQLSuiteV1Filter
           val exception = intercept[SparkRuntimeException] {
             insertNullValueAndCheck()
           }
-          assert(exception.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
+          assert(exception.getCondition == "NOT_NULL_ASSERT_VIOLATION")
         }
     }
   }
@@ -3746,7 +3746,7 @@ class DataSourceV2SQLSuiteV1Filter
         sql("INSERT INTO " + tableName + " VALUES('Bob')")
         val df = sql("SELECT * FROM " + tableName)
         assert(df.queryExecution.analyzed.exists {
-          case LogicalRelation(_: HadoopFsRelation, _, _, _) => true
+          case LogicalRelationWithTable(_: HadoopFsRelation, _) => true
           case _ => false
         })
         checkAnswer(df, Row("Bob"))

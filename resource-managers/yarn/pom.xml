@@ -29,42 +29,7 @@
   <name>Spark Project YARN</name>
   <properties>
     <sbt.project.name>yarn</sbt.project.name>
-    <jersey-1.version>1.19</jersey-1.version>
   </properties>
-
-  <profiles>
-    <profile>
-      <id>hadoop-3</id>
-      <activation>
-        <activeByDefault>true</activeByDefault>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-client-runtime</artifactId>
-          <version>${hadoop.version}</version>
-          <scope>${hadoop.deps.scope}</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-client-minicluster</artifactId>
-          <version>${hadoop.version}</version>
-          <scope>test</scope>
-        </dependency>
-        <!-- Used by MiniYARNCluster -->
-        <dependency>
-          <groupId>org.bouncycastle</groupId>
-          <artifactId>bcprov-jdk18on</artifactId>
-          <scope>test</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.bouncycastle</groupId>
-          <artifactId>bcpkix-jdk18on</artifactId>
-          <scope>test</scope>
-        </dependency>
-      </dependencies>
-    </profile>
-  </profiles>
 
   <dependencies>
     <dependency>
@@ -102,6 +67,35 @@
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client-api</artifactId>
       <version>${hadoop.version}</version>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-client-runtime</artifactId>
+      <version>${hadoop.version}</version>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-client-minicluster</artifactId>
+      <version>${hadoop.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <!-- Used by MiniYARNCluster -->
+    <dependency>
+      <groupId>javax.xml.bind</groupId>
+      <artifactId>jaxb-api</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcprov-jdk18on</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcpkix-jdk18on</artifactId>
+      <scope>test</scope>
     </dependency>
 
     <!-- Explicit listing of transitive deps that are shaded. Otherwise, odd compiler crashes. -->
@@ -135,22 +129,6 @@
     </dependency>
     <!-- End of shaded deps. -->
 
-    <!--
-      SPARK-10059: Explicitly add JSP dependencies for tests since the MiniYARN cluster needs them.
-    -->
-    <dependency>
-      <groupId>org.eclipse.jetty.orbit</groupId>
-      <artifactId>javax.servlet.jsp</artifactId>
-      <version>2.2.0.v201112011158</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.eclipse.jetty.orbit</groupId>
-      <artifactId>javax.servlet.jsp.jstl</artifactId>
-      <version>1.2.0.v201105211821</version>
-      <scope>test</scope>
-    </dependency>
-
     <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-core</artifactId>
@@ -165,65 +143,6 @@
       <groupId>net.bytebuddy</groupId>
       <artifactId>byte-buddy-agent</artifactId>
       <scope>test</scope>
-    </dependency>
-
-     <!--
-       Jersey 1 dependencies only required for YARN integration testing. Creating a YARN cluster
-       in the JVM requires starting a Jersey 1-based web application.
-     -->
-     <dependency>
-       <groupId>com.sun.jersey</groupId>
-       <artifactId>jersey-core</artifactId>
-       <scope>test</scope>
-       <version>${jersey-1.version}</version>
-     </dependency>
-     <dependency>
-       <groupId>com.sun.jersey</groupId>
-       <artifactId>jersey-json</artifactId>
-       <scope>test</scope>
-       <version>${jersey-1.version}</version>
-     </dependency>
-     <dependency>
-       <groupId>com.sun.jersey</groupId>
-       <artifactId>jersey-server</artifactId>
-       <scope>test</scope>
-       <version>${jersey-1.version}</version>
-     </dependency>
-     <dependency>
-       <groupId>com.sun.jersey.contribs</groupId>
-       <artifactId>jersey-guice</artifactId>
-       <scope>test</scope>
-       <version>${jersey-1.version}</version>
-     </dependency>
-     <dependency>
-       <groupId>com.sun.jersey</groupId>
-       <artifactId>jersey-servlet</artifactId>
-       <scope>test</scope>
-       <version>${jersey-1.version}</version>
-     </dependency>
-
-    <!-- These dependencies are duplicated from core, because dependencies in the "provided"
-    scope are not transitive.-->
-    <dependency>
-      <groupId>${hive.group}</groupId>
-      <artifactId>hive-exec</artifactId>
-      <classifier>${hive.classifier}</classifier>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>${hive.group}</groupId>
-      <artifactId>hive-metastore</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.thrift</groupId>
-      <artifactId>libthrift</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.thrift</groupId>
-      <artifactId>libfb303</artifactId>
-      <scope>provided</scope>
     </dependency>
   </dependencies>
 

@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeWithCaseAccentSensitivity
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, DataType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -193,11 +193,11 @@ case class Mask(
    */
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
-      StringTypeWithCaseAccentSensitivity,
-      StringTypeWithCaseAccentSensitivity,
-      StringTypeWithCaseAccentSensitivity,
-      StringTypeWithCaseAccentSensitivity,
-      StringTypeWithCaseAccentSensitivity)
+      StringTypeWithCollation,
+      StringTypeWithCollation,
+      StringTypeWithCollation,
+      StringTypeWithCollation,
+      StringTypeWithCollation)
 
   override def nullable: Boolean = true
 

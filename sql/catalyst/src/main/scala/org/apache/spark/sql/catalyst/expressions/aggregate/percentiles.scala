@@ -133,7 +133,8 @@ abstract class PercentileBase
       if (frqLong > 0) {
         buffer.changeValue(key, frqLong, _ + frqLong)
       } else if (frqLong < 0) {
-        throw QueryExecutionErrors.negativeValueUnexpectedError(frequencyExpression)
+        throw QueryExecutionErrors.negativeValueUnexpectedError(
+          frequencyExpression, frqLong)
       }
     }
     buffer

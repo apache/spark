@@ -96,7 +96,7 @@ trait FileWrite extends Write {
       SchemaUtils.checkColumnNameDuplication(
         schema.fields.map(_.name).toImmutableArraySeq, caseSensitiveAnalysis)
     }
-    DataSource.validateSchema(schema, sqlConf)
+    DataSource.validateSchema(formatName, schema, sqlConf)
 
     // TODO: [SPARK-36340] Unify check schema filed of DataSource V2 Insert.
     schema.foreach { field =>

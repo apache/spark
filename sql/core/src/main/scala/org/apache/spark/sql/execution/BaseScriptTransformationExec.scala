@@ -51,8 +51,8 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     child.output.map { in =>
       in.dataType match {
         case _: ArrayType | _: MapType | _: StructType =>
-          new StructsToJson(ioschema.inputSerdeProps.toMap, in)
-            .withTimeZone(conf.sessionLocalTimeZone)
+          StructsToJson(ioschema.inputSerdeProps.toMap, in,
+            Some(conf.sessionLocalTimeZone)).replacement
         case _ => Cast(in, StringType).withTimeZone(conf.sessionLocalTimeZone)
       }
     }
@@ -239,7 +239,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         val complexTypeFactory = JsonToStructs(attr.dataType,
           ioschema.outputSerdeProps.toMap, Literal(null), Some(conf.sessionLocalTimeZone))
         wrapperConvertException(data =>
-          complexTypeFactory.nullSafeEval(UTF8String.fromString(data)), any => any)
+          complexTypeFactory.evaluator.evaluate(UTF8String.fromString(data)), any => any)
       case udt: UserDefinedType[_] =>
         wrapperConvertException(data => udt.deserialize(data), converter)
       case dt =>

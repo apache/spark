@@ -504,6 +504,12 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     val arr = new ColumnarArray(testVector, 0, testVector.capacity)
     assert(arr.toSeq(testVector.dataType) == expected)
     assert(arr.copy().toSeq(testVector.dataType) == expected)
+
+    if (expected.nonEmpty) {
+      val withOffset = new ColumnarArray(testVector, 1, testVector.capacity - 1)
+      assert(withOffset.toSeq(testVector.dataType) == expected.tail)
+      assert(withOffset.copy().toSeq(testVector.dataType) == expected.tail)
+    }
   }
 
   testVectors("getInts with dictionary and nulls", 3, IntegerType) { testVector =>

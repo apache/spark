@@ -27,6 +27,7 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.test.{ConnectFunSuite, RemoteSparkSession, SQLHelper}
+import org.apache.spark.storage.StorageLevel
 
 class CheckpointSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelper {
 
@@ -50,12 +51,20 @@ class CheckpointSuite extends ConnectFunSuite with RemoteSparkSession with SQLHe
     checkFragments(captureStdOut(block), fragmentsToCheck)
   }
 
-  test("checkpoint") {
+  test("localCheckpoint") {
     val df = spark.range(100).localCheckpoint()
     testCapturedStdOut(df.explain(), "ExistingRDD")
   }
 
-  test("checkpoint gc") {
+  test("localCheckpoint with StorageLevel") {
+    // We don't have a way to reach into the server and assert the storage level server side, but
+    // this test should cover for unexpected errors in the API.
+    val df =
+      spark.range(100).localCheckpoint(eager = true, storageLevel = StorageLevel.DISK_ONLY)
+    df.collect()
+  }
+
+  test("localCheckpoint gc") {
     val df = spark.range(100).localCheckpoint(eager = true)
     val encoder = df.agnosticEncoder
     val dfId = df.plan.getRoot.getCachedRemoteRelation.getRelationId
@@ -77,7 +86,7 @@ class CheckpointSuite extends ConnectFunSuite with RemoteSparkSession with SQLHe
 
   // This test is flaky because cannot guarantee GC
   // You can locally run this to verify the behavior.
-  ignore("checkpoint gc derived DataFrame") {
+  ignore("localCheckpoint gc derived DataFrame") {
     var df1 = spark.range(100).localCheckpoint(eager = true)
     var derived = df1.repartition(10)
     val encoder = df1.agnosticEncoder

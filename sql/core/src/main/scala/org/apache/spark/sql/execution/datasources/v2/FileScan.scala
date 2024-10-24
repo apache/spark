@@ -164,7 +164,7 @@ trait FileScan extends Scan
     if (splitFiles.length == 1) {
       val path = splitFiles(0).toPath
       if (!isSplitable(path) && splitFiles(0).length >
-        sparkSession.sparkContext.getConf.get(IO_WARNING_LARGEFILETHRESHOLD)) {
+        sparkSession.sparkContext.conf.get(IO_WARNING_LARGEFILETHRESHOLD)) {
         logWarning(log"Loading one large unsplittable file ${MDC(PATH, path.toString)} with only " +
           log"one partition, the reason is: ${MDC(REASON, getFileUnSplittableReason(path))}")
       }

@@ -360,8 +360,13 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         jdf = self._jdf.checkpoint(eager)
         return DataFrame(jdf, self.sparkSession)
 
-    def localCheckpoint(self, eager: bool = True) -> ParentDataFrame:
-        jdf = self._jdf.localCheckpoint(eager)
+    def localCheckpoint(
+        self, eager: bool = True, storageLevel: Optional[StorageLevel] = None
+    ) -> ParentDataFrame:
+        if storageLevel is None:
+            jdf = self._jdf.localCheckpoint(eager)
+        else:
+            jdf = self._jdf.localCheckpoint(eager, self._sc._getJavaStorageLevel(storageLevel))
         return DataFrame(jdf, self.sparkSession)
 
     def withWatermark(self, eventTime: str, delayThreshold: str) -> ParentDataFrame:

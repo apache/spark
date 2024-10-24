@@ -383,10 +383,10 @@ abstract class Expression extends TreeNode[Expression] {
 trait FoldableUnevaluable extends Expression {
   override def foldable: Boolean = true
 
-  final override def eval(input: InternalRow = null): Any =
+  override def eval(input: InternalRow = null): Any =
     throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
 
-  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
 
@@ -1347,9 +1347,21 @@ trait CommutativeExpression extends Expression {
   /** Collects adjacent commutative operations. */
   private def gatherCommutative(
       e: Expression,
-      f: PartialFunction[CommutativeExpression, Seq[Expression]]): Seq[Expression] = e match {
-    case c: CommutativeExpression if f.isDefinedAt(c) => f(c).flatMap(gatherCommutative(_, f))
-    case other => other.canonicalized :: Nil
+      f: PartialFunction[CommutativeExpression, Seq[Expression]]): Seq[Expression] = {
+    val resultBuffer = scala.collection.mutable.Buffer[Expression]()
+    val stack = scala.collection.mutable.Stack[Expression](e)
+
+    // [SPARK-49977]: Use iterative approach to avoid creating many temporary List objects
+    // for deep expression trees through recursion.
+    while (stack.nonEmpty) {
+      stack.pop() match {
+        case c: CommutativeExpression if f.isDefinedAt(c) =>
+          stack.pushAll(f(c))
+        case other =>
+          resultBuffer += other.canonicalized
+      }
+    }
+    resultBuffer.toSeq
   }
 
   /**

@@ -61,9 +61,9 @@ object IdentityColumn {
   def getIdentityInfo(field: StructField): Option[IdentityColumnSpec] = {
     if (isIdentityColumn(field)) {
       Some(new IdentityColumnSpec(
-        field.metadata.getString(IDENTITY_INFO_START).toLong,
-        field.metadata.getString(IDENTITY_INFO_STEP).toLong,
-        field.metadata.getString(IDENTITY_INFO_ALLOW_EXPLICIT_INSERT).toBoolean))
+        field.metadata.getLong(IDENTITY_INFO_START),
+        field.metadata.getLong(IDENTITY_INFO_STEP),
+        field.metadata.getBoolean(IDENTITY_INFO_ALLOW_EXPLICIT_INSERT)))
     } else {
       None
     }

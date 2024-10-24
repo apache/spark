@@ -1017,7 +1017,9 @@ class DataFrame:
         """
         ...
 
-    def localCheckpoint(self, eager: bool = True) -> "DataFrame":
+    def localCheckpoint(
+        self, eager: bool = True, storageLevel: Optional[StorageLevel] = None
+    ) -> "DataFrame":
         """Returns a locally checkpointed version of this :class:`DataFrame`. Checkpointing can
         be used to truncate the logical plan of this :class:`DataFrame`, which is especially
         useful in iterative algorithms where the plan may grow exponentially. Local checkpoints
@@ -1028,11 +1030,16 @@ class DataFrame:
 
         .. versionchanged:: 4.0.0
             Supports Spark Connect.
+            Added storageLevel parameter.
 
         Parameters
         ----------
         eager : bool, optional, default True
             Whether to checkpoint this :class:`DataFrame` immediately.
+
+        storageLevel : :class:`StorageLevel`, optional, default None
+            The StorageLevel with which the checkpoint will be stored.
+            If not specified, default for RDD local checkpoints.
 
         Returns
         -------

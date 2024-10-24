@@ -2167,7 +2167,9 @@ def _from_numpy_type(nt: "np.dtype") -> Optional[DataType]:
     """Convert NumPy type to Spark data type."""
     import numpy as np
 
-    if nt == np.dtype("int8"):
+    if nt == np.dtype("bool"):
+        return BooleanType()
+    elif nt == np.dtype("int8"):
         return ByteType()
     elif nt == np.dtype("int16"):
         return ShortType()
@@ -2179,6 +2181,8 @@ def _from_numpy_type(nt: "np.dtype") -> Optional[DataType]:
         return FloatType()
     elif nt == np.dtype("float64"):
         return DoubleType()
+    elif nt.type == np.dtype("str"):
+        return StringType()
 
     return None
 
@@ -3273,6 +3277,8 @@ class NumpyArrayConverter:
             return gateway.jvm.double
         elif nt == np.dtype("bool"):
             return gateway.jvm.boolean
+        elif nt.type == np.dtype("str"):
+            return gateway.jvm.String
 
         return None
 
@@ -3286,15 +3292,12 @@ class NumpyArrayConverter:
         assert gateway is not None
         plist = obj.tolist()
 
-        if len(obj) > 0 and isinstance(plist[0], str):
-            jtpe = gateway.jvm.String
-        else:
-            jtpe = self._from_numpy_type_to_java_type(obj.dtype, gateway)
-            if jtpe is None:
-                raise PySparkTypeError(
-                    errorClass="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
-                    messageParameters={"dtype": str(obj.dtype)},
-                )
+        jtpe = self._from_numpy_type_to_java_type(obj.dtype, gateway)
+        if jtpe is None:
+            raise PySparkTypeError(
+                errorClass="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
+                messageParameters={"dtype": str(obj.dtype)},
+            )
         jarr = gateway.new_array(jtpe, len(obj))
         for i in range(len(plist)):
             jarr[i] = plist[i]

@@ -45,8 +45,7 @@ class TestStatefulProcessor
   override def handleInputRows(
       key: String,
       inputRows: Iterator[InputEventRow],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[OutputRow] = {
+      timerValues: TimerValues): Iterator[OutputRow] = {
     if (inputRows.isEmpty) {
       Iterator.empty
     } else {
@@ -70,8 +69,7 @@ class InputCountStatefulProcessor[T]
   override def handleInputRows(
       key: String,
       inputRows: Iterator[T],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[Int] = {
+      timerValues: TimerValues): Iterator[Int] = {
     Iterator.single(inputRows.size)
   }
 }
@@ -86,8 +84,7 @@ class StatefulProcessorEmittingRowsOlderThanWatermark
   override def handleInputRows(
       key: String,
       inputRows: Iterator[InputEventRow],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[OutputRow] = {
+      timerValues: TimerValues): Iterator[OutputRow] = {
     Iterator.single(
       OutputRow(
         key,

@@ -315,6 +315,12 @@ class Profile:
             A UDF ID to be shown. If not specified, all the results will be shown.
         type : str, optional
             The profiler type, which can be either "perf" or "memory".
+
+        Notes
+        -----
+        The results are gathered from all Python executions. For example, if there are
+        8 tasks, each processing 1,000 rows, the total output will display the results
+        for 8,000 rows.
         """
         if type == "memory":
             self.profiler_collector.show_memory_profiles(id)

@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeWithCaseAccentSensitivity
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -59,13 +59,13 @@ case class UrlEncode(child: Expression)
       SQLConf.get.defaultStringType,
       "encode",
       Seq(child),
-      Seq(StringTypeWithCaseAccentSensitivity))
+      Seq(StringTypeWithCollation))
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(child = newChild)
   }
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCaseAccentSensitivity)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCollation)
 
   override def prettyName: String = "url_encode"
 }
@@ -98,13 +98,13 @@ case class UrlDecode(child: Expression, failOnError: Boolean = true)
       SQLConf.get.defaultStringType,
       "decode",
       Seq(child, Literal(failOnError)),
-      Seq(StringTypeWithCaseAccentSensitivity, BooleanType))
+      Seq(StringTypeWithCollation, BooleanType))
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(child = newChild)
   }
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCaseAccentSensitivity)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCollation)
 
   override def prettyName: String = "url_decode"
 }
@@ -169,6 +169,36 @@ object ParseUrl {
   private val REGEXSUBFIX = "=([^&]*)"
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(url, partToExtract[, key]) - This is a special version of `parse_url` that performs the same operation, but returns a NULL value instead of raising an error if the parsing cannot be performed.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'HOST');
+       spark.apache.org
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY');
+       query=1
+      > SELECT _FUNC_('inva lid://spark.apache.org/path?query=1', 'QUERY');
+       NULL
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY', 'query');
+       1
+  """,
+  since = "4.0.0",
+  group = "url_funcs")
+// scalastyle:on line.size.limit
+case class TryParseUrl(params: Seq[Expression], replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+  def this(children: Seq[Expression]) = this(children, ParseUrl(children, failOnError = false))
+
+  override def prettyName: String = "try_parse_url"
+
+  override def parameters: Seq[Expression] = params
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(replacement = newChild)
+  }
+}
+
 /**
  * Extracts a part from a URL
  */
@@ -191,7 +221,7 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
 
   override def nullable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
-    Seq.fill(children.size)(StringTypeWithCaseAccentSensitivity)
+    Seq.fill(children.size)(StringTypeWithCollation)
   override def dataType: DataType = SQLConf.get.defaultStringType
   override def prettyName: String = "parse_url"
 

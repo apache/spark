@@ -1062,7 +1062,7 @@ class SingleSessionSuite extends HiveThriftServer2TestBase {
         statement.executeQuery("SET spark.sql.hive.thriftServer.singleSession=false")
       }.getMessage
       assert(e.contains(
-        "Cannot modify the value of a static config: spark.sql.hive.thriftServer.singleSession"))
+        "CANNOT_MODIFY_CONFIG"))
     }
   }
 

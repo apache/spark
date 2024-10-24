@@ -66,7 +66,8 @@ class SparkILoop(in0: BufferedReader, out: PrintWriter)
     "import org.apache.spark.SparkContext._",
     "import spark.implicits._",
     "import spark.sql",
-    "import org.apache.spark.sql.functions._"
+    "import org.apache.spark.sql.functions._",
+    "import org.apache.spark.util.LogUtils.SPARK_LOG_SCHEMA"
   )
 
   override protected def internalReplAutorunCode(): Seq[String] =

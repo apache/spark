@@ -331,8 +331,27 @@ package object expressions  {
       (candidates, nestedFields)
     }
 
-    /** Perform attribute resolution given a name and a resolver. */
+    /**
+     * Resolve `nameParts` into a specific [[NamedExpression]] using the provided `resolver`.
+     *
+     * This method finds all suitable candidates for the resolution based on the name matches and
+     * checks if the nested fields are requested.
+     * - If there's only one match and nested fields are requested, wrap the matched attribute with
+     *   [[ExtractValue]], and recursively wrap that with additional [[ExtractValue]]s
+     *   for each nested field. In the end, alias the final expression with the last nested field
+     *   name.
+     * - If there's only one match and no nested fields are requested, return the matched attribute.
+     * - If there are no matches, return None.
+     * - If there is more than one match, throw [[QueryCompilationErrors.ambiguousReferenceError]].
+     */
     def resolve(nameParts: Seq[String], resolver: Resolver): Option[NamedExpression] = {
+      val (candidates, nestedFields) = getCandidatesForResolution(nameParts, resolver)
+      resolveCandidates(nameParts, resolver, candidates, nestedFields)
+    }
+
+    def getCandidatesForResolution(
+        nameParts: Seq[String],
+        resolver: Resolver): (Seq[Attribute], Seq[String]) = {
       val (candidates, nestedFields) = if (hasThreeOrLessQualifierParts) {
         matchWithThreeOrLessQualifierParts(nameParts, resolver)
       } else {
@@ -345,13 +364,21 @@ package object expressions  {
         candidates
       }
 
+      (prunedCandidates, nestedFields)
+    }
+
+    def resolveCandidates(
+        nameParts: Seq[String],
+        resolver: Resolver,
+        candidates: Seq[Attribute],
+        nestedFields: Seq[String]): Option[NamedExpression] = {
       def name = UnresolvedAttribute(nameParts).name
       // We may have resolved the attributes from metadata columns. The resolved attributes will be
       // put in a logical plan node and becomes normal attributes. They can still keep the special
       // attribute metadata to indicate that they are from metadata columns, but they should not
       // keep any restrictions that may break column resolution for normal attributes.
       // See SPARK-42084 for more details.
-      prunedCandidates.distinct.map(_.markAsAllowAnyAccess()) match {
+      candidates.distinct.map(_.markAsAllowAnyAccess()) match {
         case Seq(a) if nestedFields.nonEmpty =>
           // One match, but we also need to extract the requested nested field.
           // The foldLeft adds ExtractValues for every remaining parts of the identifier,

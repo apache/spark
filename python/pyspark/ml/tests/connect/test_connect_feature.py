@@ -32,19 +32,18 @@ except ImportError:
 if should_test_connect:
     from pyspark.ml.tests.connect.test_legacy_mode_feature import FeatureTestsMixin
 
+    @unittest.skipIf(
+        not should_test_connect or not have_sklearn,
+        connect_requirement_message or sklearn_requirement_message,
+    )
+    class FeatureTestsOnConnect(FeatureTestsMixin, unittest.TestCase):
+        def setUp(self) -> None:
+            self.spark = SparkSession.builder.remote(
+                os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
+            ).getOrCreate()
 
-@unittest.skipIf(
-    not should_test_connect or not have_sklearn,
-    connect_requirement_message or sklearn_requirement_message,
-)
-class FeatureTestsOnConnect(FeatureTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.remote(
-            os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
-        ).getOrCreate()
-
-    def tearDown(self) -> None:
-        self.spark.stop()
+        def tearDown(self) -> None:
+            self.spark.stop()
 
 
 if __name__ == "__main__":

@@ -691,7 +691,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
 
     if (buckets > 0) {
       val bucketed = df.queryExecution.analyzed transform {
-        case l @ LogicalRelation(r: HadoopFsRelation, _, _, _) =>
+        case l @ LogicalRelationWithTable(r: HadoopFsRelation, _) =>
           l.copy(relation =
             r.copy(bucketSpec =
               Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil)))(r.sparkSession))

@@ -111,7 +111,7 @@ abstract class ParquetPartitionDiscoverySuite
       "hdfs://host:9000/path/a=10/b=20",
       "hdfs://host:9000/path/a=10.5/b=hello")
 
-    var exception = intercept[AssertionError] {
+    var exception = intercept[SparkRuntimeException] {
       parsePartitions(
         paths.map(new Path(_)), true, Set.empty[Path], None, true, true, timeZoneId, false)
     }
@@ -173,7 +173,7 @@ abstract class ParquetPartitionDiscoverySuite
       "hdfs://host:9000/path/a=10/b=20",
       "hdfs://host:9000/path/path1")
 
-    exception = intercept[AssertionError] {
+    exception = intercept[SparkRuntimeException] {
       parsePartitions(
         paths.map(new Path(_)),
         true,
@@ -197,7 +197,7 @@ abstract class ParquetPartitionDiscoverySuite
       "hdfs://host:9000/tmp/tables/nonPartitionedTable1",
       "hdfs://host:9000/tmp/tables/nonPartitionedTable2")
 
-    exception = intercept[AssertionError] {
+    exception = intercept[SparkRuntimeException] {
       parsePartitions(
         paths.map(new Path(_)),
         true,
@@ -878,7 +878,7 @@ abstract class ParquetPartitionDiscoverySuite
 
       checkAnswer(twoPartitionsDF, df.filter("b != 3"))
 
-      intercept[AssertionError] {
+      intercept[SparkRuntimeException] {
         spark
           .read
           .parquet(
@@ -1181,7 +1181,7 @@ abstract class ParquetPartitionDiscoverySuite
         spark.read.parquet(dir.toString)
       }
       val msg = exception.getMessage
-      assert(exception.getErrorClass === "CONFLICTING_PARTITION_COLUMN_NAMES")
+      assert(exception.getCondition === "CONFLICTING_PARTITION_COLUMN_NAMES")
       // Partitions inside the error message can be presented in any order
       assert("Partition column name list #[0-1]: col1".r.findFirstIn(msg).isDefined)
       assert("Partition column name list #[0-1]: col1, col2".r.findFirstIn(msg).isDefined)
@@ -1282,8 +1282,8 @@ class ParquetV1PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
       (1 to 10).map(i => (i, i.toString)).toDF("a", "b").write.parquet(dir.getCanonicalPath)
       val queryExecution = spark.read.parquet(dir.getCanonicalPath).queryExecution
       queryExecution.analyzed.collectFirst {
-        case LogicalRelation(
-        HadoopFsRelation(location: PartitioningAwareFileIndex, _, _, _, _, _), _, _, _) =>
+        case LogicalRelationWithTable(
+          HadoopFsRelation(location: PartitioningAwareFileIndex, _, _, _, _, _), _) =>
           assert(location.partitionSpec() === PartitionSpec.emptySpec)
       }.getOrElse {
         fail(s"Expecting a matching HadoopFsRelation, but got:\n$queryExecution")

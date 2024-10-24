@@ -302,13 +302,13 @@ class GroupStateSuite extends SparkFunSuite {
         TestGroupState.create[Int](
           Optional.of(5), NoTimeout, 100L, Optional.empty[Long], hasTimedOut = true)
       },
-      condition = "_LEGACY_ERROR_TEMP_3168",
+      condition = "MISSING_TIMEOUT_CONFIGURATION",
       parameters = Map.empty)
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
         GroupStateImpl.createForStreaming[Int](Some(5), 100L, NO_TIMESTAMP, NoTimeout, true, false)
       },
-      condition = "_LEGACY_ERROR_TEMP_3168",
+      condition = "MISSING_TIMEOUT_CONFIGURATION",
       parameters = Map.empty)
   }
 

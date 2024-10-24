@@ -101,7 +101,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       val testSchema = StructType(Seq(StructField("key", StringType, true)))
       val testStateInfo = StatefulOperatorStateInfo(
         checkpointLocation = Utils.createTempDir().getAbsolutePath,
-        queryRunId = UUID.randomUUID, operatorId = 0, storeVersion = 0, numPartitions = 5)
+        queryRunId = UUID.randomUUID, operatorId = 0, storeVersion = 0, numPartitions = 5, None)
 
       // Create state store in a task and get the RocksDBConf from the instantiated RocksDB instance
       val rocksDBConfInTask: RocksDBConf = testRDD.mapPartitionsWithStateStore[RocksDBConf](

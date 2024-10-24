@@ -45,7 +45,7 @@ except Exception:
     has_memory_profiler = False
 
 from pyspark.accumulators import AccumulatorParam
-from pyspark.errors import PySparkRuntimeError
+from pyspark.errors import PySparkRuntimeError, PySparkValueError
 
 if TYPE_CHECKING:
     from pyspark.core.context import SparkContext
@@ -473,6 +473,10 @@ class MemoryProfiler(Profiler):
             stream.write("=" * len(header) + "\n")
 
             all_lines = linecache.getlines(filename)
+            if len(all_lines) == 0:
+                raise PySparkValueError(
+                    errorClass="MEMORY_PROFILE_INVALID_SOURCE", messageParameters={}
+                )
 
             float_format = "{0}.{1}f".format(precision + 4, precision)
             template_mem = "{0:" + float_format + "} MiB"

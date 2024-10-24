@@ -218,7 +218,7 @@ private[sql] object GroupStateImpl {
       throw new IllegalArgumentException("eventTimeWatermarkMs must be 0 or positive if present")
     }
     if (hasTimedOut && timeoutConf == NoTimeout) {
-      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3168")
+      throw new SparkUnsupportedOperationException("MISSING_TIMEOUT_CONFIGURATION")
     }
 
     new GroupStateImpl[S](

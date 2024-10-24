@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractMapType, AbstractStringType,
-  StringTypeWithCaseAccentSensitivity}
+  StringTypeWithCollation}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 
@@ -439,7 +439,7 @@ abstract class TypeCoercionBase {
         }
 
       case aj @ ArrayJoin(arr, d, nr)
-          if !AbstractArrayType(StringTypeWithCaseAccentSensitivity).acceptsType(arr.dataType) &&
+          if !AbstractArrayType(StringTypeWithCollation).acceptsType(arr.dataType) &&
           ArrayType.acceptsType(arr.dataType) =>
         val containsNull = arr.dataType.asInstanceOf[ArrayType].containsNull
         implicitCast(arr, ArrayType(StringType, containsNull)) match {

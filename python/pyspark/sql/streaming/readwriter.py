@@ -1622,7 +1622,7 @@ class DataStreamWriter:
         partitionBy: Optional[Union[str, List[str]]] = None,
         queryName: Optional[str] = None,
         **options: "OptionalPrimitiveType",
-    ) -> StreamingQuery:
+    ) -> "StreamingQuery":
         """Streams the contents of the :class:`DataFrame` to a data source.
 
         The data source is specified by the ``format`` and a set of ``options``.
@@ -1710,7 +1710,7 @@ class DataStreamWriter:
         partitionBy: Optional[Union[str, List[str]]] = None,
         queryName: Optional[str] = None,
         **options: "OptionalPrimitiveType",
-    ) -> StreamingQuery:
+    ) -> "StreamingQuery":
         """
         Starts the execution of the streaming query, which will continually output results to the
         given table as new data arrives.
