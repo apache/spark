@@ -46,7 +46,6 @@ from pyspark.sql.types import (
     MapType,
     DateType,
     BinaryType,
-    YearMonthIntervalType,
     VariantType,
     VariantVal,
 )
@@ -59,6 +58,7 @@ from pyspark.testing.sqlutils import (
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
+    UnsupportedType,
 )
 from pyspark.testing.utils import assertDataFrameEqual
 
@@ -732,9 +732,9 @@ class ScalarPandasUDFTestsMixin:
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             with self.assertRaisesRegex(
                 NotImplementedError,
-                "Invalid return type.*scalar Pandas UDF.*ArrayType.*YearMonthIntervalType",
+                "Invalid return type.*scalar Pandas UDF.*ArrayType.*UnsupportedType",
             ):
-                pandas_udf(lambda x: x, ArrayType(YearMonthIntervalType()), udf_type)
+                pandas_udf(lambda x: x, ArrayType(UnsupportedType()), udf_type)
 
     def test_vectorized_udf_return_scalar(self):
         with self.quiet():
