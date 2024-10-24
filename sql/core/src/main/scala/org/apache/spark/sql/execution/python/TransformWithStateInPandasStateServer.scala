@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState, StateVariableType}
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateVariableRequest, ValueStateCall}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateVariableRequest, UtilsCallCommand, ValueStateCall}
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
@@ -58,6 +58,7 @@ class TransformWithStateInPandasStateServer(
     errorOnDuplicatedFieldNames: Boolean,
     largeVarTypes: Boolean,
     arrowTransformWithStateInPandasMaxRecordsPerBatch: Int,
+    hasInitialState: Boolean = false,
     outputStreamForTest: DataOutputStream = null,
     valueStateMapForTest: mutable.HashMap[String, ValueStateInfo] = null,
     deserializerForTest: TransformWithStateInPandasDeserializer = null,
@@ -226,8 +227,27 @@ class TransformWithStateInPandasStateServer(
         } else None
         initializeStateVariable(stateName, userKeySchema, StateVariableType.MapState, ttlDurationMs,
           valueSchema)
+      case StatefulProcessorCall.MethodCase.UTILSCALL =>
+        handleStatefulProcessorUtilRequest(message.getUtilsCall)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
+    }
+  }
+
+  private[sql] def handleStatefulProcessorUtilRequest(message: UtilsCallCommand): Unit = {
+    message.getMethodCase match {
+      case UtilsCallCommand.MethodCase.ISFIRSTBATCH =>
+        if (!hasInitialState) {
+          // In physical planning, hasInitialState will always be flipped
+          // if it is not first batch
+          sendResponse(1)
+        } else {
+          sendResponse(0)
+        }
+
+      case _ =>
+        throw new IllegalArgumentException(
+          s"Invalid method call for ${message.getMethodCase.toString}")
     }
   }
 

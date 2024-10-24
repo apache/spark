@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import sys
+import itertools
 from typing import Any, Iterator, List, Union, TYPE_CHECKING, cast
 import warnings
 
@@ -366,6 +367,7 @@ class PandasGroupedOpsMixin:
         outputStructType: Union[StructType, str],
         outputMode: str,
         timeMode: str,
+        initialState: "GroupedData" = None
     ) -> DataFrame:
         """
         Invokes methods defined in the stateful processor used in arbitrary state API v2. It
@@ -402,6 +404,9 @@ class PandasGroupedOpsMixin:
             The output mode of the stateful processor.
         timeMode : str
             The time mode semantics of the stateful processor for timers and TTL.
+        initialState : :class:`pyspark.sql.GroupedData`
+            Optional. The grouped dataframe on given grouping key as initial states used for initialization
+            of state variables in the first batch.
 
         Examples
         --------
@@ -486,6 +491,10 @@ class PandasGroupedOpsMixin:
         from pyspark.sql.functions import pandas_udf
 
         assert isinstance(self, GroupedData)
+        if initialState is not None:
+            assert isinstance(initialState, GroupedData)
+        if isinstance(outputStructType, str):
+            outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
 
         def transformWithStateUDF(
             statefulProcessorApiClient: StatefulProcessorApiClient,
@@ -505,22 +514,81 @@ class PandasGroupedOpsMixin:
 
             return result
 
-        if isinstance(outputStructType, str):
-            outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
+        def transformWithStateWithInitStateUDF(
+            statefulProcessorApiClient: StatefulProcessorApiClient,
+            key: Any,
+            inputRows: Iterator["PandasDataFrameLike"],
+            initialStates: Iterator["PandasDataFrameLike"] = None
+        ) -> Iterator["PandasDataFrameLike"]:
+            """
+            UDF for TWS operator with non-empty initial states. Possible input combinations
+            of inputRows and initialStates iterator:
+            - Both `inputRows` and `initialStates` are non-empty: for the given key, both input rows
+              and initial states contains the grouping key, both input rows and initial states contains data.
+            - `InitialStates` is non-empty, while `initialStates` is empty. For the given key, only
+              initial states contains the grouping key and data, and it is first batch.
+            - `initialStates` is empty, while `inputRows` is not empty. For the given grouping key, only inputRows
+              contains the grouping key and data, and it is first batch.
+            - `initialStates` is None, while `inputRows` is not empty. This is not first batch. `initialStates`
+              is initialized to the positional value as None.
+            """
+            handle = StatefulProcessorHandle(statefulProcessorApiClient)
 
-        udf = pandas_udf(
-            transformWithStateUDF,  # type: ignore
-            returnType=outputStructType,
-            functionType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
-        )
+            if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:
+                statefulProcessor.init(handle)
+                statefulProcessorApiClient.set_handle_state(
+                    StatefulProcessorHandleState.INITIALIZED
+                )
+
+            # only process initial state if first batch
+            is_first_batch = statefulProcessorApiClient.is_first_batch()
+            if is_first_batch and initialStates is not None:
+                for cur_initial_state in initialStates:
+                    statefulProcessorApiClient.set_implicit_key(key)
+                    statefulProcessor.handleInitialState(key, cur_initial_state)
+
+            # if we don't have input rows for the given key but only have initial state
+            # for the grouping key, the inputRows iterator could be empty
+            input_rows_empty = False
+            try:
+                first = next(inputRows)
+            except StopIteration:
+                input_rows_empty = True
+            else:
+                inputRows = itertools.chain([first], inputRows)
+
+            if not input_rows_empty:
+                statefulProcessorApiClient.set_implicit_key(key)
+                result = statefulProcessor.handleInputRows(key, inputRows)
+            else:
+                result = iter([])
+
+            return result
+
         df = self._df
-        udf_column = udf(*[df[col] for col in df.columns])
 
+        if initialState is None:
+            initial_state_java_obj = None
+            udf = pandas_udf(
+                transformWithStateUDF,  # type: ignore
+                returnType=outputStructType,
+                functionType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
+            )
+        else:
+            initial_state_java_obj = initialState._jgd
+            udf = pandas_udf(
+                transformWithStateWithInitStateUDF,  # type: ignore
+                returnType=outputStructType,
+                functionType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
+            )
+
+        udf_column = udf(*[df[col] for col in df.columns])
         jdf = self._jgd.transformWithStateInPandas(
             udf_column._jc,
             self.session._jsparkSession.parseDataType(outputStructType.json()),
             outputMode,
             timeMode,
+            initial_state_java_obj
         )
         return DataFrame(jdf, self.session)
 
