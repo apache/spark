@@ -2691,6 +2691,14 @@ class PlanGenerationTestSuite
     fn.parse_url(fn.col("g"), fn.col("g"), fn.col("g"))
   }
 
+  functionTest("try_parse_url") {
+    fn.try_parse_url(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_parse_url with key") {
+    fn.try_parse_url(fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
   functionTest("printf") {
     fn.printf(fn.col("g"), fn.col("a"), fn.col("g"))
   }
