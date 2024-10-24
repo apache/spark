@@ -696,7 +696,7 @@ object DataSource extends Logging {
           val internalSources = sources.filter(_.getClass.getName.startsWith("org.apache.spark"))
           if (provider.equalsIgnoreCase("xml") && sources.size == 2) {
             val externalSource = sources.filterNot(_.getClass.getName
-              .startsWith("org.apache.spark.sql.execution.datasources.xml.XmlFileFormat")
+              .startsWith("org.apache.spark.sql.execution.datasources.v2.xml.XmlDataSourceV2")
             ).head.getClass
             throw QueryCompilationErrors
               .foundMultipleXMLDataSourceError(provider1, sourceNames, externalSource.getName)
