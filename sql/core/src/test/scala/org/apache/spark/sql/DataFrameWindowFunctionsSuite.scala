@@ -1620,4 +1620,21 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-49386: Window spill with more than the inMemoryThreshold and spillSizeThreshold") {
+    val df = Seq((1, "1"), (2, "2"), (1, "3"), (2, "4")).toDF("key", "value")
+    val window = Window.partitionBy($"key").orderBy($"value")
+
+    withSQLConf(SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+      SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> Int.MaxValue.toString) {
+      assertNotSpilled(sparkContext, "select") {
+        df.select($"key", sum("value").over(window)).collect()
+      }
+      withSQLConf(SQLConf.WINDOW_EXEC_BUFFER_SIZE_SPILL_THRESHOLD.key -> "1") {
+        assertSpilled(sparkContext, "select") {
+          df.select($"key", sum("value").over(window)).collect()
+        }
+      }
+    }
+  }
 }
