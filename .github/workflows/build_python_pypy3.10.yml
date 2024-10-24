@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / Python-only (master, PyPy 3.9)"
+name: "Build / Python-only (master, PyPy 3.10)"
 
 on:
   schedule:
