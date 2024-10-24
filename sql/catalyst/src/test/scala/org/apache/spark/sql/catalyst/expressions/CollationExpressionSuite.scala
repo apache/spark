@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -237,11 +237,23 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("a  ", "UTF8_BINARY_RTRIM", Set("a", "b", null)) -> true,
       (null, "UTF8_BINARY_RTRIM", Set("1", "2")) -> null
     ).foreach { case ((elem, collation, inputSet), result) =>
-      val iset = inputSet.map(UTF8String.fromString).asInstanceOf[Set[Any]]
       checkEvaluation(
-        InSet(Literal.create(elem, StringType(collation)), iset),
-        result
-      )
+        InSet(
+          Literal.create(
+            elem,
+            StringType(collation)),
+          inputSet.map(UTF8String.fromString).asInstanceOf[Set[Any]]),
+        result)
+      checkEvaluation(
+        InSet(
+          Literal.create(
+            if (elem == null) null
+            else new GenericArrayData(Array(UTF8String.fromString(elem))),
+            ArrayType(StringType(collation))),
+          inputSet
+            .map(s => new GenericArrayData(Array(UTF8String.fromString(s))))
+            .asInstanceOf[Set[Any]]),
+        result)
     }
   }
 }
