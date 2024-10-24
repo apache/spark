@@ -8190,6 +8190,41 @@ object functions {
     Column.fn("make_timestamp_ltz", years, months, days, hours, mins, secs)
 
   /**
+   * Try to create the current timestamp with local time zone from years, months, days, hours,
+   * mins, secs and timezone fields.
+   * The function returns NULL on invalid inputs.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_timestamp_ltz(
+                          years: Column,
+                          months: Column,
+                          days: Column,
+                          hours: Column,
+                          mins: Column,
+                          secs: Column,
+                          timezone: Column): Column =
+    Column.fn("try_make_timestamp_ltz", years, months, days, hours, mins, secs, timezone)
+
+  /**
+   * Try to create the current timestamp with local time zone from years, months, days, hours,
+   * mins and secs fields.
+   * The function returns NULL on invalid inputs.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_timestamp_ltz(
+                          years: Column,
+                          months: Column,
+                          days: Column,
+                          hours: Column,
+                          mins: Column,
+                          secs: Column): Column =
+    Column.fn("try_make_timestamp_ltz", years, months, days, hours, mins, secs)
+
+  /**
    * Create local date-time from years, months, days, hours, mins, secs fields. If the
    * configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs.
    * Otherwise, it will throw an error instead.
@@ -8205,6 +8240,22 @@ object functions {
       mins: Column,
       secs: Column): Column =
     Column.fn("make_timestamp_ntz", years, months, days, hours, mins, secs)
+
+  /**
+   * Try to create a local date-time from years, months, days, hours, mins, secs fields.
+   * The function returns NULL on invalid inputs.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_timestamp_ntz(
+                          years: Column,
+                          months: Column,
+                          days: Column,
+                          hours: Column,
+                          mins: Column,
+                          secs: Column): Column =
+    Column.fn("try_make_timestamp_ntz", years, months, days, hours, mins, secs)
 
   /**
    * Make year-month interval from years, months.
