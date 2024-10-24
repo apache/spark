@@ -2956,24 +2956,32 @@ case class TryMakeTimestamp(
     replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
 
-  def this(
-    year: Expression,
-    month: Expression,
-    day: Expression,
-    hour: Expression,
-    min: Expression,
-    sec: Expression) = this(year, month, day, hour, min, sec, None, None,
-    MakeTimestamp(year, month, day, hour, min, sec, None, None, failOnError = false))
+  private def this(
+      year: Expression,
+      month: Expression,
+      day: Expression,
+      hour: Expression,
+      min: Expression,
+      sec: Expression,
+      timezone: Option[Expression]) = this(year, month, day, hour, min, sec, timezone, None,
+      MakeTimestamp(year, month, day, hour, min, sec, timezone, None, failOnError = false))
 
   def this(
-    year: Expression,
-    month: Expression,
-    day: Expression,
-    hour: Expression,
-    min: Expression,
-    sec: Expression,
-    timezone: Expression) = this(year, month, day, hour, min, sec, Some(timezone), None,
-    MakeTimestamp(year, month, day, hour, min, sec, Some(timezone), None, failOnError = false))
+      year: Expression,
+      month: Expression,
+      day: Expression,
+      hour: Expression,
+      min: Expression,
+      sec: Expression,
+      timezone: Expression) = this(year, month, day, hour, min, sec, Some(timezone))
+
+  def this(
+      year: Expression,
+      month: Expression,
+      day: Expression,
+      hour: Expression,
+      min: Expression,
+      sec: Expression) = this(year, month, day, hour, min, sec, None)
 
   override def prettyName: String = "try_make_timestamp"
 
