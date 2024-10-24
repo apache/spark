@@ -76,6 +76,8 @@ class TransformWithStateInPandasStateServer(
     ExpressionEncoder(groupingKeySchema).resolveAndBind().createDeserializer()
   private var inputStream: DataInputStream = _
   private var outputStream: DataOutputStream = outputStreamForTest
+
+  /** State variable related class variables */
   // A map to store the value state name -> (value state, schema, value row deserializer) mapping.
   private val valueStates = if (valueStateMapForTest != null) {
     valueStateMapForTest
@@ -115,9 +117,14 @@ class TransformWithStateInPandasStateServer(
     new mutable.HashMap[String, Iterator[(Row, Row)]]()
   }
 
+  /** Timer related class variables */
   private var expiryTimestampIter: Option[Iterator[(Any, Long)]] = None
 
-  private var listTimerIter: Option[Iterator[Long]] = None
+  // A map to store the iterator id -> Iterator[Long] mapping. This is to keep track of the
+  // current iterator position for each iterator id in the same partition for a grouping key in case
+  // user tries to fetch multiple iterators before the current iterator is exhausted. This is
+  // used for list timer function call
+  private var listTimerIters = new mutable.HashMap[String, Iterator[Long]]()
 
   def run(): Unit = {
     val listeningSocket = stateServerSocket.accept()
@@ -209,7 +216,8 @@ class TransformWithStateInPandasStateServer(
           val outputSchema = new StructType()
             .add("key", BinaryType)
             .add(StructField("timestamp", LongType))
-          sendIteratorAsArrowBatches(expiryTimestampIter.get, outputSchema) { data =>
+          sendIteratorAsArrowBatches(expiryTimestampIter.get, outputSchema,
+            arrowStreamWriterForTest) { data =>
             InternalRow(PythonSQLUtils.toPyRow(data._1.asInstanceOf[Row]), data._2)
           }
         }
@@ -228,11 +236,13 @@ class TransformWithStateInPandasStateServer(
         ImplicitGroupingKeyTracker.setImplicitKey(keyRow)
         // Reset the list/map state iterators for a new grouping key.
         iterators = new mutable.HashMap[String, Iterator[Row]]()
+        listTimerIters = new mutable.HashMap[String, Iterator[Long]]()
         sendResponse(0)
       case ImplicitGroupingKeyRequest.MethodCase.REMOVEIMPLICITKEY =>
         ImplicitGroupingKeyTracker.removeImplicitKey()
         // Reset the list/map state iterators for a new grouping key.
         iterators = new mutable.HashMap[String, Iterator[Row]]()
+        listTimerIters = new mutable.HashMap[String, Iterator[Long]]()
         sendResponse(0)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
@@ -300,20 +310,23 @@ class TransformWithStateInPandasStateServer(
             statefulProcessorHandle.deleteTimer(expiryTimestamp)
             sendResponse(0)
           case TimerStateCallCommand.MethodCase.LIST =>
-            if (!listTimerIter.isDefined) {
-              listTimerIter = Option(statefulProcessorHandle.listTimers())
+            val iteratorId = message.getTimerStateCall.getList.getIteratorId
+            var iteratorOption = listTimerIters.get(iteratorId)
+            if (iteratorOption.isEmpty) {
+              iteratorOption = Option(statefulProcessorHandle.listTimers())
+              listTimerIters.put(iteratorId, iteratorOption.get)
             }
-            // listTimerIter could be None in the TWSPandasServerSuite
-            if (!listTimerIter.isDefined || !listTimerIter.get.hasNext) {
-              // avoid sending over empty batch
-              sendResponse(1)
+            if (!iteratorOption.get.hasNext) {
+              sendResponse(2, s"List timer iterator doesn't contain any value.")
+              return
             } else {
               sendResponse(0)
-              val outputSchema = new StructType()
-                .add(StructField("timestamp", LongType))
-              sendIteratorAsArrowBatches(listTimerIter.get, outputSchema) { data =>
-                InternalRow(data)
-              }
+            }
+            val outputSchema = new StructType()
+              .add(StructField("timestamp", LongType))
+            sendIteratorAsArrowBatches(iteratorOption.get, outputSchema,
+              arrowStreamWriterForTest) { data =>
+              InternalRow(data)
             }
 
           case _ =>

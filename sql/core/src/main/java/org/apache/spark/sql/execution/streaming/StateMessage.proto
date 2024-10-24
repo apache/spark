@@ -164,6 +164,7 @@ message DeleteTimer {
 }
 
 message ListTimers {
+  string iteratorId = 1;
 }
 
 message ValueStateUpdate {

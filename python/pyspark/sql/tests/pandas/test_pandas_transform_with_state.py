@@ -589,13 +589,19 @@ class ProcTimeStatefulProcessor(StatefulProcessor):
     def handleInputRows(self, key, rows, timer_values, expired_timer_info) -> Iterator[pd.DataFrame]:
         if expired_timer_info.is_valid():
             # reset count state each time the timer is expired
-            timer_list = []
+            timer_list_1 = [e for e in self.handle.listTimers()]
+            timer_list_2 = []
+            idx = 0
             for e in self.handle.listTimers():
-                timer_list.extend(e)
-            if len(timer_list) > 0:
+                timer_list_2.append(e)
+                # check multiple iterator on the same grouping key works
+                assert timer_list_2[idx] == timer_list_1[idx]
+                idx += 1
+
+            if len(timer_list_1) > 0:
                 # before deleting the expiring timers, there are 2 timers -
                 # one timer we just registered, and one that is going to be deleted
-                assert(len(timer_list) == 2)
+                assert(len(timer_list_1) == 2)
             self.count_state.clear()
             self.handle.deleteTimer(expired_timer_info.get_expiry_time_in_ms())
             yield pd.DataFrame({"id": key, "countAsString": str("-1"),

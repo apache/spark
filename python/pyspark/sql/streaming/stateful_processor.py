@@ -18,7 +18,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, List, TYPE_CHECKING, Iterator, Optional, Union, Tuple
 
-from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
+from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient, ListTimerIterator
 from pyspark.sql.streaming.list_state_client import ListStateClient, ListStateIterator
 from pyspark.sql.streaming.map_state_client import (
     MapStateClient,
@@ -358,11 +358,11 @@ class StatefulProcessorHandle:
         """
         self.stateful_processor_api_client.delete_timer(expiry_time_stamp_ms)
 
-    def listTimers(self) -> Iterator[list[int]]:
+    def listTimers(self) -> Iterator[int]:
         """
         List all timers of their expiry timestamps in milliseconds for the grouping key.
         """
-        return self.stateful_processor_api_client.list_timers()
+        return ListTimerIterator(self.stateful_processor_api_client)
 
 
 class StatefulProcessor(ABC):

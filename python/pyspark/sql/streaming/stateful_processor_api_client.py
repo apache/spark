@@ -30,6 +30,7 @@ from pyspark.sql.pandas.types import convert_pandas_using_numpy_type
 from pyspark.sql.utils import has_numpy
 from pyspark.serializers import CPickleSerializer
 from pyspark.errors import PySparkRuntimeError
+import uuid
 
 __all__ = ["StatefulProcessorApiClient", "StatefulProcessorHandleState"]
 
@@ -54,6 +55,9 @@ class StatefulProcessorApiClient:
         self.utf8_deserializer = UTF8Deserializer()
         self.pickleSer = CPickleSerializer()
         self.serializer = ArrowStreamSerializer()
+        # Dictionaries to store the mapping between iterator id and a tuple of pandas DataFrame
+        # and the index of the last row that was read.
+        self.list_timer_iterator_cursors: Dict[str, Tuple["PandasDataFrameLike", int]] = {}
 
     def set_handle_state(self, state: StatefulProcessorHandleState) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
@@ -187,10 +191,14 @@ class StatefulProcessorApiClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error deleting timer: " f"{response_message[1]}")
 
-    def list_timers(self) -> Iterator[list[int]]:
+    def get_list_timer_row(self, iterator_id) -> int:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
-        while True:
-            list_call = stateMessage.ListTimers()
+
+        if iterator_id in self.list_timer_iterator_cursors:
+            # if the iterator is already in the dictionary, return the next row
+            pandas_df, index = self.list_timer_iterator_cursors[iterator_id]
+        else:
+            list_call = stateMessage.ListTimers(iteratorId=iterator_id)
             state_call_command = stateMessage.TimerStateCallCommand(list=list_call)
             call = stateMessage.StatefulProcessorCall(timerStateCall=state_call_command)
             message = stateMessage.StateRequest(statefulProcessorCall=call)
@@ -198,20 +206,32 @@ class StatefulProcessorApiClient:
             self._send_proto_message(message.SerializeToString())
             response_message = self._receive_proto_message()
             status = response_message[0]
-            if status == 1:
-                break
-            elif status == 0:
+            if status == 0:
                 iterator = self._read_arrow_state()
-                result_list = []
+                # We need to exhaust the iterator here to make sure all the arrow batches are read,
+                # even though there is only one batch in the iterator. Otherwise, the stream might
+                # block further reads since it thinks there might still be some arrow batches left.
+                # We only need to read the first batch in the iterator because it's guaranteed that
+                # there would only be one batch sent from the JVM side.
+                data_batch = None
                 for batch in iterator:
-                    batch_df = batch.to_pandas()
-                    for i in range(batch.num_rows):
-                        timestamp = batch_df.at[i, 'timestamp'].item()
-                        result_list.append(timestamp)
-                yield result_list
+                    if data_batch is None:
+                        data_batch = batch
+                if data_batch is None:
+                    # TODO(SPARK-49233): Classify user facing errors.
+                    raise PySparkRuntimeError("Error getting map state entry.")
+                pandas_df = data_batch.to_pandas()
+                index = 0
             else:
-                # TODO(SPARK-49233): Classify user facing errors.
-                raise PySparkRuntimeError(f"Error getting expiry timers: " f"{response_message[1]}")
+                raise StopIteration()
+        new_index = index + 1
+        if new_index < len(pandas_df):
+            # Update the index in the dictionary.
+            self.list_timer_iterator_cursors[iterator_id] = (pandas_df, new_index)
+        else:
+            # If the index is at the end of the DataFrame, remove the state from the dictionary.
+            self.list_timer_iterator_cursors.pop(iterator_id, None)
+        return pandas_df.at[index, 'timestamp'].item()
 
     def get_expiry_timers_iterator(self, expiry_timestamp: int) -> Iterator[list[Tuple, int]]:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
@@ -228,7 +248,6 @@ class StatefulProcessorApiClient:
             elif status == 0:
                 result_list = []
                 iterator = self._read_arrow_state()
-                # handles multiple batches from jvm
                 for batch in iterator:
                     batch_df = batch.to_pandas()
                     for i in range(batch.num_rows):
@@ -374,3 +393,17 @@ class StatefulProcessorApiClient:
 
     def _read_arrow_state(self) -> Any:
         return self.serializer.load_stream(self.sockfile)
+
+
+class ListTimerIterator:
+    def __init__(self, stateful_processor_api_client: StatefulProcessorApiClient):
+        # Generate a unique identifier for the iterator to make sure iterators on the
+        # same partition won't interfere with each other
+        self.iterator_id = str(uuid.uuid4())
+        self.stateful_processor_api_client = stateful_processor_api_client
+
+    def __iter__(self) -> Iterator[int]:
+        return self
+
+    def __next__(self) -> int:
+        return self.stateful_processor_api_client.get_list_timer_row(self.iterator_id)

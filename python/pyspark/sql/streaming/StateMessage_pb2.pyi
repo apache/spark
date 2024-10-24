@@ -113,8 +113,10 @@ class ListStatePut(_message.Message):
     def __init__(self) -> None: ...
 
 class ListTimers(_message.Message):
-    __slots__ = []
-    def __init__(self) -> None: ...
+    __slots__ = ["iteratorId"]
+    ITERATORID_FIELD_NUMBER: ClassVar[int]
+    iteratorId: str
+    def __init__(self, iteratorId: Optional[str] = ...) -> None: ...
 
 class MapStateCall(_message.Message):
     __slots__ = ["clear", "containsKey", "exists", "getValue", "iterator", "keys", "removeKey", "stateName", "updateValue", "values"]

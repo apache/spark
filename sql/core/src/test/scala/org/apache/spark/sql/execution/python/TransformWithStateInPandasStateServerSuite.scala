@@ -501,6 +501,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     ).build()
     stateServer.handleTimerRequest(message)
     verify(statefulProcessorHandle).getExpiredTimers(any[Long])
+    verify(arrowStreamWriter).writeRow(any)
+    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
   }
 
   test("stateful processor register timer") {
@@ -533,6 +535,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     ).build()
     stateServer.handleStatefulProcessorCall(message)
     verify(statefulProcessorHandle).listTimers()
+    verify(arrowStreamWriter).writeRow(any)
+    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
   }
   
   private def getIntegerRow(value: Int): Row = {
