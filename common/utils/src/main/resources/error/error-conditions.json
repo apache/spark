@@ -2935,12 +2935,6 @@
     ],
     "sqlState" : "0A000"
   },
-  "INVALID_PARTITION_COLUMN_KEY" : {
-    "message" : [
-      "<key> is not a valid partition column in table <tblName>."
-    ],
-    "sqlState" : "42703"
-  },
   "INVALID_PARTITION_OPERATION" : {
     "message" : [
       "The partition command is invalid."

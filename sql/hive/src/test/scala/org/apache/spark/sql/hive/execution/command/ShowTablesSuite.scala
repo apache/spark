@@ -39,8 +39,8 @@ class ShowTablesSuite extends v1.ShowTablesSuiteBase with CommandSuiteBase {
       catalog: String,
       namespace: String,
       table: String): (String, Map[String, String]) = {
-    ("INVALID_PARTITION_COLUMN_KEY",
-      Map("key" -> "id", "tblName" -> s"`$catalog`.`$namespace`.`$table`"))
+    ("PARTITIONS_NOT_FOUND",
+      Map("key" -> "`id`", "tableName" -> s"`$catalog`.`$namespace`.`$table`"))
   }
 
   protected override def extendedPartExpectedResult: String =

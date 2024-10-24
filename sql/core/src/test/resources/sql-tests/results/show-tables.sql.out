@@ -249,11 +249,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_PARTITION_COLUMN_KEY",
+  "errorClass" : "PARTITIONS_NOT_FOUND",
   "sqlState" : "42703",
   "messageParameters" : {
-    "key" : "a",
-    "tblName" : "`spark_catalog`.`showdb`.`show_t1`"
+    "key" : "`a`",
+    "tableName" : "`spark_catalog`.`showdb`.`show_t1`"
   }
 }
 
