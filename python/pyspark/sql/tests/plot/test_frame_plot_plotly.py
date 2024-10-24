@@ -18,12 +18,24 @@
 import unittest
 from datetime import datetime
 
-import pyspark.sql.plot  # noqa: F401
 from pyspark.errors import PySparkTypeError, PySparkValueError
-from pyspark.testing.sqlutils import ReusedSQLTestCase, have_plotly, plotly_requirement_message
+from pyspark.testing.sqlutils import (
+    ReusedSQLTestCase,
+    have_plotly,
+    have_numpy,
+    plotly_requirement_message,
+    numpy_requirement_message,
+    have_pandas,
+    pandas_requirement_message,
+)
+
+if have_plotly and have_pandas:
+    import pyspark.sql.plot  # noqa: F401
 
 
-@unittest.skipIf(not have_plotly, plotly_requirement_message)
+@unittest.skipIf(
+    not have_plotly or not have_pandas, plotly_requirement_message or pandas_requirement_message
+)
 class DataFramePlotPlotlyTestsMixin:
     @property
     def sdf(self):
@@ -374,6 +386,60 @@ class DataFramePlotPlotlyTestsMixin:
                 "supported_values": ", ".join(["False"]),
             },
         )
+
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
+    def test_kde_plot(self):
+        fig = self.sdf4.plot.kde(column="math_score", bw_method=0.3, ind=5)
+        expected_fig_data = {
+            "mode": "lines",
+            "name": "math_score",
+            "orientation": "v",
+            "xaxis": "x",
+            "yaxis": "y",
+            "type": "scatter",
+        }
+        self._check_fig_data(fig["data"][0], **expected_fig_data)
+
+        fig = self.sdf4.plot.kde(column=["math_score", "english_score"], bw_method=0.3, ind=5)
+        self._check_fig_data(fig["data"][0], **expected_fig_data)
+        expected_fig_data = {
+            "mode": "lines",
+            "name": "english_score",
+            "orientation": "v",
+            "xaxis": "x",
+            "yaxis": "y",
+            "type": "scatter",
+        }
+        self._check_fig_data(fig["data"][1], **expected_fig_data)
+        self.assertEqual(list(fig["data"][0]["x"]), list(fig["data"][1]["x"]))
+
+    def test_hist_plot(self):
+        fig = self.sdf2.plot.hist(column="length", bins=4)
+        expected_fig_data = {
+            "name": "length",
+            "x": [5.1625000000000005, 5.6875, 6.2125, 6.7375],
+            "y": [2, 1, 1, 1],
+            "text": ("[4.9, 5.425)", "[5.425, 5.95)", "[5.95, 6.475)", "[6.475, 7.0]"),
+            "type": "bar",
+        }
+        self._check_fig_data(fig["data"][0], **expected_fig_data)
+        fig = self.sdf2.plot.hist(column=["length", "width"], bins=4)
+        expected_fig_data = {
+            "name": "length",
+            "x": [3.5, 4.5, 5.5, 6.5],
+            "y": [0, 1, 2, 2],
+            "text": ("[3.0, 4.0)", "[4.0, 5.0)", "[5.0, 6.0)", "[6.0, 7.0]"),
+            "type": "bar",
+        }
+        self._check_fig_data(fig["data"][0], **expected_fig_data)
+        expected_fig_data = {
+            "name": "width",
+            "x": [3.5, 4.5, 5.5, 6.5],
+            "y": [5, 0, 0, 0],
+            "text": ("[3.0, 4.0)", "[4.0, 5.0)", "[5.0, 6.0)", "[6.0, 7.0]"),
+            "type": "bar",
+        }
+        self._check_fig_data(fig["data"][1], **expected_fig_data)
 
 
 class DataFramePlotPlotlyTests(DataFramePlotPlotlyTestsMixin, ReusedSQLTestCase):

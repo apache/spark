@@ -55,45 +55,42 @@ public class TestStatefulProcessor extends StatefulProcessor<Integer, String, St
   public scala.collection.Iterator<String> handleInputRows(
       Integer key,
       scala.collection.Iterator<String> rows,
-      TimerValues timerValues,
-      ExpiredTimerInfo expiredTimerInfo) {
+      TimerValues timerValues) {
 
     java.util.List<String> result = new ArrayList<>();
-    if (!expiredTimerInfo.isValid()) {
-      long count = 0;
-      // Perform various operations on composite types to verify compatibility for the Java API
-      if (countState.exists()) {
-        count = countState.get();
-      }
-
-      long numRows = 0;
-      StringBuilder sb = new StringBuilder(key.toString());
-      while (rows.hasNext()) {
-        numRows++;
-        String value = rows.next();
-        if (keyCountMap.containsKey(value)) {
-          keyCountMap.updateValue(value, keyCountMap.getValue(value) + 1);
-        } else {
-          keyCountMap.updateValue(value, 1L);
-        }
-        assertTrue(keyCountMap.containsKey(value));
-        keysList.appendValue(value);
-        sb.append(value);
-      }
-
-      scala.collection.Iterator<String> keys = keysList.get();
-      while (keys.hasNext()) {
-        String keyVal = keys.next();
-        assertTrue(keyCountMap.containsKey(keyVal));
-        assertTrue(keyCountMap.getValue(keyVal) > 0);
-      }
-
-      count += numRows;
-      countState.update(count);
-      assertEquals(count, (long) countState.get());
-
-      result.add(sb.toString());
+    long count = 0;
+    // Perform various operations on composite types to verify compatibility for the Java API
+    if (countState.exists()) {
+      count = countState.get();
     }
+
+    long numRows = 0;
+    StringBuilder sb = new StringBuilder(key.toString());
+    while (rows.hasNext()) {
+      numRows++;
+      String value = rows.next();
+      if (keyCountMap.containsKey(value)) {
+        keyCountMap.updateValue(value, keyCountMap.getValue(value) + 1);
+      } else {
+        keyCountMap.updateValue(value, 1L);
+      }
+      assertTrue(keyCountMap.containsKey(value));
+      keysList.appendValue(value);
+      sb.append(value);
+    }
+
+    scala.collection.Iterator<String> keys = keysList.get();
+    while (keys.hasNext()) {
+      String keyVal = keys.next();
+      assertTrue(keyCountMap.containsKey(keyVal));
+      assertTrue(keyCountMap.getValue(keyVal) > 0);
+    }
+
+    count += numRows;
+    countState.update(count);
+    assertEquals(count, (long) countState.get());
+
+    result.add(sb.toString());
     return CollectionConverters.asScala(result).iterator();
   }
 }

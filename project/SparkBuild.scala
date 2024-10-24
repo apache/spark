@@ -411,9 +411,6 @@ object SparkBuild extends PomBuild {
   /* Sql-api ANTLR generation settings */
   enable(SqlApi.settings)(sqlApi)
 
-  /* Spark SQL Core console settings */
-  enable(SQL.settings)(sql)
-
   /* Hive console settings */
   enable(Hive.settings)(hive)
 
@@ -1147,32 +1144,6 @@ object SqlApi {
   )
 }
 
-object SQL {
-  lazy val settings = Seq(
-    (console / initialCommands) :=
-      """
-        |import org.apache.spark.SparkContext
-        |import org.apache.spark.sql.SQLContext
-        |import org.apache.spark.sql.catalyst.analysis._
-        |import org.apache.spark.sql.catalyst.dsl._
-        |import org.apache.spark.sql.catalyst.errors._
-        |import org.apache.spark.sql.catalyst.expressions._
-        |import org.apache.spark.sql.catalyst.plans.logical._
-        |import org.apache.spark.sql.catalyst.rules._
-        |import org.apache.spark.sql.catalyst.util._
-        |import org.apache.spark.sql.execution
-        |import org.apache.spark.sql.functions._
-        |import org.apache.spark.sql.types._
-        |
-        |val sc = new SparkContext("local[*]", "dev-shell")
-        |val sqlContext = new SQLContext(sc)
-        |import sqlContext.implicits._
-        |import sqlContext._
-      """.stripMargin,
-    (console / cleanupCommands) := "sc.stop()"
-  )
-}
-
 object Hive {
 
   lazy val settings = Seq(
@@ -1186,23 +1157,6 @@ object Hive {
     scalacOptions := (scalacOptions map { currentOpts: Seq[String] =>
       currentOpts.filterNot(_ == "-deprecation")
     }).value,
-    (console / initialCommands) :=
-      """
-        |import org.apache.spark.SparkContext
-        |import org.apache.spark.sql.catalyst.analysis._
-        |import org.apache.spark.sql.catalyst.dsl._
-        |import org.apache.spark.sql.catalyst.errors._
-        |import org.apache.spark.sql.catalyst.expressions._
-        |import org.apache.spark.sql.catalyst.plans.logical._
-        |import org.apache.spark.sql.catalyst.rules._
-        |import org.apache.spark.sql.catalyst.util._
-        |import org.apache.spark.sql.execution
-        |import org.apache.spark.sql.functions._
-        |import org.apache.spark.sql.hive._
-        |import org.apache.spark.sql.hive.test.TestHive._
-        |import org.apache.spark.sql.hive.test.TestHive.implicits._
-        |import org.apache.spark.sql.types._""".stripMargin,
-    (console / cleanupCommands) := "sparkContext.stop()",
     // Some of our log4j jars make it impossible to submit jobs from this JVM to Hive Map/Reduce
     // in order to generate golden files.  This is only required for developers who are adding new
     // new query tests.

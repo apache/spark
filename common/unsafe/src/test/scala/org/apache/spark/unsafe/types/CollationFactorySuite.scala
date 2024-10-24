@@ -32,6 +32,9 @@ import org.apache.spark.sql.catalyst.util.CollationFactory._
 import org.apache.spark.unsafe.types.UTF8String.{fromString => toUTF8}
 
 class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ignore funsuite
+
+  val currentIcuVersion: String = "75.1"
+
   test("collationId stability") {
     assert(INDETERMINATE_COLLATION_ID == -1)
 
@@ -39,21 +42,25 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     val utf8Binary = fetchCollation(UTF8_BINARY_COLLATION_ID)
     assert(utf8Binary.collationName == "UTF8_BINARY")
     assert(utf8Binary.isUtf8BinaryType)
+    assert(utf8Binary.version == currentIcuVersion)
 
     assert(UTF8_LCASE_COLLATION_ID == 1)
     val utf8Lcase = fetchCollation(UTF8_LCASE_COLLATION_ID)
     assert(utf8Lcase.collationName == "UTF8_LCASE")
     assert(!utf8Lcase.isUtf8BinaryType)
+    assert(utf8Lcase.version == currentIcuVersion)
 
     assert(UNICODE_COLLATION_ID == (1 << 29))
     val unicode = fetchCollation(UNICODE_COLLATION_ID)
     assert(unicode.collationName == "UNICODE")
     assert(!unicode.isUtf8BinaryType)
+    assert(unicode.version == currentIcuVersion)
 
     assert(UNICODE_CI_COLLATION_ID == ((1 << 29) | (1 << 17)))
     val unicodeCi = fetchCollation(UNICODE_CI_COLLATION_ID)
     assert(unicodeCi.collationName == "UNICODE_CI")
     assert(!unicodeCi.isUtf8BinaryType)
+    assert(unicodeCi.version == currentIcuVersion)
   }
 
   test("UTF8_BINARY and ICU root locale collation names") {
