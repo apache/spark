@@ -53,18 +53,22 @@ public class VariantBuilder {
   public static Variant parseJson(String json, boolean allowDuplicateKeys) throws IOException {
     try (JsonParser parser = new JsonFactory().createParser(json)) {
       parser.nextToken();
-      return parseJson(parser, allowDuplicateKeys);
+      return parseJson(parser, allowDuplicateKeys, new VariantMetrics());
     }
   }
 
   /**
    * Similar {@link #parseJson(String, boolean)}, but takes a JSON parser instead of string input.
+   * The variantMetrics object is used to collect statistics about the variant being built.
    */
-  public static Variant parseJson(JsonParser parser, boolean allowDuplicateKeys)
-      throws IOException {
+  public static Variant parseJson(JsonParser parser, boolean allowDuplicateKeys,
+                                  VariantMetrics variantMetrics) throws IOException {
     VariantBuilder builder = new VariantBuilder(allowDuplicateKeys);
-    builder.buildJson(parser);
-    return builder.result();
+    builder.buildJson(parser, variantMetrics, 0);
+    variantMetrics.variantCount += 1;
+    Variant v = builder.result();
+    variantMetrics.byteSize += v.value.length + v.metadata.length;
+    return v;
   }
 
   // Build the variant metadata from `dictionaryKeys` and return the variant result.
@@ -451,10 +455,16 @@ public class VariantBuilder {
     }
   }
 
-  private void buildJson(JsonParser parser) throws IOException {
+  private void buildJson(JsonParser parser, VariantMetrics vm, long currentDepth)
+      throws IOException {
     JsonToken token = parser.currentToken();
     if (token == null) {
       throw new JsonParseException(parser, "Unexpected null token");
+    }
+    vm.numPaths += 1;
+    vm.maxDepth = Math.max(vm.maxDepth, currentDepth);
+    if (token != JsonToken.START_OBJECT && token != JsonToken.START_ARRAY) {
+      vm.numScalars += 1;
     }
     switch (token) {
       case START_OBJECT: {
@@ -465,7 +475,7 @@ public class VariantBuilder {
           parser.nextToken();
           int id = addKey(key);
           fields.add(new FieldEntry(key, id, writePos - start));
-          buildJson(parser);
+          buildJson(parser, vm, currentDepth + 1);
         }
         finishWritingObject(start, fields);
         break;
@@ -475,7 +485,7 @@ public class VariantBuilder {
         int start = writePos;
         while (parser.nextToken() != JsonToken.END_ARRAY) {
           offsets.add(writePos - start);
-          buildJson(parser);
+          buildJson(parser, vm, currentDepth + 1);
         }
         finishWritingArray(start, offsets);
         break;
