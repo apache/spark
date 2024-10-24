@@ -32,6 +32,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
+import org.apache.spark.internal.config.UI
 import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorKilled, LiveListenerBus, TaskSchedulerImpl}
@@ -47,6 +48,11 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     .set("spark.app.id", TEST_SPARK_APP_ID)
     .set(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL.key, "soLong")
     .set(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL_VALUE.key, "cruelWorld")
+    .set(
+      UI.CUSTOM_DRIVER_LOG_URL.key,
+      "https://my-custom.url/api/logs?applicationId={{APP_ID}}&namespace={{KUBERNETES_NAMESPACE}}" +
+        "&pod_name={{KUBERNETES_POD_NAME}}"
+    )
 
   @Mock
   private var sc: SparkContext = _
@@ -258,5 +264,56 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     val endpoint = schedulerBackendUnderTest.createDriverEndpoint()
     endpoint.receiveAndReply(context).apply(GenerateExecID("cheeseBurger"))
     verify(context).reply("1")
+  }
+
+  test("Driver attributes") {
+    assert(schedulerBackendUnderTest.getDriverAttributes === Some(Map(
+      "LOG_FILES" -> "log"
+    )))
+
+    withEnvs(
+      ENV_DRIVER_ATTRIBUTE_APP_ID -> "spark-app-id",
+      ENV_DRIVER_ATTRIBUTE_KUBERNETES_NAMESPACE -> "default",
+      ENV_DRIVER_ATTRIBUTE_KUBERNETES_POD_NAME -> "pod.name"
+    ) {
+      assert(schedulerBackendUnderTest.getDriverAttributes === Some(Map(
+        "LOG_FILES" -> "log",
+        "APP_ID" -> "spark-app-id",
+        "KUBERNETES_NAMESPACE" -> "default",
+        "KUBERNETES_POD_NAME" -> "pod.name"
+      )))
+    }
+  }
+
+  test("Driver log urls") {
+    assert(schedulerBackendUnderTest.getDriverLogUrls === None)
+    withEnvs(
+      ENV_DRIVER_ATTRIBUTE_APP_ID -> "spark-app-id",
+      ENV_DRIVER_ATTRIBUTE_KUBERNETES_NAMESPACE -> "default",
+      ENV_DRIVER_ATTRIBUTE_KUBERNETES_POD_NAME -> "pod.name"
+    ) {
+      assert(schedulerBackendUnderTest.getDriverLogUrls === Some(Map(
+        "log" -> ("https://my-custom.url/api/logs?applicationId=spark-app-id&namespace=default" +
+          "&pod_name=pod.name")
+      )))
+    }
+  }
+
+  private def withEnvs(pairs: (String, String)*)(f: => Unit): Unit = {
+    val readonlyEnv = System.getenv()
+    val field = readonlyEnv.getClass.getDeclaredField("m")
+    field.setAccessible(true)
+    val modifiableEnv = field.get(readonlyEnv).asInstanceOf[java.util.Map[String, String]]
+    try {
+      for ((k, v) <- pairs) {
+        assert(!modifiableEnv.containsKey(k))
+        modifiableEnv.put(k, v)
+      }
+      f
+    } finally {
+      for ((k, _) <- pairs) {
+        modifiableEnv.remove(k)
+      }
+    }
   }
 }
