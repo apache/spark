@@ -210,7 +210,7 @@ Package                    Supported version Note
 `pyarrow`                  >=10.0.0          Required for Spark Connect
 `grpcio`                   >=1.62.0          Required for Spark Connect
 `grpcio-status`            >=1.62.0          Required for Spark Connect
-`googleapis-common-protos` >=1.56.4          Required for Spark Connect
+`googleapis-common-protos` >=1.65.0          Required for Spark Connect
 `graphviz`                 >=0.20            Optional for Spark Connect
 ========================== ================= ==========================
 
