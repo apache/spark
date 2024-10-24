@@ -16,7 +16,7 @@ Project [NOT true AS (NOT true)#x]
 -- !query
 select not null::boolean
 -- !query analysis
-Project [NOT cast(null as boolean) AS (NOT CAST(NULL AS BOOLEAN))#x]
+Project [NOT null::boolean AS (NOT NULL::BOOLEAN)#x]
 +- OneRowRelation
 
 
@@ -51,35 +51,35 @@ Project [(false AND false) AS (false AND false)#x]
 -- !query
 select true and null::boolean
 -- !query analysis
-Project [(true AND cast(null as boolean)) AS (true AND CAST(NULL AS BOOLEAN))#x]
+Project [(true AND null::boolean) AS (true AND NULL::BOOLEAN)#x]
 +- OneRowRelation
 
 
 -- !query
 select false and null::boolean
 -- !query analysis
-Project [(false AND cast(null as boolean)) AS (false AND CAST(NULL AS BOOLEAN))#x]
+Project [(false AND null::boolean) AS (false AND NULL::BOOLEAN)#x]
 +- OneRowRelation
 
 
 -- !query
 select null::boolean and true
 -- !query analysis
-Project [(cast(null as boolean) AND true) AS (CAST(NULL AS BOOLEAN) AND true)#x]
+Project [(null::boolean AND true) AS (NULL::BOOLEAN AND true)#x]
 +- OneRowRelation
 
 
 -- !query
 select null::boolean and false
 -- !query analysis
-Project [(cast(null as boolean) AND false) AS (CAST(NULL AS BOOLEAN) AND false)#x]
+Project [(null::boolean AND false) AS (NULL::BOOLEAN AND false)#x]
 +- OneRowRelation
 
 
 -- !query
 select null::boolean and null::boolean
 -- !query analysis
-Project [(cast(null as boolean) AND cast(null as boolean)) AS (CAST(NULL AS BOOLEAN) AND CAST(NULL AS BOOLEAN))#x]
+Project [(null::boolean AND null::boolean) AS (NULL::BOOLEAN AND NULL::BOOLEAN)#x]
 +- OneRowRelation
 
 
@@ -114,35 +114,35 @@ Project [(false OR false) AS (false OR false)#x]
 -- !query
 select true or null::boolean
 -- !query analysis
-Project [(true OR cast(null as boolean)) AS (true OR CAST(NULL AS BOOLEAN))#x]
+Project [(true OR null::boolean) AS (true OR NULL::BOOLEAN)#x]
 +- OneRowRelation
 
 
 -- !query
 select false or null::boolean
 -- !query analysis
-Project [(false OR cast(null as boolean)) AS (false OR CAST(NULL AS BOOLEAN))#x]
+Project [(false OR null::boolean) AS (false OR NULL::BOOLEAN)#x]
 +- OneRowRelation
 
 
 -- !query
 select null::boolean or true
 -- !query analysis
-Project [(cast(null as boolean) OR true) AS (CAST(NULL AS BOOLEAN) OR true)#x]
+Project [(null::boolean OR true) AS (NULL::BOOLEAN OR true)#x]
 +- OneRowRelation
 
 
 -- !query
 select null::boolean or false
 -- !query analysis
-Project [(cast(null as boolean) OR false) AS (CAST(NULL AS BOOLEAN) OR false)#x]
+Project [(null::boolean OR false) AS (NULL::BOOLEAN OR false)#x]
 +- OneRowRelation
 
 
 -- !query
 select null::boolean or null::boolean
 -- !query analysis
-Project [(cast(null as boolean) OR cast(null as boolean)) AS (CAST(NULL AS BOOLEAN) OR CAST(NULL AS BOOLEAN))#x]
+Project [(null::boolean OR null::boolean) AS (NULL::BOOLEAN OR NULL::BOOLEAN)#x]
 +- OneRowRelation
 
 

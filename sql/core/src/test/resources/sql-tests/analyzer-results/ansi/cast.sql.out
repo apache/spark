@@ -884,56 +884,56 @@ Project [cast(10.654321 as interval month) AS CAST(10.654321 AS INTERVAL MONTH)#
 -- !query
 SELECT '1.23' :: int
 -- !query analysis
-Project [cast(1.23 as int) AS CAST(1.23 AS INT)#x]
+Project [1.23::int AS 1.23::INT#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT 'abc' :: int
 -- !query analysis
-Project [cast(abc as int) AS CAST(abc AS INT)#x]
+Project [abc::int AS abc::INT#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT '12345678901234567890123' :: long
 -- !query analysis
-Project [cast(12345678901234567890123 as bigint) AS CAST(12345678901234567890123 AS BIGINT)#xL]
+Project [12345678901234567890123::bigint AS 12345678901234567890123::BIGINT#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT '' :: int
 -- !query analysis
-Project [cast( as int) AS CAST( AS INT)#x]
+Project [::int AS ::INT#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT NULL :: int
 -- !query analysis
-Project [cast(null as int) AS CAST(NULL AS INT)#x]
+Project [null::int AS NULL::INT#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT '123.a' :: int
 -- !query analysis
-Project [cast(123.a as int) AS CAST(123.a AS INT)#x]
+Project [123.a::int AS 123.a::INT#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT '-2147483648' :: int
 -- !query analysis
-Project [cast(-2147483648 as int) AS CAST(-2147483648 AS INT)#x]
+Project [-2147483648::int AS -2147483648::INT#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT HEX('abc' :: binary)
 -- !query analysis
-Project [hex(cast(abc as binary)) AS hex(CAST(abc AS BINARY))#x]
+Project [hex(abc::binary) AS hex(abc::BINARY)#x]
 +- OneRowRelation
 
 
@@ -947,7 +947,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "configVal" : "'false'",
-    "sqlExpr" : "\"CAST(CAST(123 AS TINYINT) AS BINARY)\"",
+    "sqlExpr" : "\"123::TINYINT::BINARY\"",
     "srcType" : "\"TINYINT\"",
     "targetType" : "\"BINARY\""
   },
@@ -964,100 +964,100 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT 'interval 3 month 1 hour' :: interval
 -- !query analysis
-Project [cast(interval 3 month 1 hour as interval) AS CAST(interval 3 month 1 hour AS INTERVAL)#x]
+Project [interval 3 month 1 hour::interval AS interval 3 month 1 hour::INTERVAL#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT interval 3 day 1 second :: string
 -- !query analysis
-Project [cast(INTERVAL '3 00:00:01' DAY TO SECOND as string) AS CAST(INTERVAL '3 00:00:01' DAY TO SECOND AS STRING)#x]
+Project [INTERVAL '3 00:00:01' DAY TO SECOND::string AS INTERVAL '3 00:00:01' DAY TO SECOND::STRING#x]
 +- OneRowRelation
 
 
 -- !query
 select ' 1 ' :: DOUBLE
 -- !query analysis
-Project [cast( 1  as double) AS CAST( 1  AS DOUBLE)#x]
+Project [ 1 ::double AS  1 ::DOUBLE#x]
 +- OneRowRelation
 
 
 -- !query
 select '1.0 ' :: DEC
 -- !query analysis
-Project [cast(1.0  as decimal(10,0)) AS CAST(1.0  AS DECIMAL(10,0))#x]
+Project [1.0 ::decimal(10,0) AS 1.0 ::DECIMAL(10,0)#x]
 +- OneRowRelation
 
 
 -- !query
 select '\t\t true \n\r ' :: boolean
 -- !query analysis
-Project [cast(		 true 
-  as boolean) AS CAST(		 true 
-  AS BOOLEAN)#x]
+Project [		 true 
+ ::boolean AS 		 true 
+ ::BOOLEAN#x]
 +- OneRowRelation
 
 
 -- !query
 select '2022-01-01 00:00:00' :: timestamp
 -- !query analysis
-Project [cast(2022-01-01 00:00:00 as timestamp) AS CAST(2022-01-01 00:00:00 AS TIMESTAMP)#x]
+Project [2022-01-01 00:00:00::timestamp AS 2022-01-01 00:00:00::TIMESTAMP#x]
 +- OneRowRelation
 
 
 -- !query
 select interval '-10-2' year to month :: smallint
 -- !query analysis
-Project [cast(INTERVAL '-10-2' YEAR TO MONTH as smallint) AS CAST(INTERVAL '-10-2' YEAR TO MONTH AS SMALLINT)#x]
+Project [INTERVAL '-10-2' YEAR TO MONTH::smallint AS INTERVAL '-10-2' YEAR TO MONTH::SMALLINT#x]
 +- OneRowRelation
 
 
 -- !query
 select -10L :: interval second
 -- !query analysis
-Project [cast(-10 as interval second) AS CAST(-10 AS INTERVAL SECOND)#x]
+Project [-10::interval second AS -10::INTERVAL SECOND#x]
 +- OneRowRelation
 
 
 -- !query
 select interval '08:11:10.001' hour to second :: decimal(10, 4)
 -- !query analysis
-Project [cast(INTERVAL '08:11:10.001' HOUR TO SECOND as decimal(10,4)) AS CAST(INTERVAL '08:11:10.001' HOUR TO SECOND AS DECIMAL(10,4))#x]
+Project [INTERVAL '08:11:10.001' HOUR TO SECOND::decimal(10,4) AS INTERVAL '08:11:10.001' HOUR TO SECOND::DECIMAL(10,4)#x]
 +- OneRowRelation
 
 
 -- !query
 select 10.123456BD :: interval day to second
 -- !query analysis
-Project [cast(10.123456 as interval day to second) AS CAST(10.123456 AS INTERVAL DAY TO SECOND)#x]
+Project [10.123456::interval day to second AS 10.123456::INTERVAL DAY TO SECOND#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT '1.23' :: int :: long
 -- !query analysis
-Project [cast(cast(1.23 as int) as bigint) AS CAST(CAST(1.23 AS INT) AS BIGINT)#xL]
+Project [1.23::int::bigint AS 1.23::INT::BIGINT#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT '2147483648' :: long :: int
 -- !query analysis
-Project [cast(cast(2147483648 as bigint) as int) AS CAST(CAST(2147483648 AS BIGINT) AS INT)#x]
+Project [2147483648::bigint::int AS 2147483648::BIGINT::INT#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT CAST('2147483648' :: long AS int)
 -- !query analysis
-Project [cast(cast(2147483648 as bigint) as int) AS CAST(CAST(2147483648 AS BIGINT) AS INT)#x]
+Project [cast(2147483648::bigint as int) AS CAST(2147483648::BIGINT AS INT)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT map(1, '123', 2, '456')[1] :: int
 -- !query analysis
-Project [cast(map(1, 123, 2, 456)[1] as int) AS CAST(map(1, 123, 2, 456)[1] AS INT)#x]
+Project [map(1, 123, 2, 456)[1]::int AS map(1, 123, 2, 456)[1]::INT#x]
 +- OneRowRelation
 
 

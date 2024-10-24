@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.{QueryContext, SparkArithmeticException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -2167,13 +2168,16 @@ case class Cast(
   }
 
   override def prettyName: String = if (!isTryCast) {
-    "cast"
+    getTagValue(FUNC_ALIAS).getOrElse("cast")
   } else {
     "try_cast"
   }
 
   override def toString: String = {
-    s"$prettyName($child as ${dataType.simpleString})"
+    getTagValue(FUNC_ALIAS) match {
+      case Some(op) => s"$child$op${dataType.simpleString}"
+      case _ => s"$prettyName($child as ${dataType.simpleString})"
+    }
   }
 
   override def sql: String = dataType match {
@@ -2181,7 +2185,10 @@ case class Cast(
     // type of casting can only be introduced by the analyzer, and can be omitted when converting
     // back to SQL query string.
     case _: ArrayType | _: MapType | _: StructType => child.sql
-    case _ => s"${prettyName.toUpperCase(Locale.ROOT)}(${child.sql} AS ${dataType.sql})"
+    case _ => getTagValue(FUNC_ALIAS) match {
+      case Some(op) => s"${child.sql}$op${dataType.sql}"
+      case _ => s"${prettyName.toUpperCase(Locale.ROOT)}(${child.sql} AS ${dataType.sql})"
+    }
   }
 }
 
