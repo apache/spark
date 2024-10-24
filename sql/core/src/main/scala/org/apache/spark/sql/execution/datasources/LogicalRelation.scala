@@ -111,16 +111,13 @@ object LogicalRelation {
 }
 
 /**
- * Extract the [[BaseRelation]] and [[CatalogTable]] from [[LogicalRelation]]. This also provides
- * [[LogicalRelation]] itself, to cover the case where other params are needed (but not required
- * to have specific value to match).
+ * Extract the [[BaseRelation]] and [[CatalogTable]] from [[LogicalRelation]]. You can also
+ * retrieve the instance of LogicalRelation like following:
+ *
+ * case l @ LogicalRelationWithTable(relation, catalogTable) => ...
  */
 object LogicalRelationWithTable {
   def unapply(plan: LogicalRelation): Option[(BaseRelation, Option[CatalogTable])] = {
-    plan match {
-      case l: LogicalRelation => Some(l.relation, l.catalogTable)
-
-      case _ => None
-    }
+    Some(plan.relation, plan.catalogTable)
   }
 }
