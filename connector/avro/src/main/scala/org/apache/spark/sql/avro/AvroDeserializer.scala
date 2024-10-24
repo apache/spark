@@ -390,11 +390,43 @@ private[sql] class AvroDeserializer(
       case (LONG, _: DayTimeIntervalType) => (updater, ordinal, value) =>
         updater.setLong(ordinal, value.asInstanceOf[Long])
 
-      case (LONG, _: DecimalType) => (updater, ordinal, value) =>
-        val d = avroType.getLogicalType.asInstanceOf[CustomDecimal]
-        updater.setDecimal(ordinal, Decimal(value.asInstanceOf[Long], d.precision, d.scale))
+      case (INT, dt: DecimalType) => avroType.getLogicalType match {
+        case null =>
+          if (!isDecimalTypeMatched(INT, dt)) {
+            throw new IncompatibleSchemaException(incompatibleMsg)
+          }
+          (updater, ordinal, value) =>
+            updater.setDecimal(ordinal, Decimal(value.asInstanceOf[Int], dt.precision, dt.scale))
+        case _: CustomDecimal => (updater, ordinal, value) =>
+          val d = avroType.getLogicalType.asInstanceOf[CustomDecimal]
+          updater.setDecimal(ordinal, Decimal(value.asInstanceOf[Int], d.precision, d.scale))
+        case other => throw new IncompatibleSchemaException(errorPrefix +
+          s"Avro logical type $other cannot be converted to SQL type ${DecimalType.simpleString}.")
+      }
+
+      case (LONG, dt: DecimalType) => avroType.getLogicalType match {
+        case null =>
+          if (!isDecimalTypeMatched(LONG, dt)) {
+            throw new IncompatibleSchemaException(incompatibleMsg)
+          }
+          (updater, ordinal, value) =>
+            updater.setDecimal(ordinal, Decimal(value.asInstanceOf[Long], dt.precision, dt.scale))
+        case _: CustomDecimal => (updater, ordinal, value) =>
+          val d = avroType.getLogicalType.asInstanceOf[CustomDecimal]
+          updater.setDecimal(ordinal, Decimal(value.asInstanceOf[Long], d.precision, d.scale))
+        case other => throw new IncompatibleSchemaException(errorPrefix +
+          s"Avro logical type $other cannot be converted to SQL type ${DecimalType.simpleString}.")
+      }
 
       case _ => throw new IncompatibleSchemaException(incompatibleMsg)
+    }
+  }
+
+  private def isDecimalTypeMatched(avroType: Schema.Type, dt: DecimalType): Boolean = {
+    avroType match {
+      case INT => dt.precision >= DecimalType.IntDecimal.precision && dt.scale == 0
+      case LONG => dt.precision >= DecimalType.LongDecimal.precision && dt.scale == 0
+      case _ => false
     }
   }
 
