@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.getZoneId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -43,8 +44,11 @@ class OptimizeCsvExprsSuite extends PlanTest with ExpressionEvalHelper {
 
   val schema = StructType.fromDDL("a int, b int")
 
+  private val structAtt = $"struct".struct(schema).notNull
   private val csvAttr = $"csv".string
+
   private val testRelation = LocalRelation(csvAttr)
+  private val testRelation2 = LocalRelation(structAtt)
 
   test("SPARK-32968: prune unnecessary columns from GetStructField + from_csv") {
     val options = Map.empty[String, String]
@@ -79,5 +83,111 @@ class OptimizeCsvExprsSuite extends PlanTest with ExpressionEvalHelper {
 
     val expected = query.analyze
     comparePlans(optimized, expected)
+  }
+
+  test("SPARK-xxxxxx: optimize from_csv + to_csv") {
+    val options = Map.empty[String, String]
+
+    val query1 = testRelation2.select(
+      CsvToStructs(schema, options, StructsToCsv(options, $"struct")).as("struct"))
+    val optimized1 = Optimizer.execute(query1.analyze)
+
+    val expected = testRelation2.select($"struct".as("struct")).analyze
+    comparePlans(optimized1, expected)
+
+    val query2 = testRelation2.select(
+        CsvToStructs(schema, options,
+          StructsToCsv(options,
+            CsvToStructs(schema, options,
+              StructsToCsv(options, $"struct")))).as("struct"))
+    val optimized2 = Optimizer.execute(query2.analyze)
+
+    comparePlans(optimized2, expected)
+  }
+
+  test("SPARK-xxxxxx: not optimize from_csv + to_csv if schema is different") {
+    val options = Map.empty[String, String]
+    val schema = StructType.fromDDL("a int")
+
+    val query = testRelation2.select(
+      CsvToStructs(schema, options, StructsToCsv(options, $"struct")).as("struct"))
+    val optimized = Optimizer.execute(query.analyze)
+
+    val expected = testRelation2.select(
+      CsvToStructs(schema, options, StructsToCsv(options, $"struct")).as("struct")).analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("SPARK-xxxxxx: not optimize from_csv + to_csv " +
+    "if user gives schema with different letter case under case-insensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val options = Map.empty[String, String]
+      val schema = StructType.fromDDL("a int, B int")
+
+      val query = testRelation2.select(
+        CsvToStructs(schema, options, StructsToCsv(options, $"struct")).as("struct"))
+      val optimized = Optimizer.execute(query.analyze)
+
+      val expected = testRelation2.select(
+        CsvToStructs(schema, options, StructsToCsv(options, $"struct")).as("struct")).analyze
+      comparePlans(optimized, expected)
+    }
+  }
+
+  test("SPARK-xxxxxx: not optimize from_csv + to_csv if nullability is different") {
+    val options = Map.empty[String, String]
+    val nonNullSchema = StructType(
+      StructField("a", IntegerType, nullable = false) ::
+        StructField("b", IntegerType, nullable = false) :: Nil)
+
+    val structAtt = $"struct".struct(nonNullSchema).notNull
+    val testRelationWithNonNullAttr = LocalRelation(structAtt)
+
+    val schema = StructType.fromDDL("a int, b int")
+
+    val query = testRelationWithNonNullAttr.select(
+      CsvToStructs(schema, options, StructsToCsv(options, $"struct")).as("struct"))
+    val optimized = Optimizer.execute(query.analyze)
+
+    val expected = testRelationWithNonNullAttr.select(
+      CsvToStructs(schema, options, StructsToCsv(options, $"struct")).as("struct")).analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("SPARK-xxxxxx: not optimize from_csv + to_csv if option is not empty") {
+    val options = Map("testOption" -> "test")
+
+    val query = testRelation2.select(
+      CsvToStructs(schema, options, StructsToCsv(options, $"struct")).as("struct"))
+    val optimized = Optimizer.execute(query.analyze)
+
+    val expected = testRelation2.select(
+      CsvToStructs(schema, options, StructsToCsv(options, $"struct")).as("struct")).analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("SPARK-xxxxx: not optimize from_csv + to_csv if timezone is different") {
+    val options = Map.empty[String, String]
+    val UTC_OPT = Option("UTC")
+    val PST = getZoneId("-08:00")
+
+    // timezone is different
+    val query1 = testRelation2.select(
+      CsvToStructs(schema, options,
+        StructsToCsv(options, $"struct", Option(PST.getId)), UTC_OPT).as("struct"))
+    val optimized1 = Optimizer.execute(query1.analyze)
+
+    val expected1 = testRelation2.select(
+      CsvToStructs(schema, options,
+        StructsToCsv(options, $"struct", Option(PST.getId)), UTC_OPT).as("struct")).analyze
+    comparePlans(optimized1, expected1)
+
+    // timezone is same
+    val query2 = testRelation2.select(
+      CsvToStructs(schema, options,
+        StructsToCsv(options, $"struct", UTC_OPT), UTC_OPT).as("struct"))
+    val optimized2 = Optimizer.execute(query2.analyze)
+    val expected2 = testRelation2.select($"struct".as("struct")).analyze
+    comparePlans(optimized2, expected2)
   }
 }

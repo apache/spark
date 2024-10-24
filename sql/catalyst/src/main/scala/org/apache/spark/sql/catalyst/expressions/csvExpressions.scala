@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.csv._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.csv.SchemaOfCsvEvaluator
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CSV_TO_STRUCT, TreePattern}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -68,6 +69,8 @@ case class CsvToStructs(
   // The CSV input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions.
   val nullableSchema: StructType = schema.asNullable
+
+  override def nodePatternsInternal(): Seq[TreePattern] = Seq(CSV_TO_STRUCT)
 
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
@@ -153,6 +156,12 @@ case class CsvToStructs(
 
   override protected def withNewChildInternal(newChild: Expression): CsvToStructs =
     copy(child = newChild)
+}
+
+object CsvToStructs {
+  def unapply(c: CsvToStructs):
+      Option[(DataType, Map[String, String], Expression, Option[String], Option[StructType])] =
+    Some((c.schema, c.options, c.child, c.timeZoneId, c.requiredSchema))
 }
 
 /**
