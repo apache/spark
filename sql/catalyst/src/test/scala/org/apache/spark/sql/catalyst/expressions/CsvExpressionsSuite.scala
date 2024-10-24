@@ -149,12 +149,17 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
   test("unsupported mode") {
     val csvData = "---"
     val schema = StructType(StructField("a", DoubleType) :: Nil)
-    val exception = intercept[TestFailedException] {
-      checkEvaluation(
-        CsvToStructs(schema, Map("mode" -> DropMalformedMode.name), Literal(csvData), UTC_OPT),
-        InternalRow(null))
-    }.getCause
-    assert(exception.getMessage.contains("from_csv() doesn't support the DROPMALFORMED mode"))
+
+    checkError(
+      exception = intercept[TestFailedException] {
+        checkEvaluation(
+          CsvToStructs(schema, Map("mode" -> DropMalformedMode.name), Literal(csvData), UTC_OPT),
+          InternalRow(null))
+      }.getCause.asInstanceOf[AnalysisException],
+      condition = "PARSE_MODE_UNSUPPORTED",
+      parameters = Map(
+        "funcName" -> "`from_csv`",
+        "mode" -> "DROPMALFORMED"))
   }
 
   test("infer schema of CSV strings") {
@@ -228,13 +233,13 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
   }
 
   test("verify corrupt column") {
-    checkExceptionInExpression[AnalysisException](
+    checkErrorInExpression[AnalysisException](
       CsvToStructs(
         schema = StructType.fromDDL("i int, _unparsed boolean"),
         options = Map("columnNameOfCorruptRecord" -> "_unparsed"),
         child = Literal.create("a"),
-        timeZoneId = UTC_OPT),
-      expectedErrMsg = "The field for corrupt records must be string type and nullable")
+        timeZoneId = UTC_OPT), null, "INVALID_CORRUPT_RECORD_TYPE",
+      Map("columnName" -> "`_unparsed`", "actualType" -> "\"BOOLEAN\""))
   }
 
   test("from/to csv with intervals") {

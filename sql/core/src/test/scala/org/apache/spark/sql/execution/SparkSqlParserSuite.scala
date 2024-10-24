@@ -937,6 +937,35 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       checkSample("TABLE t |> TABLESAMPLE (50 PERCENT)")
       checkSample("TABLE t |> TABLESAMPLE (5 ROWS)")
       checkSample("TABLE t |> TABLESAMPLE (BUCKET 4 OUT OF 10)")
+      // Joins.
+      def checkPipeJoin(query: String): Unit = check(query, Seq(JOIN))
+      Seq("", "INNER", "LEFT", "LEFT OUTER", "SEMI", "LEFT SEMI", "RIGHT", "RIGHT OUTER", "FULL",
+        "FULL OUTER", "ANTI", "LEFT ANTI", "CROSS").foreach { joinType =>
+        checkPipeJoin(s"TABLE t |> $joinType JOIN other ON (t.x = other.x)")
+      }
+      // Set operations
+      def checkDistinct(query: String): Unit = check(query, Seq(DISTINCT_LIKE))
+      def checkExcept(query: String): Unit = check(query, Seq(EXCEPT))
+      def checkIntersect(query: String): Unit = check(query, Seq(INTERSECT))
+      def checkUnion(query: String): Unit = check(query, Seq(UNION))
+      checkDistinct("TABLE t |> UNION DISTINCT TABLE t")
+      checkExcept("TABLE t |> EXCEPT ALL TABLE t")
+      checkExcept("TABLE t |> EXCEPT DISTINCT TABLE t")
+      checkExcept("TABLE t |> MINUS ALL TABLE t")
+      checkExcept("TABLE t |> MINUS DISTINCT TABLE t")
+      checkIntersect("TABLE t |> INTERSECT ALL TABLE t")
+      checkUnion("TABLE t |> UNION ALL TABLE t")
+      // Sorting and distributing operators.
+      def checkSort(query: String): Unit = check(query, Seq(SORT))
+      def checkRepartition(query: String): Unit = check(query, Seq(REPARTITION_OPERATION))
+      def checkLimit(query: String): Unit = check(query, Seq(LIMIT))
+      checkSort("TABLE t |> ORDER BY x")
+      checkSort("TABLE t |> SELECT x |> SORT BY x")
+      checkLimit("TABLE t |> LIMIT 1")
+      checkLimit("TABLE t |> LIMIT 2 OFFSET 1")
+      checkRepartition("TABLE t |> DISTRIBUTE BY x |> WHERE x = 1")
+      checkRepartition("TABLE t |> CLUSTER BY x |> TABLESAMPLE (100 PERCENT)")
+      checkRepartition("TABLE t |> SORT BY x DISTRIBUTE BY x")
     }
   }
 }

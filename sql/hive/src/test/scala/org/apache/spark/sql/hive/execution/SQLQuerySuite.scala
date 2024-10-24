@@ -26,7 +26,7 @@ import java.util.{Locale, Set}
 import com.google.common.io.{Files, FileWriteMode}
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{SparkException, TestUtils}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, TestUtils}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -34,11 +34,12 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils, HiveTableRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLConf
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.{SparkPlanInfo, TestUncaughtExceptionHandler}
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.command.{InsertIntoDataSourceDirCommand, LoadDataCommand}
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
@@ -401,7 +402,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     val catalogTable =
       sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
     relation match {
-      case LogicalRelation(r: HadoopFsRelation, _, _, _) =>
+      case LogicalRelationWithTable(r: HadoopFsRelation, _) =>
         if (!isDataSourceTable) {
           fail(
             s"${classOf[HiveTableRelation].getCanonicalName} is expected, but found " +
@@ -2461,8 +2462,12 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       "spark.sql.hive.metastore.jars",
       "spark.sql.hive.metastore.sharedPrefixes",
       "spark.sql.hive.metastore.barrierPrefixes").foreach { key =>
-      val e = intercept[AnalysisException](sql(s"set $key=abc"))
-      assert(e.getMessage.contains("Cannot modify the value of a static config"))
+      checkError(
+        exception = intercept[AnalysisException](sql(s"set $key=abc")),
+        condition = "CANNOT_MODIFY_CONFIG",
+        parameters = Map(
+          "key" -> toSQLConf(key), "docroot" -> SPARK_DOC_ROOT)
+      )
     }
   }
 

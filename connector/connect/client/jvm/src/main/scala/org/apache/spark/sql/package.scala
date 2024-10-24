@@ -19,4 +19,7 @@ package org.apache.spark
 
 package object sql {
   type DataFrame = Dataset[Row]
+
+  private[sql] def throwRddNotSupportedException(): Nothing =
+    throw new UnsupportedOperationException("RDDs are not supported in Spark Connect.")
 }

@@ -193,6 +193,8 @@ def main(infile: IO, outfile: IO) -> None:
             reader.stop()
     except BaseException as e:
         handle_worker_exception(e, outfile)
+        # ensure that the updates to the socket are flushed
+        outfile.flush()
         sys.exit(-1)
     send_accumulator_updates(outfile)
 

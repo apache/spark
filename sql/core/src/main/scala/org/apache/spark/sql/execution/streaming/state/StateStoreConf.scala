@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.internal.SQLConf
 
 /** A class that contains configuration parameters for [[StateStore]]s. */
 class StateStoreConf(
-    @transient private val sqlConf: SQLConf,
+    @transient private[state] val sqlConf: SQLConf,
     val extraOptions: Map[String, String] = Map.empty)
   extends Serializable {
 
@@ -81,6 +82,12 @@ class StateStoreConf(
 
   /** The interval of maintenance tasks. */
   val maintenanceInterval = sqlConf.streamingMaintenanceInterval
+
+  /**
+   * When creating new state store checkpoint, which format version to use.
+   */
+  val enableStateStoreCheckpointIds =
+    StatefulOperatorStateInfo.enableStateStoreCheckpointIds(sqlConf)
 
   /**
    * Additional configurations related to state store. This will capture all configs in
