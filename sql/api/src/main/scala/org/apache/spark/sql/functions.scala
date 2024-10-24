@@ -8198,13 +8198,13 @@ object functions {
    * @since 4.0.0
    */
   def try_make_timestamp_ltz(
-                          years: Column,
-                          months: Column,
-                          days: Column,
-                          hours: Column,
-                          mins: Column,
-                          secs: Column,
-                          timezone: Column): Column =
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column,
+      timezone: Column): Column =
     Column.fn("try_make_timestamp_ltz", years, months, days, hours, mins, secs, timezone)
 
   /**
@@ -8216,12 +8216,12 @@ object functions {
    * @since 4.0.0
    */
   def try_make_timestamp_ltz(
-                          years: Column,
-                          months: Column,
-                          days: Column,
-                          hours: Column,
-                          mins: Column,
-                          secs: Column): Column =
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
     Column.fn("try_make_timestamp_ltz", years, months, days, hours, mins, secs)
 
   /**
@@ -8249,12 +8249,12 @@ object functions {
    * @since 4.0.0
    */
   def try_make_timestamp_ntz(
-                          years: Column,
-                          months: Column,
-                          days: Column,
-                          hours: Column,
-                          mins: Column,
-                          secs: Column): Column =
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
     Column.fn("try_make_timestamp_ntz", years, months, days, hours, mins, secs)
 
   /**
