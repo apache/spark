@@ -712,7 +712,7 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     >>> origin = spark.conf.get("spark.sql.ansi.enabled")
     >>> spark.conf.set("spark.sql.ansi.enabled", "true")
     >>> try:
-    ...     spark.range(1).select(sf.try_divide(df.id, sf.lit(0))).show()
+    ...     spark.range(1).select(sf.try_divide("id", sf.lit(0))).show()
     ... finally:
     ...     spark.conf.set("spark.sql.ansi.enabled", origin)
     +-----------------+
@@ -761,7 +761,7 @@ def try_mod(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     >>> origin = spark.conf.get("spark.sql.ansi.enabled")
     >>> spark.conf.set("spark.sql.ansi.enabled", "true")
     >>> try:
-    ...     spark.range(1).select(sf.try_mod(df.id, sf.lit(0))).show()
+    ...     spark.range(1).select(sf.try_mod("id", sf.lit(0))).show()
     ... finally:
     ...     spark.conf.set("spark.sql.ansi.enabled", origin)
     +--------------+
@@ -936,7 +936,7 @@ def try_sum(col: "ColumnOrName") -> Column:
     Example 1: Calculating the sum of values in a column
 
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(10).select(sf.try_sum(df["id"])).show()
+    >>> spark.range(10).select(sf.try_sum("id")).show()
     +-----------+
     |try_sum(id)|
     +-----------+
