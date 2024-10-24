@@ -478,9 +478,9 @@ Submission Guide for more details.
 
 ## Compatibility with Confluent Schema Registry
 
-Note that Avro data produced by the [Confluent Schema Registry based Avro serializer](https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/serdes-avro.html) prepends [a magic byte and the 4 byte schema ID](https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/index.html#wire-format) to the serialized data. This means that the `from_avro` function will not deserialize the data correctly unless this is handled. 
+Note that Avro data produced by the [Confluent Schema Registry based Avro serializer](https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/serdes-avro.html) prepends [a magic byte and the 4 byte schema ID](https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/index.html#wire-format) to the serialized data. This means that the `from_avro` function will not deserialize the data correctly unless this is handled explicitly.
 
-A simple workaround is to remove the bytes from the `value` column
+A simple workaround is to remove the bytes from the `"value"` field.
 
 <div data-lang="python" markdown="1">
 {% highlight python %}
