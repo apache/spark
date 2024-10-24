@@ -27,6 +27,13 @@ import org.apache.spark.sql.sources.BaseRelation
 
 /**
  * Used to link a [[BaseRelation]] in to a logical query plan.
+ *
+ * This class is widely used for pattern matching. We encourage developers to avoid using the
+ * default pattern if possible (except all parameters are needed). We provide convenient pattern
+ * objects to help avoiding the default pattern.
+ *
+ * Here's the list of pattern objects:
+ * - [[LogicalRelationWithTable]]
  */
 case class LogicalRelation(
     relation: BaseRelation,
@@ -100,5 +107,17 @@ object LogicalRelation {
     // with "annotated" string type here as the query engine doesn't support char/varchar yet.
     val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(relation.schema)
     LogicalRelation(relation, toAttributes(schema), Some(table), false)
+  }
+}
+
+/**
+ * Extract the [[BaseRelation]] and [[CatalogTable]] from [[LogicalRelation]]. You can also
+ * retrieve the instance of LogicalRelation like following:
+ *
+ * case l @ LogicalRelationWithTable(relation, catalogTable) => ...
+ */
+object LogicalRelationWithTable {
+  def unapply(plan: LogicalRelation): Option[(BaseRelation, Option[CatalogTable])] = {
+    Some(plan.relation, plan.catalogTable)
   }
 }

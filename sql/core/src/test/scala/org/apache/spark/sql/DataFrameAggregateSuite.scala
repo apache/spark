@@ -648,7 +648,7 @@ class DataFrameAggregateSuite extends QueryTest
       condition = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
       parameters = Map(
         "functionName" -> "`collect_set`",
-        "dataType" -> "\"MAP\"",
+        "dataType" -> "\"MAP\" or \"COLLATED STRING\"",
         "sqlExpr" -> "\"collect_set(b)\""
       ),
       context = ExpectedContext(

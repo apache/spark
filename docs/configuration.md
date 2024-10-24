@@ -3761,21 +3761,22 @@ Starting from version 4.0.0, `spark-submit` has adopted the [JSON Template Layou
 
 To configure the layout of structured logging, start with the `log4j2.properties.template` file.
 
-To query Spark logs using Spark SQL, you can use the following Python code snippet:
+To query Spark logs using Spark SQL, you can use the following code snippets:
 
+**Python:**
 ```python
-from pyspark.util import LogUtils
+from pyspark.logger import SPARK_LOG_SCHEMA
 
-logDf = spark.read.schema(LogUtils.LOG_SCHEMA).json("path/to/logs")
+logDf = spark.read.schema(SPARK_LOG_SCHEMA).json("path/to/logs")
 ```
 
-Or using the following Scala code snippet:
+**Scala:**
 ```scala
-import org.apache.spark.util.LogUtils.LOG_SCHEMA
+import org.apache.spark.util.LogUtils.SPARK_LOG_SCHEMA
 
-val logDf = spark.read.schema(LOG_SCHEMA).json("path/to/logs")
+val logDf = spark.read.schema(SPARK_LOG_SCHEMA).json("path/to/logs")
 ```
-
+**Note**: If you're using the interactive shell (pyspark shell or spark-shell), you can omit the import statement in the code because SPARK_LOG_SCHEMA is already available in the shell's context.
 ## Plain Text Logging
 If you prefer plain text logging, you have two options:
 - Disable structured JSON logging by setting the Spark configuration `spark.log.structuredLogging.enabled` to `false`.

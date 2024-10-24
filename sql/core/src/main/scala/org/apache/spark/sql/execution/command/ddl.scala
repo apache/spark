@@ -45,7 +45,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.hiveTableWithAnsiIntervalsError
-import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils, FileFormat, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils, FileFormat, HadoopFsRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
@@ -1008,9 +1008,13 @@ object DDLUtils extends Logging {
     if (!catalog.isTempView(tableMetadata.identifier)) {
       tableMetadata.tableType match {
         case CatalogTableType.VIEW if !isView =>
-          throw QueryCompilationErrors.cannotAlterViewWithAlterTableError()
+          throw QueryCompilationErrors.cannotAlterViewWithAlterTableError(
+            viewName = tableMetadata.identifier.table
+          )
         case o if o != CatalogTableType.VIEW && isView =>
-          throw QueryCompilationErrors.cannotAlterTableWithAlterViewError()
+          throw QueryCompilationErrors.cannotAlterTableWithAlterViewError(
+            tableName = tableMetadata.identifier.table
+          )
         case _ =>
       }
     }
@@ -1071,7 +1075,7 @@ object DDLUtils extends Logging {
       outputPath: Path,
       table: Option[CatalogTable] = None) : Unit = {
     val inputPaths = query.collect {
-      case LogicalRelation(r: HadoopFsRelation, _, _, _) =>
+      case LogicalRelationWithTable(r: HadoopFsRelation, _) =>
         r.location.rootPaths
     }.flatten
 

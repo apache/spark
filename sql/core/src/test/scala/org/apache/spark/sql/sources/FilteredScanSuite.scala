@@ -325,7 +325,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSparkSession {
 
         val table = spark.table("oneToTenFiltered")
         val relation = table.queryExecution.analyzed.collectFirst {
-          case LogicalRelation(r, _, _, _) => r
+          case l: LogicalRelation => l.relation
         }.get
 
         assert(

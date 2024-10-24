@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
@@ -99,7 +99,7 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark with Logging {
       spark.sql(queryString).queryExecution.analyzed.foreach {
         case SubqueryAlias(alias, _: LogicalRelation) =>
           queryRelations.add(alias.name)
-        case LogicalRelation(_, _, Some(catalogTable), _) =>
+        case LogicalRelationWithTable(_, Some(catalogTable)) =>
           queryRelations.add(catalogTable.identifier.table)
         case HiveTableRelation(tableMeta, _, _, _, _) =>
           queryRelations.add(tableMeta.identifier.table)

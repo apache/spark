@@ -21,7 +21,7 @@ import java.net.URI
 import java.nio.file.Paths
 import java.util.{ServiceLoader, UUID}
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters._
@@ -295,11 +295,7 @@ class SparkSession private(
     new Dataset(self, LocalRelation(encoder.schema), encoder)
   }
 
-  /**
-   * Creates a `DataFrame` from an RDD of Product (e.g. case classes, tuples).
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = withActive {
     val encoder = Encoders.product[A]
     Dataset.ofRows(self, ExternalRDD(rdd, self)(encoder))
@@ -312,37 +308,7 @@ class SparkSession private(
     Dataset.ofRows(self, LocalRelation.fromProduct(attributeSeq, data))
   }
 
-  /**
-   * :: DeveloperApi ::
-   * Creates a `DataFrame` from an `RDD` containing [[Row]]s using the given schema.
-   * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
-   * the provided schema. Otherwise, there will be runtime exception.
-   * Example:
-   * {{{
-   *  import org.apache.spark.sql._
-   *  import org.apache.spark.sql.types._
-   *  val sparkSession = new org.apache.spark.sql.SparkSession(sc)
-   *
-   *  val schema =
-   *    StructType(
-   *      StructField("name", StringType, false) ::
-   *      StructField("age", IntegerType, true) :: Nil)
-   *
-   *  val people =
-   *    sc.textFile("examples/src/main/resources/people.txt").map(
-   *      _.split(",")).map(p => Row(p(0), p(1).trim.toInt))
-   *  val dataFrame = sparkSession.createDataFrame(people, schema)
-   *  dataFrame.printSchema
-   *  // root
-   *  // |-- name: string (nullable = false)
-   *  // |-- age: integer (nullable = true)
-   *
-   *  dataFrame.createOrReplaceTempView("people")
-   *  sparkSession.sql("select name from people").collect.foreach(println)
-   * }}}
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @DeveloperApi
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = withActive {
     val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
@@ -354,14 +320,7 @@ class SparkSession private(
     internalCreateDataFrame(catalystRows.setName(rowRDD.name), schema)
   }
 
-  /**
-   * :: DeveloperApi ::
-   * Creates a `DataFrame` from a `JavaRDD` containing [[Row]]s using the given schema.
-   * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
-   * the provided schema. Otherwise, there will be runtime exception.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @DeveloperApi
   def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
     val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
@@ -375,14 +334,7 @@ class SparkSession private(
     Dataset.ofRows(self, LocalRelation.fromExternalRows(toAttributes(replaced), rows.asScala.toSeq))
   }
 
-  /**
-   * Applies a schema to an RDD of Java Beans.
-   *
-   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
-   * SELECT * queries will return the columns in an undefined order.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame = withActive {
     val attributeSeq: Seq[AttributeReference] = getSchema(beanClass)
     val className = beanClass.getName
@@ -393,14 +345,7 @@ class SparkSession private(
     Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRdd.setName(rdd.name))(self))
   }
 
-  /**
-   * Applies a schema to an RDD of Java Beans.
-   *
-   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
-   * SELECT * queries will return the columns in an undefined order.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def createDataFrame(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
     createDataFrame(rdd.rdd, beanClass)
   }
@@ -435,14 +380,7 @@ class SparkSession private(
     Dataset[T](self, plan)
   }
 
-  /**
-   * Creates a [[Dataset]] from an RDD of a given type. This method requires an
-   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
-   * that is generally created automatically through implicits from a `SparkSession`, or can be
-   * created explicitly by calling static methods on [[Encoders]].
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
     Dataset[T](self, ExternalRDD(data, self))
   }
@@ -806,7 +744,7 @@ class SparkSession private(
     // Use the active session thread local directly to make sure we get the session that is actually
     // set and not the default session. This to prevent that we promote the default session to the
     // active session once we are done.
-    val old = SparkSession.activeThreadSession.get()
+    val old = SparkSession.getActiveSession.orNull
     SparkSession.setActiveSession(this)
     try block finally {
       SparkSession.setActiveSession(old)
@@ -837,11 +775,14 @@ class SparkSession private(
   }
 
   private[sql] lazy val observationManager = new ObservationManager(this)
+
+  override private[sql] def isUsable: Boolean = !sparkContext.isStopped
 }
 
 
 @Stable
-object SparkSession extends api.SparkSessionCompanion with Logging {
+object SparkSession extends api.BaseSparkSessionCompanion with Logging {
+  override private[sql] type Session = SparkSession
 
   /**
    * Builder for [[SparkSession]].
@@ -926,28 +867,22 @@ object SparkSession extends api.SparkSessionCompanion with Logging {
         assertOnDriver()
       }
 
-      def clearSessionIfDead(session: SparkSession): SparkSession = {
-        if ((session ne null) && !session.sparkContext.isStopped) {
-          session
-        } else {
-          null
-        }
-      }
-
       // Get the session from current thread's active session.
-      val active = clearSessionIfDead(activeThreadSession.get())
-      if (!forceCreate && (active ne null)) {
-        applyModifiableSettings(active, new java.util.HashMap[String, String](options.asJava))
-        return active
+      val active = getActiveSession
+      if (!forceCreate && active.isDefined) {
+        val session = active.get
+        applyModifiableSettings(session, new java.util.HashMap[String, String](options.asJava))
+        return session
       }
 
       // Global synchronization so we will only set the default session once.
       SparkSession.synchronized {
         // If the current thread does not have an active session, get it from the global session.
-        val default = clearSessionIfDead(defaultSession.get())
-        if (!forceCreate && (default ne null)) {
-          applyModifiableSettings(default, new java.util.HashMap[String, String](options.asJava))
-          return default
+        val default = getDefaultSession
+        if (!forceCreate && default.isDefined) {
+          val session = default.get
+          applyModifiableSettings(session, new java.util.HashMap[String, String](options.asJava))
+          return session
         }
 
         // No active nor global default session. Create a new one.
@@ -970,12 +905,7 @@ object SparkSession extends api.SparkSessionCompanion with Logging {
           extensions,
           initialSessionOptions = options.toMap,
           parentManagedJobTags = Map.empty)
-        if (default eq null) {
-          setDefaultSession(session)
-        }
-        if (active eq null) {
-          setActiveSession(session)
-        }
+        setDefaultAndActiveSession(session)
         registerContextListener(sparkContext)
         session
       }
@@ -995,87 +925,17 @@ object SparkSession extends api.SparkSessionCompanion with Logging {
    */
   def builder(): Builder = new Builder
 
-  /**
-   * Changes the SparkSession that will be returned in this thread and its children when
-   * SparkSession.getOrCreate() is called. This can be used to ensure that a given thread receives
-   * a SparkSession with an isolated session, instead of the global (first created) context.
-   *
-   * @since 2.0.0
-   */
-  def setActiveSession(session: SparkSession): Unit = {
-    activeThreadSession.set(session)
-  }
+  /** @inheritdoc */
+  override def getActiveSession: Option[SparkSession] = super.getActiveSession
 
-  /**
-   * Clears the active SparkSession for current thread. Subsequent calls to getOrCreate will
-   * return the first created context instead of a thread-local override.
-   *
-   * @since 2.0.0
-   */
-  def clearActiveSession(): Unit = {
-    activeThreadSession.remove()
-  }
+  /** @inheritdoc */
+  override def getDefaultSession: Option[SparkSession] = super.getDefaultSession
 
-  /**
-   * Sets the default SparkSession that is returned by the builder.
-   *
-   * @since 2.0.0
-   */
-  def setDefaultSession(session: SparkSession): Unit = {
-    defaultSession.set(session)
-  }
+  /** @inheritdoc */
+  override def active: SparkSession = super.active
 
-  /**
-   * Clears the default SparkSession that is returned by the builder.
-   *
-   * @since 2.0.0
-   */
-  def clearDefaultSession(): Unit = {
-    defaultSession.set(null)
-  }
-
-  /**
-   * Returns the active SparkSession for the current thread, returned by the builder.
-   *
-   * @note Return None, when calling this function on executors
-   *
-   * @since 2.2.0
-   */
-  def getActiveSession: Option[SparkSession] = {
-    if (Utils.isInRunningSparkTask) {
-      // Return None when running on executors.
-      None
-    } else {
-      Option(activeThreadSession.get)
-    }
-  }
-
-  /**
-   * Returns the default SparkSession that is returned by the builder.
-   *
-   * @note Return None, when calling this function on executors
-   *
-   * @since 2.2.0
-   */
-  def getDefaultSession: Option[SparkSession] = {
-    if (Utils.isInRunningSparkTask) {
-      // Return None when running on executors.
-      None
-    } else {
-      Option(defaultSession.get)
-    }
-  }
-
-  /**
-   * Returns the currently active SparkSession, otherwise the default one. If there is no default
-   * SparkSession, throws an exception.
-   *
-   * @since 2.4.0
-   */
-  def active: SparkSession = {
-    getActiveSession.getOrElse(getDefaultSession.getOrElse(
-      throw SparkException.internalError("No active or default Spark session found")))
-  }
+  override protected def canUseSession(session: SparkSession): Boolean =
+    session.isUsable && !Utils.isInRunningSparkTask
 
   /**
    * Apply modifiable settings to an existing [[SparkSession]]. This method are used
@@ -1146,19 +1006,14 @@ object SparkSession extends api.SparkSessionCompanion with Logging {
     if (!listenerRegistered.get()) {
       sparkContext.addSparkListener(new SparkListener {
         override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
-          defaultSession.set(null)
+          clearDefaultSession()
+          clearActiveSession()
           listenerRegistered.set(false)
         }
       })
       listenerRegistered.set(true)
     }
   }
-
-  /** The active SparkSession for the current thread. */
-  private val activeThreadSession = new InheritableThreadLocal[SparkSession]
-
-  /** Reference to the root SparkSession. */
-  private val defaultSession = new AtomicReference[SparkSession]
 
   private val HIVE_SESSION_STATE_BUILDER_CLASS_NAME =
     "org.apache.spark.sql.hive.HiveSessionStateBuilder"
@@ -1247,7 +1102,7 @@ object SparkSession extends api.SparkSessionCompanion with Logging {
   private def applyExtensions(
       sparkContext: SparkContext,
       extensions: SparkSessionExtensions): SparkSessionExtensions = {
-    val extensionConfClassNames = sparkContext.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS)
+    val extensionConfClassNames = sparkContext.conf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS)
       .getOrElse(Seq.empty)
     extensionConfClassNames.foreach { extensionConfClassName =>
       try {
