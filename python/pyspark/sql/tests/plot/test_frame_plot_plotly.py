@@ -456,6 +456,33 @@ class DataFramePlotPlotlyTestsMixin:
         self._check_fig_data(fig["data"][0], **expected_fig_data1)
         self._check_fig_data(fig["data"][1], **expected_fig_data2)
 
+    def test_process_column_param_errors(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.sdf4.plot.box(column="math_scor")
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="PLOT_INVALID_TYPE_COLUMN",
+            messageParameters={
+                "col_name": "math_scor",
+                "valid_types": "NumericType, DateType, TimestampType",
+                "col_type": "None",
+            },
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.sdf4.plot.box(column="student")
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="PLOT_INVALID_TYPE_COLUMN",
+            messageParameters={
+                "col_name": "student",
+                "valid_types": "NumericType, DateType, TimestampType",
+                "col_type": "StringType",
+            },
+        )
+
 
 class DataFramePlotPlotlyTests(DataFramePlotPlotlyTestsMixin, ReusedSQLTestCase):
     pass

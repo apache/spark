@@ -18,7 +18,7 @@
 import inspect
 from typing import TYPE_CHECKING, Any, List, Optional, Union
 
-from pyspark.errors import PySparkValueError
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.plot import (
     PySparkPlotAccessor,
     PySparkBoxPlotBase,
@@ -213,15 +213,30 @@ def plot_histogram(data: "DataFrame", **kwargs: Any) -> "Figure":
 
 def process_column_param(column: Optional[Union[str, List[str]]], data: "DataFrame") -> List[str]:
     """
-    Process the provided column parameter. If a string is passed, it is converted to a list.
-    If column is None, it returns the list of numeric or datetime columns from the DataFrame.
+    Processes the provided column parameter for a DataFrame.
+    - If `column` is None, returns a list of numeric or datetime columns from the DataFrame.
+    - If `column` is a string, converts it to a list first.
+    - If `column` is a list, it checks if all specified columns exist in the DataFrame and are of valid types
+      (NumericType, DateType, or TimestampType).
+    - Raises a PySparkTypeError if any column in the list is not present in the DataFrame or has an invalid type.
     """
-    if isinstance(column, str):
-        return [column]
+    valid_types = (NumericType, DateType, TimestampType)
     if column is None:
         return [
-            field.name
-            for field in data.schema.fields
-            if isinstance(field.dataType, (NumericType, DateType, TimestampType))
+            field.name for field in data.schema.fields if isinstance(field.dataType, valid_types)
         ]
+    if isinstance(column, str):
+        column = [column]
+
+    for col in column:
+        field = next((f for f in data.schema.fields if f.name == col), None)
+        if not field or not isinstance(field.dataType, valid_types):
+            raise PySparkTypeError(
+                errorClass="PLOT_INVALID_TYPE_COLUMN",
+                messageParameters={
+                    "col_name": col,
+                    "valid_types": ", ".join([t.__name__ for t in valid_types]),
+                    "col_type": field.dataType.__class__.__name__ if field else "None",
+                },
+            )
     return column

@@ -812,6 +812,11 @@
       "Pipe function `<func_name>` exited with error code <error_code>."
     ]
   },
+    "PLOT_INVALID_TYPE_COLUMN": {
+    "message": [
+      "Column <col_name> must be one of <valid_types> for plotting, got <col_type>."
+    ]
+  },
   "PLOT_NOT_NUMERIC_COLUMN": {
     "message": [
       "Argument <arg_name> must be a numerical column for plotting, got <arg_type>."
